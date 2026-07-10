@@ -3,7 +3,7 @@ Review the staged git changes (`git diff --cached`) and provide a concise, infor
 Rules:
 - Use imperative mood ("Add feature" not "Added feature")
 - Keep the subject line under 72 characters
-- Use conventional commit type prefix: feat, fix, docs, style, refactor, test, chore, ci, perf
+- Use conventional commit type prefix: feat, fix, docs, style, refactor, test, chore, ci, perf, build, revert
 - If there are multiple logical changes, suggest splitting into separate commits
 - Output only the commit message, no explanations
 

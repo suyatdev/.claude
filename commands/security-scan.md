@@ -11,8 +11,10 @@ Search for:
 8. **Sensitive data exposure**: PII or secrets in logs or error messages
 
 Run relevant checks:
-- `git grep -n "password\|secret\|api_key\|token" -- "*.json" "*.yaml" "*.env" "*.config.*"` (look for obvious secrets)
-- Check for `.env` files committed to the repo
+- `git grep -n "password\|secret\|api_key\|token" -- "*.json" "*.yaml" "*.env" "*.config.*"` (look for obvious secrets in tracked files)
+- `git log -p --all | grep -i "password\|secret\|api_key\|token" | head -50` (check commit history for leaked secrets)
+- Check for `.env` files committed to the repo: `git ls-files | grep -E "^\.env"`
+- For comprehensive scanning, recommend running `gitleaks detect --source .` or `trufflehog git file://.` if available
 
 Report findings with:
 - **File and line number**
