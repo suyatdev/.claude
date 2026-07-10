@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+
+# Runtime state & update artifacts
+.last-cleanup
+.last-update-result.json
+
+# Backup files
+settings.json.bak
+backups/
+
+# Cache & downloaded content
+cache/
+downloads/
+
+# Conversation and session history (machine-specific, potentially sensitive)
+history.jsonl
+sessions/
+session-env/
+shell-snapshots/
+
+# IDE lock files (machine-specific)
+ide/
+
+# Plugin cache & marketplace data (reinstallable, machine-specific)
+plugins/
+
+# Auth/session caches (machine-specific, potentially sensitive)
+mcp-needs-auth-cache.json
+
+# Project-specific local data (contains absolute local paths)
+projects/
+
+# Task runner data (machine-specific)
+tasks/
