@@ -1,7 +1,20 @@
 # .Claude
 
 ```
-        YOU:  just write me a quick script, no tests needed
+  ┌─────────────────────────────────────────┐
+  │                                         │
+  │   > follow my rules                     │
+  │                                         │
+  │   Claude: Understood. Also, you have    │
+  │   3 unsanitized prompts, a hardcoded    │
+  │   secret, and forgot to branch first.   │
+  │                                         │
+  │   ████████████████████░░  92% pedantic  │
+  └─────────────────────────────────────────┘
+         the AI that reads the docs
+              so you don't have to
+
+                      YOU:  just write me a quick script, no tests needed
               ___
           ___|   |___
          |           |       CLAUDE.md detected

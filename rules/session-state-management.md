@@ -8,6 +8,10 @@
   2. Key decisions made and new conventions established.
   3. The exact next steps required.
 - **Session Startup:** At the beginning of every new session, silently read `CODING_MEMORY.md` to restore your context before beginning work.
+- **Session Origin Tracking:** At the start of every session, record the environment it was opened from — one of: `desktop`, `remote`, or `browser`. Store this in `CODING_MEMORY.md` under the active session block as `session_origin`.
+- **Session Origin Fields:** For each session block in `CODING_MEMORY.md`, record: `session_origin` (desktop/remote/browser), `session_started_at` (timestamp), and `last_active_branch`.
+- **Cross-Environment Resume Rule:** When starting a session in a different environment than the previous one (e.g., picking up a desktop session remotely), read `CODING_MEMORY.md` first, note the `session_origin` switch, and confirm the branch is up to date before continuing. Do not assume local state matches remote state across environments.
+- **Most-Recent Session Is Source of Truth:** The session with the latest `session_started_at` timestamp is considered the authoritative source for current work state. Any conflicting in-progress work in an older session must defer to the most recent one.
 - **Pre-Session Planning Check:** Right before each session begins, if the next task starts in planning mode, pause and ask the user whether to switch models or continue using the current model. Do not begin planning until the user answers.
 - **Per-Task Planning Check:** Right before starting any new task during a session, if that task will require planning, brainstorming, or similar ideation, pause and inform the user, then ask whether to switch models or continue using the current model. Do not start that task until the user answers.
 - **Pre-Task Implementation Check:** Right after brainstorming/planning is complete and immediately before implementation begins, pause again and ask whether to switch to a lower-tier model for smaller tasks. Do not begin implementation until the user answers.
