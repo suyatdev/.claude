@@ -7,7 +7,16 @@
 
 ## PR Tracking
 
-### repo: suyatdev/.claude
+### repo: suyatdev/.claude — feature/vibe-coding-standards-integration
+- branch: feature/vibe-coding-standards-integration (open)
+- remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/4 (OPEN)
+- opened_by session_origin: desktop (CLI)
+- last_push session_origin: desktop (CLI)
+- implementation status: complete and verified. 27 commits. Always-on 3473/3500. 8 skills.
+  4 hooks written but NOT installed (settings.json untouched by design).
+
+### repo: suyatdev/.claude — feature/standards-extractor-agent
 - branch: feature/standards-extractor-agent (merged into main, deleted locally and on origin)
 - remote: origin (git@github.com:suyatdev/.claude.git)
 - PR: https://github.com/suyatdev/.claude/pull/3 (merged, commit 16dd601)
