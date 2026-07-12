@@ -13,7 +13,25 @@
 Copied verbatim from the spec. **Every task's requirements implicitly include this section.**
 
 - **Source of truth:** `/Users/marksuyat/Other Docs/AI/Resources/VibeCodingRules/extracted-standards/`. Read the named source file(s) for each task. Do not invent rules not present in the sources.
-- **Always-on budget:** `rules/*.md` + `CLAUDE.md` must total **≤ 3,500 words** after all tasks. Current baseline: 1,952.
+- **Always-on budget:** `CLAUDE.md` + `rules/*.md` + `RTK.md` must total **≤ 3,500 words** after all tasks.
+
+  **AMENDED 2026-07-12 (mid-execution).** The original per-task word targets summed to ~4,300 and were mathematically incompatible with this ceiling. The ceiling governs. Binding per-file allocation:
+
+  | File | Target | Change |
+  |---|---|---|
+  | `RTK.md` | 160 | untouched |
+  | `CLAUDE.md` | ≤ 250 | router + imports + skills catalog + reference pointers |
+  | `rules/general-engineering.md` | ≤ 850 | +150 (was +300) |
+  | `rules/session-state-management.md` | ≤ 465 | +30 |
+  | `rules/pr-requests.md` | ≤ 765 | +150 (was +300) |
+  | `rules/parallel-agent-guardrails.md` | ≤ 280 | +120 |
+  | `rules/context-and-token-discipline.md` | ≤ 345 | trim from 449 |
+  | `rules/zero-trust-and-agent-safety.md` | ≤ 425 | trim from 499 |
+  | **Total** | **≈ 3,500** | |
+
+  `rules/authoring-skills-and-agents.md` is **removed from always-on** and becomes `skills/_standards/authoring-skills-and-agents.md` — a reference document, not a triggerable skill (no trigger collision with `skill-creator`). `CLAUDE.md` carries a one-line always-on **pointer** to it, so it stays discoverable and is loaded the moment a skill is being authored. Freed from the always-on budget, it may exceed 400 words and **must** now also carry the per-tier graduation criteria (90% trigger accuracy for Read-Only; 20+ case golden dataset for Draft-Only; adversarial red-teaming and sustained multi-run success for Action-Allowed) — without these the authority ladder classifies tiers but states no bar for reaching them.
+
+  **Rationale for the ceiling:** trimming must remove *words*, never *rationale*. A rule stripped to a bare imperative is the "context debt" anti-pattern Day 3 names — models learn to ignore capitalized imperatives exactly as humans ignore a wall of warning text. Cut redundancy, examples, and hedging; keep every rule's *why*.
 - **No false assurance:** This setup has **no** container sandboxing, policy server, LLM firewall, SPIFFE identities, CMEK, mTLS, or OpenTelemetry tracing. No rule may be phrased so that it implies these protections exist. Guidance about them lives in skills, phrased "when you build X, do Y."
 - **New rules only** adopt Day 3's explain-the-why voice. **Do not rewrite** the existing four rule files' ALWAYS/NEVER voice, structure, or headings beyond the additions specified.
 - **Never modify** anything under `plugins/` (third-party `superpowers`, `skill-creator`, etc.) — edits are lost on update.
