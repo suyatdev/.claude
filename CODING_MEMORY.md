@@ -132,6 +132,27 @@ Known honest gap: skill *trigger routing accuracy* is unmeasured. The verificati
 trigger phrases are textually distinct and collision-free — that is not an accuracy measurement, and
 measuring it needs a live eval harness this setup does not have.
 
+### Always-on budget: decided, do not re-litigate
+
+Always-on (`CLAUDE.md` + `rules/*.md` + `RTK.md`) is **3,473 words (~4,600 tokens)** against a 3,500 ceiling.
+Verified against the Claude Code docs on 2026-07-12 — not assumed.
+
+- **Why this is not expensive.** `CLAUDE.md` and `rules/` sit in the prompt-cached system prefix. They are
+  billed at full rate ONCE per session, then at the **cached-read rate (~10%)** on every turn after. The
+  growth from 1,952 -> 3,473 words therefore costs roughly **200 extra tokens per turn**, or about
+  **$0.30 across a 100-turn session**.
+- **Context rot is not a concern at this size.** ~4,600 tokens is about **9%** of the ~50K-active-token
+  threshold the source papers cite as where degradation begins.
+- **Dynamic/conditional loading was considered and rejected.** `@import` is resolved unconditionally at
+  session start, *before the prompt exists*, so a *rule* cannot gate it. A `UserPromptSubmit` hook could
+  (via `hookSpecificOutput.additionalContext`), but the only rules safe to defer are the non-safety ones
+  (~1,045 words, ~140 tokens/turn) — safety rules must always be present precisely because you cannot
+  predict which "simple" task will need them. That trade adds a silent-failure path to save about a dime.
+  **Rejected.**
+
+This rationale deliberately lives in memory, not in `rules/`: spending always-on budget to explain why the
+always-on budget is fine would be self-defeating, and there are only 27 words of headroom anyway.
+
 ## Key Decisions And Conventions
 - CLAUDE.md now acts as a lightweight entry point with @imports.
 - PR process and PR-memory logic are centralized in rules/pr-requests.md.
