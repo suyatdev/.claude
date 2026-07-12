@@ -11,6 +11,7 @@
   3. Links to related PRs, if any (otherwise state "None").
   4. Screenshots, if the PR is UI-related: include a **before** and **after** screenshot scoped to the specific section that changed (not a full-page dump). If non-UI, state "N/A - non-UI change".
   5. Step-by-step testing instructions used to verify the changes.
+  6. A change summary and risk assessment: what changed and where it could break, so review targets architectural impact over line-by-line diffs.
 - **PR Memory Tracking:** Track PR status per repository/project in `CODING_MEMORY.md`.
 - **PR Memory Fields:** For each repository, store: repo identifier, branch name, remote name/url, PR URL or number, whether the PR is currently open, the `session_origin` that created the PR (desktop/remote/browser), and the `session_origin` of the most recent push to that PR.
 - **PR Session Continuity Rule:** When resuming work on a PR from a different environment than the one that opened it, note the environment switch in `CODING_MEMORY.md` and verify the branch tip matches the remote before pushing. The session with the most recent push to the PR branch is considered the most up-to-date.
@@ -25,3 +26,9 @@
 - **First PR Persistence Rule:** If no PR exists yet, push once, create the PR, and immediately save this first-created PR metadata in `CODING_MEMORY.md` for future reference.
 - **Future Session Check Rule:** On later sessions, consult saved PR metadata before deciding whether any pull action is necessary.
 - **Verification Rule**: Never approve or request a PR generation unless local tests pass successfully first.
+- **AI-Code Review Rule**: Scrutinize agent-written code harder than human-written: hallucinated dependencies, thin error handling, and correctness gaps that look right at a glance. Approval fatigue is a quality risk, not an inconvenience: approving without reading is not reviewing.
+
+## Project Setup Gate
+
+- **In a new repo, or on first substantial work in an existing repo with no `.claude/project-standards.md`, run the `setting-up-a-new-project` skill before writing project code.** It walks the opt-in register and records the answers there. This gate blocks work: an opt-in that is only documented gets forgotten.
+- **Conditional LGTM (approving a PR contingent on tests passing, so it merges unattended) is opt-in per project, never the default.** Enable it only where `.claude/project-standards.md` says so: it sits in tension with the default-branch-safety and tests-pass-first rules above.
