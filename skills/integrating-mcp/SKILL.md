@@ -52,6 +52,7 @@ The Model Context Protocol is the tool layer: a standardized, structured interfa
 - **Load tools dynamically and drop them when done:** pull tools from a registry only when the current task needs them, and remove them from context once the task completes. Tools that linger dilute the model's attention across a search space that no longer contains the right answer.
 - **Prefer internal API gateways and registries:** consuming approved, governed schemas beats consuming an unvetted connector someone reinvented, because the governed schema has an owner who is on the hook when it changes.
 - **Show tool inputs to the user before the call:** a human-in-the-loop confirmation step on the *inputs* is what catches a malicious or accidental exfiltration before the data leaves — after the call, the data is already gone.
+- **Show the exact query that ran:** when a tool queries tables or moves files, display the specific SQL statement or command that produced the output, not just the output. A result presented without its query is unfalsifiable — the reviewer cannot tell a correct answer from a plausible one drawn from the wrong table, and the check the human is there to perform becomes impossible.
 - **Log all tool usage:** an audit later is only possible if the record exists now. Tool-call logs are what let you reconstruct why an agent did something, which is otherwise unrecoverable.
 
 ## Governance — Don't

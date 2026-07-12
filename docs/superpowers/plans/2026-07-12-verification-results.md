@@ -6,8 +6,13 @@ Every number below is observed command output, not an estimate. Where a check fa
 recorded alongside the fix; where it could not be fixed, it is recorded as an open defect.
 
 **Verdict: 5 of 6 steps PASS as run. Step 2 (coverage) FAILED on first pass — 15 distinct pieces of
-source content had landed nowhere. 13 were fixed during this pass. 2 remain as open defects,
-blocked on the always-on word budget.**
+source content had landed nowhere. 13 were fixed during this pass. The remaining 2 were recorded as
+open defects, blocked on the always-on word budget.**
+
+**Update (2026-07-12, follow-up pass): D-1 and D-2 are now CLOSED.** The user resolved the budget
+question by choosing a **skills destination over always-on** — both rules are load-on-demand rather
+than resident in `rules/general-engineering.md`, so they cost zero always-on words and the ceiling
+did not have to move. The always-on total is still **3,473**. All 15 gaps are now closed.
 
 ---
 
@@ -83,14 +88,14 @@ negative results trusted.
 | 27 | `evaluation.md` | `skills/evaluating-agents-and-skills` | yes |
 | **Day 5 — Spec-Driven Development** ||||
 | 28 | `spec-driven-development.md` | `skills/writing-specs` | yes |
-| 29 | `instruction-and-context-management.md` | `rules/context-and-token-discipline.md` + `CLAUDE.md` | **PARTIAL — OPEN DEFECT** |
-| 30 | `prompting-by-use-case.md` | `rules/general-engineering.md` | **PARTIAL — OPEN DEFECT** |
+| 29 | `instruction-and-context-management.md` | `rules/context-and-token-discipline.md` + `CLAUDE.md` + `skills/writing-specs` | **yes** (after D-1 fix) |
+| 30 | `prompting-by-use-case.md` | `rules/general-engineering.md` + `skills/writing-specs` + `skills/integrating-mcp` | **yes** (after D-1/D-2 fix) |
 | 31 | `mcp-integration.md` | `skills/integrating-mcp` | yes |
 | 32 | `team-culture-and-code-review.md` | `rules/pr-requests.md` + opt-in register | yes — 3 org-culture bullets not carried |
 | 33 | `testing-and-evaluation.md` | `rules/general-engineering.md` + `skills/evaluating-agents-and-skills` | yes — 1 minor bullet not carried |
 
-**Score: 33/33 files represented at their destination. 27/33 fully; 6 carry residual bullet-level
-gaps, of which 2 are open defects.**
+**Score: 33/33 files represented at their destination. 29/33 fully; 4 carry residual bullet-level
+gaps, none of which are open defects — D-1 and D-2 are closed (see below).**
 
 Days 2 and 4 are effectively complete transcriptions — every bullet of all 13 files traced to a
 destination. The gaps clustered entirely in Day 1, Day 3 authoring, and Day 5 prompting.
@@ -126,28 +131,42 @@ The Six Types of Context deserve a note: `designing-agentic-architecture` alread
 *harness* components, which is a **different list**. The two were not interchangeable, and the context
 taxonomy had simply been lost. The fix states the distinction explicitly so they are not conflated later.
 
-### OPEN DEFECTS (2) — not fixed
+### DEFECTS D-1 and D-2 — **CLOSED** (follow-up pass, 2026-07-12)
 
-Both are always-on-shaped rules whose only correct home is `rules/general-engineering.md`, and the
-always-on budget has **27 words of headroom**. Adding them costs ~27 words — exactly the entire
-remaining margin, taking the config to 3,500/3,500 with zero room for any future edit.
+Both were originally held open because the coverage map promised them to `rules/general-engineering.md`
+and the always-on budget had only **27 words of headroom** — enough to land them, but only by consuming
+the entire safety margin (3,500/3,500, zero room for a future edit). That was a budget call the
+verification pass declined to make silently.
 
-**Deliberately not fixed.** Consuming the whole safety margin is a budget decision the user owns, not
-one to make silently inside a verification pass. Both were promised to `rules/general-engineering.md`
-by the coverage map, so this is a real deviation from the spec, not a reinterpretation of it.
+**The user made the call: put them in skills, not always-on.** A load-on-demand skill costs zero
+always-on words, and both rules are topically at home in a skill that already owns the surrounding
+concern. The always-on ceiling never had to move and the total is unchanged at **3,473**.
 
-| # | Missing content | Source | Map promised | Est. cost |
-|---|---|---|---|---|
-| **D-1** | **Structured docstrings** — Google style for Python, JSDoc for TypeScript | D5 `prompting-by-use-case`, D5 `instruction-and-context-management` | `rules/general-engineering.md` ("docstrings") | ~9 words |
-| **D-2** | **Show the exact query** — when querying tables or moving files, display the SQL/command used, not just the result | D5 `prompting-by-use-case` | `rules/general-engineering.md` ("show the query") | ~18 words |
+| # | Content | Source | Map originally promised | Now lives in | Status |
+|---|---|---|---|---|---|
+| **D-1** | **Structured docstrings** — Google style for Python, JSDoc for TypeScript, so a function's contract is readable without reading its logic. Carried alongside the adjacent docs/code-sync rule (`README.md` / `CHANGELOG.md` updated in the change that makes them wrong). | D5 `prompting-by-use-case`, D5 `instruction-and-context-management` | `rules/general-engineering.md` | `skills/writing-specs/SKILL.md` → *The Spec Is the Source of Truth, Not the Code* | **CLOSED** |
+| **D-2** | **Show the exact query** — when a tool queries tables or moves files, display the SQL/command that produced the output, not just the output. | D5 `prompting-by-use-case` | `rules/general-engineering.md` | `skills/integrating-mcp/SKILL.md` → *Governance — Do* | **CLOSED** |
 
-Also uncarried, lower value, same budget cause:
+Placement rationale: `writing-specs` already argues that documentation is the contract and that
+spec/code drift causes hallucination — docstrings are that same argument one level down, at the
+function. `integrating-mcp` already requires validating a query's type before execution and showing
+tool *inputs* to a human before the call — showing the query that ran is the same human-oversight
+concern on the output side.
+
+The coverage map in
+`docs/superpowers/specs/2026-07-12-vibe-coding-standards-integration-design.md` was corrected in the
+same pass: the Day 5 rows for `instruction-and-context-management.md` and `prompting-by-use-case.md`
+now name these skill destinations instead of asserting a `rules/general-engineering.md` landing that
+never happened.
+
+### Still uncarried (lower value, same original budget cause)
+
 - "Require tests, documentation, and logging in every scaffold" (D5 `prompting-by-use-case`) — `general-engineering.md` has *Never scaffold in YOLO mode* and *Pin exact versions*, but not this.
 - "Manually confirm changes across multiple files" (D5 `prompting-by-use-case`).
 - "Don't duplicate instructions across all three layers" — the *instructional fragmentation* warning (D5 `instruction-and-context-management`). `CLAUDE.md` states the layering but not the anti-duplication rule.
 
-**Remedy:** either raise the ceiling above 3,500, or trim ~30 words from an always-on file. Both are
-user calls.
+**Remedy for these three:** either raise the ceiling above 3,500, trim words from an always-on file,
+or — as with D-1 and D-2 — find them a load-on-demand home. Still a user call.
 
 ### Recorded, deliberately NOT carried (no agent-actionable surface)
 
@@ -328,16 +347,18 @@ All comfortably within budget.
 | Step | Check | Result |
 |---|---|---|
 | 1 | Always-on budget ≤ 3,500 | **PASS** — 3,473 (27 words spare) |
-| 2 | 33/33 source files represented | **FAILED first pass** — 15 gaps found; 13 fixed; **2 open defects** |
+| 2 | 33/33 source files represented | **FAILED first pass** — 15 gaps found; 13 fixed in-pass; **D-1 and D-2 closed in follow-up** → 15/15 |
 | 3 | No phrase positive-triggers two skills | **PASS** — 24 positives, all distinct |
 | 4 | No name collision; "Not for" clause | **PASS** — 0 collisions, 8/8 clauses |
 | 5 | No false assurance | **PASS** — 2 always-on hits, both legitimate; 5/5 skill disclaimers present |
 | 6 | Frontmatter valid | **PASS** — 0/8 bad |
 | — | `settings.json` uncommitted | **PASS** — 0 |
 
-**Open defects: D-1 (docstrings) and D-2 (show the exact query).** Both promised to
-`rules/general-engineering.md` by the coverage map; both blocked on 27 words of always-on headroom.
-Requires a user decision: raise the ceiling, or trim ~30 words.
+**Open defects: none.** D-1 (docstrings) and D-2 (show the exact query) were promised to
+`rules/general-engineering.md` by the coverage map and were blocked on 27 words of always-on headroom.
+The user chose the **skills destination over always-on**: D-1 landed in `skills/writing-specs/SKILL.md`
+and D-2 in `skills/integrating-mcp/SKILL.md`, both load-on-demand and therefore free of always-on cost.
+The budget is untouched at **3,473** and the coverage map now names the real destinations.
 
 The honest headline: the coverage audit was the check that mattered, and it did not pass clean. The
 authoring standards — the file governing how every future skill gets written — had lost an entire

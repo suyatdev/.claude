@@ -263,8 +263,8 @@ Every extracted file has a destination. Nothing is silently dropped.
 |---|---|
 | `index.md` | (navigational) |
 | `spec-driven-development.md` | `skills/writing-specs` |
-| `instruction-and-context-management.md` | `rules/context-and-token-discipline.md` + `CLAUDE.md` (layering) |
-| `prompting-by-use-case.md` | `rules/general-engineering.md` (no-YOLO scaffold, match conventions, evidence prompting, root-cause-only, docstrings, show the query) |
+| `instruction-and-context-management.md` | `rules/context-and-token-discipline.md` + `CLAUDE.md` (layering) + `skills/writing-specs` (docs/code sync, structured docstrings) |
+| `prompting-by-use-case.md` | `rules/general-engineering.md` (no-YOLO scaffold, match conventions, evidence prompting, root-cause-only) + `skills/writing-specs` (docstrings) + `skills/integrating-mcp` (show the exact query) |
 | `mcp-integration.md` | `skills/integrating-mcp` |
 | `team-culture-and-code-review.md` | `rules/pr-requests.md` + opt-in register (Conditional LGTM) |
 | `zero-trust-guardrails.md` | `rules/zero-trust-and-agent-safety.md` + `skills/securing-agentic-systems` (policy server) |

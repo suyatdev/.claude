@@ -11,7 +11,8 @@ A specification is the architectural north star an agent builds from. Its job is
 
 - **Code becomes disposable:** a rock-solid spec lets the codebase be regenerated on demand, which inverts the usual value ordering — the spec is the durable artifact and the implementation is the derivative one.
 - **Maintain it with production rigor:** because both humans and the agent build from the spec, it earns the same care you would give production code — review, versioning, and updates when reality changes.
-- **Drift causes hallucination:** when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists. Keeping them aligned is not tidiness; it is correctness.
+- **Drift causes hallucination:** when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists. Keeping them aligned is not tidiness; it is correctness. The same obligation runs down to `README.md` and `CHANGELOG.md` — update them in the change that makes them wrong, not later.
+- **Docstrings are the code-level contract:** use Google-style docstrings for Python and JSDoc for TypeScript. A structured docstring lets the agent — and the next human — know what a function does without reading every line of its logic, which is the same bargain the spec makes at the design level.
 
 ## Write Scenarios in BDD/Gherkin Form
 
