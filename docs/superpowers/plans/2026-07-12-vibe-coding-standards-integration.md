@@ -320,7 +320,8 @@ EOF
 - **Give AI-generated code equal or greater scrutiny than human-written code.** Pay specific attention to hallucinated dependencies (check that imports resolve to real packages), inadequate error handling, and subtle correctness gaps that look right at a glance.
 - **Approval fatigue is a real risk to review quality, not a productivity inconvenience.** A constant stream of micro-approvals trains reflexive clicking. If you are approving without reading, stop and say so rather than rubber-stamping.
 - **Use AI as a first-pass reviewer, not as the reviewer** for context-dependent decisions about design, maintainability, and strategic alignment.
-- **Context-engineering artifacts are code.** `CLAUDE.md`, `rules/`, `skills/`, and eval suites are reviewed in PRs and versioned with the project, not edited ad hoc.
+
+> **AMENDED:** the originally-planned "Context-engineering artifacts are code" bullet is **dropped** — `rules/zero-trust-and-agent-safety.md` already carries "rule files are source code," and restating it in a second always-on file is duplication the budget cannot afford.
 
 - [ ] **Step 4: Add a new `## Project Setup Gate` section** — this is the trigger:
 
