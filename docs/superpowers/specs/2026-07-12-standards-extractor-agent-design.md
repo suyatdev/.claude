@@ -9,11 +9,11 @@ only — this agent does not enforce the standards it extracts.
 
 ## Motivation
 
-`VibeCodingRules/` in this repo already contains five PDFs (Agent Skills, Agent
-Tools & Interoperability, Spec-Driven Production Grade Development, The New SDLC
-With Vibe Coding, Vibe Coding Agent Security and Evaluation) whose normative
-content should be turned into rule files consistent with the existing
-`rules/*.md` convention used by this repo's `CLAUDE.md`.
+The user regularly receives PDF documents (e.g. vendor guidelines, internal
+policy docs) containing normative engineering content that should become rule
+files consistent with the existing `rules/*.md` convention used by this repo's
+`CLAUDE.md`. This agent automates that extraction so it doesn't have to be
+done by hand each time.
 
 ## Location & Registration
 
@@ -67,7 +67,7 @@ No `model` override — inherits the caller's model.
 
 ## Verification
 
-Before opening a PR, run the agent against one PDF from `VibeCodingRules/`
-(e.g. `Agent Skills_Day_3.pdf`) with an explicit output directory, and confirm
-the generated Markdown is well-structured, faithful to the source, and
-correctly split by category.
+Before opening a PR, run the agent against a synthetic test PDF containing a
+few clearly normative rules across at least two categories, with an explicit
+output directory, and confirm the generated Markdown is well-structured,
+faithful to the source, and correctly split by category.
