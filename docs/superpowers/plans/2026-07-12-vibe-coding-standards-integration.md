@@ -20,8 +20,8 @@ Copied verbatim from the spec. **Every task's requirements implicitly include th
   | File | Target | Change |
   |---|---|---|
   | `RTK.md` | 160 | untouched |
-  | `CLAUDE.md` | ≤ 250 | router + imports + skills catalog + reference pointers |
-  | `rules/general-engineering.md` | ≤ 850 | +150 (was +300) |
+  | `CLAUDE.md` | ≤ 235 | router + imports + skills catalog + reference pointers |
+  | `rules/general-engineering.md` | ≤ 855 | +155 (was +300) |
   | `rules/session-state-management.md` | ≤ 465 | +30 |
   | `rules/pr-requests.md` | ≤ 765 | +150 (was +300) |
   | `rules/parallel-agent-guardrails.md` | ≤ 280 | +120 |
