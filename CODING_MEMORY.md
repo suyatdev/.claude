@@ -3,17 +3,17 @@
 ## Active Session
 - session_origin: desktop (CLI)
 - session_started_at: 2026-07-12
-- last_active_branch: feature/standards-extractor-agent
+- last_active_branch: main
 
 ## PR Tracking
 
 ### repo: suyatdev/.claude
-- branch: feature/standards-extractor-agent
+- branch: feature/standards-extractor-agent (merged into main, safe to delete)
 - remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/3 (open)
+- PR: https://github.com/suyatdev/.claude/pull/3 (merged, commit 16dd601)
 - opened_by session_origin: desktop (CLI)
 - last_push session_origin: desktop (CLI)
-- implementation status: standards-extractor agent file + design spec implemented and pushed; verified manually against a synthetic test PDF (real subagent invocation still pending a fresh session that reloads the agent registry). Pending: merge decision from user.
+- implementation status: standards-extractor agent file + design spec merged to main and pulled locally. Verified manually against a synthetic test PDF; real end-to-end invocation via the Agent tool still pending a fresh session that reloads the agent registry.
 
 ## Session Summary
 - Refactored the large CLAUDE.md into a compact root file that imports focused rule files under the rules directory.
@@ -48,4 +48,5 @@
 8. Create and switch to `feature/standards-extractor-agent`, then implement `~/.claude/agents/standards-extractor.md` per the approved design.
 9. Verify the new agent by running it against a synthetic test PDF (no real standards PDFs exist in this repo) before opening a PR. — done
 10. Open a PR for the new agent file. — done, see PR Tracking above (PR #3).
-11. After merge, in a fresh session, confirm `standards-extractor` appears in the Agent tool's available list and run a real end-to-end invocation.
+11. PR #3 merged to main (commit 16dd601); local main pulled and in sync. In a fresh session, confirm `standards-extractor` appears in the Agent tool's available list and run a real end-to-end invocation.
+12. Optional cleanup: delete the merged `feature/standards-extractor-agent` branch (local + remote) once confirmed no longer needed.
