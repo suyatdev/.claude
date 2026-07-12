@@ -13,6 +13,11 @@ Most agentic systems are over-architected before they are over-loaded. The quest
 - **Multi-agent needs a genuine architectural reason:** reach for it only on real parallelism, real capability or security boundaries (different access, different security postures, different external systems), hierarchical decomposition where the abstraction layers actually differ, adversarial check-and-balance setups, sub-agent intercommunication, or heterogeneous models. Skills do not eliminate the need for multi-agent here — but absent one of these, the extra topology only costs coordination.
 - **Scope each sub-agent's skill library:** if you do go multi-agent, give each specialist its own scoped library rather than duplicating the whole library into every agent. A sub-agent does not need skills for domains it will never touch, and carrying them only widens its search space.
 
+## Skills, MCP, and CLAUDE.md Are Not Competitors
+
+- **MCP is reach; a skill is know-how:** MCP connects the agent to an external system — Drive, Salesforce, BigQuery. A skill teaches it how to *think* about a kind of work. They compose: when a skill needs data, it calls a tool, and that tool is usually one an MCP server provides. Treating them as alternatives forces a choice that the architecture never actually poses.
+- **`CLAUDE.md` is the always-loaded index; skills load on demand:** keep the conventions file tight and use it as a router into the skills library, rather than duplicating skill content into it. Everything in it is paid for on every turn whether or not it is relevant.
+
 ## Symptoms a Monolith Has Hit Its Ceiling
 
 - **Decision quality degrades as tools accumulate:** the next-action search space grows too large, and the agent starts hallucinating parameters and calling the wrong tool. It is the clearest signal, because it worsens with every tool added.
@@ -69,6 +74,20 @@ Most agentic systems are over-architected before they are over-loaded. The quest
 - **Hooks are where unforgettable rules live:** enforce hard constraints deterministically at lifecycle points — before a tool call, after a file edit, before a commit — for the rules the agent should never forget but reliably does.
 - **Without observability you cannot see drift:** logs, traces, evaluations, and cost/latency metering are what let you audit why an agent made a specific decision. Uninstrumented, a system is not one you know is working — only one whose failures you cannot see.
 - **Configure the harness before the code:** instructions, tool access, and architectural constraints belong in the requirements and architecture phase. Configure them after implementation and the agent has already been improvising inside a boundary you had not drawn yet.
+- **Let the harness drive the test-fix loop:** during testing, orchestration should capture failing test output and route it back to the model for another attempt, rather than making a human relay the error by hand. A loop a human has to close is a loop that stops closing the moment they get busy.
+
+## The Six Types of Context
+
+Design what the agent can see, not just what it can do. Omitting any one of these is a recurring source of agent failure — and each fails differently, so a missing one is rarely diagnosed as missing.
+
+- **Instructions** — the agent's role, goals, and operational boundaries.
+- **Knowledge** — retrieved documents, architectural diagrams, domain data.
+- **Memory** — short-term session logs and long-term persistent state.
+- **Examples** — few-shot demonstrations and reference patterns from the codebase.
+- **Tools** — precise definitions of the APIs, scripts, and services it can invoke.
+- **Guardrails** — hard constraints, formatting rules, safety validations.
+
+These are the six *context* types, and they are a different list from the six *harness* components above: the harness is the machinery around the model, this is what it gets to see.
 
 ## Trigger Phrases
 

@@ -2,6 +2,20 @@
 
 > **Reference document.** Load this when authoring or editing a skill or an agent. It is not a triggerable skill: `skill-creator` and `superpowers:writing-skills` own the authoring *workflow*. This file states the *standards* the resulting skill must meet, and the bar it must clear before it is allowed to act.
 
+## Folder Anatomy
+
+- **`SKILL.md` is the only mandatory file:** every skill is a directory anchored by one. `scripts/`, `references/`, and `assets/` are optional and exist to hold what does not need to be in the body — deterministic code in `scripts/`, on-demand domain knowledge in `references/`, templates and schemas in `assets/`.
+- **Move it to `references/` once the body gets long:** a paragraph that only matters after the skill is already running — domain principles, definitions, edge-case handling — is paying a body-sized token cost for reference-sized value. `references/` loads only when reached for.
+- **Bundle repeated deterministic work into `scripts/`:** helper code the agent would otherwise re-derive every time (parsing, math, formatting) belongs in an executable script, not in prose. Code in a script can be unit-tested; the same logic in instructions can only be hoped at.
+
+## Naming
+
+- **Gerund form for skill names:** `managing-databases`, `processing-pdfs` — not `pdf-processor`. A skill names an activity the agent is doing, and the routing model matches on it.
+- **snake_case for directories, kebab-case for skill names.**
+- **No generic names:** `utils`, `tools`, `helper`, `data` give the routing model nothing to match against, so the skill either never fires or fires on everything.
+- **No vendor prefixes:** `claude-*`, `gemini-*`, `anthropic-*` — portability is part of a skill's value, and the prefix buys nothing the description does not already say.
+- **No internal jargon** an outsider would not recognize: a name only your team can parse is a name only your team can route to.
+
 ## The Description Field Is the Routing Algorithm
 
 - **The only routing signal:** the description is all the model sees when deciding whether to load a skill. Everything else in the file is invisible until that decision has already been made, so the description earns more time than the rest of the file combined.
@@ -9,6 +23,7 @@
 - **Front-load trigger keywords:** open with the action ("Generate a commit message…"), and keep it near 200 characters. A description that buries its trigger words behind throat-clearing gets matched less reliably.
 - **Six trigger phrases:** write three positive and three negative triggers for every skill, and verify all six route correctly before shipping. If you cannot write three cases that should *not* fire it, its scope is not yet defined.
 - **Frontmatter must lint clean:** an unparseable skill never routes at all, however good its body is.
+- **Be pushy if it under-triggers:** if testing shows the skill failing to fire on cases it should own, strengthen the description rather than accepting the miss. An under-triggering skill is indistinguishable from an absent one.
 
 ## One Skill, One Job
 
@@ -21,6 +36,15 @@
 - **No paths, no secrets:** never hard-code either inside a skill; skills get committed and shared.
 - **Progressive disclosure:** metadata is always loaded, the `SKILL.md` body loads on trigger, and `references/` loads only when needed. This layering is what lets a library grow large without every skill taxing every turn (see `rules/context-and-token-discipline.md`).
 - **Skills are dependencies:** version them, pin them, and review changes to them in pull requests, exactly as with any other library.
+- **Cut any line that does not earn its place:** keep the gotchas, the exact commands, the business logic, the anti-patterns. Delete boilerplate the model already knows — "always validate output" teaches nothing and costs attention on every turn the skill is loaded.
+- **Make every instruction verifiable:** if the agent cannot tell whether it followed a rule, the rule is too vague to keep as written. Rewrite it as something checkable, or cut it.
+- **Blanket "always do X" rules belong in `CLAUDE.md`, not in a skill:** a skill is loaded conditionally, so a rule that must always hold cannot live in one. Project-wide conventions go in the project-level conventions file.
+- **Don't reinvent MCP as scripts:** reaching an external system is a tool's job — use an MCP server. The skill's job is teaching the agent how to *think* about the task. A skill that re-implements a connector has taken on maintenance that a server was already carrying.
+
+## Meta-Skills: Sequencing
+
+- **Get the manual authoring loop working first:** pointing an agent at an empty folder and asking it to generate a library is the fastest route to a bad one. Author skills by hand until the loop is understood, then automate it.
+- **Prefer harvesting a skill from a real trace:** when a trace of a successfully completed task exists, harvest the skill from it rather than asking an agent to author one from a described workflow. The human's job then shifts from writing the skill to confirming the harvested version captured the right steps — a much easier thing to get right.
 
 ## Skill Smells
 

@@ -18,6 +18,7 @@
 - **Domain allowlisting alone is not a network control:** an allowlist of approved domains cannot stop an indirect prompt injection hidden inside an approved third-party page. The page is on the list; the payload is in the page.
 - **Restrict agents to non-interactive internet access:** have agents fetch external information exclusively through offline caches or dedicated, pre-sanitized crawling services rather than live interactive browsing.
 - **Govern all outbound paths:** agent-generated data should travel only through authorised, governed pathways — offline caches or explicit internal proxies — so an agent cannot inadvertently exfiltrate data or push unverified code into a live environment.
+- **Browser agents get their own profile, never yours:** when an agent drives a browser to reproduce or verify a front-end bug, run it in a sandboxed, incognito-like profile that cannot see or reuse your active logins and personal sessions. A browser agent inheriting a logged-in profile is an agent holding every credential that profile holds — and a prompt injection on any page it visits can then act as you.
 
 ---
 

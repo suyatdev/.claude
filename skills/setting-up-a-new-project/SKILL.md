@@ -40,6 +40,10 @@ Ask **one question at a time**. Use `AskUserQuestion` wherever the options are e
 **2. Review gate — human approval on every PR, or Conditional LGTM (auto-merge on green)?**
 *Default:* human gate. *Why:* auto-merge sits in direct tension with the default-branch-safety and tests-pass-first rules in `rules/pr-requests.md`. It can be the right call for a low-stakes repo with strong tests, but it has to be a deliberate opt-in that a human chose, not a habit the repo slid into.
 
+*If an automated reviewer is wanted, pick the lowest tier that catches what actually matters.* **Managed** — a vendor-hosted reviewer, no infrastructure, generic criteria; enough when the criteria are generic. **Hybrid** — your own review skill triggered by CI (a GitHub Action running a coding-agent CLI); the right call when criteria are team- or repo-specific but need no memory across runs. **Custom** — a dedicated agent with durable sessions; only when the reviewer must hold context across a multi-PR refactor. Escalate on failure severity, not preference: if the worst case is a noisy comment, any tier does. If the worst case is a merged regression or a leaked secret, the reviewer needs a policy gate in front of every tool call it makes — infrastructure this setup does not have (see `skills/securing-agentic-systems`).
+
+Whichever tier: an automated reviewer is a *first pass* — good at bugs, style violations, known vulnerability shapes, and performance smells. It does not replace human review for the context-dependent calls: design, maintainability, strategic fit. Letting it do so converts review into a formality with a green check on it.
+
 **3. Hooks to install in the repo's `.claude/settings.json` — secret scan, invisible-Unicode scan, checkpoint-before-modify?**
 *Default:* none; opt in per hook. *Why:* rule files are instructions, and instructions are guidance a model can be talked out of. Hooks are deterministic and run outside the model's judgment, which is why they are the only real enforcement available here. They are not installed by default because they belong to the repo's `.claude/settings.json`, and that is the user's file to change.
 
