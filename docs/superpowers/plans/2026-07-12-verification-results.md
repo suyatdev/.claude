@@ -14,6 +14,12 @@ question by choosing a **skills destination over always-on** — both rules are 
 than resident in `rules/general-engineering.md`, so they cost zero always-on words and the ceiling
 did not have to move. The always-on total is still **3,473**. All 15 gaps are now closed.
 
+> **⚠ Read the [Final-review fix pass](#final-review-fix-pass-2026-07-12) at the bottom before trusting
+> anything in this document about the hooks.** A whole-branch review found that **both scanner hooks
+> enforced nothing** — they scanned the file on disk, and `PreToolUse` fires before the write lands.
+> They passed their tests because the tests exercised the CLI path, not the hook path. Fixed and
+> re-tested through the real path. The verification pass below did not catch it.
+
 ---
 
 ## Step 1 — Always-on token budget: **PASS**
@@ -109,7 +115,7 @@ the standard requiring it was written down nowhere.
 
 | Content that had landed nowhere | Source | Now lives in |
 |---|---|---|
-| Skill naming: gerund form, kebab-case names, snake_case dirs, no generic names, no vendor prefixes, no jargon | D3 `skill-authoring` | `skills/_standards/authoring-skills-and-agents.md` |
+| Skill naming: gerund form, kebab-case names and dirs (see the final-review pass — the source's `snake_case` dirs would break skill loading here), no generic names, no vendor prefixes, no jargon | D3 `skill-authoring` | `skills/_standards/authoring-skills-and-agents.md` |
 | Folder anatomy: `SKILL.md` mandatory; `scripts/`, `references/`, `assets/` roles | D3 `skill-authoring` | `skills/_standards/...` |
 | "Cut any line that doesn't earn its place" | D3 `skill-authoring` | `skills/_standards/...` |
 | "Make every instruction verifiable" | D3 `skill-authoring` | `skills/_standards/...` |
@@ -364,3 +370,237 @@ The honest headline: the coverage audit was the check that mattered, and it did 
 authoring standards — the file governing how every future skill gets written — had lost an entire
 named section. That is exactly the class of defect a verification pass exists to catch, and it would
 not have surfaced from a spot check.
+
+---
+
+# Final-review fix pass (2026-07-12)
+
+A whole-branch review after Task 18 found a **Critical** defect that this verification pass had marked
+PASS. The PASS was false. What follows is the defect, the fix, and the evidence — run through the code
+path that actually executes in production.
+
+## CRITICAL — the two scanner hooks enforced nothing
+
+`scan-secrets.sh` and `scan-invisible-unicode.sh` extracted `file_path` from the stdin JSON payload
+and then scanned **that file on disk**. `hooks/README.md` wires them as `PreToolUse` on `Write|Edit`,
+which fires **before the write lands**. So:
+
+- **Write of a new file** carrying `AKIAIOSFODNN7EXAMPLE` → the file does not exist yet →
+  `[ -f "$target" ] || continue` skipped it → **exit 0, allowed.**
+- **Edit injecting a secret** into a clean file → the scanner read the **pre-edit** content, which was
+  clean → **exit 0, allowed.**
+- Same for the zero-width Unicode scanner.
+
+The content being written lives in the payload at `tool_input.content` (Write) and
+`tool_input.new_string` (Edit), and was never parsed. Both hooks were inert.
+
+### Why it was reported as passing
+
+**The fixtures called the scripts as `script.sh <file>` — the CLI path. That is not the path a hook
+runs on.** The CLI path worked, so the tests were green, and the production path was never once
+executed. A test that exercises a convenient path *resembling* the real one produces a passing result
+and no safety. This is the second false PASS on this branch, and the lesson generalizes:
+
+> **Test the code path that will actually run in production, not a CLI path that merely resembles it.**
+
+### The fix
+
+Both scripts now detect their mode:
+
+| Mode | Invocation | Scans |
+|---|---|---|
+| **Hook** | no args, JSON on stdin | `tool_input.content` / `new_string` / `edits[].new_string` — the content **being written** |
+| **CLI** | `script.sh <file>…` | the files **on disk** (pre-commit, manual sweeps — retained and re-tested) |
+
+Byte offsets from the Unicode scanner are rebased onto the payload string. Extraction goes through a
+real JSON parser (`python3`), which is not incidental: a zero-width codepoint arrives in the payload as
+a six-character `\u200b` escape — plain ASCII on the wire — and a `sed` extractor would see six
+harmless characters and report it clean. Both scanners now **fail closed**: an unparseable payload or a
+missing `python3` exits 2, because a scanner that cannot see the content cannot certify it.
+
+### The evidence that matters — the ACTUAL hook path
+
+Realistic `PreToolUse` JSON piped on stdin. Preconditions verified first, because they are the whole
+point: the Write target **does not exist on disk**, and the Edit target **is clean on disk** — so a
+scanner that reads the file instead of the payload returns 0 for every case below.
+
+```
+PRECONDITIONS
+  new-file.py exists on disk? NO   <- Write target
+  clean.py on disk contains a secret? NO  <- Edit target is CLEAN on disk
+
+=== scan-secrets.sh
+$ scan-secrets.sh < w-secret.json
+/tmp/hookpath.WOCslO/new-file.py:2: possible secret [AWS access key id]
+scan-secrets: credential material detected — write blocked.
+If this is a false positive, fix the pattern or move the value to an env var.
+exit: 2
+
+$ scan-secrets.sh < w-clean.json
+exit: 0
+
+$ scan-secrets.sh < e-secret.json
+/tmp/hookpath.WOCslO/clean.py:1: possible secret [Bearer token]
+scan-secrets: credential material detected — write blocked.
+If this is a false positive, fix the pattern or move the value to an env var.
+exit: 2
+
+$ scan-secrets.sh < e-clean.json
+exit: 0
+
+=== scan-invisible-unicode.sh
+$ scan-invisible-unicode.sh < w-zwsp.json
+/tmp/hookpath.WOCslO/new-file.py: byte offset 23: invisible codepoint U+200B (ZERO WIDTH SPACE)
+scan-invisible-unicode: hidden codepoints detected — write blocked.
+These are invisible in a diff. Strip them before proceeding.
+exit: 2
+
+$ scan-invisible-unicode.sh < w-nozwsp.json
+exit: 0
+
+$ scan-invisible-unicode.sh < e-rlo.json
+/tmp/hookpath.WOCslO/clean.py: byte offset 18: invisible codepoint U+202D (LEFT-TO-RIGHT OVERRIDE)
+/tmp/hookpath.WOCslO/clean.py: byte offset 12: invisible codepoint U+202E (RIGHT-TO-LEFT OVERRIDE)
+scan-invisible-unicode: hidden codepoints detected — write blocked.
+These are invisible in a diff. Strip them before proceeding.
+exit: 2
+
+$ scan-invisible-unicode.sh < e-norlo.json
+exit: 0
+```
+
+**8/8 correct: positive and negative, Write and Edit, both scanners.** The Unicode positives are the
+sharpest proof — the ZWSP and the bidi overrides existed *only* as `\u` escapes in the payload JSON and
+*only* in the new content; nothing on disk carried them.
+
+CLI mode re-tested and still correct (secret file → 2, clean file → 0; ZWSP file → 2, clean file → 0).
+Fail-closed re-tested: garbage on stdin → **exit 2** with a named reason, for both.
+
+## IMPORTANT — `checkpoint-before-modify.sh` stranded the agent
+
+Wired to `PreToolUse` on `Bash`, it blocked **every** Bash call on a dirty tree — including `git add`,
+`git commit`, and `git stash`, which are the only actions that would satisfy it. It printed "commit or
+stash these" while blocking the commit and the stash. There was no recovering move. **A guard whose own
+remedy it blocks is not a guard, it is a trap.**
+
+Fixed with a command allowlist read from `tool_input.command`, evaluated in order: recovery/read-only
+always passes → destructive requires a clean checkpoint → everything else passes.
+
+```
+dirty tree: ?? work.txt
+
+--- RECOVERY (must pass on a dirty tree — this is the stranding fix)
+git add -A                               exit=0
+git commit -m "wip"                      exit=0
+git stash                                exit=0
+git status --porcelain                   exit=0
+git diff HEAD                            exit=0
+git log --oneline                        exit=0
+git commit -m "stop using rm -rf here"   exit=0    <- allowlist beats the message text
+
+--- ORDINARY WORK (must pass)
+npm test / pytest -q / ls -la / CI=1 npm run build    exit=0
+
+--- DESTRUCTIVE on a DIRTY tree (must block)
+rm -rf src/                              exit=2
+git reset --hard HEAD~1                  exit=2
+git clean -fd                            exit=2
+git checkout -- .                        exit=2
+git push --force origin main             exit=2
+git branch -D feat                       exit=2
+find . -name "*.tmp" -delete             exit=2
+
+--- DESTRUCTIVE on a CLEAN tree (rollback point exists → must pass)
+rm -rf src/                              exit=0
+git reset --hard HEAD~1                  exit=0
+```
+
+A bug worth recording: the first version of the allowlist used inline regexes in `[[ =~ ]]`. Bash's
+parser reads a bare `(` or `;` inside one as shell syntax and dies with "unexpected EOF" — and a dead
+script exits non-zero, which a `PreToolUse` hook reports as a **block**. Every test case "passed" as
+`exit=2`, which looked exactly like a working guard. The regexes now live in variables. A syntax error
+that fails in the blocking direction is invisible unless the negative cases are checked too.
+
+## The gate test the spec promised and nobody ran — now run
+
+The spec's verification plan promised: *"Simulate a new-repo setup and confirm the opt-in register
+blocks and writes `.claude/project-standards.md`."* It was never executed. Executed now, in a throwaway
+git repo in a temp dir:
+
+```
+repo: /tmp/newrepo.lJ8RuS
+project-standards present? NO
+
+=== BEFORE: repo has no .claude/project-standards.md
+src/app.py (project source)          exit=2     <- BLOCKED
+README.md (docs exemption)           exit=0
+.claude/project-standards.md         exit=0     <- the register itself is never blocked
+
+--- block message the agent sees:
+    require-project-standards: blocked write to src/app.py
+
+    This repo has no .claude/project-standards.md.
+    Repo root: /private/tmp/newrepo.lJ8RuS
+
+    Run the `setting-up-a-new-project` skill first. It runs the opt-in register
+    (language, test runner, lint, CI, review gates) and writes the answers to
+    .claude/project-standards.md. Source code is gated until that exists.
+
+=== register written (as the setting-up-a-new-project skill would)
+=== AFTER
+src/app.py (project source)          exit=0     <- ALLOWED
+```
+
+**The gate is real.** It blocks project source, exempts docs and `.claude/`, and opens once the register
+exists.
+
+## Documentation defects fixed in the same pass
+
+- **`hooks/README.md` install paths pointed where the scripts are not.** Every snippet used
+  `$CLAUDE_PROJECT_DIR/.claude/hooks/<script>.sh`, but the scripts live in `~/.claude/hooks/`. Pasted
+  into any repo, that path resolves to a file that does not exist — **exit 127 on every Write**, and the
+  missing "copy the scripts in first" step was never stated. Both install forms are now documented: a
+  user-level install referencing `$HOME/.claude/hooks/` (no copying), and a per-repo install with the
+  `cp` step spelled out.
+- **`skills/_standards/authoring-skills-and-agents.md` had no "none of this exists here" disclaimer**,
+  while its Deployment Checklist asserted unit tests in CI, an eval suite in CI, and a clean security
+  scan — **none of which exist in this repo.** It is loaded independently (`CLAUDE.md` points straight
+  at it), so it could not inherit a sibling's note. It now carries its own, matching the tone of
+  `evaluating-agents-and-skills`.
+- **`snake_case for directories` was wrong for this harness.** It was a faithful transcription of the
+  source paper and would have broken skill loading here: Claude Code resolves a skill by matching the
+  directory name to the frontmatter `name`, so `securing_agentic_systems/` with
+  `name: securing-agentic-systems` simply never loads. All 8 skills on this branch use kebab-case
+  directories. Corrected to kebab-case **with the rationale stated** — it was that file's only
+  rationale-free imperative, in a file that forbids them — and the divergence from the source is called
+  out rather than silently applied.
+- **Spec drift corrected.** The design doc still described `rules/authoring-skills-and-agents.md` as a
+  ~350-word Tier-2 always-on file (it shipped as `skills/_standards/`, ~1,500 words, load-on-demand) and
+  still listed 3 hooks (4 shipped). Both fixed, including the four stale coverage-map rows.
+- **The ledger stopped at Task 8.** `.superpowers/sdd/progress.md` now carries Tasks 9–19, so the
+  disclosed-drops record is complete.
+
+## Re-verified after this pass
+
+```
+$ wc -w CLAUDE.md rules/*.md RTK.md | tail -1
+    3473 total
+```
+
+**Always-on budget unchanged at 3,473 / 3,500.** Every fix landed in `hooks/`, `skills/_standards/`, or
+docs — none of it always-on.
+
+`settings.json` remains **untouched and uncommitted**. The hooks are still *designed, not installed*,
+which is the user's explicit choice. Fixing a scanner is not the same as wiring it in, and this pass did
+not wire anything in.
+
+## The gap that remains — stated plainly
+
+**Skill-trigger routing accuracy is UNMEASURED.** Step 3 above verified that the 24 positive trigger
+phrases are textually distinct and that no phrase is claimed by two skills. That is a *collision* check,
+not an *accuracy* check. It says nothing about whether the routing model actually fires
+`securing-agentic-systems` when it should, or fires it when it should not. Measuring that requires a live
+multi-session eval against a labelled trigger set — and, as `skills/evaluating-agents-and-skills` says of
+itself, **no eval harness exists here.** The 90%-trigger-accuracy bar that
+`skills/_standards/authoring-skills-and-agents.md` sets for a Read-Only skill has **not been met, because
+it has not been measured.** Do not read "no collisions" as "routing works."

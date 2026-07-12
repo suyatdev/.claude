@@ -127,7 +127,15 @@ when architecting such a system, not in every-turn operating rules.
 - Dependencies come from vetted registries with pinned versions — guards against slopsquatting
   (malware published under names matching LLM-hallucinated packages).
 
-**`rules/authoring-skills-and-agents.md`** (~350 words)
+**`skills/_standards/authoring-skills-and-agents.md`** — *shipped as a Tier-3 load-on-demand reference, not a Tier-2 always-on rule.*
+
+> **Amended during Task 3b, recorded here so the spec matches what shipped.** This was originally
+> specified as `rules/authoring-skills-and-agents.md`, ~350 words, always-on. It moved to
+> `skills/_standards/` for two reasons: it only applies while *authoring a skill*, which is a small
+> fraction of turns, and the always-on budget could not carry it at the fidelity it needed (it ships at
+> ~1,500 words). `CLAUDE.md` carries a **pointer** to it, not an `@import`, so it costs zero always-on
+> words. The always-on total is 3,473 with it excluded.
+
 Reinforces `skill-creator` and `superpowers:writing-skills`; does not compete with them.
 - The description field *is* the routing algorithm — it is the only content the model sees when
   deciding whether to load a skill. ~200 characters, stating what it does, when to use it, and
@@ -182,7 +190,7 @@ walks through the checklist. Answers are written to that repo's `.claude/project
    follows. Day 1: teams that leave this blurry "ship prototypes into production by accident."
 2. **Conditional LGTM** — auto-merge on green, or human gate. Default: human gate.
 3. **Hooks to install** in the repo's `.claude/settings.json` — secret scan, invisible-Unicode scan,
-   checkpoint-before-modify.
+   checkpoint-before-modify, require-project-standards (four shipped; see `hooks/README.md`).
 4. **Spec folder** — is a spec required before implementation, and is BDD/Gherkin mandated?
 5. **Sandboxing** — do agent-written scripts execute in a container, or on the host?
 6. **`security:scan` script** — wired and runnable (the existing global rule already requires this;
@@ -195,17 +203,29 @@ walks through the checklist. Answers are written to that repo's `.claude/project
 ## Hooks — designed, not installed
 
 Instructions demonstrably cannot enforce these; the standards are explicit that deterministic,
-external enforcement is required. Scripts will be written to `hooks/` and documented, but
+external enforcement is required. Scripts are written to `hooks/` and documented, but
 `settings.json` is **left untouched** pending review.
+
+**Four shipped, not three** — `require-project-standards.sh` was added during implementation as the
+enforcement half of the opt-in register below, on the same reasoning as the rest: the register is
+specified as a *blocking gate*, and a gate made of words is a gate that opens when pushed.
 
 1. **Secret-pattern scan** — PreToolUse on Write/Edit and pre-commit. Blocks obvious credential
    patterns.
-2. **Zero-width Unicode / homoglyph scan** — on files read and written. Day 4: a single hidden payload
+2. **Zero-width Unicode / homoglyph scan** — on content written. Day 4: a single hidden payload
    can spread across hundreds of files within minutes once an agent starts replicating it, and it
    bypasses human review by construction.
-3. **Checkpoint-before-modify** — ensures a rollback point exists before a codebase modification.
+3. **Checkpoint-before-modify** — ensures a rollback point exists before a *destructive* command.
+   Carries a command allowlist: recovery commands (`git add`/`commit`/`stash`) and ordinary work
+   always pass, or the hook strands the agent by blocking its own remedy.
+4. **Require-project-standards** — blocks writes of project source into a git repo that has no
+   `.claude/project-standards.md`. Exempts `.claude/` and docs.
 
-All three fail loud rather than silently blocking, so a false positive is visible and correctable.
+Both scanners take the content to scan **from the PreToolUse payload** (`tool_input.content`,
+`tool_input.new_string`), not from the file on disk: the hook fires *before* the write lands, so the
+path holds either nothing or the pre-edit text.
+
+All four fail loud rather than silently blocking, so a false positive is visible and correctable.
 
 ## Coverage map — all 38 files
 
@@ -238,13 +258,13 @@ Every extracted file has a destination. Nothing is silently dropped.
 | File | Destination |
 |---|---|
 | `index.md` | (navigational) |
-| `skill-authoring-and-structure.md` | `rules/authoring-skills-and-agents.md` |
+| `skill-authoring-and-structure.md` | `skills/_standards/authoring-skills-and-agents.md` |
 | `evaluation-and-testing.md` | `skills/evaluating-agents-and-skills` |
-| `governance-and-deployment.md` | `rules/authoring-skills-and-agents.md` (authority ladder) + `skills/evaluating-agents-and-skills` (deployment checklist) |
+| `governance-and-deployment.md` | `skills/_standards/authoring-skills-and-agents.md` (authority ladder) + `skills/evaluating-agents-and-skills` (deployment checklist) |
 | `context-and-token-management.md` | `rules/context-and-token-discipline.md` |
 | `composition-and-architecture.md` | `skills/designing-agentic-architecture` |
-| `meta-skills-and-self-improvement.md` | `rules/authoring-skills-and-agents.md` |
-| `skill-sourcing-and-security.md` | `rules/authoring-skills-and-agents.md` (trust tiers, pinning) + `rules/zero-trust-and-agent-safety.md` |
+| `meta-skills-and-self-improvement.md` | `skills/_standards/authoring-skills-and-agents.md` |
+| `skill-sourcing-and-security.md` | `skills/_standards/authoring-skills-and-agents.md` (trust tiers, pinning) + `rules/zero-trust-and-agent-safety.md` |
 
 ### Day 4 — Vibe Coding Agent Security and Evaluation
 | File | Destination |

@@ -2,6 +2,10 @@
 
 > **Reference document.** Load this when authoring or editing a skill or an agent. It is not a triggerable skill: `skill-creator` and `superpowers:writing-skills` own the authoring *workflow*. This file states the *standards* the resulting skill must meet, and the bar it must clear before it is allowed to act.
 
+## None of This Machinery Exists Here Yet
+
+**Read this before applying anything below.** This configuration has no CI, no unit tests for skill scripts, no eval suite, no automated security scan, no linter wired to a merge gate, and no org-level provisioning. The Deployment Checklist and the graduation criteria on the authority ladder describe **the bar to build toward**, not gates that currently run — nothing in this repository will stop a skill from shipping unverified today. Every check named here is **absent until someone builds it**; a document mistaken for an inventory produces false confidence, which is worse than having no document at all. Where a gate is claimed but not built, the honest move is to run the check by hand and say so.
+
 ## Folder Anatomy
 
 - **`SKILL.md` is the only mandatory file:** every skill is a directory anchored by one. `scripts/`, `references/`, and `assets/` are optional and exist to hold what does not need to be in the body — deterministic code in `scripts/`, on-demand domain knowledge in `references/`, templates and schemas in `assets/`.
@@ -11,7 +15,7 @@
 ## Naming
 
 - **Gerund form for skill names:** `managing-databases`, `processing-pdfs` — not `pdf-processor`. A skill names an activity the agent is doing, and the routing model matches on it.
-- **snake_case for directories, kebab-case for skill names.**
+- **kebab-case for both the directory and the skill name, and they must be identical:** `securing-agentic-systems/` holding a `SKILL.md` whose frontmatter says `name: securing-agentic-systems`. Claude Code resolves a skill by matching the directory name to the frontmatter `name`, so a mismatch means the skill never loads at all — no error, it is simply not there. (**Divergence from the source paper, deliberate:** it specifies *snake_case for directories, kebab-case for names*. That is correct for the harness it describes and wrong for this one — `securing_agentic_systems/` with `name: securing-agentic-systems` would break loading here. The rule follows the harness that actually runs the skill.)
 - **No generic names:** `utils`, `tools`, `helper`, `data` give the routing model nothing to match against, so the skill either never fires or fires on everything.
 - **No vendor prefixes:** `claude-*`, `gemini-*`, `anthropic-*` — portability is part of a skill's value, and the prefix buys nothing the description does not already say.
 - **No internal jargon** an outsider would not recognize: a name only your team can parse is a name only your team can route to.
@@ -72,7 +76,7 @@ Supporting rules:
 
 ## Deployment Checklist
 
-Verify all of the following before a skill ships:
+Verify all of the following before a skill ships. **None of these gates exist in this repository** (see the note at the top): there is no CI, no eval suite, and no security scan to fail. Read this as the bar to build toward, and until it is built, run what you can by hand and state plainly which items were not checked.
 
 - Frontmatter validates (lint passes).
 - The description says what the skill does, when to use it, and when not to.
