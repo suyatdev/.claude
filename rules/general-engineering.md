@@ -29,6 +29,18 @@ Prioritize quality, simplicity, robustness, reliability, and long-term maintaina
 - Cover the meaningful behavior, including edge cases and error paths.
 - Structure tests as Arrange-Act-Assert with descriptive names.
 - When a test fails, fix the implementation - only change the test if the test itself is wrong.
+- **Reproduce before you fix.** Write a failing test or repro command first, and keep it permanently so the bug cannot silently return.
+- **Never edit tests and implementation in the same step.** The test stays an unbiased baseline; editing both turns a build green without fixing anything.
+
+## Working On Existing Code
+
+- **Fix the root cause, and only the root cause.** Debug from evidence — logs, request flow — not symptoms. Drive-by cleanup hides the real fix; a rename is its own task.
+
+## Starting New Work
+
+- **Never scaffold in YOLO mode.** Propose structure and stack, then wait for confirmation — a scaffold's defaults outlive the session.
+- **Pin exact library and tool versions.** Unpinned, an agent falls back on training data and picks something outdated.
+- **Architecture trade-offs stay human-owned** — consistency vs. availability, complexity vs. flexibility, build vs. buy. Implement once decided; never decide unilaterally.
 
 ## Security Engineering Guardrails
 
