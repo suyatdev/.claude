@@ -40,7 +40,7 @@ Prioritize quality, simplicity, robustness, reliability, and long-term maintaina
 
 - **Never scaffold in YOLO mode.** Propose structure and stack, then wait for confirmation — a scaffold's defaults outlive the session.
 - **Pin exact library and tool versions.** Unpinned, an agent falls back on training data and picks something outdated.
-- **Architecture trade-offs stay human-owned** — consistency vs. availability, complexity vs. flexibility, build vs. buy. Implement once decided; never decide unilaterally.
+- **Architecture trade-offs stay human-owned** — consistency vs. availability, complexity vs. flexibility, build vs. buy. They need judgment AI cannot provide.
 
 ## Security Engineering Guardrails
 
