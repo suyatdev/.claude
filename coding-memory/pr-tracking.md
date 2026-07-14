@@ -27,7 +27,7 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 ### feature/modular-coding-memory
 - branch: feature/modular-coding-memory
 - remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: not yet opened
+- PR: https://github.com/suyatdev/.claude/pull/5 (open)
 - opened_by session_origin: desktop (VSCode)
 - last_push session_origin: desktop (VSCode)
-- implementation status: in progress — see coding-memory/branches/modular-coding-memory.md
+- implementation status: implemented and pushed, PR open awaiting review — see coding-memory/branches/modular-coding-memory.md
