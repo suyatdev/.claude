@@ -35,7 +35,7 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 ### feature/new-project-memory-scaffold
 - branch: feature/new-project-memory-scaffold
 - remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: not yet opened
+- PR: https://github.com/suyatdev/.claude/pull/6 (open)
 - opened_by session_origin: desktop (VSCode)
 - last_push session_origin: desktop (VSCode)
-- implementation status: in progress — see coding-memory/branches/new-project-memory-scaffold.md
+- implementation status: implemented and pushed, PR open awaiting review — see coding-memory/branches/new-project-memory-scaffold.md
