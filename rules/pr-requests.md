@@ -6,7 +6,7 @@
 - **PR/Remote First Workflow:** Before any pull/sync step, first check whether an open PR already exists for the current repo/branch and whether a remote already exists for pushing updates.
 - **PR/Remote Creation Rule:** If no PR/remote exists yet, create the remote/PR first, then record that PR state in memory for future runs.
 - **PR Descriptions**: Every PR output must explicitly outline:
-  1. A description of all changes in layman's terms.
+  1. A description of all changes in layman's terms — translate technical/architectural detail into plain language a non-engineer can follow; define any unavoidable jargon inline.
   2. Why the change was made.
   3. Links to related PRs, if any (otherwise state "None").
   4. Screenshots, if the PR is UI-related: include a **before** and **after** screenshot scoped to the specific section that changed (not a full-page dump). If non-UI, state "N/A - non-UI change".

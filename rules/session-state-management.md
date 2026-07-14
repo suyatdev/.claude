@@ -3,13 +3,11 @@
 - **Continuous Tracking:** You must maintain a running summary of our progress in a file named `CODING_MEMORY.md`.
 - **Event-Based Saves:** Update `CODING_MEMORY.md` immediately after completing any major task, resolving a significant bug, or making a structural architectural decision.
 - **Pre-Compaction Save:** If the conversation context is growing long, or before you execute any `/compact` commands to clear history, you must update `CODING_MEMORY.md` first to prevent context loss.
-- **State File Structure:** Your updates to the state file must concisely include:
-  1. A summary of the current session.
-  2. Key decisions made and new conventions established.
-  3. The exact next steps required.
+- **State File Structure:** Each update must concisely include a session summary, key decisions/conventions, and exact next steps.
+- **Modular Memory:** Keep `CODING_MEMORY.md` an index only, at or under 200 lines — active session, repo/PR pointers, next steps. Move PR history, session logs, decisions, branch logs, and brainstorm write-ups into `coding-memory/<topic>.md` files, linked by path — never inlined back into the index.
+- **Plain-Language Summaries:** Session summaries and technical output shown in chat (diffs, architecture, errors) must be major-changes-only, plain language a non-engineer or junior developer can follow, skip routine/local steps, and cover only changes that affect other files, systems, or components. Same standard applies to PR descriptions of technical changes.
 - **Session Startup:** At the beginning of every new session, silently read `CODING_MEMORY.md` to restore your context before beginning work.
-- **Session Origin Tracking:** At the start of every session, record the environment it was opened from — one of: `desktop`, `remote`, or `browser`. Store this in `CODING_MEMORY.md` under the active session block as `session_origin`.
-- **Session Origin Fields:** For each session block in `CODING_MEMORY.md`, record: `session_origin` (desktop/remote/browser), `session_started_at` (timestamp), and `last_active_branch`.
+- **Session Origin Fields:** At the start of every session, record `session_origin` (`desktop`/`remote`/`browser`), `session_started_at` (timestamp), and `last_active_branch` under the active session block in `CODING_MEMORY.md`.
 - **Cross-Environment Resume Rule:** When starting a session in a different environment than the previous one (e.g., picking up a desktop session remotely), read `CODING_MEMORY.md` first, note the `session_origin` switch, and confirm the branch is up to date before continuing. Do not assume local state matches remote state across environments.
 - **Most-Recent Session Is Source of Truth:** The session with the latest `session_started_at` timestamp is considered the authoritative source for current work state. Any conflicting in-progress work in an older session must defer to the most recent one.
 - **Pre-Session Planning Check:** Right before each session begins, if the next task starts in planning mode, pause and ask the user whether to switch models or continue using the current model. Do not begin planning until the user answers.
