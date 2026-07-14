@@ -72,8 +72,8 @@ Whichever tier: an automated reviewer is a *first pass* — good at bugs, style 
 
 1. Copy `assets/project-standards-template.md` into the target repo as `.claude/project-standards.md`.
 2. Fill in every section with the user's actual answers, including the `Decided on:` date and the `Revisit when:` trigger. An unfilled section is a question that was skipped, and skipping is the thing this skill exists to prevent.
-3. Add a pointer line for the repo in `CODING_MEMORY.md` so future sessions know the register has been run and where the answers live.
-4. Commit the file with the repo's setup work. It is a project artifact, not a scratch note.
+3. Create the repo's own `CODING_MEMORY.md` as a lean index (active session, PR pointers, next steps — see `rules/session-state-management.md`) with a `coding-memory/` directory alongside it for history, from the first commit. Add a pointer line there for this setup register so future sessions know it has run and where the answers live.
+4. Commit both files with the repo's setup work. They are project artifacts, not scratch notes.
 
 Then proceed to the actual work.
 

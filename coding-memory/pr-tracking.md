@@ -25,9 +25,17 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - detail: coding-memory/branches/standards-extractor-agent.md
 
 ### feature/modular-coding-memory
-- branch: feature/modular-coding-memory
+- branch: feature/modular-coding-memory (merged; not yet deleted locally/on origin)
 - remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/5 (open)
+- PR: https://github.com/suyatdev/.claude/pull/5 (MERGED 2026-07-14)
 - opened_by session_origin: desktop (VSCode)
 - last_push session_origin: desktop (VSCode)
-- implementation status: implemented and pushed, PR open awaiting review — see coding-memory/branches/modular-coding-memory.md
+- implementation status: complete and merged — see coding-memory/branches/modular-coding-memory.md
+
+### feature/new-project-memory-scaffold
+- branch: feature/new-project-memory-scaffold
+- remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/6 (open)
+- opened_by session_origin: desktop (VSCode)
+- last_push session_origin: desktop (VSCode)
+- implementation status: implemented and pushed, PR open awaiting review — see coding-memory/branches/new-project-memory-scaffold.md

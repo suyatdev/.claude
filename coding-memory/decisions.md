@@ -26,3 +26,8 @@ non-safety rules — the ones you can't predict you'll need, which is exactly wh
 2026-07-13 update: the modular-memory change (merged a redundant bullet to partly offset cost) brought
 the total to 3,538/3,500 words — 38 words over. Still ~9% of the context-rot threshold, so left as is
 rather than cut for the sake of a round number. See coding-memory/branches/modular-coding-memory.md.
+
+2026-07-14 update: folding the memory-bootstrap prompt into the existing "Session Startup" bullet
+(instead of a new bullet) brought the total to 3,567/3,500 — 67 words over. Still well under the ~50K
+active-token context-rot threshold (~9.5%). See coding-memory/branches/new-project-memory-scaffold.md.
+If this keeps climbing, the next always-on edit should trim before adding, not just accept more drift.
