@@ -6,7 +6,7 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop (VSCode)
-- session_started_at: 2026-07-13
+- session_started_at: 2026-07-14
 - last_active_branch: feature/new-project-memory-scaffold
 
 ## Repositories
@@ -27,7 +27,12 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. Wait for PR #6 review/merge. Once merged, this repo's always-on rules budget sits at 3,567/3,500
-   words — worth a trim pass on a future rules change rather than continued drift.
-2. Nothing else outstanding — the VibeCodingRules integration and standards-extractor agent are both
-   shipped and merged.
+1. **Rules-to-skills restructure (next task):** approved design at
+   `docs/superpowers/specs/2026-07-14-rules-to-skills-restructure-design.md` (committed on
+   feature/new-project-memory-scaffold). Next step: invoke `superpowers:writing-plans` to create the
+   implementation plan — user chose to switch to a cheaper model first (Hard Model Gate satisfied for
+   spec writing; re-confirmed for implementation). Implementation gets its own feature branch off main.
+   The restructure replaces the 7 rules files with core-conduct.md + gates.md, 5 new skills
+   (agentskills.io-conformant), and a git-guard PreToolUse hook. This also supersedes the old
+   "trim pass on rules budget" note — the restructure IS the trim.
+2. Wait for PR #6 review/merge (branch also now carries the restructure spec commits).
