@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-14
 **Status:** Approved design, pending implementation plan
-**Scope:** The 7 `rules/*.md` files imported by `~/.claude/CLAUDE.md`. CLAUDE.md itself changes only mechanically: the `@rules/*` import lines are swapped for the two new files, and four lines are added to its Skills Catalog section. Explicitly out of scope: `RTK.md`, the rest of `CLAUDE.md`'s text, existing skills (except the two receiving merged content), superpowers plugin.
+**Scope:** The 7 `rules/*.md` files imported by `~/.claude/CLAUDE.md`. CLAUDE.md itself changes only mechanically: the `@rules/*` import lines are swapped for the two new files, and five lines are added to its Skills Catalog section. Explicitly out of scope: `RTK.md`, the rest of `CLAUDE.md`'s text, existing skills (except the two receiving merged content), superpowers plugin.
 
 ## Problem
 
@@ -47,11 +47,11 @@ Three enforcement tiers, strongest first:
 - Default-branch safety → stub here; enforcement via hook (Tier 1)
 - Project Setup Gate → points at existing `setting-up-a-new-project` skill (unchanged)
 
-Estimated static cost after restructure: **~1.4–1.8K tokens** (from ~5.2K), plus ~300 tokens of new skill descriptions in the always-loaded catalog. Net saving ≈ 3–3.5K tokens per turn.
+Estimated static cost after restructure: **~1.4–1.8K tokens** (from ~5.2K), plus ~375 tokens of new skill descriptions in the always-loaded catalog. Net saving ≈ 3–3.5K tokens per turn.
 
-### Tier 3: The four new skills
+### Tier 3: The five new skills
 
-All four conform to the agentskills.io specification: kebab-case `name` (max 64 chars, lowercase alphanumeric + hyphens, no leading/trailing/consecutive hyphens) matching the directory name exactly; `description` ≤1,024 chars stating what, when, and when not; body <500 lines and under ~5,000 tokens; long detail in `references/`; relative file references one level deep.
+All five conform to the agentskills.io specification: kebab-case `name` (max 64 chars, lowercase alphanumeric + hyphens, no leading/trailing/consecutive hyphens) matching the directory name exactly; `description` ≤1,024 chars stating what, when, and when not; body <500 lines and under ~5,000 tokens; long detail in `references/`; relative file references one level deep.
 
 | Skill | Source content | Triggers on |
 |---|---|---|
@@ -59,6 +59,15 @@ All four conform to the agentskills.io specification: kebab-case `name` (max 64 
 | `preparing-pull-requests` | `pr-requests.md`: branch naming, Conventional Commits, PR/remote-first workflow, 6-part PR description template, PR memory fields, brainstorm-then-branch, branch resume + freshness rules, AI-code review posture | Creating branches, committing, opening or updating PRs |
 | `writing-secure-code` | `general-engineering.md` Security Guardrails + prompt sanitization: injection prevention, XSS, secrets handling, mass assignment, IDOR, schema validation at boundaries, SAST hooks, least-data prompting | Writing or reviewing code touching external input, auth, databases, or AI calls |
 | `allocating-local-ports` | `local-port-registry.md`, near-verbatim | New Docker port mappings, dev servers, native/Homebrew services |
+| `triaging-new-instructions` | New content (decision tree derived in this design): guided prompts that classify a proposed instruction into hook / static rule / gate stub + skill / new or existing skill / reference file, then hand off to the matching authoring path (`skill-creator`, `update-config`, or direct rule edit) with `_standards/authoring-skills-and-agents.md` loaded | User wants to add a new rule, instruction, skill, hook, or "always/never do X" behavior |
+
+**The `triaging-new-instructions` decision tree** (the skill's body walks these as guided questions, one at a time, then hands off):
+
+1. Can a script decide it from observable facts (command string, branch, file path, staged files)? → **hook** via `update-config`, optionally with an explanatory stub.
+2. Must it hold on every turn, or is its applicability unpredictable from task type (identity, safety invariants, parallel-agent rules)? → **static rule** in `core-conduct.md`.
+3. Judgment-based but must never be missed (a gate)? → **stub in `gates.md` + procedure in a skill**.
+4. Needed only during a specific activity? → **skill** — first checking whether an existing skill should own it (extend rather than duplicate; an "and" between unrelated capabilities means two skills).
+5. Rarely-needed reference data? → **reference file** a skill points at, never preloaded.
 
 **Merges into existing skills (no new skill created):**
 
@@ -103,12 +112,13 @@ Every section of the current 7 files maps to exactly one destination:
 | zero-trust-and-agent-safety.md | Invariants | `core-conduct.md` (compressed) |
 | zero-trust-and-agent-safety.md | Rationale prose | merge → existing `securing-agentic-systems` |
 | local-port-registry.md | All | skill: `allocating-local-ports` |
+| — (new content, no source file) | Instruction-placement decision tree from this design | skill: `triaging-new-instructions` |
 
 A **line-level** audit checklist (every rule line → destination or "dropped because X") is produced as the first implementation step, before any deletion. No line moves implicitly.
 
 ## Verification
 
-1. **Spec validation:** `skills-ref validate` passes clean on all four new skill directories.
+1. **Spec validation:** `skills-ref validate` passes clean on all five new skill directories.
 2. **Trigger testing:** per `skills/_standards/authoring-skills-and-agents.md` — 3 positive and 3 negative trigger phrases per skill, verified to route correctly in a fresh session before old rule files are removed. A miss → strengthen the description, retest.
 3. **Hook testing:** run `git-guard.sh` manually with fake tool-input JSON: commit on main (blocked), commit on main with only CODING_MEMORY staged (allowed), commit on feature branch (allowed), force push (blocked), rtk-prefixed variants of each.
 4. **Token measurement:** word-count of all statically loaded content before and after, recorded in the PR description.
@@ -118,7 +128,7 @@ A **line-level** audit checklist (every rule line → destination or "dropped be
 One PR on a feature branch (created at implementation time, after the model-switch checkpoint):
 
 1. Line-level audit checklist from the current 7 files
-2. Create 4 skill directories, write bodies from the audit
+2. Create 5 skill directories, write bodies from the audit (plus the decision tree above for `triaging-new-instructions`)
 3. Merge content into `securing-agentic-systems` and `designing-agentic-architecture`
 4. Write + manually test `hooks/git-guard.sh`; register in `settings.json`
 5. Run skills-ref validation + trigger tests
