@@ -8,6 +8,10 @@
 #      brainstorm-then-branch exception).
 #   2. Force-push guard: blocks a bare `git push --force`/`-f` on any branch;
 #      allows `--force-with-lease` except when the current branch is main/master.
+#      Scope note: this matches `--force`/`-f`/`--force-with-lease` specifically,
+#      not the `+refspec` force-push form (`git push origin +main`) — a momentum
+#      guardrail, not a security boundary, same philosophy as
+#      checkpoint-before-modify.sh's leading-command match.
 #
 # Must also catch the `rtk git ...` form: the RTK PreToolUse hook (registered
 # ahead of this one in settings.json) rewrites plain git commands before this

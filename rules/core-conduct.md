@@ -2,7 +2,7 @@
 
 Permanent invariants that hold on every turn. Everything else — procedures, checklists, reference data — loads on demand via `rules/gates.md` (judgment gates) or the Skills Catalog in `CLAUDE.md`.
 
-Prioritize quality, simplicity, robustness, and long-term maintainability over development speed — prefer the simplest solution that fully solves the problem, and when a tradeoff must be made, favor whatever will be easier to understand, test, and change six months from now.
+Prioritize quality, simplicity, robustness, reliability, and long-term maintainability over development cost and speed — prefer the simplest solution that fully solves the problem, and when a tradeoff must be made, favor whatever will be easier to understand, test, and change six months from now.
 
 ## Session Defaults
 
