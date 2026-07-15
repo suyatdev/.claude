@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-14
 **Status:** Approved design, pending implementation plan
-**Scope:** The 7 `rules/*.md` files imported by `~/.claude/CLAUDE.md`. Explicitly out of scope: `RTK.md`, `CLAUDE.md` body text, existing skills (except the two receiving merged content), superpowers plugin.
+**Scope:** The 7 `rules/*.md` files imported by `~/.claude/CLAUDE.md`. CLAUDE.md itself changes only mechanically: the `@rules/*` import lines are swapped for the two new files, and four lines are added to its Skills Catalog section. Explicitly out of scope: `RTK.md`, the rest of `CLAUDE.md`'s text, existing skills (except the two receiving merged content), superpowers plugin.
 
 ## Problem
 
@@ -70,7 +70,7 @@ All four conform to the agentskills.io specification: kebab-case `name` (max 64 
 One script, `~/.claude/hooks/git-guard.sh`, registered as a `PreToolUse` hook with matcher `Bash` in `settings.json`:
 
 1. **Main-branch commit guard.** Blocks `git commit` when the current branch is `main`/`master`, unless every staged file is `CODING_MEMORY.md` or under `coding-memory/` (the brainstorm-then-branch exception, checked via `git diff --cached --name-only`). Blocks with exit code 2 and an explanatory stderr message.
-2. **Force-push guard.** Blocks `git push --force`/`-f` to `main`/`master`; `--force-with-lease` remains allowed on feature branches.
+2. **Force-push guard.** Bare `git push --force`/`-f` is blocked on every branch; `--force-with-lease` is allowed on feature branches and blocked when the target is `main`/`master`.
 
 Implementation constraints:
 
