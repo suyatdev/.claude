@@ -18,7 +18,10 @@ how this file and its linked files should be written (plain language, major chan
 - PR #4 (feature/vibe-coding-standards-integration) — MERGED 2026-07-12.
 - PR #3 (feature/standards-extractor-agent) — MERGED.
 - PR #5 (feature/modular-coding-memory) — MERGED 2026-07-14. `main` fast-forwarded to include it.
-- PR #6 (feature/new-project-memory-scaffold) — open, awaiting review.
+- PR #6 (feature/new-project-memory-scaffold) — MERGED 2026-07-14.
+- PR #7 (feature/new-project-memory-scaffold) — MERGED 2026-07-15. Design spec + memory checkpoint.
+- PR #8 (feature/new-project-memory-scaffold) — open, awaiting review. 2026-07-15 reconciliation commits
+  (local port registry, Hard Model Gate, Session Freshness Checkpoint, settings.json, .gitignore).
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
@@ -36,6 +39,8 @@ how this file and its linked files should be written (plain language, major chan
    Implementation gets its own feature branch off main. The restructure replaces the 7 rules files with
    core-conduct.md + gates.md, 5 new skills (agentskills.io-conformant), and a git-guard PreToolUse
    hook. This also supersedes the old "trim pass on rules budget" note — the restructure IS the trim.
-2. Wait for PR #6 review/merge (branch also now carries the restructure spec commits plus the
-   2026-07-15 reconciliation commits — local port registry, Hard Model Gate, Session Freshness
-   Checkpoint, settings.json tweaks, .gitignore cleanup).
+2. Wait for PR #8 review/merge (the 2026-07-15 reconciliation: local port registry, Hard Model Gate,
+   Session Freshness Checkpoint, settings.json tweaks, .gitignore cleanup). PR #6 and #7 already merged.
+   Note for the restructure: `main` won't have local-port-registry.md or the two new session-state
+   rules until #8 merges — the restructure's first task must sync against a `main` that includes #8,
+   not branch from a stale snapshot missing that content.

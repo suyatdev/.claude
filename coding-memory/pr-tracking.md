@@ -33,9 +33,11 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - implementation status: complete and merged — see coding-memory/branches/modular-coding-memory.md
 
 ### feature/new-project-memory-scaffold
-- branch: feature/new-project-memory-scaffold
+- branch: feature/new-project-memory-scaffold (still open — reused across three PRs so far)
 - remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/6 (open)
+- PR #6: https://github.com/suyatdev/.claude/pull/6 (MERGED 2026-07-14) — CODING_MEMORY scaffold + bootstrap prompt.
+- PR #7: https://github.com/suyatdev/.claude/pull/7 (MERGED 2026-07-15) — rules-to-skills restructure design spec + memory checkpoint.
+- PR #8: https://github.com/suyatdev/.claude/pull/8 (open) — 2026-07-15 reconciliation: local port registry, Hard Model Gate, Session Freshness Checkpoint, settings.json tweaks, .gitignore cleanup. Opened after discovering #6/#7 were already merged and these 5 commits had no open PR.
 - opened_by session_origin: desktop (VSCode)
 - last_push session_origin: desktop (VSCode)
-- implementation status: implemented and pushed, PR open awaiting review — see coding-memory/branches/new-project-memory-scaffold.md
+- implementation status: PR #8 open awaiting review — see coding-memory/branches/new-project-memory-scaffold.md
