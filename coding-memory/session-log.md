@@ -63,3 +63,21 @@ follow that standard: major architectural changes only, no routine steps, plain 
 - Always-on rules budget is now 4,030/3,500 words (~15% over) — see `coding-memory/decisions.md`.
   Not trimming piecemeal: the approved rules-to-skills restructure replaces this whole budget and is
   the very next task.
+- Wrote the 12-task implementation plan (`docs/superpowers/plans/2026-07-15-rules-to-skills-restructure.md`)
+  via `superpowers:writing-plans`, self-reviewed it, and caught several real issues before execution:
+  a word-count overshoot in the drafted `core-conduct.md` (771 vs. a 450-550 target — rewritten as
+  denser prose to 489), a Markdown nested-fence bug in one skill's embedded content that would have
+  desynced the rest of the plan document, and a `.gitignore` bug the reconciliation work had just
+  introduced (an unanchored `plans/` pattern silently blocking `docs/superpowers/plans/`).
+- Discovered mid-session that PR #8 had merged before two more commits (the gitignore fix + this
+  plan doc) were pushed — the same "orphaned after merge" pattern as PR #6/#7. Opened PR #8 for the
+  first batch of orphaned commits earlier; this second batch was later recovered via cherry-pick
+  onto the implementation branch rather than a 4th PR.
+- Executed the plan via `superpowers:subagent-driven-development` (fresh implementer + independent
+  reviewer per task, all 12 tasks). Task 11 (deleting the 7 old rule files) is where real gaps
+  surfaced: a "Guiding Principle" paragraph silently dropped during the `core-conduct.md` rewrite,
+  and ~12 other live files still naming the deleted rule files — neither of which the plan itself
+  had scoped, both caught by task review before merge. A first fix pass introduced a second-order
+  misattribution (2 references repointed to a real-but-wrong file), caught by a third review pass.
+  Opened PR #9. Always-on content: 4,030 → 1,151 words. Full log:
+  `coding-memory/branches/rules-to-skills-restructure.md`.

@@ -7,9 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-14
-- last_active_branch: feature/new-project-memory-scaffold
-- Note: prior session was `/clear`'d before its checkpoint save; orphaned work was reconciled and
-  committed on 2026-07-15 — see `coding-memory/session-log.md`.
+- last_active_branch: feature/rules-to-skills-restructure
 
 ## Repositories
 
@@ -20,8 +18,11 @@ how this file and its linked files should be written (plain language, major chan
 - PR #5 (feature/modular-coding-memory) — MERGED 2026-07-14. `main` fast-forwarded to include it.
 - PR #6 (feature/new-project-memory-scaffold) — MERGED 2026-07-14.
 - PR #7 (feature/new-project-memory-scaffold) — MERGED 2026-07-15. Design spec + memory checkpoint.
-- PR #8 (feature/new-project-memory-scaffold) — open, awaiting review. 2026-07-15 reconciliation commits
-  (local port registry, Hard Model Gate, Session Freshness Checkpoint, settings.json, .gitignore).
+- PR #8 (feature/new-project-memory-scaffold) — MERGED 2026-07-15. Reconciliation: local port
+  registry, Hard Model Gate, Session Freshness Checkpoint, settings.json, .gitignore.
+- PR #9 (feature/rules-to-skills-restructure) — open, awaiting review. The rules-to-skills
+  restructure itself: 7 always-loaded rule files → core-conduct.md + gates.md + 5 new skills +
+  git-guard hook. Always-on content: 4,030 → 1,151 words.
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
@@ -32,15 +33,11 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Rules-to-skills restructure (next task):** approved design at
-   `docs/superpowers/specs/2026-07-14-rules-to-skills-restructure-design.md` (committed on
-   feature/new-project-memory-scaffold). Next step: invoke `superpowers:writing-plans` to create the
-   implementation plan — re-confirmed staying on Sonnet for this per the Hard Model Gate (2026-07-15).
-   Implementation gets its own feature branch off main. The restructure replaces the 7 rules files with
-   core-conduct.md + gates.md, 5 new skills (agentskills.io-conformant), and a git-guard PreToolUse
-   hook. This also supersedes the old "trim pass on rules budget" note — the restructure IS the trim.
-2. Wait for PR #8 review/merge (the 2026-07-15 reconciliation: local port registry, Hard Model Gate,
-   Session Freshness Checkpoint, settings.json tweaks, .gitignore cleanup). PR #6 and #7 already merged.
-   Note for the restructure: `main` won't have local-port-registry.md or the two new session-state
-   rules until #8 merges — the restructure's first task must sync against a `main` that includes #8,
-   not branch from a stale snapshot missing that content.
+1. **Wait for PR #9 review/merge.** This is the rules-to-skills restructure itself — see
+   `coding-memory/branches/rules-to-skills-restructure.md` for the full implementation log.
+2. **Cleanup once PR #9 merges:** `feature/new-project-memory-scaffold` still carries 2 commits
+   (a `.gitignore` fix + this same restructure's plan doc) that were pushed after PR #8 already
+   merged, so they never landed on `main` via that PR. They were cherry-picked onto
+   `feature/rules-to-skills-restructure` instead (see that branch's log) and will land via PR #9.
+   Once #9 merges, `feature/new-project-memory-scaffold` can be deleted — nothing on it is still
+   needed.
