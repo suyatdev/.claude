@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-14
-- last_active_branch: feature/rules-to-skills-restructure
+- last_active_branch: main (rules-to-skills restructure merged; both feature branches deleted)
 
 ## Repositories
 
@@ -16,13 +16,12 @@ how this file and its linked files should be written (plain language, major chan
 - PR #4 (feature/vibe-coding-standards-integration) — MERGED 2026-07-12.
 - PR #3 (feature/standards-extractor-agent) — MERGED.
 - PR #5 (feature/modular-coding-memory) — MERGED 2026-07-14. `main` fast-forwarded to include it.
-- PR #6 (feature/new-project-memory-scaffold) — MERGED 2026-07-14.
-- PR #7 (feature/new-project-memory-scaffold) — MERGED 2026-07-15. Design spec + memory checkpoint.
-- PR #8 (feature/new-project-memory-scaffold) — MERGED 2026-07-15. Reconciliation: local port
-  registry, Hard Model Gate, Session Freshness Checkpoint, settings.json, .gitignore.
-- PR #9 (feature/rules-to-skills-restructure) — open, awaiting review. The rules-to-skills
-  restructure itself: 7 always-loaded rule files → core-conduct.md + gates.md + 5 new skills +
-  git-guard hook. Always-on content: 4,030 → 1,151 words.
+- PR #6, #7, #8 (feature/new-project-memory-scaffold) — all MERGED. Branch deleted 2026-07-15
+  (fully superseded — see `coding-memory/branches/new-project-memory-scaffold.md`).
+- PR #9 (feature/rules-to-skills-restructure) — MERGED 2026-07-15 (fast-forward, user's choice to
+  merge locally rather than wait for GitHub review). Branch deleted. The rules-to-skills
+  restructure: 7 always-loaded rule files → core-conduct.md + gates.md + 5 new skills + git-guard
+  hook. Always-on content: 4,030 → 1,151 words (~71% cut).
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
@@ -33,11 +32,9 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Wait for PR #9 review/merge.** This is the rules-to-skills restructure itself — see
-   `coding-memory/branches/rules-to-skills-restructure.md` for the full implementation log.
-2. **Cleanup once PR #9 merges:** `feature/new-project-memory-scaffold` still carries 2 commits
-   (a `.gitignore` fix + this same restructure's plan doc) that were pushed after PR #8 already
-   merged, so they never landed on `main` via that PR. They were cherry-picked onto
-   `feature/rules-to-skills-restructure` instead (see that branch's log) and will land via PR #9.
-   Once #9 merges, `feature/new-project-memory-scaffold` can be deleted — nothing on it is still
-   needed.
+1. **None outstanding.** The rules-to-skills restructure (the major task this whole session was
+   building toward) is merged to `main` and both its feature branches are cleaned up. Next session
+   starts clean — read `coding-memory/branches/rules-to-skills-restructure.md` if resuming context
+   on this work is ever needed (e.g. to understand why `rules/core-conduct.md`/`rules/gates.md`
+   exist, or the review-history lesson about audit tables needing an explicit dangling-reference
+   sweep).

@@ -32,27 +32,23 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - last_push session_origin: desktop (VSCode)
 - implementation status: complete and merged — see coding-memory/branches/modular-coding-memory.md
 
-### feature/new-project-memory-scaffold
-- branch: feature/new-project-memory-scaffold (all 3 PRs merged; 2 trailing commits now superseded, see below)
-- remote: origin (git@github.com:suyatdev/.claude.git)
+### feature/new-project-memory-scaffold (DELETED 2026-07-15)
 - PR #6: https://github.com/suyatdev/.claude/pull/6 (MERGED 2026-07-14) — CODING_MEMORY scaffold + bootstrap prompt.
 - PR #7: https://github.com/suyatdev/.claude/pull/7 (MERGED 2026-07-15) — rules-to-skills restructure design spec + memory checkpoint.
 - PR #8: https://github.com/suyatdev/.claude/pull/8 (MERGED 2026-07-15) — reconciliation: local port registry, Hard Model Gate, Session Freshness Checkpoint, settings.json tweaks, .gitignore cleanup.
-- implementation status: all 3 PRs merged. Two more commits (a `.gitignore` anchor fix + the
-  rules-to-skills implementation plan doc) were pushed to this branch after PR #8 had already
-  merged, so they were never included in it — same "pushed after merge" pattern as PR #6/#7.
-  Rather than opening a 4th PR from this branch, they were cherry-picked onto
-  `feature/rules-to-skills-restructure` and will land via PR #9 instead. This branch can be
-  deleted once #9 merges. See coding-memory/branches/new-project-memory-scaffold.md.
+- implementation status: all 3 PRs merged; 2 trailing commits pushed after PR #8 merged were
+  cherry-picked onto `feature/rules-to-skills-restructure` and landed via PR #9 instead. Branch
+  (local + remote) deleted 2026-07-15, fully superseded. See coding-memory/branches/new-project-memory-scaffold.md.
 
-### feature/rules-to-skills-restructure
-- branch: feature/rules-to-skills-restructure (forked from main at the PR #8 merge commit)
-- remote: origin (git@github.com:suyatdev/.claude.git)
-- PR #9: https://github.com/suyatdev/.claude/pull/9 (open, awaiting review) — the rules-to-skills
+### feature/rules-to-skills-restructure (DELETED 2026-07-15)
+- PR #9: https://github.com/suyatdev/.claude/pull/9 (MERGED 2026-07-15, fast-forward — merged
+  locally to `main` at the user's request rather than via GitHub review) — the rules-to-skills
   restructure: 7 always-loaded rule files → rules/core-conduct.md + rules/gates.md + 5 new skills
   + hooks/git-guard.sh. Always-on content 4,030 → 1,151 words (~71% reduction).
 - opened_by session_origin: desktop (VSCode)
 - last_push session_origin: desktop (VSCode)
 - implementation status: all 12 plan tasks complete via superpowers:subagent-driven-development,
-  each with an independent task-reviewer pass. Task 11's review caught and fixed real gaps (see
-  coding-memory/branches/rules-to-skills-restructure.md for the full log).
+  each with an independent task-reviewer pass, plus a final whole-branch review (Opus). Task 11's
+  review caught and fixed real gaps across 3 review rounds; final review found 2 Minor items, both
+  fixed. Merged to main, branch (local + remote) deleted. See
+  coding-memory/branches/rules-to-skills-restructure.md for the full log.

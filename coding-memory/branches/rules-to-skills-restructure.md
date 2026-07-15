@@ -1,6 +1,8 @@
 # Branch Implementation Log: feature/rules-to-skills-restructure
 
-**Status:** all 12 plan tasks complete; PR #9 open, awaiting review.
+**Status:** MERGED 2026-07-15. All 12 plan tasks complete, final whole-branch review (Opus) passed
+with only 2 Minor items (both fixed). PR #9 merged to `main` as a fast-forward, at the user's
+request, rather than waiting for GitHub review. Branch deleted (local + remote).
 
 ## What changed
 
@@ -52,8 +54,25 @@ files verified byte-identical to the originals.
   needs its own explicit sweep (a repo-wide grep for the old paths) as a planned step, not an
   incidental review catch.
 
-## Next steps
+## Final whole-branch review (Opus, post-Task-12)
 
-1. User reviews and merges PR #9.
-2. Delete `feature/new-project-memory-scaffold` (fully superseded, all 3 of its PRs merged, its 2
-   trailing commits cherry-picked here).
+Ready to merge: Yes, on first pass. Confirmed independently: 3-tier architecture matches the
+design, a repo-wide dangling-reference sweep was completely clean, all 3 of Task 11's fix rounds
+landed correctly, `git-guard.sh` is portable and sound, the skill library is internally consistent.
+4 Minor findings:
+- Fixed: the restored Guiding Principle sentence had dropped "reliability" and "cost and" from the
+  original wording; `git-guard.sh`'s force-push guard scope (misses `+refspec` form) is now
+  documented as an intentional momentum-guardrail limitation, not a gap.
+- Accepted, no action: an audit-table wording gap on where the Conditional-LGTM note landed
+  (content fully preserved, just organized differently than predicted); gitignored/untracked
+  auto-memory files outside this repo still name old rule paths (follow-up housekeeping, not this
+  PR's scope).
+
+## Outcome
+
+1. Merged locally to `main` as a fast-forward (`dd6f59f..097913f`) — the user chose to merge
+   directly rather than wait for GitHub review, since the branch had already been through 12
+   per-task reviews plus a final whole-branch review.
+2. GitHub auto-detected the fast-forward and marked PR #9 as merged.
+3. Both `feature/rules-to-skills-restructure` and the fully-superseded `feature/new-project-memory-scaffold`
+   deleted (local + remote).
