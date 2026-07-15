@@ -33,3 +33,20 @@ projects/
 
 # Task runner data (machine-specific)
 tasks/
+
+# Background daemon state (machine-specific, potentially sensitive)
+daemon/
+daemon.lock
+daemon.log
+daemon.status.json
+
+# Local job queue & plan-mode scratch state (machine-specific)
+jobs/
+plans/
+
+# Paste and file-edit history (machine-specific, potentially sensitive)
+paste-cache/
+file-history/
+
+# GitHub PR status cache (machine-specific)
+gh-pr-status-cache.json
