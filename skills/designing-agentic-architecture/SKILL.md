@@ -41,6 +41,12 @@ Most agentic systems are over-architected before they are over-loaded. The quest
 - **Don't wrap an agent as a fire-and-forget tool call:** a collaborative agent must be able to pause, request more information, negotiate with the calling orchestrator, and resume without losing conversational state. Forcing that into a tool wrapper is the architectural equivalent of an uncontrolled `GOTO` — control flow leaves the structured context and may never return.
 - **Split the layers:** keep the tool layer (MCP) clean, predictable, and strictly structured, and isolate collaborative multi-turn interaction in the agent-to-agent layer. Mixing them means the structured layer inherits the unbounded layer's failure modes.
 
+## Delegation Mode: Conductor vs. Orchestrator
+
+- **Match the mode to the task.** Conductor mode — real-time, keystroke-level — fits exploration, debugging, and unfamiliar codebases, where each change must be understood as it happens. Orchestrator mode — async, goal-level delegation — fits well-defined work: bug fixes, migrations, test generation, features built on established patterns. Defaulting to one mode wastes the other.
+- **An orchestrator routes; it doesn't do the domain work itself.** Keep domain depth in the specialists it dispatches to, not in the orchestrator's own reasoning.
+- **Give agents success criteria, not step-by-step instructions**, and let them iterate — the same reasoning as "bounded tools vs. unbounded agents" above: an agent needs room to reach the goal its own way, not a script to execute literally.
+
 ## DAG Orchestration, Not Prompt Chaining
 
 - **Naive chaining compounds errors:** a hallucination in an early stage is carried faithfully into every stage after it, and nothing in the chain is positioned to catch it. Use a directed acyclic graph for multi-step or multi-skill workflows instead.
