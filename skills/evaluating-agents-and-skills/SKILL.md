@@ -1,6 +1,6 @@
 ---
 name: evaluating-agents-and-skills
-description: Use when deciding whether an agent, a skill, or AI-generated output is actually good enough to ship — trigger accuracy, output vs. trajectory scoring, eval-driven development, pass^k consistency, and LLM-as-judge calibration. Not for ordinary unit testing of deterministic code (see rules/general-engineering.md).
+description: Use when deciding whether an agent, a skill, or AI-generated output is actually good enough to ship — trigger accuracy, output vs. trajectory scoring, eval-driven development, pass^k consistency, and LLM-as-judge calibration. Not for ordinary unit testing of deterministic code (see rules/core-conduct.md).
 ---
 
 # Evaluating Agents and Skills
@@ -100,6 +100,6 @@ Positive — this skill should fire:
 
 Negative — this skill should *not* fire:
 
-- "write unit tests for this parser" → `rules/general-engineering.md` testing rules
+- "write unit tests for this parser" → `rules/core-conduct.md` testing rules
 - "review this diff" → `/code-review`
 - "why is this test failing?" → `superpowers:systematic-debugging`

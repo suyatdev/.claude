@@ -1,7 +1,7 @@
 # CODING_MEMORY
 
 This is an index only, kept at or under 200 lines. Full history lives in `coding-memory/` — follow the
-pointers below for detail instead of reading everything here. See rules/session-state-management.md for
+pointers below for detail instead of reading everything here. See `managing-session-memory` for
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session

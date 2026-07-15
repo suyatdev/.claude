@@ -46,10 +46,8 @@
 
 ## Rules at a glance
 
-- **`general-engineering.md`** — coding standards, security guardrails (injection, XSS, secrets, SAST, prompt sanitization)
-- **`session-state-management.md`** — model-switch checkpoints, brainstorm-before-branch workflow, token-limit pauses
-- **`pr-requests.md`** — branch naming, PR descriptions, PR memory tracking, no-pull-first workflow
-- **`parallel-agent-guardrails.md`** — multi-agent/worktree safety rules
+- **`core-conduct.md`** — permanent invariants: session defaults, code style, zero-trust rules, parallel-agent safety, context discipline
+- **`gates.md`** — judgment-based checkpoints (model-switch gates, default-branch safety, project setup) as short stubs pointing at the skill with the full procedure
 
 ## New machine?
 

@@ -11,7 +11,7 @@ Security for a system whose code is written, and whose actions are chosen, by a 
 
 **Read this before applying anything below.** This configuration has no container sandbox, no policy server, no LLM firewall, no SPIFFE identities, no CMEK, no mTLS, and no OpenTelemetry tracing. Every control in this skill is guidance for a system *being designed* — "when you build X, do Y" — never a description of a protection that is already in place. Treat each one as absent until someone has actually built and verified it. Reading this file changes nothing about what this environment enforces, and mistaking it for a description of existing defences produces false confidence, which is worse than having no document at all.
 
-The always-on companion rule, `rules/zero-trust-and-agent-safety.md`, carries what an agent can enforce unaided. This skill carries the infrastructure that rule cannot build for itself.
+The always-on companion rule, `rules/core-conduct.md`, carries what an agent can enforce unaided. This skill carries the infrastructure that rule cannot build for itself.
 
 ## The Always-On Half
 
@@ -72,5 +72,5 @@ Positive — this skill should fire:
 Negative — this skill should *not* fire:
 
 - "review this branch for vulnerabilities" → `/security-review`
-- "is my API key in this file?" → `rules/zero-trust-and-agent-safety.md`
+- "is my API key in this file?" → `rules/core-conduct.md`
 - "should this be one agent or three?" → `designing-agentic-architecture`

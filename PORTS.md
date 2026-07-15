@@ -10,7 +10,7 @@ a clear "port in use."
 
 This file is **reference data, not a rule** — it is not auto-loaded every
 turn. Read it before allocating a new local port or starting a system-level
-service; see `rules/local-port-registry.md` for when that's required.
+service; see `allocating-local-ports` for when that's required.
 
 ## Registry
 

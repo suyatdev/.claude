@@ -41,7 +41,7 @@ A specification is the architectural north star an agent builds from. Its job is
 ## Tokenization Is a Hard Constraint
 
 - **Every character costs budget and latency:** whitespace, indentation, and repetitive boilerplate — redundant Given/When/Then blocks being the usual offender in specs — inflate cost directly.
-- **Bloat degrades reasoning:** the damage is not only financial. Padding can degrade reasoning quality even under a generous context window, so trimming a spec makes it work better, not just cheaper. See `rules/context-and-token-discipline.md`.
+- **Bloat degrades reasoning:** the damage is not only financial. Padding can degrade reasoning quality even under a generous context window, so trimming a spec makes it work better, not just cheaper. See `rules/core-conduct.md`.
 
 ## A Human Reviews the Spec Before the Agent Generates Code
 
@@ -66,4 +66,4 @@ Negative — this skill should *not* fire:
 
 - "write the implementation plan" → `superpowers:writing-plans`
 - "help me brainstorm a new feature" → `superpowers:brainstorming`
-- "write the tests for this function" → the testing rules in `rules/general-engineering.md`
+- "write the tests for this function" → the testing rules in `rules/core-conduct.md`

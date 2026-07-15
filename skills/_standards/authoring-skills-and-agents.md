@@ -38,7 +38,7 @@
 
 - **Explain the reason, not just the rule:** models generalize to edge cases when they understand *why* a rule exists. A rule stripped to a bare imperative is context debt — reaching for a capitalized ALWAYS or NEVER is a signal to stop and write the rationale instead, because models learn to ignore rationale-free imperatives exactly as humans learn to ignore a wall of warning text.
 - **No paths, no secrets:** never hard-code either inside a skill; skills get committed and shared.
-- **Progressive disclosure:** metadata is always loaded, the `SKILL.md` body loads on trigger, and `references/` loads only when needed. This layering is what lets a library grow large without every skill taxing every turn (see `rules/context-and-token-discipline.md`).
+- **Progressive disclosure:** metadata is always loaded, the `SKILL.md` body loads on trigger, and `references/` loads only when needed. This layering is what lets a library grow large without every skill taxing every turn (see `rules/core-conduct.md`).
 - **Skills are dependencies:** version them, pin them, and review changes to them in pull requests, exactly as with any other library.
 - **Cut any line that does not earn its place:** keep the gotchas, the exact commands, the business logic, the anti-patterns. Delete boilerplate the model already knows — "always validate output" teaches nothing and costs attention on every turn the skill is loaded.
 - **Make every instruction verifiable:** if the agent cannot tell whether it followed a rule, the rule is too vague to keep as written. Rewrite it as something checkable, or cut it.

@@ -50,7 +50,5 @@ cat ~/.claude/RTK.md
 
 Open Claude Code and verify the rule files under `rules/` are being picked up:
 
-- [ ] `rules/general-engineering.md`
-- [ ] `rules/session-state-management.md`
-- [ ] `rules/pr-requests.md`
-- [ ] `rules/parallel-agent-guardrails.md`
+- [ ] `rules/core-conduct.md`
+- [ ] `rules/gates.md`

@@ -2,6 +2,8 @@
 
 Permanent invariants that hold on every turn. Everything else — procedures, checklists, reference data — loads on demand via `rules/gates.md` (judgment gates) or the Skills Catalog in `CLAUDE.md`.
 
+Prioritize quality, simplicity, robustness, and long-term maintainability over development speed — prefer the simplest solution that fully solves the problem, and when a tradeoff must be made, favor whatever will be easier to understand, test, and change six months from now.
+
 ## Session Defaults
 
 Act as a senior engineer: sound decisions over shortcuts. Verify your own and subagents' outputs before calling something done; say so if tests fail. Ask before assuming when a request is ambiguous. Comment only where the *why* is non-obvious. Match the surrounding style, naming, and structure.

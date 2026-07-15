@@ -38,7 +38,7 @@ Ask **one question at a time**. Use `AskUserQuestion` wherever the options are e
 *Default:* none. Ask; do not assume. *Why:* teams that leave this blurry ship prototypes into production by accident — the code was written under one set of assumptions and is now serving traffic under another. Naming the tier makes the later corner-cutting a decision rather than a drift, and it gates every question below.
 
 **2. Review gate — human approval on every PR, or Conditional LGTM (auto-merge on green)?**
-*Default:* human gate. *Why:* auto-merge sits in direct tension with the default-branch-safety and tests-pass-first rules in `rules/pr-requests.md`. It can be the right call for a low-stakes repo with strong tests, but it has to be a deliberate opt-in that a human chose, not a habit the repo slid into.
+*Default:* human gate. *Why:* auto-merge sits in direct tension with the default-branch-safety and tests-pass-first rules in `rules/gates.md`. It can be the right call for a low-stakes repo with strong tests, but it has to be a deliberate opt-in that a human chose, not a habit the repo slid into.
 
 *If an automated reviewer is wanted, pick the lowest tier that catches what actually matters.* **Managed** — a vendor-hosted reviewer, no infrastructure, generic criteria; enough when the criteria are generic. **Hybrid** — your own review skill triggered by CI (a GitHub Action running a coding-agent CLI); the right call when criteria are team- or repo-specific but need no memory across runs. **Custom** — a dedicated agent with durable sessions; only when the reviewer must hold context across a multi-PR refactor. Escalate on failure severity, not preference: if the worst case is a noisy comment, any tier does. If the worst case is a merged regression or a leaked secret, the reviewer needs a policy gate in front of every tool call it makes — infrastructure this setup does not have (see `skills/securing-agentic-systems`).
 
@@ -54,7 +54,7 @@ Whichever tier: an automated reviewer is a *first pass* — good at bugs, style 
 *Default:* **host, unsandboxed.** *Why:* this setup has no container sandbox, no policy server, and no LLM firewall. Say that plainly rather than implying otherwise — a false "yes, it's sandboxed" is worse than a truthful "no", because it buys confidence that nothing is backing. If the project needs real isolation, that is infrastructure to build; see `skills/securing-agentic-systems`. Until then, treat every agent-written script as running with the user's full privileges, because it is.
 
 **6. Is a `security:scan` script actually wired up?**
-*Default:* required — verify it exists rather than assuming. *Why:* `rules/general-engineering.md` already demands a `security:scan` script. This question checks that reality matches the rule, which is the only way a written requirement stays a real one. Confirm the script runs, not merely that a line exists in `package.json` or its equivalent.
+*Default:* required — verify it exists rather than assuming. *Why:* `writing-secure-code` already demands a `security:scan` script. This question checks that reality matches the rule, which is the only way a written requirement stays a real one. Confirm the script runs, not merely that a line exists in `package.json` or its equivalent.
 
 **7. MCP servers — which ones, scoped read-only, pointed at non-production data?**
 *Default:* none. *Why:* an unscoped MCP server with write access to production data is the standing risk in this whole setup — the agent treats tool output as data, but the tool's *permissions* are real. Add servers one at a time, read-only until proven otherwise, and against non-production data wherever a non-production copy exists. See `skills/integrating-mcp`.
@@ -72,7 +72,7 @@ Whichever tier: an automated reviewer is a *first pass* — good at bugs, style 
 
 1. Copy `assets/project-standards-template.md` into the target repo as `.claude/project-standards.md`.
 2. Fill in every section with the user's actual answers, including the `Decided on:` date and the `Revisit when:` trigger. An unfilled section is a question that was skipped, and skipping is the thing this skill exists to prevent.
-3. Create the repo's own `CODING_MEMORY.md` as a lean index (active session, PR pointers, next steps — see `rules/session-state-management.md`) with a `coding-memory/` directory alongside it for history, from the first commit. Add a pointer line there for this setup register so future sessions know it has run and where the answers live.
+3. Create the repo's own `CODING_MEMORY.md` as a lean index (active session, PR pointers, next steps — see `managing-session-memory`) with a `coding-memory/` directory alongside it for history, from the first commit. Add a pointer line there for this setup register so future sessions know it has run and where the answers live.
 4. Commit both files with the repo's setup work. They are project artifacts, not scratch notes.
 
 Then proceed to the actual work.
@@ -88,5 +88,5 @@ Positive — this skill should fire:
 Negative — this skill should *not* fire:
 
 - "add a function to this existing service" → routine work in a configured repo; proceed normally
-- "open a PR" → `rules/pr-requests.md`
+- "open a PR" → `preparing-pull-requests`
 - "write a spec" → `skills/writing-specs`
