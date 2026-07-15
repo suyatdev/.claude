@@ -1,6 +1,6 @@
 # Hooks
 
-**These hooks are NOT installed.** `settings.json` is untouched by design — nothing in this directory runs until you deliberately wire it up by pasting one of the JSON blocks below into a repo's `.claude/settings.json`. They were designed, tested, and left inert on purpose.
+**Most of these hooks are NOT installed.** Nothing in this directory runs until you deliberately wire it up by pasting one of the JSON blocks below into a repo's `.claude/settings.json`. They were designed, tested, and left inert on purpose. The one exception is `git-guard.sh`, appended to this repo's own `settings.json` — see its section below for why.
 
 ---
 
@@ -68,6 +68,19 @@ The hook now reads `tool_input.command` from the payload and decides per command
 It is a **rollback guard, not a security boundary**: it matches the leading command, so `git commit -m x && rm -rf /` gets through. Anything that must not be bypassable belongs in the permission system, not here.
 
 Invoked with no payload (`checkpoint-before-modify.sh <repo-dir>`) it checks the tree unconditionally — the original CLI behavior, useful in a pre-commit hook.
+
+### `git-guard.sh`
+
+Two deterministic guards, both matched on `tool_input.command`:
+
+1. **Default-branch commit guard.** Blocks `git commit` while `main`/`master` is checked out, unless every staged file is `CODING_MEMORY.md` or under `coding-memory/` — the brainstorm-then-branch exception in `rules/pr-requests.md`.
+2. **Force-push guard.** Blocks a bare `git push --force`/`-f` on any branch. `--force-with-lease` is allowed, except while `main`/`master` is checked out, where it is blocked too.
+
+It also unwraps an `rtk ` prefix before matching: the RTK hook is registered ahead of this one on the same `Bash` matcher and rewrites plain git commands, so by the time this guard runs the command it sees may already read `rtk git commit -m x`.
+
+*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/pr-requests.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `CODING_MEMORY.md` and `coding-memory/*`, nothing else.
+
+Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, because this repo is the global config every other repo inherits, and the two guards it enforces (`rules/pr-requests.md`) apply here first.
 
 ### `require-project-standards.sh`
 
@@ -196,6 +209,30 @@ Takes the repo directory as `$1` and reads `tool_input.command` from the payload
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/checkpoint-before-modify.sh \"$CLAUDE_PROJECT_DIR\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Git safety guard on shell commands
+
+Reads `tool_input.command` from the payload directly — no argument, unlike the checkpoint guard above. Blocks a `git commit` on `main`/`master` unless every staged file is `CODING_MEMORY.md` or under `coding-memory/`, and blocks a bare `git push --force`/`-f` everywhere (`--force-with-lease` is also blocked on `main`/`master`). It unwraps a leading `rtk ` prefix first, so it still matches after the RTK hook above it has rewritten the command.
+
+This is the one hook in this file that **is** installed — appended to this repo's own `settings.json`, after the existing `rtk hook claude` entry, because this repo is the global config every other repo inherits:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/git-guard.sh"
           }
         ]
       }
