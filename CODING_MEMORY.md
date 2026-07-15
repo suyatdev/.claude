@@ -8,6 +8,8 @@ how this file and its linked files should be written (plain language, major chan
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-14
 - last_active_branch: feature/new-project-memory-scaffold
+- Note: prior session was `/clear`'d before its checkpoint save; orphaned work was reconciled and
+  committed on 2026-07-15 — see `coding-memory/session-log.md`.
 
 ## Repositories
 
@@ -30,9 +32,10 @@ how this file and its linked files should be written (plain language, major chan
 1. **Rules-to-skills restructure (next task):** approved design at
    `docs/superpowers/specs/2026-07-14-rules-to-skills-restructure-design.md` (committed on
    feature/new-project-memory-scaffold). Next step: invoke `superpowers:writing-plans` to create the
-   implementation plan — user chose to switch to a cheaper model first (Hard Model Gate satisfied for
-   spec writing; re-confirmed for implementation). Implementation gets its own feature branch off main.
-   The restructure replaces the 7 rules files with core-conduct.md + gates.md, 5 new skills
-   (agentskills.io-conformant), and a git-guard PreToolUse hook. This also supersedes the old
-   "trim pass on rules budget" note — the restructure IS the trim.
-2. Wait for PR #6 review/merge (branch also now carries the restructure spec commits).
+   implementation plan — re-confirmed staying on Sonnet for this per the Hard Model Gate (2026-07-15).
+   Implementation gets its own feature branch off main. The restructure replaces the 7 rules files with
+   core-conduct.md + gates.md, 5 new skills (agentskills.io-conformant), and a git-guard PreToolUse
+   hook. This also supersedes the old "trim pass on rules budget" note — the restructure IS the trim.
+2. Wait for PR #6 review/merge (branch also now carries the restructure spec commits plus the
+   2026-07-15 reconciliation commits — local port registry, Hard Model Gate, Session Freshness
+   Checkpoint, settings.json tweaks, .gitignore cleanup).

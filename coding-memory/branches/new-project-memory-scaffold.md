@@ -1,6 +1,7 @@
 # Branch Implementation Log: feature/new-project-memory-scaffold
 
-**Status:** implemented, not yet pushed/PR'd.
+**Status:** implemented and pushed, PR #6 open awaiting review (now also carries the rules-to-skills
+restructure spec commits and the reconciliation commits below).
 
 ## What changed
 
@@ -12,6 +13,25 @@
   run the setup skill. If a repo has no `CODING_MEMORY.md` when a session starts there, ask the user
   before doing substantive work whether to initialize it — create it only on yes, and don't re-ask
   within the same session if declined.
+
+### 2026-07-15 reconciliation
+
+A prior session added the following to the working tree but was `/clear`'d before it could commit or
+log them. On resume, verified the content, got user sign-off to commit them to this branch, and split
+into commits by concern:
+
+- `PORTS.md` + `rules/local-port-registry.md` (new files, imported from `CLAUDE.md`): machine-wide
+  registry of local ports/host services, to prevent a native/Homebrew service silently shadowing a
+  Docker container bound to the same port.
+- `rules/session-state-management.md`: added the Hard Model Gate (pause before any code/branch/PR/
+  implementation work to confirm model tier) and Session Freshness Checkpoint (save memory + push
+  before offering a session clear, on a major-task or ~4k-token trigger) rules.
+- `settings.json`: `permissions.defaultMode` set to `acceptEdits`, `effortLevel` raised to `xhigh`,
+  `skipDangerousModePermissionPrompt` and `agentPushNotifEnabled` turned on.
+- `.gitignore`: added entries for `daemon/`, `jobs/`, `plans/`, `paste-cache/`, `file-history/`,
+  `gh-pr-status-cache.json` — machine-local Claude Code runtime state that had been showing up as
+  untracked; not inspected or committed, since some (`paste-cache/`, `daemon.log`) could hold pasted
+  secrets.
 
 ## Why
 
