@@ -29,3 +29,19 @@ follow that standard: major architectural changes only, no routine steps, plain 
   decisions, branch logs, brainstorms), linked by path instead of inlined.
 - Added standing rules (`rules/session-state-management.md`) requiring future session summaries and
   PR descriptions to be plain-language, impact-focused, and free of routine-step detail.
+
+## 2026-07-14 — Rules-to-skills restructure design approved
+
+- Wrote the missing auto-memory file explaining the ~4K session-freshness checkpoint (why incremental
+  growth, not an absolute ceiling, triggers the save+clear prompt). A proposed 5K hard ceiling was
+  discussed and rejected: a single task plus the memory-save itself would regularly blow past a 1K buffer.
+- Brainstormed and approved a full restructure of the always-loaded rules: the 7 rules/*.md files will be
+  replaced by two static files (core-conduct.md invariants, gates.md critical-gate stubs), five new
+  on-demand skills (managing-session-memory, preparing-pull-requests, writing-secure-code,
+  allocating-local-ports, triaging-new-instructions), and a deterministic git-guard hook blocking
+  commits/force-pushes to main. Cuts always-loaded context from ~5.2K to ~1.8K tokens per turn.
+- All new skills must conform to the agentskills.io specification (validated with skills-ref; body under
+  500 lines; description ≤1,024 chars stating what/when/when-not).
+- Approved spec: docs/superpowers/specs/2026-07-14-rules-to-skills-restructure-design.md (3 commits on
+  feature/new-project-memory-scaffold). Implementation not started — next step is the implementation
+  plan on a cheaper model per the Hard Model Gate.
