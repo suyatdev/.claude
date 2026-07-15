@@ -4,19 +4,9 @@ These instructions apply to every project. Project-level CLAUDE.md files layer o
 
 Where the standards literature says AGENTS.md, this setup uses CLAUDE.md. They are equivalent; the guidance applies unchanged.
 
-@rules/general-engineering.md
+@rules/core-conduct.md
 
-@rules/session-state-management.md
-
-@rules/pr-requests.md
-
-@rules/parallel-agent-guardrails.md
-
-@rules/context-and-token-discipline.md
-
-@rules/zero-trust-and-agent-safety.md
-
-@rules/local-port-registry.md
+@rules/gates.md
 
 # Tip: as this file grows, you can split sections into separate files and
 # pull them in with @imports, e.g. @rules/git-workflow.md
@@ -35,5 +25,10 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `designing-agent-commerce` — UCP ordering and AP2 payment mandates for agents that transact.
 - `evaluating-agents-and-skills` — whether an agent, skill, or AI output is actually good enough to ship.
 - `setting-up-a-new-project` — the blocking opt-in register for a new repo.
+- `managing-session-memory` — restoring/saving CODING_MEMORY.md, and the model-switch/freshness/token-limit gates.
+- `preparing-pull-requests` — branch naming, commits, PR descriptions, PR memory tracking.
+- `writing-secure-code` — injection/XSS/secrets/IDOR guardrails, prompt sanitization.
+- `allocating-local-ports` — checking/updating PORTS.md before a new local port or service.
+- `triaging-new-instructions` — classifying a proposed new rule/hook/skill before writing it anywhere.
 
 When authoring or editing any skill or agent, read skills/_standards/authoring-skills-and-agents.md first.
