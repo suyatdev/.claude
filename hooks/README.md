@@ -78,9 +78,9 @@ Two deterministic guards, both matched on `tool_input.command`:
 
 It also unwraps an `rtk ` prefix before matching: the RTK hook is registered ahead of this one on the same `Bash` matcher and rewrites plain git commands, so by the time this guard runs the command it sees may already read `rtk git commit -m x`.
 
-*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `preparing-pull-requests`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `CODING_MEMORY.md` and `coding-memory/*`, nothing else.
+*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/gates.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `CODING_MEMORY.md` and `coding-memory/*`, nothing else.
 
-Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, because this repo is the global config every other repo inherits, and the two guards it enforces (`preparing-pull-requests`) apply here first.
+Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, because this repo is the global config every other repo inherits, and the two guards it enforces (`rules/gates.md`) apply here first.
 
 ### `require-project-standards.sh`
 
