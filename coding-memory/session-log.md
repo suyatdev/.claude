@@ -45,3 +45,21 @@ follow that standard: major architectural changes only, no routine steps, plain 
 - Approved spec: docs/superpowers/specs/2026-07-14-rules-to-skills-restructure-design.md (3 commits on
   feature/new-project-memory-scaffold). Implementation not started — next step is the implementation
   plan on a cheaper model per the Hard Model Gate.
+
+## 2026-07-15 — Resumed after mid-checkpoint /clear, reconciled orphaned work
+
+- Session opened with a plain "continue" right after a `/clear`. Restoring from `CODING_MEMORY.md`
+  surfaced work in the tree that the prior session never logged or committed before being cleared:
+  new Hard Model Gate + Session Freshness Checkpoint rules, a new local port registry
+  (`PORTS.md` + `rules/local-port-registry.md`), and `settings.json` permission/effort changes.
+  Also found several untracked Claude Code runtime directories (`daemon/`, `jobs/`, `plans/`,
+  `paste-cache/`, `file-history/`, `gh-pr-status-cache.json`) with no relation to any documented task.
+- Confirmed with the user before acting: committed the pending rule/config changes to
+  `feature/new-project-memory-scaffold` (PR #6) as four scoped commits, and added the runtime
+  directories to `.gitignore` without inspecting their contents (some could hold pasted secrets).
+  Detail: `coding-memory/branches/new-project-memory-scaffold.md`.
+- Confirmed staying on Sonnet (already the configured model) before starting the rules-to-skills
+  implementation plan, per the Hard Model Gate.
+- Always-on rules budget is now 4,030/3,500 words (~15% over) — see `coding-memory/decisions.md`.
+  Not trimming piecemeal: the approved rules-to-skills restructure replaces this whole budget and is
+  the very next task.

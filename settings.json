@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "defaultMode": "acceptEdits"
+  },
   "model": "sonnet",
   "hooks": {
     "PreToolUse": [
@@ -20,5 +23,8 @@
     "code-simplifier@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true
   },
-  "tui": "fullscreen"
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "agentPushNotifEnabled": true
 }

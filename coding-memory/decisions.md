@@ -31,3 +31,11 @@ rather than cut for the sake of a round number. See coding-memory/branches/modul
 (instead of a new bullet) brought the total to 3,567/3,500 — 67 words over. Still well under the ~50K
 active-token context-rot threshold (~9.5%). See coding-memory/branches/new-project-memory-scaffold.md.
 If this keeps climbing, the next always-on edit should trim before adding, not just accept more drift.
+
+2026-07-15 update: reconciling uncommitted work from a session that got `/clear`'d before its checkpoint
+save added rules/local-port-registry.md (new file, always-on via CLAUDE.md import) plus the Hard Model
+Gate and Session Freshness Checkpoint bullets in rules/session-state-management.md. Total is now
+4,030/3,500 words — 530 over (~15%), still well under the ~50K-token context-rot threshold but the
+largest overshoot yet. Not trimming now: the approved rules-to-skills restructure
+(coding-memory/session-log.md, 2026-07-14 entry) replaces this whole always-on budget with a ~1.8K-token
+design and is the next task in the queue — trimming this budget piecemeal first would be wasted work.

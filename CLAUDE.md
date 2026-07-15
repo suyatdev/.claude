@@ -16,6 +16,8 @@ Where the standards literature says AGENTS.md, this setup uses CLAUDE.md. They a
 
 @rules/zero-trust-and-agent-safety.md
 
+@rules/local-port-registry.md
+
 # Tip: as this file grows, you can split sections into separate files and
 # pull them in with @imports, e.g. @rules/git-workflow.md
 
