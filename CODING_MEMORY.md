@@ -33,6 +33,9 @@ how this file and its linked files should be written (plain language, major chan
 - PR #12 (feature/diagramming-skill) — MERGED 2026-07-16. New `diagramming-technical-docs` skill
   (Mermaid docs standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML).
   Detail: `coding-memory/branches/diagramming-skill.md`.
+- feature/observability-judge (2026-07-16, in progress) — `hooks/judge-guard.sh` landed: PreToolUse
+  gate blocking `gh pr create` without a fresh implementation-stage verdict (9/9 tests passing),
+  wired into settings.json.
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
