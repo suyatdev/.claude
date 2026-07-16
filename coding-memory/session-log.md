@@ -97,3 +97,15 @@ follow that standard: major architectural changes only, no routine steps, plain 
 - Branch `feature/documentation-enforcement`. Next: vibe-scape ADR backfill (its own
   repo/PR), then PR this branch. Full log:
   `coding-memory/branches/documentation-enforcement.md`.
+
+## 2026-07-16 — Diagramming skill (Mermaid documentation standard)
+
+- Added a documentation standard for embedding rendered diagrams. Routed via
+  `triaging-new-instructions` → a new cross-cutting skill `diagramming-technical-docs`
+  (`references/` + `assets/` + `scripts/`).
+- Flagged and resolved a defect in the user's proposed standard: PlantUML mind maps don't render
+  where the docs live (GitHub/VS Code/Artifacts) and rendering them leaks private source to
+  plantuml.com; switched to Mermaid-for-both (native `mindmap` type, renders everywhere, stays
+  local). User approved.
+- Built + tested (validator: all templates pass, bad file flagged, no false positives). Full log:
+  `coding-memory/branches/diagramming-skill.md`.
