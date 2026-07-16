@@ -55,3 +55,13 @@ A hook can only enforce the mechanical proxy (source changed without a doc chang
 combination of criteria + durable ADR home + backstop. `/clear` is non-blockable by any hook, so the
 next-session-start surfacing is the catch for the slip that actually happened (2026-07-15 reconciliation).
 See `coding-memory/branches/documentation-enforcement.md`.
+
+## Diagramming standard: Mermaid, not PlantUML (decided 2026-07-16)
+
+Added the `diagramming-technical-docs` skill for embedding rendered diagrams in technical
+docs/designs/plans/ADRs. Chose Mermaid for BOTH structural diagrams and decision mind maps,
+rejecting the originally-proposed PlantUML mind maps: PlantUML in a ` ```text ` block renders as
+plain text in GitHub / VS Code / Artifacts, and rendering it needs a Java+Graphviz toolchain or
+sends private diagram source to a public `plantuml.com` server. Mermaid renders natively in all
+three and has a `mindmap` type, so no diagram category needs PlantUML. See
+`coding-memory/branches/diagramming-skill.md`.
