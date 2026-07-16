@@ -39,3 +39,19 @@ Gate and Session Freshness Checkpoint bullets in rules/session-state-management.
 largest overshoot yet. Not trimming now: the approved rules-to-skills restructure
 (coding-memory/session-log.md, 2026-07-14 entry) replaces this whole always-on budget with a ~1.8K-token
 design and is the next task in the queue — trimming this budget piecemeal first would be wasted work.
+
+## Documentation enforcement (decided 2026-07-16)
+
+Broadened the mandatory-documentation criteria and added a mechanical backstop, in three tiers:
+(1) `managing-session-memory` now names business-logic changes and direction-pivoting technological
+implementations as mandatory save triggers — not just architectural ones — each earning a durable ADR
+under `docs/decisions/`; (2) `setting-up-a-new-project` scaffolds `docs/decisions/` + an ADR template so
+the home exists before the first decision; (3) `hooks/doc-guard.sh` blocks a substantial source commit
+that stages no docs (`Doc-Exempt: <reason>` trailer bypasses) and surfaces uncommitted work before a
+`/compact` and at the next session start.
+
+A hook can only enforce the mechanical proxy (source changed without a doc change), never verify the
+*reasoning* was written — so this is deliberately not sold as semantic enforcement; the guarantee is the
+combination of criteria + durable ADR home + backstop. `/clear` is non-blockable by any hook, so the
+next-session-start surfacing is the catch for the slip that actually happened (2026-07-15 reconciliation).
+See `coding-memory/branches/documentation-enforcement.md`.

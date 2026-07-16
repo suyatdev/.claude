@@ -81,3 +81,19 @@ follow that standard: major architectural changes only, no routine steps, plain 
   misattribution (2 references repointed to a real-but-wrong file), caught by a third review pass.
   Opened PR #9. Always-on content: 4,030 → 1,151 words. Full log:
   `coding-memory/branches/rules-to-skills-restructure.md`.
+
+## 2026-07-16 — Documentation audit + enforcement backstop
+
+- Audited how the four active projects document decisions. Content is strong
+  (business-logic and direction-pivoting decisions, with reasoning, are captured),
+  but the ADR pattern is uneven — Snatch-Bracket has `docs/decisions/`, vibe-scape
+  has none — and capture depends on checkpoint discipline that slipped once.
+- Per user request, broadened the mandatory-documentation criteria (business-logic +
+  direction-pivoting changes now explicit save triggers, each earning an ADR) and
+  built a backstop: `hooks/doc-guard.sh` (block substantial undocumented source
+  commits; surface uncommitted work before compaction and at the next session start),
+  plus skill edits, an ADR template, and a `gates.md` stub. Verified the hook with a
+  15-case harness (all green).
+- Branch `feature/documentation-enforcement`. Next: vibe-scape ADR backfill (its own
+  repo/PR), then PR this branch. Full log:
+  `coding-memory/branches/documentation-enforcement.md`.
