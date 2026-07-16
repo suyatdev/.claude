@@ -1,6 +1,6 @@
 # Branch Implementation Log: feature/diagramming-skill
 
-**Status:** IN PROGRESS (branch from `main` 2026-07-16, after the documentation-enforcement work merged).
+**Status:** MERGED (PR #12, 2026-07-16, branch `feature/diagramming-skill` from `main`). Tree clean.
 
 ## Why
 

@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: feature/diagramming-skill (Mermaid diagramming skill; PR pending)
+- last_active_branch: main (diagramming skill PR #12 merged; tree clean)
 
 ## Repositories
 
@@ -30,8 +30,8 @@ how this file and its linked files should be written (plain language, major chan
   Detail: `coding-memory/branches/documentation-enforcement.md`.
 - PR #11 (chore/ports-registry-snatch-8001) — MERGED 2026-07-16. Reconciled the orphaned PORTS.md
   edit (snatch-bracket backend on port 8001) as its own commit, per user's commit-only-my-work call.
-- feature/diagramming-skill (2026-07-16) — new `diagramming-technical-docs` skill (Mermaid docs
-  standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML). PR pending.
+- PR #12 (feature/diagramming-skill) — MERGED 2026-07-16. New `diagramming-technical-docs` skill
+  (Mermaid docs standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML).
   Detail: `coding-memory/branches/diagramming-skill.md`.
 - Full detail: `coding-memory/pr-tracking.md`
 
@@ -43,15 +43,13 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Open + merge the diagramming-skill PR** (`feature/diagramming-skill`): the
-   `diagramming-technical-docs` skill (Mermaid docs standard). Ready; validator tested.
-2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+1. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
-3. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
+2. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
    `coding-memory/decisions.md` as its equivalent today); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
 
-**Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile);
-vibe-scape (Tayvyx-Lab/VibeSpace) PR #6 (ADR backfill 0001-0003 + template) + PR #7 (Plan 4a-1 +
-memory reconcile). No orphans outstanding.
+**Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile) +
+PR #12 (diagramming-technical-docs skill); vibe-scape (Tayvyx-Lab/VibeSpace) PR #6 (ADR backfill
+0001-0003 + template) + PR #7 (Plan 4a-1 + memory reconcile). No orphans outstanding.
