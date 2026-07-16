@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: feature/documentation-enforcement (doc-enforcement backstop; not yet PR'd)
+- last_active_branch: feature/documentation-enforcement (doc-enforcement backstop; PR #10 OPEN)
 
 ## Repositories
 
@@ -26,8 +26,8 @@ how this file and its linked files should be written (plain language, major chan
   `hooks/doc-guard.sh` (block substantial undocumented source commits + surface uncommitted
   work before compaction / at next session start), broadened `managing-session-memory` criteria
   (business-logic + direction-pivoting changes → mandatory + ADR), ADR standard/template in
-  `setting-up-a-new-project`, gates stub. Verified (15-case harness). Not yet PR'd. Detail:
-  `coding-memory/branches/documentation-enforcement.md`.
+  `setting-up-a-new-project`, gates stub. Verified (15-case harness). **PR #10 OPEN (2026-07-16).**
+  Detail: `coding-memory/branches/documentation-enforcement.md`.
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
@@ -38,11 +38,12 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **vibe-scape ADR backfill** (separate repo `~/Other Docs/AI/AI_Projx/vibe-scape`, its own feature
-   branch → docs PR; that repo's `main` is PR-only): create `docs/decisions/` with ADRs for the
-   monolith-extension architecture, the positive-only token/vote economy, and the public-opt-in
-   privacy model, sourced from its `CODING_MEMORY.md`. (User approved backfill-now, 2026-07-16.)
-2. **PR `feature/documentation-enforcement`** in this repo (per `preparing-pull-requests`).
-3. **Live-verify** the SessionStart/PreCompact injection fires end-to-end — the script logic is
-   tested (15-case harness), but the event wiring needs a real `/clear` + `/compact` to confirm.
-   Detail for all three: `coding-memory/branches/documentation-enforcement.md`.
+1. **Review/merge two open PRs:** `.claude` PR #10 (documentation-enforcement backstop) and
+   vibe-scape PR #6 (`docs/backfill-decisions-adrs` — ADRs 0001-0003 + template, at
+   github.com/Tayvyx-Lab/VibeSpace).
+2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end — logic is tested
+   (15-case harness), but the event wiring needs a real `/clear` + `/compact` in a fresh session
+   (hooks load at startup) to confirm.
+3. **Orphaned work still uncommitted, left per user's call (2026-07-16):** this repo's `PORTS.md`
+   (snatch port 8001); vibe-scape's `CODING_MEMORY.md` edit + untracked plan4a1 doc. Reconcile
+   when ready. Detail: `coding-memory/branches/documentation-enforcement.md`.
