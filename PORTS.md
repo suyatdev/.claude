@@ -21,6 +21,7 @@ service; see `allocating-local-ports` for when that's required.
 | 5434 | snatch-bracket | Postgres (`postgres:16`) | Docker container | `docker-compose.yml` maps `5434:5432` (allocated 2026-07-14; 5432/5433 taken). In-repo defaults (`config.py`, `tests/conftest.py`) point here; CI unaffected (sets `DATABASE_URL` explicitly). |
 | 5198 | vibescape | Presence E2E signaling server (Fastify `buildApp()`, PGlite-backed) | Local dev/test process | Bound only while Playwright presence E2E runs (`packages/client/e2e/support/presenceServer.ts`); proxied via Vite's ws proxy. Allocated 2026-07-14 (Plan 3 Task 13). |
 | 8000 | mtg-wizard | `core-api` (FastAPI) | Docker container / local dev | `docker-compose.yml`, desktop app's `API_BASE_URL` default. |
+| 8001 | snatch-bracket | backend (FastAPI, `snatch_bracket.main:app`) | Local dev process (`just dev-backend`) | Moved from 8000 on 2026-07-15 — mtg-wizard's `core-api` owns 8000. Set in `justfile`; frontend `BACKEND_URL` default (`frontend/lib/backend.ts`, `.env.example`, `.env.local`) points here. CI unaffected (no live server). |
 | 8100 | mtg-wizard | `ai-service` (FastAPI) | Docker container | Internal to compose network; proxied through `core-api`. |
 | — | Homebrew `postgresql@15` | Postgres | Homebrew service, **installed but stopped/unused** | Defaults to 5432 (commented out in its `postgresql.conf`) — would collide with the container if ever started. Leave stopped, or assign it a port here first. |
 
