@@ -1,6 +1,8 @@
 # Branch Implementation Log: feature/documentation-enforcement
 
-**Status:** PR #10 OPEN (2026-07-16, branch `feature/documentation-enforcement` from `main`). Awaiting review/merge.
+**Status:** MERGED (PR #10, 2026-07-16). The orphaned `PORTS.md` was reconciled separately via PR #11
+(merged). vibe-scape's ADR backfill (PR #6) and its plan4a1/memory orphans (PR #7) also merged. Both
+repos clean. Only follow-up: live-verify the SessionStart/PreCompact injection in a fresh session.
 
 ## Why
 

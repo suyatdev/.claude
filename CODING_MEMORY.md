@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: feature/documentation-enforcement (doc-enforcement backstop; PR #10 OPEN)
+- last_active_branch: main (doc-enforcement PR #10 + ports PR #11 merged; all orphans reconciled)
 
 ## Repositories
 
@@ -26,8 +26,10 @@ how this file and its linked files should be written (plain language, major chan
   `hooks/doc-guard.sh` (block substantial undocumented source commits + surface uncommitted
   work before compaction / at next session start), broadened `managing-session-memory` criteria
   (business-logic + direction-pivoting changes → mandatory + ADR), ADR standard/template in
-  `setting-up-a-new-project`, gates stub. Verified (15-case harness). **PR #10 OPEN (2026-07-16).**
+  `setting-up-a-new-project`, gates stub. Verified (15-case harness). **PR #10 MERGED (2026-07-16).**
   Detail: `coding-memory/branches/documentation-enforcement.md`.
+- PR #11 (chore/ports-registry-snatch-8001) — MERGED 2026-07-16. Reconciled the orphaned PORTS.md
+  edit (snatch-bracket backend on port 8001) as its own commit, per user's commit-only-my-work call.
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
@@ -38,12 +40,12 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Review/merge two open PRs:** `.claude` PR #10 (documentation-enforcement backstop) and
-   vibe-scape PR #6 (`docs/backfill-decisions-adrs` — ADRs 0001-0003 + template, at
-   github.com/Tayvyx-Lab/VibeSpace).
-2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end — logic is tested
-   (15-case harness), but the event wiring needs a real `/clear` + `/compact` in a fresh session
-   (hooks load at startup) to confirm.
-3. **Orphaned work still uncommitted, left per user's call (2026-07-16):** this repo's `PORTS.md`
-   (snatch port 8001); vibe-scape's `CODING_MEMORY.md` edit + untracked plan4a1 doc. Reconcile
-   when ready. Detail: `coding-memory/branches/documentation-enforcement.md`.
+1. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+   (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
+   against a real `/clear` + `/compact`.
+2. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
+   `coding-memory/decisions.md` as its equivalent today).
+
+**All 2026-07-16 work merged; both repos clean.** `.claude`: PR #10 (documentation-enforcement) +
+PR #11 (PORTS.md reconcile) MERGED. vibe-scape (Tayvyx-Lab/VibeSpace): PR #6 (ADR backfill 0001-0003
++ template) + PR #7 (Plan 4a-1 plan + memory reconcile) MERGED. No orphans outstanding.
