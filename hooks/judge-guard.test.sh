@@ -66,5 +66,12 @@ else
   printf 'FAIL — quoted JUDGE_EXEMPT did not log exemption (got: %s)\n' "$exempt_out"; fail=$((fail+1))
 fi
 
+# Regression: RTK rewrites commands in this environment, so a leading `rtk ` wrapper is
+# stripped before classification — `rtk gh pr create` must be guarded like a bare invocation.
+rm -f "$VFILE"
+run_case "rtk-wrapped invocation, no verdict -> block"   2 "rtk gh pr create --fill"
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_case "rtk-wrapped invocation, fresh verdict -> pass" 0 "rtk gh pr create --fill"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
