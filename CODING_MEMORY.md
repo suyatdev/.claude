@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: main (diagramming skill PR #12 merged; tree clean)
+- last_active_branch: feature/observability-judge (observability judge complete; PR #13 open)
 
 ## Repositories
 
@@ -33,7 +33,16 @@ how this file and its linked files should be written (plain language, major chan
 - PR #12 (feature/diagramming-skill) — MERGED 2026-07-16. New `diagramming-technical-docs` skill
   (Mermaid docs standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML).
   Detail: `coding-memory/branches/diagramming-skill.md`.
-- Full detail: `coding-memory/pr-tracking.md`
+- feature/observability-judge (2026-07-16) — the observability judge (16 commits, 17/17 tests):
+  `agents/observability-judge.md` (subagent scoring 10 dims → JSONL+markdown verdict + junior-dev
+  layman summary), `hooks/judge-guard.sh` (+17-case test + settings.json) blocking `gh pr create`
+  without a fresh strict-freshness verdict, `skills/running-the-observability-judge/`, `rules/gates.md`
+  stub + `CLAUDE.md` catalog, ADR `docs/decisions/0001-observability-judge.md`, spec
+  `docs/superpowers/specs/2026-07-16-observability-judge-design.md`, verdict store. Command detection
+  took 2 review-driven security fixes (substring→anchored→python shlex, closing a quoted-env-prefix
+  bypass); Opus whole-branch review fixed the verdict-filename-on-slashed-branches bug + a stale
+  `hooks/README.md` "only git-guard installed" claim. **PR #13 OPEN (bootstrap self-gate → JUDGE_EXEMPT).**
+  Detail: `coding-memory/branches/observability-judge.md`; PR status: `coding-memory/pr-tracking.md`.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`

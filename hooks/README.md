@@ -1,6 +1,6 @@
 # Hooks
 
-**Most of these hooks are NOT installed.** Nothing in this directory runs until you deliberately wire it up by pasting one of the JSON blocks below into a repo's `.claude/settings.json`. They were designed, tested, and left inert on purpose. The one exception is `git-guard.sh`, appended to this repo's own `settings.json` — see its section below for why.
+**Most of these hooks are NOT installed.** Nothing in this directory runs until you deliberately wire it up by pasting one of the JSON blocks below into a repo's `.claude/settings.json`. They were designed, tested, and left inert on purpose. The exceptions are `git-guard.sh`, `doc-guard.sh`, and `judge-guard.sh` — all three are appended to this repo's own `settings.json` today; see the `git-guard.sh` and `judge-guard.sh` sections below for why.
 
 ---
 
@@ -80,7 +80,19 @@ It also unwraps an `rtk ` prefix before matching: the RTK hook is registered ahe
 
 *Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/gates.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `CODING_MEMORY.md` and `coding-memory/*`, nothing else.
 
-Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, because this repo is the global config every other repo inherits, and the two guards it enforces (`rules/gates.md`) apply here first.
+Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, alongside `doc-guard.sh` and `judge-guard.sh` (see below), because this repo is the global config every other repo inherits, and the two guards it enforces (`rules/gates.md`) apply here first.
+
+### `judge-guard.sh`
+
+A `PreToolUse` guard matched on `tool_input.command`: it blocks `gh pr create` unless a **fresh** implementation-stage `observability-judge` verdict exists for the exact repo, branch, and full `head_sha` currently checked out. Freshness is strict — any commit added after the verdict was written moves `HEAD` and invalidates it, forcing a re-run before the PR can go out.
+
+Like the checkpoint and git guards above, it classifies the command with `python3`'s `shlex` rather than a flat bash regex — shell quoting (an `rtk` wrapper, a quoted-space env-assignment) defeats a naive pattern match, and a gate that a quoting trick defeats is worse than no gate. Escape hatch: a leading `JUDGE_EXEMPT=<reason> gh pr create ...` lets a genuinely exempt PR through and logs the reason to stderr — see `running-the-observability-judge` for when that's appropriate.
+
+*Why an instruction cannot do this job:* "run the judge before opening a PR" is exactly the step momentum skips — the diff is done, tests pass, and the temptation is to just ship. A hook is the only thing that reliably notices the verdict is missing or stale before the PR exists to review.
+
+Unlike `doc-guard.sh` (a momentum guardrail that fails open when it can't verify), `judge-guard.sh` **fails closed**: if `python3` is missing, the repo/branch/HEAD can't be determined, or the verdict store can't be read, it blocks rather than allows — this is a shipping gate, not a momentum guardrail, so an unverifiable state must not default to "let it through."
+
+`judge-guard.sh` **is installed** too, alongside `git-guard.sh` and `doc-guard.sh`, appended to this repo's own `settings.json`.
 
 ### `require-project-standards.sh`
 
