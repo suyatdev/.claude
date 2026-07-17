@@ -40,7 +40,8 @@ how this file and its linked files should be written (plain language, major chan
   same pattern as git-guard's `^git` anchor (12/12 tests passing). Round-2 fix: replaced the flat
   bash regex with python shlex-based classification — a quoted-space env-assignment prefix (e.g.
   `FOO="a b" ...`) had defeated the regex and silently bypassed the fail-closed gate (15/15 tests
-  passing).
+  passing). Task 3: added `agents/observability-judge.md` (subagent that scores changes and writes
+  verdicts to JSONL + markdown).
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
