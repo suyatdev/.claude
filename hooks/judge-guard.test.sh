@@ -51,5 +51,20 @@ run_case "commit msg containing phrase -> ignore" 0 'git commit -m "feat: blocki
 run_case "echo containing phrase -> ignore"       0 "echo gh pr create"
 run_case "chained && (documented gap) -> ignore"  0 "cd /tmp && gh pr create --fill"
 
+# Regression (round 2): a quoted-space env prefix must NOT silently bypass the guard.
+rm -f "$VFILE"
+run_case "quoted-space env prefix, no verdict -> block" 2 'FOO="a b" gh pr create --fill'
+run_case "quoted multi-word JUDGE_EXEMPT -> exempt pass" 0 'JUDGE_EXEMPT="skip, docs only" gh pr create --fill'
+# Exit code alone can't distinguish a silent bypass from a real exemption (both exit 0),
+# so assert the quoted JUDGE_EXEMPT path actually LOGS its exemption.
+rm -f "$VFILE"
+exempt_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"JUDGE_EXEMPT=\"skip, docs only\" gh pr create --fill"}}))')
+exempt_out=$(printf '%s' "$exempt_payload" | bash "$HOOK" 2>&1)
+if printf '%s' "$exempt_out" | grep -q 'exempted (JUDGE_EXEMPT=skip, docs only)'; then
+  printf 'ok   — quoted JUDGE_EXEMPT logs exemption\n'; pass=$((pass+1))
+else
+  printf 'FAIL — quoted JUDGE_EXEMPT did not log exemption (got: %s)\n' "$exempt_out"; fail=$((fail+1))
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

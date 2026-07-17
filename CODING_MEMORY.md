@@ -37,7 +37,10 @@ how this file and its linked files should be written (plain language, major chan
   gate blocking `gh pr create` without a fresh implementation-stage verdict (9/9 tests passing),
   wired into settings.json. Follow-up fix: anchored the PR-create detection regex (was matching
   the phrase anywhere in a command string, e.g. inside a commit message) to start-of-command only,
-  same pattern as git-guard's `^git` anchor (12/12 tests passing).
+  same pattern as git-guard's `^git` anchor (12/12 tests passing). Round-2 fix: replaced the flat
+  bash regex with python shlex-based classification — a quoted-space env-assignment prefix (e.g.
+  `FOO="a b" ...`) had defeated the regex and silently bypassed the fail-closed gate (15/15 tests
+  passing).
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
