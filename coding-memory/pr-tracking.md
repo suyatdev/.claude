@@ -4,6 +4,20 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 
 ## suyatdev/.claude
 
+### feature/observability-judge
+- branch: feature/observability-judge (OPEN; pushed to origin)
+- remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/13 (OPEN, opened 2026-07-16)
+- opened_by session_origin: desktop (VSCode)
+- last_push session_origin: desktop (VSCode)
+- implementation status: complete; hook suite 17/17. The observability judge: `agents/observability-judge.md`
+  + `hooks/judge-guard.sh` (+test, settings.json) + `skills/running-the-observability-judge/` + `rules/gates.md`
+  stub + `CLAUDE.md` catalog + ADR + verdict store. Built via subagent-driven development (per-task reviews +
+  Opus whole-branch review; 2 security fixes to command detection, 2 Important final-review fixes). Opened with
+  `JUDGE_EXEMPT` (bootstrap self-gate — the judge's own introducing PR can't carry a committed verdict matching
+  its tip; this circularity recurs only for `~/.claude` self-PRs, not when judging other repos).
+- detail: coding-memory/branches/observability-judge.md
+
 ### feature/vibe-coding-standards-integration
 - branch: feature/vibe-coding-standards-integration (MERGED into main; branch still exists local + remote)
 - remote: origin (git@github.com:suyatdev/.claude.git)

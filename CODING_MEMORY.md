@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: feature/observability-judge (observability judge complete, 16 commits; PR opening)
+- last_active_branch: feature/observability-judge (observability judge complete; PR #13 open)
 
 ## Repositories
 
@@ -41,7 +41,7 @@ how this file and its linked files should be written (plain language, major chan
   `docs/superpowers/specs/2026-07-16-observability-judge-design.md`, verdict store. Command detection
   took 2 review-driven security fixes (substring→anchored→python shlex, closing a quoted-env-prefix
   bypass); Opus whole-branch review fixed the verdict-filename-on-slashed-branches bug + a stale
-  `hooks/README.md` "only git-guard installed" claim. **PR opening (bootstrap self-gate → JUDGE_EXEMPT).**
+  `hooks/README.md` "only git-guard installed" claim. **PR #13 OPEN (bootstrap self-gate → JUDGE_EXEMPT).**
   Detail: `coding-memory/branches/observability-judge.md`; PR status: `coding-memory/pr-tracking.md`.
 
 ## Pointers
