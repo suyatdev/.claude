@@ -182,6 +182,18 @@ rm -f "$VFILE"
 run_case "commit msg containing phrase -> ignore" 0 'git commit -m "feat: blocking gh pr create without a verdict"'
 run_case "echo containing phrase -> ignore"       0 "echo gh pr create"
 run_case "chained && (documented gap) -> ignore"  0 "cd /tmp && gh pr create --fill"
+# Regression: a quoted-space env prefix must NOT silently bypass; a quoted JUDGE_EXEMPT works.
+rm -f "$VFILE"
+run_case "quoted-space env prefix, no verdict -> block" 2 'FOO="a b" gh pr create --fill'
+run_case "quoted multi-word JUDGE_EXEMPT -> exempt pass" 0 'JUDGE_EXEMPT="skip, docs only" gh pr create --fill'
+rm -f "$VFILE"
+exempt_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"JUDGE_EXEMPT=\"skip, docs only\" gh pr create --fill"}}))')
+exempt_out=$(printf '%s' "$exempt_payload" | bash "$HOOK" 2>&1)
+if printf '%s' "$exempt_out" | grep -q 'exempted (JUDGE_EXEMPT=skip, docs only)'; then
+  printf 'ok   — quoted JUDGE_EXEMPT logs exemption\n'; pass=$((pass+1))
+else
+  printf 'FAIL — quoted JUDGE_EXEMPT did not log exemption (got: %s)\n' "$exempt_out"; fail=$((fail+1))
+fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
@@ -244,24 +256,40 @@ if isinstance(ti, dict):
 ' 2>/dev/null)
 [ -n "$command_line" ] || exit 0
 
-# Strip leading whitespace, then a leading rtk wrapper.
-normalized="${command_line#"${command_line%%[![:space:]]*}"}"
-if [[ "$normalized" == rtk\ * ]]; then
-  normalized="${normalized#rtk }"
-fi
+# Classify the command with python — shlex handles the shell quoting a flat bash regex
+# cannot. A command is guarded only when, after an optional leading `rtk` wrapper and any
+# leading NAME=VALUE env-assignments, the actual command is `gh pr create`; the phrase inside
+# a commit message, an echo, or a quoted string is therefore ignored. JUDGE_EXEMPT's value
+# (quoted or not) is captured here. Accepted limitation: a chained `foo && gh pr create` is not
+# caught — a momentum guardrail, not a security boundary, the same tradeoff git-guard makes.
+classify=$(printf '%s' "$command_line" | "$py" -c '
+import re, shlex, sys
+try:
+    toks = shlex.split(sys.stdin.read())
+except ValueError:
+    print("NO"); print(""); sys.exit(0)
+if toks and toks[0] == "rtk":
+    toks = toks[1:]
+assign = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+exempt = ""
+i = 0
+while i < len(toks) and assign.match(toks[i]):
+    name, _, val = toks[i].partition("=")
+    if name == "JUDGE_EXEMPT":
+        exempt = val.replace("\n", " ")
+    i += 1
+print("PR" if toks[i:i+3] == ["gh", "pr", "create"] else "NO")
+print(exempt)
+' 2>/dev/null)
+kind=$(printf '%s\n' "$classify" | sed -n '1p')
+exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 
-# Only guard `gh pr create` as the actual command: optional leading env-assignments
-# (e.g. JUDGE_EXEMPT=...), then `gh pr create`. Anchored at the start like git-guard's
-# `^git`, so the phrase inside a commit message, an echo, or any quoted string is ignored.
-# Accepted limitation (same as git-guard's `^git`): a chained `foo && gh pr create` is not
-# caught — a momentum guardrail, not a security boundary.
-pr_create_re='^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'
-[[ "$normalized" =~ $pr_create_re ]] || exit 0
+[ "$kind" = "PR" ] || exit 0
 
-# Escape hatch: JUDGE_EXEMPT=<non-empty reason> as an inline env assignment.
-exempt_re='(^|[[:space:]])JUDGE_EXEMPT=([^[:space:]]+)'
-if [[ "$normalized" =~ $exempt_re ]]; then
-  printf 'judge-guard: exempted (JUDGE_EXEMPT=%s); skipping verdict check.\n' "${BASH_REMATCH[2]}" >&2
+# Escape hatch: a non-empty JUDGE_EXEMPT reason (quoted or not) as a leading env-assignment
+# allows the PR and logs the exemption.
+if [ -n "$exempt_reason" ]; then
+  printf 'judge-guard: exempted (JUDGE_EXEMPT=%s); skipping verdict check.\n' "$exempt_reason" >&2
   exit 0
 fi
 
@@ -325,7 +353,7 @@ exit 2
 - [ ] **Step 4: Make it executable and run the tests to verify they pass**
 
 Run: `chmod +x hooks/judge-guard.sh && bash hooks/judge-guard.test.sh`
-Expected: `9 passed, 0 failed` (exit 0).
+Expected: `15 passed, 0 failed` (exit 0).
 
 - [ ] **Step 5: Wire the hook into settings.json**
 
