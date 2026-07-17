@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: main (diagramming skill PR #12 merged; tree clean)
+- last_active_branch: feature/observability-judge (observability judge complete, 16 commits; PR opening)
 
 ## Repositories
 
@@ -33,24 +33,16 @@ how this file and its linked files should be written (plain language, major chan
 - PR #12 (feature/diagramming-skill) — MERGED 2026-07-16. New `diagramming-technical-docs` skill
   (Mermaid docs standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML).
   Detail: `coding-memory/branches/diagramming-skill.md`.
-- feature/observability-judge (2026-07-16, in progress) — `hooks/judge-guard.sh` landed: PreToolUse
-  gate blocking `gh pr create` without a fresh implementation-stage verdict (9/9 tests passing),
-  wired into settings.json. Follow-up fix: anchored the PR-create detection regex (was matching
-  the phrase anywhere in a command string, e.g. inside a commit message) to start-of-command only,
-  same pattern as git-guard's `^git` anchor (12/12 tests passing). Round-2 fix: replaced the flat
-  bash regex with python shlex-based classification — a quoted-space env-assignment prefix (e.g.
-  `FOO="a b" ...`) had defeated the regex and silently bypassed the fail-closed gate (15/15 tests
-  passing). Task 3: added `agents/observability-judge.md` (subagent that scores changes and writes
-  verdicts to JSONL + markdown).
-- Task 4: added `skills/running-the-observability-judge/SKILL.md` (tells main agent when to invoke judge and relay results).
-- Task 5: wired the gate stub (`rules/gates.md`) and catalog entry (`CLAUDE.md`) — feature landed
-  (agent + skill + `judge-guard.sh` hook + verdict store). ADR: `docs/decisions/0001-observability-judge.md`;
-  spec: `docs/superpowers/specs/2026-07-16-observability-judge-design.md`.
-- Final-review fixes: sanitized the verdict markdown filename (`/`→`-` branch slug, agent +
-  README now agree), corrected `hooks/README.md`'s stale "only git-guard installed" claim to name
-  all three installed hooks and added a `judge-guard.sh` section, added the `JUDGE_EXEMPT` pointer
-  to the skill, and commented (behavior-unchanged, 15/15) the shlex fail-open in `judge-guard.sh`.
-- Full detail: `coding-memory/pr-tracking.md`
+- feature/observability-judge (2026-07-16) — the observability judge (16 commits, 17/17 tests):
+  `agents/observability-judge.md` (subagent scoring 10 dims → JSONL+markdown verdict + junior-dev
+  layman summary), `hooks/judge-guard.sh` (+17-case test + settings.json) blocking `gh pr create`
+  without a fresh strict-freshness verdict, `skills/running-the-observability-judge/`, `rules/gates.md`
+  stub + `CLAUDE.md` catalog, ADR `docs/decisions/0001-observability-judge.md`, spec
+  `docs/superpowers/specs/2026-07-16-observability-judge-design.md`, verdict store. Command detection
+  took 2 review-driven security fixes (substring→anchored→python shlex, closing a quoted-env-prefix
+  bypass); Opus whole-branch review fixed the verdict-filename-on-slashed-branches bug + a stale
+  `hooks/README.md` "only git-guard installed" claim. **PR opening (bootstrap self-gate → JUDGE_EXEMPT).**
+  Detail: `coding-memory/branches/observability-judge.md`; PR status: `coding-memory/pr-tracking.md`.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
