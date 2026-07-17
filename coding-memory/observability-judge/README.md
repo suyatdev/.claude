@@ -21,9 +21,13 @@ verdicts are keyed by `repo` + `branch` + `head_sha`, so entries stay correct ac
 Dimension keys: `intent`, `execution`, `trajectory`, `regression`, `context_budget`,
 `traceability`, `success_masking`, `intent_drift`, `checkpoint`, `audit_trail`.
 
-## `YYYY-MM-DD-<branch>.md` — human writeup
-The four layman sections (what changed / does it do what you wanted / what could go wrong /
-what I'd double-check), plus the dimension table and concern list.
+## `<YYYY-MM-DD>-<branch_slug>.md` — human writeup
+`branch_slug` sanitizes the branch for filesystem use by replacing every `/` with `-` (so
+`feature/observability-judge` → `feature-observability-judge`) — otherwise the `/` would create a
+stray subdirectory and different branches (`feature/x`, `fix/x`) would collide onto the same path.
+Filename only: the `branch` field in `verdicts.jsonl` above always stays the raw, unsanitized name.
+The file itself holds the four layman sections (what changed / does it do what you wanted / what
+could go wrong / what I'd double-check), plus the dimension table and concern list.
 
 ## Calibration
 `outcome` starts `null`. Backfill it when a PR's real result is known. Aggregating the JSONL by

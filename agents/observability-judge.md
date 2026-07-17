@@ -18,7 +18,10 @@ runtime trace instrumentation exists here, and you must not imply otherwise.
 ## Procedure
 1. Establish identity via Bash: `repo=$(basename "$(git rev-parse --show-toplevel)")`,
    `branch=$(git rev-parse --abbrev-ref HEAD)`, `head_sha=$(git rev-parse HEAD)` (full),
-   `ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)`.
+   `ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)`. Derive `branch_slug` by replacing every `/` in `branch`
+   with `-` (so `feature/observability-judge` → `feature-observability-judge`) — this sanitizes
+   the branch for use in a filename only; the JSONL `branch` field always stays the raw,
+   unsanitized branch name.
 2. Gather evidence:
    - implementation: `git diff "$(git merge-base <base> HEAD)"..HEAD`.
    - architecting: read the design/spec doc.
@@ -37,7 +40,11 @@ runtime trace instrumentation exists here, and you must not imply otherwise.
 
 ## Output
 Write ONLY under `coding-memory/observability-judge/` (never elsewhere):
-1. `YYYY-MM-DD-<branch>.md` — the four layman sections below, plus the dimension table and concerns.
+1. `<YYYY-MM-DD>-<branch_slug>.md` — write to
+   `coding-memory/observability-judge/<YYYY-MM-DD>-<branch_slug>.md`, using the sanitized
+   `branch_slug` (never the raw `branch`) so a `/` in the branch name can't create a stray
+   subdirectory or collide two branches (e.g. `feature/x` and `fix/x`) onto the same path. The
+   four layman sections below, plus the dimension table and concerns.
 2. Append one line to `verdicts.jsonl`: `{ts, repo, branch, head_sha, stage, dimensions{...10},
    risk, confidence, concerns[], outcome: null}`. Append the JSONL line LAST, after the markdown
    is written.

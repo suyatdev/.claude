@@ -46,6 +46,10 @@ how this file and its linked files should be written (plain language, major chan
 - Task 5: wired the gate stub (`rules/gates.md`) and catalog entry (`CLAUDE.md`) — feature landed
   (agent + skill + `judge-guard.sh` hook + verdict store). ADR: `docs/decisions/0001-observability-judge.md`;
   spec: `docs/superpowers/specs/2026-07-16-observability-judge-design.md`.
+- Final-review fixes: sanitized the verdict markdown filename (`/`→`-` branch slug, agent +
+  README now agree), corrected `hooks/README.md`'s stale "only git-guard installed" claim to name
+  all three installed hooks and added a `judge-guard.sh` section, added the `JUDGE_EXEMPT` pointer
+  to the skill, and commented (behavior-unchanged, 15/15) the shlex fail-open in `judge-guard.sh`.
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers

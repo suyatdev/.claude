@@ -37,6 +37,10 @@ double-check* — and state the `risk`/`confidence`. The full scored verdict is 
 If the subagent errors or returns malformed output, write no verdict and fabricate none — report the
 failure to the user. With no verdict the hook keeps the PR blocked, which is correct.
 
+To bypass the gate for a genuinely exempt PR, `judge-guard.sh` honors
+`JUDGE_EXEMPT=<reason> gh pr create ...` (logged) — use it sparingly, and only when a verdict
+genuinely cannot or should not be produced, not as a routine shortcut.
+
 ## Calibration
 Verdicts carry `outcome: null`. When a PR's real result is known, backfill it (`clean`/`rework`/`bug`)
 in `verdicts.jsonl` so the risk-vs-outcome history shows where the judge needs tightening.
