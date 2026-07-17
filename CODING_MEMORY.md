@@ -35,7 +35,9 @@ how this file and its linked files should be written (plain language, major chan
   Detail: `coding-memory/branches/diagramming-skill.md`.
 - feature/observability-judge (2026-07-16, in progress) — `hooks/judge-guard.sh` landed: PreToolUse
   gate blocking `gh pr create` without a fresh implementation-stage verdict (9/9 tests passing),
-  wired into settings.json.
+  wired into settings.json. Follow-up fix: anchored the PR-create detection regex (was matching
+  the phrase anywhere in a command string, e.g. inside a commit message) to start-of-command only,
+  same pattern as git-guard's `^git` anchor (12/12 tests passing).
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers

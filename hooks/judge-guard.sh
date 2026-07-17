@@ -51,8 +51,12 @@ if [[ "$normalized" == rtk\ * ]]; then
   normalized="${normalized#rtk }"
 fi
 
-# Only guard `gh pr create`.
-pr_create_re='(^|[[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'
+# Only guard `gh pr create` as the actual command: optional leading env-assignments
+# (e.g. JUDGE_EXEMPT=...), then `gh pr create`. Anchored at the start like git-guard's
+# `^git`, so the phrase inside a commit message, an echo, or any quoted string is ignored.
+# Accepted limitation (same as git-guard's `^git`): a chained `foo && gh pr create` is not
+# caught — a momentum guardrail, not a security boundary.
+pr_create_re='^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'
 [[ "$normalized" =~ $pr_create_re ]] || exit 0
 
 # Escape hatch: JUDGE_EXEMPT=<non-empty reason> as an inline env assignment.
