@@ -57,8 +57,8 @@ try:
     toks = shlex.split(sys.stdin.read())
 except ValueError:
     # Deliberate fail-OPEN, not a bug: a command that is valid bash but not
-    # shlex-parseable (e.g. ANSI-C $'"'"'...'"'"' quoting) is treated as "not a gh pr
-    # create". Failing closed here would block unrelated commands that merely
+    # shlex-parseable (some exotic shell quoting forms) is treated as "not a gh
+    # pr create". Failing closed here would block unrelated commands that merely
     # contain such quoting, which is wrong for a momentum guardrail -- the
     # repo/branch/HEAD checks below still fail closed for the cases that matter.
     print("NO"); print(""); sys.exit(0)
