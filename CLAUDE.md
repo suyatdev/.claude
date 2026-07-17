@@ -25,6 +25,7 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `designing-agent-interop` — A2A (Agent Cards, registries, monetization) and A2UI (generative UI).
 - `designing-agent-commerce` — UCP ordering and AP2 payment mandates for agents that transact.
 - `evaluating-agents-and-skills` — whether an agent, skill, or AI output is actually good enough to ship.
+- `running-the-observability-judge` — scoring a change against the evaluation + observability rubrics, relaying a junior-dev summary, and recording a verdict before a PR.
 - `setting-up-a-new-project` — the blocking opt-in register for a new repo.
 - `managing-session-memory` — restoring/saving CODING_MEMORY.md, and the model-switch/freshness/token-limit gates.
 - `preparing-pull-requests` — branch naming, commits, PR descriptions, PR memory tracking.

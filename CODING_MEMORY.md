@@ -43,6 +43,9 @@ how this file and its linked files should be written (plain language, major chan
   passing). Task 3: added `agents/observability-judge.md` (subagent that scores changes and writes
   verdicts to JSONL + markdown).
 - Task 4: added `skills/running-the-observability-judge/SKILL.md` (tells main agent when to invoke judge and relay results).
+- Task 5: wired the gate stub (`rules/gates.md`) and catalog entry (`CLAUDE.md`) — feature landed
+  (agent + skill + `judge-guard.sh` hook + verdict store). ADR: `docs/decisions/0001-observability-judge.md`;
+  spec: `docs/superpowers/specs/2026-07-16-observability-judge-design.md`.
 - Full detail: `coding-memory/pr-tracking.md`
 
 ## Pointers
