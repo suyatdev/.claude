@@ -53,18 +53,21 @@ and so recall works **across repositories**, not just the one currently open.
 SOURCES                      PIPELINE                       STORE                CONSUMERS
 projects/*/*.jsonl ──► extract (mechanical) ─┐
                        digest  (qwen3.6 MLX) ─┼─► chunk ─► embed ─► memory.db ◄─ CLI (agent via Bash)
-curated docs ────────────────────────────────┘           (Ollama)   ▲            SessionStart hook (nudge)
+durable docs ────────────────────────────────┘           (Ollama)   ▲            SessionStart hook (nudge)
 config-listed repo roots ─────────────────────────────────────────┐ │
-                                                       sqlite-vec + FTS5
+(CODING_MEMORY.md excluded — ephemeral index)          sqlite-vec + FTS5
 ```
 
 ```mermaid
 flowchart LR
   subgraph Sources
     A[projects/*.jsonl<br/>raw transcripts]
-    B[curated docs<br/>coding-memory/ docs/<br/>CODING_MEMORY.md]
+    B[durable docs<br/>coding-memory/ docs/<br/>docs/decisions ADRs]
     C[config repo roots<br/>e.g. vibe-scape, Snatch-Bracket]
+    Z[CODING_MEMORY.md<br/>ephemeral working index]:::excluded
   end
+  classDef excluded fill:#eee,stroke:#999,stroke-dasharray:4 3,color:#666;
+  Z -.->|NOT indexed| S
   A --> X[extract turns<br/>strip tool-output noise]
   X --> D[digest per session<br/>qwen3.6:35b-mlx<br/>keep_alive=0]
   B --> H[header-aware split]
@@ -124,10 +127,12 @@ Three source types, processed differently, then a common `chunk → embed → st
   substrate for episodic recall. This is the slow one-time backfill (~597 sessions, batched,
   several hours), run once; afterward only new/changed sessions are digested.
 
-### 2. Curated docs — header-aware split, no LLM
+### 2. Durable docs — header-aware split, no LLM
 
-- `CODING_MEMORY.md`, `coding-memory/`, `docs/` chunked by markdown header (never mid-decision),
-  embedded verbatim. **Highest retrieval weight** — a hand-written ADR outranks an auto-digest.
+- `coding-memory/*.md` (history, decisions, branch logs), `docs/` specs, and `docs/decisions/`
+  ADRs, chunked by markdown header (never mid-decision), embedded verbatim. **Highest retrieval
+  weight** — a hand-written ADR outranks an auto-digest.
+- **`CODING_MEMORY.md` is explicitly excluded** — see "What Is NOT Indexed" below.
 
 ### 3. Config-listed repo roots — header-aware split
 
@@ -141,6 +146,22 @@ Three source types, processed differently, then a common `chunk → embed → st
   Idempotent: safe to run daily, weekly, or on demand.
 - **Backfill order: newest session first**, so the system is useful within minutes while older
   sessions fill in behind it. `--full` backfill is resumable if interrupted.
+
+### What Is NOT Indexed
+
+The trigger for (re-)embedding is **durable vs. ephemeral**, not update frequency.
+
+- **Excluded: `CODING_MEMORY.md` (and per-repo equivalents).** It is a *working index* whose
+  job is to be restored into the next session, not searched as long-term memory. Its durable
+  content is already promoted into indexed stores — decisions → `coding-memory/decisions.md` +
+  `docs/decisions/` ADRs, history → `coding-memory/session-log.md`, branch detail →
+  `coding-memory/branches/`. Indexing it would re-churn on every session and pollute semantic
+  search with transient "Active Session / Exact Next Steps" text. Excluded via config.
+- **Included even though frequently updated:** `session-log.md`, `pr-tracking.md`, and generated
+  specs are *durable* records (append-mostly), so they stay indexed. Content-hash keying means an
+  appended file re-embeds **only that one small file**, not the corpus — cost is trivial, so the
+  reason to skip `CODING_MEMORY.md` is signal quality, not cost.
+- The excluded-path list lives in config so it is auditable and adjustable.
 
 ### Provenance (mandatory, zero-trust guard)
 
