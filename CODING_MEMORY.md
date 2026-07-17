@@ -6,8 +6,15 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop (VSCode)
-- session_started_at: 2026-07-16
-- last_active_branch: main (observability judge PR #13 merged 2026-07-17; tree clean)
+- session_started_at: 2026-07-17
+- last_active_branch: feature/memory-rag-index (spec committed; not yet pushed)
+- current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written. Local
+  SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
+  embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
+  hybrid retrieval, silent SessionStart nudge. Store-choice decision (SQLite over Qdrant) +
+  revisit trigger (>500k chunks or p95 >500ms) recorded in spec. Next: observability judge
+  (design stage), then writing-plans.
+  Spec: `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
 
 ## Repositories
 
