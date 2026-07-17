@@ -1,7 +1,7 @@
 # Branch Implementation Log: feature/observability-judge
 
-**Status:** OPEN PR (pending push, 2026-07-16, branch `feature/observability-judge` from `main`,
-16 commits). Tree clean. Hook suite 17/17.
+**Status:** MERGED (PR #13, 2026-07-17, merge commit 82d7b9b, branch `feature/observability-judge`
+from `main`). Tree clean. Hook suite 17/17. Judge + gate now live and global.
 
 ## Why
 

@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-16
-- last_active_branch: feature/observability-judge (observability judge complete; PR #13 open)
+- last_active_branch: main (observability judge PR #13 merged 2026-07-17; tree clean)
 
 ## Repositories
 
@@ -41,7 +41,7 @@ how this file and its linked files should be written (plain language, major chan
   `docs/superpowers/specs/2026-07-16-observability-judge-design.md`, verdict store. Command detection
   took 2 review-driven security fixes (substring→anchored→python shlex, closing a quoted-env-prefix
   bypass); Opus whole-branch review fixed the verdict-filename-on-slashed-branches bug + a stale
-  `hooks/README.md` "only git-guard installed" claim. **PR #13 OPEN (bootstrap self-gate → JUDGE_EXEMPT).**
+  `hooks/README.md` "only git-guard installed" claim. **PR #13 MERGED 2026-07-17 (bootstrap self-gate → JUDGE_EXEMPT).**
   Detail: `coding-memory/branches/observability-judge.md`; PR status: `coding-memory/pr-tracking.md`.
 
 ## Pointers
@@ -62,3 +62,6 @@ how this file and its linked files should be written (plain language, major chan
 **Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile) +
 PR #12 (diagramming-technical-docs skill); vibe-scape (Tayvyx-Lab/VibeSpace) PR #6 (ADR backfill
 0001-0003 + template) + PR #7 (Plan 4a-1 + memory reconcile). No orphans outstanding.
+
+**Merged 2026-07-17:** `.claude` PR #13 (observability judge — agent + judge-guard hook + skill +
+gate/catalog + verdict store; merge commit 82d7b9b). Judge + gate now live and global.
