@@ -5,7 +5,7 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 ## suyatdev/.claude
 
 ### feature/observability-judge
-- branch: feature/observability-judge (MERGED into main via PR #13; branch still exists local + remote)
+- branch: feature/observability-judge (MERGED into main via PR #13; branch DELETED 2026-07-17 local + remote)
 - remote: origin (git@github.com:suyatdev/.claude.git)
 - PR: https://github.com/suyatdev/.claude/pull/13 (MERGED 2026-07-17, merge commit 82d7b9b)
 - opened_by session_origin: desktop (VSCode)
