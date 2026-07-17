@@ -8,13 +8,15 @@ how this file and its linked files should be written (plain language, major chan
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-17
 - last_active_branch: feature/memory-rag-index (spec committed; not yet pushed)
-- current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written. Local
-  SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
+- current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written + judged.
+  Local SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
   embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
-  hybrid retrieval, silent SessionStart nudge. Store-choice decision (SQLite over Qdrant) +
-  revisit trigger (>500k chunks or p95 >500ms) recorded in spec. Next: observability judge
-  (design stage), then writing-plans.
+  hybrid retrieval, silent SessionStart nudge. SQLite-over-Qdrant decision + revisit trigger
+  (>500k chunks or p95 >500ms) recorded. CODING_MEMORY.md excluded from index (ephemeral).
+  Design-stage observability judge: risk=low, confidence=medium (advisory, not gating).
   Spec: `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
+  Verdict: `coding-memory/observability-judge/2026-07-17-feature-memory-rag-index.md`.
+  Next: writing-plans (user chose to stay on Fable 5 for it).
 
 ## Repositories
 
@@ -59,7 +61,13 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+1. **memsearch:** run `writing-plans` for the approved spec. Carry the judge's 5 implementation
+   flags into the plan: (a) golden-query set bigger than happy-path = acceptance bar;
+   (b) systematic digest-accuracy check, not just spot-checks; (c) promote SQLite-vs-Qdrant to a
+   real ADR under `docs/decisions/`; (d) explicit sign-off before the `sqlite-vec` dep + uv/Python
+   subsystem land (never-add-dependency-unilaterally invariant); (e) verify SessionStart hook is
+   one silent line, no auto-inject. Branch `feature/memory-rag-index` (2 commits, pushed).
+2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
 2. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
