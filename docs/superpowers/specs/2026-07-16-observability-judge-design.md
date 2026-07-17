@@ -153,7 +153,7 @@ forces a re-run, so the gate always reflects exactly what is being PR'd.
 
 ## Hook behavior — `judge-guard.sh`
 
-- **Fires:** PreToolUse on `Bash`, when `tool_input.command` contains a `gh pr create` invocation.
+- **Fires:** PreToolUse on `Bash`, when `tool_input.command` **is** a `gh pr create` invocation — anchored at the command start (after optional leading env-assignments), so the phrase inside a commit message, echo, or quoted string is ignored. Accepts the same chained-command gap as `git-guard`'s `^git` anchor.
   Parsing of the PreToolUse JSON uses `python3` (consistent with the existing scanners), not `sed`.
 - **Passes (exit 0):** any command that is not `gh pr create`; or a matching command with a fresh
   verdict; or a command carrying the exempt hatch.

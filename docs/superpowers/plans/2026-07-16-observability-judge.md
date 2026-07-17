@@ -177,6 +177,11 @@ line architecting  "$REPO" "$BRANCH" "$SHA"   > "$VFILE"; run_case "architecting
 rm -f "$VFILE";                                 run_case "JUDGE_EXEMPT=<reason> -> pass"     0 "JUDGE_EXEMPT=hotfix gh pr create --fill"
 rm -f "$VFILE";                                 run_case "JUDGE_EXEMPT= (empty) -> block"    2 "JUDGE_EXEMPT= gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"; run_case "gh pr list unaffected"     0 "gh pr list"
+# Regression: the phrase inside another command must NOT trigger the guard (anchored regex).
+rm -f "$VFILE"
+run_case "commit msg containing phrase -> ignore" 0 'git commit -m "feat: blocking gh pr create without a verdict"'
+run_case "echo containing phrase -> ignore"       0 "echo gh pr create"
+run_case "chained && (documented gap) -> ignore"  0 "cd /tmp && gh pr create --fill"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
@@ -245,8 +250,12 @@ if [[ "$normalized" == rtk\ * ]]; then
   normalized="${normalized#rtk }"
 fi
 
-# Only guard `gh pr create`.
-pr_create_re='(^|[[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'
+# Only guard `gh pr create` as the actual command: optional leading env-assignments
+# (e.g. JUDGE_EXEMPT=...), then `gh pr create`. Anchored at the start like git-guard's
+# `^git`, so the phrase inside a commit message, an echo, or any quoted string is ignored.
+# Accepted limitation (same as git-guard's `^git`): a chained `foo && gh pr create` is not
+# caught — a momentum guardrail, not a security boundary.
+pr_create_re='^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'
 [[ "$normalized" =~ $pr_create_re ]] || exit 0
 
 # Escape hatch: JUDGE_EXEMPT=<non-empty reason> as an inline env assignment.
