@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-17
-- last_active_branch: feature/memory-rag-index (6 commits, PUSHED to origin; no PR yet — next is writing-plans)
+- last_active_branch: feature/memory-rag-index (7 commits; commits 1-6 PUSHED, commit 7 = settings chore a3de623 local; no PR yet — next is writing-plans)
 - current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written + judged.
   Local SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
   embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
@@ -17,9 +17,11 @@ how this file and its linked files should be written (plain language, major chan
   Spec: `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
   Verdict: `coding-memory/observability-judge/2026-07-17-feature-memory-rag-index.md`.
 - MODEL SETTLED: writing-plans runs on **Fable 5**. Default committed to settings.json
-  (chore be44ca2, opus[1m]→claude-fable-5[1m]); user cleared + switched the session to Fable 5
-  specifically for this. On resume, DO NOT re-ask the model-switch gate for writing-plans —
-  proceed directly (see Exact Next Steps #1).
+  (chore be44ca2, opus[1m]→claude-fable-5[1m]).
+- RESUME 2026-07-17 (session B): cleared session came up on **Opus 4.8**, not Fable 5. Surfaced the
+  mismatch; user elected to **switch to Fable 5 first** (via /model) before writing-plans, honoring
+  the settled decision. Also reconciled a /clear-orphaned settings.json (harness UI/notif prefs →
+  chore a3de623). WAITING on the user's /model switch to Fable 5, then proceed to Exact Next Steps #1.
 
 ## Repositories
 
