@@ -1,0 +1,23 @@
+[project]
+name = "memsearch"
+version = "0.1.0"
+description = "Local hybrid RAG index over Claude Code session digests and durable docs"
+requires-python = ">=3.12"
+dependencies = ["sqlite-vec==0.1.9"]
+
+[project.scripts]
+memsearch = "memsearch.cli:main"
+
+[dependency-groups]
+dev = ["pytest==8.3.4"]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["memsearch"]
+
+[tool.pytest.ini_options]
+markers = ["golden: retrieval-quality acceptance tests against the real index"]
+addopts = "-m 'not golden'"

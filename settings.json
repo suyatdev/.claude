@@ -2,7 +2,7 @@
   "permissions": {
     "defaultMode": "acceptEdits"
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -33,6 +33,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/doc-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/memsearch-nudge.sh"
           }
         ]
       }
@@ -58,5 +62,8 @@
   "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "editorMode": "normal",
+  "preferredNotifChannel": "iterm2",
+  "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true
 }

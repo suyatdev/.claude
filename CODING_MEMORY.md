@@ -6,8 +6,48 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop (VSCode)
-- session_started_at: 2026-07-16
-- last_active_branch: main (observability judge PR #13 merged 2026-07-17; tree clean)
+- session_started_at: 2026-07-17
+- last_active_branch: feature/memory-rag-index (7 commits; commits 1-6 PUSHED, commit 7 = settings chore a3de623 local; no PR yet — next is writing-plans)
+- current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written + judged.
+  Local SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
+  embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
+  hybrid retrieval, silent SessionStart nudge. SQLite-over-Qdrant decision + revisit trigger
+  (>500k chunks or p95 >500ms) recorded. CODING_MEMORY.md excluded from index (ephemeral).
+  Design-stage observability judge: risk=low, confidence=medium (advisory, not gating).
+  Spec: `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
+  Verdict: `coding-memory/observability-judge/2026-07-17-feature-memory-rag-index.md`.
+- MODEL SETTLED: writing-plans runs on **Fable 5**. Default committed to settings.json
+  (chore be44ca2, opus[1m]→claude-fable-5[1m]).
+- RESUME 2026-07-17 (session C): reconciled a /clear-orphaned verdicts.jsonl append (docs 8e4251d —
+  Snatch-Bracket impl-stage verdict landed in the global store before that session checkpointed).
+  Then EXECUTED the memsearch plan (subagent-driven, Sonnet 5 implementers/reviewers).
+- MEMSEARCH EXECUTION (2026-07-17→18): Tasks 1-14 COMPLETE, all task-reviewed Approved; Task 15
+  Steps 1-2 committed (golden set + acceptance test), Step 3 full backfill (~69 sessions, hours)
+  RUNNING in background. 60-test suite green. Live index: 154 sources / 2041 chunks / 0 errors,
+  qwen3-embedding:0.6b 1024-dim, provenance + digest audits passed, idle RAM zero verified.
+  Review loops fixed 5 plan-inherited defects (all logged as plan deviations in the SDD ledger
+  + branch log): JSONDecodeError escape (ollama), user list-content text dropped + non-dict crash
+  (extract), vacuous subagents-exclusion test (indexer), LIKE-wildcard count inflation (rename),
+  oversized-section embed 400 + venv pollution (chunk/config, found live in Task 14).
+  Ledger: .superpowers/sdd/progress.md. Branch log: coding-memory/branches/memory-rag-index.md.
+  PARALLEL-WORK NOTE: uncommitted changes by another session sit in the working tree (CLAUDE.md,
+  rules/gates.md, verdicts.jsonl append, untracked skills/verifying-subagent-commits/) — left
+  alone by this session; reconcile whenever that session checkpoints.
+  COMPLETE (2026-07-18): all 15 tasks done + task-reviewed; full backfill 228 sources / 2332
+  chunks / 0 errors / p95 149ms; golden bar 16/16 (1 honest expected-path tune); digest audit
+  11/12 supported (8.3% ≤ 10% bar — caught a paraphrased git command); final whole-branch review
+  (fable) READY TO MERGE after fix wave 37cb7b6 (search model-mismatch guard + rename missing-DB
+  guard + full=True test). Accepted debt recorded in ledger. Judge (impl): risk=low conf=high.
+  **PR #14 OPEN: https://github.com/suyatdev/.claude/pull/14** (created 2026-07-18, desktop).
+- RESUME 2026-07-17 (session B): reconciled a /clear-orphaned settings.json (chore a3de623),
+  user switched session to Fable 5, then **writing-plans COMPLETED**: 15-task implementation plan
+  written + self-reviewed at `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (3,079 lines,
+  full TDD code per task). All 5 judge flags mapped: (a) golden bar T15, (b) digest audit T10+T15,
+  (c) ADR 0002 T13, (d) dep sign-off T1-Step-0, (e) one-line hook T12. Self-review fixed: chunk_digest
+  H2-split, negative-golden semantics (warn-not-fail — RRF has no absolute confidence floor),
+  vec0 LIMIT inlining, task renumbering. Verified live: qwen3-embedding:0.6b NOT yet pulled
+  (T14 pulls it), 72 main transcripts + 578 subagent files (subagents excluded from indexing).
+  NEXT: user picks execution mode + confirms sqlite-vec/uv dep sign-off, then execute the plan.
 
 ## Repositories
 
@@ -52,11 +92,21 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+1. **PR #14 (memsearch) — await user review/merge.** After merge: backfill the judge verdict
+   `outcome` field (clean/rework/bug) in verdicts.jsonl; delete the feature branch.
+2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
+   `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
+   `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
+   format validation; README sentence that digest-chunk line numbers are digest-relative.
+   Also live-verify the memsearch-nudge SessionStart line fires in a FRESH session.
+3. **Reconcile the parallel session's work when it checkpoints:** uncommitted CLAUDE.md +
+   rules/gates.md edits + untracked skills/verifying-subagent-commits/ are ANOTHER session's
+   in-flight work — left alone by session C; do not commit them from this session.
+4. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
-2. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
-   `coding-memory/decisions.md` as its equivalent today); add diagramming pointers to
+5. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
+   `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
 
 **Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile) +
