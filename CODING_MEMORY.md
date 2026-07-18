@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-18
-- last_active_branch: main (synced to origin/main @ 7015369)
+- last_active_branch: feature/verifying-subagent-commits (pushed, PR open)
 - current work: post-merge housekeeping for memsearch. **PR #14 MERGED** 2026-07-18T16:57Z, merge
   commit 7015369. Local + remote `feature/memory-rag-index` branch deleted. Judge verdict at head
   6f2d4e3 backfilled `outcome: clean` in verdicts.jsonl. Full history:
@@ -15,11 +15,18 @@ how this file and its linked files should be written (plain language, major chan
 - RECONCILED a stranded local-main commit from a parallel session: `00705b7`
   (`feat(skills): add verifying-subagent-commits gate` — CLAUDE.md + rules/gates.md +
   skills/verifying-subagent-commits/SKILL.md) had landed directly on local `main` with no PR,
-  violating default-branch safety. Preserved on new branch `feature/verifying-subagent-commits`
-  (not pushed, no PR yet — left for that session to pick up); local `main` hard-reset to
-  `origin/main`.
-- Model gate: this session (docs/git housekeeping only) routed to **Sonnet 5**, per user; the
-  memsearch feature work itself ran on Fable 5.
+  violating default-branch safety. Preserved on new branch `feature/verifying-subagent-commits`,
+  rebased onto current main; local `main` hard-reset to `origin/main`.
+- PICKED UP `feature/verifying-subagent-commits`: rebased clean, then two judge-driven fixes —
+  added the missing "not for X" negative-trigger clause to the skill's description (authoring
+  standard gap), then trimmed the description from ~488→~348 chars after judge flagged it as an
+  outlier (verified against the repo's actual 275–414 char range — 348 is typical, not long).
+  Deliberately did NOT write an ADR: this skill is explicitly not hook-enforced (unlike ADR-0001's
+  judge-guard.sh), closer in kind to the no-ADR `feature/diagramming-skill` precedent (PR #12).
+  Judge (impl, re-run at final head 367da77): risk=low conf=high, both fixes verified against
+  actual git history. **PR opened** — see Repositories/pr-tracking below for number.
+- Model gate: this session (docs/git housekeeping + a small skill-description fix) routed to
+  **Sonnet 5**, per user; the memsearch feature work itself ran on Fable 5.
 
 ## Repositories
 
@@ -62,6 +69,13 @@ how this file and its linked files should be written (plain language, major chan
   golden bar 16/16, digest audit 11/12 supported. **PR #14 MERGED 2026-07-18** (merge commit
   7015369); branch deleted. Judge (impl): risk=low conf=high, outcome=clean.
   Detail: `coding-memory/branches/memory-rag-index.md`.
+- feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
+  subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
+  in the target checkout that it actually landed there, before trusting the report. Harvested from
+  a real trace (a subagent committed to the wrong checkout 3x in one session, despite an explicit
+  dispatch-prompt self-check instruction). Not hook-enforced by design. **PR #15 OPEN:
+  https://github.com/suyatdev/.claude/pull/15** (created 2026-07-18, desktop). Judge (impl, head
+  367da77): risk=low conf=high.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
@@ -76,9 +90,8 @@ how this file and its linked files should be written (plain language, major chan
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
    Also live-verify the memsearch-nudge SessionStart line fires in a FRESH session.
-2. **feature/verifying-subagent-commits** exists locally (not pushed, no PR) — a parallel session's
-   work reconciled onto its own branch this session (see Active Session above). Pick it up, review,
-   and open a PR when that work is ready to continue.
+2. **PR #15 (feature/verifying-subagent-commits) — await user review/merge.** After merge: backfill
+   the judge verdict `outcome` field at head 367da77 in verdicts.jsonl; delete the feature branch.
 3. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.

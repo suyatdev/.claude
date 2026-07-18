@@ -75,9 +75,17 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - judge verdict: implementation, risk=low confidence=high, head 6f2d4e3, outcome=clean (backfilled 2026-07-18).
 - detail: coding-memory/branches/memory-rag-index.md
 
-### feature/verifying-subagent-commits (stranded commit reconciled 2026-07-18)
-- branch created at 00705b7 to preserve a parallel session's commit that had landed directly on
-  local `main` (feat commit, no PR) — `feat(skills): add verifying-subagent-commits gate`
-  (CLAUDE.md + rules/gates.md + skills/verifying-subagent-commits/SKILL.md). Local `main` was then
-  hard-reset to origin/main. No PR opened yet; not this session's work to carry further — left for
-  whoever picks it up next.
+### feature/verifying-subagent-commits
+- repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/15 · status: OPEN (created 2026-07-18)
+- opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
+- origin: a parallel session's commit (`00705b7`, `feat(skills): add verifying-subagent-commits
+  gate` — CLAUDE.md + rules/gates.md + skills/verifying-subagent-commits/SKILL.md) had landed
+  directly on local `main` with no PR. A later session preserved it on this branch, rebased onto
+  current main, then picked it up: added a missing "not for X" description boundary clause, then
+  trimmed the resulting description from ~488→~348 chars per judge feedback (verified against the
+  repo's other 15 skill descriptions, 275–414 char range). No ADR written — this skill is
+  explicitly not hook-enforced, unlike ADR-0001's judge-guard.sh; closer precedent is the no-ADR
+  feature/diagramming-skill (PR #12).
+- judge verdict: implementation, risk=low confidence=high, head 367da77 (re-run after both
+  follow-up fixes; outcome: pending merge)
