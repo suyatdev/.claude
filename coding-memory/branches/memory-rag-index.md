@@ -12,3 +12,4 @@
 - Task 7 fix: replaced vacuous subagents-exclusion check (glob non-recursive, deep fixture path unreachable) with a glob-reachable test that genuinely exercises is_excluded, RED-proven by temporarily removing the filter
 - Task 8: hybrid search — vec KNN + FTS5 BM25, RRF fusion, weight boost, repo/type/since filters, provenance formatting, latency log
 - Task 8 fix: brief's test_latency_logged_and_fts_syntax_safe asserted query_log count >= 2 after a single search() call — corrected to >= 1 (log_query fires once per search, matching db.py's p95-over-N-queries design; a second call was never made)
+- Task 9: rename (metadata-only, zero re-embed proven by vector-identity test) + status (counts, mismatch, revisit triggers)
