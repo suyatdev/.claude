@@ -1,0 +1,18 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "embed_model": "qwen3-embedding:0.6b",
+  "embed_dim": 1024,
+  "embed_fallback_model": "nomic-embed-text",
+  "embed_fallback_dim": 768,
+  "digest_model": "qwen3.6:35b-mlx",
+  "digest_input_char_cap": 80000,
+  "db_path": "~/.claude/memory-index/memory.db",
+  "transcripts_glob": "~/.claude/projects/*/*.jsonl",
+  "curated_docs": ["~/.claude/coding-memory", "~/.claude/docs", "~/.claude/PORTS.md"],
+  "repo_roots": [
+    {"id": "vibe-scape", "name": "vibe-scape", "root": "~/Other Docs/AI/AI_Projx/vibe-scape"},
+    {"id": "snatch-bracket", "name": "Snatch-Bracket", "root": "~/Other Docs/AI/AI_Projx/Snatch-Bracket"}
+  ],
+  "exclude_paths": ["CODING_MEMORY.md", "/subagents/", "/node_modules/", "/.git/", "/dist/", "/build/"],
+  "weights": {"curated_doc": 1.5, "repo_doc": 1.2, "transcript_digest": 1.0}
+}
