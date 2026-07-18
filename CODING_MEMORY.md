@@ -18,10 +18,15 @@ how this file and its linked files should be written (plain language, major chan
   Verdict: `coding-memory/observability-judge/2026-07-17-feature-memory-rag-index.md`.
 - MODEL SETTLED: writing-plans runs on **Fable 5**. Default committed to settings.json
   (chore be44ca2, opus[1m]→claude-fable-5[1m]).
-- RESUME 2026-07-17 (session B): cleared session came up on **Opus 4.8**, not Fable 5. Surfaced the
-  mismatch; user elected to **switch to Fable 5 first** (via /model) before writing-plans, honoring
-  the settled decision. Also reconciled a /clear-orphaned settings.json (harness UI/notif prefs →
-  chore a3de623). WAITING on the user's /model switch to Fable 5, then proceed to Exact Next Steps #1.
+- RESUME 2026-07-17 (session B): reconciled a /clear-orphaned settings.json (chore a3de623),
+  user switched session to Fable 5, then **writing-plans COMPLETED**: 15-task implementation plan
+  written + self-reviewed at `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (3,079 lines,
+  full TDD code per task). All 5 judge flags mapped: (a) golden bar T15, (b) digest audit T10+T15,
+  (c) ADR 0002 T13, (d) dep sign-off T1-Step-0, (e) one-line hook T12. Self-review fixed: chunk_digest
+  H2-split, negative-golden semantics (warn-not-fail — RRF has no absolute confidence floor),
+  vec0 LIMIT inlining, task renumbering. Verified live: qwen3-embedding:0.6b NOT yet pulled
+  (T14 pulls it), 72 main transcripts + 578 subagent files (subagents excluded from indexing).
+  NEXT: user picks execution mode + confirms sqlite-vec/uv dep sign-off, then execute the plan.
 
 ## Repositories
 
@@ -66,14 +71,12 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **memsearch — RESUME HERE (Fable 5, no model re-ask):** invoke `superpowers:writing-plans`
-   directly against the approved spec `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
-   Model is already settled = Fable 5 (see Active Session). Carry the judge's 5 implementation
-   flags into the plan: (a) golden-query set bigger than happy-path = acceptance bar;
-   (b) systematic digest-accuracy check, not just spot-checks; (c) promote SQLite-vs-Qdrant to a
-   real ADR under `docs/decisions/`; (d) explicit sign-off before the `sqlite-vec` dep + uv/Python
-   subsystem land (never-add-dependency-unilaterally invariant); (e) verify SessionStart hook is
-   one silent line, no auto-inject. Branch `feature/memory-rag-index` (6 commits, pushed).
+1. **memsearch — EXECUTE THE PLAN:** plan at `docs/superpowers/plans/2026-07-17-memory-rag-index.md`
+   (15 tasks, TDD, complete code). Prerequisites before Task 1: (i) user's execution-mode choice
+   (subagent-driven vs inline), (ii) recorded sign-off for sqlite-vec==0.1.9 + uv/Python subsystem
+   (judge flag d — goes in Task 1's commit body), (iii) Hard Model Gate: ask model tier for
+   implementation (plan was written on Fable 5; implementation is its own checkpoint).
+   Task 14 (live bring-up) + Task 15 Step 3 (full backfill, hours) run in the main session.
 2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
