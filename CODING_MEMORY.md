@@ -33,8 +33,12 @@ how this file and its linked files should be written (plain language, major chan
   PARALLEL-WORK NOTE: uncommitted changes by another session sit in the working tree (CLAUDE.md,
   rules/gates.md, verdicts.jsonl append, untracked skills/verifying-subagent-commits/) — left
   alone by this session; reconcile whenever that session checkpoints.
-  REMAINING: Task 15 Steps 4-6 (golden bar, digest audit, final commit) after backfill; Task-15
-  task-review; final whole-branch review; observability judge (implementation stage); PR.
+  COMPLETE (2026-07-18): all 15 tasks done + task-reviewed; full backfill 228 sources / 2332
+  chunks / 0 errors / p95 149ms; golden bar 16/16 (1 honest expected-path tune); digest audit
+  11/12 supported (8.3% ≤ 10% bar — caught a paraphrased git command); final whole-branch review
+  (fable) READY TO MERGE after fix wave 37cb7b6 (search model-mismatch guard + rename missing-DB
+  guard + full=True test). Accepted debt recorded in ledger. REMAINING: judge (impl) → PR →
+  post-PR verdict commit (incl. 2nd parallel Snatch-Bracket verdicts.jsonl reconcile).
 - RESUME 2026-07-17 (session B): reconciled a /clear-orphaned settings.json (chore a3de623),
   user switched session to Fable 5, then **writing-plans COMPLETED**: 15-task implementation plan
   written + self-reviewed at `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (3,079 lines,
