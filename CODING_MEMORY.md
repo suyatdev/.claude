@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-17
-- last_active_branch: feature/memory-rag-index (3 commits, PUSHED to origin; no PR yet — next is writing-plans)
+- last_active_branch: feature/memory-rag-index (4 commits, PUSHED to origin; no PR yet — next is writing-plans)
 - current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written + judged.
   Local SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
   embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
@@ -16,7 +16,10 @@ how this file and its linked files should be written (plain language, major chan
   Design-stage observability judge: risk=low, confidence=medium (advisory, not gating).
   Spec: `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
   Verdict: `coding-memory/observability-judge/2026-07-17-feature-memory-rag-index.md`.
-  Next: writing-plans (user chose to stay on Fable 5 for it).
+- MODEL SETTLED: writing-plans runs on **Fable 5**. Default committed to settings.json
+  (chore be44ca2, opus[1m]→claude-fable-5[1m]); user cleared + switched the session to Fable 5
+  specifically for this. On resume, DO NOT re-ask the model-switch gate for writing-plans —
+  proceed directly (see Exact Next Steps #1).
 
 ## Repositories
 
@@ -61,16 +64,18 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **memsearch:** run `writing-plans` for the approved spec. Carry the judge's 5 implementation
+1. **memsearch — RESUME HERE (Fable 5, no model re-ask):** invoke `superpowers:writing-plans`
+   directly against the approved spec `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md`.
+   Model is already settled = Fable 5 (see Active Session). Carry the judge's 5 implementation
    flags into the plan: (a) golden-query set bigger than happy-path = acceptance bar;
    (b) systematic digest-accuracy check, not just spot-checks; (c) promote SQLite-vs-Qdrant to a
    real ADR under `docs/decisions/`; (d) explicit sign-off before the `sqlite-vec` dep + uv/Python
    subsystem land (never-add-dependency-unilaterally invariant); (e) verify SessionStart hook is
-   one silent line, no auto-inject. Branch `feature/memory-rag-index` (2 commits, pushed).
+   one silent line, no auto-inject. Branch `feature/memory-rag-index` (4 commits, pushed).
 2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
-2. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
+3. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
    `coding-memory/decisions.md` as its equivalent today); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
 
