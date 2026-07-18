@@ -143,3 +143,47 @@ def test_repo_for_cwd(tmp_path):
     assert repo_for_cwd(root + "/src", cfg) == ("myrepo", "myrepo")
     assert repo_for_cwd("/somewhere/OtherRepo", cfg) == ("otherrepo", "OtherRepo")
     assert repo_for_cwd("", cfg) == ("unknown", "unknown")
+
+
+def test_glob_reachable_subagents_transcript_is_excluded(tmp_path):
+    """Two layers protect the "never index subagents" invariant, and this
+    test exercises only the second one. Layer 1 (structural, untested here):
+    setup_corpus's subagent fixture lives 4 path segments below `projects/`
+    (.../new-session/subagents/agent-1.jsonl), while `transcripts_glob`
+    (`projects/*/*.jsonl`) is non-recursive and only ever matches 2 segments
+    — so that fixture path is unreachable by the glob regardless of
+    `is_excluded`, which is why the path assertion in
+    test_full_run_indexes_all_sources_newest_first stays green even if
+    `is_excluded` were deleted from `_iter_transcripts`. Layer 2 (logical,
+    exercised here): a subagents-pattern transcript placed where the glob
+    DOES reach it (`projects/subagents/agent-1.jsonl`, 2 segments) is kept
+    out only by `is_excluded` — a real exercise of the backstop, so this
+    invariant stays covered even if a future recursive glob makes the deep
+    layout reachable too."""
+    cfg = make_cfg(tmp_path)
+    sub_dir = tmp_path / "projects" / "subagents"
+    sub_dir.mkdir(parents=True)
+    sub_path = sub_dir / "agent-1.jsonl"
+    sub_path.write_text(jl(
+        type="user", message={"role": "user", "content": "subagent noise"},
+        **BASE) + "\n")
+
+    seen_session_ids = []
+
+    def spy_digester(extract):
+        seen_session_ids.append(extract.session_id)
+        return CANNED_DIGEST
+
+    run_index(cfg, embedder=stub_embedder, digester=spy_digester,
+              progress=lambda _: None)
+
+    # extractor/digester were never invoked for the excluded transcript
+    assert "agent-1" not in seen_session_ids
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    sources = [r[0] for r in conn.execute("SELECT path FROM sources")]
+    conn.close()
+    # Exact-path check, not a bare "subagents" substring check: pytest's own
+    # tmp_path embeds this test's function name, which itself contains the
+    # word "subagents" — a naive substring assertion would false-positive on
+    # every source path regardless of whether the excluded file leaked in.
+    assert str(sub_path) not in sources

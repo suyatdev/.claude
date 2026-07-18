@@ -9,3 +9,4 @@
 - Task 5: chunkers — header-aware markdown split (merge tiny/split oversized) + per-H2 digest chunks w/ recall_type mapping
 - Task 6: digest module — 4-section template, truncate-middle cap, injectable chat
 - Task 7: indexer — docs then newest-first transcripts, hash-diff skip, per-source atomic, errors recorded not fatal, status.json
+- Task 7 fix: replaced vacuous subagents-exclusion check (glob non-recursive, deep fixture path unreachable) with a glob-reachable test that genuinely exercises is_excluded, RED-proven by temporarily removing the filter
