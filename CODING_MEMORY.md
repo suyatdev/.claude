@@ -71,12 +71,14 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **memsearch — EXECUTE THE PLAN:** plan at `docs/superpowers/plans/2026-07-17-memory-rag-index.md`
-   (15 tasks, TDD, complete code). Prerequisites before Task 1: (i) user's execution-mode choice
-   (subagent-driven vs inline), (ii) recorded sign-off for sqlite-vec==0.1.9 + uv/Python subsystem
-   (judge flag d — goes in Task 1's commit body), (iii) Hard Model Gate: ask model tier for
-   implementation (plan was written on Fable 5; implementation is its own checkpoint).
-   Task 14 (live bring-up) + Task 15 Step 3 (full backfill, hours) run in the main session.
+1. **memsearch — EXECUTE THE PLAN (all gates cleared 2026-07-17):** plan at
+   `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (15 tasks, TDD, complete code).
+   User decisions recorded: (i) execution = **subagent-driven** (superpowers:subagent-driven-development);
+   (ii) **dep sign-off APPROVED** — sqlite-vec==0.1.9 + uv/Python 3.12 + pytest==8.3.4 dev-only;
+   cite "user approved at plan approval (2026-07-17)" in Task 1's commit body; (iii) Hard Model Gate
+   answered = **Sonnet 5 for implementation** — orchestrate from this session, dispatch task subagents
+   with model: sonnet; do NOT re-ask. Start at Task 1. Task 14 (live bring-up) + Task 15 Step 3
+   (full backfill, hours) run in the main session, not a subagent.
 2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
