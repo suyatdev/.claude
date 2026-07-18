@@ -6,3 +6,4 @@
 - Task 3 fix: _post now catches json.JSONDecodeError -> OllamaError (non-JSON/HTML error bodies no longer escape as raw JSONDecodeError)
 - Task 4: extractor — JSONL -> clean turns; drops tool payloads/thinking/sidechains/meta, keeps tool names
 - Task 4 fix: user list-content now keeps real text blocks (was silently dropped), non-dict JSON lines (null/number) no longer crash extraction
+- Task 5: chunkers — header-aware markdown split (merge tiny/split oversized) + per-H2 digest chunks w/ recall_type mapping
