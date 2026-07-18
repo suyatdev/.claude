@@ -24,6 +24,8 @@ def _post(url: str, payload: dict, timeout: float) -> dict:
             return json.loads(resp.read())
     except (urllib.error.URLError, TimeoutError) as e:
         raise OllamaError(f"ollama request failed at {url}: {e}") from e
+    except json.JSONDecodeError as e:
+        raise OllamaError(f"ollama returned non-JSON response from {url}: {e}") from e
 
 
 def embed(texts: list[str], model: str, base_url: str,

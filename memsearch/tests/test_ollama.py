@@ -55,3 +55,22 @@ def test_chat_empty_reply_raises(monkeypatch):
     monkeypatch.setattr(ollama, "_post", rec)
     with pytest.raises(ollama.OllamaError, match="empty"):
         ollama.chat("hello", "m", "http://x")
+
+
+def test_post_non_json_response_raises_ollama_error(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def read(self):
+            return b"<html>error</html>"
+
+    def fake_urlopen(req, timeout=None):
+        return FakeResponse()
+
+    monkeypatch.setattr(ollama.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(ollama.OllamaError):
+        ollama._post("http://x/api/chat", {"a": 1}, 5.0)
