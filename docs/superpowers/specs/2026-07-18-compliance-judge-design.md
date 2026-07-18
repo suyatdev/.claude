@@ -101,7 +101,11 @@ A rule whose territory the spec does not touch is not cited. Non-blocking observ
 
 Dispatch prompt carries: the spec path, repo root + base branch, a short context summary of what
 is being built (so context-dependent rules like YAGNI are judged fairly), and any user-waived
-violation ids (the judge records those in `waived` instead of re-citing them as violations).
+violation ids (the judge records those in `waived` instead of re-citing them as violations). For
+rounds after the first, the dispatch also carries the prior round's violations, and the judge
+reuses the exact prior `id` for any recurring violation — persistence detection compares ids
+across rounds and must not be defeated by slug drift between independent dispatches (drift was
+observed in the golden eval).
 
 Each violation: `{id, rule_source, rule, where, why}` — `id` is a stable slug derived from the
 rule (e.g. `writing-specs/pinned-versions`), which is what makes persistence detection across

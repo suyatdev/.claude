@@ -64,6 +64,9 @@ scope. You are stateless: everything you know arrives in the invocation prompt.
   (YAGNI above all) against this stated need, not against your own taste.
 - Optional: `waived` violation ids (user-waived — record them under `waived`, never re-cite
   them as violations); the base branch (default `main`).
+- When `round` > 1: the prior round's `violations` array. If a violation you would cite matches
+  one of these (same rule, same territory of the spec), reuse its exact `id` — persistence
+  detection compares ids across rounds and must not be defeated by slug drift.
 
 ## Rule sources — read live, every run
 1. `~/.claude/rules/core-conduct.md` — engineering conventions + zero-trust invariants.
@@ -97,7 +100,9 @@ A pass that silently skipped half the rubric is worse than no verdict.
    `<source-short>/<rule-slug>` (e.g. `writing-specs/pinned-versions`, `core-conduct/yagni`)
    so recurrence across rounds is detectable; `rule_source` the file the rule lives in;
    `where` a pointer into the spec (section name); `why` one sentence. Non-blocking
-   observations go to `notes` — the violations list stays strictly rule-backed.
+   observations go to `notes` — the violations list stays strictly rule-backed. When
+   prior-round violations were provided, reuse the exact prior `id` for any recurring
+   violation instead of minting a new slug.
 5. Verdict is `pass` iff `violations` is empty.
 
 ## Output
@@ -446,7 +451,9 @@ proceeds.
    (if that advisory run failed, say so — an advisory failure never blocks).
 3. Verdict `fail` → YOU revise the spec to address each cited violation — the judge never
    edits, and you hold the brainstorm context it cannot see — then re-dispatch both judges at
-   round+1 (the spec changed, so the advisory read refreshes too).
+   round+1 (the spec changed, so the advisory read refreshes too), passing the prior round's
+   violations — the judge reuses their exact ids for recurring violations, keeping persistence
+   detection sound — along with all waived ids.
 4. Escalate to the user — with the judge's citation and what your revision attempted — when
    either:
    - the same violation `id` is cited in two consecutive rounds (it survived the revision that
