@@ -7,7 +7,9 @@ Written ONLY by the `compliance-judge` subagent (`agents/compliance-judge.md`); 
   spec_blob_sha, round, verdict, violations[], notes[], rule_sources_read[], waived[],
   confidence, outcome}`. Created on first verdict.
 - `<YYYY-MM-DD>-<spec_slug>.md` — per-spec human writeup, one section per round: layman
-  summary, violations table with rule citations, waiver record.
+  summary, violations table with rule citations, waiver record. Dated by its first round;
+  later rounds glob the store for the existing `*-<spec_slug>.md` and append there instead
+  of creating a new dated file.
 
 `outcome` starts `null`; backfill `clean`/`rework`/`bug` once the spec's implementation lands.
 A verdict is fresh only while its `spec_blob_sha` matches `git hash-object <spec_path>` —

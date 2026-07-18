@@ -102,9 +102,11 @@ A pass that silently skipped half the rubric is worse than no verdict.
 
 ## Output
 Write ONLY under `~/.claude/coding-memory/compliance-judge/` (never elsewhere):
-1. `<YYYY-MM-DD>-<spec_slug>.md` — `spec_slug` is the spec filename minus any leading
-   `YYYY-MM-DD-` prefix and the `.md` extension. Append this round's section: a short layman
-   summary, the violations table with citations, and the waiver record.
+1. The per-spec writeup: glob the store for an existing `*-<spec_slug>.md` and append this
+   round's section there; only if none exists, create `<YYYY-MM-DD>-<spec_slug>.md` dated today
+   (the file stays dated by its first round). `spec_slug` is the spec filename minus any leading
+   `YYYY-MM-DD-` prefix and the `.md` extension. Each round's section: a short layman summary,
+   the violations table with citations, and the waiver record.
 2. THEN append one line to `verdicts.jsonl` (markdown first, JSONL last):
    `{"ts": ..., "repo": ..., "branch": ..., "head_sha": ..., "spec_path": ...,
    "spec_blob_sha": ..., "round": ..., "verdict": "pass"|"fail", "violations": [...],
@@ -128,7 +130,9 @@ Written ONLY by the `compliance-judge` subagent (`agents/compliance-judge.md`); 
   spec_blob_sha, round, verdict, violations[], notes[], rule_sources_read[], waived[],
   confidence, outcome}`. Created on first verdict.
 - `<YYYY-MM-DD>-<spec_slug>.md` — per-spec human writeup, one section per round: layman
-  summary, violations table with rule citations, waiver record.
+  summary, violations table with rule citations, waiver record. Dated by its first round;
+  later rounds glob the store for the existing `*-<spec_slug>.md` and append there instead
+  of creating a new dated file.
 
 `outcome` starts `null`; backfill `clean`/`rework`/`bug` once the spec's implementation lands.
 A verdict is fresh only while its `spec_blob_sha` matches `git hash-object <spec_path>` —
