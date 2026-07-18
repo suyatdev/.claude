@@ -8,17 +8,15 @@ how this file and its linked files should be written (plain language, major chan
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-18
 - last_active_branch: main (synced to origin/main @ 417e8e7)
-- current work: post-merge housekeeping, two PRs. **PR #14 (memsearch) MERGED** 2026-07-18T16:57Z
-  (commit 7015369). **PR #15 (verifying-subagent-commits) MERGED** 2026-07-18T17:41Z (commit
-  417e8e7). Both feature branches deleted, local + remote; both judge verdicts backfilled
-  `outcome: clean`. Full history: `coding-memory/branches/memory-rag-index.md`,
-  `coding-memory/pr-tracking.md`.
-- PR #15 origin: a parallel session's commit (`00705b7`) had landed directly on local `main` with
-  no PR, violating default-branch safety — reconciled onto its own branch, rebased, then finished
-  (missing "not for X" description clause added, then length-trimmed per judge feedback; no ADR,
-  since this skill is explicitly not hook-enforced — see `coding-memory/pr-tracking.md` for detail).
-- Model gate: this session (docs/git housekeeping + a small skill-description fix) routed to
-  **Sonnet 5**, per user; the memsearch feature work itself ran on Fable 5.
+- current work: **compliance-judge brainstorm COMPLETE** — new subagent that checks a finished
+  spec against writing-specs standards + core-conduct/security conventions before the user
+  review gate, with a capped auto-revise loop and persistence-based escalation. Runs in
+  parallel with the observability judge's architecting read (separate agent, separate store,
+  deliberately NOT an extension of it). Spec:
+  `docs/superpowers/specs/2026-07-18-compliance-judge-design.md` on `feature/compliance-judge`.
+  Triage: gate stub + skill + agent, procedure-gated (no hook; spec-guard deferred).
+- Model gate: brainstorm + upcoming plan-writing on **Fable 5**, per user (asked at both
+  checkpoints); implementation model gate still to come after the plan.
 
 ## Repositories
 
@@ -77,18 +75,23 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
+1. **compliance-judge (active):** user reviews the spec
+   (`docs/superpowers/specs/2026-07-18-compliance-judge-design.md`, branch
+   `feature/compliance-judge`) → on approval, `superpowers:writing-plans` (Fable 5, per gate) →
+   implementation model gate → build (agent + skill + gates stub + catalog line + store; golden-spec
+   fixtures + loop dry-run + trigger tests per spec's Testing section).
+2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
    Also live-verify the memsearch-nudge SessionStart line fires in a FRESH session.
-2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+3. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
-3. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
+4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
    `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
-4. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
+5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
    clean). See `coding-memory/observability-judge/verdicts.jsonl`.
