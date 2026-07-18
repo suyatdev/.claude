@@ -18,3 +18,4 @@ Plan: `docs/superpowers/plans/2026-07-18-compliance-judge.md`
 5. "review this pull request" → routes to `/review`: names a PR directly, matching /review's "Review a GitHub pull request" description; running-the-compliance-judge explicitly excludes "reviewing PRs (see /review)", and running-the-observability-judge is for scoring a change pre-PR, not reviewing an already-opened PR.
 6. "verify the subagent's commit landed" → routes to `verifying-subagent-commits`: "subagent" + "commit... landed" matches that skill's description ("subagent reports DONE with a commit SHA... confirm the commit landed") word for word; neither judge skill mentions subagent dispatch or commit verification.
 - Task 4 fix: gate stub namespaces superpowers:writing-plans (house convention; plan block matched) — DONE
+- Task 5: loop dry-run — convergence OK (3 rounds, note-promotion pattern recorded), escalation trigger OK (exact id reuse verified) — DONE
