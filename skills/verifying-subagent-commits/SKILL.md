@@ -1,6 +1,6 @@
 ---
 name: verifying-subagent-commits
-description: Use when a dispatched implementer or fix subagent reports DONE with a commit SHA, before trusting that report, generating a review diff, or advancing to the next task — subagents given the correct worktree path and a self-check instruction have still committed to the wrong git checkout. Not for judging whether the commit's contents are correct (see /code-review or the task-reviewer step in superpowers:subagent-driven-development) — only for confirming it landed in the right checkout.
+description: Use when a dispatched implementer/fix subagent reports DONE with a commit SHA, before trusting that report or dispatching a reviewer — subagents told to self-check their worktree have still committed to the wrong checkout. Not for judging whether the commit's contents are correct (see /code-review) — only whether it landed in the right place.
 ---
 
 # Verifying Subagent Commits
