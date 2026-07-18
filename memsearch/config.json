@@ -13,6 +13,6 @@
     {"id": "vibe-scape", "name": "vibe-scape", "root": "~/Other Docs/AI/AI_Projx/vibe-scape"},
     {"id": "snatch-bracket", "name": "Snatch-Bracket", "root": "~/Other Docs/AI/AI_Projx/Snatch-Bracket"}
   ],
-  "exclude_paths": ["CODING_MEMORY.md", "/subagents/", "/node_modules/", "/.git/", "/dist/", "/build/"],
+  "exclude_paths": ["CODING_MEMORY.md", "/subagents/", "/node_modules/", "/.git/", "/dist/", "/build/", "/.venv/", "/site-packages/", "/.pytest_cache/"],
   "weights": {"curated_doc": 1.5, "repo_doc": 1.2, "transcript_digest": 1.0}
 }

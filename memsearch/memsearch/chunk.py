@@ -52,6 +52,21 @@ def _merge_tiny(sections: list[Section]) -> list[Section]:
     return merged
 
 
+def _hard_split(text: str, max_chars: int) -> list[str]:
+    """Force-split text into pieces of at most max_chars each: prefer the
+    last newline before the cap, fall back to an exact-length cut when the
+    text has no newline to break on (e.g. one dense, unbroken paragraph).
+    Pieces concatenate back into `text` with no separator — no data lost."""
+    pieces: list[str] = []
+    while len(text) > max_chars:
+        cut = text.rfind("\n", 0, max_chars)
+        cut = cut + 1 if cut > 0 else max_chars
+        pieces.append(text[:cut])
+        text = text[cut:]
+    pieces.append(text)
+    return pieces
+
+
 def _split_oversized(sections: list[Section]) -> list[Section]:
     out: list[Section] = []
     for s in sections:
@@ -61,17 +76,33 @@ def _split_oversized(sections: list[Section]) -> list[Section]:
         paras = s.text.split("\n\n")
         buf: list[str] = []
         line_cursor = s.line_start
+
+        def emit(piece: str, cursor: int) -> int:
+            n_lines = piece.count("\n") + 2  # + blank separator line
+            end = min(cursor + n_lines - 1, s.line_end)
+            if len(piece) <= MAX_SECTION_CHARS:
+                out.append(Section(s.heading, piece, cursor, end))
+                return min(cursor + n_lines, s.line_end)
+            # Paragraph splitting alone wasn't enough — e.g. a dense ledger
+            # with no blank lines collapses to one giant "paragraph". Hard
+            # split it so every emitted chunk stays under the embed API's
+            # size limit; line numbers are recomputed exactly per part
+            # rather than by the heuristic above, since we now hold the
+            # real substrings.
+            for part in _hard_split(piece, MAX_SECTION_CHARS):
+                part_lines = part.count("\n") + 1
+                part_end = min(cursor + part_lines - 1, s.line_end)
+                out.append(Section(s.heading, part, cursor, part_end))
+                cursor = min(cursor + part_lines, s.line_end)
+            return cursor
+
         for para in paras:
             if buf and len("\n\n".join(buf)) + len(para) > MAX_SECTION_CHARS:
-                piece = "\n\n".join(buf)
-                n_lines = piece.count("\n") + 2  # + blank separator line
-                out.append(Section(s.heading, piece, line_cursor,
-                                   min(line_cursor + n_lines - 1, s.line_end)))
-                line_cursor = min(line_cursor + n_lines, s.line_end)
+                line_cursor = emit("\n\n".join(buf), line_cursor)
                 buf = []
             buf.append(para)
         if buf:
-            out.append(Section(s.heading, "\n\n".join(buf), line_cursor, s.line_end))
+            line_cursor = emit("\n\n".join(buf), line_cursor)
     return out
 
 

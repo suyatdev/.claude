@@ -46,6 +46,22 @@ def test_oversized_section_is_split():
     assert all(len(s.text) <= MAX_SECTION_CHARS + 400 for s in sections)
 
 
+def test_oversized_paragraph_without_blank_lines_is_hard_split():
+    # Reproduces the vibe-scape/.superpowers/sdd/progress.md production
+    # failure: a heading-free ledger with no blank lines produced one
+    # 20,125-char section that paragraph-splitting alone couldn't shrink,
+    # and Ollama's /api/embed rejected it with HTTP 400. No "\n\n" anywhere
+    # here, so split("\n\n") yields exactly one giant paragraph; the hard
+    # split must still cap every emitted section.
+    big_line = "x" * 4000  # a single unbroken line, far over the cap
+    blob = "# Ledger\n" + "\n".join([big_line] * 6)  # ~24k chars, few newlines
+    sections = split_markdown(blob)
+    assert len(sections) > 1
+    assert all(len(s.text) <= MAX_SECTION_CHARS for s in sections)
+    expected = "\n".join(blob.splitlines()).strip()
+    assert "".join(s.text for s in sections) == expected
+
+
 def test_chunk_doc_decision_detection():
     chunks = chunk_doc(Path("/x/docs/decisions/0002-a.md"), DOC, ".claude",
                        ".claude", "curated_doc", 1.5, "2026-07-17")

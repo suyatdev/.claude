@@ -48,3 +48,9 @@ def test_is_excluded():
     assert is_excluded(Path("/x/repo/CODING_MEMORY.md"), cfg)
     assert is_excluded(Path("/x/projects/p/abc/subagents/agent-1.jsonl"), cfg)
     assert not is_excluded(Path("/x/coding-memory/decisions.md"), cfg)
+    # vendored/venv docs (smoke backfill pulled ~50 junk chunks from these)
+    assert is_excluded(
+        Path("/x/Snatch-Bracket/backend/.venv/bin/activate"), cfg)
+    assert is_excluded(
+        Path("/x/Snatch-Bracket/backend/lib/site-packages/fastapi/LICENSE.md"),
+        cfg)
