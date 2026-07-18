@@ -7,24 +7,16 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-18
-- last_active_branch: feature/verifying-subagent-commits (pushed, PR open)
-- current work: post-merge housekeeping for memsearch. **PR #14 MERGED** 2026-07-18T16:57Z, merge
-  commit 7015369. Local + remote `feature/memory-rag-index` branch deleted. Judge verdict at head
-  6f2d4e3 backfilled `outcome: clean` in verdicts.jsonl. Full history:
-  `coding-memory/branches/memory-rag-index.md`, `coding-memory/pr-tracking.md`.
-- RECONCILED a stranded local-main commit from a parallel session: `00705b7`
-  (`feat(skills): add verifying-subagent-commits gate` — CLAUDE.md + rules/gates.md +
-  skills/verifying-subagent-commits/SKILL.md) had landed directly on local `main` with no PR,
-  violating default-branch safety. Preserved on new branch `feature/verifying-subagent-commits`,
-  rebased onto current main; local `main` hard-reset to `origin/main`.
-- PICKED UP `feature/verifying-subagent-commits`: rebased clean, then two judge-driven fixes —
-  added the missing "not for X" negative-trigger clause to the skill's description (authoring
-  standard gap), then trimmed the description from ~488→~348 chars after judge flagged it as an
-  outlier (verified against the repo's actual 275–414 char range — 348 is typical, not long).
-  Deliberately did NOT write an ADR: this skill is explicitly not hook-enforced (unlike ADR-0001's
-  judge-guard.sh), closer in kind to the no-ADR `feature/diagramming-skill` precedent (PR #12).
-  Judge (impl, re-run at final head 367da77): risk=low conf=high, both fixes verified against
-  actual git history. **PR opened** — see Repositories/pr-tracking below for number.
+- last_active_branch: main (synced to origin/main @ 417e8e7)
+- current work: post-merge housekeeping, two PRs. **PR #14 (memsearch) MERGED** 2026-07-18T16:57Z
+  (commit 7015369). **PR #15 (verifying-subagent-commits) MERGED** 2026-07-18T17:41Z (commit
+  417e8e7). Both feature branches deleted, local + remote; both judge verdicts backfilled
+  `outcome: clean`. Full history: `coding-memory/branches/memory-rag-index.md`,
+  `coding-memory/pr-tracking.md`.
+- PR #15 origin: a parallel session's commit (`00705b7`) had landed directly on local `main` with
+  no PR, violating default-branch safety — reconciled onto its own branch, rebased, then finished
+  (missing "not for X" description clause added, then length-trimmed per judge feedback; no ADR,
+  since this skill is explicitly not hook-enforced — see `coding-memory/pr-tracking.md` for detail).
 - Model gate: this session (docs/git housekeeping + a small skill-description fix) routed to
   **Sonnet 5**, per user; the memsearch feature work itself ran on Fable 5.
 
@@ -73,9 +65,9 @@ how this file and its linked files should be written (plain language, major chan
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
   a real trace (a subagent committed to the wrong checkout 3x in one session, despite an explicit
-  dispatch-prompt self-check instruction). Not hook-enforced by design. **PR #15 OPEN:
-  https://github.com/suyatdev/.claude/pull/15** (created 2026-07-18, desktop). Judge (impl, head
-  367da77): risk=low conf=high.
+  dispatch-prompt self-check instruction). Not hook-enforced by design. **PR #15 MERGED
+  2026-07-18** (merge commit 417e8e7); branch deleted. Judge (impl, head 367da77): risk=low
+  conf=high, outcome=clean.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
@@ -90,15 +82,13 @@ how this file and its linked files should be written (plain language, major chan
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
    Also live-verify the memsearch-nudge SessionStart line fires in a FRESH session.
-2. **PR #15 (feature/verifying-subagent-commits) — await user review/merge.** After merge: backfill
-   the judge verdict `outcome` field at head 367da77 in verdicts.jsonl; delete the feature branch.
-3. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
-4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
+3. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
    `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
-5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
+4. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
    clean). See `coding-memory/observability-judge/verdicts.jsonl`.
@@ -110,5 +100,6 @@ PR #12 (diagramming-technical-docs skill); vibe-scape (Tayvyx-Lab/VibeSpace) PR 
 **Merged 2026-07-17:** `.claude` PR #13 (observability judge — agent + judge-guard hook + skill +
 gate/catalog + verdict store; merge commit 82d7b9b). Judge + gate now live and global.
 
-**Merged 2026-07-18:** `.claude` PR #14 (memsearch — local RAG index over session transcripts +
-curated docs; merge commit 7015369). Feature branch deleted, local + remote.
+**Merged 2026-07-18:** `.claude` PR #14 (memsearch — local RAG index; merge commit 7015369) + PR #15
+(verifying-subagent-commits skill — controller-side subagent-checkout verification gate; merge
+commit 417e8e7). Both feature branches deleted, local + remote. No orphans outstanding.
