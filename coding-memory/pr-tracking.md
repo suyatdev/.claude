@@ -69,6 +69,15 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 
 ### PR #14 — feature/memory-rag-index (memsearch)
 - repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/14 · status: OPEN (created 2026-07-18)
-- session_origin created: desktop (VSCode) · last push: desktop (VSCode)
-- judge verdict: implementation, risk=low confidence=high, head 6f2d4e3 (outcome: pending merge)
+- PR: https://github.com/suyatdev/.claude/pull/14 · status: MERGED 2026-07-18T16:57Z (merge commit 7015369)
+- opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
+- branch (local + remote) deleted post-merge.
+- judge verdict: implementation, risk=low confidence=high, head 6f2d4e3, outcome=clean (backfilled 2026-07-18).
+- detail: coding-memory/branches/memory-rag-index.md
+
+### feature/verifying-subagent-commits (stranded commit reconciled 2026-07-18)
+- branch created at 00705b7 to preserve a parallel session's commit that had landed directly on
+  local `main` (feat commit, no PR) — `feat(skills): add verifying-subagent-commits gate`
+  (CLAUDE.md + rules/gates.md + skills/verifying-subagent-commits/SKILL.md). Local `main` was then
+  hard-reset to origin/main. No PR opened yet; not this session's work to carry further — left for
+  whoever picks it up next.
