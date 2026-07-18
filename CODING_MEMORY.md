@@ -20,7 +20,21 @@ how this file and its linked files should be written (plain language, major chan
   (chore be44ca2, opus[1m]→claude-fable-5[1m]).
 - RESUME 2026-07-17 (session C): reconciled a /clear-orphaned verdicts.jsonl append (docs 8e4251d —
   Snatch-Bracket impl-stage verdict landed in the global store before that session checkpointed).
-  Now EXECUTING the memsearch plan per Exact Next Steps #1 (subagent-driven, Sonnet 5 subagents).
+  Then EXECUTED the memsearch plan (subagent-driven, Sonnet 5 implementers/reviewers).
+- MEMSEARCH EXECUTION (2026-07-17→18): Tasks 1-14 COMPLETE, all task-reviewed Approved; Task 15
+  Steps 1-2 committed (golden set + acceptance test), Step 3 full backfill (~69 sessions, hours)
+  RUNNING in background. 60-test suite green. Live index: 154 sources / 2041 chunks / 0 errors,
+  qwen3-embedding:0.6b 1024-dim, provenance + digest audits passed, idle RAM zero verified.
+  Review loops fixed 5 plan-inherited defects (all logged as plan deviations in the SDD ledger
+  + branch log): JSONDecodeError escape (ollama), user list-content text dropped + non-dict crash
+  (extract), vacuous subagents-exclusion test (indexer), LIKE-wildcard count inflation (rename),
+  oversized-section embed 400 + venv pollution (chunk/config, found live in Task 14).
+  Ledger: .superpowers/sdd/progress.md. Branch log: coding-memory/branches/memory-rag-index.md.
+  PARALLEL-WORK NOTE: uncommitted changes by another session sit in the working tree (CLAUDE.md,
+  rules/gates.md, verdicts.jsonl append, untracked skills/verifying-subagent-commits/) — left
+  alone by this session; reconcile whenever that session checkpoints.
+  REMAINING: Task 15 Steps 4-6 (golden bar, digest audit, final commit) after backfill; Task-15
+  task-review; final whole-branch review; observability judge (implementation stage); PR.
 - RESUME 2026-07-17 (session B): reconciled a /clear-orphaned settings.json (chore a3de623),
   user switched session to Fable 5, then **writing-plans COMPLETED**: 15-task implementation plan
   written + self-reviewed at `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (3,079 lines,
