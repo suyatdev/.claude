@@ -15,3 +15,4 @@
 - Task 9: rename (metadata-only, zero re-embed proven by vector-identity test) + status (counts, mismatch, revisit triggers)
 - Task 9 fix: escaped SQL LIKE wildcards (%, _) in rename_repo's path-segment match — an underscore in a repo name (e.g. my_repo) previously wildcard-matched unrelated paths, inflating paths_rewritten/sources_rewritten counts (no data corruption; REPLACE is literal), RED-proven with a decoy-path test
 - Task 10: eval-digests — seeded deterministic digest-vs-transcript audit, persisted markdown report (judge flag b)
+- Task 11: CLI (index/query/rename/status/eval-digests) + bin/memsearch uv wrapper
