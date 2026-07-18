@@ -107,7 +107,8 @@ A pass that silently skipped half the rubric is worse than no verdict.
 
 ## Output
 Write ONLY under `~/.claude/coding-memory/compliance-judge/` (never elsewhere):
-1. The per-spec writeup: glob the store for an existing `*-<spec_slug>.md` and append this
+1. The per-spec writeup: glob the store for an existing `????-??-??-<spec_slug>.md` (a file
+   whose name after the leading `YYYY-MM-DD-` is exactly `<spec_slug>.md`) and append this
    round's section there; only if none exists, create `<YYYY-MM-DD>-<spec_slug>.md` dated today
    (the file stays dated by its first round). `spec_slug` is the spec filename minus any leading
    `YYYY-MM-DD-` prefix and the `.md` extension. Each round's section: a short layman summary,
@@ -136,7 +137,8 @@ Written ONLY by the `compliance-judge` subagent (`agents/compliance-judge.md`); 
   confidence, outcome}`. Created on first verdict.
 - `<YYYY-MM-DD>-<spec_slug>.md` — per-spec human writeup, one section per round: layman
   summary, violations table with rule citations, waiver record. Dated by its first round;
-  later rounds glob the store for the existing `*-<spec_slug>.md` and append there instead
+  later rounds glob the store for the existing `????-??-??-<spec_slug>.md` (a file whose name
+  after the leading `YYYY-MM-DD-` is exactly `<spec_slug>.md`) and append there instead
   of creating a new dated file.
 
 `outcome` starts `null`; backfill `clean`/`rework`/`bug` once the spec's implementation lands.
@@ -349,7 +351,7 @@ Run: `grep -L "Slugify CLI" skills/running-the-compliance-judge/tests/*.md`
 Expected: only `README.md` and `expected-citations.md` listed (every fixture carries the base spec).
 
 Run: `grep -c "sk-live-9f8e7d6c5b4a3210" skills/running-the-compliance-judge/tests/seeded-embedded-secret.md`
-Expected: `1` (the seeded fake secret exists exactly where intended — it appears nowhere else in the repo).
+Expected: `1` (the seeded fake secret exists exactly where intended — its only other occurrences are in this plan's own text).
 
 - [ ] **Step 11: Commit**
 
@@ -440,7 +442,8 @@ After a spec/design doc is written and self-reviewed, before the user reviews it
 flow produced the spec. **Freshness:** a verdict is fresh only while its `spec_blob_sha`
 matches `git hash-object <spec_path>`. Any later edit — including edits the user requests
 during their review — invalidates it; re-run the loop before `superpowers:writing-plans`
-proceeds.
+proceeds. A re-entry after such an invalidation restarts at round 1; re-pass all previously
+waived ids from the spec's prior verdicts so the judge records rather than re-cites them.
 
 ## The loop
 1. Dispatch BOTH judges in parallel, in one message: `compliance-judge` (blocking) and

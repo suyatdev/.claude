@@ -1,7 +1,7 @@
 # Compliance Judge — Design
 
 **Date:** 2026-07-18
-**Status:** Approved (design). Awaiting spec review before implementation planning.
+**Status:** Implemented on this branch (agent + skill + gate + eval evidence). Original design approved 2026-07-18.
 **Branch:** `feature/compliance-judge`
 
 ## Problem
@@ -139,7 +139,8 @@ rounds deterministic; `rule_source` is the file the rule lives in; `where` point
 Markdown writeup per spec: `coding-memory/compliance-judge/<YYYY-MM-DD>-<spec_slug>.md`
 (`spec_slug` = spec filename minus date prefix and extension; slash-free by construction), holding
 a layman summary, the violations table with citations, and the waiver record. Appended per round —
-each round globs the store for an existing `*-<spec_slug>.md` first and appends there; only when
+each round globs the store for an existing `????-??-??-<spec_slug>.md` (a file whose name after
+the leading `YYYY-MM-DD-` is exactly `<spec_slug>.md`) first and appends there; only when
 none exists does it create today's dated file, so the file stays dated by its first round (a
 revise loop crossing midnight still appends to round 1's file). JSONL line written last, after
 the markdown — same single-writer discipline as the sibling judge.

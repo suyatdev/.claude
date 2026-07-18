@@ -8,7 +8,8 @@ Written ONLY by the `compliance-judge` subagent (`agents/compliance-judge.md`); 
   confidence, outcome}`. Created on first verdict.
 - `<YYYY-MM-DD>-<spec_slug>.md` — per-spec human writeup, one section per round: layman
   summary, violations table with rule citations, waiver record. Dated by its first round;
-  later rounds glob the store for the existing `*-<spec_slug>.md` and append there instead
+  later rounds glob the store for the existing `????-??-??-<spec_slug>.md` (a file whose name
+  after the leading `YYYY-MM-DD-` is exactly `<spec_slug>.md`) and append there instead
   of creating a new dated file.
 
 `outcome` starts `null`; backfill `clean`/`rework`/`bug` once the spec's implementation lands.

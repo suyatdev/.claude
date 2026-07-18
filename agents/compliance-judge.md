@@ -58,7 +58,8 @@ A pass that silently skipped half the rubric is worse than no verdict.
 
 ## Output
 Write ONLY under `~/.claude/coding-memory/compliance-judge/` (never elsewhere):
-1. The per-spec writeup: glob the store for an existing `*-<spec_slug>.md` and append this
+1. The per-spec writeup: glob the store for an existing `????-??-??-<spec_slug>.md` (a file
+   whose name after the leading `YYYY-MM-DD-` is exactly `<spec_slug>.md`) and append this
    round's section there; only if none exists, create `<YYYY-MM-DD>-<spec_slug>.md` dated today
    (the file stays dated by its first round). `spec_slug` is the spec filename minus any leading
    `YYYY-MM-DD-` prefix and the `.md` extension. Each round's section: a short layman summary,

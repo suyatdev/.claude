@@ -16,7 +16,8 @@ After a spec/design doc is written and self-reviewed, before the user reviews it
 flow produced the spec. **Freshness:** a verdict is fresh only while its `spec_blob_sha`
 matches `git hash-object <spec_path>`. Any later edit — including edits the user requests
 during their review — invalidates it; re-run the loop before `superpowers:writing-plans`
-proceeds.
+proceeds. A re-entry after such an invalidation restarts at round 1; re-pass all previously
+waived ids from the spec's prior verdicts so the judge records rather than re-cites them.
 
 ## The loop
 1. Dispatch BOTH judges in parallel, in one message: `compliance-judge` (blocking) and

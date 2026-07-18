@@ -19,3 +19,4 @@ Plan: `docs/superpowers/plans/2026-07-18-compliance-judge.md`
 6. "verify the subagent's commit landed" → routes to `verifying-subagent-commits`: "subagent" + "commit... landed" matches that skill's description ("subagent reports DONE with a commit SHA... confirm the commit landed") word for word; neither judge skill mentions subagent dispatch or commit verification.
 - Task 4 fix: gate stub namespaces superpowers:writing-plans (house convention; plan block matched) — DONE
 - Task 5: loop dry-run — convergence OK (3 rounds, note-promotion pattern recorded), escalation trigger OK (exact id reuse verified) — DONE
+- Final review fix wave: glob date-anchored, re-entry waiver semantics, plan parenthetical, spec status — DONE
