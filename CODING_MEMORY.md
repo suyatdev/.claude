@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-17
-- last_active_branch: feature/memory-rag-index (4 commits, PUSHED to origin; no PR yet — next is writing-plans)
+- last_active_branch: feature/memory-rag-index (6 commits, PUSHED to origin; no PR yet — next is writing-plans)
 - current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written + judged.
   Local SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
   embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
@@ -71,7 +71,7 @@ how this file and its linked files should be written (plain language, major chan
    (b) systematic digest-accuracy check, not just spot-checks; (c) promote SQLite-vs-Qdrant to a
    real ADR under `docs/decisions/`; (d) explicit sign-off before the `sqlite-vec` dep + uv/Python
    subsystem land (never-add-dependency-unilaterally invariant); (e) verify SessionStart hook is
-   one silent line, no auto-inject. Branch `feature/memory-rag-index` (4 commits, pushed).
+   one silent line, no auto-inject. Branch `feature/memory-rag-index` (6 commits, pushed).
 2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
