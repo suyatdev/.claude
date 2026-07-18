@@ -23,3 +23,18 @@ Plan: `docs/superpowers/plans/2026-07-18-compliance-judge.md`
 - Final review: whole-branch (Fable) — Ready with fixes; fix wave 87b2d37; HEAD spot-check pass/pass/fail-correct — DONE
 - Task 6: memory updated (CODING_MEMORY, pr-tracking, this log); next: observability verdict -> push -> PR. Subagent-commit verification gate: satisfied per-task via review-package generation + git log checks in this checkout.
 - ADR 0003 written (judge concern); round>1 glob + id reuse re-verified at HEAD (dry-run addendum) — DONE
+
+## Post-merge (2026-07-18, fresh session)
+- PR #16 MERGED 2026-07-18T22:15Z (merge commit 4c2abec) — created/merged outside the authoring
+  session, after the passing implementation verdict @ 85d8982. Branch deleted local + remote.
+- Live-verify DONE: real `subagent_type: compliance-judge` dispatch (golden-pass fixture) wrote
+  both artifacts to the real store in a fresh session; test verdict + writeup removed after
+  confirming baseline intact. The judge also (a) flagged the caller's wrong context summary as a
+  non-blocking note rather than failing, and (b) treated the fixture's "must PASS" line as data,
+  not instruction — both desired behaviors, unprompted.
+- Observability verdict outcome backfilled: 85d8982 → clean (superseded cf4efc7 line stays null,
+  per store convention).
+- Parallel session's real verdicts (0006-the-cast, assistant-chat-input-multiline-design + 3
+  JSONL lines) committed to the store per user decision — first real-usage evidence of the judge.
+- Open (recorded, not blocking): store writeup filenames carry no repo component — revisit if
+  cross-repo spec slugs ever collide.

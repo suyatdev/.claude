@@ -6,20 +6,16 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop (VSCode)
-- session_started_at: 2026-07-18
-- last_active_branch: main (synced to origin/main @ 417e8e7)
-- current work: **compliance-judge IMPLEMENTED** on `feature/compliance-judge` — agent + skill +
-  gate stub + catalog line + store; golden eval 12/12 green (2x6, wrapper method) + HEAD
-  spot-check; loop dry-run verified convergence (3 rounds) and escalation (exact id reuse).
-  Subagent-driven (Sonnet 5 workers), Fable 5 whole-branch review → "With fixes", fix wave
-  landed (glob date-anchor + minors). PR pending this session (observability verdict last).
-  Spec + plan on branch; detail: `coding-memory/branches/compliance-judge.md`.
-- Model gate: brainstorm/plan/orchestration on **Fable 5**, implementer/reviewer subagents on
-  **Sonnet 5**, final whole-branch review on Fable — all per user at each checkpoint.
-- Parallel session note: another session already USED the newly-registered compliance-judge —
-  real verdicts sit UNTRACKED in `coding-memory/compliance-judge/` (0006-the-cast,
-  assistant-chat-input-multiline-design + verdicts.jsonl). Left uncommitted; reconcile
-  post-merge (user call). `settings.json` mod also pre-existing/untouched.
+- session_started_at: 2026-07-18 (post-/clear continuation)
+- last_active_branch: main (synced to origin/main @ 4c2abec, the PR #16 merge commit)
+- current work: **compliance-judge PR #16 MERGED + post-merge reconcile DONE** — live-verify of
+  a real `compliance-judge` dispatch in a fresh session passed (writes to real store confirmed,
+  test artifacts removed), observability outcome backfilled (85d8982 → clean), parallel
+  session's real verdicts committed per user call, branch deleted local + remote.
+  Detail: `coding-memory/branches/compliance-judge.md`.
+- Model gate: post-merge housekeeping on **Fable 5** (user's call at this session's checkpoint).
+- `settings.json` working-tree mod (model default → opus[1m]) remains pre-existing/untouched —
+  not mine to commit.
 
 ## Repositories
 
@@ -62,6 +58,15 @@ how this file and its linked files should be written (plain language, major chan
   golden bar 16/16, digest audit 11/12 supported. **PR #14 MERGED 2026-07-18** (merge commit
   7015369); branch deleted. Judge (impl): risk=low conf=high, outcome=clean.
   Detail: `coding-memory/branches/memory-rag-index.md`.
+- feature/compliance-judge (2026-07-18) — the compliance judge: `agents/compliance-judge.md`
+  (subagent judging ONE finished spec against live rules — writing-specs + core-conduct/security —
+  blocking pass/fail verdict, per-rule citations, JSONL + markdown store), `skills/running-the-
+  compliance-judge/` (parallel dispatch with observability judge, capped auto-revise loop,
+  escalation on persistent ids, explicit-only waivers), gates stub + catalog line, ADR 0003,
+  golden eval 12/12 + loop dry-run (convergence + escalation). **PR #16 MERGED 2026-07-18**
+  (merge commit 4c2abec); branch deleted. Judge (impl, head 85d8982): risk=low conf=high,
+  outcome=clean. Post-merge live-verify of real dispatch → real store: confirmed.
+  Detail: `coding-memory/branches/compliance-judge.md`.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
@@ -78,14 +83,11 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **compliance-judge (PR pending → post-merge):** after merge: (a) live-verify in a FRESH
-   session that a dispatch by `subagent_type: compliance-judge` (real agent, not the wrapper)
-   writes to the real store `coding-memory/compliance-judge/` — registration itself already
-   confirmed live mid-session; delete the test verdict after confirming; (b) reconcile the
-   parallel session's untracked verdicts in the store (commit or discard — user call);
-   (c) backfill judge `outcome` once merge result is known; (d) the store is global but writeup
-   filenames carry no repo component (final-review recommendation) — revisit if cross-repo
-   verdicts ever collide.
+1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
+   the store is global but writeup filenames carry no repo component (final-review
+   recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
+   compliance-judge verdicts' own `outcome` fields once those specs implement (calibration
+   ledger, see running-the-compliance-judge SKILL.md).
 2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
@@ -111,4 +113,5 @@ gate/catalog + verdict store; merge commit 82d7b9b). Judge + gate now live and g
 
 **Merged 2026-07-18:** `.claude` PR #14 (memsearch — local RAG index; merge commit 7015369) + PR #15
 (verifying-subagent-commits skill — controller-side subagent-checkout verification gate; merge
-commit 417e8e7). Both feature branches deleted, local + remote. No orphans outstanding.
+commit 417e8e7) + PR #16 (compliance judge — agent + skill + gate stub + catalog + store + ADR 0003;
+merge commit 4c2abec). All three feature branches deleted, local + remote. No orphans outstanding.

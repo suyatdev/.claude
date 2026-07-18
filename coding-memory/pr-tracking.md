@@ -90,11 +90,18 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   feature/diagramming-skill (PR #12).
 - judge verdict: implementation, risk=low confidence=high, head 367da77, outcome=clean (backfilled 2026-07-18).
 
-### feature/compliance-judge (PR pending, 2026-07-18)
+### feature/compliance-judge (MERGED 2026-07-18)
 - repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: to be created this session (number recorded in next housekeeping commit — judge freshness
-  forbids a post-verdict commit before `gh pr create`).
-- opened_by session_origin: desktop (VSCode)
+- PR: https://github.com/suyatdev/.claude/pull/16 · status: MERGED 2026-07-18T22:15Z (merge
+  commit 4c2abec). Created and merged outside the authoring session (user/parallel), after the
+  passing implementation verdict @ 85d8982.
+- opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
+- branch (local + remote) deleted post-merge.
 - scope: compliance judge — agent + running-the-compliance-judge skill + gates stub + catalog +
-  store; golden eval 12/12 + HEAD spot-check; loop dry-run (convergence + escalation).
+  store; golden eval 12/12 + HEAD spot-check; loop dry-run (convergence + escalation); ADR 0003.
+- post-merge live-verify (fresh session, 2026-07-18): real `subagent_type: compliance-judge`
+  dispatch on the golden-pass fixture wrote writeup + JSONL to the real store — confirmed, test
+  artifacts removed. Bonus signals: the judge flagged a deliberate caller-context mismatch as a
+  non-blocking note and treated fixture instruction-text as data.
+- judge verdict: implementation, risk=low confidence=high, head 85d8982, outcome=clean (backfilled 2026-07-18).
 - detail: coding-memory/branches/compliance-judge.md
