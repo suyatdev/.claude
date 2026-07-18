@@ -58,5 +58,8 @@
   "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "editorMode": "normal",
+  "preferredNotifChannel": "iterm2",
+  "remoteControlAtStartup": false,
   "agentPushNotifEnabled": true
 }
