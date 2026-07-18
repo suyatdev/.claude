@@ -21,3 +21,4 @@ Plan: `docs/superpowers/plans/2026-07-18-compliance-judge.md`
 - Task 5: loop dry-run — convergence OK (3 rounds, note-promotion pattern recorded), escalation trigger OK (exact id reuse verified) — DONE
 - Final review fix wave: glob date-anchored, re-entry waiver semantics, plan parenthetical, spec status — DONE
 - Final review: whole-branch (Fable) — Ready with fixes; fix wave 87b2d37; HEAD spot-check pass/pass/fail-correct — DONE
+- Task 6: memory updated (CODING_MEMORY, pr-tracking, this log); next: observability verdict -> push -> PR. Subagent-commit verification gate: satisfied per-task via review-package generation + git log checks in this checkout.
