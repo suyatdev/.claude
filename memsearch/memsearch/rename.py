@@ -19,6 +19,8 @@ def _like_escape(segment: str) -> str:
 
 
 def rename_repo(cfg: Config, old: str, new: str) -> dict:
+    if not cfg.db_path.exists():
+        raise SystemExit("memsearch: no index found — run: memsearch index")
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
     old_seg, new_seg = f"/{old}/", f"/{new}/"
     like_pattern = f"%{_like_escape(old_seg)}%"

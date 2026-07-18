@@ -35,6 +35,9 @@ def search(cfg: Config, query: str, k: int = 6, repo: str | None = None,
     embedder = embedder or partial(
         ollama.embed, model=cfg.embed_model, base_url=cfg.ollama_url)
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    mismatch = dbmod.model_mismatch(conn, cfg.embed_model, cfg.embed_dim)
+    if mismatch:
+        raise SystemExit(f"memsearch: {mismatch}")
     t0 = time.perf_counter()
 
     qvec = embedder([query])[0]

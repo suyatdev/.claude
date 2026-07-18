@@ -1,3 +1,5 @@
+import pytest
+
 from memsearch import db as dbmod
 from memsearch.config import load_config
 from memsearch.search import format_results, search
@@ -5,10 +7,10 @@ from tests.conftest import DIM, make_chunk, vec
 from tests.test_config import write_cfg
 
 
-def make_cfg(tmp_path):
+def make_cfg(tmp_path, **over):
     p = write_cfg(tmp_path, **{
         "embed_model": "test-embed", "embed_dim": DIM,
-        "db_path": str(tmp_path / "memory-index" / "memory.db"),
+        "db_path": str(tmp_path / "memory-index" / "memory.db"), **over,
     })
     return load_config(p)
 
@@ -102,6 +104,21 @@ def test_provenance_always_present(tmp_path):
     for r in out:
         assert r["file_path"] in text
     assert "·" in text
+
+
+def test_search_raises_on_model_mismatch(tmp_path):
+    cfg = make_cfg(tmp_path)
+    seed(cfg)
+    # same db_path, different embed_model/dim — as if the config was swapped
+    # to a new embed model without a `memsearch index --full` rebuild. The
+    # stub embedder returns vectors sized to the *new* model's dim, exactly
+    # like a real embed model swap would (the on-disk vec0 table stays at
+    # the old dim), so an unguarded search() hits a raw sqlite3 dimension
+    # mismatch rather than the friendly SystemExit under test.
+    cfg2 = make_cfg(tmp_path, embed_model="other-model", embed_dim=8)
+    mismatched_embedder = lambda texts: [[0.5] * cfg2.embed_dim for _ in texts]
+    with pytest.raises(SystemExit, match="other-model"):
+        search(cfg2, "anything", embedder=mismatched_embedder)
 
 
 def test_latency_logged_and_fts_syntax_safe(tmp_path):

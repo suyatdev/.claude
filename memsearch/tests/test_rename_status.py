@@ -1,3 +1,5 @@
+import pytest
+
 from memsearch import db as dbmod
 from memsearch.config import load_config
 from memsearch.rename import rename_repo
@@ -80,6 +82,15 @@ def test_rename_escapes_like_wildcards(tmp_path):
         "SELECT path FROM sources WHERE path LIKE '%b.md'").fetchone()[0]
     assert decoy_source == "/x/myXrepo/docs/b.md"
     conn.close()
+
+
+def test_rename_repo_raises_without_index(tmp_path):
+    cfg = make_cfg(tmp_path)
+    assert not cfg.db_path.exists()
+    with pytest.raises(SystemExit, match="no index"):
+        rename_repo(cfg, "Snatch-Bracket", "CourtFlow")
+    # connect()'s schema side effect must not have silently created a DB
+    assert not cfg.db_path.exists()
 
 
 def test_status_report_contents(tmp_path):

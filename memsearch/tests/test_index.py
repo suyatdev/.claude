@@ -117,6 +117,30 @@ def test_changed_file_reindexes_only_itself(tmp_path):
     assert report["processed"] == 1
 
 
+def test_full_rebuild_reprocesses_and_dedupes(tmp_path):
+    """--full is the prescribed remedy for a model_mismatch: it unlinks the DB
+    and reindexes from scratch. Assert every source is re-processed (not
+    skipped by hash-diff, since the DB — and therefore its `sources` hash
+    cache — no longer exists) and the resulting chunk count matches a fresh
+    single run exactly, i.e. nothing got duplicated."""
+    cfg = make_cfg(tmp_path)
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    chunks_before = dbmod.stats(conn)["chunks"]
+    conn.close()
+
+    report = run_index(cfg, full=True, embedder=stub_embedder,
+                       digester=stub_digester, progress=lambda _: None)
+    assert report["processed"] == 4  # 2 docs + 2 transcripts, all reprocessed
+    assert report["skipped"] == 0
+
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    chunks_after = dbmod.stats(conn)["chunks"]
+    conn.close()
+    assert chunks_after == chunks_before  # rebuilt exactly once, not duplicated
+
+
 def test_limit_caps_transcripts(tmp_path):
     cfg = make_cfg(tmp_path)
     report = run_index(cfg, limit=1, embedder=stub_embedder,
