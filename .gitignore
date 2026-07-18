@@ -52,3 +52,6 @@ tasks/
 
 # GitHub PR status cache (machine-specific)
 /gh-pr-status-cache.json
+
+# memsearch index cache (regenerable, potentially sensitive)
+/memory-index/
