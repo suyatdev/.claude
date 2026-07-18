@@ -32,5 +32,6 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `writing-secure-code` — injection/XSS/secrets/IDOR guardrails, prompt sanitization.
 - `allocating-local-ports` — checking/updating PORTS.md before a new local port or service.
 - `triaging-new-instructions` — classifying a proposed new rule/hook/skill before writing it anywhere.
+- `verifying-subagent-commits` — independently confirming a subagent's reported commit actually landed in the right checkout, before trusting it.
 
 When authoring or editing any skill or agent, read skills/_standards/authoring-skills-and-agents.md first.
