@@ -17,3 +17,4 @@
 - Task 10: eval-digests — seeded deterministic digest-vs-transcript audit, persisted markdown report (judge flag b)
 - Task 11: CLI (index/query/rename/status/eval-digests) + bin/memsearch uv wrapper
 - Task 12: SessionStart nudge hook (one line max, never injects chunks, always exit 0) + settings/gitignore wiring
+- Task 13: ADR 0002 sqlite-over-qdrant (revisit triggers match status.py) + README
