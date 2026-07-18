@@ -49,6 +49,39 @@ def test_rename_rewrites_metadata_only(tmp_path):
     conn.close()
 
 
+def test_rename_escapes_like_wildcards(tmp_path):
+    # "my_repo" contains a SQL LIKE wildcard ('_' = any single char). An
+    # unescaped LIKE '%/my_repo/%' would also match a decoy path where that
+    # position holds a different literal character (e.g. "/myXrepo/") —
+    # REPLACE() itself is literal so no corruption occurs, but the row
+    # still gets touched by the UPDATE and inflates the returned counts.
+    cfg = make_cfg(tmp_path)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    dbmod.replace_source(
+        conn, "/x/my_repo/docs/a.md", "doc", "hash-a",
+        [make_chunk(repo_id="my-repo", repo_name="my_repo",
+                    file_path="/x/my_repo/docs/a.md")], [vec(1.0)])
+    dbmod.replace_source(
+        conn, "/x/myXrepo/docs/b.md", "doc", "hash-b",
+        [make_chunk(repo_id="myxrepo", repo_name="myXrepo",
+                    file_path="/x/myXrepo/docs/b.md")], [vec(2.0)])
+    conn.close()
+
+    report = rename_repo(cfg, "my_repo", "new_repo")
+    assert report["chunks_renamed"] == 1
+    assert report["paths_rewritten"] == 1          # decoy not counted
+    assert report["sources_rewritten"] == 1         # decoy not counted
+
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    decoy_path = conn.execute(
+        "SELECT file_path FROM chunks WHERE repo_name='myXrepo'").fetchone()[0]
+    assert decoy_path == "/x/myXrepo/docs/b.md"      # decoy untouched
+    decoy_source = conn.execute(
+        "SELECT path FROM sources WHERE path LIKE '%b.md'").fetchone()[0]
+    assert decoy_source == "/x/myXrepo/docs/b.md"
+    conn.close()
+
+
 def test_status_report_contents(tmp_path):
     cfg = make_cfg(tmp_path)
     seed(cfg)

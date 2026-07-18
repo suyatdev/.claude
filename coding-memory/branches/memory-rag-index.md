@@ -13,3 +13,4 @@
 - Task 8: hybrid search — vec KNN + FTS5 BM25, RRF fusion, weight boost, repo/type/since filters, provenance formatting, latency log
 - Task 8 fix: brief's test_latency_logged_and_fts_syntax_safe asserted query_log count >= 2 after a single search() call — corrected to >= 1 (log_query fires once per search, matching db.py's p95-over-N-queries design; a second call was never made)
 - Task 9: rename (metadata-only, zero re-embed proven by vector-identity test) + status (counts, mismatch, revisit triggers)
+- Task 9 fix: escaped SQL LIKE wildcards (%, _) in rename_repo's path-segment match — an underscore in a repo name (e.g. my_repo) previously wildcard-matched unrelated paths, inflating paths_rewritten/sources_rewritten counts (no data corruption; REPLACE is literal), RED-proven with a decoy-path test
