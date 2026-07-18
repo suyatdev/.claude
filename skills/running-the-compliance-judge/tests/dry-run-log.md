@@ -36,3 +36,13 @@ passed the prior round's violations for exact-id reuse.
   **Escalation trigger: OK**
 - Store append behavior verified in both rehearsals: rounds 2/3 appended sections to the same
   first-round-dated file (glob-first), and `verdicts.jsonl` accumulated one valid line per round.
+
+## Addendum — round>1 glob verified at HEAD (agent @ cf4efc7, 2026-07-18)
+
+Observability-judge concern closure: the date-anchored glob fix (87b2d37) landed after the
+rehearsals above, leaving round>1 append behavior unverified at the shipped bytes. Re-ran the
+escalation store with a round-3 dispatch at HEAD: the glob `????-??-??-dryrun-esc.md` matched
+the existing first-round-dated file and appended its section there (no new file), and both prior
+ids were re-cited verbatim (the escalation condition would fire again, spec unchanged between
+rounds — the judge itself noted the identical spec_blob_sha). Round>1 append + id reuse now
+directly evidenced at HEAD.

@@ -22,3 +22,4 @@ Plan: `docs/superpowers/plans/2026-07-18-compliance-judge.md`
 - Final review fix wave: glob date-anchored, re-entry waiver semantics, plan parenthetical, spec status — DONE
 - Final review: whole-branch (Fable) — Ready with fixes; fix wave 87b2d37; HEAD spot-check pass/pass/fail-correct — DONE
 - Task 6: memory updated (CODING_MEMORY, pr-tracking, this log); next: observability verdict -> push -> PR. Subagent-commit verification gate: satisfied per-task via review-package generation + git log checks in this checkout.
+- ADR 0003 written (judge concern); round>1 glob + id reuse re-verified at HEAD (dry-run addendum) — DONE
