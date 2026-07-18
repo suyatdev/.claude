@@ -92,10 +92,10 @@ how this file and its linked files should be written (plain language, major chan
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
-   Also live-verify the memsearch-nudge SessionStart line fires in a FRESH session.
-3. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
-   (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
-   against a real `/clear` + `/compact`.
+   Memsearch-nudge SessionStart line: **VERIFIED live 2026-07-18** (fired post-/clear, 2332 chunks).
+3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
+   SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
+   verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
 4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
    `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
