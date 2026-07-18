@@ -21,3 +21,5 @@
 - Task 5 fix (post Task-14 bring-up): hard-split cap in _split_oversized (embed HTTP 400 on unbroken oversized paragraphs) + exclude_paths for .venv/site-packages/.pytest_cache (vendored docs pollution)
 - Task 14: live bring-up — qwen3-embedding:0.6b verified 1024-dim; smoke backfill (154 sources, 2041 chunks, errors=0 after hard-split+exclusion fix 7ddcf25); retrieval+provenance audited; idle RAM zero
 - Task 15 (steps 1-2): golden query set (16 queries: 11 must / 3 stretch / 2 negative) + acceptance test
+- Task 15: full backfill complete (228 sources, 2332 chunks, 0 errors, p95 149ms); golden bar 16/16 green after 1 tune (always-on-cut query: expected path session-log -> rules-to-skills-restructure — truth verified present in retrieved file); 1 warned negative (sourdough -> decision docs, RRF rank-based, calibration data recorded)
+- Task 15: digest audit 12 sampled / 11 supported / 1 UNSUPPORTED (8.3% <= 10% bar): b282f601 digest paraphrased a git command inaccurately; report committed at coding-memory/memsearch-evals/digest-audit-2026-07-18.md
