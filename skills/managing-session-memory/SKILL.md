@@ -42,7 +42,7 @@ Every one of these pauses and asks the user whether to switch model tier before 
 Save memory and offer a session clear on two triggers:
 
 1. After completing any major task (a feature, a significant bugfix, or an architecture/brainstorm/spec/plan milestone).
-2. After roughly every ~4K tokens of new conversation since the last save/clear checkpoint — incremental growth since the last checkpoint, not the absolute context total, and an estimate rather than an exact measurement.
+2. After roughly every ~35k tokens of new conversation since the last save/clear checkpoint — incremental growth since the last checkpoint, not the absolute context total, and an estimate rather than an exact measurement.
 
 On either trigger, in this order: finish the current step cleanly, update `CODING_MEMORY.md` (index + relevant `coding-memory/*.md`) and push, **then** prompt the user to clear the session. Never prompt to clear before the save+push — a `/clear` run mid-checkpoint is a session gone before its state was captured, and the next session inherits an out-of-sync memory file.
 

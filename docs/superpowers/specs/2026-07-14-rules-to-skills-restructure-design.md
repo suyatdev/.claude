@@ -42,7 +42,7 @@ Three enforcement tiers, strongest first:
 
 - Hard Model Gate before code/branches/PRs → procedure in `managing-session-memory`
 - Pre-session / per-task planning and pre-implementation model checks → same skill
-- ~4K-token session freshness checkpoint → same skill
+- ~35k-token session freshness checkpoint → same skill
 - Token-limit checkpoint → same skill
 - Default-branch safety → stub here; enforcement via hook (Tier 1)
 - Project Setup Gate → points at existing `setting-up-a-new-project` skill (unchanged)

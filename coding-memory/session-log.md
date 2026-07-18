@@ -32,7 +32,7 @@ follow that standard: major architectural changes only, no routine steps, plain 
 
 ## 2026-07-14 — Rules-to-skills restructure design approved
 
-- Wrote the missing auto-memory file explaining the ~4K session-freshness checkpoint (why incremental
+- Wrote the missing auto-memory file explaining the ~35k session-freshness checkpoint (why incremental
   growth, not an absolute ceiling, triggers the save+clear prompt). A proposed 5K hard ceiling was
   discussed and rejected: a single task plus the memory-save itself would regularly blow past a 1K buffer.
 - Brainstormed and approved a full restructure of the always-loaded rules: the 7 rules/*.md files will be

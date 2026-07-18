@@ -513,7 +513,7 @@ Every one of these pauses and asks the user whether to switch model tier before 
 Save memory and offer a session clear on two triggers:
 
 1. After completing any major task (a feature, a significant bugfix, or an architecture/brainstorm/spec/plan milestone).
-2. After roughly every ~4K tokens of new conversation since the last save/clear checkpoint — incremental growth since the last checkpoint, not the absolute context total, and an estimate rather than an exact measurement.
+2. After roughly every ~35k tokens of new conversation since the last save/clear checkpoint — incremental growth since the last checkpoint, not the absolute context total, and an estimate rather than an exact measurement.
 
 On either trigger, in this order: finish the current step cleanly, update `CODING_MEMORY.md` (index + relevant `coding-memory/*.md`) and push, **then** prompt the user to clear the session. Never prompt to clear before the save+push — a `/clear` run mid-checkpoint is a session gone before its state was captured, and the next session inherits an out-of-sync memory file.
 
@@ -1067,7 +1067,7 @@ Create `rules/gates.md`:
 Judgment-based checkpoints that must never be silently skipped. Each stub is deliberately short — read it, then load the named skill for the actual procedure. A stub that looks complete invites acting on it alone; it isn't, the skill is.
 
 - **Model-switch gates [CRITICAL]:** before starting planning, before starting implementation, and before any code/branch/PR/commit work — including docs-only PRs and "small" housekeeping — pause and ask whether to switch model tier. Unskippable, applies mid-session even on an already-warmed-up frontier model. Procedure: `managing-session-memory`.
-- **Session freshness checkpoint [ENFORCED]:** after a major task, or roughly every ~4K tokens of new conversation, save memory and push before offering to clear the session — never the reverse order. Procedure: `managing-session-memory`.
+- **Session freshness checkpoint [ENFORCED]:** after a major task, or roughly every ~35k tokens of new conversation, save memory and push before offering to clear the session — never the reverse order. Procedure: `managing-session-memory`.
 - **Token-limit checkpoint:** near the token limit, ask whether to keep spending now or stop and resume after refresh. Procedure: `managing-session-memory`.
 - **Default-branch safety:** never commit application code directly to `main`/`master`. Enforced by `hooks/git-guard.sh` (Tier 1); the one exception (a brainstorm-only `CODING_MEMORY.md` commit) is encoded in the hook. Workflow: `preparing-pull-requests`.
 - **Force-push safety:** a bare `git push --force`/`-f` is blocked on every branch by `hooks/git-guard.sh`; `--force-with-lease` is allowed on feature branches, blocked on `main`/`master`.

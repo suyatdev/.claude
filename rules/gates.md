@@ -3,7 +3,7 @@
 Judgment-based checkpoints that must never be silently skipped. Each stub is deliberately short — read it, then load the named skill for the actual procedure. A stub that looks complete invites acting on it alone; it isn't, the skill is.
 
 - **Model-switch gates [CRITICAL]:** before starting planning, before starting implementation, and before any code/branch/PR/commit work — including docs-only PRs and "small" housekeeping — pause and ask whether to switch model tier. Unskippable, applies mid-session even on an already-warmed-up frontier model. Procedure: `managing-session-memory`.
-- **Session freshness checkpoint [ENFORCED]:** after a major task, or roughly every ~4K tokens of new conversation, save memory and push before offering to clear the session — never the reverse order. Procedure: `managing-session-memory`.
+- **Session freshness checkpoint [ENFORCED]:** after a major task, or roughly every ~35k tokens of new conversation, save memory and push before offering to clear the session — never the reverse order. Procedure: `managing-session-memory`.
 - **Token-limit checkpoint:** near the token limit, ask whether to keep spending now or stop and resume after refresh. Procedure: `managing-session-memory`.
 - **Default-branch safety:** never commit application code directly to `main`/`master`. Enforced by `hooks/git-guard.sh` (Tier 1); the one exception (a brainstorm-only `CODING_MEMORY.md` commit) is encoded in the hook. Workflow: `preparing-pull-requests`.
 - **Force-push safety:** a bare `git push --force`/`-f` is blocked on every branch by `hooks/git-guard.sh`; `--force-with-lease` is allowed on feature branches, blocked on `main`/`master`.

@@ -25,7 +25,7 @@ into commits by concern:
   Docker container bound to the same port.
 - `rules/session-state-management.md`: added the Hard Model Gate (pause before any code/branch/PR/
   implementation work to confirm model tier) and Session Freshness Checkpoint (save memory + push
-  before offering a session clear, on a major-task or ~4k-token trigger) rules.
+  before offering a session clear, on a major-task or ~35k-token trigger) rules.
 - `settings.json`: `permissions.defaultMode` set to `acceptEdits`, `effortLevel` raised to `xhigh`,
   `skipDangerousModePermissionPrompt` and `agentPushNotifEnabled` turned on.
 - `.gitignore`: added entries for `daemon/`, `jobs/`, `plans/`, `paste-cache/`, `file-history/`,
