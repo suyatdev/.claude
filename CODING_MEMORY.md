@@ -18,6 +18,9 @@ how this file and its linked files should be written (plain language, major chan
   Verdict: `coding-memory/observability-judge/2026-07-17-feature-memory-rag-index.md`.
 - MODEL SETTLED: writing-plans runs on **Fable 5**. Default committed to settings.json
   (chore be44ca2, opus[1m]→claude-fable-5[1m]).
+- RESUME 2026-07-17 (session C): reconciled a /clear-orphaned verdicts.jsonl append (docs 8e4251d —
+  Snatch-Bracket impl-stage verdict landed in the global store before that session checkpointed).
+  Now EXECUTING the memsearch plan per Exact Next Steps #1 (subagent-driven, Sonnet 5 subagents).
 - RESUME 2026-07-17 (session B): reconciled a /clear-orphaned settings.json (chore a3de623),
   user switched session to Fable 5, then **writing-plans COMPLETED**: 15-task implementation plan
   written + self-reviewed at `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (3,079 lines,
