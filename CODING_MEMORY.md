@@ -7,7 +7,7 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-17
-- last_active_branch: feature/memory-rag-index (spec committed; not yet pushed)
+- last_active_branch: feature/memory-rag-index (3 commits, PUSHED to origin; no PR yet — next is writing-plans)
 - current work: memory RAG index (`memsearch`) — brainstorm APPROVED, spec written + judged.
   Local SQLite (sqlite-vec + FTS5) RAG over transcripts + curated docs; Qwen3-Embedding-0.6B
   embeddings, qwen3.6:35b-mlx digests (keep_alive=0), newest-first backfill, `rename` cmd,
