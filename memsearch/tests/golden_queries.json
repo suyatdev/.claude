@@ -1,0 +1,18 @@
+[
+  {"query": "why did we choose sqlite over qdrant for the memory index", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 6, "kind": "must", "filters": {}},
+  {"query": "what makes us reconsider the vector store choice later", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 6, "kind": "must", "filters": {}},
+  {"query": "why is CODING_MEMORY.md excluded from the memory rag index", "expect_path_contains": "memory-rag-index-design", "k": 6, "kind": "must", "filters": {}},
+  {"query": "reasoning behind the observability judge blocking PR creation", "expect_path_contains": "0001-observability-judge", "k": 6, "kind": "must", "filters": {}},
+  {"query": "JUDGE_EXEMPT", "expect_path_contains": "observability-judge", "k": 6, "kind": "must", "filters": {}},
+  {"query": "Doc-Exempt trailer bypass", "expect_path_contains": "documentation-enforcement", "k": 6, "kind": "must", "filters": {}},
+  {"query": "how much always-on rule content did the skills restructure cut", "expect_path_contains": "session-log", "k": 6, "kind": "must", "filters": {}},
+  {"query": "verdict filenames broke on branch names containing slashes", "expect_path_contains": "observability-judge", "k": 6, "kind": "must", "filters": {}},
+  {"query": "which port does the snatch bracket backend use", "expect_path_contains": "PORTS.md", "k": 6, "kind": "must", "filters": {}},
+  {"query": "sqlite over qdrant", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 3, "kind": "must", "filters": {"rtype": "decision"}},
+  {"query": "what were we working on in mid july 2026", "expect_path_contains": ".jsonl", "k": 6, "kind": "must", "filters": {"rtype": "episodic", "since": "2026-07-01"}},
+  {"query": "vibe-scape architecture decision records", "expect_path_contains": "vibe-scape", "k": 6, "kind": "stretch", "filters": {}},
+  {"query": "snatch bracket auth token bug fix", "expect_path_contains": "Snatch-Bracket", "k": 6, "kind": "stretch", "filters": {}},
+  {"query": "how the diagramming skill validates mermaid blocks", "expect_path_contains": "diagramming", "k": 6, "kind": "stretch", "filters": {}},
+  {"query": "how do we deploy this to kubernetes with helm charts", "expect_path_contains": "PORTS.md", "k": 3, "kind": "negative", "filters": {}},
+  {"query": "recipe for sourdough bread starter", "expect_path_contains": "decisions", "k": 3, "kind": "negative", "filters": {}}
+]
