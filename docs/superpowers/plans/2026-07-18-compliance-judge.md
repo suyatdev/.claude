@@ -488,7 +488,7 @@ this pull request" (/review), "verify the subagent's commit landed" (verifying-s
 ````markdown
 - **Spec-compliance gate:** after a spec/design doc is written and self-reviewed — and again after
   any later spec edit — run the compliance judge before the user review gate; a failing or missing
-  verdict blocks `writing-plans`. Persistent violations escalate to the user, never silently waived.
+  verdict blocks `superpowers:writing-plans`. Persistent violations escalate to the user, never silently waived.
   Not hook-enforced (a `spec-guard` hook is deferred until this gate is observed being skipped).
   Procedure: `running-the-compliance-judge`.
 ````
