@@ -5,3 +5,4 @@
 - Task 3: ollama client — stdlib HTTP, batched /api/embed, /api/chat with keep_alive=0 (zero idle RAM)
 - Task 3 fix: _post now catches json.JSONDecodeError -> OllamaError (non-JSON/HTML error bodies no longer escape as raw JSONDecodeError)
 - Task 4: extractor — JSONL -> clean turns; drops tool payloads/thinking/sidechains/meta, keeps tool names
+- Task 4 fix: user list-content now keeps real text blocks (was silently dropped), non-dict JSON lines (null/number) no longer crash extraction

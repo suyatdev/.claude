@@ -24,11 +24,17 @@ class SessionExtract:
 
 
 def _user_text(content) -> str:
-    # Tool results arrive as user lines with list content — payloads are
-    # exactly the noise the spec says to drop, so only string content counts.
-    if not isinstance(content, str):
-        return ""
-    return _STRIP_BLOCKS.sub("", content).strip()
+    if isinstance(content, str):
+        return _STRIP_BLOCKS.sub("", content).strip()
+    if isinstance(content, list):
+        # Real user lines can carry list content mixing genuine text blocks
+        # with tool_result payloads — keep the text, drop the payload noise.
+        parts = [
+            item["text"] for item in content
+            if isinstance(item, dict) and item.get("type") == "text" and item.get("text")
+        ]
+        return _STRIP_BLOCKS.sub("", "\n".join(parts)).strip()
+    return ""
 
 
 def _assistant_text(content) -> str:
@@ -54,6 +60,8 @@ def extract_session(path: Path) -> SessionExtract | None:
             try:
                 d = json.loads(line)
             except json.JSONDecodeError:
+                continue
+            if not isinstance(d, dict):
                 continue
             kind = d.get("type")
             if kind not in ("user", "assistant"):

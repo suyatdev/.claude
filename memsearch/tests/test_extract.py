@@ -75,3 +75,30 @@ def test_unparseable_lines_skipped(tmp_path):
     ])
     ex = extract_session(p)
     assert "hello" in ex.text
+
+
+def test_user_list_content_keeps_text_block_drops_tool_result(tmp_path):
+    p = write_session(tmp_path, [
+        jl(type="user", message={"role": "user", "content": [
+            {"type": "tool_result", "content": "huge file dump"},
+            {"type": "text", "text": "please refactor the config loader"},
+        ]}, **BASE),
+    ])
+    ex = extract_session(p)
+    assert ex is not None
+    assert "please refactor the config loader" in ex.text
+    assert "huge file dump" not in ex.text
+
+
+def test_non_dict_json_lines_skipped(tmp_path):
+    p = write_session(tmp_path, [
+        "null",
+        "3",
+        jl(type="user", message={"role": "user", "content": "hello"}, **BASE),
+        jl(type="assistant", message={"role": "assistant", "content": [
+            {"type": "text", "text": "hi"}]}, **BASE),
+    ])
+    ex = extract_session(p)
+    assert ex is not None
+    assert "hello" in ex.text
+    assert "hi" in ex.text
