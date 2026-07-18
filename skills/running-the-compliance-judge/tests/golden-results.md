@@ -27,3 +27,13 @@ errors). One watch item for future calibration: the base fixture's stdin decode-
 a violation in some seeded runs but only a note in golden-pass runs — golden-pass still passed
 2/2; if a future golden run cites it as a violation, tighten `golden-pass.md`'s Error handling
 section to tie exit 3 to an explicit stdin requirement rather than tuning the judge.
+
+## Addendum — HEAD spot-check (agent @ 87b2d37, 2026-07-18)
+
+Final-review closure: the 12/12 table above ran against the agent @ 44340bf; two later
+amendments (id-stability, glob date-anchor) changed the shipped bytes. Spot-check at HEAD:
+`golden-pass.md` → **pass 2/2** (the stdin line again held as a non-blocking note in both runs —
+one run explicitly reasoned from this file's watch item), `seeded-missing-gherkin.md` → **fail**
+citing `writing-specs/bdd-gherkin-scenarios`. The shipped agent text is now directly evidenced;
+a full 12-run re-baseline was judged unnecessary since the amendments are round>1-scoped and
+naming-scoped. (Loop-path evidence at post-amendment wording: `dry-run-log.md`, five dispatches.)
