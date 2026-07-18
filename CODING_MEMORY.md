@@ -37,8 +37,8 @@ how this file and its linked files should be written (plain language, major chan
   chunks / 0 errors / p95 149ms; golden bar 16/16 (1 honest expected-path tune); digest audit
   11/12 supported (8.3% ≤ 10% bar — caught a paraphrased git command); final whole-branch review
   (fable) READY TO MERGE after fix wave 37cb7b6 (search model-mismatch guard + rename missing-DB
-  guard + full=True test). Accepted debt recorded in ledger. REMAINING: judge (impl) → PR →
-  post-PR verdict commit (incl. 2nd parallel Snatch-Bracket verdicts.jsonl reconcile).
+  guard + full=True test). Accepted debt recorded in ledger. Judge (impl): risk=low conf=high.
+  **PR #14 OPEN: https://github.com/suyatdev/.claude/pull/14** (created 2026-07-18, desktop).
 - RESUME 2026-07-17 (session B): reconciled a /clear-orphaned settings.json (chore a3de623),
   user switched session to Fable 5, then **writing-plans COMPLETED**: 15-task implementation plan
   written + self-reviewed at `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (3,079 lines,
@@ -92,19 +92,21 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **memsearch — EXECUTE THE PLAN (all gates cleared 2026-07-17):** plan at
-   `docs/superpowers/plans/2026-07-17-memory-rag-index.md` (15 tasks, TDD, complete code).
-   User decisions recorded: (i) execution = **subagent-driven** (superpowers:subagent-driven-development);
-   (ii) **dep sign-off APPROVED** — sqlite-vec==0.1.9 + uv/Python 3.12 + pytest==8.3.4 dev-only;
-   cite "user approved at plan approval (2026-07-17)" in Task 1's commit body; (iii) Hard Model Gate
-   answered = **Sonnet 5 for implementation** — orchestrate from this session, dispatch task subagents
-   with model: sonnet; do NOT re-ask. Start at Task 1. Task 14 (live bring-up) + Task 15 Step 3
-   (full backfill, hours) run in the main session, not a subagent.
-2. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
+1. **PR #14 (memsearch) — await user review/merge.** After merge: backfill the judge verdict
+   `outcome` field (clean/rework/bug) in verdicts.jsonl; delete the feature branch.
+2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
+   `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
+   `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
+   format validation; README sentence that digest-chunk line numbers are digest-relative.
+   Also live-verify the memsearch-nudge SessionStart line fires in a FRESH session.
+3. **Reconcile the parallel session's work when it checkpoints:** uncommitted CLAUDE.md +
+   rules/gates.md edits + untracked skills/verifying-subagent-commits/ are ANOTHER session's
+   in-flight work — left alone by session C; do not commit them from this session.
+4. **Live-verify** doc-guard's SessionStart/PreCompact injection fires end-to-end in a FRESH session
    (hooks load at startup); logic is tested (15-case harness), the event wiring is not yet confirmed
    against a real `/clear` + `/compact`.
-3. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it uses
-   `coding-memory/decisions.md` as its equivalent today); add diagramming pointers to
+5. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
+   `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
 
 **Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile) +
