@@ -19,3 +19,4 @@
 - Task 12: SessionStart nudge hook (one line max, never injects chunks, always exit 0) + settings/gitignore wiring
 - Task 13: ADR 0002 sqlite-over-qdrant (revisit triggers match status.py) + README
 - Task 5 fix (post Task-14 bring-up): hard-split cap in _split_oversized (embed HTTP 400 on unbroken oversized paragraphs) + exclude_paths for .venv/site-packages/.pytest_cache (vendored docs pollution)
+- Task 14: live bring-up — qwen3-embedding:0.6b verified 1024-dim; smoke backfill (154 sources, 2041 chunks, errors=0 after hard-split+exclusion fix 7ddcf25); retrieval+provenance audited; idle RAM zero
