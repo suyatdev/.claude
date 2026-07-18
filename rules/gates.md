@@ -12,3 +12,8 @@ Judgment-based checkpoints that must never be silently skipped. Each stub is del
 - **New-instruction gate:** before adding any new "always/never do X" rule, hook, or skill, run `triaging-new-instructions` to classify where it actually belongs.
 - **Observability-judge gate:** after architecting a design and after implementing a change, run the observability judge before opening a PR — it scores the change against the evaluation and observability rubrics, relays a junior-dev summary, and records a verdict. Enforced by `hooks/judge-guard.sh` (Tier 1), which blocks `gh pr create` until a fresh implementation-stage verdict matches the current HEAD (strict); bypass a genuinely exempt PR with `JUDGE_EXEMPT=<reason>`. Procedure: `running-the-observability-judge`.
 - **Subagent-commit verification gate:** after any implementer/fix subagent reports DONE with a commit SHA, before trusting that report, generating a review diff, or advancing to the next task — independently confirm the commit landed in the correct checkout. Not hook-enforced (no generic script can know which checkout is "correct" for a given dispatch); a subagent's own self-check instruction has repeatedly failed to catch this. Procedure: `verifying-subagent-commits`.
+- **Spec-compliance gate:** after a spec/design doc is written and self-reviewed — and again after
+  any later spec edit — run the compliance judge before the user review gate; a failing or missing
+  verdict blocks `superpowers:writing-plans`. Persistent violations escalate to the user, never silently waived.
+  Not hook-enforced (a `spec-guard` hook is deferred until this gate is observed being skipped).
+  Procedure: `running-the-compliance-judge`.

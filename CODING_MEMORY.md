@@ -8,15 +8,18 @@ how this file and its linked files should be written (plain language, major chan
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-18
 - last_active_branch: main (synced to origin/main @ 417e8e7)
-- current work: **compliance-judge brainstorm COMPLETE** — new subagent that checks a finished
-  spec against writing-specs standards + core-conduct/security conventions before the user
-  review gate, with a capped auto-revise loop and persistence-based escalation. Runs in
-  parallel with the observability judge's architecting read (separate agent, separate store,
-  deliberately NOT an extension of it). Spec:
-  `docs/superpowers/specs/2026-07-18-compliance-judge-design.md` on `feature/compliance-judge`.
-  Triage: gate stub + skill + agent, procedure-gated (no hook; spec-guard deferred).
-- Model gate: brainstorm + upcoming plan-writing on **Fable 5**, per user (asked at both
-  checkpoints); implementation model gate still to come after the plan.
+- current work: **compliance-judge IMPLEMENTED** on `feature/compliance-judge` — agent + skill +
+  gate stub + catalog line + store; golden eval 12/12 green (2x6, wrapper method) + HEAD
+  spot-check; loop dry-run verified convergence (3 rounds) and escalation (exact id reuse).
+  Subagent-driven (Sonnet 5 workers), Fable 5 whole-branch review → "With fixes", fix wave
+  landed (glob date-anchor + minors). PR pending this session (observability verdict last).
+  Spec + plan on branch; detail: `coding-memory/branches/compliance-judge.md`.
+- Model gate: brainstorm/plan/orchestration on **Fable 5**, implementer/reviewer subagents on
+  **Sonnet 5**, final whole-branch review on Fable — all per user at each checkpoint.
+- Parallel session note: another session already USED the newly-registered compliance-judge —
+  real verdicts sit UNTRACKED in `coding-memory/compliance-judge/` (0006-the-cast,
+  assistant-chat-input-multiline-design + verdicts.jsonl). Left uncommitted; reconcile
+  post-merge (user call). `settings.json` mod also pre-existing/untouched.
 
 ## Repositories
 
@@ -75,11 +78,14 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **compliance-judge (active):** user reviews the spec
-   (`docs/superpowers/specs/2026-07-18-compliance-judge-design.md`, branch
-   `feature/compliance-judge`) → on approval, `superpowers:writing-plans` (Fable 5, per gate) →
-   implementation model gate → build (agent + skill + gates stub + catalog line + store; golden-spec
-   fixtures + loop dry-run + trigger tests per spec's Testing section).
+1. **compliance-judge (PR pending → post-merge):** after merge: (a) live-verify in a FRESH
+   session that a dispatch by `subagent_type: compliance-judge` (real agent, not the wrapper)
+   writes to the real store `coding-memory/compliance-judge/` — registration itself already
+   confirmed live mid-session; delete the test verdict after confirming; (b) reconcile the
+   parallel session's untracked verdicts in the store (commit or discard — user call);
+   (c) backfill judge `outcome` once merge result is known; (d) the store is global but writeup
+   filenames carry no repo component (final-review recommendation) — revisit if cross-repo
+   verdicts ever collide.
 2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`

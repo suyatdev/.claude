@@ -89,3 +89,12 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   explicitly not hook-enforced, unlike ADR-0001's judge-guard.sh; closer precedent is the no-ADR
   feature/diagramming-skill (PR #12).
 - judge verdict: implementation, risk=low confidence=high, head 367da77, outcome=clean (backfilled 2026-07-18).
+
+### feature/compliance-judge (PR pending, 2026-07-18)
+- repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: to be created this session (number recorded in next housekeeping commit — judge freshness
+  forbids a post-verdict commit before `gh pr create`).
+- opened_by session_origin: desktop (VSCode)
+- scope: compliance judge — agent + running-the-compliance-judge skill + gates stub + catalog +
+  store; golden eval 12/12 + HEAD spot-check; loop dry-run (convergence + escalation).
+- detail: coding-memory/branches/compliance-judge.md
