@@ -8,10 +8,15 @@ how this file and its linked files should be written (plain language, major chan
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-19 (post-/clear continuation)
 - last_active_branch: feature/statusline-command
-- current work: **status line config** — user had already written `statusline-command.sh` and
-  wired it into `settings.json`; this session documented and committed it on
-  `feature/statusline-command`. **Not yet pushed; no PR open.**
-  Detail: `coding-memory/branches/statusline-command.md`.
+- current work: **status line config — PR #18 OPEN** (7 commits, pushed
+  2026-07-19). User had already written `statusline-command.sh` and wired it into
+  `settings.json`; this session documented, hardened and shipped it.
+  Detail: `coding-memory/branches/statusline-command.md`, `coding-memory/pr-tracking.md`.
+- **Orca hooks in `settings.json` deliberately uncommitted** (~112 lines, written by an external
+  process mid-session; third-party, machine-local, absolute paths). Left dirty at the user's
+  direction, so the working tree stays permanently modified. Worth knowing: `claude-hook.sh`
+  sources `$ORCA_AGENT_HOOK_ENDPOINT` *before* its token check, and that file's stdout becomes
+  hook stdout — a channel into the agent control plane. Not resolved; user's call pending.
 - untracked `chrome/chrome-native-host` in working tree: Claude Code auto-generated Chrome
   native-messaging wrapper (machine-local tooling) — not repo work, leave untracked. Note it
   keeps the tree permanently dirty, so the new status line's `✗` marker always shows in this

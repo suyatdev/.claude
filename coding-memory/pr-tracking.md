@@ -118,3 +118,39 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   2026-07-19, both rounds). Round 1 @ 3c5a826 (low/medium) found the placeholder-grep hole → fixed 0d23feb.
 - follow-up recorded: dogfood the skill on the .claude repo itself (it has no README).
 - detail: coding-memory/branches/writing-project-readmes-skill.md
+
+### feature/statusline-command (OPEN, 2026-07-19)
+- repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/18 · status: OPEN (opened 2026-07-19)
+- opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
+- scope: Claude Code status line reproducing the oh-my-zsh `robbyrussell` prompt plus dimmed
+  model + token segments — `statusline-command.sh`, `statusLine` entry in `settings.json`,
+  README row. Preference churn (model → opus[1m], theme → dark) split into its own
+  `chore(settings)` commit at the user's direction. 7 commits.
+- security: terminal-escape injection via **four** distinct paths, each found only after the
+  previous was closed — `printf %b` expanding literal `\x1b`; real control bytes decoded by jq
+  and forwarded by `printf %s`; the `$PWD` fallback assigned after the strip; and a *second*
+  unstripped fallback introduced by the fix for the third. Root-caused by stripping each source
+  at its source. Severity low (data originates from Claude Code; git rejects control chars in ref
+  names; realistic vector is a hostile directory name — garbled bar or hijacked terminal title,
+  no execution, no data loss).
+- tests: `statusline-command.test.sh` 20/20, plus `statusline-command.falsify.py` — replays the
+  current suite against all 5 historical versions (9/20, 10/20, 15/20, 20/20, 19/20), expected
+  counts derived from behaviour rather than fitted to output. Known gap: `user`/`host` strips are
+  uncovered (reaching them needs PATH/hostname control).
+- judge verdicts: 6 implementation rounds. R1 f0902ed low/medium · R2 c06737b low/high ·
+  R3 29d6131 low/high · R4 4d63b09 low/high · **R5 e882659 medium/high (2 failing dims —
+  regression + false "Cosmetic, no leak" claim)** · R6 ae34fc7 low/high, cleared to ship.
+  outcome: null (backfill on merge).
+- PR opened with `JUDGE_EXEMPT=verdict-commit-only` — the R6 verdict commit itself moved HEAD and
+  re-staled the gate; judge explicitly endorsed this bypass as non-substantive.
+- process note: the write-up ran ahead of the code in every round; one round's fix left the code
+  worse than its parent. All caught by review, none by self-review.
+- scope note: user asked only to "document and push" an already-written script; 6 of 7 commits
+  are review-driven. Surfaced to the user rather than resolved unilaterally.
+- not committed: ~112 lines of Orca agent-orchestrator hooks written into `settings.json` by an
+  external process mid-session (third-party, machine-local, absolute paths). Left dirty at the
+  user's direction. Note `claude-hook.sh` sources `$ORCA_AGENT_HOOK_ENDPOINT` *before* its token
+  check, and the sourced file's stdout becomes hook stdout — a channel into the agent control
+  plane, not just code execution.
+- detail: coding-memory/branches/statusline-command.md
