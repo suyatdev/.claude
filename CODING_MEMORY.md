@@ -8,10 +8,10 @@ how this file and its linked files should be written (plain language, major chan
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-19 (post-/clear continuation)
 - last_active_branch: main (synced to origin/main @ a4097c9)
-- current work: **new skill: writing-project-readmes — implemented + verified** on
-  feature/writing-project-readmes-skill (RED/GREEN subagent tests + 8/8 routing pass).
-  Remaining: observability-judge implementation verdict → PR.
-  Detail: `coding-memory/branches/writing-project-readmes-skill.md`.
+- current work: **writing-project-readmes skill — PR #17 OPEN** (judge round 2 @ 0d23feb:
+  risk=low conf=high; round-1 grep hole fixed). Awaiting review/merge; then backfill outcome
+  + delete branch. Detail: `coding-memory/branches/writing-project-readmes-skill.md`,
+  `coding-memory/pr-tracking.md`.
 - Model gate: user chose **Opus 4.8** for this work (session was on Fable 5; switch is
   user-side via /model).
 - `settings.json` working-tree mod (model default → opus[1m]) remains pre-existing/untouched —
