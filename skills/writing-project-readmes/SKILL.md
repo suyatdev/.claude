@@ -33,8 +33,9 @@ same things in the same places. The template is the contract; the facts come fro
    real. No LICENSE file → no license badge; no `images/logo.png` → drop the `<img>` and keep
    the centered title; no docs site → "Explore the docs" points at the README itself. A
    plausible-looking dead link costs more trust than an omitted one.
-5. **Verify before committing:** `grep -nE 'OWNER/REPO|\[.*[Pp]laceholder|\[Project Title\]'
-   README.md` must come back empty, and every remaining link must have a real target.
+5. **Verify before committing:** `grep -nE 'OWNER/REPO|\[TODO:' README.md` must come back
+   empty — every placeholder in the template carries one of those two markers precisely so
+   this check cannot miss a leftover — and every remaining link must have a real target.
 
 ## Maintaining the Roadmap
 

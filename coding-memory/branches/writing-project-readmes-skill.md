@@ -35,7 +35,16 @@ stays current as features land.
 - Routing: 8/8 forced-choice phrases correct (3 positive, 3 negative, plus new-repo →
   setting-up-a-new-project and "standardize" → this skill).
 
+## Judge round 1 (@ 3c5a826): risk=low conf=medium, one actionable finding
+
+The skill's verification grep couldn't catch the template's bracketed guidance prose (only
+OWNER/REPO, [Project Title], and literal "placeholder"), so leftover template text could
+pass the skill's own check. Fixed at the root: every template placeholder now carries a
+`[TODO: …]` marker and the verify step greps `OWNER/REPO|\[TODO:` — greppable by
+construction, no false positives on markdown links/checkboxes. Deterministic re-verify:
+25 marker hits in the raw template, 0 in the GREEN-generated fixture README.
+
 ## Status
 
-- Implementation + verification complete; committed on this branch.
-- Next: observability-judge implementation verdict → PR.
+- Implementation + verification complete; judge round 1 finding fixed and re-verified.
+- Next: fresh implementation verdict on new HEAD → PR.

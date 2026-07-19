@@ -1,8 +1,9 @@
 <!--
   House README template. Copy the structure exactly; replace every OWNER/REPO
-  and bracketed placeholder with facts from the actual repository. GitHub does
-  not render markdown badge syntax inside block-level HTML, so the badge row
-  uses HTML <img> tags — keep it that way.
+  and [TODO: …] placeholder with facts from the actual repository — the TODO
+  marker is what the skill's verification grep hunts for, so never restyle it.
+  GitHub does not render markdown badge syntax inside block-level HTML, so the
+  badge row uses HTML <img> tags — keep it that way.
 -->
 
 <!-- PROJECT LOGO OR BANNER -->
@@ -12,10 +13,10 @@
     <img src="images/logo.png" alt="Logo" width="80" height="80">
   </a>
 
-  <h3 align="center">[Project Title]</h3>
+  <h3 align="center">[TODO: Project Title]</h3>
 
   <p align="center">
-    [A short, punchy one-line description of what this project actually does.]
+    [TODO: a short, punchy one-line description of what this project actually does]
     <br />
     <a href="https://github.com/OWNER/REPO"><strong>Explore the docs »</strong></a>
     <br />
@@ -46,14 +47,14 @@
 
 ## 📌 About The Project
 
-[A clear, brief overview paragraph explaining the goals and target audience of the project.
-Include any screenshots, diagrams, or quick animations demonstrating the software in action —
-only ones that actually exist in the repo.]
+[TODO: a clear, brief overview paragraph explaining the goals and target audience of the
+project. Include any screenshots, diagrams, or quick animations demonstrating the software in
+action — only ones that actually exist in the repo.]
 
 ### Built With
 
-[List the major frameworks, languages, and core libraries actually used in this codebase —
-the examples below are placeholders to replace:]
+[TODO: list the major frameworks, languages, and core libraries actually used in this
+codebase — the examples below are placeholders to replace:]
 
 * [Next.js](https://nextjs.org)
 * [React.js](https://reactjs.org)
@@ -67,7 +68,7 @@ Follow these instructions to set up a local copy of the project and run it on yo
 
 ### Prerequisites
 
-[List the software packages or runtimes required to use this project:]
+[TODO: list the software packages or runtimes required to use this project:]
 
 * npm
   ```sh
@@ -97,8 +98,8 @@ Follow these instructions to set up a local copy of the project and run it on yo
 
 ## 💡 Usage
 
-[Demonstrate how to interact with the project. Use clear code blocks, output expectations,
-or point to architectural patterns if necessary.]
+[TODO: demonstrate how to interact with the project. Use clear code blocks, output
+expectations, or point to architectural patterns if necessary.]
 
 ```javascript
 import { initializeProject } from 'project-library';
@@ -114,9 +115,9 @@ initializeProject({
 
 ## 🗺️ Roadmap
 
-[Shipped features as checked items, upcoming work as unchecked — keep this current as
+[TODO: shipped features as checked items, upcoming work as unchecked — keep this current as
 features land:]
 
-- [x] [Feature that has already shipped]
-- [ ] [Next planned feature]
-- [ ] [Later planned feature]
+- [x] [TODO: feature that has already shipped]
+- [ ] [TODO: next planned feature]
+- [ ] [TODO: later planned feature]
