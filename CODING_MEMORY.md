@@ -7,17 +7,21 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-19 (post-/clear continuation)
-- last_active_branch: main (synced to origin/main @ d242e69)
-- current work: **PR #17 (writing-project-readmes skill) MERGED 2026-07-19** — post-merge
-  reconcile done: main fast-forwarded, branch deleted local + remote, both judge verdicts
-  backfilled outcome=clean. Detail: `coding-memory/branches/writing-project-readmes-skill.md`,
-  `coding-memory/pr-tracking.md`.
+- last_active_branch: feature/statusline-command
+- current work: **status line config** — user had already written `statusline-command.sh` and
+  wired it into `settings.json`; this session documented, committed and pushed it.
+  Detail: `coding-memory/branches/statusline-command.md`.
 - untracked `chrome/chrome-native-host` in working tree: Claude Code auto-generated Chrome
-  native-messaging wrapper (machine-local tooling) — not repo work, leave untracked.
-- Model gate: user chose **Opus 4.8** for this work (session was on Fable 5; switch is
-  user-side via /model).
-- `settings.json` working-tree mod (model default → opus[1m]) remains pre-existing/untouched —
-  not mine to commit.
+  native-messaging wrapper (machine-local tooling) — not repo work, leave untracked. Note it
+  keeps the tree permanently dirty, so the new status line's `✗` marker always shows in this
+  repo; gitignoring it is an open question flagged to the user, not yet decided.
+- Model gate: this session started on **Sonnet 5** and the user switched to **Opus 4.8** via
+  /model before any commit. (Correction: the previous entry here read "session was on Fable 5" —
+  that described PR #17's session, not this one. Both are accurate for their own session; the
+  earlier wording was overwritten rather than superseded, noted here per the same convention as
+  commit 69cc063.)
+- `settings.json` model/theme preference changes are now committed on this branch, following
+  the existing `chore(settings):` precedent — superseding the earlier "not mine to commit" note.
 
 ## Repositories
 
@@ -76,6 +80,12 @@ how this file and its linked files should be written (plain language, major chan
   **PR #17 MERGED 2026-07-19** (merge commit d242e69); branch deleted. Judge rounds 1-2
   (3c5a826 low/medium → grep hole fixed → 0d23feb low/high), outcome=clean (backfilled).
   Detail: `coding-memory/branches/writing-project-readmes-skill.md`.
+- feature/statusline-command (2026-07-19) — Claude Code status line reproducing the oh-my-zsh
+  `robbyrussell` prompt (`➜ user@host dir git:(branch) ✗`) plus dimmed model + token-count
+  segments: new `statusline-command.sh`, `statusLine` entry in `settings.json` (which also
+  carries model → opus[1m] and theme → dark), README table row. Verified against 3 stdin
+  shapes. No ADR (presentation-only — misses all three ADR triggers).
+  Detail: `coding-memory/branches/statusline-command.md`.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
