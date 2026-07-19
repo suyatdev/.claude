@@ -28,8 +28,12 @@
 
 input=$(cat)
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
-cwd="${cwd//[[:cntrl:]]/}"
+# The $PWD fallback must be applied BEFORE the strip, not after. $PWD is just as
+# external as the JSON -- it is the name of whatever directory the shell is in --
+# and stdin without a usable cwd is routine, not exotic: {}, malformed JSON,
+# {"cwd":null} and {"workspace":{}} all land here.
 [ -z "$cwd" ] && cwd="$PWD"
+cwd="${cwd//[[:cntrl:]]/}"
 
 # $'...' embeds real ESC bytes at assignment time, so the final render can use
 # printf '%s' rather than '%b'. With '%b', printf expands backslash escapes

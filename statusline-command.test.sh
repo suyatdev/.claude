@@ -28,7 +28,12 @@ pass=0; fail=0
 ok()   { printf 'ok   — %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf 'FAIL — %s\n' "$1"; fail=$((fail+1)); }
 
-render() { printf '%s' "$1" | bash "$SCRIPT" 2>/dev/null; }
+# stderr is deliberately NOT swallowed: a jq parse error here would otherwise be
+# invisible, and a payload jq rejects makes its assertion pass vacuously.
+render() { printf '%s' "$1" | bash "$SCRIPT"; }
+
+# Same, but runs the script from a given directory, to exercise the $PWD fallback.
+render_in() { printf '%s' "$2" | (cd "$1" && bash "$SCRIPT"); }
 
 count_byte() { # $1 output, $2 tr-class
   printf '%s' "$1" | tr -dc "$2" | wc -c | tr -d ' '
@@ -127,6 +132,23 @@ assert_no_injection "OSC title-rewrite sequence is stripped" \
 
 assert_no_injection "carriage return cannot overwrite the line" \
   '{"cwd":"/tmp","model":{"display_name":"Opus\u000d4.8"}}'
+
+# The $PWD fallback is reached whenever stdin yields no usable cwd. $PWD is as
+# external as the JSON -- it is a directory name -- so it must be stripped too.
+# Regression test for a hole that survived the first strip because the fallback
+# was applied after it.
+HOSTILE="$TMP/$(printf '\033')]0;HIJACK$(printf '\007')evil"
+mkdir -p "$HOSTILE"
+for shape in '{}' 'garbage' '{"cwd":null}' '{"workspace":{}}'; do
+  OUT="$(render_in "$HOSTILE" "$shape" 2>/dev/null)"
+  bel="$(count_byte "$OUT" '\007')"
+  esc="$(count_byte "$OUT" '\033')"
+  if [ "$bel" -eq 0 ] && [ "$esc" -le "$BASE_ESC" ]; then
+    ok "\$PWD fallback stripped for stdin '$shape' (esc=$esc bel=$bel)"
+  else
+    bad "\$PWD fallback leaked control bytes for stdin '$shape' (esc=$esc bel=$bel)"
+  fi
+done
 
 # Stripping must remove the control byte without discarding the whole field.
 OUT="$(render '{"cwd":"/tmp","model":{"display_name":"Opus\u001b[5m4.8"}}')"

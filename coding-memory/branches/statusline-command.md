@@ -72,8 +72,16 @@ became a real escape. Fixed by building colours and the `➜` glyph with `$'...'
 via a unicode escape; `jq -r` decodes it to a real byte and `printf '%s'` forwards it untouched.
 Route 1's fix does nothing about this. Demonstrated: a blink attribute, a newline splitting the
 status line in two, and an OSC sequence rewriting the terminal title. Fixed by stripping C0
-controls and DEL from every externally-sourced value with `${v//[[:cntrl:]]/}` — pure bash, so
-it costs an inline expansion rather than a fork in a script that re-renders constantly.
+controls and DEL with `${v//[[:cntrl:]]/}` — pure bash, so it costs an inline expansion rather
+than a fork in a script that re-renders constantly.
+
+**Route 2b — the `$PWD` fallback, missed on the first attempt at route 2.** The strip was applied
+to the jq result, but `[ -z "$cwd" ] && cwd="$PWD"` ran *after* it, so the fallback value went
+out unstripped. `$PWD` is every bit as external as the JSON — it is the name of whatever
+directory the shell happens to be in — and the fallback is reached by four routine stdin shapes
+(`{}`, malformed JSON, `{"cwd":null}`, `{"workspace":{}}`), not just exotic ones. Fixed by
+applying the fallback before the strip. This is the same class of miss as route 2 itself: the
+write-up claimed "every externally-sourced value" while one path bypassed it.
 
 Why round 1's tests could not have caught route 2: they used *literal-backslash* payloads, the
 exact encoding that removing `%b` neutralises by construction. They passed and could never fail
@@ -121,32 +129,58 @@ is invisible, a successful one reads as a rendering quirk), and the defect regre
 session*, fixed by one route while still open by another. Put back to the user with that new
 information; they opted to commit it.
 
-`statusline-command.test.sh` — 15 assertions in the style of `hooks/memsearch-nudge.test.sh`,
+`statusline-command.test.sh` — 19 assertions in the style of `hooks/memsearch-nudge.test.sh`,
 split into a rendering group and a control-byte injection group.
 
 **Validated by falsification, not just by passing.** A test that cannot fail proves nothing, so
-it was run against all three states of the script:
+the current suite is run against every historical state of the script:
 
 | Script version | Result | Reads as |
 |---|---|---|
-| `f0902ed` (original, `printf %b`) | 8/15 | both injection routes open |
-| `925c310` (round-1 fix only) | 9/15 | route 1 closed, route 2 still open |
-| current | 15/15 | both closed |
+| `f0902ed` (original, `printf %b`) | 8/19 | both injection routes open, plus `$PWD` |
+| `925c310` (route-1 fix only) | 9/19 | route 1 closed, route 2 and `$PWD` open |
+| `29d6131` (route-2 fix) | 15/19 | both routes closed, `$PWD` fallback still open |
+| current | 19/19 | closed |
 
-That middle row is the important one — it is the state the round-1 tests declared clean, and
-this suite fails it.
+Each row fails exactly the assertions covering the defect it still carries, and every injection
+assertion fails against at least one version — so none of them pass vacuously.
 
-Two weaknesses the falsification run exposed in the tests themselves, both fixed: the
-carriage-return case passed against unfixed scripts because the assertion counted ESC/NL/BEL but
-not CR; and the git-segment case silently depended on the script living inside a repo, so it now
-builds a throwaway repo with `mktemp -d` and asserts on a known branch name.
+Three weaknesses the falsification runs exposed in the tests themselves, all fixed: the
+carriage-return assertion passed against unfixed scripts because it counted ESC/NL/BEL but not
+CR; the git-segment assertion silently depended on the script living inside a repo, so it now
+builds a throwaway repo via `mktemp -d`; and `render()` swallowed stderr, which would have hidden
+a jq parse error and let a rejected payload's assertion pass vacuously.
+
+### Extraction gotcha worth remembering
+
+Running the falsification from the Bash tool gave a bogus *identical* result for all three
+versions. Cause: the rtk proxy rewrites git commands there, and both `git show <sha>:<path>` and
+`git cat-file -p <sha>:<path>` returned the **commit object** rather than the file blob — so
+every version was being "tested" against the same non-script text. `rtk proxy` did not bypass it.
+The check that should have caught this did not: grepping the extracted text for `cntrl` matched
+the *commit message*, not the code. `scratchpad/falsify.py` now shells out to git from Python,
+which the hook does not rewrite, and asserts each blob starts with `#!` before trusting it.
 
 ## Checkpoint
 
-Two commits: `feat(statusline)` (script + `statusLine` wiring + docs, with the escape-injection
-fix folded in — the defect never shipped, so it isn't preserved as its own commit) and
-`chore(settings)` (model + theme preferences). Observability judge run at implementation stage
-against the pre-split HEAD f0902ed: risk=low, confidence=medium, no dimension failed; its three
-actionable findings (escape injection, false checkpoint claims, unverified schema) are all
-resolved above. Re-run required before `gh pr create` — the split moved HEAD and judge-guard
-enforces strict freshness.
+Four commits on the branch:
+
+1. `925c310 feat(statusline)` — script + `statusLine` wiring + docs.
+2. `c06737b chore(settings)` — model + theme preferences, split out at the user's direction.
+3. `29d6131 fix(statusline)` — route-2 control-byte stripping + the test harness.
+4. `fix(statusline)` — the `$PWD` fallback ordering, plus the four regression assertions.
+
+Observability judge ran three rounds, each finding something real in the round before it:
+
+| Round | Head | Verdict | Found |
+|---|---|---|---|
+| 1 | `f0902ed` | risk=low conf=medium | escape injection (route 1), false "pushed" claims, unverified schema |
+| 2 | `c06737b` | risk=low conf=high | route 1 fixed but route 2 open while docs claimed complete |
+| 3 | `29d6131` | risk=low conf=high | route 2 fixed but `$PWD` fallback open, again while docs claimed complete |
+
+The recurring pattern, worth carrying forward: **the write-up ran ahead of the code three rounds
+running** — each time asserting a class of defect was closed when one path still bypassed the
+fix. The judge caught it every time; self-review did not.
+
+A fourth round is required before `gh pr create` — judge-guard enforces strict freshness and
+these commits moved HEAD.
