@@ -48,6 +48,7 @@ Every PR description covers, in this order:
 ## Before Requesting Review
 
 - **Tests pass first:** never approve or request a PR generation unless local tests pass successfully.
+- **Feature PRs update the README Roadmap:** if the PR delivers a feature or user-visible implementation, the repo README's Roadmap section reflects it in this same branch (see `writing-project-readmes`). Fixes, refactors, and chores are exempt — the roadmap tracks capabilities, not internals.
 - **Scrutinize AI-written code harder than human-written:** hallucinated dependencies, thin error handling, and correctness gaps that look right at a glance are the specific failure modes to check for. Approval fatigue is a quality risk, not an inconvenience — approving without reading is not reviewing.
 
 ## Trigger Phrases
