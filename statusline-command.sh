@@ -27,17 +27,20 @@
 # every status line update.
 
 input=$(cat)
+# Both candidate sources are external -- the JSON payload, and the name of
+# whatever directory the shell happens to be in -- so each is stripped AT ITS
+# SOURCE rather than once after the fallback. Ordering a strip around a fallback
+# is what went wrong twice: put the strip first and the fallback reintroduces an
+# unstripped value; put it last and a value that strips to empty falls through to
+# a second, unstripped assignment. Stripping each source removes the trap
+# entirely -- there is no later assignment that can reintroduce a raw value.
+#
+# $PWD cannot strip to empty: it is always absolute, so it always retains its
+# slashes. That is what guarantees $cwd is non-empty below, which in turn keeps
+# `git -C "$cwd"` from silently resolving to the process's own directory.
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
-# The $PWD fallback must be applied BEFORE the strip, not after. $PWD is just as
-# external as the JSON -- it is the name of whatever directory the shell is in --
-# and stdin without a usable cwd is routine, not exotic: {}, malformed JSON,
-# {"cwd":null} and {"workspace":{}} all land here.
-[ -z "$cwd" ] && cwd="$PWD"
 cwd="${cwd//[[:cntrl:]]/}"
-# A cwd made entirely of control bytes strips to empty, and `git -C ""` silently
-# resolves to the process's own directory -- which would name a different repo
-# than the payload asked for. Re-check after stripping, not just before.
-[ -z "$cwd" ] && cwd="$PWD"
+[ -z "$cwd" ] && cwd="${PWD//[[:cntrl:]]/}"
 
 # $'...' embeds real ESC bytes at assignment time, so the final render can use
 # printf '%s' rather than '%b'. With '%b', printf expands backslash escapes

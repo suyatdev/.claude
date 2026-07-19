@@ -164,7 +164,27 @@ future change that makes an assertion unfalsifiable fails the run.
   true without a carve-out.
 - A `cwd` consisting entirely of control bytes strips to empty, and `git -C ""` silently resolves
   to the process's own directory, so the git segment could name a different repo than the payload
-  asked for. Cosmetic, no leak. The empty check now runs again after the strip, not only before.
+  asked for.
+
+  **This was written up as "Cosmetic, no leak" — and the fix for it introduced a real leak.**
+  Adding a second `[ -z "$cwd" ] && cwd="$PWD"` *below* the strip recreated, five lines down, the
+  exact defect round 3 had found at the first fallback: an unstripped `$PWD` reaching the
+  terminal. Round 5 caught it and confirmed the parent commit `4d63b09` had been clean on that
+  input. The false "Cosmetic, no leak" phrasing also survives in `e882659`'s commit message,
+  which is already pushed and not being rewritten — this entry is the correction of record.
+
+  Fixed properly by stripping each source *at its source* and then falling back, so no later
+  assignment can reintroduce a raw value:
+
+  ```bash
+  cwd=$(echo "$input" | jq -r '...')
+  cwd="${cwd//[[:cntrl:]]/}"
+  [ -z "$cwd" ] && cwd="${PWD//[[:cntrl:]]/}"
+  ```
+
+  `$PWD` is always absolute, so it always keeps its slashes and can never strip to empty — that
+  is what guarantees `$cwd` is non-empty and keeps `git -C "$cwd"` from silently resolving to the
+  process directory.
 
 ### Extraction gotcha worth remembering
 
@@ -173,33 +193,52 @@ versions. Cause: the rtk proxy rewrites git commands there, and both `git show <
 `git cat-file -p <sha>:<path>` returned the **commit object** rather than the file blob — so
 every version was being "tested" against the same non-script text. `rtk proxy` did not bypass it.
 The check that should have caught this did not: grepping the extracted text for `cntrl` matched
-the *commit message*, not the code. `scratchpad/falsify.py` now shells out to git from Python,
-which the hook does not rewrite, and asserts each blob starts with `#!` before trusting it.
+the *commit message*, not the code. `statusline-command.falsify.py` now shells out to git from
+Python, which the hook does not rewrite, and asserts each blob starts with `#!` before trusting
+it. Its expected counts are derived from what each version *does*, with the reasoning recorded
+inline — fitting them to observed output would make the harness certify whatever it saw.
 
 ## Checkpoint
 
-Four commits on the branch:
+Six commits on the branch:
 
 1. `925c310 feat(statusline)` — script + `statusLine` wiring + docs.
 2. `c06737b chore(settings)` — model + theme preferences, split out at the user's direction.
 3. `29d6131 fix(statusline)` — route-2 control-byte stripping + the test harness.
-4. `fix(statusline)` — the `$PWD` fallback ordering, plus the four regression assertions.
+4. `4d63b09 fix(statusline)` — the `$PWD` fallback ordering, plus four regression assertions.
+5. `e882659 fix(statusline)` — `user`/`host` stripping, falsify harness committed, and the
+   empty-cwd "fix" that **introduced the round-5 regression**.
+6. `fix(statusline)` — strip at source; undoes 5's regression, adds the 20th assertion.
 
-Observability judge ran three rounds, each finding something real in the round before it:
+Observability judge ran five rounds, each finding something real in the round before it:
 
 | Round | Head | Verdict | Found |
 |---|---|---|---|
 | 1 | `f0902ed` | risk=low conf=medium | escape injection (route 1), false "pushed" claims, unverified schema |
 | 2 | `c06737b` | risk=low conf=high | route 1 fixed but route 2 open while docs claimed complete |
 | 3 | `29d6131` | risk=low conf=high | route 2 fixed but `$PWD` fallback open, again while docs claimed complete |
-| 4 | `4d63b09` | risk=low conf=high | code correct at last; stale assertion counts, `user`/`host` over-claim, uncommitted falsify harness |
+| 4 | `4d63b09` | risk=low conf=high | code correct at last; stale counts, `user`/`host` over-claim, uncommitted falsify harness |
+| 5 | `e882659` | **risk=medium conf=high** | the round-4 fix **regressed** a path its parent had closed; 11 doc mismatches incl. a false "no leak" claim |
 
-The recurring pattern, worth carrying forward: **the write-up ran ahead of the code four rounds
-running** — rounds 1-3 each asserted a class of defect was closed while one path still bypassed
-the fix; round 4's code was right but its counts still described an earlier state. The judge
-caught it every time; self-review did not. Worth noting too that the judge was right on a finding
-I twice failed to reproduce and nearly dismissed — the `$PWD` leak — because both of my repro
+The recurring pattern, worth carrying forward: **the write-up ran ahead of the code in every
+round** — rounds 1-3 each asserted a class of defect was closed while one path still bypassed the
+fix; round 4's code was right but its counts described an earlier state; round 5 found a *new*
+leak introduced by the fix meant to be the last, described in the record as "Cosmetic, no leak".
+The judge caught it every time; self-review did not. Worth noting too that the judge was right on
+a finding I twice failed to reproduce and nearly dismissed — the `$PWD` leak — because both of my repro
 attempts had their control bytes silently stripped before reaching disk.
 
-A fifth round is required before `gh pr create` — judge-guard enforces strict freshness and these
-commits moved HEAD.
+### Scope, stated plainly
+
+The user asked to "document and push" a status line they had already written. Five of six commits
+are judge-driven, and the branch carries ~280 lines of test and harness against a 113-line
+deliverable. Rounds 1-2 found a genuine defect that would otherwise have shipped and were clearly
+worth it. Rounds 3-5 chased progressively narrower variants — round 3 needed a hostile directory
+plus routine stdin, round 4's needed `PATH` control ("already game over" in the judge's own
+words), round 5's needs a payload Claude Code cannot send — and round 5's ratchet made the code
+*worse* than its parent. That is the argument for stopping, and it was taken to the user rather
+than resolved unilaterally.
+
+A sixth judge round is required before `gh pr create`: judge-guard enforces strict freshness, and
+the round-5 verdict is `risk=medium` with two failing dimensions against a HEAD that has since
+changed.

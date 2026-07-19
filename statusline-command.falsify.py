@@ -8,12 +8,13 @@ assertions covering the defect it still carries.
 
 Expected, and asserted below:
 
-    f0902ed   8/19   printf '%b'; both injection routes open, plus $PWD
-    925c310   9/19   route 1 closed; route 2 and $PWD open
-    29d6131  15/19   routes 1-2 closed; $PWD fallback still unstripped
-    4d63b09  19/19   all closed
+    f0902ed   8/20   printf '%b'; both injection routes open, plus $PWD
+    925c310   9/20   route 1 closed; route 2 and $PWD open
+    29d6131  15/20   routes 1-2 closed; $PWD fallback still unstripped
+    4d63b09  19/20   $PWD ordering fixed; all-control cwd untested and unhandled
+    e882659  19/20   regressed: a SECOND unstripped fallback added below the strip
 
-Run: python3 statusline-command.falsify.sh
+Run: python3 statusline-command.falsify.py
 
 WHY THIS IS PYTHON AND NOT SHELL: the rtk proxy rewrites git commands issued
 from the agent's Bash tool, and for `git show <sha>:<path>` it returns the
@@ -34,11 +35,23 @@ SCRIPT_NAME = "statusline-command.sh"
 SUITE_NAME = "statusline-command.test.sh"
 
 # sha -> (expected passes, what that version still gets wrong)
+# Each count is derived from what that version does, not copied from what it
+# printed -- fitting these to observed output would make the harness certify
+# whatever it happens to see.
 EXPECTED = {
-    "f0902ed": (8, "original: printf '%b', no stripping"),
-    "925c310": (9, "route-1 fix only: printf '%s', no stripping"),
+    # No stripping at all, so an all-control cwd never empties and never reaches
+    # the fallthrough: that one assertion passes here for the right reason.
+    "f0902ed": (9, "original: printf '%b', no stripping"),
+    "925c310": (10, "route-1 fix only: printf '%s', no stripping"),
+    # strip-then-fallback: an all-control cwd empties, then takes a raw $PWD.
     "29d6131": (15, "route-2 fix, but $PWD fallback unstripped"),
-    "4d63b09": (19, "$PWD ordering fixed"),
+    # fallback-then-strip: an all-control cwd empties and STAYS empty, so there
+    # is no leak. Its flaw is cosmetic only -- `git -C ""` silently resolves to
+    # the process directory -- which is why it scores full marks here.
+    "4d63b09": (20, "$PWD ordering fixed; empty-cwd handling cosmetic only"),
+    # Added a second fallback below the strip, reintroducing the raw $PWD leak
+    # that 4d63b09 had closed.
+    "e882659": (19, "regressed: second unstripped fallback below the strip"),
 }
 
 

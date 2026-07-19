@@ -150,6 +150,23 @@ for shape in '{}' 'garbage' '{"cwd":null}' '{"workspace":{}}'; do
   fi
 done
 
+# A cwd of nothing but control bytes strips to empty and falls through to $PWD.
+# That second assignment was itself unstripped for one commit, so this asserts
+# the fallthrough specifically -- the four shapes above never reach it, because
+# they are empty before the strip rather than after it.
+CTRL_ONLY='{"cwd":"\u0001\u0002\u0003"}'
+OUT="$(render_in "$HOSTILE" "$CTRL_ONLY" 2>/dev/null)"
+# Asserted on BEL alone, deliberately. The escape baseline is not usable here:
+# when cwd strips to empty, git falls back to the process directory and the git
+# segment may or may not render, moving the escape count for reasons unrelated to
+# any leak. BEL is never legitimate output, so it is unambiguous.
+bel="$(count_byte "$OUT" '\007')"
+if [ "$bel" -eq 0 ]; then
+  ok "all-control cwd falls through to a stripped \$PWD (bel=$bel)"
+else
+  bad "all-control cwd leaked via the \$PWD fallthrough (bel=$bel)"
+fi
+
 # Stripping must remove the control byte without discarding the whole field.
 OUT="$(render '{"cwd":"/tmp","model":{"display_name":"Opus\u001b[5m4.8"}}')"
 case "$OUT" in

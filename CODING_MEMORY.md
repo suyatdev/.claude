@@ -85,14 +85,17 @@ how this file and its linked files should be written (plain language, major chan
   `robbyrussell` prompt (`➜ user@host dir git:(branch) ✗`) plus dimmed model + token-count
   segments: new `statusline-command.sh`, `statusLine` entry in `settings.json`, README table
   row; model → opus[1m] and theme → dark split into their own `chore(settings)` commit.
-  Observability judge ran **4 rounds**, each finding something real in the round before: terminal-escape
-  injection via three distinct paths (`printf %b` expansion, real control bytes through jq, then the
-  unstripped `$PWD` fallback), false "pushed" claims, and an unverified `context_window` schema — all
-  fixed, schema confirmed against the official docs. `statusline-command.test.sh`: 19 assertions,
-  validated by falsification against all 4 historical script versions (8/19, 9/19, 15/19, 19/19) rather
-  than by passing alone; `statusline-command.falsify.py` makes that reproducible. Recurring lesson: the
-  write-up ran ahead of the code three rounds running. No ADR (presentation-only — misses all three ADR
-  triggers).
+  Observability judge ran **5 rounds**, each finding something real in the round before: terminal-escape
+  injection via four distinct paths (`printf %b` expansion, real control bytes through jq, the unstripped
+  `$PWD` fallback, then a **second** unstripped fallback introduced by the fix for the third), false
+  "pushed" claims, and an unverified `context_window` schema — all fixed, schema confirmed against the
+  official docs. `statusline-command.test.sh`: 20 assertions, validated by falsification against all 5
+  historical versions (9/20, 10/20, 15/20, 20/20, 19/20) rather than by passing alone;
+  `statusline-command.falsify.py` makes that reproducible, with each expected count derived from what the
+  version does rather than fitted to its output. Recurring lesson: **the write-up ran ahead of the code in
+  every round**, including a "Cosmetic, no leak" claim about a path that did leak. Scope overran badly —
+  5 of 6 commits are judge-driven; taken to the user rather than resolved unilaterally. No ADR
+  (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
