@@ -52,4 +52,7 @@ construction, no false positives on markdown links/checkboxes. Deterministic re-
   as follow-up push, which is docs-only and post-gate by design).
 - Post-merge reconcile 2026-07-19: main fast-forwarded to d242e69, branch deleted local + remote,
   both judge verdicts (rounds 1-2) backfilled outcome=clean.
-- Follow-up still open: dogfood the skill on the .claude repo itself (no README yet).
+- Follow-up closed 2026-07-19: dogfood check found `.claude` already has a README.md (present
+  since the initial commit — hand-authored, personal-voice, ASCII-art). Per the skill's own
+  step 1 (existing README → leave alone), no action taken. The "no README yet" note in PR #17's
+  memory was stale, not verified against the repo at write time.

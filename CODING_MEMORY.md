@@ -92,25 +92,23 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **Dogfood `writing-project-readmes` on the `.claude` repo itself** (it has no README) —
-   recorded follow-up from PR #17.
-2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
+1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
    compliance-judge verdicts' own `outcome` fields once those specs implement (calibration
    ledger, see running-the-compliance-judge SKILL.md).
-3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
+2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
    Memsearch-nudge SessionStart line: **VERIFIED live 2026-07-18** (fired post-/clear, 2332 chunks).
-4. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
+3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
-5. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
+4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
    `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
-6. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
+5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
    clean). See `coding-memory/observability-judge/verdicts.jsonl`.
