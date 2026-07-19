@@ -48,7 +48,7 @@ Manually exercised against five stdin shapes, all exit 0:
 5. Directory named `aa\nbb` (literal backslash-n) → stays on one line.
 
 These five were the initial manual pass. They are now superseded by the committed
-`statusline-command.test.sh` (15 assertions), which additionally covers the *real*-byte
+`statusline-command.test.sh` (19 assertions), which additionally covers the *real*-byte
 encoding that cases 4-5 structurally cannot reach — see the harness section below.
 
 The observability judge additionally ran the script against detached HEAD, a fresh repo with no
@@ -151,6 +151,21 @@ CR; the git-segment assertion silently depended on the script living inside a re
 builds a throwaway repo via `mktemp -d`; and `render()` swallowed stderr, which would have hidden
 a jq parse error and let a rejected payload's assertion pass vacuously.
 
+`statusline-command.falsify.py` — the falsification runner itself, committed rather than left in
+a scratchpad, since round 4 pointed out that the most valuable artifact of the exercise was being
+cited in docs while being unreproducible. It asserts the expected pass count per version, so a
+future change that makes an assertion unfalsifiable fails the run.
+
+### Two round-4 leftovers, both closed
+
+- `user` and `host` (from `whoami`/`hostname -s`) were the only unstripped values, while the
+  script comment claimed *every* value was stripped. Exploiting them needs control of the
+  hostname or `PATH`, which is already game over — but they are stripped now, so the comment is
+  true without a carve-out.
+- A `cwd` consisting entirely of control bytes strips to empty, and `git -C ""` silently resolves
+  to the process's own directory, so the git segment could name a different repo than the payload
+  asked for. Cosmetic, no leak. The empty check now runs again after the strip, not only before.
+
 ### Extraction gotcha worth remembering
 
 Running the falsification from the Bash tool gave a bogus *identical* result for all three
@@ -177,10 +192,14 @@ Observability judge ran three rounds, each finding something real in the round b
 | 1 | `f0902ed` | risk=low conf=medium | escape injection (route 1), false "pushed" claims, unverified schema |
 | 2 | `c06737b` | risk=low conf=high | route 1 fixed but route 2 open while docs claimed complete |
 | 3 | `29d6131` | risk=low conf=high | route 2 fixed but `$PWD` fallback open, again while docs claimed complete |
+| 4 | `4d63b09` | risk=low conf=high | code correct at last; stale assertion counts, `user`/`host` over-claim, uncommitted falsify harness |
 
-The recurring pattern, worth carrying forward: **the write-up ran ahead of the code three rounds
-running** — each time asserting a class of defect was closed when one path still bypassed the
-fix. The judge caught it every time; self-review did not.
+The recurring pattern, worth carrying forward: **the write-up ran ahead of the code four rounds
+running** — rounds 1-3 each asserted a class of defect was closed while one path still bypassed
+the fix; round 4's code was right but its counts still described an earlier state. The judge
+caught it every time; self-review did not. Worth noting too that the judge was right on a finding
+I twice failed to reproduce and nearly dismissed — the `$PWD` leak — because both of my repro
+attempts had their control bytes silently stripped before reaching disk.
 
-A fourth round is required before `gh pr create` — judge-guard enforces strict freshness and
-these commits moved HEAD.
+A fifth round is required before `gh pr create` — judge-guard enforces strict freshness and these
+commits moved HEAD.

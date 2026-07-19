@@ -34,6 +34,10 @@ cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 # {"cwd":null} and {"workspace":{}} all land here.
 [ -z "$cwd" ] && cwd="$PWD"
 cwd="${cwd//[[:cntrl:]]/}"
+# A cwd made entirely of control bytes strips to empty, and `git -C ""` silently
+# resolves to the process's own directory -- which would name a different repo
+# than the payload asked for. Re-check after stripping, not just before.
+[ -z "$cwd" ] && cwd="$PWD"
 
 # $'...' embeds real ESC bytes at assignment time, so the final render can use
 # printf '%s' rather than '%b'. With '%b', printf expands backslash escapes
@@ -51,8 +55,14 @@ RESET=$'\033[0m'
 ARROW=$'\xe2\x9e\x9c'
 
 dir=$(basename "$cwd")
+# whoami/hostname are far less exposed than the JSON -- reaching them means
+# controlling the hostname or PATH, at which point the terminal is the least of
+# it. Stripped anyway so the claim above holds for *every* value without a
+# carve-out a future reader has to re-derive.
 user=$(whoami)
+user="${user//[[:cntrl:]]/}"
 host=$(hostname -s)
+host="${host//[[:cntrl:]]/}"
 
 branch=""
 dirty=""
