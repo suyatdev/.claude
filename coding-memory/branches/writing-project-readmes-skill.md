@@ -47,8 +47,9 @@ construction, no false positives on markdown links/checkboxes. Deterministic re-
 ## Status
 
 - Judge round 2 @ 0d23feb: risk=low confidence=high, nothing blocking.
-- **PR #17 OPEN**: https://github.com/suyatdev/.claude/pull/17 (created 2026-07-19; verdict
-  matched HEAD at create time; verdict-store audit trail committed as follow-up push, which
-  is docs-only and post-gate by design).
-- Follow-up: dogfood the skill on the .claude repo itself (no README yet); backfill this
-  verdict's outcome when the PR's real result is known.
+- **PR #17 MERGED 2026-07-19** (merge commit d242e69): https://github.com/suyatdev/.claude/pull/17
+  (created 2026-07-19; verdict matched HEAD at create time; verdict-store audit trail committed
+  as follow-up push, which is docs-only and post-gate by design).
+- Post-merge reconcile 2026-07-19: main fast-forwarded to d242e69, branch deleted local + remote,
+  both judge verdicts (rounds 1-2) backfilled outcome=clean.
+- Follow-up still open: dogfood the skill on the .claude repo itself (no README yet).

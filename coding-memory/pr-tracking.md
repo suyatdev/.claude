@@ -106,15 +106,15 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - judge verdict: implementation, risk=low confidence=high, head 85d8982, outcome=clean (backfilled 2026-07-18).
 - detail: coding-memory/branches/compliance-judge.md
 
-### feature/writing-project-readmes-skill (OPEN 2026-07-19)
+### feature/writing-project-readmes-skill (MERGED 2026-07-19; branch DELETED local + remote)
 - repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/17 · status: OPEN (created 2026-07-19)
+- PR: https://github.com/suyatdev/.claude/pull/17 · status: MERGED 2026-07-19T06:17Z (merge commit d242e69)
 - opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
 - scope: writing-project-readmes skill (house README standard from user-supplied template +
   Roadmap upkeep as features land) + trigger wiring (setting-up-a-new-project step 5,
   preparing-pull-requests roadmap bullet, CLAUDE.md catalog). TDD: RED/GREEN subagent runs +
   8/8 routing; placeholder grep 25-template/0-generated. No ADR (convention, precedent PR #12/#15).
-- judge verdict: implementation, risk=low confidence=high, head 0d23feb, outcome=null (backfill
-  when merged). Round 1 @ 3c5a826 (low/medium) found the placeholder-grep hole → fixed 0d23feb.
+- judge verdict: implementation, risk=low confidence=high, head 0d23feb, outcome=clean (backfilled
+  2026-07-19, both rounds). Round 1 @ 3c5a826 (low/medium) found the placeholder-grep hole → fixed 0d23feb.
 - follow-up recorded: dogfood the skill on the .claude repo itself (it has no README).
 - detail: coding-memory/branches/writing-project-readmes-skill.md

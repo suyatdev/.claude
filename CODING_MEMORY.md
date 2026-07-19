@@ -7,11 +7,13 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-19 (post-/clear continuation)
-- last_active_branch: main (synced to origin/main @ a4097c9)
-- current work: **writing-project-readmes skill — PR #17 OPEN** (judge round 2 @ 0d23feb:
-  risk=low conf=high; round-1 grep hole fixed). Awaiting review/merge; then backfill outcome
-  + delete branch. Detail: `coding-memory/branches/writing-project-readmes-skill.md`,
+- last_active_branch: main (synced to origin/main @ d242e69)
+- current work: **PR #17 (writing-project-readmes skill) MERGED 2026-07-19** — post-merge
+  reconcile done: main fast-forwarded, branch deleted local + remote, both judge verdicts
+  backfilled outcome=clean. Detail: `coding-memory/branches/writing-project-readmes-skill.md`,
   `coding-memory/pr-tracking.md`.
+- untracked `chrome/chrome-native-host` in working tree: Claude Code auto-generated Chrome
+  native-messaging wrapper (machine-local tooling) — not repo work, leave untracked.
 - Model gate: user chose **Opus 4.8** for this work (session was on Fable 5; switch is
   user-side via /model).
 - `settings.json` working-tree mod (model default → opus[1m]) remains pre-existing/untouched —
@@ -67,6 +69,13 @@ how this file and its linked files should be written (plain language, major chan
   (merge commit 4c2abec); branch deleted. Judge (impl, head 85d8982): risk=low conf=high,
   outcome=clean. Post-merge live-verify of real dispatch → real store: confirmed.
   Detail: `coding-memory/branches/compliance-judge.md`.
+- feature/writing-project-readmes-skill (2026-07-19) — `writing-project-readmes` skill: house
+  README standard from the user-supplied template (check-then-create, real facts only, `[TODO:]`
+  greppable placeholders) + Roadmap upkeep as features land + trigger wiring (setting-up-a-new-
+  project step 5, preparing-pull-requests bullet, CLAUDE.md catalog). TDD RED/GREEN + 8/8 routing.
+  **PR #17 MERGED 2026-07-19** (merge commit d242e69); branch deleted. Judge rounds 1-2
+  (3c5a826 low/medium → grep hole fixed → 0d23feb low/high), outcome=clean (backfilled).
+  Detail: `coding-memory/branches/writing-project-readmes-skill.md`.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
@@ -83,23 +92,25 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
+1. **Dogfood `writing-project-readmes` on the `.claude` repo itself** (it has no README) —
+   recorded follow-up from PR #17.
+2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
    compliance-judge verdicts' own `outcome` fields once those specs implement (calibration
    ledger, see running-the-compliance-judge SKILL.md).
-2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
+3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
    Memsearch-nudge SessionStart line: **VERIFIED live 2026-07-18** (fired post-/clear, 2332 chunks).
-3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
+4. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
-4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
+5. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
    `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
    `designing-agentic-architecture` / `writing-specs`.
-5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
+6. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
    clean). See `coding-memory/observability-judge/verdicts.jsonl`.
@@ -115,3 +126,7 @@ gate/catalog + verdict store; merge commit 82d7b9b). Judge + gate now live and g
 (verifying-subagent-commits skill — controller-side subagent-checkout verification gate; merge
 commit 417e8e7) + PR #16 (compliance judge — agent + skill + gate stub + catalog + store + ADR 0003;
 merge commit 4c2abec). All three feature branches deleted, local + remote. No orphans outstanding.
+
+**Merged 2026-07-19:** `.claude` PR #17 (writing-project-readmes skill + trigger wiring; merge
+commit d242e69). Branch deleted local + remote; judge verdicts backfilled outcome=clean.
+No orphans outstanding.
