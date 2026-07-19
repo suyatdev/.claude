@@ -86,9 +86,17 @@ one, which is the same reason the hook was correctly rejected.
 structure and no diagram, move the pointer out of the index-description bullet and into the
 save-time procedure section. This log is itself the first data point — it carries a diagram.
 
-## Deferred
+## ADR
 
-The judge noted a triage that explicitly rejects both a hook and a gate looks like a class-(a)
-structural decision under `managing-session-memory`, and so earns its own ADR. Left out
-deliberately: adopting `docs/decisions/` in this repo is the other, still-open half of item 4 and is
-its own change.
+`docs/decisions/0004-diagramming-reachability-not-enforcement.md` — written at the user's direction
+after the judge flagged that a triage explicitly rejecting both a hook and a gate is a class-(a)
+structural decision. Carries a Mermaid **mindmap** of the four tiers and why each was rejected
+(complementing the flowchart above, per the skill's "tradeoff analysis → mindmap" guidance).
+
+The ADR records one thing this log doesn't: the **escalation path is a gate stub, never the hook.**
+The hook's rejection is structural — a script cannot judge whether a diagram was warranted, and that
+does not change with more evidence. The gate's rejection is a cost/benefit call that new evidence
+could legitimately overturn.
+
+`docs/decisions/` already held ADRs 0001-0003, so no directory adoption was needed. The other half of
+open item 4 — retiring `coding-memory/decisions.md` as the older equivalent — stays open.
