@@ -74,7 +74,8 @@ Whichever tier: an automated reviewer is a *first pass* — good at bugs, style 
 2. Fill in every section with the user's actual answers, including the `Decided on:` date and the `Revisit when:` trigger. An unfilled section is a question that was skipped, and skipping is the thing this skill exists to prevent.
 3. Create the repo's own `CODING_MEMORY.md` as a lean index (active session, PR pointers, next steps — see `managing-session-memory`) with a `coding-memory/` directory alongside it for history, from the first commit. Add a pointer line there for this setup register so future sessions know it has run and where the answers live.
 4. Scaffold `docs/decisions/` and copy `assets/adr-template.md` into it as `0000-adr-template.md`. Direction-pivoting and business-logic decisions get a numbered ADR here from the first one onward (see `managing-session-memory`), so the directory and its template exist before the first decision is made, not scrambled together after.
-5. Commit these files with the repo's setup work. They are project artifacts, not scratch notes.
+5. Check for a `README.md` at the repo root; if missing, create one from the house template via `writing-project-readmes`, seeding its Roadmap from what this register just decided. Every project ships with one — a repo without a README has no front door.
+6. Commit these files with the repo's setup work. They are project artifacts, not scratch notes.
 
 Then proceed to the actual work.
 

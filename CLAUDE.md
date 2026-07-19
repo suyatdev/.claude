@@ -31,6 +31,7 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `managing-session-memory` — restoring/saving CODING_MEMORY.md, and the model-switch/freshness/token-limit gates.
 - `preparing-pull-requests` — branch naming, commits, PR descriptions, PR memory tracking.
 - `writing-secure-code` — injection/XSS/secrets/IDOR guardrails, prompt sanitization.
+- `writing-project-readmes` — a repo missing its README, creating one from the house template, or updating the Roadmap when a feature lands.
 - `allocating-local-ports` — checking/updating PORTS.md before a new local port or service.
 - `triaging-new-instructions` — classifying a proposed new rule/hook/skill before writing it anywhere.
 - `verifying-subagent-commits` — independently confirming a subagent's reported commit actually landed in the right checkout, before trusting it.
