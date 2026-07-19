@@ -2,7 +2,7 @@
   "permissions": {
     "defaultMode": "acceptEdits"
   },
-  "model": "claude-fable-5[1m]",
+  "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -52,6 +52,10 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$HOME/.claude/statusline-command.sh\""
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
@@ -62,6 +66,7 @@
   "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
   "editorMode": "normal",
   "preferredNotifChannel": "iterm2",
   "remoteControlAtStartup": false,
