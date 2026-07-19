@@ -12,8 +12,23 @@
 # separator -- is silently omitted when its field is absent or null (e.g.
 # before the first API response of a session).
 
+# Every value below originates outside this script, so each is stripped of C0
+# control bytes and DEL before it reaches the terminal. Two distinct routes get
+# closed here; the first alone is not enough:
+#   1. printf '%b' would expand the literal seven-character text \x1b into a real
+#      escape. Addressed by the $'...' colours plus printf '%s' below.
+#   2. JSON can carry a *real* control byte directly, written as a unicode
+#      escape. jq -r decodes that into an actual byte, which printf '%s' then
+#      passes through untouched -- enough to set a blink attribute, rewrite the
+#      terminal title with an OSC sequence, or split the status line with a
+#      newline. Only stripping closes this second route.
+# ${v//[[:cntrl:]]/} is pure bash (works on macOS's bash 3.2), so each strip is
+# an inline expansion rather than another fork, in a script that re-renders on
+# every status line update.
+
 input=$(cat)
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
+cwd="${cwd//[[:cntrl:]]/}"
 [ -z "$cwd" ] && cwd="$PWD"
 
 # $'...' embeds real ESC bytes at assignment time, so the final render can use
@@ -42,6 +57,9 @@ dirty=""
 if git -C "$cwd" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   branch=$(git -C "$cwd" --no-optional-locks symbolic-ref --short HEAD 2>/dev/null)
   [ -z "$branch" ] && branch=$(git -C "$cwd" --no-optional-locks rev-parse --short HEAD 2>/dev/null)
+  # git rejects control characters in ref names, so this is belt-and-braces --
+  # but it costs one inline expansion and removes the need to trust that.
+  branch="${branch//[[:cntrl:]]/}"
   if [ -n "$(git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)" ]; then
     dirty=" ${RED}✗${RESET}"
   fi
@@ -54,7 +72,9 @@ fi
 
 # --- Claude-specific segments (dim/grey, secondary to the git prompt) ---
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
+model_name="${model_name//[[:cntrl:]]/}"
 tokens_used=$(echo "$input" | jq -r '.context_window.total_input_tokens // empty')
+tokens_used="${tokens_used//[[:cntrl:]]/}"
 
 extras=()
 [ -n "$model_name" ] && extras+=("$model_name")

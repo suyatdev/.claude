@@ -9,7 +9,8 @@ how this file and its linked files should be written (plain language, major chan
 - session_started_at: 2026-07-19 (post-/clear continuation)
 - last_active_branch: feature/statusline-command
 - current work: **status line config** — user had already written `statusline-command.sh` and
-  wired it into `settings.json`; this session documented, committed and pushed it.
+  wired it into `settings.json`; this session documented and committed it on
+  `feature/statusline-command`. **Not yet pushed; no PR open.**
   Detail: `coding-memory/branches/statusline-command.md`.
 - untracked `chrome/chrome-native-host` in working tree: Claude Code auto-generated Chrome
   native-messaging wrapper (machine-local tooling) — not repo work, leave untracked. Note it
@@ -82,9 +83,13 @@ how this file and its linked files should be written (plain language, major chan
   Detail: `coding-memory/branches/writing-project-readmes-skill.md`.
 - feature/statusline-command (2026-07-19) — Claude Code status line reproducing the oh-my-zsh
   `robbyrussell` prompt (`➜ user@host dir git:(branch) ✗`) plus dimmed model + token-count
-  segments: new `statusline-command.sh`, `statusLine` entry in `settings.json` (which also
-  carries model → opus[1m] and theme → dark), README table row. Verified against 3 stdin
-  shapes. No ADR (presentation-only — misses all three ADR triggers).
+  segments: new `statusline-command.sh`, `statusLine` entry in `settings.json`, README table
+  row; model → opus[1m] and theme → dark split into their own `chore(settings)` commit.
+  Observability judge rounds 1-2 caught a terminal-escape injection (both encodings), false
+  "pushed" claims, and an unverified `context_window` schema — all fixed, schema confirmed
+  against the official docs. `statusline-command.test.sh`: 15 assertions, validated by
+  falsification against both pre-fix script versions (8/15 and 9/15) rather than by passing
+  alone. No ADR (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
