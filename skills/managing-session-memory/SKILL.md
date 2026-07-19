@@ -15,6 +15,7 @@ An agent's context resets between sessions; a repo's `CODING_MEMORY.md` is the o
 - **Pre-compaction save:** if the conversation is growing long, or before a `/compact`, update it first — compacting with unsaved state is how context gets lost.
 - **Structure:** each update concisely covers a session summary, key decisions/conventions, and exact next steps.
 - **Keep it an index, ≤200 lines:** active session, repo/PR pointers, next steps only. Move PR history, session logs, decisions, branch logs, and brainstorm write-ups into `coding-memory/<topic>.md` files, linked by path — never inlined back into the index. An index that re-accumulates history is one that stops getting read in full.
+- **Diagram the relocated detail, not the index:** when a `coding-memory/` branch log, decision entry, or brainstorm write-up describes something with structure — a component topology, a call sequence, a state machine, a tradeoff space — embed a rendered Mermaid diagram in that file; see `diagramming-technical-docs`. The index itself stays plain pointers: a diagram inlined into `CODING_MEMORY.md` spends the ≤200-line budget on something the linked file should be carrying.
 - **Plain-language summaries:** session summaries, PR descriptions, and any diff/architecture/error output shown in chat should be major-changes-only, in language a non-engineer or junior developer can follow. Skip routine or local steps; cover only what affects other files, systems, or components.
 
 ## Session Startup

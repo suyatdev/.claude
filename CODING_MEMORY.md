@@ -7,10 +7,16 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-19 (post-/clear continuation)
-- last_active_branch: feature/statusline-command
-- current work: **status line config — PR #18 OPEN** (7 commits, pushed
-  2026-07-19). User had already written `statusline-command.sh` and wired it into
-  `settings.json`; this session documented, hardened and shipped it.
+- last_active_branch: docs/diagramming-pointers (branched off `origin/main` after #18 merged)
+- current work: **diagramming reachability — `docs/diagramming-pointers`**. The
+  `diagramming-technical-docs` standard was reachable only from the ADR bullet in
+  `managing-session-memory`, so it never self-triggered while writing `coding-memory/`
+  branch logs, specs, or agent-architecture designs. Added one conditional pointer to each
+  of those three authoring paths. Triaged as category 4 (extend an existing skill) —
+  explicitly **not** a hook (a script can detect whether a mermaid block exists, not whether
+  one is warranted) and **not** a gate (a missing diagram is recoverable later, so it fails
+  the never-miss bar the other nine gates share).
+- **status line config — PR #18 MERGED** (2026-07-19, merge commit b6362ff).
   Detail: `coding-memory/branches/statusline-command.md`, `coding-memory/pr-tracking.md`.
 - **Orca hooks in `settings.json` deliberately uncommitted** (~112 lines, written by an external
   process mid-session; third-party, machine-local, absolute paths). Left dirty at the user's
@@ -132,8 +138,10 @@ how this file and its linked files should be written (plain language, major chan
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
 4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
-   `coding-memory/decisions.md` still serves as the older equivalent); add diagramming pointers to
-   `designing-agentic-architecture` / `writing-specs`.
+   `coding-memory/decisions.md` still serves as the older equivalent). ~~diagramming pointers~~
+   **DONE 2026-07-19** on `docs/diagramming-pointers` — and wider than this item scoped it: the
+   memory-authoring path (`managing-session-memory`) was the actual gap, not just the two skills
+   named here.
 5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
