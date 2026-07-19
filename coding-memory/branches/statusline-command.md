@@ -48,7 +48,7 @@ Manually exercised against five stdin shapes, all exit 0:
 5. Directory named `aa\nbb` (literal backslash-n) → stays on one line.
 
 These five were the initial manual pass. They are now superseded by the committed
-`statusline-command.test.sh` (19 assertions), which additionally covers the *real*-byte
+`statusline-command.test.sh` (20 assertions), which additionally covers the *real*-byte
 encoding that cases 4-5 structurally cannot reach — see the harness section below.
 
 The observability judge additionally ran the script against detached HEAD, a fresh repo with no
@@ -129,7 +129,7 @@ is invisible, a successful one reads as a rendering quirk), and the defect regre
 session*, fixed by one route while still open by another. Put back to the user with that new
 information; they opted to commit it.
 
-`statusline-command.test.sh` — 19 assertions in the style of `hooks/memsearch-nudge.test.sh`,
+`statusline-command.test.sh` — 20 assertions in the style of `hooks/memsearch-nudge.test.sh`,
 split into a rendering group and a control-byte injection group.
 
 **Validated by falsification, not just by passing.** A test that cannot fail proves nothing, so
@@ -137,10 +137,19 @@ the current suite is run against every historical state of the script:
 
 | Script version | Result | Reads as |
 |---|---|---|
-| `f0902ed` (original, `printf %b`) | 8/19 | both injection routes open, plus `$PWD` |
-| `925c310` (route-1 fix only) | 9/19 | route 1 closed, route 2 and `$PWD` open |
-| `29d6131` (route-2 fix) | 15/19 | both routes closed, `$PWD` fallback still open |
-| current | 19/19 | closed |
+| `f0902ed` (original, `printf %b`) | 9/20 | both injection routes open, plus `$PWD` |
+| `925c310` (route-1 fix only) | 10/20 | route 1 closed, route 2 and `$PWD` open |
+| `29d6131` (route-2 fix) | 15/20 | both routes closed, `$PWD` fallback still open |
+| `4d63b09` (`$PWD` ordering) | 20/20 | no leak; empty-cwd flaw cosmetic only |
+| `e882659` (regression) | 19/20 | second unstripped fallback below the strip |
+| current | 20/20 | closed |
+
+The two oldest versions score *above* `29d6131` on the 20th assertion, and correctly so: with no
+stripping at all, `cwd` never empties, so the fallthrough that assertion targets is never reached.
+
+Known untested: unstripping `user` or `host` still scores 20/20, so those two strips have no
+coverage. Reaching them requires control of `PATH` or the hostname, which is already game over —
+recorded rather than fixed.
 
 Each row fails exactly the assertions covering the defect it still carries, and every injection
 assertion fails against at least one version — so none of them pass vacuously.

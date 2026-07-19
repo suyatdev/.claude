@@ -8,11 +8,14 @@ assertions covering the defect it still carries.
 
 Expected, and asserted below:
 
-    f0902ed   8/20   printf '%b'; both injection routes open, plus $PWD
-    925c310   9/20   route 1 closed; route 2 and $PWD open
+    f0902ed   9/20   printf '%b'; both injection routes open, plus $PWD
+    925c310  10/20   route 1 closed; route 2 and $PWD open
     29d6131  15/20   routes 1-2 closed; $PWD fallback still unstripped
-    4d63b09  19/20   $PWD ordering fixed; all-control cwd untested and unhandled
+    4d63b09  20/20   $PWD ordering fixed; empty-cwd handling cosmetic only
     e882659  19/20   regressed: a SECOND unstripped fallback added below the strip
+
+These are the single source of truth alongside EXPECTED below; if the two ever
+disagree, EXPECTED is what runs.
 
 Run: python3 statusline-command.falsify.py
 
