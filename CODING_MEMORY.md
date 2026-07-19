@@ -6,14 +6,15 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop (VSCode)
-- session_started_at: 2026-07-18 (post-/clear continuation)
-- last_active_branch: main (synced to origin/main @ 4c2abec, the PR #16 merge commit)
-- current work: **compliance-judge PR #16 MERGED + post-merge reconcile DONE** — live-verify of
-  a real `compliance-judge` dispatch in a fresh session passed (writes to real store confirmed,
-  test artifacts removed), observability outcome backfilled (85d8982 → clean), parallel
-  session's real verdicts committed per user call, branch deleted local + remote.
-  Detail: `coding-memory/branches/compliance-judge.md`.
-- Model gate: post-merge housekeeping on **Fable 5** (user's call at this session's checkpoint).
+- session_started_at: 2026-07-19 (post-/clear continuation)
+- last_active_branch: main (synced to origin/main @ a4097c9)
+- current work: **new skill: writing-project-readmes** — user-requested README standard
+  (template-based creation when missing + Roadmap upkeep as features land), triggering both
+  on demand and via the new-project setup gate. Triage + decisions:
+  `coding-memory/brainstorms/writing-project-readmes.md`. Next: branch
+  feature/writing-project-readmes-skill, RED baseline test, author, verify, judge, PR.
+- Model gate: user chose **Opus 4.8** for this work (session was on Fable 5; switch is
+  user-side via /model).
 - `settings.json` working-tree mod (model default → opus[1m]) remains pre-existing/untouched —
   not mine to commit.
 
