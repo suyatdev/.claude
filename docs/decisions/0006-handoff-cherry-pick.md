@@ -94,9 +94,11 @@ as authority when they disagree with committed memory.
   file-creation race). Documented in the script's provenance header. Verified live:
   the tracker appended real entries the moment the marker existed.
 - **doc-guard loses only PreCompact.** Its commit-blocking (PreToolUse) and
-  session-start surfacing remain. Pre-compact warnings about uncommitted work now
-  ride on the handoff trio — which uses AskUserQuestion in task/bug modes and may
-  stall an unattended autocompaction. Accepted knowingly.
+  session-start surfacing remain. The handoff trio saves conversation/session state
+  at PreCompact but does **not** check `git status` — the pre-compact warning about
+  uncommitted work is gone, not transferred; the remaining backstop is doc-guard's
+  next-session-start surfacing. The trio also uses AskUserQuestion in task/bug modes
+  and may stall an unattended autocompaction. Both accepted knowingly.
 - **Per-prompt injection cost accepted** (pick: Both) despite the Context Discipline
   tension — revisit if it measurably crowds sessions.
 - **Every project repo needs `.gitignore` entries** for the handoff state files
