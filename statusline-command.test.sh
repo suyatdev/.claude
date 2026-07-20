@@ -50,7 +50,9 @@ STATE_HOME="$(mktemp -d)" # stands in for $HOME so the sigma cases cannot read o
                           # corrupt the real per-session counters under ~/.claude
 RACE_HOME="$(mktemp -d)"  # separate again: the concurrency case writes from many
                           # processes at once and would perturb the serial cases
-trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME"' EXIT
+LOCK_HOME="$(mktemp -d)"  # lock-recovery cases, which plant hand-built lock dirs
+JSON_HOME="$(mktemp -d)"  # legacy-state-format migration case
+trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME"' EXIT
 
 BASE_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 4.8"},"context_window":{"total_input_tokens":100}}'
 BASE_OUT="$(render "$BASE_PAYLOAD")"
@@ -209,26 +211,110 @@ esac
 # The atomic `mv` in the script prevents a torn READ and does nothing whatsoever
 # for a lost UPDATE; conflating the two is what left this open.
 #
-# Asserted against the state file rather than a rendered line: the render shows
-# whatever the last writer stored, which is exactly the value under suspicion.
-# 20 concurrent writers each contribute a distinct amount, so any lost update
+# 20 concurrent writers each contribute a distinct amount, so a lost update
 # leaves a total that is both wrong and specific about how much went missing.
+#
+# The total is read back through a final RENDER rather than by parsing the state
+# file, so this asserts the observable behaviour and stays valid across changes
+# to how the total is stored. That final render carries a signature no writer
+# used and a zero contribution: it is a new call, so it is not skipped as a
+# duplicate, and it adds nothing to the figure it is reporting.
+#
+# Amounts are chosen to keep the total under 1000, because at or above that the
+# display switches to k-form ("20.4k") and would round away the exact value the
+# assertion depends on.
 race_render() { printf '%s' "$1" | HOME="$RACE_HOME" bash "$SCRIPT" >/dev/null 2>&1; }
 
-race_render "$(usage_payload race 200 0 0)"
-RACE_EXPECTED=200
+race_render "$(usage_payload race 100 0 0)"
+RACE_EXPECTED=100
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-  race_render "$(usage_payload race $((1000 + i)) 0 0)" &
-  RACE_EXPECTED=$((RACE_EXPECTED + 1000 + i))
+  race_render "$(usage_payload race $((10 + i)) 0 0)" &
+  RACE_EXPECTED=$((RACE_EXPECTED + 10 + i))
 done
 wait
-RACE_FILE="$RACE_HOME/.claude/statusline-state/session-race.json"
-RACE_ACTUAL="$(jq -r '.cum_tokens // 0' "$RACE_FILE" 2>/dev/null)"
-if [ "$RACE_ACTUAL" = "$RACE_EXPECTED" ]; then
-  ok "concurrent renders do not lose sigma updates (total $RACE_ACTUAL)"
+OUT="$(printf '%s' "$(usage_payload race 0 0 0)" | HOME="$RACE_HOME" bash "$SCRIPT")"
+case "$OUT" in
+  *"${SIGMA} ${RACE_EXPECTED}"*) ok "concurrent renders do not lose sigma updates (total $RACE_EXPECTED)" ;;
+  *) bad "sigma lost updates under concurrency: expected $RACE_EXPECTED in: $OUT" ;;
+esac
+
+# --- Stale-lock recovery ------------------------------------------------------
+# White-box by necessity: these plant lock directories by hand, so they encode
+# the lock's name and layout. The coupling is worth it. Both bugs found in the
+# lock were invisible to every black-box assertion here -- a PID check that was
+# dead code because `read` reports EOF on a file with no trailing newline, and a
+# give-up ceiling more than twice its intended length because the age check
+# forked per attempt. Hand-probing found them; only the suite keeps them found.
+LOCK_STATE_DIR="$LOCK_HOME/.claude/statusline-state"
+mkdir -p "$LOCK_STATE_DIR"
+LOCK_DIR="$LOCK_STATE_DIR/.session-lockcase.lock"
+lock_render() { printf '%s' "$(usage_payload lockcase "$1" 0 0)" | HOME="$LOCK_HOME" bash "$SCRIPT"; }
+assert_sigma() { # $1 desc, $2 output, $3 expected total
+  case "$2" in
+    *"${SIGMA} $3"*) ok "$1" ;;
+    *) bad "$1 -- expected sigma $3 in: $2" ;;
+  esac
+}
+
+# A recently-reaped PID is used rather than a large literal: it is genuinely
+# dead, whereas a number like 999999 only happens to exceed the default pid_max.
+( exit 0 ) & DEAD_PID=$!
+wait "$DEAD_PID" 2>/dev/null
+
+# Both newline forms are asserted, and the UNTERMINATED one is the case that
+# matters. `read` reports EOF (non-zero) on a final line with no trailing
+# newline even though it assigned the value, so a reader that treats that status
+# as failure silently discards a perfectly good PID -- which is exactly how the
+# PID check came to be dead code. A test that only ever plants a newline-
+# terminated file cannot see that bug: it was written this way first, and the
+# mutation that restores the bug passed 43/43 against it.
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"; printf '%s' "$DEAD_PID" >"$LOCK_DIR/pid"
+assert_sigma "dead PID with NO trailing newline is still read and the lock cleared" "$(lock_render 50)" 50
+
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"; printf '%s\n' "$DEAD_PID" >"$LOCK_DIR/pid"
+assert_sigma "dead PID with a trailing newline is read and the lock cleared" "$(lock_render 55)" 105
+
+# A pid-less lock is the normal, microseconds-long window of a healthy holder
+# between mkdir and the pid write. Breaking it on sight would reintroduce the
+# lost update, so a young one must be waited out and the update skipped.
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"
+assert_sigma "young pid-less lock is left alone and the update is skipped" "$(lock_render 60)" 105
+
+# Same lock, now aged past the staleness threshold: its holder cannot be alive.
+# This also demonstrates that a skip is DEFERRAL, not loss -- the signature from
+# the skipped render above was never stored, so this render still counts it.
+touch -t 202001010000 "$LOCK_DIR"
+assert_sigma "aged pid-less lock is broken and the skipped usage is retried" "$(lock_render 60)" 165
+
+# A live holder must never be evicted, however long it holds.
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"; printf '%s\n' "$$" >"$LOCK_DIR/pid"
+assert_sigma "lock held by a live PID is never broken" "$(lock_render 70)" 165
+
+# A coarse guard against a spin that never terminates or grows without bound.
+# It deliberately does NOT claim to catch the per-attempt-fork regression: that
+# bug measured ~455ms against an intended ~390ms ceiling, and no portable
+# timing assertion separates those two reliably. The comment on LOCK_ATTEMPTS
+# in the script is what carries that constraint.
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"
+LOCK_T0="$(date '+%s')"
+lock_render 80 >/dev/null 2>&1
+LOCK_ELAPSED=$(( $(date '+%s') - LOCK_T0 ))
+if [ "$LOCK_ELAPSED" -le 2 ]; then
+  ok "giving up on an unavailable lock stays bounded (${LOCK_ELAPSED}s <= 2s)"
 else
-  bad "sigma lost updates under concurrency: expected $RACE_EXPECTED, got ${RACE_ACTUAL:-<unreadable>}"
+  bad "giving up on an unavailable lock took ${LOCK_ELAPSED}s -- spin is unbounded or forking per attempt"
 fi
+rm -rf "$LOCK_DIR"
+
+# A state file in the previous JSON format must not crash the render or be
+# misread as a total. It fails charset validation, so the counter restarts.
+mkdir -p "$JSON_HOME/.claude/statusline-state"
+printf '{"sig":"1:2:3:4","cum_tokens":500}\n' >"$JSON_HOME/.claude/statusline-state/session-legacy.json"
+OUT="$(printf '%s' "$(usage_payload legacy 77 0 0)" | HOME="$JSON_HOME" bash "$SCRIPT")"
+case "$OUT" in
+  *"${SIGMA} 77"*) ok "legacy JSON state file is ignored, counter restarts cleanly" ;;
+  *) bad "legacy JSON state file was misread or crashed the render: $OUT" ;;
+esac
 
 # --- Weekly quota segment -----------------------------------------------------
 # resets_at is epoch SECONDS. An earlier version assumed ISO-8601 and rendered no

@@ -123,6 +123,16 @@ reach** — the same failure mode this branch keeps repeating:
 
 Both are now covered by regression tests rather than living in a transcript.
 
+**The first version of that regression test did not catch bug 1.** It planted the lock's PID file
+with a trailing newline, so `read` returned 0, the clobber never fired, and re-introducing the bug
+passed 44/44. The test was asserting a condition the buggy writer could not produce. It now plants
+both forms, and the *unterminated* one is the case that matters. Writing the test was not the same
+as the test working — only the mutation showed which of those had happened.
+
+The give-up-time assertion is deliberately coarse and says so: the bug measured ~455ms against an
+intended ~390ms ceiling, and no portable timing assertion separates those. That constraint lives in
+the `LOCK_ATTEMPTS` comment, not in a test that would only pretend to enforce it.
+
 **Sizing the budget is a measurement, not arithmetic.** 10 attempts (~190ms)
 looked like the safer prompt-latency choice and failed the concurrency test
 every run (387–495 of 510). 20 concurrent renders take ~314ms to drain, so any
