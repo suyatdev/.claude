@@ -122,7 +122,8 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Exact Next Steps
 0. **Judge terminal-enforcement (2026-07-20) — RESUME HERE. Design COMPLETE (§1–§4 approved).**
-   Next: Hard Model Gate → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
+   Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
+   on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
    NOT off statusline branch) → spec doc → self-review → compliance + observability judges
    (current skill procedure — spec-guard doesn't exist yet) → user review → writing-plans.
    The spec must be self-contained: this write-up lives on `feature/statusline-token-bar` only.

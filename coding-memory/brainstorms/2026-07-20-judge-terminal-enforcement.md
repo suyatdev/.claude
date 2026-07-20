@@ -150,8 +150,9 @@ flowchart TD
 ## Resume script for next session
 
 1. Design is DONE (§1–§4 approved above — they are the design of record).
-2. Hard Model Gate before spec/branch/commit work (asked at 2026-07-20 checkpoint; re-ask if
-   resuming fresh).
+2. Hard Model Gate: ASKED AND ANSWERED at the 2026-07-20 checkpoint — **spec phase runs on
+   Opus 4.8** (user's call). If the session isn't already on it, prompt the user to `/model`
+   Opus 4.8 before writing the spec; do not silently proceed on another tier.
 3. New branch off `main` (NOT off `feature/statusline-token-bar`), naming via
    `preparing-pull-requests` — proposed: `feature/judge-terminal-enforcement`.
 4. Write spec to `docs/superpowers/specs/<date>-judge-terminal-enforcement-design.md`
