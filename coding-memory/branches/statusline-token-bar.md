@@ -58,13 +58,21 @@ This is the second time in two statusline efforts that an unverified schema assu
 silent failure. The general shape: **a guessed field name or type fails closed, and failing closed
 looks exactly like the feature being off.**
 
-## Degradation paths (verified by hand-run payloads — NOT by the regression suite)
+## Degradation paths (now covered by the regression suite)
 
-**Correction.** An earlier version of this file said "all verified by execution," which reads as
-"the tests pass." They do not: `statusline-command.test.sh` was never updated or run for this
-change and is **red at 17/20** (3 assertions still expect the old `"N tokens"` format). What
-follows was verified by hand-constructed payloads run live — real evidence, but not
-regression-protected, and it lives only in a session transcript until ported into the suite.
+**History of this claim, kept because the drift is the lesson.** The first version of this file
+said "all verified by execution," which reads as "the tests pass." They did not:
+`statusline-command.test.sh` was never updated or run for this change and sat **red at 17/20**
+(3 assertions still expecting the old `"N tokens"` format). The claim was corrected to
+"hand-run payloads, not regression-protected" — accurate, but it left the evidence living only
+in a session transcript.
+
+**Now resolved.** The hand-built payloads are ported into the suite, which is **green at 36/36**.
+Every case below is asserted there, and the assertions were validated by *falsification* rather
+than by passing: mutating the script (ISO-only `resets_at` parsing, sigma counting cache reads,
+bar reference widened to 1M, `model_name` strip removed) turns the relevant assertions red.
+The injection group's ceiling is now a per-payload benign twin instead of one global baseline —
+see §Injection ceiling below.
 
 ```mermaid
 flowchart TD
@@ -84,6 +92,28 @@ malformed timestamp, `seven_day` absent, `rate_limits` absent, `current_usage: n
 Two documented conditions the design must survive, both confirmed handled: `rate_limits` appears
 only for Pro/Max subscribers *after the first API response*, and `current_usage` is `null` before
 the first call and immediately after `/compact` (Σ holds its prior total rather than resetting).
+
+## Injection ceiling: one global baseline → per-payload benign twins
+
+The injection tests assert that a hostile field value adds no escape bytes to the output. They did
+that by comparing every hostile render against `BASE_ESC`, the escape count of one shared baseline
+payload. That only holds while the baseline renders the *same segments* as the injection payloads,
+and adding the context bar broke it silently: the baseline grew a second segment the injection
+payloads did not carry, opening **4 bytes of slack**. Measured, not inferred — and a mutation that
+removes the `model_name` strip leaks an escape to 11, comfortably under the old ceiling of 14, so
+the leak would have passed with every assertion green.
+
+Each hostile payload now carries a **benign twin** — the same shape with harmless values — and is
+compared against the twin's own escape count. Adding a segment moves both sides, so the comparison
+cannot drift again. Every case now reads exactly `esc=N<=N`.
+
+One trap found while fixing it, worth recording because the obvious twin is the wrong one: the
+`$PWD`-fallback group's twin must live **outside** any git repo. A sibling directory inside the
+throwaway repo looks natural and is wrong — the hostile directory's real name contains control
+bytes, so its *stripped* path does not exist on disk, `git -C` fails, and no git segment renders.
+A twin inside the repo does render one, which put that group's ceiling **8 escapes** above what the
+hostile payload could legitimately emit — looser than the global baseline it replaced. Matching the
+segment set is what makes a twin a twin; sharing a parent directory is not.
 
 ## Open cosmetics (not defects)
 
