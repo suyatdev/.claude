@@ -6,9 +6,10 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
-- current work: **judge terminal-enforcement — USER REVIEW DONE 2026-07-20; spec is now TWO files
-  (681 + 696 lines) and gained a spec-unit model. Re-entry judge round is the immediate next action.
-  See Exact Next Steps 0.** Rounds 1–3 ran on Opus 4.8 (model gate `9fd3896`); round 4 on Fable 5;
+- current work: **judge terminal-enforcement — USER REVIEW + 2 RE-ENTRY JUDGE ROUNDS DONE 2026-07-20.
+  Spec is now TWO files (a spec unit) at 787 + 740 lines. Round 2 ended FAIL with ONE user-WAIVED
+  violation (escalation #3, first waiver on this branch); user directed no round 3. NEXT:
+  `superpowers:writing-plans`, then spikes S1/S3 before any code. See Exact Next Steps 0.** Rounds 1–3 ran on Opus 4.8 (model gate `9fd3896`); round 4 on Fable 5;
   the review session ran on Sonnet 5 then **Opus 4.8** — the user set each tier themselves via
   `/model`, so every tier choice on this branch is the user's own. Design approved §1–§4 2026-07-20; brainstorm landed on
   `main` via a docs-only merge (user's call). Deterministic hook gates for both judges + per-judge
@@ -133,9 +134,20 @@ how this file and its linked files should be written (plain language, major chan
    definitions unchanged" (compliance judge gains one declared input it records, never computes) and
    §5's "schemas unchanged" (one additive nullable `spec_unit_sha`). Units then pushed the parent
    back over 800, so §7 followed §6 across.
-   **Round 4's PASS @ `4f846ff` is long stale** (superseded by `dbf48ae` + the whole review cascade).
-   Run ONE re-entry round — restarts at round 1 per `running-the-compliance-judge` — before
-   `superpowers:writing-plans`. Then blocking spikes S1 (JUDGE_SESSION guard reaches hooks inside the
+   **Re-entry rounds 1–2 are DONE (2026-07-20).** R1 @ `8de76f9`: compliance FAIL (2), observability
+   risk=medium — **both judges independently found the same hole**, that §5.3 never said how a script
+   *finds* a `spec_unit` declaration, and the dogfooding decision had put three such blocks in the root
+   (real + §5.3's two illustrations, one declaring `part_of` itself). R2 @ `d77c26d`: compliance FAIL
+   (1) — `writing-specs/agent-input-contract` **persisted a second consecutive round → escalation #3**;
+   observability risk=**low**. **User WAIVED it** — the first waiver on this branch, recorded as a
+   `record_type: user_waiver` row in `coding-memory/compliance-judge/verdicts.jsonl` with an explicit
+   list of what it does not cover — and directed **no round 3**. So the spec goes to
+   `superpowers:writing-plans` with a round-2 fail on record and the last pass of fixes **unjudged**.
+   Fixed rather than waived, from observability R2: a **silent fail-open** — appending the dry-run flags
+   instead of splicing them after `commit` makes git eat them as pathspecs (exit 1 → the exit-1 row
+   *allows* a real spec commit through), reproduced on git 2.50.1; plus a rationale that was wrong in
+   three places in a way that would have made a falsification test **pass for the wrong reason**.
+   Then blocking spikes S1 (JUDGE_SESSION guard reaches hooks inside the
    judge session — `--bare` dropped, so hooks DO run there) and S3 (does the harness honour a 900s
    hook timeout; only precedent is 10s) gate implementation. ADR obligations grew (spec §12): new ADR
    **must cover the spec-unit model as its own recorded decision**, ADR-0003 update, and the

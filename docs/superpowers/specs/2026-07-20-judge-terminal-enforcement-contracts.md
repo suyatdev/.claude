@@ -387,7 +387,8 @@ invitation to soften on exactly the violation under dispute, and the judge's con
 spec as it stands. Keeping the ack out of the prompt also keeps §4.1 true: the compliance agent's input
 list stays exactly what its definition declares — `spec_path`, `round`, context summary, `waived`, base
 branch, prior violations, and §4.1's two additions `spec_unit_sha` and `unit_members` — with no
-undeclared field to interpret. The ack is not on that list and must not become an eighth entry.
+undeclared field to interpret. That list holds **eight** entries; the ack is not one of them and must
+not become a ninth.
 
 An ack is **not** a waiver and must not be used as one: it does not suppress the violation, and the
 judge still cites it. Only `SPEC_EXEMPT` bypasses the gate, and only the user supplies it.
@@ -713,9 +714,11 @@ Scenario: Illustrative yaml in the body is never parsed as a declaration
   And one of them declares part_of pointing at the file containing it
   When the parser resolves that file
   Then only the header-region block counts
-  And the file resolves as a root, not as a companion of itself
-  # The design's own first instance. A whole-file scan would classify this
-  # spec as a broken unit and refuse the commit that introduced it.
+  And the file resolves as a root
+  # The design's own first instance. Under a whole-file scan this root
+  # presents THREE blocks, so it exits 2 on the multi-block ambiguity row —
+  # not on bidirectional or depth-1, which are never reached. A test written
+  # against those rules would assert an unreachable branch and pass wrongly.
 
 Scenario: Two declaration blocks in the header region
   Given a file's header region contains two spec_unit blocks

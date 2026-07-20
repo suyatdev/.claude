@@ -335,6 +335,76 @@ diagram were updated to show unit resolution rather than left describing the old
 every `§N.M` reference resolves across the pair; the spec declares itself as the first spec unit,
 dogfooding §5.3's own format.
 
+## Re-entry rounds 1–2 (2026-07-20) — ESCALATION #3, and the first waiver on this branch
+
+**Re-entry round 1 @ `8de76f9` — compliance FAIL (2 violations), observability risk=medium/high-conf.**
+Both judges independently found the same hole, which is the strongest convergence seen on this branch:
+
+- `writing-specs/unambiguous-requirements` — §5.3 said the declaration lived in "a fenced yaml block
+  near the top" and never said how a *script* finds one. **The dogfooding decision collided with the
+  illustrations:** the root carried three blocks with a top-level `spec_unit:` key — the real one plus
+  §5.3's two examples, the second declaring `part_of` the file containing it. Fixed structurally —
+  header region only, strictly before the first `## ` heading; the resolution table went from 3 rows to
+  7 and is now total, with every malformed case exiting 2 instead of falling through to the fail-open
+  standalone row.
+- `writing-specs/agent-input-contract` — §4.1/§2 promised one added agent input while §6.1.3/§12
+  required two.
+
+Observability additionally found (each **reproduced against real git before accepting**): no §5.2 row
+for `X = U` (conflicted spec → `UU`, exit 1, and `git rev-parse ":<path>"` **exit 128** on unmerged
+paths, so the wrong routing would block every commit during a rebase); §8's unqualified "never a hang"
+being false for ladder rung 3, which has no liveness probe; and a header sentence claiming "Final: 672
+and 693 lines" when the files were 684/696 **in the very commit that wrote it**.
+
+**Re-entry round 2 @ `d77c26d` — compliance FAIL (1 violation), observability risk=low/high-conf.**
+`writing-specs/agent-input-contract` **persisted into a second consecutive round → escalation cap
+fired (escalation #3).**
+
+*Why the round-1 fix missed:* it corrected the locations round 1's citation enumerated, then added a
+§4.1 sentence asserting consistency across exactly that list — **verifying against the list of fixed
+locations rather than against the document.** The two survivors (§5.2's "Neither agent definition
+changes", §11's "one declared input") were semantically equivalent claims that a grep for the *phrasing
+used* could never match. The judge's mechanical tell: §6.2.2 enumerated eight inputs then called the ack
+a potential "eighth entry" — the list was extended, the ordinal counting it was not.
+
+**User decision: WAIVED.** The first waiver on this branch — rounds 1–4 and escalations #1/#2 were all
+closed by user-directed fixes. Recorded in `coding-memory/compliance-judge/verdicts.jsonl` as a
+`record_type: user_waiver` row, attributed to the user, with the substance, the reason the fix missed,
+and an explicit list of what the waiver does **not** cover. The waived item is documentation
+consistency, not a design defect: §4.1's table states the real contract unambiguously.
+
+**Fixed rather than waived (observability round 2, all unwaived):**
+
+- **Flag-splice position — a silent fail-open on the gate's core case.** §5.2 showed
+  `git commit --dry-run --porcelain -z <same args>` while its prose read *additively* ("arguments
+  unchanged **plus** those three flags"). Reproduced: appending instead of splicing makes git eat the
+  flags as **pathspecs** → exit 1 → §5.2's exit-1 row **allows a real spec commit straight through the
+  gate** (`-i` gives exit 128 → false block). Position is now a stated requirement with the evidence
+  table, plus a §10 falsification target.
+- **The whole-file-scan rationale was factually wrong in §5.3, §7 and §10.** They claimed the root would
+  "resolve as a companion of itself" and fail bidirectional/depth-1. It has *three* blocks, so the
+  multi-block ambiguity row fires first and classification is never reached. Same exit code, different
+  mechanism — **a falsification test written to the stated mechanism would assert an unreachable branch
+  and pass for the wrong reason.**
+- §6.2.2's "eighth entry" off-by-one; §11's "657 and 472 lines" (matching no commit in history, in a
+  document that had just declared measured numbers belong in `wc -l`); and the header-region scan is now
+  specified **fence-aware**, with a fixture-backed test since neither real file distinguishes it from a
+  naive scan.
+
+**User directed no round 3.** The spec proceeds to `superpowers:writing-plans` with a round-2 fail on
+record, one waived violation, and the above fixes **applied but unjudged**. S1/S3 still gate
+implementation independently.
+
+**The recurring lesson, now at eight instances and evolving:** it began as *the write-up runs ahead of
+the code*; it is now *the verification is scoped to the list rather than the document*. Round 1's fix
+and its self-audit shared a single list, so the audit could only confirm what had already been changed.
+Observability's framing is the one to keep: the pattern **moved rather than broke** — and its worst
+form is not a stale sentence but a stated mechanism that is wrong while the outcome looks right, since
+that is the form which survives into the tests.
+
+**Headroom note:** the root is at 787 of 800 lines. The next substantive addition needs a plan, not
+another paragraph.
+
 ## Notes
 
 - Judges ran as in-session `Agent`-tool subagents (~86k subagent tokens in round 1; ~133k in

@@ -285,12 +285,29 @@ as `-m a`, not `-a`. A table that must re-derive git's own argument parser will 
 gate delegates to that parser:
 
 ```
-git commit --dry-run --porcelain -z <same args>
+git [<global options>] commit --dry-run --porcelain -z <the commit's own args, unchanged>
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ spliced IMMEDIATELY after the `commit` token,
+                                                       BEFORE any of the user's arguments
 ```
 
-— the gated command's arguments unchanged (global options passed through, §6.2) plus those three
-flags, re-executed as the **parsed argv list** from the same `shlex` split detection used — never as
-re-joined shell text, which would reopen the quoting surface the split closed. Each NUL-delimited
+**The splice position is load-bearing and is a requirement, not a formatting choice.** The three flags
+go immediately after `commit` and before the gated command's own arguments. Appending them instead is
+a silent fail-open on the gate's core case — verified on git 2.50.1 with a staged spec:
+
+| Invocation | Result | What the gate would do |
+|---|---|---|
+| `git commit --dry-run --porcelain -z -- <spec>` (**specified**) | `M  <spec>`, exit 0 | correctly detects the spec |
+| `git commit -- <spec> --dry-run --porcelain -z` (appended) | flags consumed as **pathspecs**, exit 1 | routes to the exit-1 "nothing to commit" row → **allows a real spec commit through** |
+| `git commit -i -- <spec> --dry-run --porcelain -z` | exit 128 | routes to exit > 1 → false block on a valid commit |
+
+Past `--`, and after any pathspec, git reads further tokens as paths rather than options, so appended
+flags never take effect and the gate mistakes their failure for "nothing to commit". An implementer who
+follows a sentence describing the flags as merely *added* to the command will build precisely that.
+§10 carries this as a falsification target for the same reason.
+
+The gated command's arguments are otherwise unchanged (global options passed through, §6.2), and the
+whole thing is re-executed as the **parsed argv list** from the same `shlex` split detection used —
+never as re-joined shell text, which would reopen the quoting surface the split closed. Each NUL-delimited
 entry is `XY <path>`; column 1 (`X`, the index column) says whether this commit records that path.
 **Entries decide first; the exit code is consulted only when no spec entry answers:**
 
@@ -420,14 +437,27 @@ declares its role in a fenced `yaml` block whose top-level key is `spec_unit`.
 **Where the parser looks, stated as a rule rather than as "near the top".** *"Near the top" is not
 script-decidable, and this very section proves why: the illustrations below are themselves fenced
 `yaml` blocks with a top-level `spec_unit:` key, and the second declares `part_of` pointing at this
-file. A parser scanning the whole file would read this spec's own root as simultaneously declaring
-`parts` and being `part_of` itself — which its own bidirectional and depth-1 rules then classify as a
-broken unit. The design's stated first user would be refused by the design.* So the region is bounded
-structurally:
+file. A parser scanning the whole file sees **three** blocks in this root — so the ambiguity row below
+(`two or more` → exit 2) fires first and the commit that introduced this design is refused, its
+declaration never even classified.* The refusal is the right outcome for an ambiguous file and the
+wrong outcome here, since only one of the three is a declaration at all.
+
+*State the mechanism precisely, because a falsification test written to the wrong one passes for the
+wrong reason:* the whole-file mutation in §10 must assert **exit 2 on the multi-block row**, not a
+bidirectional or depth-1 failure. An earlier revision of this paragraph claimed the root would
+"resolve as a companion of itself" and fail those rules — reachable only in a two-block file, which
+this is not. So the region is bounded structurally:
 
 > **The declaration is a fenced `yaml` block with a top-level `spec_unit:` key appearing in the
 > file's HEADER REGION — strictly before the first `## ` heading. Blocks at or after the first
 > `## ` heading are prose and are never parsed.**
+
+**The boundary scan is fence-aware:** a line beginning `## ` *inside* a fenced code block does not end
+the header region. Both files here are indifferent (a naive scan and a fence-aware scan agree on them),
+so this is specified rather than discovered — a future spec whose header contains a fenced example with
+a `## ` line would otherwise have its own declaration fall outside the region and silently resolve as
+standalone. §10 asserts the fence-aware reading against a fixture built for it, since neither real file
+distinguishes the two.
 
 Both files in this unit satisfy that: each real declaration sits above `## 1.` / `## 6.` respectively,
 and §5.3's illustrations sit inside §5, far below the first heading. The rule is structural, not a
@@ -633,7 +663,9 @@ vs worktree divergence.
 | Unit: precondition spans members | unstaged companion → exit 2 naming it, even when the commit records only the root |
 | Unit: malformed declarations | one-sided `part_of` **in either direction**, nested `parts` (depth-1), member outside `docs/superpowers/specs/*.md`, member absent from the index — each exits 2, nothing launched |
 | **Unit: declaration block selection** | **written against these two spec files themselves.** Only the header-region block counts; §5.3's illustrative blocks — including the one declaring `part_of` the file that contains it — are ignored, and this spec resolves as a root. Two header blocks, unparseable YAML, neither key, and both keys each exit 2 rather than falling through to standalone |
+| **Flag-splice position** | the three dry-run flags spliced **after `commit`, before the user's args**. Assert the appended ordering is *not* what ships: with a staged spec, appending yields exit 1 (flags eaten as pathspecs) which the exit-1 row would **allow** — a real spec commit through the gate |
 | Unit: `U` unmerged spec | a conflicted spec mid-rebase exits 0; asserted **against a real conflicted repo**, since `git rev-parse ":<path>"` exits 128 on unmerged paths and the wrong routing would fail closed on every commit during a rebase |
+| Unit: header-region scan is fence-aware | a **purpose-built fixture** whose header contains a fenced example with a `## ` line inside it — the declaration below that fence must still be found. Neither real spec file distinguishes fence-aware from naive, so only a fixture can assert it |
 | Unit: two distinct roots in one commit | exit 2 naming both; **no judge spawned** (assert on run-dir count) |
 | Unit: `--spec <companion>` rejected | exit 1 naming the root, rather than judging a fragment |
 | Unit: one round counter | rounds increment per unit root across commits that touch different members |
@@ -651,11 +683,15 @@ pass reading fresh — the split's hole, restored); **count rounds per member in
 (a violation persisting across both halves splits across two counters and the cap never fires);
 **let the judge recompute `spec_unit_sha` rather than echo it** (resolution in two places, and the
 row stops matching the lookup the moment the two rules disagree); **scan the whole file for
-`spec_unit` blocks instead of the header region only** (this spec's own §5.3 illustrations resolve it
-as a companion of itself, and its own bidirectional and depth-1 rules then refuse the commit that
-introduced it); **route a malformed declaration to the standalone row instead of exit 2** (fail-open
-in a fail-closed section); **route `U` into the record branch** (`git rev-parse ":<path>"` exits 128,
-the gate reads infrastructure failure, and every commit during a conflicted rebase is blocked).
+`spec_unit` blocks instead of the header region only** — this root then presents **three** blocks and
+exits 2 on the *multi-block ambiguity row*, refusing the commit that introduced this design; assert
+that row specifically, since a test written against a bidirectional or depth-1 failure would assert an
+unreachable branch and pass for the wrong reason; **route a malformed declaration to the standalone row
+instead of exit 2** (fail-open in a fail-closed section); **route `U` into the record branch**
+(`git rev-parse ":<path>"` exits 128, the gate reads infrastructure failure, and every commit during a
+conflicted rebase is blocked); **append the dry-run flags instead of splicing them after `commit`**
+(they are consumed as pathspecs, the run exits 1, and the exit-1 row lets a real spec commit through —
+silent fail-open on the gate's core case).
 A test that still passes under its mutation does not count as coverage.
 
 The detection mutations matter most: the `-a` and `-i` holes were each *present in a reviewed
@@ -705,9 +741,12 @@ a green suite.
 - **The 800-line ceiling — RESOLVED at user review (2026-07-20): split.** The single-file revision
   ran ~1100 lines. Earlier revisions argued for keeping it whole on self-containment grounds; the
   user chose the ceiling over that argument. §6 moved to
-  `2026-07-20-judge-terminal-enforcement-contracts.md` verbatim, numbering untouched, leaving 657 and
-  472 lines. Self-containment is now a property of the pair, stated as such at the top rather than
-  quietly dropped.
+  `2026-07-20-judge-terminal-enforcement-contracts.md` verbatim, numbering untouched; §7 followed when
+  the spec-unit work pushed the root back over. **Both halves are under the 800 maximum** — the
+  invariant rather than a line count, for the reason the header now states. *An earlier revision of
+  this bullet claimed "657 and 472 lines", a pair matching no commit that ever existed, in a document
+  that had just declared measured numbers belong in `wc -l` rather than prose.* Self-containment is now
+  a property of the pair, stated as such at the top rather than quietly dropped.
 - **Multi-file specs — RESOLVED at user review (2026-07-20): key the gate on a spec *unit*** (§5.3).
   The split made this design's own normal commit a two-spec commit, and per-file keying would have
   left a stale-pass hole: edit the companion, and the root's verdict still reads fresh. A unit is one

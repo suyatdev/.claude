@@ -424,3 +424,107 @@ declared input or two, and §2 forbids the second.
 
 None. Nothing has been waived on this spec in any round, including this one. The caller confirms both
 prior escalations were resolved by user-directed fixes rather than waivers.
+
+## Re-entry Round 2 — 2026-07-20T19:24:15Z · verdict: **FAIL** (1 violation)
+
+- **Artifact:** two files judged as one spec unit — root
+  `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` (748 lines, blob
+  `7d7c4b3`) + companion `...-contracts.md` (737 lines, blob `7c998ac`). Both read in full.
+- **Head:** `d77c26d737183667ec4c7b7619521461ae1a600c` on `feature/judge-terminal-enforcement`.
+- **Prior round violations:** 2 cited at round 1 (`8de76f9`). **One closed, one persists.**
+
+### In plain terms
+
+**Round 1's first violation is genuinely fixed, and the fix was verified rather than read.** §5.3 no
+longer says "near the top" — it bounds the parse region structurally: the declaration is the fenced
+`yaml` block with a top-level `spec_unit:` key appearing *strictly before the first `## ` heading*,
+and blocks at or after it are prose that is never parsed. Simulated against the two real files: the
+root has three `spec_unit:` keys file-wide (L42, L439, L446) but its first `## ` heading is at L55, so
+only L42 is in the header region and the root resolves as ROOT with `parts` — §5.3's own self-
+referential `part_of` illustration at L446 sits 391 lines below the boundary and is correctly ignored.
+The companion's declaration at L24 sits above its first `## ` at L30 and resolves as PART. Bidirectional
+and depth-1 both hold. The resolution table is now **total**: seven rows covering absent, `part_of`-only,
+`parts`-only, two-or-more, unparseable YAML, neither key, and both keys — and every malformed input
+exits 2 instead of falling through to the fail-open standalone row. That was the substance of the
+citation and it is closed.
+
+**Round 1's second violation persists, in territory the revision did not sweep.** The revision fixed
+the four locations it enumerated (§2, §4.1, §6.1.3, §12) and also updated §6.2.2 — but the root file
+still contains two locations stating the *superseded* count, so the artifact now answers "how many
+declared inputs does `agents/compliance-judge.md` gain?" **three different ways**:
+
+| Answer | Where | Text |
+|---|---|---|
+| **zero** | §5.2 closing para (root L365) | "Neither agent definition changes (§4.1)" |
+| **one** | §11 multi-file deferral (root L722) | "the compliance judge gains **one declared input**, which it records and never computes" |
+| **two** | §2 L87, §4.1 L172/L195–202, §6.1.3 L148, §6.2.2 L389, §12 L740 | `spec_unit_sha` **and** `unit_members` |
+
+§5.2's sentence cites §4.1 as its authority while §4.1 says the opposite. §11's sentence is
+self-aware enough to name «§4.1's "agent definitions unchanged"» as an invariant that *was* amended —
+and then states the amendment as one input, describing only `spec_unit_sha`'s "records and never
+computes" contract. And §4.1's own self-audit sentence (L203–206) claims "the count is now stated
+identically in §2, §4.1, §6.1.3 and §12" — a four-location list that omits both of the locations
+that are still wrong. The self-audit checked the locations it had already fixed.
+
+The mechanical tell is in the companion: §6.2.2 (L389–390) enumerates the declared list as
+`spec_path`, `round`, context summary, `waived`, base branch, prior violations, `spec_unit_sha`,
+`unit_members` — **eight** items — then says the ack "must not become an **eighth** entry." The
+enumeration was extended to two inputs; the ordinal that counted it was not. It would be the ninth.
+
+This is the same rule and the same territory as round 1's citation, so the id is reused. The
+implementer-facing consequence is unchanged from round 1: someone amending `agents/compliance-judge.md`
+finds a scope table saying two, a rationale section saying one, and a data-contract section saying
+none.
+
+### Violations
+
+| # | id | Rule source | Rule | Where | Why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/agent-input-contract` | `skills/writing-specs/SKILL.md` | API contracts must give the real interface boundaries to build against rather than letting components improvise shapes others fail to match; a requirement readable two ways is a requirement not yet decided | §5.2 closing paragraph (root L365) and §11 multi-file deferral (root L722), against §2 / §4.1 / §6.1.3 / §12 | The root still answers "how many declared inputs does `agents/compliance-judge.md` gain?" three ways — §5.2 says "Neither agent definition changes", §11 says "one declared input", and §2/§4.1/§6.1.3/§12 say two — so the size of the only agent-definition amendment in the design remains readable more than one way. |
+
+### Notes (non-blocking)
+
+- **Round 1 violation `writing-specs/unambiguous-requirements` is closed — verified by simulation, not
+  by reading.** Parse region, block selection, totality of the resolution table, bidirectionality and
+  depth-1 were each checked against the two real files' actual heading and fence offsets. §10 L635
+  encodes the check as a test written against these two files themselves, which is the right shape.
+- **§11's line counts are stale and match no commit that ever existed.** L708–709 says the split left
+  "657 and 472 lines." Real history: the split commit `8de76f9` left **684 and 696**; `d77c26d` is
+  **748 and 737**; the pre-split single file was 1101. This directly contradicts the header's own
+  policy at L29–32 — "Numbers that go stale on the next edit belong in a command (`wc -l`), not in
+  prose" — which was written *this round* to retire exactly this defect from the header while leaving
+  it in place 680 lines later. Not cited as a violation because it is a historical record bullet that
+  directs no implementation, but it is the same prose-lags-design failure class as the violation.
+- **§8's failure matrix has no row for the `U` (unmerged) case**, though §5.2's table and §7's
+  "conflicted mid-rebase" scenario both cover it. §8 covers every other exit-2/exit-0 branch of the
+  unit and precondition logic, so the omission reads as an oversight rather than a decision.
+- **§2's scope table duplicates an out-of-scope item**: row 1 says "Changing either judge's rubric or
+  scoring" and row 2 says "Changing either judge's **rubric, scoring, or reasoning**." Harmless, but
+  one of the two should absorb the other.
+- **§6.1.2's asserted preflight edge has no §10 case.** "`--round > 1` but the store holds no prior
+  round and no override → exit 4" is stated as an assertion; §10's "Prior violations launcher-derived"
+  row tests the derive path and the override path but not the empty-store failure.
+- **The advisory changes this round all hold.** §5.2's `U` row is correct and its reasoning checks out
+  (git refuses an unmerged commit itself, and `git rev-parse ":<path>"` exits 128 on unmerged paths, so
+  routing `U` into the record branch would fail closed on every commit during a rebase — the spec says
+  exactly this and §10 carries the falsification target). §8's "never a hang" is now correctly qualified
+  for rung 3, matching §6.1's ladder table where rung 3's liveness probe is "none available — deadline
+  only." §7 gained the depth-1, one-sided, body-illustration, ambiguous/malformed and `U` scenarios;
+  §10 gained matching cases and four falsification targets.
+- **Unchanged and still clean:** §4's pinned toolchain (six tools, exact versions, machine-verified —
+  CLI `2.1.215`, bash `3.2.57(1)`, Python `3.9.6`, tmux `3.6a`, cmux `0.64.20`, git `2.50.1`);
+  §5.1/§9's default-deny run-dir posture (`umask 077`, `0700`/`0600`, asserted after creation rather
+  than assumed from umask); the `run.sh` indirection keeping prompt text off every rung's command line
+  including rung 1's `--command`; no secrets, no absolute paths, no unvetted dependencies; S1/S3 held
+  as blocking spikes; §11's deferrals honest about trusted-vs-verified.
+- **Cross-file references check out in both directions.** Every `§6.x`/`§7` in the root resolves in the
+  companion; every `§1`–`§5`/`§8`–`§12` in the companion resolves in the root. Both halves under
+  core-conduct's 800 max (748, 737).
+- **YAGNI holds.** `--prior-violations-file` surviving with no caller in the design was considered and
+  is *not* a YAGNI finding: §2 explicitly keeps ad-hoc launcher runs in scope, so the override flag has
+  a stated user.
+
+### Waivers
+
+None. Nothing has been waived on this spec in any round, including this one. No waived ids were
+supplied by the caller.
