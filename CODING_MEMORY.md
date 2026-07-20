@@ -143,15 +143,20 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Statusline token bar — judge R1 (high), R2 (medium), R3 (medium) findings all FIXED
-   (suite 17/20 → 50/50).** Next action: **fresh implementation-stage verdict @ HEAD**, then PR
-   (judge-guard blocks `gh pr create` without one). Each round found the *same class* one level
-   deeper: R2, the lock's own cleanup was a lost update; R3, the cleanup's backstop justified a
-   break by **age** then verified it by **PID**, and the breaker lock lacked the guards the state
-   lock had just gained. Rule now encoded, not remembered: **verify a break against whatever
-   justified it**, one shared implementation for both locks. R3 also caught that every R2 safety
-   mechanism was untested — stripping them left the suite green; it now sources the script in a
-   subshell to call the lock helpers directly.
+0. **Statusline token bar — judge R1 (high) → R2/R3/R4 (medium) findings all FIXED
+   (suite 17/20 → 50/50).** Next action: **fresh verdict @ HEAD**, then PR (judge-guard blocks
+   `gh pr create` without one). Every round found the *same class* one level deeper, and the last
+   three were all inside the fix for the one before: R2, the lock's cleanup was itself a lost
+   update; R3, the cleanup's backstop justified a break by **age** then verified it by **PID**,
+   and the breaker lock lacked the guards the state lock had just gained; R4, `mv dirA dirB`
+   **nests** when dirB exists rather than failing — so the restore could never fail, its `|| rm`
+   was dead code, and a retaken path buried the capture inside the live lock. A wrong assumption
+   about a shell builtin sat underneath all three. Rules now encoded, not remembered: verify a
+   break against whatever justified it; use `mkdir` (atomic, fails if present) where "rename or
+   fail" is meant. R3 also caught that every R2 guard was untested — the suite now sources the
+   script in a subshell to call lock helpers directly, and drives the interleaving that makes the
+   restore bug observable. **Impact ceiling since R2 has been a wrong cosmetic total that
+   self-heals — no round has been a merge blocker. Diminishing returns are a live question.**
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
    **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
    present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,
@@ -186,15 +191,12 @@ how this file and its linked files should be written (plain language, major chan
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
    clean). See `coding-memory/observability-judge/verdicts.jsonl`.
 
-**Merged 2026-07-16 → 07-18** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 —
+**Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
-hook, now live and global), memsearch RAG index, verifying-subagent-commits, compliance judge;
-plus vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. All branches deleted. No orphans outstanding.
-
-**Merged 2026-07-19:** PR #17 (writing-project-readmes + wiring, d242e69) + PR #18 (statusline,
-4 rounds of escape-injection hardening, b6362ff). **Merged 2026-07-20:** PR #19 (diagramming
-reachability — 3 conditional pointers + ADR 0004, a735fb4; judge R1 low/high, outcome clean).
+hook, live and global), memsearch RAG index, verifying-subagent-commits, compliance judge; plus
+vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-readmes, d242e69),
+#18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4).
 
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote). `feature/statusline-token-bar` has all R1–R3 judge findings
+merged but not deleted (local + remote). `feature/statusline-token-bar` has all R1–R4 judge findings
 fixed, suite 50/50; needs a fresh verdict @ HEAD before `gh pr create`. See Next Step 0.
