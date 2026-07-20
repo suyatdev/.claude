@@ -175,10 +175,9 @@ how this file and its linked files should be written (plain language, major chan
 3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
-4. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/`, which is already
-   live and now holds ADRs 0001-**0004** — the "adopt" framing was stale, the directory was never
-   the blocker. Diagramming-pointers half **DONE 2026-07-19** (PR #19), and wider than this item
-   scoped it: `managing-session-memory` was the actual gap, not just the two skills named here.
+4. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/` (now ADRs
+   0001-**0005**) — the "adopt" framing was stale, the directory was never the blocker.
+   Diagramming-pointers half **DONE 2026-07-19** (PR #19), wider than this item scoped it.
 4a. **Watch the next 2-3 `coding-memory/` branch logs** (ADR-0004 revisit trigger). If one lands with
    real structure and no diagram, the `managing-session-memory:18` pointer is in the wrong place —
    move it from the index-description bullet into the save-time procedure section. Escalation if that
