@@ -160,10 +160,6 @@ how this file and its linked files should be written (plain language, major chan
    `mkdir` (atomic, fails if present) where "rename or fail" is meant. **Impact ceiling since R2
    has been a wrong cosmetic total that self-heals — no round has been a merge blocker.**
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
-   **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
-   present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,
-   never stdout. Would have caught the epoch bug on render one. Deliberately not absorbed: this
-   branch overran scope once already and that was escalated rather than resolved unilaterally.
    Cosmetics still left: duration floors, bar rounds full at 95k, no MB rollover.
 1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
