@@ -74,30 +74,22 @@ how this file and its linked files should be written (plain language, major chan
   (Mermaid docs standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML).
   Detail: `coding-memory/branches/diagramming-skill.md`.
 - feature/observability-judge (2026-07-16) — the observability judge (16 commits, 17/17 tests):
-  `agents/observability-judge.md` (subagent scoring 10 dims → JSONL+markdown verdict + junior-dev
-  layman summary), `hooks/judge-guard.sh` (+17-case test + settings.json) blocking `gh pr create`
-  without a fresh strict-freshness verdict, `skills/running-the-observability-judge/`, `rules/gates.md`
-  stub + `CLAUDE.md` catalog, ADR `docs/decisions/0001-observability-judge.md`, spec
-  `docs/superpowers/specs/2026-07-16-observability-judge-design.md`, verdict store. Command detection
-  took 2 review-driven security fixes (substring→anchored→python shlex, closing a quoted-env-prefix
-  bypass); Opus whole-branch review fixed the verdict-filename-on-slashed-branches bug + a stale
-  `hooks/README.md` "only git-guard installed" claim. **PR #13 MERGED 2026-07-17 (bootstrap self-gate → JUDGE_EXEMPT).**
+  scoring subagent (10 dims → JSONL+markdown verdict + layman summary), `hooks/judge-guard.sh`
+  blocking `gh pr create` without a fresh strict-freshness verdict, skill + gate stub + catalog,
+  ADR 0001, spec, verdict store. Command detection took 2 review-driven security fixes
+  (substring→anchored→python shlex, closing a quoted-env-prefix bypass). **PR #13 MERGED
+  2026-07-17** (bootstrap self-gate → JUDGE_EXEMPT).
   Detail: `coding-memory/branches/observability-judge.md`; PR status: `coding-memory/pr-tracking.md`.
 - feature/memory-rag-index (2026-07-17→18) — `memsearch`: local SQLite (sqlite-vec + FTS5) RAG over
-  session transcripts + curated docs, Qwen3-Embedding-0.6B embeddings, qwen3.6:35b-mlx digests,
-  hybrid retrieval, silent SessionStart nudge. 15-task plan, subagent-driven (Sonnet 5 implementers/
-  reviewers), 60-test suite green, full backfill 228 sources / 2332 chunks / 0 errors / p95 149ms,
-  golden bar 16/16, digest audit 11/12 supported. **PR #14 MERGED 2026-07-18** (merge commit
-  7015369); branch deleted. Judge (impl): risk=low conf=high, outcome=clean.
+  transcripts + curated docs, Qwen3 embeddings, hybrid retrieval, silent SessionStart nudge.
+  60-test suite green, backfill 228 sources / 2332 chunks / 0 errors / p95 149ms, golden 16/16.
+  **PR #14 MERGED 2026-07-18** (7015369). Judge (impl): risk=low conf=high, outcome=clean.
   Detail: `coding-memory/branches/memory-rag-index.md`.
-- feature/compliance-judge (2026-07-18) — the compliance judge: `agents/compliance-judge.md`
-  (subagent judging ONE finished spec against live rules — writing-specs + core-conduct/security —
-  blocking pass/fail verdict, per-rule citations, JSONL + markdown store), `skills/running-the-
-  compliance-judge/` (parallel dispatch with observability judge, capped auto-revise loop,
-  escalation on persistent ids, explicit-only waivers), gates stub + catalog line, ADR 0003,
-  golden eval 12/12 + loop dry-run (convergence + escalation). **PR #16 MERGED 2026-07-18**
-  (merge commit 4c2abec); branch deleted. Judge (impl, head 85d8982): risk=low conf=high,
-  outcome=clean. Post-merge live-verify of real dispatch → real store: confirmed.
+- feature/compliance-judge (2026-07-18) — subagent judging ONE finished spec against live rules
+  (writing-specs + core-conduct/security): blocking pass/fail, per-rule citations, JSONL+markdown
+  store; skill with parallel dispatch alongside the observability judge, capped auto-revise loop,
+  escalation, explicit-only waivers; gates stub + catalog, ADR 0003, golden eval 12/12.
+  **PR #16 MERGED 2026-07-18** (4c2abec). Judge (impl @ 85d8982): risk=low conf=high, clean.
   Detail: `coding-memory/branches/compliance-judge.md`.
 - feature/writing-project-readmes-skill (2026-07-19) — `writing-project-readmes` skill: house
   README standard from the user-supplied template (check-then-create, real facts only, `[TODO:]`
@@ -148,12 +140,23 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Statusline token bar — uncommitted, needs a home.** `statusline-command.sh` (+272/-15) and
-   `.gitignore` (+3) are done and verified by execution, sitting dirty on `main`. Next: branch
-   (`feature/statusline-token-bar`), commit those two files **only** (leave `settings.json` — Orca's,
-   see Active Session), run the observability judge, open the PR. Model gate not yet answered for
-   this commit. Cosmetics deliberately left: duration floors (2d 3h 59m → `2d 3h`), bar rounds full
-   at 95k while still orange, `Σ` has no MB rollover (`1135.4k`).
+0. **Statusline token bar — pushed @ b24d422, judge says risk=HIGH. Do not PR until fixed.**
+   Verdict: `coding-memory/observability-judge/2026-07-19-feature-statusline-token-bar.md`.
+   Three real failures, in priority order:
+   (a) **`statusline-command.test.sh` is RED (17/20) and was never run** — 3 assertions still expect
+   the old `"N tokens"` format. The branch doc's "all verified by execution" is misleading: ~15
+   hand-built payloads were run live, the regression suite was not. Fix the assertions, reword the
+   claim, and port those payloads into the suite (they currently exist only in a transcript).
+   (b) **Σ counter loses concurrent updates** — reproduced: seed 200, concurrent +1000/+1400 → 1200,
+   not 2600. Atomic `mv` prevents torn *reads*, not lost *updates*; the in-script comment conflates
+   the two, and the winner stores the loser's `sig` so it stays desynced. Needs a lockfile or an
+   honest documented undercount.
+   (c) **Injection-test slack regressed 0→4 bytes** — the new bar inflated `BASE_PAYLOAD` but not the
+   injection payloads, so ~2 colour sequences could leak and the test would still pass. No actual
+   hole found (stripping verified, `../` in session_id contained). Give the payloads matching segments.
+   Also worth doing: split "field absent" from "field present but unparseable", logging the latter to
+   `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG` — never stdout. Would have caught the epoch bug on
+   render one. Cosmetics deliberately left: duration floors, bar rounds full at 95k, no MB rollover.
 1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
@@ -187,14 +190,10 @@ documentation-enforcement, PORTS.md reconcile, diagramming skill, observability 
 hook, now live and global), memsearch RAG index, verifying-subagent-commits, compliance judge;
 plus vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. All branches deleted. No orphans outstanding.
 
-**Merged 2026-07-19:** `.claude` PR #17 (writing-project-readmes skill + trigger wiring; merge
-commit d242e69) + PR #18 (statusline — robbyrussell-style status line, 4 rounds of escape-injection
-hardening; merge commit b6362ff). PR #17 branch deleted local + remote; verdicts backfilled clean.
+**Merged 2026-07-19:** PR #17 (writing-project-readmes + wiring, d242e69) + PR #18 (statusline,
+4 rounds of escape-injection hardening, b6362ff). **Merged 2026-07-20:** PR #19 (diagramming
+reachability — 3 conditional pointers + ADR 0004, a735fb4; judge R1 low/high, outcome clean).
 
-**Merged 2026-07-20:** `.claude` PR #19 (diagramming reachability — 3 conditional pointers into
-`managing-session-memory` / `writing-specs` / `designing-agentic-architecture`, + ADR 0004; merge
-commit a735fb4). Judge R1 low/high first pass, no `JUDGE_EXEMPT`; outcome backfilled clean.
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote). The statusline rewrite in the tree is **no longer
-unattributed** — it is this session's work (see Active Session); it still needs a branch, a commit,
-and a judge run before it can open a PR.
+merged but not deleted (local + remote). `feature/statusline-token-bar` is pushed @ b24d422 but
+**not PR-ready** — judge risk=high, see Next Step 0.

@@ -58,7 +58,13 @@ This is the second time in two statusline efforts that an unverified schema assu
 silent failure. The general shape: **a guessed field name or type fails closed, and failing closed
 looks exactly like the feature being off.**
 
-## Degradation paths (all verified by execution)
+## Degradation paths (verified by hand-run payloads — NOT by the regression suite)
+
+**Correction.** An earlier version of this file said "all verified by execution," which reads as
+"the tests pass." They do not: `statusline-command.test.sh` was never updated or run for this
+change and is **red at 17/20** (3 assertions still expect the old `"N tokens"` format). What
+follows was verified by hand-constructed payloads run live — real evidence, but not
+regression-protected, and it lives only in a session transcript until ported into the suite.
 
 ```mermaid
 flowchart TD
@@ -90,3 +96,12 @@ the first call and immediately after `/compact` (Σ holds its prior total rather
 `~/.claude/statusline-state/session-<id>.json`, gitignored. Keyed per session (parallel sessions
 each keep their own counter), written atomically via temp+`mv`, corrupt/missing falls back to zero
 rather than erroring — the status line must never fail in a way that blanks the prompt.
+
+**Known defect (judge-confirmed, unfixed).** The atomic `mv` prevents a reader seeing a half-written
+file; it does **not** prevent lost updates. Two overlapping renders can both read the same total and
+both write back: reproduced as seed 200 + concurrent 1000/1400 → 1200, not 2600. The winning write
+also stores the loser's `sig`, so the counter stays desynced rather than self-correcting. The
+in-script comment conflates torn reads with lost updates and overstates the guarantee. Window is
+narrow (~97ms render vs ~300ms throttle) but `git status` sits in that path and can exceed it in a
+large repo. Needs a lockfile or an explicitly documented undercount — believing `mv` covers it is
+the unsafe option.
