@@ -5,6 +5,9 @@
 .last-cleanup
 .last-update-result.json
 
+# Statusline cumulative-token counters (machine-specific, regenerable)
+/statusline-state/
+
 # Backup files
 settings.json.bak
 backups/

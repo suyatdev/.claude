@@ -5,15 +5,20 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop (VSCode)
-- session_started_at: 2026-07-19 (post-/clear continuation)
+- session_origin: desktop (VSCode) · session_started_at: 2026-07-19 (post-/clear continuation)
 - last_active_branch: main (both PRs merged; branch `docs/diagramming-pointers` not yet deleted)
-- **UNCOMMITTED PARALLEL WORK IN TREE — not this session's, do not commit blind.** After PR #19
-  merged, `statusline-command.sh` (+317/-15) and `.gitignore` (+3, ignoring `/statusline-state/`)
-  appeared modified. Reads as an in-progress statusline rewrite adding cumulative token/cost
-  tracking, plus an untracked `stats-cache.json`. Written by a parallel agent or the user, not by
-  this session — it appeared mid-session, between one `git status` and the next. Left untouched
-  per the parallel-agent invariant. **Verify authorship before committing or discarding it.**
+- **AUTHORSHIP RESOLVED (was: "uncommitted parallel work, do not commit blind").** The modified
+  `statusline-command.sh` + `.gitignore` are **this session's work**, not a parallel agent's —
+  a statusline follow-on to PR #18 (orange model name, 100k-referenced context bar, cumulative
+  input+output counter, purple weekly-quota segment; cost display built then deliberately removed).
+  The earlier "verify authorship before committing or discarding" warning was written by a
+  *concurrent* session that saw the file change mid-session and correctly refused to guess.
+  Safe to commit. Detail: `coding-memory/branches/statusline-token-bar.md`.
+- **A concurrent session was active on 2026-07-19.** It merged PR #19, advanced `main` to f574213,
+  and wrote the memory entry above — all while this session was editing `statusline-command.sh`.
+  Evidence: this session opened on branch `docs/diagramming-pointers` @ ff9d215 and later found
+  itself on `main` @ f574213 with no local checkout. Not a problem in itself, but the parallel-agent
+  invariant applied in both directions and neither session could see the other's intent.
 - current work: **diagramming reachability — PR #19 MERGED** 2026-07-20 (merge commit a735fb4,
   3 commits). The
   `diagramming-technical-docs` standard was reachable only from the ADR bullet in
@@ -36,17 +41,13 @@ how this file and its linked files should be written (plain language, major chan
   direction, so the working tree stays permanently modified. Worth knowing: `claude-hook.sh`
   sources `$ORCA_AGENT_HOOK_ENDPOINT` *before* its token check, and that file's stdout becomes
   hook stdout — a channel into the agent control plane. Not resolved; user's call pending.
-- untracked `chrome/chrome-native-host` in working tree: Claude Code auto-generated Chrome
-  native-messaging wrapper (machine-local tooling) — not repo work, leave untracked. Note it
-  keeps the tree permanently dirty, so the new status line's `✗` marker always shows in this
-  repo; gitignoring it is an open question flagged to the user, not yet decided.
-- Model gate: this session started on **Sonnet 5** and the user switched to **Opus 4.8** via
-  /model before any commit. (Correction: the previous entry here read "session was on Fable 5" —
-  that described PR #17's session, not this one. Both are accurate for their own session; the
-  earlier wording was overwritten rather than superseded, noted here per the same convention as
-  commit 69cc063.)
-- `settings.json` model/theme preference changes are now committed on this branch, following
-  the existing `chore(settings):` precedent — superseding the earlier "not mine to commit" note.
+- untracked `chrome/`, `telemetry/`, `stats-cache.json`: machine-local Claude Code artifacts, not
+  repo work — leave untracked. They keep the tree permanently dirty, so the status line's `✗`
+  always shows here; gitignoring them is still an open question for the user.
+- Model gate: session started on **Sonnet 5**, user switched to **Opus 4.8** before any commit.
+  (An earlier entry misattributed PR #17's "Fable 5" here; each is right for its own session.)
+- `settings.json` model/theme preference changes follow the `chore(settings):` precedent —
+  superseding the earlier "not mine to commit" note. Distinct from the Orca hooks below.
 
 ## Repositories
 
@@ -121,6 +122,16 @@ how this file and its linked files should be written (plain language, major chan
   5 of 6 commits are judge-driven; taken to the user rather than resolved unilaterally. No ADR
   (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
+- statusline token bar + weekly quota (2026-07-19, **UNCOMMITTED — no branch yet**) — follow-on to
+  PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
+  model's window — against 1M a 143k session rendered nearly-empty-but-red), cumulative Σ counting
+  input+output only (cache traffic swamped it ~16x), purple weekly-quota segment. A cost-estimate
+  feature was requested, built, then **removed entirely**: subscription plan, `costUSD: 0`, no cost
+  field in the payload — any dollar figure would have been invented. Weekly quota is a percentage
+  for the same reason: docs confirm `rate_limits` exposes `used_percentage` + `resets_at` only, so
+  "tokens left" is uncomputable. Schema check caught a silent bug: `resets_at` is epoch seconds, not
+  ISO — the countdown would have never rendered and looked merely absent.
+  Detail: `coding-memory/branches/statusline-token-bar.md`.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
@@ -137,6 +148,12 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
+0. **Statusline token bar — uncommitted, needs a home.** `statusline-command.sh` (+272/-15) and
+   `.gitignore` (+3) are done and verified by execution, sitting dirty on `main`. Next: branch
+   (`feature/statusline-token-bar`), commit those two files **only** (leave `settings.json` — Orca's,
+   see Active Session), run the observability judge, open the PR. Model gate not yet answered for
+   this commit. Cosmetics deliberately left: duration floors (2d 3h 59m → `2d 3h`), bar rounds full
+   at 95k while still orange, `Σ` has no MB rollover (`1135.4k`).
 1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
@@ -165,17 +182,10 @@ how this file and its linked files should be written (plain language, major chan
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
    clean). See `coding-memory/observability-judge/verdicts.jsonl`.
 
-**Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile) +
-PR #12 (diagramming-technical-docs skill); vibe-scape (Tayvyx-Lab/VibeSpace) PR #6 (ADR backfill
-0001-0003 + template) + PR #7 (Plan 4a-1 + memory reconcile). No orphans outstanding.
-
-**Merged 2026-07-17:** `.claude` PR #13 (observability judge — agent + judge-guard hook + skill +
-gate/catalog + verdict store; merge commit 82d7b9b). Judge + gate now live and global.
-
-**Merged 2026-07-18:** `.claude` PR #14 (memsearch — local RAG index; merge commit 7015369) + PR #15
-(verifying-subagent-commits skill — controller-side subagent-checkout verification gate; merge
-commit 417e8e7) + PR #16 (compliance judge — agent + skill + gate stub + catalog + store + ADR 0003;
-merge commit 4c2abec). All three feature branches deleted, local + remote. No orphans outstanding.
+**Merged 2026-07-16 → 07-18** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 —
+documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
+hook, now live and global), memsearch RAG index, verifying-subagent-commits, compliance judge;
+plus vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. All branches deleted. No orphans outstanding.
 
 **Merged 2026-07-19:** `.claude` PR #17 (writing-project-readmes skill + trigger wiring; merge
 commit d242e69) + PR #18 (statusline — robbyrussell-style status line, 4 rounds of escape-injection
@@ -185,5 +195,6 @@ hardening; merge commit b6362ff). PR #17 branch deleted local + remote; verdicts
 `managing-session-memory` / `writing-specs` / `designing-agentic-architecture`, + ADR 0004; merge
 commit a735fb4). Judge R1 low/high first pass, no `JUDGE_EXEMPT`; outcome backfilled clean.
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote), and the tree carries the unattributed statusline rewrite
-noted in Active Session.
+merged but not deleted (local + remote). The statusline rewrite in the tree is **no longer
+unattributed** — it is this session's work (see Active Session); it still needs a branch, a commit,
+and a judge run before it can open a PR.
