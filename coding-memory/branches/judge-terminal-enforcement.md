@@ -278,6 +278,63 @@ never re-joined shell text.
 `superpowers:writing-plans`. User decision owed at review: §11's split-or-accept (1101 lines vs the
 800 ceiling). Then spikes S1 and S3 block implementation.
 
+## User review (2026-07-20) — the split, and the three-step cascade it set off
+
+The review resolved §11's open question and then two consequences of that resolution that nobody
+anticipated when it was asked. Recorded as a sequence because the ordering is the lesson: a
+document-structure decision turned into a design change.
+
+**Step 1 — split (user's call).** §11 had argued for keeping the spec whole on self-containment
+grounds; the user chose the 800-line ceiling over that argument. §6 → companion file
+`2026-07-20-judge-terminal-enforcement-contracts.md`, verbatim, numbering untouched so no
+cross-reference needed rewriting. Verified byte-identical against `HEAD` (diff: one trailing
+newline). The extraction script asserted its own line anchors and **failed closed on first run**,
+catching an off-by-one before writing anything.
+
+**Step 2 — the split broke the design, and the break was in the gate's own subject matter.** Both
+halves match `docs/superpowers/specs/*.md`, so this design's normal commit became a two-spec commit
+— undefined behaviour in §5.2/§6.2.1 — and per-file freshness keying meant *editing the companion
+left the root's verdict reading fresh*. A stale pass that looks current, inside the gate whose whole
+purpose is preventing that. Pre-existing (any two-spec commit hit it) but promoted from rare edge
+case to this design's default path.
+
+**Step 3 — spec units (user's call, option A of three).** New §5.3: explicit `spec_unit:`
+declarations (`parts:` in the root, `part_of:` in each companion), bidirectional consistency,
+depth-1 only, resolution from index blobs, order-independent `spec_unit_sha` over all members,
+distinct-units-in-one-commit refused. One root, one round counter, one verdict.
+
+**What units cost — two invariants that had survived four judge rounds, amended in the text rather
+than quietly kept:**
+
+| Was | Now | Why unavoidable |
+|---|---|---|
+| §4.1 "agent definitions unchanged" | compliance judge gains **one** declared input, `spec_unit_sha`, recorded and never computed | freshness must cover every member → the store must carry unit identity → the judge writes the row but hashes one path and cannot know a unit exists |
+| §5 "schemas unchanged" | compliance store gains **one** additive nullable field | same chain; additive so absent = standalone and no stored row changes meaning |
+
+Rejected: judge resolves units itself (resolution in two places), and a sidecar index outside the
+store (breaks §9.1, *the store is the only authority*).
+
+**Step 4 — units pushed the parent back over 800 (852), so §7 followed §6 to the companion.**
+Final **681 / 696**. Companion retitled "Component Contracts & Scenarios".
+
+**Two things worth carrying forward:**
+
+- **The cost estimate for option A was wrong when it was given.** It was pitched as "+1 agent line,
+  +1 schema field"; it actually touched the prompt contract, hook argument table, round accounting,
+  skill freshness sentence, failure matrix, test cases, falsification targets, scenarios and the
+  scope table — ~170 lines, and it forced a second file move. The recommendation held; the estimate
+  did not. Give the blast radius, not the headline change.
+- **§2's scope table still listed both amended items as explicitly out of scope** after the design
+  changed. Caught by grepping every `unchanged`/`already exists` claim against the new design rather
+  than by re-reading. Same failure mode this branch keeps producing — **the write-up runs ahead of
+  the change** — now on its sixth instance, and again caught by a mechanical check rather than a
+  careful read.
+
+Also verified: all three Mermaid blocks pass `validate-diagrams.sh` (§3's flowchart and sequence
+diagram were updated to show unit resolution rather than left describing the old single-file flow);
+every `§N.M` reference resolves across the pair; the spec declares itself as the first spec unit,
+dogfooding §5.3's own format.
+
 ## Notes
 
 - Judges ran as in-session `Agent`-tool subagents (~86k subagent tokens in round 1; ~133k in

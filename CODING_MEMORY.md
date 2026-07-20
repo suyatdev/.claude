@@ -6,11 +6,11 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
-- current work: **judge terminal-enforcement — SPEC PASSED round 4 (first pass on this spec);
-  post-verdict advisory fixes landed → one re-entry judge round owed after user review. NEXT: user
-  reviews the spec. See Exact Next Steps 0.** Rounds 1–3 ran on Opus 4.8 (model gate `9fd3896`);
-  round 4 ran on Fable 5 — the user switched settings.json to `claude-fable-5` before this session,
-  so the tier choice is the user's own. Design approved §1–§4 2026-07-20; brainstorm landed on
+- current work: **judge terminal-enforcement — USER REVIEW DONE 2026-07-20; spec is now TWO files
+  (681 + 696 lines) and gained a spec-unit model. Re-entry judge round is the immediate next action.
+  See Exact Next Steps 0.** Rounds 1–3 ran on Opus 4.8 (model gate `9fd3896`); round 4 on Fable 5;
+  the review session ran on Sonnet 5 then **Opus 4.8** — the user set each tier themselves via
+  `/model`, so every tier choice on this branch is the user's own. Design approved §1–§4 2026-07-20; brainstorm landed on
   `main` via a docs-only merge (user's call). Deterministic hook gates for both judges + per-judge
   terminal sessions via a shared launcher; key approvals (runner-script indirection, 840s/900s
   timing, SPEC_EXEMPT, mkdir-atomic lock, falsification-backed tests) in the brainstorm:
@@ -119,24 +119,30 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement — SPEC PASSED ROUND 4. NEXT ACTION: user reviews the spec**
-   (`docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`, 1101 lines, branch
-   `feature/judge-terminal-enforcement`). Round 4 @ `4f846ff` (blob `30fd5a0`): compliance **PASS**,
-   0 violations, high confidence — `writing-specs/api-contracts` closed after persisting 3 rounds;
-   observability risk=medium, trajectory pass (first on this branch). Post-verdict advisory fixes
-   landed as `dbf48ae` (entries-first dry-run table — observability's only-untracked exit-1 finding,
-   reproduced before accepting — plus 3 compliance contract notes), so **that pass is stale by
-   blob: after user review, run ONE re-entry judge round (restarts at round 1 per
-   running-the-compliance-judge) covering `dbf48ae` + review edits, before
-   `superpowers:writing-plans`.** User decision owed at review: §11's split-or-accept question
-   (1101 lines vs core-conduct's 800 ceiling — named in the spec, deliberately not decided there).
-   Then blocking spikes S1 (JUDGE_SESSION guard reaches hooks inside the judge session — `--bare`
-   dropped, so hooks DO run there) and S3 (does the harness honour a 900s hook timeout; only
-   precedent is 10s) gate implementation. ADR obligations at implementation: new ADR + ADR-0003
-   update (spec §12). Rounds 1→4 history, both escalations (user-resolved, nothing waived),
-   verdicts, evidence: `coding-memory/branches/judge-terminal-enforcement.md`. Design of record
-   (spec amends: `--bare` and iTerm2 dropped):
-   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+0. **Judge terminal-enforcement — USER REVIEW DONE. NEXT ACTION: the re-entry judge round.**
+   The spec is now a **two-file spec unit** on branch `feature/judge-terminal-enforcement`:
+   `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` (681 lines, §1–5 + §8–12)
+   and `...-contracts.md` (696 lines, §6 component contracts + §7 scenarios). Numbering was never
+   renumbered, so all pre-existing `§6.x`/`§7` references still resolve.
+   **Review cascade (2026-07-20), three user decisions in sequence:** (1) split §6 out — the user
+   chose core-conduct's 800 ceiling over §11's self-containment argument; (2) the split broke the
+   design — both halves match `docs/superpowers/specs/*.md`, so this spec's own normal commit became
+   a two-spec commit with undefined gate behaviour, and per-file freshness keying let a
+   companion-only edit leave the root's verdict reading fresh; (3) resolved by a **spec-unit model**
+   (new §5.3) which cost two invariants that had survived four judge rounds — §4.1's "agent
+   definitions unchanged" (compliance judge gains one declared input it records, never computes) and
+   §5's "schemas unchanged" (one additive nullable `spec_unit_sha`). Units then pushed the parent
+   back over 800, so §7 followed §6 across.
+   **Round 4's PASS @ `4f846ff` is long stale** (superseded by `dbf48ae` + the whole review cascade).
+   Run ONE re-entry round — restarts at round 1 per `running-the-compliance-judge` — before
+   `superpowers:writing-plans`. Then blocking spikes S1 (JUDGE_SESSION guard reaches hooks inside the
+   judge session — `--bare` dropped, so hooks DO run there) and S3 (does the harness honour a 900s
+   hook timeout; only precedent is 10s) gate implementation. ADR obligations grew (spec §12): new ADR
+   **must cover the spec-unit model as its own recorded decision**, ADR-0003 update, and the
+   one-line `agents/compliance-judge.md` amendment. Rounds 1→4, both escalations (user-resolved,
+   nothing waived), and the full review cascade:
+   `coding-memory/branches/judge-terminal-enforcement.md`. Design of record (spec amends: `--bare`
+   and iTerm2 dropped): `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 1. **Statusline token bar — RESOLVED: PR #20 merged 2026-07-20 04:01Z.** (Memory had said "not yet
    PR'd"; reconciled 2026-07-20 — the merge happened outside a checkpointed session, and the 3
    brainstorm commits pushed afterwards were stranded until the docs-only merge above.) R5 was
