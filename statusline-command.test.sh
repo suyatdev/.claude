@@ -48,7 +48,9 @@ TMP="$(mktemp -d)"        # made into a git repo below, for the git-segment case
 NONGIT="$(mktemp -d)"     # never a repo -- the benign twin for $PWD-fallback cases
 STATE_HOME="$(mktemp -d)" # stands in for $HOME so the sigma cases cannot read or
                           # corrupt the real per-session counters under ~/.claude
-trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME"' EXIT
+RACE_HOME="$(mktemp -d)"  # separate again: the concurrency case writes from many
+                          # processes at once and would perturb the serial cases
+trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME"' EXIT
 
 BASE_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 4.8"},"context_window":{"total_input_tokens":100}}'
 BASE_OUT="$(render "$BASE_PAYLOAD")"
@@ -200,6 +202,33 @@ case "$OUT" in
   *"${SIGMA} 10"*) ok "sigma is per-session, not global" ;;
   *) bad "expected a fresh sigma of 10 for a new session: $OUT" ;;
 esac
+
+# Concurrent renders must not LOSE updates. The statusline re-renders on a timer
+# and can overlap with itself, so two processes can read the same total, each add
+# their own call, and each write back -- the later write erasing the earlier one.
+# The atomic `mv` in the script prevents a torn READ and does nothing whatsoever
+# for a lost UPDATE; conflating the two is what left this open.
+#
+# Asserted against the state file rather than a rendered line: the render shows
+# whatever the last writer stored, which is exactly the value under suspicion.
+# 20 concurrent writers each contribute a distinct amount, so any lost update
+# leaves a total that is both wrong and specific about how much went missing.
+race_render() { printf '%s' "$1" | HOME="$RACE_HOME" bash "$SCRIPT" >/dev/null 2>&1; }
+
+race_render "$(usage_payload race 200 0 0)"
+RACE_EXPECTED=200
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  race_render "$(usage_payload race $((1000 + i)) 0 0)" &
+  RACE_EXPECTED=$((RACE_EXPECTED + 1000 + i))
+done
+wait
+RACE_FILE="$RACE_HOME/.claude/statusline-state/session-race.json"
+RACE_ACTUAL="$(jq -r '.cum_tokens // 0' "$RACE_FILE" 2>/dev/null)"
+if [ "$RACE_ACTUAL" = "$RACE_EXPECTED" ]; then
+  ok "concurrent renders do not lose sigma updates (total $RACE_ACTUAL)"
+else
+  bad "sigma lost updates under concurrency: expected $RACE_EXPECTED, got ${RACE_ACTUAL:-<unreadable>}"
+fi
 
 # --- Weekly quota segment -----------------------------------------------------
 # resets_at is epoch SECONDS. An earlier version assumed ISO-8601 and rendered no
