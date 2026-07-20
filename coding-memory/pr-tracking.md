@@ -187,7 +187,9 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 ## PR #21 — feature/add-claude-code-handoff (suyatdev/.claude)
 
 - repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/21 · status: OPEN (created 2026-07-20)
+- PR: https://github.com/suyatdev/.claude/pull/21 · status: MERGED 2026-07-20T22:02:47Z
+  (merge commit 3c58363; PR tip e0721ae). Branch NOT deleted local + remote (redundant tip
+  commit 77b59ad, see PR #22).
 - opened_by session_origin: desktop · last push: desktop
 - scope: vendored Sonovore/claude-code-handoff @ c6cb717 (1d9312c), then the per-feature
   cherry-pick against the house memory system (a9a84b7) + judge-R1 doc fixes (e56c2f2).
@@ -197,6 +199,26 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   R2 e56c2f2 **low/high**, nothing blocking. outcome: null (backfill post-merge).
 - process note: metadata written after `gh pr create`, keeping the verdict matched to HEAD
   (same ordering as PR #19; the pattern PR #18 got wrong).
+- **audit-trail gap → PR #22:** the judge verdict store + the two markdown writeups were
+  committed to the branch as `77b59ad` *after* PR #21 had already merged (at e0721ae), so
+  they never reached `main` even though CODING_MEMORY already cited them. Landed separately
+  via PR #22.
 - watch item: first unattended autocompaction with an active task/bug file — the handoff
   PreCompact trio's AskUserQuestion may stall it (accepted risk, ADR 0006).
 - detail: coding-memory/branches/add-claude-code-handoff.md
+
+## PR #22 — docs/pr21-judge-audit-trail (suyatdev/.claude)
+
+- repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/22 · status: MERGED 2026-07-20 (merge commit
+  284478a). Branch deleted local + remote post-merge.
+- opened_by session_origin: desktop · last push: desktop
+- scope: docs-only. Cherry-picks `77b59ad` (PR #21's judge audit trail — verdicts.jsonl
+  +2 entries and the two `2026-07-20-feature-add-claude-code-handoff*.md` writeups) off the
+  already-merged PR #21 branch onto `main` as `7337186`. Content byte-identical to 77b59ad.
+- process note: opened with `JUDGE_EXEMPT` (docs-only, no source change to evaluate) — a
+  genuine exemption, not a bypass of a stale verdict. Same reasoning the observability-judge
+  skill sanctions for pure-documentation PRs.
+- lesson: committing a branch's judge trail *after* its PR merges strands it — the verdict
+  files belong in the same commit train as the source, or in a follow-up before merge. Here
+  the cherry-pick + follow-up PR was the clean recovery once already stranded.

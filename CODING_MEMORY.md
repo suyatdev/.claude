@@ -6,14 +6,15 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-20 (3rd session) · last_active_branch: feature/add-claude-code-handoff
-- current work: **claude-code-handoff cherry-pick EXECUTED (model gate: Fable 5) — judge + PR
-  remain.** User's per-row picks applied: handoff SessionStart loader removed, doc-guard
-  PreCompact registration removed (handoff trio owns the event), live-handoff/tracker/PreCompact
-  trio stay, tracker's upstream bug patched locally (verified live), `/handoff` = manual
-  checkpoint UX while committed CODING_MEMORY stays the source of truth, philosophy + gitignore
-  duty absorbed into `managing-session-memory`. Full table: **ADR 0006**; execution detail:
-  `coding-memory/branches/add-claude-code-handoff.md`. settings.json dual-version staging
-  policy unchanged (Orca hooks + fable-model line stay uncommitted).
+- current work: **claude-code-handoff cherry-pick SHIPPED — PR #21 MERGED (3c58363, 2026-07-20
+  22:02Z); PR #22 MERGED (284478a) landed the stranded judge audit trail.** The `/clear` that
+  opened this session interrupted the checkpoint: PR #21's judge verdicts + writeups had been
+  committed to the branch as `77b59ad` *after* #21 already merged, so they never reached `main`.
+  Recovered by cherry-picking onto `main` via a docs-only PR #22 (`JUDGE_EXEMPT`, docs-only).
+  Full picks table: **ADR 0006**; execution detail: `coding-memory/branches/add-claude-code-handoff.md`.
+  settings.json dual-version staging policy unchanged (Orca hooks + fable-model line stay uncommitted).
+  **Open cleanup: `feature/add-claude-code-handoff` merged but not deleted — its tip 77b59ad is
+  byte-identical to the merged 7337186, so a force-delete (`-D`) is safe but was deferred to the user.**
 - parked: **judge terminal-enforcement — design complete (§1–§4 approved), spec phase not
   started.** Resume via Next Steps 0b; full design + approvals:
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
@@ -119,7 +120,9 @@ how this file and its linked files should be written (plain language, major chan
   c6cb717, then cherry-picked per the user's 15-row picks (ADR 0006): handoff SessionStart
   loader + doc-guard PreCompact removed, tracker bug patched locally (verified live),
   `/handoff` = checkpoint UX, committed memory stays authoritative. Judge R1 medium→fixed,
-  R2 **low/high** @ e56c2f2. **PR #21 OPEN** (2026-07-20).
+  R2 **low/high** @ e56c2f2. **PR #21 MERGED 2026-07-20 22:02Z (3c58363).** Judge audit trail
+  committed to the branch post-merge (77b59ad) and stranded off `main`; recovered via docs-only
+  **PR #22 MERGED (284478a)** — cherry-pick 7337186.
   Detail: `coding-memory/branches/add-claude-code-handoff.md`, `coding-memory/pr-tracking.md`.
 
 ## Pointers
@@ -130,13 +133,13 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **claude-code-handoff cherry-pick (2026-07-20) — EXECUTED; judge + PR remain.** Picks
-   applied per ADR 0006 (settings removals, local tracker fix verified live, skill
-   adaptations). Chart artifact e570411a now persists picks via localStorage (was in-page
-   only — the original picks were unrecoverable and were re-supplied by paste). Remaining:
-   observability judge (implementation stage) → PR. Ongoing duty: add handoff state-file
-   gitignore entries per project repo on first work there (recorded in
-   `managing-session-memory`).
+0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
+   applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
+   stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
+   **Only cleanup left:** force-delete the merged `feature/add-claude-code-handoff` (local +
+   remote) — safe (tip 77b59ad ≡ merged 7337186) but pending user OK; see Orphans below.
+   Ongoing duty (unchanged): add handoff state-file gitignore entries per project repo on
+   first work there (recorded in `managing-session-memory`).
 0b. **Judge terminal-enforcement (2026-07-20) — parked. Design COMPLETE (§1–§4 approved).**
    Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
    on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
@@ -146,15 +149,10 @@ how this file and its linked files should be written (plain language, major chan
    on `main`, so the branch inherits it; the spec should still stand alone as the build artifact.
    Approved design + platform facts (hook timeout **fails open**; `claude --bare -p --agent`):
    `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
-1. **Statusline token bar — RESOLVED: PR #20 merged 2026-07-20 04:01Z.** (Memory had said "not yet
-   PR'd"; reconciled 2026-07-20 — the merge happened outside a checkpointed session, and the 3
-   brainstorm commits pushed afterwards were stranded until the docs-only merge above.) R5 was
-   never run and is now moot. Still open, deliberately unabsorbed: R1's `STATUSLINE_DEBUG` logging
-   to `$STATE_DIR/debug.log` splitting "field absent" from "field present but unparseable" — the
-   judge noted it would have caught the epoch-seconds bug on render one. Cosmetics left: duration
-   floors, bar rounds full at 95k, no MB rollover. Lessons (same bug class one level deeper each
-   round; `mkdir`-atomic over `mv`; verify a break against whatever justified it) are recorded in
-   `coding-memory/branches/statusline-token-bar.md` and ADR 0005.
+1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
+   unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
+   unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
+   bar full at 95k, no MB rollover). Detail + lessons: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
 2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
@@ -187,10 +185,13 @@ documentation-enforcement, PORTS.md reconcile, diagramming skill, observability 
 hook, live and global), memsearch RAG index, verifying-subagent-commits, compliance judge; plus
 vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-readmes, d242e69),
 #18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4),
-**#20 (statusline token bar, merged 04:01Z)**.
+**#20 (statusline token bar, merged 04:01Z)**, **#21 (claude-code-handoff cherry-pick, 3c58363,
+22:02Z)**, **#22 (docs-only follow-up landing PR #21's stranded judge audit trail, 284478a)**.
 
-**Orphans outstanding:** branches `feature/statusline-command`, `docs/diagramming-pointers`, and
-now `feature/statusline-token-bar` are merged but not deleted (local + remote). Also unmerged and
-unexplained by memory: remote branches `feature/documentation-enforcement`,
+**Orphans outstanding:** branches `feature/statusline-command`, `docs/diagramming-pointers`,
+`feature/statusline-token-bar`, and now `feature/add-claude-code-handoff` are merged but not
+deleted (local + remote). The handoff branch needs a force-delete (`git branch -D`) because its
+tip 77b59ad landed on `main` under a different SHA (7337186, via PR #22) — content-identical, so
+safe. Also unmerged and unexplained by memory: remote branches `feature/documentation-enforcement`,
 `feature/modular-coding-memory`, `feature/vibe-coding-standards-integration`,
 `update/update-default-model` — their PRs merged long ago; safe to prune after a check.
