@@ -169,6 +169,26 @@ Cost: the suite is ~6.5s, dominated by two deliberate ~390ms give-up paths and t
 concurrency cases. Slow for a statusline, and worth it — these are the only assertions that have
 ever caught these bugs.
 
+**Round 4 — a wrong assumption about a shell builtin, underneath all of it.** `mv dirA dirB` is not
+"rename or fail" when `dirB` exists: the `mv` utility moves `dirA` *inside* `dirB` and reports
+success. So the restore could never fail, its `|| rm -rf` was dead code, and on a retaken path it
+buried the capture inside the live lock — putting the capture's pid file where the owner's belonged,
+so the owner then failed its *own* ownership check and never released. ADR 0005 had described that
+path as "the captured directory is dropped", which was mechanically wrong, not merely optimistic.
+
+Restore now uses `mkdir`, which genuinely is atomic and genuinely does fail when the path is taken —
+the test actually wanted. Capture fails closed on a leftover grave rather than nesting into it.
+
+**The test that catches it had to drive the interleaving.** A plain mismatch-restore never occupies
+the path, so both forms pass; the `find` fork in age verification leaves a window where the path is
+free, and the suite now spins for that window, plants a competing holder, and asserts the live lock
+is neither nested into nor pid-displaced. Retried up to 20 times and failing loudly if it cannot
+construct the race, rather than passing vacuously.
+
+Still uncaught, declared: reintroducing the R3 bug at the *call site* (passing `pid:` mode where
+`age` justified the break) leaves the suite green. The helper is guarded; the choice of argument is
+not.
+
 The give-up-time assertion is deliberately coarse and says so: the bug measured ~455ms against an
 intended ~390ms ceiling, and no portable timing assertion separates those. That constraint lives in
 the `LOCK_ATTEMPTS` comment, not in a test that would only pretend to enforce it.

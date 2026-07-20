@@ -96,14 +96,29 @@ serialisation. Both locks now share one break and one release implementation,
 because two implementations of the same protocol is precisely how the breaker
 came to lack guards the state lock already had.
 
-**Residual window, accepted deliberately:** if a breaker captures a lock a fresh
-holder took between its judgement and its rename, it restores the directory;
-should that restore lose to a newer lock, the captured directory is dropped.
-Review could not construct a reachable interleaving through `clear_stale_lock`,
-where serialisation plus in-lock re-reading closes it; the window is a property
-of the capture-verify-restore shape rather than a known live path. It costs one
-wrong cosmetic total and self-heals on the next render. Closing it outright
-requires a compare-and-swap the filesystem does not offer.
+**`mv` on directories is not "rename or fail".** The `mv` utility moves a source
+directory *inside* an existing target directory and reports success, so a
+restore written as `mv "$grave" "$lock"` cannot fail — its `|| rm -rf` was dead
+code — and when the path had been retaken it buried the capture inside the live
+lock, putting the capture's pid file where the true owner's belonged and making
+the owner fail its own ownership check. An earlier revision of this ADR
+described that path as "the captured directory is dropped", which was
+mechanically wrong rather than merely optimistic.
+
+Restoring therefore uses `mkdir`, which *is* atomic and *does* fail when the
+path is taken — precisely the test wanted. If the path is free the lock is
+recreated with its owner's pid; if not, a newer lock owns it and the capture is
+discarded. Recreating resets the lock's mtime, which only delays a future
+age-based break: the safe direction. Capturing likewise fails closed when a
+grave path already exists, rather than nesting into a leftover.
+
+**Residual window, accepted deliberately:** the capture-verify-restore shape has
+a window between judging a lock and capturing it. Review could not construct a
+reachable interleaving through `clear_stale_lock`, where serialisation plus
+in-lock re-reading closes it, so this is a property of the shape rather than a
+known live path. It costs one wrong cosmetic total and self-heals on the next
+render. Closing it outright requires a compare-and-swap the filesystem does not
+offer.
 
 ## Consequences
 - Totals are exact under normal concurrency: 20 concurrent renders against a
