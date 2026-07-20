@@ -335,6 +335,85 @@ case "$OUT" in
   *) bad "stale-lock break lost updates: expected $BREAK_EXPECTED in: $OUT" ;;
 esac
 
+# An AGED lock whose PID is still alive is the PID-reuse case: PIDs are reused
+# after wraparound, so `kill -0` cannot distinguish a reused PID from the
+# original holder, and without an age backstop such a lock wedges this session's
+# counter permanently and silently. The backstop runs after the spin, so the
+# wedge clears on the render AFTER the one that hit it -- assert exactly that,
+# rather than expecting the first render to recover.
+#
+# Without this case, deleting the whole backstop leaves the suite green: it was
+# added on a judge finding and was itself untested, which is how the same class
+# of gap keeps recurring on this branch.
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"; printf '%s\n' "$$" >"$LOCK_DIR/pid"
+touch -t 202001010000 "$LOCK_DIR"
+assert_sigma "aged lock held by a LIVE pid does not recover on the first render" "$(lock_render 80)" 165
+assert_sigma "aged lock held by a LIVE pid recovers on the next render" "$(lock_render 80)" 245
+
+# A render must never evict a lock it does not own. Here the planted lock is
+# young and live, so it is neither stale nor aged: the render must give up,
+# leave it standing, and record nothing.
+rm -rf "$LOCK_DIR"; mkdir -p "$LOCK_DIR"; printf '%s\n' "$$" >"$LOCK_DIR/pid"
+assert_sigma "young live lock blocks the update rather than being evicted" "$(lock_render 90)" 245
+if [ -d "$LOCK_DIR" ]; then
+  ok "a foreign live lock is still standing after the render gives up"
+else
+  bad "the render evicted a foreign live lock it did not own"
+fi
+rm -rf "$LOCK_DIR"
+
+# --- Lock helpers, exercised directly ----------------------------------------
+# These guards cannot be reached through a normal render. They only matter when
+# a lock is broken and re-taken inside another render's ~3ms critical section,
+# which no black-box test can schedule deterministically -- stripping the
+# ownership check from release leaves the entire suite green, verified by
+# mutation. So the functions are called directly instead, by sourcing the script
+# in a SUBSHELL with stdin closed and output discarded. The subshell is what
+# keeps the sourced script's many globals from colliding with this file's.
+unit_lock_helpers() {
+  UNIT_HOME="$(mktemp -d)"
+  # shellcheck disable=SC1090
+  HOME="$UNIT_HOME" . "$SCRIPT" >/dev/null 2>&1 </dev/null
+
+  mine="$UNIT_HOME/mine.lock"; foreign="$UNIT_HOME/foreign.lock"
+  mkdir -p "$mine" "$foreign"
+  printf '%s\n' "$$" >"$mine/pid"
+  printf '%s\n' "999999" >"$foreign/pid"
+  release_lock_if_owned "$mine"
+  release_lock_if_owned "$foreign"
+  [ -d "$mine" ] && { printf 'release kept a lock it owned\n'; return 1; }
+  [ -d "$foreign" ] || { printf 'release removed a lock it did NOT own\n'; return 1; }
+
+  # break_lock_verified, pid mode: matching capture is removed, differing
+  # capture is restored rather than destroyed.
+  match="$UNIT_HOME/match.lock"; differ="$UNIT_HOME/differ.lock"
+  mkdir -p "$match" "$differ"
+  printf '%s\n' "4242" >"$match/pid"
+  printf '%s\n' "7777" >"$differ/pid"
+  break_lock_verified "$match" "pid:4242"
+  break_lock_verified "$differ" "pid:4242"
+  [ -d "$match" ] && { printf 'pid-mode break kept a verified stale lock\n'; return 1; }
+  [ -d "$differ" ] || { printf 'pid-mode break destroyed a lock it had not judged\n'; return 1; }
+
+  # break_lock_verified, age mode: this is the mode whose verification was
+  # originally wrong -- the break was justified by age but verified by pid, so a
+  # lock re-taken in between passed the check and a live lock was deleted.
+  aged="$UNIT_HOME/aged.lock"; fresh="$UNIT_HOME/fresh.lock"
+  mkdir -p "$aged" "$fresh"
+  touch -t 202001010000 "$aged"
+  break_lock_verified "$aged" "age"
+  break_lock_verified "$fresh" "age"
+  [ -d "$aged" ] && { printf 'age-mode break kept an aged lock\n'; return 1; }
+  [ -d "$fresh" ] || { printf 'age-mode break destroyed a FRESH lock\n'; return 1; }
+
+  # Nothing may be left behind on any path.
+  leftovers="$(find "$UNIT_HOME" -name '*.dead.*' | wc -l | tr -d ' ')"
+  [ "$leftovers" = "0" ] || { printf 'break left %s captured directories behind\n' "$leftovers"; return 1; }
+  return 0
+}
+UNIT_ERR="$(unit_lock_helpers 2>&1)" && ok "lock helpers behave correctly when called directly" \
+  || bad "lock helper unit checks: $UNIT_ERR"
+
 # A state file in the previous JSON format must not crash the render or be
 # misread as a total. It fails charset validation, so the counter restarts.
 mkdir -p "$JSON_HOME/.claude/statusline-state"
