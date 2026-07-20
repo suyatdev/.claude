@@ -39,25 +39,9 @@
             "command": "$HOME/.claude/hooks/memsearch-nudge.sh"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/handoff/session-start.sh"
-          }
-        ]
       }
     ],
     "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.claude/hooks/doc-guard.sh"
-          }
-        ]
-      },
       {
         "hooks": [
           {

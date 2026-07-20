@@ -5,15 +5,15 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-20 (2nd session) · last_active_branch: feature/add-claude-code-handoff
-- current work: **claude-code-handoff vendored install — COMMITTED, awaiting user cherry-pick.**
-  Full verbatim install of github.com/Sonovore/claude-code-handoff @ c6cb717 (user chose full
-  install over adapt-into-existing; model gate: Fable 5). `/handoff` command + 6 scripts under
-  `hooks/handoff/` + 4 hook registrations (SessionStart, UserPromptSubmit, PostToolUse,
-  PreCompact). Comparison chart delivered (link in branch log); user cherry-picks per-feature
-  defaults next — nothing disabled yet, both memory systems currently run. settings.json
-  committed as HEAD+handoff-only via index staging (Orca hooks + fable-model change stay
-  uncommitted, policy unchanged). Detail: `coding-memory/branches/add-claude-code-handoff.md`.
+- session_origin: desktop · session_started_at: 2026-07-20 (3rd session) · last_active_branch: feature/add-claude-code-handoff
+- current work: **claude-code-handoff cherry-pick EXECUTED (model gate: Fable 5) — judge + PR
+  remain.** User's per-row picks applied: handoff SessionStart loader removed, doc-guard
+  PreCompact registration removed (handoff trio owns the event), live-handoff/tracker/PreCompact
+  trio stay, tracker's upstream bug patched locally (verified live), `/handoff` = manual
+  checkpoint UX while committed CODING_MEMORY stays the source of truth, philosophy + gitignore
+  duty absorbed into `managing-session-memory`. Full table: **ADR 0006**; execution detail:
+  `coding-memory/branches/add-claude-code-handoff.md`. settings.json dual-version staging
+  policy unchanged (Orca hooks + fable-model line stay uncommitted).
 - parked: **judge terminal-enforcement — design complete (§1–§4 approved), spec phase not
   started.** Resume via Next Steps 0b; full design + approvals:
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
@@ -129,13 +129,13 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **claude-code-handoff cherry-pick (2026-07-20) — AWAITING USER PICKS.** Comparison chart
-   delivered (artifact e570411a-795d-4b79-bda2-d0017ad9794e; content regenerable from
-   `coding-memory/branches/add-claude-code-handoff.md`). On reply: disable losing hook
-   registrations in settings.json, adapt winners (standouts: bug-test-log ledger,
-   recent-prompts capture, forward-looking handoff principle), per-repo gitignore guidance,
-   observability judge, then PR (judge deferred to PR time by design). Known upstream bug:
-   PostToolUse tracker no-ops when live-handoff created session-state.md.
+0. **claude-code-handoff cherry-pick (2026-07-20) — EXECUTED; judge + PR remain.** Picks
+   applied per ADR 0006 (settings removals, local tracker fix verified live, skill
+   adaptations). Chart artifact e570411a now persists picks via localStorage (was in-page
+   only — the original picks were unrecoverable and were re-supplied by paste). Remaining:
+   observability judge (implementation stage) → PR. Ongoing duty: add handoff state-file
+   gitignore entries per project repo on first work there (recorded in
+   `managing-session-memory`).
 0b. **Judge terminal-enforcement (2026-07-20) — parked. Design COMPLETE (§1–§4 approved).**
    Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
    on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,

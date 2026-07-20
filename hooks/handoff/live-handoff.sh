@@ -1,5 +1,8 @@
 #!/bin/bash
 # Vendored from https://github.com/Sonovore/claude-code-handoff @ c6cb717 (2026-07-20)
+# Locally patched 2026-07-20: INIT template gained the "<!-- Files touched this session -->"
+# marker so the PostToolUse tracker's sed target exists (upstream bug: the tracker silently
+# no-ops whenever this template wins the file-creation race against proactive-handoff.sh init).
 # Live Handoff — UserPromptSubmit hook
 # Injects a directive on EVERY user message telling Claude to maintain session-state.md
 # This is the primary mechanism for continuous context preservation.
@@ -53,6 +56,7 @@ Auto-maintained during conversation. Do not delete.
 ## Key Context
 
 ## Modified Files
+<!-- Files touched this session -->
 
 ## Current Focus
 

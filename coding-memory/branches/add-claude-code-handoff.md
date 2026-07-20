@@ -1,7 +1,8 @@
 # feature/add-claude-code-handoff — vendored claude-code-handoff install
 
-**Status (2026-07-20):** installed verbatim and committed; awaiting the user's per-feature
-cherry-pick between this and the house memory system. Nothing disabled — both systems run.
+**Status (2026-07-20, cherry-pick executed):** the user's per-feature picks are decided and
+applied — row-by-row outcome and rationale in **ADR 0006** (`docs/decisions/0006-handoff-cherry-pick.md`).
+Remaining: observability judge → PR.
 
 ## What and why
 
@@ -93,10 +94,31 @@ recent-prompts capture, the mode state machine, and the "write for the NEXT cont
 principle. Core tension: gitignored machine-local state files vs committed CODING_MEMORY —
 two sources of truth if both stay on.
 
+## Cherry-pick execution (2026-07-20)
+
+Getting the picks was its own lesson: the chart stored them **only in an in-page JS variable**,
+so the previous session's clicks were unrecoverable (Chrome extension not connected either).
+The artifact was republished at the same URL with localStorage persistence, and the picks
+finally arrived pasted into the terminal. Row-by-row decision table: ADR 0006.
+
+Applied:
+
+- `settings.json` — handoff `session-start.sh` SessionStart registration removed (restore:
+  House); **doc-guard's PreCompact registration removed** (pre-compaction save: Handoff — the
+  trio owns the event; doc-guard keeps PreToolUse blocking + SessionStart surfacing).
+  Dual-version staging repeated: committed blob = HEAD + these removals, worktree additionally
+  keeps the uncommitted Orca hooks + `claude-fable-5[1m]` model line.
+- `hooks/handoff/live-handoff.sh` — **local patch, deliberate divergence from c6cb717**: INIT
+  template gained the `<!-- Files touched this session -->` marker, fixing the upstream
+  tracker no-op. Verified live immediately: the PostToolUse tracker appended real entries to
+  this repo's `session-state.md` on the very next edits.
+- `skills/managing-session-memory/SKILL.md` — three additions: "Write for the NEXT context
+  window" bullet (philosophy: Both), `/handoff` named as the manual checkpoint command that
+  complements (never replaces) the CODING_MEMORY save+push (checkpoint: Handoff × storage:
+  House), and the per-repo gitignore duty for handoff state files.
+- `docs/decisions/0006-handoff-cherry-pick.md` — the ADR, with the post-pick event-ownership
+  diagram.
+
 ## Next
 
-User's picks → disable losing hook registrations in `settings.json`, adapt winners (likely
-into `managing-session-memory` or new skill homes per triage), per-repo gitignore guidance,
-observability judge, PR. The judge is deliberately deferred to PR time — the gate anchors on
-`gh pr create`, and judging the intermediate both-systems-on state would be judging a state
-the cherry-pick is about to change.
+Observability judge (implementation stage), then PR via `preparing-pull-requests`.
