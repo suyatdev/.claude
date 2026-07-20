@@ -255,3 +255,82 @@ the array on stdin), but which way to go is an interface decision, not a typo fi
 
 None. Nothing has been waived on this spec in any round; the escalation that fired after round 2 was
 resolved by the user directing a fix.
+
+---
+
+## Round 4 — 2026-07-20 · verdict: PASS (0 violations)
+
+- **Spec blob:** `30fd5a07ed3f493b44b01de797f95b3b62768b91` · **HEAD:** `4f846ff8f9547c1cc7d37994c2b72f3eee8730bc`
+- **Branch:** `feature/judge-terminal-enforcement` · **Waived:** none
+- **Persistence:** `writing-specs/api-contracts`, cited in rounds 1–3, is **closed this round**.
+  Nothing else is outstanding. This is the spec's first pass.
+
+### Layman summary
+
+The problem that survived three rounds is gone, and it is gone for the right reason: the design
+deleted the hand-off instead of re-plumbing it. For three rounds, someone had to hand the judge the
+previous round's list of problems so the judge could recognize a repeat — and each revision assigned
+that hand-off to a party that could not perform it (no caller at all, then a caller with no data
+source, then a destination that could not exist yet). Round 4's answer, directed by the user at
+escalation #2, is that nobody hands it over: the launcher pulls the prior round's violations out of
+the verdict store — a file it already reads — after it has created its own run directory, where
+everything it needs (`--spec`, `--round`, the store) is already in its hands. I checked every
+argument on every caller path against the test the escalation set: the hook derives all of its
+arguments from the repo and the store with no conversation to draw on; the skills author their own
+context files and no longer pass the prior-violations flag; an ad-hoc caller may override with a
+file that must already exist, which such a caller can trivially provide. Nothing is sequenced by a
+party that cannot produce it. The circular dependency is not re-sequenced; it no longer exists.
+
+The other two user-directed changes hold up the same way. Detection stopped trying to out-parse git
+and now asks git itself (`git commit --dry-run --porcelain -z` on the unchanged arguments) which
+files the commit will record — the fix that ends the whack-a-mole where round 2 missed `-a` and
+round 3's fix missed `-i`. The universal staged==worktree precondition that replaces the per-form
+"effective blob" analysis is a sound KISS trade: it costs the agent one `git add` and deletes the
+exact analysis where both detection bugs lived. And §6.5's corrected timeout claim moves in the
+honest direction — the truth (ten of seventeen hooks set timeouts, all at 10 seconds) makes the
+900-second ask a 90× extrapolation and *sharpens* spike S3 rather than excusing it; S3 stays
+blocking, which is right. All four of round 3's notes are fixed, including the §3 flowchart that
+previously showed the disproved design. The spec's remaining honesty items — the 800-line ceiling
+breach, the unverifiable ack provenance, the untested rungs — are named in §11 and put to the user
+rather than hidden, which is exactly where decisions like those belong.
+
+### Violations
+
+None.
+
+### Notes (non-blocking)
+
+- **Closure verified argument-by-argument.** Hook/compliance: `--spec` from detection, `--round` =
+  store max+1 (empty case defined as 1), `--waived` as the store union, `--acked` from the env key,
+  prior violations launcher-derived, context fallback a constant compiled into `judge-rundir.sh`.
+  Hook/observability: stage constant, decisions fallback naming evidence that already exists in the
+  repo. Skill paths: explicit `--context-file`/`--decisions-file`, no prior-violations flag. Ad-hoc:
+  the override validated like every other `--*-file`. Every input either arrives validated, falls
+  back deterministically, or is derived — none is awaited from a caller that cannot produce it.
+- **Vestigial validation branch.** `--*-file` may resolve "inside repo **or run dir**", but no caller
+  can pre-place a file in a run dir only the launcher creates; the run-dir branch is now dead and
+  worth pruning at implementation so it does not read as a supported path.
+- **One misuse edge unstated.** An ad-hoc `--round 3` against a spec with no stored rounds leaves the
+  extraction result unspecified. Unreachable on both specified caller paths (hook and skill both
+  derive round from real history), and §9.5's fail-closed posture reasonably covers it — but one
+  sentence (fail validation when `--round > 1` finds no stored round) would close it.
+- **Dry-run invocation mechanism left implicit.** §5.2/§6.2 should state that the hook re-executes
+  the parsed argv list (python subprocess, the same `shlex` split it already has), never re-joined
+  shell text. Not a security hole — the command author already has arbitrary shell — but re-quoting
+  could mangle a commit message and misclassify.
+- **A literal `git commit --dry-run` run by the agent is itself gated** (detection appends a
+  duplicate flag harmlessly; freshness/launch then applies to a commit that never lands). An
+  over-block toward fail-closed, consistent with the stated posture, but unenumerated in §7.
+- **The spec is ~1096 lines against core-conduct's 800-line ceiling.** §11 names the breach and puts
+  the split question to the user at review — a surfaced, human-owned decision, recorded here so the
+  review gate sees it. Not cited: the ceiling lives in Code Style, the density §5.2 carried is what
+  this round deleted, and silently splitting would break the self-containment the spec promises.
+- **All four round-3 notes are fixed:** §3's flowchart now shows dry-run detection and the universal
+  precondition; §6.1.2's fallback pointer now correctly reads §6.2.1; `design_doc` has a stated
+  absent-form; §10's table heading matches its contents.
+
+### Waivers
+
+None. Nothing has been waived on this spec in any round. Both escalations (#1 after round 2,
+#2 after round 3) were resolved by the user directing fixes, and both directed fixes are now in the
+spec and verified.

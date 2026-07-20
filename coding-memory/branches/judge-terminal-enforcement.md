@@ -5,12 +5,13 @@ Cut off `main` 2026-07-20. Implements the approved design in
 
 ## State
 
-**Spec phase, round 3 JUDGED @ `60abc86`: compliance fail (1 violation, third consecutive round of
-the same id) → escalation #2 fired → user directed both fixes, nothing waived. Round 4 revision NOT
-yet written.**
+**Spec phase, round 4 PASSED @ `4f846ff` (compliance: 0 violations, high confidence; observability:
+trajectory pass — first on this branch — risk=medium). Post-verdict advisory fixes landed as
+`dbf48ae`, so that pass is stale by blob; ONE re-entry round owed, batched with user-review edits.
+NEXT: the user reviews the spec.**
 
 - Spec: `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`
-  (1027 lines, 3 Mermaid blocks, validator PASS).
+  (1101 lines, 3 Mermaid blocks, validator PASS).
 - Base established by merging the brainstorm commits into `main` (user's call over cherry-pick),
   pushed as `48f02d4` + `69ecd12`. Branch inherits the design; the spec still stands alone.
 
@@ -19,7 +20,9 @@ yet written.**
 | 1 | `8aed77a` (464 ln) | **fail** — 5 violations, high | risk=medium, 3 concerns |
 | 2 | `ccd02fc` (855 ln) | **fail** — 3 violations, high (2 persisted, 1 new) | risk=medium, high |
 | 3 | `60abc86` (1036 ln) | **fail** — 1 violation, high (2 closed, **1 persisted 3x**) | risk=medium, high |
-| 4 | not yet written | — | — |
+| 4 | `4f846ff` (1096 ln) | **PASS** — 0 violations, high | risk=medium, high, trajectory pass |
+
+Post-verdict: `dbf48ae` (1101 ln) — advisory fixes, unjudged; covered by the owed re-entry round.
 
 ## Round 1 verdicts (2026-07-20)
 
@@ -227,9 +230,57 @@ pending a pass during the round-4 edit (§6.1.2 cross-ref points at §6.2.2 for 
 §6.2.1; `design_doc` has no specified absent-form; §3's flowchart still draws the precondition §5.2
 disproves; §10's table header still says "round-2 revisions").
 
+## Round 4 revision (spec `4f846ff`, 2026-07-20, ran on Fable 5)
+
+Both user-directed fixes applied, all four round-3 notes, §6.5 corrected (**10 of 17 hooks set
+`timeout: 10`** — verified by parsing the live settings.json), and every §5.2 claim re-verified
+against real git before writing (the branch rule: run, don't read). That re-verification caught
+three refinements BEFORE they shipped: untracked `??` entries are not recorded (the real commit
+omits them), spec deletions (`D`) trigger nothing, and `-z` rename entries carry the recorded path
+with the source as an extra NUL field. Vocabulary swept ("stages a spec" → "records a spec").
+Trim pass applied, but net 1036 → 1096 lines — the fixes added more than the trim removed — so §11
+now names the 800-ceiling breach as an explicit user-review question instead of hiding it.
+
+- **Fix 1:** `--prior-violations-file` dropped from every caller path; §6.1.2 has the launcher
+  extract the prior round's `violations` array from the store *after* creating the run dir. The
+  3-round circularity is deleted, not re-sequenced — no ordering exists for a caller to get wrong.
+- **Fix 2:** §5.2 detection = `git commit --dry-run --porcelain -z <same args>`; the
+  index==worktree precondition became universal; all per-form "effective blob" analysis deleted.
+
+## Round 4 verdicts (2026-07-20, spec `4f846ff`, blob `30fd5a0`)
+
+| Judge | Result | Detail |
+|---|---|---|
+| compliance (blocking) | **PASS**, 0 violations, confidence high | `coding-memory/compliance-judge/2026-07-20-judge-terminal-enforcement-design.md` |
+| observability (advisory, architecting) | risk=medium, confidence=high, **trajectory pass — first on this branch** | `coding-memory/observability-judge/2026-07-20-feature-judge-terminal-enforcement-round4.md` |
+
+**`writing-specs/api-contracts` closed after three rounds** — the judge walked every caller path
+against the user's test (every argument producible by its caller at call time) and confirmed the
+circularity is deleted. Nothing waived in any round. Observability's remaining concerns are the two
+blocking spikes (S1, S3), the most-run-command blast radius, and the named-but-open S3 fail-open
+shape plus the advisory ack — all already stated in the spec, none new.
+
+## Post-verdict fix (`dbf48ae`) — why the round-4 pass is stale by blob
+
+Observability found one real uncovered case. **Reproduced before accepting** — and the first
+reproduction attempt *disagreed with the judge* because `cmd | tr ...; echo $?` measures tr's exit,
+not git's; controlled redirects settled it (a fifth instance of the branch lesson, this time in the
+verification harness itself): an only-untracked tree exits 1 with **non-empty** output (`??`
+entries), matching no §5.2 table row, and row 3's "non-space `X` including `??`" wording
+contradicted the M/A/R/C whitelist that actually governs. Fixed as the judge proposed — **entries
+decide first; exit codes consulted only when no spec entry answers** — plus the compliance judge's
+three non-blocking notes: dead "or run dir" validation branch dropped, `--round > 1` with no stored
+history now fails preflight (exit 4), and §5.2 states the dry-run re-executes the parsed argv list,
+never re-joined shell text.
+
+**Owed next:** user review → one re-entry judge round (restarts at round 1 per
+`running-the-compliance-judge`) covering `dbf48ae` + whatever the review changes, before
+`superpowers:writing-plans`. User decision owed at review: §11's split-or-accept (1101 lines vs the
+800 ceiling). Then spikes S1 and S3 block implementation.
+
 ## Notes
 
-- Judges ran as in-session `Agent`-tool subagents (~86k subagent tokens across the two) — the exact
-  cost this design exists to move out of the main window. Round 2 will cost similar.
+- Judges ran as in-session `Agent`-tool subagents (~86k subagent tokens in round 1; ~133k in
+  round 4) — the exact cost this design exists to move out of the main window.
 - ADR obligations still outstanding (spec §12): new ADR for this decision (class (a) structural),
   update ADR-0003 whose "no script-decidable spec-done moment" deferral this resolves.

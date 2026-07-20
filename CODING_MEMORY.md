@@ -6,19 +6,17 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
-- current work: **judge terminal-enforcement — SPEC PHASE, round 3 JUDGED (fail, 1 violation);
-  escalation #2 resolved by user decision; round 4 revision owed.** Spec phase running on Opus 4.8
-  (model gate answered `9fd3896`; revision rounds continue under that same answer).
-  Design approved §1–§4 2026-07-20; brainstorm landed on
-  `main` via a docs-only merge (user's call over cherry-pick), so branches forked from `main`
-  inherit the design rather than it being stranded on a merged branch.
-  Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
-  Key approvals: runner-script indirection (no AppleScript interpolation), tmux split-pane,
-  10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
-  mkdir-atomic launch lock with piggyback-wait, falsification-backed tests.
-  Full approved design: `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
-  **The escalation rule fired on this spec itself — twice** (rounds 1→2, then again at round 3) and
-  was honoured both times rather than bypassed — see Exact Next Steps 0.
+- current work: **judge terminal-enforcement — SPEC PASSED round 4 (first pass on this spec);
+  post-verdict advisory fixes landed → one re-entry judge round owed after user review. NEXT: user
+  reviews the spec. See Exact Next Steps 0.** Rounds 1–3 ran on Opus 4.8 (model gate `9fd3896`);
+  round 4 ran on Fable 5 — the user switched settings.json to `claude-fable-5` before this session,
+  so the tier choice is the user's own. Design approved §1–§4 2026-07-20; brainstorm landed on
+  `main` via a docs-only merge (user's call). Deterministic hook gates for both judges + per-judge
+  terminal sessions via a shared launcher; key approvals (runner-script indirection, 840s/900s
+  timing, SPEC_EXEMPT, mkdir-atomic lock, falsification-backed tests) in the brainstorm:
+  `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+  **The escalation rule fired on this spec twice, was honoured both times, and round 4 closed the
+  3x-persisted violation by user-directed design. Nothing was ever waived.**
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
 - Carried over, still open: **Orca hooks in `settings.json` deliberately uncommitted** (third-party,
@@ -121,34 +119,24 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement — RESUME HERE. Round 3 judged @ `60abc86` (fail, 1 violation);
-   escalation #2 resolved by user decision; ROUND 4 REVISION IS THE NEXT ACTION.** Branch
-   `feature/judge-terminal-enforcement` off `main`; spec
-   `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` (1036 lines).
-   Rounds: 1 fail (5) → 2 fail (2 persisted, 1 new) → **escalation #1** → 3 fail (2 closed,
-   **`writing-specs/api-contracts` persisted a 3rd time**) → **escalation #2**. Nothing ever waived.
-   **Write round 4 applying the two user-directed fixes, then re-dispatch BOTH judges at round 4**
-   passing round 3's single violation id → user review → `superpowers:writing-plans`.
-   **Fix 1 — the launcher extracts prior violations itself** (drop `--prior-violations-file` from the
-   hook path; it is derivable from `--spec` + `--round` + the store, and the launcher does it after
-   creating the run dir; flag survives as an optional override). Kills a 3-round circularity by
-   removing the argument rather than sequencing it.
-   **Fix 2 — §5.2 stops enumerating commit forms**: `git commit --dry-run --porcelain <same args>`,
-   column 1 non-space ⟺ recorded. Verified 5/5 including the new `git commit -i` hole; no index or
-   worktree mutation, no editor, 9ms. Caveats: exit 1 + empty = "nothing to commit", not a failure;
-   `--amend` lists the whole amended set.
-   Also fix: **§6.5's claim that no hook sets an explicit timeout is false — 10 of 17 do, at 10s**
-   (which sharpens spike S3: 10s is the only precedent, the design wants 900s). Plus 4 judge notes
-   and a 1036-line spec against core-conduct's 800 ceiling.
-   Verdicts, both escalation records, the `-i` evidence table and full revision history:
-   `coding-memory/branches/judge-terminal-enforcement.md`.
-   Design of record: `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
-   **Spec amends it in two places: `--bare` dropped** (never reads OAuth/keychain auth, so it cannot
-   authenticate on this subscription machine and would bill judge runs as separate API credits —
-   consequence: hooks DO run inside the judge session, making `JUDGE_SESSION=1` load-bearing,
-   blocking spike S1); **and iTerm2 dropped from the ladder** (user decision), leaving
-   cmux → tmux → Apple_Terminal → headless. Blocking spikes are now S1 **and S3** (the 900s hook
-   timeout is unprecedented in this repo and its fail-open premise is unmeasured).
+0. **Judge terminal-enforcement — SPEC PASSED ROUND 4. NEXT ACTION: user reviews the spec**
+   (`docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`, 1101 lines, branch
+   `feature/judge-terminal-enforcement`). Round 4 @ `4f846ff` (blob `30fd5a0`): compliance **PASS**,
+   0 violations, high confidence — `writing-specs/api-contracts` closed after persisting 3 rounds;
+   observability risk=medium, trajectory pass (first on this branch). Post-verdict advisory fixes
+   landed as `dbf48ae` (entries-first dry-run table — observability's only-untracked exit-1 finding,
+   reproduced before accepting — plus 3 compliance contract notes), so **that pass is stale by
+   blob: after user review, run ONE re-entry judge round (restarts at round 1 per
+   running-the-compliance-judge) covering `dbf48ae` + review edits, before
+   `superpowers:writing-plans`.** User decision owed at review: §11's split-or-accept question
+   (1101 lines vs core-conduct's 800 ceiling — named in the spec, deliberately not decided there).
+   Then blocking spikes S1 (JUDGE_SESSION guard reaches hooks inside the judge session — `--bare`
+   dropped, so hooks DO run there) and S3 (does the harness honour a 900s hook timeout; only
+   precedent is 10s) gate implementation. ADR obligations at implementation: new ADR + ADR-0003
+   update (spec §12). Rounds 1→4 history, both escalations (user-resolved, nothing waived),
+   verdicts, evidence: `coding-memory/branches/judge-terminal-enforcement.md`. Design of record
+   (spec amends: `--bare` and iTerm2 dropped):
+   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 1. **Statusline token bar — RESOLVED: PR #20 merged 2026-07-20 04:01Z.** (Memory had said "not yet
    PR'd"; reconciled 2026-07-20 — the merge happened outside a checkpointed session, and the 3
    brainstorm commits pushed afterwards were stranded until the docs-only merge above.) R5 was
