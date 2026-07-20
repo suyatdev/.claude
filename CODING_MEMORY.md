@@ -120,19 +120,25 @@ how this file and its linked files should be written (plain language, major chan
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
 - Session log (chronological summaries): `coding-memory/session-log.md`
 - Decisions & conventions: `coding-memory/decisions.md`
-- Branch implementation logs: `coding-memory/branches/`
+- Branch implementation logs: `coding-memory/branches/` (active: `judge-terminal-enforcement.md`)
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement (2026-07-20) — RESUME HERE. Design COMPLETE (§1–§4 approved).**
-   Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
-   on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
-   NOT off statusline branch) → spec doc → self-review → compliance + observability judges
-   (current skill procedure — spec-guard doesn't exist yet) → user review → writing-plans.
-   Branch `feature/judge-terminal-enforcement` cut off `main` 2026-07-20. The write-up now lives
-   on `main`, so the branch inherits it; the spec should still stand alone as the build artifact.
-   Approved design + platform facts (hook timeout **fails open**; `claude --bare -p --agent`):
-   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+0. **Judge terminal-enforcement — RESUME HERE. Spec written, round 1 judged, spec FAILS compliance.**
+   Branch `feature/judge-terminal-enforcement` off `main`; spec @ `8aed77a`
+   (`docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`).
+   Round 1: compliance **fail** (5 violations, high conf), observability risk=medium (3 concerns).
+   **Both judges independently found the same hole — the revise loop's escalation cap.**
+   **Next: apply the 7-item revision plan, then re-dispatch BOTH judges at round 2 passing round
+   1's violation ids** (persistence detection needs them; no waived ids) → user review →
+   `superpowers:writing-plans`. Plan + verdicts + the one user decision made during round 1
+   (ladder = cmux → tmux → Apple_Terminal → headless; iTerm2 dropped):
+   `coding-memory/branches/judge-terminal-enforcement.md`.
+   Design of record: `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+   **Spec amends it in one place: `--bare` dropped** — it never reads OAuth/keychain auth, so it
+   cannot authenticate on this subscription machine and would bill judge runs as separate API
+   credits. Consequence: hooks DO run inside the judge session, making `JUDGE_SESSION=1`
+   load-bearing (blocking spike S1).
 1. **Statusline token bar — RESOLVED: PR #20 merged 2026-07-20 04:01Z.** (Memory had said "not yet
    PR'd"; reconciled 2026-07-20 — the merge happened outside a checkpointed session, and the 3
    brainstorm commits pushed afterwards were stranded until the docs-only merge above.) R5 was
