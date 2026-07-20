@@ -313,8 +313,16 @@ LOCK_STALE_MINUTES=1
 # and a live lock was deleted. `mv` preserves mtime, so the age of a captured
 # directory is still the age that was judged -- which is what makes verifying on
 # the capture sound for both modes.
+# CAREFUL: `mv dirA dirB` is not "rename or fail" when dirB exists -- the mv
+# utility moves dirA *inside* dirB and reports success. Every use of mv on a
+# directory here has to account for that, and an earlier version did not: its
+# restore could never fail, so its `|| rm -rf` was dead code, and a leftover
+# grave could end up buried inside a live lock, putting the grave's pid file at
+# the live lock's path and making the true owner fail its own ownership check.
 break_lock_verified() { # $1 dir, $2 mode: "age" | "pid:<expected>"
   local lock="$1" mode="$2" grave="$1.dead.$$" captured="" verified=1
+  # Fail closed on a leftover grave rather than nesting the capture inside it.
+  [ -e "$grave" ] && return 0
   mv "$lock" "$grave" 2>/dev/null || return 0
   case "$mode" in
     age)
@@ -329,9 +337,16 @@ break_lock_verified() { # $1 dir, $2 mode: "age" | "pid:<expected>"
     rm -rf "$grave" 2>/dev/null
     return 0
   fi
-  # Not what we judged: a fresh holder took it in between. Put it back rather
-  # than destroy a live lock.
-  mv "$grave" "$lock" 2>/dev/null || rm -rf "$grave" 2>/dev/null
+  # Not what we judged: a fresh holder took it in between, so put it back.
+  # Restored with mkdir, NOT `mv "$grave" "$lock"`. mkdir is atomic and fails
+  # when the path is taken, which is precisely the test wanted here -- whereas
+  # mv would nest the capture inside whatever now holds the path. Recreating
+  # rather than renaming resets the lock's mtime; that only delays a future
+  # age-based break, which is the safe direction.
+  if mkdir "$lock" 2>/dev/null; then
+    [ -r "$grave/pid" ] && cp "$grave/pid" "$lock/pid" 2>/dev/null
+  fi
+  rm -rf "$grave" 2>/dev/null
   return 0
 }
 
