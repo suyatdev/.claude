@@ -5,12 +5,18 @@ Cut off `main` 2026-07-20. Implements the approved design in
 
 ## State
 
-**Spec phase, round 1 complete — spec currently FAILS compliance. Revision not yet written.**
+**Spec phase, round 3 revision written and committed @ `60abc86`. Round 3 judging NOT yet run.**
 
-- Spec: `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` @ `8aed77a`
-  (464 lines, 2 Mermaid blocks, validator PASS).
+- Spec: `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`
+  (1027 lines, 3 Mermaid blocks, validator PASS).
 - Base established by merging the brainstorm commits into `main` (user's call over cherry-pick),
   pushed as `48f02d4` + `69ecd12`. Branch inherits the design; the spec still stands alone.
+
+| Round | Spec commit | Compliance | Observability |
+|---|---|---|---|
+| 1 | `8aed77a` (464 ln) | **fail** — 5 violations, high | risk=medium, 3 concerns |
+| 2 | `ccd02fc` (855 ln) | **fail** — 3 violations, high (2 persisted, 1 new) | risk=medium, high |
+| 3 | `60abc86` (1027 ln) | not yet run | not yet run |
 
 ## Round 1 verdicts (2026-07-20)
 
@@ -81,6 +87,59 @@ flowchart TD
    sharply: `judge-guard` matches rare `gh pr create`, `spec-guard` matches every `git commit`, so
    a classifier bug blocks all commits. Also confirm `coding-memory/judge-runs/` is in `.gitignore`
    before any run dir is written.
+
+## Round 2 (2026-07-20, spec `ccd02fc`)
+
+All seven revision items applied, plus an eighth found while revising. Result: **fail**, 3 violations.
+
+- **Closed cleanly:** `core-conduct/small-focused-files`, `core-conduct/default-deny-stores`,
+  `core-conduct/yagni`, and all four round-1 notes. Judge confirmed the 464→855 growth was substance,
+  and called §6.5's S3 fork "exemplary".
+- **Persisted (round 1 → 2):** `writing-specs/api-contracts`, `gates/escalation-not-preserved`.
+- **New:** `writing-specs/pinned-versions` — cmux was rung 1 yet the one named tool missing from the
+  pinned table, with its spawn written as the phrase "cmux pane".
+
+**The eighth item (self-found, neither judge caught it): the two-hash livelock.** The gate keys
+freshness on the *index* blob; `agents/compliance-judge.md` and its skill both compute `spec_blob_sha`
+from the *worktree*. On divergence the hook misses forever and relaunches the judge every round, each
+iteration a full session.
+
+## Escalation (2026-07-20) — the rule fired on this spec
+
+Two violations cited in two consecutive rounds = the `running-the-compliance-judge` tripwire. Stopped
+and escalated rather than auto-revising a third time; escalating silently would have violated the rule
+this spec exists to enforce. **User directed the proposed fix; nothing waived.**
+
+Root cause shared by both: round 2 specified the launcher's argument contract but never its *caller*.
+A hook running non-interactively inside `git commit` had no way to populate `--context-file`, and
+nothing built `--prior-violations-file` — so the "same id twice" tripwire could never fire, because the
+judge only reuses ids when handed the prior array. **The cap round 2 added was inert.**
+
+## Round 3 revision (spec `60abc86`)
+
+- **§6.2.1 (new):** every launcher argument derived deterministically from repo + store.
+  `--prior-violations-file` extracted from the store; `--context-file`/`--decisions-file` become
+  optional with specified fallbacks. On the hook path the spec's own §1/§2 *are* the stated need — an
+  agent-authored summary is the injection vector §6.1.3 flags, since the agent writing the spec would
+  also write the standard it is judged against. Skills keep passing explicit summaries.
+- **§5.2 corrected:** the round-2 claim that one precondition covered `git commit -a` and pathspec was
+  **wrong, and circularly so** — the precondition only runs once a spec is detected as staged, and
+  those are the forms where nothing is staged. The observability judge disproved it by running git,
+  not reading the spec (`git commit -aqm x` commits a modified spec past an empty `--cached` listing).
+  Detection is now per-form; the precondition narrows to plain `commit`.
+- **§6.2.2:** ack now releases whichever escalation branch fired — id-scoping deadlocked the round-3
+  branch, which cites no ids.
+- **§6.4:** "who may set it" rewritten — the hook cannot enforce provenance of an env assignment, so
+  the release is advisory with visibility (stderr echo, manifest, store rows) as the real control.
+  Pretending otherwise would be a claim the code cannot back.
+- **cmux pinned** `0.64.20 (100)` with a real rung-1 command
+  (`cmux new-workspace --command "bash <run-dir>/run.sh" --focus false`). cmux sets
+  `TERM_PROGRAM=ghostty`, so rung 3's `Apple_Terminal` test cannot false-positive inside it.
+
+**Recurring lesson, now four-for-four across this branch lineage: the write-up runs ahead of the code.**
+Round 2's `-a` claim read as rigorous and was verified only by re-reading. It took *running git* to
+break it. §10 now requires the three commit forms tested against real git, and adds two mutations
+drawn from bugs that were live in a reviewed revision of this very spec.
 
 ## Notes
 

@@ -74,3 +74,84 @@ dirs" asserted with no mechanism behind it.
 ### Waivers
 
 None. No waived ids supplied for this round.
+
+---
+
+## Round 2 — 2026-07-20T16:20:33Z — **FAIL** (3 violations)
+
+Head sha: `ccd02fca57f9dd94e356fb0545efd463c46a1d47`
+Spec blob sha: `f52cd4779b4c7581fe329e5a76418da9650dc898`
+Confidence: **high** (agent input lists, the cmux binary's real existence, and the round-1 store entry all verified directly against the machine and repo)
+
+### Layman summary
+
+Three of round 1's five violations are cleanly and convincingly closed. The launcher is now six
+files with per-file line budgets enforced by the test harness, not by good intentions
+(`core-conduct/small-focused-files`). The run directory gets a real permission posture — `umask 077`,
+`0700`/`0600`, asserted with `stat` after creation rather than assumed, with a preflight failure if
+the modes are wrong (`core-conduct/default-deny-stores`). And the terminal ladder is down to four
+rungs, each mapped to a terminal the user actually works in plus a headless correctness floor; that
+was the user's own decision and it is recorded where a reader will find it (`core-conduct/yagni`).
+The revision also found and fixed a defect nobody asked about — the gate and the judge hashed
+different content, which would have livelocked the revise loop — and §6.5's S3 spike is a model of
+how to surface a design fork as human-owned rather than quietly picking a branch. The growth from
+464 to 855 lines is substance, not padding.
+
+Two round-1 violations persist, both for a narrower reason than before, and one new one appears.
+
+The persistent one is the same plumbing gap, one layer down. Round 1 said the launcher's argument
+set could not carry what the judges need; round 2 fixed that by adding `--context-file`,
+`--prior-violations-file`, and `--decisions-file`, and by specifying a prompt template. But nothing
+says where the *hook* gets those files. `--context-file` is mandatory for a compliance launch, and
+the deterministic path — a `git commit` that spec-guard intercepts — has no main-agent reasoning to
+draw a context summary from. The skill path can author one; the hook path, which is the entire point
+of this change, cannot. The observability side has the same hole for `--decisions-file` in §6.3, and
+the prompt template additionally has no slot at all for two arguments §6.1.2 accepts: observability's
+`--spec` (the template marks `spec_path` "compliance only") and `--test-cmd-file`.
+
+The escalation cap persists for a related but distinct reason. The cap fires when the same violation
+id appears in the two most recent rounds. That depends on the judge *reusing* ids, which its
+definition only does when it is handed the prior round's violations array — and nothing in §6.2.1
+specifies the hook extracting that array from the store into `--prior-violations-file`. §6.2.1 does
+establish that attempt history is reconstructible from the store, but it uses that only to count
+rounds, not to feed the judge. Without the feed, each round mints fresh slugs, "same id twice" never
+matches, and the only surviving tripwire is the round-3 cap. `rules/gates.md` requires persistent
+violations to escalate; two thirds of the mechanism designed to do that would silently no-op.
+
+The new one is small and concrete: cmux is rung 1, the user's primary environment, and it is missing
+from §4's pinned-version table entirely — while tmux, git, python, bash, and the Claude CLI are all
+pinned. Its spawn is given as the words "cmux pane", not a command, where rung 2 gets
+`tmux split-window -d` and rung 4 gets `nohup`. cmux is a real binary on this machine
+(`/Applications/cmux.app/Contents/Resources/bin`, invoked elsewhere in this repo as
+`${CMUX_CLAUDE_HOOK_CMUX_BIN:-cmux}`), so this is a fillable blank, not an unknowable — but as
+written the highest-priority rung is the one an implementer cannot build.
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | API contracts give the agent real interface boundaries instead of letting it improvise shapes other components then fail to match | §6.1.2 argument contract; §6.1.3 prompt template; §6.2 decision order | The hook path never specifies how it produces the mandatory `--context-file` (or §6.3's `--decisions-file`), and the prompt template has no slot for observability's `--spec` or `--test-cmd-file`, so a deterministic launch cannot satisfy the launcher's own required-argument contract. |
+| `gates/escalation-not-preserved` | `rules/gates.md` (spec-compliance gate) | Persistent violations escalate to the user, never silently waived | §6.2.1 round accounting and the escalation cap | The "same id in the two most recent rounds" tripwire depends on the judge reusing ids, which requires the prior round's `violations` array in the prompt, yet nothing specifies the hook building `--prior-violations-file` from the store — so that half of the cap can never fire. |
+| `writing-specs/pinned-versions` | `skills/writing-specs/SKILL.md` | Pin the exact version of every library and tool the spec names | §4 pinned toolchain table; §6.1 terminal ladder rung 1 | cmux is the ladder's first and primary rung but is absent from the pinned table that covers every other named tool, and its spawn is specified only as "cmux pane" with no command, leaving the highest-priority rung unimplementable. |
+
+### Notes (non-blocking)
+
+- §5.2 is placed before §5.1 in document order. Cosmetic, but a reader following section numbers
+  will stumble.
+- The git global-option pass-through (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`,
+  `--exec-path`, `--config-env`) is a fair amount of surface and four test cases for a gate whose
+  stated need is spec commits in this repo — and §6.2 already accepts fail-open-with-a-warning for
+  unclassifiable invocations, which would cover `-C` at zero cost. Not cited as YAGNI because
+  `git -C ~/.claude commit` is a plausible real pattern in this setup, but it is worth a KISS pass.
+- Round 1's four notes are all addressed: exit code `2` is now explicitly reserved and explained, the
+  empty-store round is defined as `1`, `.gitignore` is in §12's obligations with an ordering
+  constraint, and §6.7 states the operator-facing 840s cost.
+- §6.5's handling of S3 is exemplary — an unmeasured assumption named as blocking, with the fallback
+  design fork spelled out and explicitly reserved for measurement rather than implementation-time
+  improvisation.
+- §6.2.1's decision to keep `SPEC_ESCALATION_ACK` out of `prompt.txt`, and the reasoning for it, is
+  the strongest single paragraph in the revision.
+
+### Waivers
+
+None. No waived ids supplied for this spec in any round.
