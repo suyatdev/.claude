@@ -149,14 +149,13 @@ how this file and its linked files should be written (plain language, major chan
    three were all inside the fix for the one before: R2, the lock's cleanup was itself a lost
    update; R3, the cleanup's backstop justified a break by **age** then verified it by **PID**,
    and the breaker lock lacked the guards the state lock had just gained; R4, `mv dirA dirB`
-   **nests** when dirB exists rather than failing — so the restore could never fail, its `|| rm`
-   was dead code, and a retaken path buried the capture inside the live lock. A wrong assumption
-   about a shell builtin sat underneath all three. Rules now encoded, not remembered: verify a
-   break against whatever justified it; use `mkdir` (atomic, fails if present) where "rename or
-   fail" is meant. R3 also caught that every R2 guard was untested — the suite now sources the
-   script in a subshell to call lock helpers directly, and drives the interleaving that makes the
-   restore bug observable. **Impact ceiling since R2 has been a wrong cosmetic total that
-   self-heals — no round has been a merge blocker. Diminishing returns are a live question.**
+   **nests** when dirB exists rather than failing — so the restore could never fail and a retaken
+   path buried the capture inside the live lock. A wrong assumption about a shell builtin sat
+   underneath all three. Rules now encoded: verify a break against whatever justified it; use
+   `mkdir` (atomic, fails if present) where "rename or fail" is meant. R3 also caught that every
+   R2 guard was untested — the suite now calls lock helpers directly via subshell sourcing.
+   **Impact ceiling since R2 has been a wrong cosmetic total that self-heals — no round has been
+   a merge blocker. Diminishing returns are a live question.**
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
    **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
    present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,
