@@ -103,20 +103,16 @@ how this file and its linked files should be written (plain language, major chan
   segments: new `statusline-command.sh`, `statusLine` entry in `settings.json`, README table
   row; model → opus[1m] and theme → dark split into their own `chore(settings)` commit.
   Observability judge ran **5 rounds**, each finding something real in the round before: terminal-escape
-  injection via four distinct paths (`printf %b` expansion, real control bytes through jq, the unstripped
-  `$PWD` fallback, then a **second** unstripped fallback introduced by the fix for the third), false
-  "pushed" claims, and an unverified `context_window` schema — all fixed, schema confirmed against the
-  official docs. `statusline-command.test.sh`: 20 assertions, validated by falsification against all 5
-  historical versions (9/20, 10/20, 15/20, 20/20, 19/20) rather than by passing alone;
-  `statusline-command.falsify.py` makes that reproducible, with each expected count derived from what the
-  version does rather than fitted to its output. Recurring lesson: **the write-up ran ahead of the code in
-  every round**, including a "Cosmetic, no leak" claim about a path that did leak. Scope overran badly —
-  5 of 6 commits are judge-driven; taken to the user rather than resolved unilaterally. No ADR
-  (presentation-only — misses all three ADR triggers).
+  injection via four distinct paths (incl. a **second** unstripped fallback introduced by the fix for the
+  third), false "pushed" claims, and an unverified `context_window` schema — all fixed. Test suite
+  validated by falsification against all 5 historical versions rather than by passing alone
+  (`statusline-command.falsify.py` makes that reproducible). Recurring lesson: **the write-up ran ahead
+  of the code in every round**, including a "Cosmetic, no leak" claim about a path that did leak. Scope
+  overran badly — 5 of 6 commits judge-driven; taken to the user rather than resolved unilaterally.
+  No ADR (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
-- feature/statusline-token-bar (2026-07-19, **pushed, judge findings fixed, not yet PR'd**) —
-  follow-on to
-  PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
+- feature/statusline-token-bar (2026-07-19, **pushed, judge findings fixed, not yet PR'd**) — follow-on
+  to PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
   model's window — against 1M a 143k session rendered nearly-empty-but-red), cumulative Σ counting
   input+output only (cache traffic swamped it ~16x), purple weekly-quota segment. A cost-estimate
   feature was requested, built, then **removed entirely**: subscription plan, `costUSD: 0`, no cost
