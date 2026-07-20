@@ -334,3 +334,93 @@ None.
 None. Nothing has been waived on this spec in any round. Both escalations (#1 after round 2,
 #2 after round 3) were resolved by the user directing fixes, and both directed fixes are now in the
 spec and verified.
+
+---
+
+## Re-entry Round 1 — 2026-07-20T19:14:52Z · verdict: **FAIL** (2 violations)
+
+- **Artifact:** now **two files judged as one spec unit** — root
+  `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` (684 lines, blob
+  `b0b76ee`) + companion `...-contracts.md` (696 lines, blob `8ec58aa`). Both read in full.
+- **Head:** `8de76f9d41d4eaf2c1545edb3daef7a94c926314` on `feature/judge-terminal-enforcement`.
+- **Round counter restarted** at the caller's direction, covering `dbf48ae` (post-verdict advisory
+  fixes) and `8de76f9` (the split + spec-unit cascade) since round 4's PASS at blob `30fd5a0`.
+
+### In plain terms
+
+The split into two files is clean and the 800-line ceiling is now genuinely respected (684 and 696).
+The advisory fixes from round 4 all landed: the dry-run table is entries-first, the dead "or run dir"
+branch is gone, `--round > 1` with no history now fails preflight, and §5.2 states the parsed-argv
+re-execution. The §4.1 and §5 amendments are honestly *labelled* — the spec says out loud that two
+four-round-old invariants moved, and §2's scope table and §12's obligations were updated to match.
+That is the right instinct and most of it is done well.
+
+Two things in the newest territory do not hold up.
+
+First, **§5.3 tells an implementer what a `spec_unit` declaration means but not how to find one.** The
+only locating rule is the prose phrase "a fenced `yaml` block near the top", which no script can
+implement as written. This is not hypothetical: the root spec file contains **three** fenced `yaml`
+blocks with a top-level `spec_unit:` key — the real declaration at lines 38–42, plus §5.3's own two
+worked examples at 398–403 and 405–409. The example at 405–409 declares
+`part_of: <the root spec itself>`. A parser that takes the first, last, or any matching block resolves
+the design's own root file as a companion of itself. The section's stated posture is fail-closed
+("a half-resolved unit is worse than a refused commit"), but the undefined cases here — which block
+wins, and what a present-but-unparseable or keyless `spec_unit:` block means — fall through the
+resolution table's three rows into the "no `spec_unit` block → standalone" row, which fails *open*.
+
+Second, **the "exactly one agent-definition change" claim is contradicted by the design's own prompt
+contract.** §4.1 says the compliance judge "gains a single declared input, `spec_unit_sha`" and
+enumerates its declared inputs without `unit_members`; §2's scope table says "**one** added declared
+input" and puts "any other agent-definition change" out of scope. But §6.1.3's prompt contract emits
+`unit_members` as a compliance-only field annotated "read all of them", and §12 states the agent
+amendment as `spec_unit_sha` "**plus** reading every path in `unit_members` as one artifact". So the
+agent must act on a second field. Worse, §6.2.2 asserts as an invariant that keeping the ack out of
+the prompt "keeps §4.1 true: the compliance agent's input list stays exactly what its definition
+declares, **with no undeclared field to interpret**" — `unit_members` is exactly such a field. An
+implementer amending `agents/compliance-judge.md` cannot tell from this spec whether to add one
+declared input or two, and §2 forbids the second.
+
+### Violations
+
+| # | id | Rule source | Rule | Where | Why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/unambiguous-requirements` | `skills/writing-specs/SKILL.md` | Requirements must not be readable two ways; "anything you leave implicit, the agent infers — and inference is where the defects come from" | §5.3 (Spec units — declaration & resolution) | The `spec_unit` block's location is specified only as "near the top" and the root file contains three blocks matching that description — one of which declares `part_of` the root itself — so unit resolution is undefined for the design's own first instance, and the undefined cases fall through to the fail-open standalone row. |
+| 2 | `writing-specs/agent-input-contract` | `skills/writing-specs/SKILL.md` | API contracts must give the real interface boundaries to build against rather than letting components improvise shapes others fail to match | §4.1 / §2 scope table vs. §6.1.3 prompt contract / §12 | §4.1 and §2 commit to exactly one added declared input (`spec_unit_sha`) and bar any other agent-definition change, while §6.1.3 and §12 require the judge to also receive and act on `unit_members` — and §6.2.2 states as an invariant that the agent has no undeclared field to interpret. |
+
+### Notes (non-blocking)
+
+- **Bidirectional consistency is stated one-directionally in the normative text.** §5.3's bullet reads
+  "If `P` declares `part_of: R`, then `R` must declare `P` in its `parts`" — literally, it never fires
+  when resolution starts from the root. The companion's header states the rule symmetrically ("Its
+  `part_of` and the parent's `parts` must agree"), and the distinct-roots refusal catches the
+  both-files-committed case, so the intent is clear and the gap is narrow: a root committed alone whose
+  declared part points at a different root. One clause ("and symmetrically, every path in `parts` must
+  declare `part_of` this root") closes it.
+- **Depth-1 nesting has no §7 scenario.** It has a §5.3 rule, a §8 failure-matrix row, and a §10 test
+  case, but its sibling failure (one-sided `part_of`) got a Gherkin scenario and this one did not. §7
+  is described as "the behavioural acceptance criteria an implementer works against", so the asymmetry
+  is worth closing.
+- **The split itself is correct and well-executed.** 684 + 696 lines, both under core-conduct's 800
+  max; numbering deliberately continuous; every `§6.x`/`§7` reference from the root resolves in the
+  companion and every `§1`–`§5`/`§8`–`§12` reference from the companion resolves in the root — checked,
+  none broken. The header records the split→design-change→second-move sequence rather than presenting
+  it as one clean decision, which is the honest framing.
+- **Scope-table and §12 consistency for the store change is clean.** The `spec_unit_sha` field is
+  additive and nullable, §5's fallback key preserves byte-for-byte existing behaviour, and §10 asserts
+  backward compatibility against a *pre-existing stored row* rather than a synthetic one — the right
+  test.
+- **§10's unit coverage is otherwise strong**, including the highest-value case (companion-only edit
+  invalidates the verdict) and a falsification target for it. The gaps track violation 1 exactly: no
+  case for multiple/ambiguous declaration blocks, none for a present-but-unparseable block.
+- **Unchanged and still clean:** §4's pinned toolchain (six tools, exact versions, machine-verified);
+  §5.1/§9's default-deny run-dir posture (`umask 077`, `0700`/`0600`, asserted after creation, not
+  assumed); the `run.sh` indirection that keeps prompt text off every rung's command line including
+  rung 1's `--command`; no secrets, no absolute paths, no unvetted dependencies; S1/S3 held as blocking
+  spikes rather than assumed; §11's deferrals honest about what is trusted vs. verified.
+- **YAGNI holds.** The spec-unit model is forced by the user-directed split, not speculative — the
+  design's own normal commit would otherwise be a two-spec commit with undefined behaviour.
+
+### Waivers
+
+None. Nothing has been waived on this spec in any round, including this one. The caller confirms both
+prior escalations were resolved by user-directed fixes rather than waivers.

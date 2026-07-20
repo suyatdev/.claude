@@ -145,10 +145,10 @@ Follow your agent definition. Persist your verdict before returning.
 ```
 
 Both judges' declared inputs are now covered: compliance's `spec_path`, `round`, context summary,
-`waived`, base branch, prior violations and `spec_unit_sha`; observability's `stage`, decisions
-summary, design doc, test command and base branch. `spec_unit_sha` and `unit_members` are the §4.1
-amendment's whole footprint on the prompt: the judge reads every listed member as one artifact, and
-copies `spec_unit_sha` into its verdict row verbatim. It is explicitly **not** the judge's to derive —
+`waived`, base branch, prior violations, and §4.1's two additions `spec_unit_sha` and `unit_members`;
+observability's `stage`, decisions summary, design doc, test command and base branch. Those two are the
+§4.1 amendment's whole footprint on the prompt — the count matches §2, §4.1 and §12 exactly: the judge
+reads every listed member as one artifact, and copies `spec_unit_sha` into its verdict row verbatim. It is explicitly **not** the judge's to derive —
 a judge that recomputed it would put unit resolution in two places and reintroduce, one level up, the
 two-hash divergence §5.2 exists to close. `--test-cmd-file` is a file rather than a flag value for one reason: a
 test command is shell text, and a flag would invite it onto a command line. It is written into
@@ -385,7 +385,9 @@ attribution, not used as a filter.
 never `prompt.txt`. Telling a judge "the user has been consulted about `core-conduct/yagni`" is an
 invitation to soften on exactly the violation under dispute, and the judge's contract is to score the
 spec as it stands. Keeping the ack out of the prompt also keeps §4.1 true: the compliance agent's input
-list stays exactly what its definition declares, with no undeclared field to interpret.
+list stays exactly what its definition declares — `spec_path`, `round`, context summary, `waived`, base
+branch, prior violations, and §4.1's two additions `spec_unit_sha` and `unit_members` — with no
+undeclared field to interpret. The ack is not on that list and must not become an eighth entry.
 
 An ack is **not** a waiver and must not be used as one: it does not suppress the violation, and the
 judge still cites it. Only `SPEC_EXEMPT` bypasses the gate, and only the user supplies it.
@@ -693,4 +695,43 @@ Scenario: A single-file spec is unaffected
   Given a spec with no spec_unit block
   Then it resolves to a unit of itself
   And spec_unit_sha is null and freshness keys on spec_blob_sha, exactly as before
+
+Scenario: A parts member itself declares parts
+  Given the root lists a companion in parts
+  And that companion also declares its own parts list
+  Then spec-guard exits 2 on the depth-1 rule and launches nothing
+  # Nesting is unrepresentable rather than merely detected: resolution
+  # terminates by construction and cycles cannot be expressed.
+
+Scenario: A root claims a file that does not claim it back
+  Given the root lists a companion in parts
+  And that companion declares no part_of pointing at the root
+  Then spec-guard exits 2 — consistency is checked in both directions
+
+Scenario: Illustrative yaml in the body is never parsed as a declaration
+  Given §5.3 contains example spec_unit blocks below the first "## " heading
+  And one of them declares part_of pointing at the file containing it
+  When the parser resolves that file
+  Then only the header-region block counts
+  And the file resolves as a root, not as a companion of itself
+  # The design's own first instance. A whole-file scan would classify this
+  # spec as a broken unit and refuse the commit that introduced it.
+
+Scenario: Two declaration blocks in the header region
+  Given a file's header region contains two spec_unit blocks
+  Then spec-guard exits 2 as ambiguous
+  And it does not silently take the first or the last
+
+Scenario: A malformed declaration never reads as absent
+  Given a header-region spec_unit block that is unparseable YAML,
+    or declares neither parts nor part_of, or declares both
+  Then spec-guard exits 2 in every case
+  And none of them falls through to the standalone row, which would fail open
+
+Scenario: A spec file is conflicted mid-rebase
+  Given a merge or rebase leaves docs/superpowers/specs/s.md unmerged
+  When the dry-run lists it with X = U
+  Then spec-guard exits 0, because git refuses an unmerged commit itself
+  And the precondition is never reached, since git rev-parse ":<path>"
+    exits 128 on an unmerged path and would otherwise read as infrastructure failure
 ```

@@ -25,10 +25,13 @@
   match `docs/superpowers/specs/*.md`, so this design's own normal commit became a two-spec commit —
   which the gate had no defined behaviour for, and which per-file freshness keying would have handled
   wrongly (edit one half, the other's verdict still reads fresh). Resolved by user decision to key on
-  a **spec unit** (§5.3). That work added ~170 lines and put this file back over the ceiling, so §7
-  moved to the companion too. Final: 672 and 693 lines. The sequence is recorded rather than
-  presented as one clean decision, because the second and third steps were consequences of the first
-  that nobody saw coming at the time.
+  a **spec unit** (§5.3). That work put this file back over the ceiling, so §7 moved to the companion
+  too. **Both halves are now under `core-conduct`'s 800-line maximum** — the invariant, stated instead
+  of a line count, because an earlier revision of this sentence carried exact numbers that were
+  already stale in the commit that wrote them. Numbers that go stale on the next edit belong in a
+  command (`wc -l`), not in prose. The sequence is recorded rather than presented as one clean
+  decision, because the second and third steps were consequences of the first that nobody saw coming
+  at the time.
 - **Builds on:** ADR-0001 (observability judge), ADR-0003 (compliance judge), ADR-0005 (lock discipline).
 
 This spec is the first **spec unit** (§5.3) and declares itself in the format §5.3 defines. The block
@@ -81,7 +84,7 @@ spirit — compliance at spec-done, observability before a PR. Ordinary code com
 | `hooks/judge-guard.sh` — miss-branch extension | Replacing the `Agent`-tool path for ad-hoc runs |
 | `settings.json` hook registration + timeouts | CI / remote enforcement |
 | Both `running-the-*-judge` skills → launcher | Observability store schema (unchanged, §5) |
-| `agents/compliance-judge.md` — **one** added declared input, `spec_unit_sha`, recorded not computed (§4.1) | Any other agent-definition change; the observability agent is untouched |
+| `agents/compliance-judge.md` — **two** added declared inputs: `spec_unit_sha` (recorded, never computed) and `unit_members` (read as one artifact) (§4.1) | Any other agent-definition change; the observability agent is untouched |
 | Compliance store — **one** additive nullable field, `spec_unit_sha` (§5, §5.3) | Migrating or rewriting existing verdict rows |
 | `.gitignore` — `coding-memory/judge-runs/` entry | Multi-repo verdict namespacing (deferred, §11) |
 | Test harnesses + falsification | |
@@ -166,7 +169,7 @@ not load-bearing for correctness between those two. Verified on this machine 202
 ### 4.1 Judge agents
 
 Both agent definitions already exist. The observability judge's is unchanged; the compliance judge's
-takes **one additive line** (§5.3), which is stated here rather than absorbed:
+gains **two declared inputs** (§5.3), stated here rather than absorbed:
 
 ```yaml
 agents:
@@ -189,11 +192,20 @@ Likewise `agents/compliance-judge.md` computes `spec_blob_sha` itself with `git 
 <spec_path>` — a **worktree** hash — which the gate reconciles with a precondition rather than an agent
 edit (§5.2).
 
-**The one amendment, and why no design avoids it.** `agents/compliance-judge.md` gains a single
-declared input, `spec_unit_sha`, which it **records verbatim into its verdict row and never computes**
-(§5.3). Earlier revisions of this spec claimed both agent definitions were untouched; the split into
-two files (see the header note) made that claim unholdable, and it is corrected rather than quietly
-kept. Freshness must depend on the content of *every* file in a multi-file spec, or editing one half
+**The amendment, and why no design avoids it.** `agents/compliance-judge.md` gains exactly two
+declared inputs, and no other change:
+
+| Input | The agent's contract |
+|---|---|
+| `spec_unit_sha` | **Records it verbatim into its verdict row. Never computes or recomputes it** (§5.3) |
+| `unit_members` | Reads every listed path and judges them as **one artifact**; cites file and line within any of them |
+
+*An earlier revision of this section claimed the amendment was a single input while §6.1.3's prompt
+contract and §12 both required `unit_members` as well, and §2's scope table barred any second change —
+an implementer could not tell whether to declare one input or two. Two it is; the count is now stated
+identically in §2, §4.1, §6.1.3 and §12.* Revisions before that claimed both agent definitions were
+untouched altogether; the split into two files (see the header note) made that unholdable. Each
+correction is recorded rather than quietly kept. Freshness must depend on the content of *every* file in a multi-file spec, or editing one half
 leaves the other half's verdict reading fresh. The gate computes freshness from the store, so the store
 must carry identity for the whole unit — and the judge, which writes the row, hashes one path and
 cannot know a unit exists. Something must carry that value in. The alternatives were the judge
@@ -288,7 +300,17 @@ entry is `XY <path>`; column 1 (`X`, the index column) says whether this commit 
 | entries resolving to **two or more distinct** unit roots | one commit, several unrelated specs | exit 2 — commit them separately (§5.3) |
 | spec entry with `X` = `D` | spec deletion — no new content to judge | exit 0 |
 | no spec entry outside `??`/`!!` (untracked/ignored — never recorded), exit 0 **or 1** | commit records no spec; exit 1 means git will itself refuse it as "nothing to commit" — and its output is **not** always empty, because untracked files still print `??` entries | exit 0 |
+| spec entry with `X` = `U` (unmerged — a conflicted spec mid-merge/rebase/cherry-pick) | nothing is committable yet; git refuses the real commit itself | exit 0 |
 | exit > 1 (usage or repo error) | real error | exit 2 — fail closed |
+
+**The `U` row is load-bearing, not tidiness.** Rebasing a spec branch is routine here, and an
+earlier revision of this table had no row for it: `U` is not in the `M A R C` whitelist and not
+`??`/`!!`, so a conflicted spec matched nothing and the behaviour was undefined. Routing it into the
+record branch would break the precondition itself — verified on git 2.50.1, a `UU` path yields
+`git rev-parse ":<path>"` → *"is in the index, but not at stage 0"*, **exit 128**, which the gate
+would read as an infrastructure failure and fail closed on, blocking every commit during a conflicted
+rebase. Exiting 0 is correct because git refuses an unmerged commit on its own; once the author
+resolves and stages, `X` becomes `M` and the gate applies normally.
 
 A rename entry (`R`) carries the **recorded** (new) path; its source path follows as one extra
 NUL-terminated field the parser must consume to stay aligned. `-z` also disables C-style path
@@ -393,35 +415,65 @@ the fix: one artifact, one round counter, one verdict, one content hash covering
 
 **Declaration is explicit and script-decidable.** Filename-prefix matching was rejected: it is
 implicit, and it would silently absorb any future file that happened to share a prefix. Each file
-declares its role in a fenced `yaml` block near the top:
+declares its role in a fenced `yaml` block whose top-level key is `spec_unit`.
+
+**Where the parser looks, stated as a rule rather than as "near the top".** *"Near the top" is not
+script-decidable, and this very section proves why: the illustrations below are themselves fenced
+`yaml` blocks with a top-level `spec_unit:` key, and the second declares `part_of` pointing at this
+file. A parser scanning the whole file would read this spec's own root as simultaneously declaring
+`parts` and being `part_of` itself — which its own bidirectional and depth-1 rules then classify as a
+broken unit. The design's stated first user would be refused by the design.* So the region is bounded
+structurally:
+
+> **The declaration is a fenced `yaml` block with a top-level `spec_unit:` key appearing in the
+> file's HEADER REGION — strictly before the first `## ` heading. Blocks at or after the first
+> `## ` heading are prose and are never parsed.**
+
+Both files in this unit satisfy that: each real declaration sits above `## 1.` / `## 6.` respectively,
+and §5.3's illustrations sit inside §5, far below the first heading. The rule is structural, not a
+convention an author must remember — a declaration written in the body simply does not exist, which
+fails toward standalone (visible, ungated) rather than toward a mis-resolved unit.
 
 ```yaml
-# in the ROOT spec
+# in the ROOT spec — header region, above the first "## " heading
 spec_unit:
   parts:
     - docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-contracts.md
 ```
 
 ```yaml
-# in each COMPANION
+# in each COMPANION — header region, above the first "## " heading
 spec_unit:
   part_of: docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md
 ```
 
 **Resolution, from any recorded spec path `P`** — read from `P`'s **index** blob, never the worktree,
-so resolution sees exactly what the commit records (§5.2's precondition makes the two equal anyway):
+so resolution sees exactly what the commit records (§5.2's precondition makes the two equal anyway).
+The table is total: every input lands on exactly one row, and the malformed rows fail **closed**
+rather than falling through to standalone.
 
-| `P` declares | Unit root | Members |
+| `P`'s header region contains | Unit root | Members |
 |---|---|---|
-| `part_of: R` | `R` | `R` + `R`'s declared `parts` |
-| `parts: [...]` | `P` | `P` + its `parts` |
-| no `spec_unit` block | `P` | `P` alone — **standalone, and the behaviour is byte-for-byte what it is today** |
+| no `spec_unit` block | `P` | `P` alone — **standalone; behaviour is byte-for-byte what it is today** |
+| exactly one block, valid, with `part_of: R` only | `R` | `R` + `R`'s declared `parts` |
+| exactly one block, valid, with `parts: [...]` only | `P` | `P` + its `parts` |
+| **two or more** `spec_unit` blocks | — | **exit 2** — ambiguous; never first-match or last-match |
+| a block that is **not parseable YAML** | — | **exit 2** — never silently treated as absent |
+| a block with **neither** `parts` nor `part_of` | — | **exit 2** — a declaration that declares nothing |
+| a block with **both** `parts` and `part_of` | — | **exit 2** — a file cannot be root and part at once |
+
+The last four rows exist because the earlier revision of this table had only three rows and no
+`otherwise` case, so every malformed declaration fell through to the standalone row — **fail-open, in
+a section whose stated posture is fail-closed.** Both judges cited it independently.
 
 **Validation — every one of these fails closed (exit 2), because a half-resolved unit is worse than a
 refused commit:**
 
-- **Bidirectional consistency.** If `P` declares `part_of: R`, then `R` must declare `P` in its
-  `parts`. A companion pointing at a root that does not claim it is a broken unit, not a unit.
+- **Bidirectional consistency — checked in both directions, not one.** If `P` declares `part_of: R`,
+  then `R` must declare `P` in its `parts`; **and** every path in a root's `parts` must declare
+  `part_of` pointing back at that root. A companion pointing at a root that does not claim it, and a
+  root claiming a file that does not claim it back, are both broken units rather than units. The
+  earlier wording stated only the first direction while calling itself bidirectional.
 - **Depth 1 only.** A file listed in `parts` must not itself declare `parts`. This makes resolution
   terminate by construction and makes cycles unrepresentable rather than merely detected.
 - Every member path must match `docs/superpowers/specs/*.md`, resolve inside the repo, and exist in
@@ -501,9 +553,13 @@ contracts rather than apart from them. Numbering is unchanged — `§7` still me
 | Exotic git global option | classifier cannot resolve | exit 0 + logged warning (open, by §6.2's stated posture) |
 | Harness caps hook timeout < 840s | **S3, unmeasured** | would fail OPEN silently — blocks implementation until measured |
 
-Every path ends in a **closed gate or a clear message — never a hang** — with one exception that is
-called out rather than absorbed: an unclassifiable git invocation exits open by design (§6.2), and the
-S3 row is a known unknown, not a handled case.
+Every path ends in a **closed gate or a clear message — never an unbounded hang** — with three
+exceptions called out rather than absorbed: an unclassifiable git invocation exits open by design
+(§6.2); the S3 row is a known unknown, not a handled case; and **"never a hang" is bounded, not
+instant, on ladder rung 3.** Terminal's `do script` has no liveness probe (§6.1), so a pane killed
+there produces no sentinel and no early exit — the launcher waits the full 840s before reporting.
+Rungs 1, 2 and 4 detect it in one poll. The earlier unqualified "never a hang" read as though every
+rung failed fast; only three of the four do.
 
 ---
 
@@ -575,7 +631,9 @@ vs worktree divergence.
 | Unit: sha is order-independent | reordering `parts:` leaves `spec_unit_sha` unchanged; editing any member changes it |
 | Unit: standalone specs unchanged | a single-file spec stores `spec_unit_sha: null` and keys on `spec_blob_sha` — asserted against a **pre-existing stored row**, so the additive field is proven backward-compatible rather than assumed |
 | Unit: precondition spans members | unstaged companion → exit 2 naming it, even when the commit records only the root |
-| Unit: malformed declarations | one-sided `part_of`, nested `parts`, member outside `docs/superpowers/specs/*.md`, member absent from the index — each exits 2, nothing launched |
+| Unit: malformed declarations | one-sided `part_of` **in either direction**, nested `parts` (depth-1), member outside `docs/superpowers/specs/*.md`, member absent from the index — each exits 2, nothing launched |
+| **Unit: declaration block selection** | **written against these two spec files themselves.** Only the header-region block counts; §5.3's illustrative blocks — including the one declaring `part_of` the file that contains it — are ignored, and this spec resolves as a root. Two header blocks, unparseable YAML, neither key, and both keys each exit 2 rather than falling through to standalone |
+| Unit: `U` unmerged spec | a conflicted spec mid-rebase exits 0; asserted **against a real conflicted repo**, since `git rev-parse ":<path>"` exits 128 on unmerged paths and the wrong routing would fail closed on every commit during a rebase |
 | Unit: two distinct roots in one commit | exit 2 naming both; **no judge spawned** (assert on run-dir count) |
 | Unit: `--spec <companion>` rejected | exit 1 naming the root, rather than judging a fragment |
 | Unit: one round counter | rounds increment per unit root across commits that touch different members |
@@ -592,7 +650,12 @@ with a hand-written form table** (`git commit -i -- <path>` walks a staged spec 
 pass reading fresh — the split's hole, restored); **count rounds per member instead of per unit root**
 (a violation persisting across both halves splits across two counters and the cap never fires);
 **let the judge recompute `spec_unit_sha` rather than echo it** (resolution in two places, and the
-row stops matching the lookup the moment the two rules disagree).
+row stops matching the lookup the moment the two rules disagree); **scan the whole file for
+`spec_unit` blocks instead of the header region only** (this spec's own §5.3 illustrations resolve it
+as a companion of itself, and its own bidirectional and depth-1 rules then refuse the commit that
+introduced it); **route a malformed declaration to the standalone row instead of exit 2** (fail-open
+in a fail-closed section); **route `U` into the record branch** (`git rev-parse ":<path>"` exits 128,
+the gate reads infrastructure failure, and every commit during a conflicted rebase is blocked).
 A test that still passes under its mutation does not count as coverage.
 
 The detection mutations matter most: the `-a` and `-i` holes were each *present in a reviewed
@@ -674,9 +737,10 @@ a green suite.
   against, so the rationale belongs somewhere immutable rather than only in a spec that keeps being
   revised.
 - **Update ADR-0003** — its "no script-decidable spec-done moment" deferral is resolved here.
-- **Amend `agents/compliance-judge.md`** — one added declared input, `spec_unit_sha`, recorded verbatim
-  into the verdict row and never recomputed, plus reading every path in `unit_members` as one artifact
-  (§4.1, §6.1.3). This is the only agent-definition change in the design and must not grow past it.
+- **Amend `agents/compliance-judge.md`** — exactly **two** added declared inputs: `spec_unit_sha`
+  (recorded verbatim into the verdict row, never recomputed) and `unit_members` (every listed path read
+  as one artifact) (§4.1, §6.1.3). This is the only agent-definition change in the design and must not
+  grow past those two.
 - Update `rules/gates.md` (spec-compliance gate becomes hook-enforced) and both judge skills —
   including the freshness sentence in `running-the-compliance-judge` that §5.2's precondition makes
   true (§6.6).
