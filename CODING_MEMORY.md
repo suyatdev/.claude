@@ -148,25 +148,14 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Exact Next Steps
 0. **Statusline token bar — all three judge findings FIXED 2026-07-19 (suite 17/20 → 44/44).**
-   Needs a fresh implementation-stage judge verdict before `gh pr create` (judge-guard blocks it).
-   Original verdict: `coding-memory/observability-judge/2026-07-19-feature-statusline-token-bar.md`.
-   (a) DONE — assertions corrected and the hand-run payloads ported in (bar tiers/rounding, Σ
-   accumulation + no-double-count + cache exclusion + per-session isolation, weekly quota incl. the
-   epoch-seconds countdown). Branch doc's verification claim rewritten again.
-   (b) DONE — read-modify-write serialised with a `mkdir` lock, re-read *inside* the lock; state
-   moved JSON → 2-line plain text so the critical section holds no `jq` fork. **ADR 0005.** Was far
-   worse than the verdict framed it: at 20 writers the total was 1213 of an expected 20410 — the
-   seed plus exactly one writer.
-   (c) DONE — and wider than scoped. Replaced the global `BASE_ESC` with a per-payload **benign
-   twin**, so the ceiling cannot drift when a segment is added. Fixing it exposed a *larger* hole
-   the finding did not name: the `$PWD`-fallback group had **8** bytes of slack, not 4.
-   Everything above was validated by **falsification** (mutate the script, watch the right
-   assertions go red), not by passing.
-   **Still open (deliberately not done, user's call):** the judge's "also worth doing" — split
-   "field absent" from "field present but unparseable", logging the latter to `$STATE_DIR/debug.log`
-   behind `STATUSLINE_DEBUG`, never stdout. Would have caught the epoch bug on render one. Left
-   because this branch has already overrun scope once and that was escalated rather than absorbed.
-   Cosmetics still deliberately left: duration floors, bar rounds full at 95k, no MB rollover.
+   Next action: **fresh implementation-stage judge verdict** @ cc0a853, then PR (judge-guard
+   blocks `gh pr create` without one). Two findings were wider than the verdict scoped them.
+   Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
+   **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
+   present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,
+   never stdout. Would have caught the epoch bug on render one. Deliberately not absorbed: this
+   branch overran scope once already and that was escalated rather than resolved unilaterally.
+   Cosmetics still left: duration floors, bar rounds full at 95k, no MB rollover.
 1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
