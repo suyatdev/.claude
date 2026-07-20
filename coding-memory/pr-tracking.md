@@ -119,9 +119,9 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - follow-up recorded: dogfood the skill on the .claude repo itself (it has no README).
 - detail: coding-memory/branches/writing-project-readmes-skill.md
 
-### feature/statusline-command (OPEN, 2026-07-19)
+### feature/statusline-command (MERGED 2026-07-19)
 - repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/18 · status: OPEN (opened 2026-07-19)
+- PR: https://github.com/suyatdev/.claude/pull/18 · status: MERGED 2026-07-19 (merge commit b6362ff)
 - opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
 - scope: Claude Code status line reproducing the oh-my-zsh `robbyrussell` prompt plus dimmed
   model + token segments — `statusline-command.sh`, `statusLine` entry in `settings.json`,
@@ -154,3 +154,28 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   check, and the sourced file's stdout becomes hook stdout — a channel into the agent control
   plane, not just code execution.
 - detail: coding-memory/branches/statusline-command.md
+
+### docs/diagramming-pointers (OPEN, 2026-07-19)
+- repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/19 · status: OPEN (opened 2026-07-19)
+- opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
+- scope: makes the `diagramming-technical-docs` standard (PR #12) reachable from the three
+  authoring paths that write documentation — `managing-session-memory` (the actual gap: nothing
+  covered `coding-memory/` branch logs or decision entries), `writing-specs`, and
+  `designing-agentic-architecture`. One conditional pointer each. 1 commit, +17/-7.
+- triage: `triaging-new-instructions` → category 4 (extend an existing skill). Explicitly **not**
+  a hook (a script sees whether a mermaid block exists, not whether one was warranted) and **not**
+  a gate (a missing diagram is recoverable later at zero cost, failing the never-miss bar the other
+  9 gates share). `CLAUDE.md`, `core-conduct.md`, `gates.md` untouched — zero always-on context.
+- judge verdicts: R1 84a60bf **low/high**, no blocking findings, cleared to ship on the first pass.
+  outcome: null (backfill on merge). Judge caught 2 overstatements in the commit body (the
+  "each pointer carries the conditional" claim is true of 1 of 3; "reachable only from the ADR
+  bullet" omitted `CLAUDE.md:21`) — corrected in the PR description rather than by amending, since
+  an amend moves HEAD and re-stales the gate.
+- process note: no `JUDGE_EXEMPT` needed. PR memory tracking was written *after* `gh pr create`
+  precisely so the verdict stayed matched to HEAD — the ordering PR #18 got wrong.
+- known weakness: the `managing-session-memory` pointer is the weakest of the three and the one
+  that motivated the change (memory restores at session start; branch logs are written at session
+  end, and a `/compact` between can drop it). The change is also unfalsifiable — nothing can report
+  that it failed. Watch the next 2-3 branch logs for a structured one landing with no diagram.
+- detail: coding-memory/branches/diagramming-pointers.md

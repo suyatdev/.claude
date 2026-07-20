@@ -23,7 +23,7 @@ A specification is the architectural north star an agent builds from. Its job is
 
 - **Requirements, not one-liners:** "make a login page" is a vibe, not a design. Break the feature into concrete requirements the agent can satisfy and you can check.
 - **Database schemas and API contracts:** these give the agent the real data structures and interface boundaries to build against, instead of letting it improvise shapes that other components then fail to match.
-- **Diagrams and the required toolchain:** include visual aids plus the specific tools and libraries the implementation must use, so the agent is choosing within your architecture rather than picking its own.
+- **Diagrams and the required toolchain:** include visual aids plus the specific tools and libraries the implementation must use, so the agent is choosing within your architecture rather than picking its own. Draw the visual aids as rendered Mermaid — `diagramming-technical-docs` covers which diagram type fits which job.
 - **Background — the *why*:** explaining the reasoning behind a requirement lets the agent anticipate the follow-on work rather than satisfying the literal ask and stopping there.
 - **Good, bad, and edge-case scenarios:** state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from.
 

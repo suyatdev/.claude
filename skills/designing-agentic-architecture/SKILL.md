@@ -52,6 +52,7 @@ Most agentic systems are over-architected before they are over-loaded. The quest
 - **Naive chaining compounds errors:** a hallucination in an early stage is carried faithfully into every stage after it, and nothing in the chain is positioned to catch it. Use a directed acyclic graph for multi-step or multi-skill workflows instead.
 - **Decouple state from the prompt:** routing state in a DAG should not depend on execution history accumulating inside the prompt — that makes correctness a function of how much history still fits in the window.
 - **Pass schema references, not raw outputs:** hand off between nodes via structured schema references on a file message bus, rather than piping one node's raw LLM output into the next node's prompt.
+- **Draw the graph, don't just describe it:** a DAG that exists only as prose forces every reader to rebuild the node-and-edge shape in their head, and mis-wired routing is exactly what hides in that gap. Render it as a Mermaid `flowchart` in the design doc — see `diagramming-technical-docs`.
 - **Abstract the payload away from the text input:** keeping data out of the model's text input protects its attention, prevents context-window bloat, and preserves effective capacity for the reasoning you want.
 
 ## Node Roles in the Graph
