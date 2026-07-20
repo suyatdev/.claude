@@ -51,8 +51,9 @@ STATE_HOME="$(mktemp -d)" # stands in for $HOME so the sigma cases cannot read o
 RACE_HOME="$(mktemp -d)"  # separate again: the concurrency case writes from many
                           # processes at once and would perturb the serial cases
 LOCK_HOME="$(mktemp -d)"  # lock-recovery cases, which plant hand-built lock dirs
+BREAK_HOME="$(mktemp -d)" # stale-lock breaking UNDER concurrency
 JSON_HOME="$(mktemp -d)"  # legacy-state-format migration case
-trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME"' EXIT
+trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME"' EXIT
 
 BASE_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 4.8"},"context_window":{"total_input_tokens":100}}'
 BASE_OUT="$(render "$BASE_PAYLOAD")"
@@ -305,6 +306,34 @@ else
   bad "giving up on an unavailable lock took ${LOCK_ELAPSED}s -- spin is unbounded or forking per attempt"
 fi
 rm -rf "$LOCK_DIR"
+
+# Breaking a stale lock must be atomic with respect to whoever takes it next.
+# Every stale-lock case above is single-render, and that is precisely why they
+# all pass while this one does not: when several renders each independently
+# judge the same lock stale, each removes it, and a removal can delete a lock
+# another render has legitimately just acquired -- reintroducing the lost update
+# inside the mechanism built to prevent it. Found by the observability judge,
+# not by this suite, which is the argument for the case existing at all.
+BREAK_STATE_DIR="$BREAK_HOME/.claude/statusline-state"
+mkdir -p "$BREAK_STATE_DIR"
+break_render() { printf '%s' "$(usage_payload brk "$1" 0 0)" | HOME="$BREAK_HOME" bash "$SCRIPT" >/dev/null 2>&1; }
+
+break_render 100
+BREAK_EXPECTED=100
+# Plant a stale lock so every one of the concurrent renders below arrives to
+# find one, and all of them reach the breaking path at once.
+mkdir -p "$BREAK_STATE_DIR/.session-brk.lock"
+touch -t 202001010000 "$BREAK_STATE_DIR/.session-brk.lock"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  break_render $((10 + i)) &
+  BREAK_EXPECTED=$((BREAK_EXPECTED + 10 + i))
+done
+wait
+OUT="$(printf '%s' "$(usage_payload brk 0 0 0)" | HOME="$BREAK_HOME" bash "$SCRIPT")"
+case "$OUT" in
+  *"${SIGMA} ${BREAK_EXPECTED}"*) ok "breaking a stale lock under concurrency loses no updates (total $BREAK_EXPECTED)" ;;
+  *) bad "stale-lock break lost updates: expected $BREAK_EXPECTED in: $OUT" ;;
+esac
 
 # A state file in the previous JSON format must not crash the render or be
 # misread as a total. It fails charset validation, so the counter restarts.
