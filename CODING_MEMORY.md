@@ -143,19 +143,22 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Statusline token bar — judge R1 (high) → R2/R3/R4 (medium) findings all FIXED
-   (suite 17/20 → 50/50).** Next action: **fresh verdict @ HEAD**, then PR (judge-guard blocks
-   `gh pr create` without one). Every round found the *same class* one level deeper, and the last
+0. **Statusline token bar — PAUSED 2026-07-19 at the user's direction. Do NOT auto-PR on resume.**
+   R1 (high) → R2/R3/R4 (medium) findings all FIXED, suite 17/20 → 50/50, everything pushed
+   @ 9c82cdd (21 commits ahead of `main`). **R5 was never run** — there is no verdict at HEAD, so
+   judge-guard will block `gh pr create` until one exists. On resume: decide PR vs. more hardening
+   *first* (see the diminishing-returns note below), then run the judge only if PRing.
+   Also still open, deliberately unabsorbed: R1's `STATUSLINE_DEBUG` logging to
+   `$STATE_DIR/debug.log` splitting "field absent" from "field present but unparseable" — the judge
+   noted it would have caught the epoch-seconds bug on render one.
+   Every round found the *same class* one level deeper, and the last
    three were all inside the fix for the one before: R2, the lock's cleanup was itself a lost
    update; R3, the cleanup's backstop justified a break by **age** then verified it by **PID**,
    and the breaker lock lacked the guards the state lock had just gained; R4, `mv dirA dirB`
-   **nests** when dirB exists rather than failing — so the restore could never fail and a retaken
-   path buried the capture inside the live lock. A wrong assumption about a shell builtin sat
+   **nests** when dirB exists rather than failing. A wrong assumption about a shell builtin sat
    underneath all three. Rules now encoded: verify a break against whatever justified it; use
-   `mkdir` (atomic, fails if present) where "rename or fail" is meant. R3 also caught that every
-   R2 guard was untested — the suite now calls lock helpers directly via subshell sourcing.
-   **Impact ceiling since R2 has been a wrong cosmetic total that self-heals — no round has been
-   a merge blocker. Diminishing returns are a live question.**
+   `mkdir` (atomic, fails if present) where "rename or fail" is meant. **Impact ceiling since R2
+   has been a wrong cosmetic total that self-heals — no round has been a merge blocker.**
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
    **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
    present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,
@@ -179,15 +182,14 @@ how this file and its linked files should be written (plain language, major chan
    0001-**0005**) — the "adopt" framing was stale, the directory was never the blocker.
    Diagramming-pointers half **DONE 2026-07-19** (PR #19), wider than this item scoped it.
 4a. **Watch the next 2-3 `coding-memory/` branch logs** (ADR-0004 revisit trigger). If one lands with
-   real structure and no diagram, the `managing-session-memory:18` pointer is in the wrong place —
-   move it from the index-description bullet into the save-time procedure section. Escalation if that
-   also fails is a **gate stub, never the hook**: the hook's rejection is structural (a script cannot
-   judge warrant), the gate's is cost/benefit and could be legitimately overturned. Evidence so far:
-   1 of 3 (`coding-memory/branches/diagramming-pointers.md` carries a flowchart).
-5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
-   `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
-   *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
-   clean). See `coding-memory/observability-judge/verdicts.jsonl`.
+   real structure and no diagram, move the `managing-session-memory:18` pointer from the
+   index-description bullet into the save-time procedure section. Escalation if that also fails is a
+   **gate stub, never the hook** (the hook's rejection is structural; the gate's is cost/benefit).
+   Evidence: **2 of 3** — `diagramming-pointers.md` has a flowchart; `statusline-token-bar.md` now
+   describes a lock protocol with real structure and carries **none** (its diagram went to ADR 0005).
+5. (Optional) Backfill `outcome` for the remaining `null` verdicts (all known-clean):
+   `feature/observability-judge` @ fdbd7b9 and @ 381bd79, memsearch *architecting* @ c2b23fe.
+   See `coding-memory/observability-judge/verdicts.jsonl`.
 
 **Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
