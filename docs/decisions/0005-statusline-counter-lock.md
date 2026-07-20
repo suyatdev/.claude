@@ -80,12 +80,30 @@ Two changes fix it, and the first alone was measured insufficient:
 Releasing is ownership-checked for the same reason: a render whose lock was
 broken and re-taken must not remove the new holder's lock on its way out.
 
-**Residual window, accepted deliberately:** if the single breaker captures a
-lock a fresh holder took between its judgement and its rename, it restores the
-directory; should that restore lose to a newer lock, the captured directory is
-dropped. This needs an interleaving within two syscalls, costs one wrong
-cosmetic total, and self-heals on the next render. Closing it properly requires
-a compare-and-swap the filesystem does not offer.
+A third change followed a later review, and it is the general rule the first two
+were special cases of: **verify a break against whatever justified it.** The
+first version of the post-spin age backstop judged a lock by AGE and then
+verified the capture by PID. A lock released and re-taken in between passed the
+PID check, so a live lock was deleted — the same bug, wearing the fix's clothes.
+`break_lock_verified` now takes the justification as a mode (`age` or
+`pid:<expected>`), and `mv` preserving mtime is what makes verifying age on the
+captured directory sound.
+
+The breaker lock also had to be given the protections the state lock had just
+received — its orphan clearing was a raw `rm -rf` on the live path and its
+release was unconditional, letting two renders hold it at once and defeating the
+serialisation. Both locks now share one break and one release implementation,
+because two implementations of the same protocol is precisely how the breaker
+came to lack guards the state lock already had.
+
+**Residual window, accepted deliberately:** if a breaker captures a lock a fresh
+holder took between its judgement and its rename, it restores the directory;
+should that restore lose to a newer lock, the captured directory is dropped.
+Review could not construct a reachable interleaving through `clear_stale_lock`,
+where serialisation plus in-lock re-reading closes it; the window is a property
+of the capture-verify-restore shape rather than a known live path. It costs one
+wrong cosmetic total and self-heals on the next render. Closing it outright
+requires a compare-and-swap the filesystem does not offer.
 
 ## Consequences
 - Totals are exact under normal concurrency: 20 concurrent renders against a

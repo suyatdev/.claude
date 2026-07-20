@@ -143,12 +143,15 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Statusline token bar — judge R1 (risk=high) and R2 (risk=medium) findings all FIXED
-   (suite 17/20 → 45/45).** Next action: **fresh implementation-stage verdict @ HEAD**, then PR
-   (judge-guard blocks `gh pr create` without one). R2 caught what R1 and I both missed: the
-   *lock's own cleanup* was a lost update (`rm -rf` can delete a lock another render just
-   acquired) — invisible here because every stale-lock test was single-render. Atomic rename
-   alone barely helped (4-in-8 → 4-in-10); serialising the breakers fixed it (0-in-20).
+0. **Statusline token bar — judge R1 (high), R2 (medium), R3 (medium) findings all FIXED
+   (suite 17/20 → 50/50).** Next action: **fresh implementation-stage verdict @ HEAD**, then PR
+   (judge-guard blocks `gh pr create` without one). Each round found the *same class* one level
+   deeper: R2, the lock's own cleanup was a lost update; R3, the cleanup's own backstop justified
+   a break by **age** then verified it by **PID**, and the breaker lock lacked the guards the
+   state lock had just gained. Rule now encoded, not remembered: **verify a break against whatever
+   justified it**, one shared implementation for both locks. R3 also caught that every R2 safety
+   mechanism was untested — stripping them left the suite green; it now sources the script in a
+   subshell to call lock helpers directly.
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
    **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
    present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,

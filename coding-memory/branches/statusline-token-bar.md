@@ -145,6 +145,30 @@ Also added on the judge's read: an age backstop for a PID that merely *looks* al
 without it a wedged counter never recovers), and an ownership check before release. ADR 0005's
 "totals are exact under concurrency" was an overclaim and has been corrected.
 
+**Round 3 — the same class again, twice more, and the general rule that finally covers it.** The
+backstop I had just added judged a lock by **age** and then verified the capture by **PID**. A lock
+released and re-taken in between passed the PID check, so it deleted a live lock: the bug wearing the
+fix's clothes. And the breaker lock had none of the protections the state lock had just been given —
+raw `rm -rf` on its live path, unconditional release — so two renders could hold it at once and
+defeat the serialisation that *is* the fix.
+
+The rule, now encoded rather than remembered: **verify a break against whatever justified it.**
+`break_lock_verified` takes the justification as a mode (`age` / `pid:<expected>`); `mv` preserves
+mtime, which is what makes verifying age on the captured directory sound. Both locks now share one
+break and one release implementation — two implementations of the same protocol is exactly how the
+breaker came to lack guards the state lock already had.
+
+**Every safety mechanism from round 2 was untested.** Deleting the backstop outright, or stripping
+the release ownership check, both left the suite fully green — a guard no test can distinguish from
+its own absence. Some of them are unreachable by any black-box render (release only matters when a
+lock is broken and re-taken inside another render's ~3ms critical section), so the suite now sources
+the script in a subshell with stdin closed and calls the lock helpers directly. Both
+previously-uncaught mutations now fail with a specific reason.
+
+Cost: the suite is ~6.5s, dominated by two deliberate ~390ms give-up paths and two 20-way
+concurrency cases. Slow for a statusline, and worth it — these are the only assertions that have
+ever caught these bugs.
+
 The give-up-time assertion is deliberately coarse and says so: the bug measured ~455ms against an
 intended ~390ms ceiling, and no portable timing assertion separates those. That constraint lives in
 the `LOCK_ATTEMPTS` comment, not in a test that would only pretend to enforce it.
