@@ -217,22 +217,128 @@ cu_cache_read="${cu_cache_read//[[:cntrl:]]/}"
 STATE_DIR="$HOME/.claude/statusline-state"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
+# --- State file format ----------------------------------------------------
+# Two lines: the usage signature, then the running total. Plain text rather
+# than JSON specifically so it can be read with the `read` BUILTIN. The JSON
+# form cost two jq forks (~8ms measured) on every render, and that is what made
+# a prompt-safe lock unworkable below: a critical section long enough to fork
+# jq cannot serialise several waiting renders inside any delay a prompt can
+# absorb. Reading fork-free brings the whole locked section to roughly one mv.
+#
+# Anything not matching the shape written here is treated as absent rather than
+# trusted, which also handles the one-time migration from the old .json file:
+# its single line fails the signature charset test, so the counter restarts
+# from the current call. Legacy session-*.json files are inert leftovers.
+read_session_state() { # $1 state file -> sets $state_sig / $state_cum
+  state_sig=""
+  state_cum=0
+  [ -f "$1" ] || return 0
+  local f_sig="" f_cum=""
+  # No `|| f_var=""` fallbacks: `read` returns non-zero at EOF on a final line
+  # with no trailing newline even though it assigned the value, so treating that
+  # status as failure would discard a total this script had written correctly.
+  # Both values are charset-validated below, which is the real guard.
+  { read -r f_sig; read -r f_cum; } <"$1" 2>/dev/null
+  case "$f_sig" in ''|*[!0-9:]*) f_sig="" ;; esac
+  case "$f_cum" in ''|*[!0-9]*) f_cum=0 ;; esac
+  state_sig="$f_sig"
+  state_cum="$f_cum"
+}
+
+# --- Serialising the read-modify-write ------------------------------------
+# The total is read, incremented, and written back. Two renders that overlap
+# both read the same starting value and the later write erases the earlier: a
+# LOST UPDATE. The atomic mv below does not prevent this and never did -- that
+# guards a torn READ, which is a different failure. Conflating the two is what
+# left this open. Measured before fixing: 20 concurrent renders against a
+# seeded 200 stored 1213, the seed plus exactly one writer.
+#
+# mkdir is the lock primitive. It is atomic on every POSIX filesystem and needs
+# no flock, which macOS does not ship. The holder's PID is recorded inside so a
+# lock orphaned by a killed render can be cleared instead of wedging the
+# counter for the rest of the session.
+#
+# Failing to acquire is NOT an error. This is a cosmetic counter on a line that
+# re-renders constantly, so no total is worth a stalled prompt. On timeout the
+# update is skipped -- and skipping is usually deferral rather than loss: the
+# signature is not stored either, so the next render sees the same unrecorded
+# usage and tries again. It is only a real loss when usage moves on before any
+# retry wins the lock, which needs sustained contention to happen at all.
+# Sized against measurement, not arithmetic. Worst case is ATTEMPTS *
+# (LOCK_SLEEP + one fork of /bin/sleep), and the FORK dominates: at ~9ms it
+# makes each attempt cost ~19ms, so the interval is nearly irrelevant.
+# Change ATTEMPTS, not LOCK_SLEEP.
+#
+# 20 gives a ~390ms ceiling, deliberately above the ~314ms measured for 20
+# concurrent renders of one session to drain. A budget below the drain time does
+# not degrade gracefully -- it structurally guarantees the last waiters give up.
+# Tried and rejected: 10 attempts (~190ms) looked like the safer prompt-latency
+# choice and made the concurrency test fail every run, at 387-495 of 510.
+#
+# The ceiling is only ever paid in full by a render that never acquires, and
+# that render skips its update rather than blocking anything downstream. An
+# uncontended render is ~65-78ms and takes the lock on the first attempt.
+LOCK_ATTEMPTS=20
+LOCK_SLEEP=0.01
+LOCK_STALE_MINUTES=1
+
+# Clears a lock whose owner is provably gone. Called ONCE before the spin, not
+# per attempt: the age branch forks `find`, and doing that on every iteration
+# stretched the give-up ceiling from ~200ms to a measured 455ms -- a stall a
+# prompt cannot absorb, to re-answer a question whose answer cannot change
+# while we hold still. A holder that dies mid-spin is simply cleared by the
+# next render, which is soon and costs nothing.
+clear_stale_lock() { # $1 lock dir
+  local lock="$1" holder=""
+  [ -d "$lock" ] || return 0
+  # No `|| holder=""` on failure: `read` returns non-zero at EOF on a file with
+  # no trailing newline while still having assigned the value, so treating its
+  # exit status as "nothing was read" discards a perfectly good PID. That is
+  # exactly the bug this line replaces -- it made the whole PID check dead code
+  # and sent every stale lock down the slow age path instead.
+  [ -r "$lock/pid" ] && read -r holder <"$lock/pid" 2>/dev/null
+  case "$holder" in
+    ''|*[!0-9]*)
+      # No usable PID: the holder either died between mkdir and the pid write,
+      # or the file is corrupt. Neither can be tested with kill -0, so fall back
+      # to age -- a lock older than a minute cannot belong to a live render,
+      # which finishes in milliseconds. Deliberately NOT cleared when it is
+      # merely young and pid-less: that is the normal, microseconds-long window
+      # of a healthy holder, and breaking it would reintroduce the lost update.
+      [ -n "$(find "$lock" -maxdepth 0 -mmin "+$LOCK_STALE_MINUTES" 2>/dev/null)" ] &&
+        rm -rf "$lock" 2>/dev/null
+      ;;
+    *)
+      # kill -0 tests for existence only; it sends no signal.
+      kill -0 "$holder" 2>/dev/null || rm -rf "$lock" 2>/dev/null
+      ;;
+  esac
+  return 0
+}
+
+acquire_state_lock() { # $1 lock dir -> 0 acquired, 1 gave up
+  local lock="$1" attempt=0
+  clear_stale_lock "$lock"
+  while [ "$attempt" -lt "$LOCK_ATTEMPTS" ]; do
+    # Trailing newline matters: it is what lets a reader's `read` succeed
+    # rather than report EOF on the last line.
+    if mkdir "$lock" 2>/dev/null; then
+      printf '%s\n' "$$" >"$lock/pid" 2>/dev/null
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep "$LOCK_SLEEP" 2>/dev/null
+  done
+  return 1
+}
+
 cum_tokens=0
 
 if [ -n "$session_id_safe" ] && [ -d "$STATE_DIR" ]; then
-  session_state_file="$STATE_DIR/session-${session_id_safe}.json"
-  prev_sig=""
-
-  if [ -f "$session_state_file" ]; then
-    # A half-written or corrupt file must fall back to zero, never abort
-    # the script -- jq's own parse failure is enough to decide whether to
-    # trust it; nothing here can blank the prompt.
-    state_json=$(jq -c '.' "$session_state_file" 2>/dev/null)
-    if [ -n "$state_json" ]; then
-      prev_sig=$(printf '%s' "$state_json" | jq -r '.sig // empty' 2>/dev/null)
-      cum_tokens=$(printf '%s' "$state_json" | jq -r '.cum_tokens // 0' 2>/dev/null)
-    fi
-  fi
+  session_state_file="$STATE_DIR/session-${session_id_safe}.state"
+  read_session_state "$session_state_file"
+  prev_sig="$state_sig"
+  cum_tokens="$state_cum"
 
   have_usage=false
   if [ -n "$cu_input" ] || [ -n "$cu_output" ] || [ -n "$cu_cache_write" ] || [ -n "$cu_cache_read" ]; then
@@ -249,19 +355,38 @@ if [ -n "$session_id_safe" ] && [ -d "$STATE_DIR" ]; then
       # stop it tracking actual conversation volume. Note this differs from
       # $sig above, which still fingerprints all four fields -- that is for
       # detecting a new API call, not for measuring one.
+      #
+      # Computed BEFORE the lock: it depends only on the payload, and every
+      # instruction inside the critical section is one every other render is
+      # waiting through.
       call_tokens=$(awk -v a="${cu_input:-0}" -v b="${cu_output:-0}" 'BEGIN { printf "%d", a + b }')
-      cum_tokens=$(awk -v x="$cum_tokens" -v y="$call_tokens" 'BEGIN { printf "%d", x + y }')
+      case "$call_tokens" in ''|*[!0-9]*) call_tokens=0 ;; esac
 
-      # Atomic write: the statusline re-renders frequently and can overlap
-      # with itself, so a reader must never see a half-written file. Writing
-      # to a per-process temp name then `mv`-ing into place is what
-      # guarantees that -- rename within the same directory is a single
-      # filesystem operation, never a partial one.
-      session_tmp="$STATE_DIR/.session-${session_id_safe}.$$.tmp"
-      if jq -n --arg sig "$sig" --argjson cum_tokens "$cum_tokens" '{sig: $sig, cum_tokens: $cum_tokens}' >"$session_tmp" 2>/dev/null; then
-        mv -f "$session_tmp" "$session_state_file" 2>/dev/null
-      else
-        rm -f "$session_tmp" 2>/dev/null
+      lock_dir="$STATE_DIR/.session-${session_id_safe}.lock"
+      if acquire_state_lock "$lock_dir"; then
+        # Re-read INSIDE the lock. Holding the lock while adding to a value
+        # read outside it leaves the race exactly as it was -- the read and the
+        # write have to be one indivisible step, and the earlier read was only
+        # ever for display.
+        read_session_state "$session_state_file"
+        cum_tokens="$state_cum"
+        # A concurrent render may have recorded this very call while we waited.
+        if [ "$sig" != "$state_sig" ]; then
+          cum_tokens=$((state_cum + call_tokens))
+          # Atomic write: a reader must never see a half-written file. Writing
+          # to a per-process temp name then `mv`-ing into place guarantees that
+          # -- rename within a directory is a single filesystem operation,
+          # never a partial one. This is separate from the lock above: the lock
+          # is what makes the update not get lost, the rename is what makes it
+          # not get read torn.
+          session_tmp="$STATE_DIR/.session-${session_id_safe}.$$.tmp"
+          if printf '%s\n%s\n' "$sig" "$cum_tokens" >"$session_tmp" 2>/dev/null; then
+            mv -f "$session_tmp" "$session_state_file" 2>/dev/null
+          else
+            rm -f "$session_tmp" 2>/dev/null
+          fi
+        fi
+        rm -rf "$lock_dir" 2>/dev/null
       fi
     fi
   fi

@@ -93,6 +93,43 @@ Two documented conditions the design must survive, both confirmed handled: `rate
 only for Pro/Max subscribers *after the first API response*, and `current_usage` is `null` before
 the first call and immediately after `/compact` (Σ holds its prior total rather than resetting).
 
+## Σ lost update: serialised with a mkdir lock (ADR 0005)
+
+Judge finding (b), fixed. The read-modify-write is now serialised with a
+`mkdir`-based lock, re-reading the total *inside* the lock. Full rationale and
+the rejected alternatives: `docs/decisions/0005-statusline-counter-lock.md`.
+
+Worse than the verdict framed it. The two-writer repro (+1000/+1400 → 1200)
+reads as a marginal undercount; at 20 writers the stored total was **1213
+against an expected 20410** — the seed plus exactly one writer. Every other
+update was lost, because all 20 read the same starting value and the last write
+won outright. The counter was not approximate, it was reporting one call.
+
+The state file moved from JSON to two lines of plain text. That is the enabling
+change, not a tidy-up: JSON cost two `jq` forks (~8ms) *inside* the critical
+section, and a section that long cannot serialise waiting renders inside any
+delay a prompt can absorb.
+
+**Two bugs found in the lock itself, by hand-probing paths the suite did not
+reach** — the same failure mode this branch keeps repeating:
+
+1. The PID check was **dead code from the start**. The PID was written with
+   `printf '%s'` (no trailing newline), so `read` hit EOF and returned
+   non-zero, and a `|| holder=""` fallback then discarded the value it had just
+   read. Every stale lock fell through to the slow age path. Caught only by
+   constructing a dead-PID lock by hand.
+2. The give-up ceiling was **455ms, not the ~200ms the constants implied**,
+   because the age check forked `find` on every spin iteration.
+
+Both are now covered by regression tests rather than living in a transcript.
+
+**Sizing the budget is a measurement, not arithmetic.** 10 attempts (~190ms)
+looked like the safer prompt-latency choice and failed the concurrency test
+every run (387–495 of 510). 20 concurrent renders take ~314ms to drain, so any
+budget under that structurally guarantees the last waiters give up. 20 attempts
+(~390ms) sits above it. The dominant cost is the fork of `/bin/sleep` (~9ms),
+not the interval — tune `LOCK_ATTEMPTS`, never `LOCK_SLEEP`.
+
 ## Injection ceiling: one global baseline → per-payload benign twins
 
 The injection tests assert that a hostile field value adds no escape bytes to the output. They did
