@@ -129,6 +129,22 @@ passed 44/44. The test was asserting a condition the buggy writer could not prod
 both forms, and the *unterminated* one is the case that matters. Writing the test was not the same
 as the test working — only the mutation showed which of those had happened.
 
+**Third bug, found by the observability judge rather than by me or the suite: breaking a stale lock
+was itself a lost update.** `rm -rf` on the live lock path means several renders each judge the same
+lock stale and each remove it — and a removal landing after another render legitimately acquired the
+lock deletes a *live* lock. The mechanism built to prevent lost updates was causing them. Invisible
+to every test here because all the stale-lock cases were single-render.
+
+Fixing it took two changes, and the obvious one was measurably not enough:
+break by atomic **rename** (never remove in place, and verify the captured directory is the one
+judged) got it from failing 4-of-8 to failing **4-of-10** — barely moved. The stampede was the real
+cause: twenty renders each acting on a judgement already out of date. Serialising breakers behind a
+second `mkdir` lock, with the holder re-read *inside* it, took it to **0-of-20**.
+
+Also added on the judge's read: an age backstop for a PID that merely *looks* alive (PIDs are reused;
+without it a wedged counter never recovers), and an ownership check before release. ADR 0005's
+"totals are exact under concurrency" was an overclaim and has been corrected.
+
 The give-up-time assertion is deliberately coarse and says so: the bug measured ~455ms against an
 intended ~390ms ceiling, and no portable timing assertion separates those. That constraint lives in
 the `LOCK_ATTEMPTS` comment, not in a test that would only pretend to enforce it.

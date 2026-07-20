@@ -288,9 +288,87 @@ LOCK_STALE_MINUTES=1
 # prompt cannot absorb, to re-answer a question whose answer cannot change
 # while we hold still. A holder that dies mid-spin is simply cleared by the
 # next render, which is soon and costs nothing.
-clear_stale_lock() { # $1 lock dir
-  local lock="$1" holder=""
+# Breaking a stale lock must be ATOMIC with respect to whoever takes it next.
+# `rm -rf "$lock"` is not, and that is a lost update in its own right: several
+# renders can each judge the same lock stale, and a removal that lands after
+# another render has legitimately acquired the lock deletes a LIVE lock. The
+# mechanism built to prevent lost updates then causes them. Reproduced at 20
+# concurrent renders against a planted stale lock.
+#
+# The lock is renamed away instead. rename() is atomic, so exactly one breaker
+# wins and the losers get ENOENT and carry on. Crucially the winner only ever
+# deletes the directory it captured, never the live path. It then confirms the
+# capture is the lock it judged -- a fresh holder may have taken the lock
+# between the judgement and the rename -- and puts it back on a mismatch rather
+# than destroying a live lock.
+#
+# Residual window, deliberately accepted: if the restore fails because a newer
+# lock already exists at the path, the captured directory is dropped. That
+# needs two breakers and a new holder to interleave within two syscalls, and
+# the cost is one wrong cosmetic total that self-heals next render. Closing it
+# properly needs a compare-and-swap the filesystem does not offer.
+break_stale_lock() { # $1 lock dir, $2 pid judged stale ('' when pid-less)
+  local lock="$1" expected="$2" grave="$1.dead.$$" captured=""
+  mv "$lock" "$grave" 2>/dev/null || return 0
+  [ -r "$grave/pid" ] && read -r captured <"$grave/pid" 2>/dev/null
+  if [ "$captured" = "$expected" ]; then
+    rm -rf "$grave" 2>/dev/null
+    return 0
+  fi
+  mv "$grave" "$lock" 2>/dev/null || rm -rf "$grave" 2>/dev/null
+  return 0
+}
+
+# Releases only a lock this process still owns. If ours was broken and re-taken
+# while we were in the critical section, removing it would evict a live holder
+# -- the same eviction bug as above, at the other end of the lock's life.
+release_state_lock() { # $1 lock dir
+  local holder=""
+  [ -r "$1/pid" ] && read -r holder <"$1/pid" 2>/dev/null
+  [ "$holder" = "$$" ] && rm -rf "$1" 2>/dev/null
+  return 0
+}
+
+# Last-resort backstop for a lock whose PID looks alive but is not its owner:
+# PIDs are reused after wraparound, and kill -0 cannot tell a reused PID from
+# the original holder, so without this a stale lock would wedge that session's
+# counter permanently and silently. Run only after the spin is exhausted, never
+# per attempt -- it forks `find`, and the contended path is exactly where that
+# cost is least affordable. The counter self-heals on the following render.
+force_break_aged_lock() { # $1 lock dir
+  local lock="$1" holder="" breaker="$1.break"
+  # Clear a breaker lock orphaned by a killed render first -- while it stands,
+  # no render can break anything, so this is what keeps a wedge recoverable.
+  [ -d "$breaker" ] &&
+    [ -n "$(find "$breaker" -maxdepth 0 -mmin "+$LOCK_STALE_MINUTES" 2>/dev/null)" ] &&
+    rm -rf "$breaker" 2>/dev/null
   [ -d "$lock" ] || return 0
+  [ -n "$(find "$lock" -maxdepth 0 -mmin "+$LOCK_STALE_MINUTES" 2>/dev/null)" ] || return 0
+  mkdir "$breaker" 2>/dev/null || return 0
+  [ -r "$lock/pid" ] && read -r holder <"$lock/pid" 2>/dev/null
+  break_stale_lock "$lock" "$holder"
+  rm -rf "$breaker" 2>/dev/null
+  return 0
+}
+
+# Only ONE render may attempt a break, serialised by a second mkdir lock.
+# Atomic renaming alone is not enough: twenty renders each judge the same lock
+# stale, and each then acts on a judgement that is already out of date, so one
+# captures a lock a different render legitimately acquired microseconds earlier.
+# Measured with renaming but no serialisation: 4 runs in 10 still lost updates.
+# Serialising removes the stampede entirely. The single breaker's own
+# judge-then-rename window remains, and is what break_stale_lock's identity
+# check covers.
+#
+# A breaker lock orphaned by a killed render would disable breaking for that
+# session; force_break_aged_lock clears it on age, off the contended path.
+clear_stale_lock() { # $1 lock dir
+  local lock="$1" holder="" breaker="$1.break"
+  [ -d "$lock" ] || return 0
+  mkdir "$breaker" 2>/dev/null || return 0
+  # Re-read INSIDE the breaker lock: a judgement made before serialising is
+  # exactly the out-of-date judgement this function exists to avoid acting on.
+  #
   # No `|| holder=""` on failure: `read` returns non-zero at EOF on a file with
   # no trailing newline while still having assigned the value, so treating its
   # exit status as "nothing was read" discards a perfectly good PID. That is
@@ -306,13 +384,16 @@ clear_stale_lock() { # $1 lock dir
       # merely young and pid-less: that is the normal, microseconds-long window
       # of a healthy holder, and breaking it would reintroduce the lost update.
       [ -n "$(find "$lock" -maxdepth 0 -mmin "+$LOCK_STALE_MINUTES" 2>/dev/null)" ] &&
-        rm -rf "$lock" 2>/dev/null
+        break_stale_lock "$lock" ""
       ;;
     *)
-      # kill -0 tests for existence only; it sends no signal.
-      kill -0 "$holder" 2>/dev/null || rm -rf "$lock" 2>/dev/null
+      # kill -0 tests for existence only; it sends no signal. A PID that looks
+      # alive is left alone here; force_break_aged_lock covers PID reuse after
+      # the spin, where the extra fork is affordable.
+      kill -0 "$holder" 2>/dev/null || break_stale_lock "$lock" "$holder"
       ;;
   esac
+  rm -rf "$breaker" 2>/dev/null
   return 0
 }
 
@@ -329,6 +410,10 @@ acquire_state_lock() { # $1 lock dir -> 0 acquired, 1 gave up
     attempt=$((attempt + 1))
     sleep "$LOCK_SLEEP" 2>/dev/null
   done
+  # A lock this persistent may be held by a reused PID that kill -0 cannot
+  # distinguish from its original owner. Break it on age here, off the
+  # contended path, so the next render acquires normally.
+  force_break_aged_lock "$lock"
   return 1
 }
 
@@ -386,7 +471,7 @@ if [ -n "$session_id_safe" ] && [ -d "$STATE_DIR" ]; then
             rm -f "$session_tmp" 2>/dev/null
           fi
         fi
-        rm -rf "$lock_dir" 2>/dev/null
+        release_state_lock "$lock_dir"
       fi
     fi
   fi
