@@ -6,9 +6,10 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
-- current work: **judge terminal-enforcement — SPEC PHASE, round 3 revision written, round 3
-  judging still owed.** Spec phase running on Opus 4.8 (model gate answered `9fd3896`; revision
-  rounds continue under that same answer). Design approved §1–§4 2026-07-20; brainstorm landed on
+- current work: **judge terminal-enforcement — SPEC PHASE, round 3 JUDGED (fail, 1 violation);
+  escalation #2 resolved by user decision; round 4 revision owed.** Spec phase running on Opus 4.8
+  (model gate answered `9fd3896`; revision rounds continue under that same answer).
+  Design approved §1–§4 2026-07-20; brainstorm landed on
   `main` via a docs-only merge (user's call over cherry-pick), so branches forked from `main`
   inherit the design rather than it being stranded on a merged branch.
   Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
@@ -16,8 +17,8 @@ how this file and its linked files should be written (plain language, major chan
   10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
   mkdir-atomic launch lock with piggyback-wait, falsification-backed tests.
   Full approved design: `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
-  **The escalation rule fired on this spec itself** (2 violations persisted rounds 1→2) and was
-  honoured rather than bypassed — see Exact Next Steps 0.
+  **The escalation rule fired on this spec itself — twice** (rounds 1→2, then again at round 3) and
+  was honoured both times rather than bypassed — see Exact Next Steps 0.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
 - Carried over, still open: **Orca hooks in `settings.json` deliberately uncommitted** (third-party,
@@ -80,18 +81,13 @@ how this file and its linked files should be written (plain language, major chan
   **PR #17 MERGED 2026-07-19** (merge commit d242e69); branch deleted. Judge rounds 1-2
   (3c5a826 low/medium → grep hole fixed → 0d23feb low/high), outcome=clean (backfilled).
   Detail: `coding-memory/branches/writing-project-readmes-skill.md`.
-- feature/statusline-command (2026-07-19) — Claude Code status line reproducing the oh-my-zsh
-  `robbyrussell` prompt (`➜ user@host dir git:(branch) ✗`) plus dimmed model + token-count
-  segments: new `statusline-command.sh`, `statusLine` entry in `settings.json`, README table
-  row; model → opus[1m] and theme → dark split into their own `chore(settings)` commit.
-  Observability judge ran **5 rounds**, each finding something real in the round before: terminal-escape
-  injection via four distinct paths (incl. a **second** unstripped fallback introduced by the fix for the
-  third), false "pushed" claims, and an unverified `context_window` schema — all fixed. Test suite
-  validated by falsification against all 5 historical versions rather than by passing alone
-  (`statusline-command.falsify.py` makes that reproducible). Recurring lesson: **the write-up ran ahead
-  of the code in every round**, including a "Cosmetic, no leak" claim about a path that did leak. Scope
-  overran badly — 5 of 6 commits judge-driven; taken to the user rather than resolved unilaterally.
-  No ADR (presentation-only — misses all three ADR triggers).
+- feature/statusline-command (2026-07-19) — **PR #18 MERGED** (b6362ff). oh-my-zsh `robbyrussell`
+  status line + dimmed model/token segments. Observability judge ran **5 rounds**, each finding
+  something real in the one before: terminal-escape injection via four paths (incl. a second
+  unstripped fallback introduced by the fix for the third), false "pushed" claims, an unverified
+  `context_window` schema. Suite validated by falsification against all 5 historical versions
+  (`statusline-command.falsify.py`). Origin of the recurring lesson: **the write-up ran ahead of the
+  code in every round.** No ADR (presentation-only).
   Detail: `coding-memory/branches/statusline-command.md`.
 - feature/statusline-token-bar (2026-07-19) — **PR #20 MERGED 2026-07-20 04:01Z.** Follow-on
   to PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
@@ -125,19 +121,26 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement — RESUME HERE. Round 3 revision written @ `60abc86`; round 3
-   judging NOT yet run.** Branch `feature/judge-terminal-enforcement` off `main`; spec
-   `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` (1027 lines).
-   **Next: re-dispatch BOTH judges at round 3**, passing round 2's violation ids (persistence
-   detection needs them; no waived ids) → user review → `superpowers:writing-plans`.
-   Rounds: 1 fail (5 violations) → 2 fail (3 closed, **2 persisted**, 1 new) → **escalation fired**,
-   user directed the fix, nothing waived → 3 written.
-   Round 2's two persistent violations shared one root: the launcher's argument contract was
-   specified without its *caller*, so the hook could not populate it and the escalation cap it added
-   was inert. Fixed in §6.2.1. Two round-2 claims were **wrong and are corrected as corrections**:
-   the `-a`/pathspec precondition (circular; disproved by running git, not reading) and the ack's
-   id-scoping (deadlocked the round-3 branch).
-   Verdicts, escalation record, and full revision history:
+0. **Judge terminal-enforcement — RESUME HERE. Round 3 judged @ `60abc86` (fail, 1 violation);
+   escalation #2 resolved by user decision; ROUND 4 REVISION IS THE NEXT ACTION.** Branch
+   `feature/judge-terminal-enforcement` off `main`; spec
+   `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md` (1036 lines).
+   Rounds: 1 fail (5) → 2 fail (2 persisted, 1 new) → **escalation #1** → 3 fail (2 closed,
+   **`writing-specs/api-contracts` persisted a 3rd time**) → **escalation #2**. Nothing ever waived.
+   **Write round 4 applying the two user-directed fixes, then re-dispatch BOTH judges at round 4**
+   passing round 3's single violation id → user review → `superpowers:writing-plans`.
+   **Fix 1 — the launcher extracts prior violations itself** (drop `--prior-violations-file` from the
+   hook path; it is derivable from `--spec` + `--round` + the store, and the launcher does it after
+   creating the run dir; flag survives as an optional override). Kills a 3-round circularity by
+   removing the argument rather than sequencing it.
+   **Fix 2 — §5.2 stops enumerating commit forms**: `git commit --dry-run --porcelain <same args>`,
+   column 1 non-space ⟺ recorded. Verified 5/5 including the new `git commit -i` hole; no index or
+   worktree mutation, no editor, 9ms. Caveats: exit 1 + empty = "nothing to commit", not a failure;
+   `--amend` lists the whole amended set.
+   Also fix: **§6.5's claim that no hook sets an explicit timeout is false — 10 of 17 do, at 10s**
+   (which sharpens spike S3: 10s is the only precedent, the design wants 900s). Plus 4 judge notes
+   and a 1036-line spec against core-conduct's 800 ceiling.
+   Verdicts, both escalation records, the `-i` evidence table and full revision history:
    `coding-memory/branches/judge-terminal-enforcement.md`.
    Design of record: `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
    **Spec amends it in two places: `--bare` dropped** (never reads OAuth/keychain auth, so it cannot
@@ -175,9 +178,10 @@ how this file and its linked files should be written (plain language, major chan
    real structure and no diagram, move the `managing-session-memory:18` pointer from the
    index-description bullet into the save-time procedure section. Escalation if that also fails is a
    **gate stub, never the hook** (the hook's rejection is structural; the gate's is cost/benefit).
-   Evidence: **2 of 3** — `diagramming-pointers.md` has a flowchart; `statusline-token-bar.md` now
+   Evidence: **3 of 4** — `diagramming-pointers.md` has a flowchart; `statusline-token-bar.md` now
    describes a lock protocol with real structure and carries **none** (its diagram went to ADR 0005).
-   The 07-20 brainstorm write-up carries its flowchart inline (counts toward the healthy side).
+   The 07-20 brainstorm write-up carries its flowchart inline, and `judge-terminal-enforcement.md`
+   carries one for the round-4 detection rule (both count toward the healthy side).
 6. (Optional) Backfill `outcome` for the remaining `null` verdicts (all known-clean):
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79, memsearch *architecting* @ c2b23fe.
    See `coding-memory/observability-judge/verdicts.jsonl`.

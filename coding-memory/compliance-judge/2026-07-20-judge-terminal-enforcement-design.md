@@ -155,3 +155,103 @@ written the highest-priority rung is the one an implementer cannot build.
 ### Waivers
 
 None. No waived ids supplied for this spec in any round.
+
+
+---
+
+## Round 3 — 2026-07-20 · verdict: FAIL (1 violation)
+
+- **Spec blob:** `b9c67ffe372e46a077992cf2bd097476620b530e` · **HEAD:** `60581c83d5e13d08afc9777fa8e3a643a88dae17`
+- **Branch:** `feature/judge-terminal-enforcement` · **Waived:** none
+- **Persistence:** `writing-specs/api-contracts` is now cited in **three consecutive rounds**.
+  `gates/escalation-not-preserved` and `writing-specs/pinned-versions` are **closed**.
+
+### Layman summary
+
+Two of round 2's three problems are genuinely fixed. cmux is now pinned (`0.64.20 (100)`, commit
+`14e3400b9`) with a real rung-1 command, closing `writing-specs/pinned-versions`. The new §6.2.1
+finally designs the *caller* — it says, argument by argument, where a hook with no conversation to
+draw on gets each value, which is what round 2 was missing. That closes
+`gates/escalation-not-preserved` as a design: the hook now extracts the prior round's `violations`
+array from the store and hands it to the judge, so the "same id twice" tripwire has something real to
+compare.
+
+The revision is also unusually honest. It does not quietly patch the two claims it got wrong; it
+names them, explains that the staged==worktree reasoning was *circular*, and records that real git
+disproved it. I re-ran those git cases myself rather than reading the table — `git commit -a` with a
+never-staged spec, a pathspec commit, a brand-new staged spec, and an untracked-file pathspec commit
+— and §5.2's per-form table is empirically correct on every row, including the non-obvious one
+(`git diff --name-only HEAD` *does* list a newly-added staged file, and git refuses a pathspec commit
+of an untracked file, so the listing's blindness to untracked files opens no hole).
+
+What still fails is one link in the chain §6.2.1 was written to build, and it is a hard circular
+dependency rather than a wording problem. §6.2.1 says the hook writes the prior-violations array to
+`<run-dir>/prior-violations.json` and passes that path to the launcher. But the run dir does not
+exist when the hook needs to write into it, and its name is not knowable to the hook: §5.1 defines
+`run_id` as `<UTC ts>-<judge>-<HEAD short sha>-<launcher PID>`, where the launcher PID belongs to a
+process the hook has not started yet, and §6.1.1 assigns run-dir creation to `judge-rundir.sh` —
+*inside* the launcher. §6.1.2 then closes the loop by requiring every `--*-file` to already **exist**
+and resolve "inside repo or run dir" at validation time. So the hook must write a file into a
+directory that only the thing it is about to call can create, under a name only that thing can
+generate, and the launcher will reject the argument if the file is not already there. An implementer
+cannot follow this; they must invent a location, and the validation rule forbids the obvious one
+(`/tmp`).
+
+That matters more than a normal contract gap because of what hangs off it. The escalation cap is the
+mechanism `rules/gates.md` requires, and this spec's own §6.2.1 says it plainly: without
+`--prior-violations-file` "the tripwire silently no-ops". The mechanism is now correctly *designed*
+and still not *deliverable*. This is the third consecutive round on the same seam — the
+hook-to-launcher argument boundary — which is exactly the pattern the escalation rule exists to stop.
+Fixing it looks small (have the launcher do the extraction, or have it create the run dir and accept
+the array on stdin), but which way to go is an interface decision, not a typo fix.
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | API contracts give the agent real interface boundaries instead of letting it improvise shapes other components then fail to match | §6.2.1 argument-provisioning table; §5.1 run-id layout; §6.1.2 `--*-file` validation; §6.1.3 prompt template | The hook is told to write `--prior-violations-file` into `<run-dir>/prior-violations.json`, but the run dir is created inside the launcher under a run-id containing the launcher's own PID and every `--*-file` must already exist to pass validation, so the one argument that makes the escalation cap fire cannot be produced by its specified caller. |
+
+### Notes (non-blocking)
+
+- **Wrong cross-reference.** §6.1.2 says each optional input "has a specified deterministic fallback
+  (§6.2.2)". The fallbacks are in §6.2.1; §6.2.2 is round accounting and the escalation cap. An
+  implementer following the pointer lands on a section with no fallbacks in it.
+- **`design_doc` has no stated absent-form.** §6.1.3's template gives explicit fallbacks for
+  `test_command` ("none — nothing runnable at this stage") and `waived` ("none"), but
+  `design_doc: <validated --spec>` gets none, and §6.2.1's table never covers observability's
+  `--spec` on the `judge-guard` path. The observability judge declares that input optional, so this
+  is not blocking — but two slots in the same template specify their empty case and one does not.
+- **§3's flowchart still encodes the disproved round-2 claim.** It shows an unconditional
+  "spec: index blob == worktree blob?" precondition, where §5.2 (normative) and §8 both scope it to
+  plain `git commit` only, and the diagram omits the per-form detection step entirely. §5.2 is
+  unambiguous enough that this is not cited, but the architecture diagram is the first thing an
+  implementer reads, and it currently shows the behaviour the revision exists to correct.
+- **§10's table is still headed "Cases the round-2 revisions add"** while listing round-3 cases
+  (`--prior-violations-file` is built and passed, ack releases the round-3 branch, `-am` against real
+  git). Cosmetic.
+- **Round 2's other two violations are properly closed, not papered over.** cmux is pinned with
+  version, build, and a full rung-1 command; §6.2.1 supplies every hook-side argument deterministically
+  from repo and store with no main-agent input.
+- **The refusal to pass `--context-file` on the hook path is a security improvement, not a shortcut.**
+  §6.2.1's argument — that an agent-authored summary lets the author of the spec also author the
+  standard it is judged against — is correct, and judging the spec on its own Background and Scope
+  removes a real lever. Same reasoning for `--decisions-file`.
+- **§6.4 now states that "authorised source" is convention, not enforcement**, and lists the
+  provenance gap in §11 rather than implying the hook checks it. That is the right call: the previous
+  wording would have been a claim the code cannot back.
+- **YAGNI: clean.** Judged against the stated need (a deterministic compliance gate plus moving judge
+  token cost out of the main window), every in-scope item traces to that need or to a
+  `rules/gates.md` requirement. The four-rung ladder is a settled user decision — three rungs are
+  terminals the user actually runs, and rung 4 is the correctness floor that keeps S2 non-blocking —
+  so it is not speculative surface. The hook/skill threshold duplication is deliberate and guarded by
+  a test asserting the constants agree.
+- **Security: clean.** Run dirs are default-deny (`umask 077`, `0700`/`0600`, asserted by `stat`
+  after creation, failure = exit 4). The `run.sh` indirection keeps untrusted text out of both
+  interpolation points, and §6.1 correctly identifies rung 1's `--command` as one of them rather than
+  treating rung 3's AppleScript as the only surface. Prompt-injection-against-the-judge is accepted
+  with a stated bound. No secrets and no absolute paths in the committed artifact.
+
+### Waivers
+
+None. Nothing has been waived on this spec in any round; the escalation that fired after round 2 was
+resolved by the user directing a fix.

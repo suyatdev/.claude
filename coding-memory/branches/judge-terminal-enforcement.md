@@ -5,7 +5,9 @@ Cut off `main` 2026-07-20. Implements the approved design in
 
 ## State
 
-**Spec phase, round 3 revision written and committed @ `60abc86`. Round 3 judging NOT yet run.**
+**Spec phase, round 3 JUDGED @ `60abc86`: compliance fail (1 violation, third consecutive round of
+the same id) → escalation #2 fired → user directed both fixes, nothing waived. Round 4 revision NOT
+yet written.**
 
 - Spec: `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`
   (1027 lines, 3 Mermaid blocks, validator PASS).
@@ -16,7 +18,8 @@ Cut off `main` 2026-07-20. Implements the approved design in
 |---|---|---|---|
 | 1 | `8aed77a` (464 ln) | **fail** — 5 violations, high | risk=medium, 3 concerns |
 | 2 | `ccd02fc` (855 ln) | **fail** — 3 violations, high (2 persisted, 1 new) | risk=medium, high |
-| 3 | `60abc86` (1027 ln) | not yet run | not yet run |
+| 3 | `60abc86` (1036 ln) | **fail** — 1 violation, high (2 closed, **1 persisted 3x**) | risk=medium, high |
+| 4 | not yet written | — | — |
 
 ## Round 1 verdicts (2026-07-20)
 
@@ -140,6 +143,89 @@ judge only reuses ids when handed the prior array. **The cap round 2 added was i
 Round 2's `-a` claim read as rigorous and was verified only by re-reading. It took *running git* to
 break it. §10 now requires the three commit forms tested against real git, and adds two mutations
 drawn from bugs that were live in a reviewed revision of this very spec.
+
+## Round 3 verdicts (2026-07-20, spec `60abc86`, blob `b9c67ff`)
+
+| Judge | Result | Detail |
+|---|---|---|
+| compliance (blocking) | **fail**, 1 violation, confidence high | `coding-memory/compliance-judge/2026-07-20-judge-terminal-enforcement-design.md` |
+| observability (advisory, architecting) | risk=medium, confidence=high | `coding-memory/observability-judge/2026-07-20-feature-judge-terminal-enforcement-round3.md` |
+
+**Closed:** `writing-specs/pinned-versions` (cmux pinned, real rung-1 command) and
+`gates/escalation-not-preserved` (§6.2.1 designs the caller). The compliance judge deliberately did
+**not** re-cite the latter — the mechanism is right, what remains is an interface defect, and
+double-counting one root cause as two would have misreported the revision.
+
+**Persisted a third time: `writing-specs/api-contracts`.** §6.2.1 tells the hook to write
+`<run-dir>/prior-violations.json`, but §5.1 builds `run_id` from the *launcher's PID* and §6.1.1 has
+the launcher create the dir, while §6.1.2 requires every `--*-file` to already exist. The hook must
+therefore place a file in a directory only the launcher can create, under a name only the launcher can
+generate. Unimplementable — and it is the exact argument the spec says the cap no-ops without.
+
+**The three rounds are one mistake at three depths:** specifying an interface without fully specifying
+who calls it and what that caller can know *at call time*. R1 = no caller at all. R2 = caller named,
+data source unspecified. R3 = data source specified, destination not yet in existence.
+
+## Escalation #2 (2026-07-20) — both tripwires, resolved by user decision
+
+Same id in consecutive rounds **and** round 3 closed with a violation outstanding. Stopped rather than
+auto-revising a fourth time. **User directed both fixes; nothing waived.**
+
+1. **`--prior-violations-file` — the launcher extracts it itself.** Dropped from the hook path
+   entirely: the launcher already gets `--spec` and `--round`, and "violations array of the most recent
+   stored round for this repo + spec_path" is fully derivable from those plus the store. The launcher
+   does the extraction *after* it creates the run dir. This kills the circularity by removing the
+   argument rather than sequencing it, so the ordering bug cannot recur — there is no ordering. The
+   flag survives as an optional override for skill/interactive callers.
+2. **§5.2 detection — resolve the effective file set once, stop enumerating commit forms.**
+
+## The `-i` hole and the detection rewrite (evidence, not reasoning)
+
+The observability judge found `git commit -i -- <path>` commits the named path **plus everything
+already staged** — a staged spec walks the gate while detection looks only at the pathspec. Same class
+as round 2's `-a` bug, one form over. Reproduced independently before accepting it. It also caught that
+`git commit -ma "x"` parses as `-m a`, not `-a`, so letter-cluster scanning misfires.
+
+The structural point won over patching: a hand-written form table has now leaked twice in three rounds.
+**Let git resolve the set.** Verified 5/5 against real git — `git commit --dry-run --porcelain <same
+args>`, column 1 (index column) non-space ⟺ that file is recorded in the commit:
+
+| Form | col-1 for staged spec | spec actually recorded |
+|---|---|---|
+| plain | `M ` | yes |
+| `-a` | `M ` | yes |
+| `-- other.txt` | ` M` | no |
+| `-i -- other.txt` | `M ` | **yes** (the hole) |
+| `--only -- other.txt` | ` M` | no |
+
+```mermaid
+flowchart TD
+    A["git commit &lt;any args&gt;"] --> B["git commit --dry-run --porcelain &lt;same args&gt;"]
+    B --> C{"exit code"}
+    C -- "1, empty output" --> D["nothing to commit —<br/>allow; git will refuse it anyway"]
+    C -- "other nonzero" --> E["real error → fail closed"]
+    C -- "0" --> F["keep lines whose column 1 is non-space"]
+    F --> G{"any match<br/>docs/superpowers/specs/*.md?"}
+    G -- no --> H["allow"]
+    G -- yes --> I["spec-guard freshness check"]
+```
+
+Safety checks run before proposing it (it would execute inside every `git commit`): does **not** mutate
+index or worktree even on the temp-index `-a` form; does **not** launch an editor or hang with no `-m`;
+**9ms** on the real repo; `A`/`D` both surface in column 1. Two caveats for the spec text: exit 1 with
+empty output means "nothing to commit" and must not read as detection failure, and `--amend` lists the
+amended commit's whole file set (over-blocks toward fail-closed — semantically right, since the
+amended commit really does record that spec blob).
+
+**Corrected factual error:** §6.5 claims no hook in `settings.json` sets an explicit timeout. **10 of
+17 do**, all at `timeout: 10`. Verified. The argument sharpens rather than collapses — the only
+precedent is 10s against a design that wants 900s, a 90× jump, so spike S3 matters more, not less.
+
+**Also flagged, not yet actioned:** the spec is 1036 lines against core-conduct's 800 ceiling, and
+length is plausibly *why* round 2's circular argument survived two reviews. Four judge notes are
+pending a pass during the round-4 edit (§6.1.2 cross-ref points at §6.2.2 for fallbacks that live in
+§6.2.1; `design_doc` has no specified absent-form; §3's flowchart still draws the precondition §5.2
+disproves; §10's table header still says "round-2 revisions").
 
 ## Notes
 
