@@ -116,10 +116,11 @@ how this file and its linked files should be written (plain language, major chan
   2026-07-18** (merge commit 417e8e7); branch deleted. Judge (impl, head 367da77): risk=low
   conf=high, outcome=clean.
 - feature/add-claude-code-handoff (2026-07-20) — vendored Sonovore/claude-code-handoff @
-  c6cb717 verbatim (user's call): `/handoff` command, `hooks/handoff/` scripts, 4 hook
-  registrations, nested `.claude/` gitignored. Both memory systems live pending per-feature
-  cherry-pick (comparison chart sent). Judge + PR deferred until after the cherry-pick.
-  Detail: `coding-memory/branches/add-claude-code-handoff.md`.
+  c6cb717, then cherry-picked per the user's 15-row picks (ADR 0006): handoff SessionStart
+  loader + doc-guard PreCompact removed, tracker bug patched locally (verified live),
+  `/handoff` = checkpoint UX, committed memory stays authoritative. Judge R1 medium→fixed,
+  R2 **low/high** @ e56c2f2. **PR #21 OPEN** (2026-07-20).
+  Detail: `coding-memory/branches/add-claude-code-handoff.md`, `coding-memory/pr-tracking.md`.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
