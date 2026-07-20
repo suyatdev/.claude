@@ -5,49 +5,27 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop (VSCode) · session_started_at: 2026-07-19 (post-/clear continuation)
-- last_active_branch: main (both PRs merged; branch `docs/diagramming-pointers` not yet deleted)
-- **AUTHORSHIP RESOLVED (was: "uncommitted parallel work, do not commit blind").** The modified
-  `statusline-command.sh` + `.gitignore` are **this session's work**, not a parallel agent's —
-  a statusline follow-on to PR #18 (orange model name, 100k-referenced context bar, cumulative
-  input+output counter, purple weekly-quota segment; cost display built then deliberately removed).
-  The earlier "verify authorship before committing or discarding" warning was written by a
-  *concurrent* session that saw the file change mid-session and correctly refused to guess.
-  Safe to commit. Detail: `coding-memory/branches/statusline-token-bar.md`.
-- **A concurrent session was active on 2026-07-19.** It merged PR #19, advanced `main` to f574213,
-  and wrote the memory entry above — all while this session was editing `statusline-command.sh`.
-  Evidence: this session opened on branch `docs/diagramming-pointers` @ ff9d215 and later found
-  itself on `main` @ f574213 with no local checkout. Not a problem in itself, but the parallel-agent
-  invariant applied in both directions and neither session could see the other's intent.
-- current work: **diagramming reachability — PR #19 MERGED** 2026-07-20 (merge commit a735fb4,
-  3 commits). The
-  `diagramming-technical-docs` standard was reachable only from the ADR bullet in
-  `managing-session-memory` and the `CLAUDE.md:21` catalog line, so it never self-triggered
-  while writing `coding-memory/`
-  branch logs, specs, or agent-architecture designs. Added one conditional pointer to each
-  of those three authoring paths. Triaged as category 4 (extend an existing skill) —
-  explicitly **not** a hook (a script can detect whether a mermaid block exists, not whether
-  one is warranted) and **not** a gate (a missing diagram is recoverable later, so it fails
-  the never-miss bar the other nine gates share). Judge R1 84a60bf low/high, no blocking
-  findings, **outcome backfilled `clean`**. ADR
-  `docs/decisions/0004-diagramming-reachability-not-enforcement.md` (carries a
-  mindmap of the rejected tiers; escalation path if it underperforms is a gate stub, never the
-  hook — the hook's rejection is structural, not evidentiary).
-  Detail: `coding-memory/branches/diagramming-pointers.md`, `coding-memory/pr-tracking.md`.
-- **status line config — PR #18 MERGED** (2026-07-19, merge commit b6362ff).
-  Detail: `coding-memory/branches/statusline-command.md`, `coding-memory/pr-tracking.md`.
-- **Orca hooks in `settings.json` deliberately uncommitted** (~112 lines, written by an external
-  process mid-session; third-party, machine-local, absolute paths). Left dirty at the user's
-  direction, so the working tree stays permanently modified. Worth knowing: `claude-hook.sh`
-  sources `$ORCA_AGENT_HOOK_ENDPOINT` *before* its token check, and that file's stdout becomes
-  hook stdout — a channel into the agent control plane. Not resolved; user's call pending.
-- untracked `chrome/`, `telemetry/`, `stats-cache.json`: machine-local Claude Code artifacts, not
-  repo work — leave untracked. They keep the tree permanently dirty, so the status line's `✗`
-  always shows here; gitignoring them is still an open question for the user.
-- Model gate: session started on **Sonnet 5**, user switched to **Opus 4.8** before any commit.
-  (An earlier entry misattributed PR #17's "Fable 5" here; each is right for its own session.)
-- `settings.json` model/theme preference changes follow the `chore(settings):` precedent —
-  superseding the earlier "not mine to commit" note. Distinct from the Orca hooks below.
+- session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/statusline-token-bar
+- current work: **judge terminal-enforcement — DESIGN COMPLETE, §1–§4 all approved 2026-07-20.**
+  Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
+  Key approvals: runner-script indirection (no AppleScript interpolation), tmux split-pane,
+  10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
+  mkdir-atomic launch lock with piggyback-wait, falsification-backed tests. Spec NOT yet
+  written — next: new branch off `main`, spec doc, judges, user review, writing-plans.
+  Full approved design + resume script:
+  `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+- **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
+  after each task so the user can /clear before the next design task.**
+- Carried over, still open: **Orca hooks in `settings.json` deliberately uncommitted** (third-party,
+  machine-local, absolute paths; user's call pending; `claude-hook.sh` sources
+  `$ORCA_AGENT_HOOK_ENDPOINT` before its token check and that stdout becomes hook stdout — a channel
+  into the agent control plane). Untracked `chrome/`, `telemetry/`, `stats-cache.json` stay untracked
+  (machine-local; tree permanently dirty so the status line always shows `✗`; gitignore an open
+  question for the user).
+- 2026-07-19 session notes — statusline-edit authorship resolved as that session's own work,
+  concurrent-session evidence, model-gate history (Sonnet 5 → Opus 4.8), `chore(settings):`
+  precedent for model/theme changes: `coding-memory/branches/statusline-token-bar.md` and
+  `coding-memory/session-log.md`.
 
 ## Repositories
 
@@ -143,7 +121,15 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Statusline token bar — PAUSED 2026-07-19 at the user's direction. Do NOT auto-PR on resume.**
+0. **Judge terminal-enforcement (2026-07-20) — RESUME HERE. Design COMPLETE (§1–§4 approved).**
+   Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
+   on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
+   NOT off statusline branch) → spec doc → self-review → compliance + observability judges
+   (current skill procedure — spec-guard doesn't exist yet) → user review → writing-plans.
+   The spec must be self-contained: this write-up lives on `feature/statusline-token-bar` only.
+   Approved design + platform facts (hook timeout **fails open**; `claude --bare -p --agent`):
+   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+1. **Statusline token bar — PAUSED 2026-07-19 at the user's direction. Do NOT auto-PR on resume.**
    R1 (high) → R2/R3/R4 (medium) findings all FIXED, suite 17/20 → 50/50, everything pushed
    @ 9c82cdd (21 commits ahead of `main`). **R5 was never run** — there is no verdict at HEAD, so
    judge-guard will block `gh pr create` until one exists. On resume: decide PR vs. more hardening
@@ -161,29 +147,30 @@ how this file and its linked files should be written (plain language, major chan
    has been a wrong cosmetic total that self-heals — no round has been a merge blocker.**
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
    Cosmetics still left: duration floors, bar rounds full at 95k, no MB rollover.
-1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
+2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
    compliance-judge verdicts' own `outcome` fields once those specs implement (calibration
    ledger, see running-the-compliance-judge SKILL.md).
-2. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
+3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
    format validation; README sentence that digest-chunk line numbers are digest-relative.
    Memsearch-nudge SessionStart line: **VERIFIED live 2026-07-18** (fired post-/clear, 2332 chunks).
-3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
+4. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
-4. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/` (now ADRs
+5. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/` (now ADRs
    0001-**0005**) — the "adopt" framing was stale, the directory was never the blocker.
    Diagramming-pointers half **DONE 2026-07-19** (PR #19), wider than this item scoped it.
-4a. **Watch the next 2-3 `coding-memory/` branch logs** (ADR-0004 revisit trigger). If one lands with
+5a. **Watch the next 2-3 `coding-memory/` branch logs** (ADR-0004 revisit trigger). If one lands with
    real structure and no diagram, move the `managing-session-memory:18` pointer from the
    index-description bullet into the save-time procedure section. Escalation if that also fails is a
    **gate stub, never the hook** (the hook's rejection is structural; the gate's is cost/benefit).
    Evidence: **2 of 3** — `diagramming-pointers.md` has a flowchart; `statusline-token-bar.md` now
    describes a lock protocol with real structure and carries **none** (its diagram went to ADR 0005).
-5. (Optional) Backfill `outcome` for the remaining `null` verdicts (all known-clean):
+   The 07-20 brainstorm write-up carries its flowchart inline (counts toward the healthy side).
+6. (Optional) Backfill `outcome` for the remaining `null` verdicts (all known-clean):
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79, memsearch *architecting* @ c2b23fe.
    See `coding-memory/observability-judge/verdicts.jsonl`.
 
@@ -195,4 +182,4 @@ vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-r
 
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
 merged but not deleted (local + remote). `feature/statusline-token-bar` has all R1–R4 judge findings
-fixed, suite 50/50; needs a fresh verdict @ HEAD before `gh pr create`. See Next Step 0.
+fixed, suite 50/50; needs a fresh verdict @ HEAD before `gh pr create`. See Next Step 1.
