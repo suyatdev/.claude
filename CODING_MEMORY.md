@@ -5,8 +5,11 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/statusline-token-bar
+- session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
 - current work: **judge terminal-enforcement — DESIGN COMPLETE, §1–§4 all approved 2026-07-20.**
+  Spec phase starting on Opus 4.8 (model gate answered). Brainstorm landed on `main` via a
+  docs-only merge 2026-07-20 (user's call over cherry-pick), so branches forked from `main`
+  now inherit the design instead of it being stranded on a merged branch.
   Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
   Key approvals: runner-script indirection (no AppleScript interpolation), tmux split-pane,
   10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
@@ -89,7 +92,7 @@ how this file and its linked files should be written (plain language, major chan
   overran badly — 5 of 6 commits judge-driven; taken to the user rather than resolved unilaterally.
   No ADR (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
-- feature/statusline-token-bar (2026-07-19, **pushed, judge findings fixed, not yet PR'd**) — follow-on
+- feature/statusline-token-bar (2026-07-19) — **PR #20 MERGED 2026-07-20 04:01Z.** Follow-on
   to PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
   model's window — against 1M a 143k session rendered nearly-empty-but-red), cumulative Σ counting
   input+output only (cache traffic swamped it ~16x), purple weekly-quota segment. A cost-estimate
@@ -126,27 +129,19 @@ how this file and its linked files should be written (plain language, major chan
    on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
    NOT off statusline branch) → spec doc → self-review → compliance + observability judges
    (current skill procedure — spec-guard doesn't exist yet) → user review → writing-plans.
-   The spec must be self-contained: this write-up lives on `feature/statusline-token-bar` only.
+   Branch `feature/judge-terminal-enforcement` cut off `main` 2026-07-20. The write-up now lives
+   on `main`, so the branch inherits it; the spec should still stand alone as the build artifact.
    Approved design + platform facts (hook timeout **fails open**; `claude --bare -p --agent`):
    `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
-1. **Statusline token bar — PAUSED 2026-07-19 at the user's direction. Do NOT auto-PR on resume.**
-   R1 (high) → R2/R3/R4 (medium) findings all FIXED, suite 17/20 → 50/50, everything pushed
-   @ 9c82cdd (21 commits ahead of `main`). **R5 was never run** — there is no verdict at HEAD, so
-   judge-guard will block `gh pr create` until one exists. On resume: decide PR vs. more hardening
-   *first* (see the diminishing-returns note below), then run the judge only if PRing.
-   Also still open, deliberately unabsorbed: R1's `STATUSLINE_DEBUG` logging to
-   `$STATE_DIR/debug.log` splitting "field absent" from "field present but unparseable" — the judge
-   noted it would have caught the epoch-seconds bug on render one.
-   Every round found the *same class* one level deeper, and the last
-   three were all inside the fix for the one before: R2, the lock's cleanup was itself a lost
-   update; R3, the cleanup's backstop justified a break by **age** then verified it by **PID**,
-   and the breaker lock lacked the guards the state lock had just gained; R4, `mv dirA dirB`
-   **nests** when dirB exists rather than failing. A wrong assumption about a shell builtin sat
-   underneath all three. Rules now encoded: verify a break against whatever justified it; use
-   `mkdir` (atomic, fails if present) where "rename or fail" is meant. **Impact ceiling since R2
-   has been a wrong cosmetic total that self-heals — no round has been a merge blocker.**
-   Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
-   Cosmetics still left: duration floors, bar rounds full at 95k, no MB rollover.
+1. **Statusline token bar — RESOLVED: PR #20 merged 2026-07-20 04:01Z.** (Memory had said "not yet
+   PR'd"; reconciled 2026-07-20 — the merge happened outside a checkpointed session, and the 3
+   brainstorm commits pushed afterwards were stranded until the docs-only merge above.) R5 was
+   never run and is now moot. Still open, deliberately unabsorbed: R1's `STATUSLINE_DEBUG` logging
+   to `$STATE_DIR/debug.log` splitting "field absent" from "field present but unparseable" — the
+   judge noted it would have caught the epoch-seconds bug on render one. Cosmetics left: duration
+   floors, bar rounds full at 95k, no MB rollover. Lessons (same bug class one level deeper each
+   round; `mkdir`-atomic over `mv`; verify a break against whatever justified it) are recorded in
+   `coding-memory/branches/statusline-token-bar.md` and ADR 0005.
 2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
@@ -178,8 +173,11 @@ how this file and its linked files should be written (plain language, major chan
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
 hook, live and global), memsearch RAG index, verifying-subagent-commits, compliance judge; plus
 vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-readmes, d242e69),
-#18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4).
+#18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4),
+**#20 (statusline token bar, merged 04:01Z)**.
 
-**Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote). `feature/statusline-token-bar` has all R1–R4 judge findings
-fixed, suite 50/50; needs a fresh verdict @ HEAD before `gh pr create`. See Next Step 1.
+**Orphans outstanding:** branches `feature/statusline-command`, `docs/diagramming-pointers`, and
+now `feature/statusline-token-bar` are merged but not deleted (local + remote). Also unmerged and
+unexplained by memory: remote branches `feature/documentation-enforcement`,
+`feature/modular-coding-memory`, `feature/vibe-coding-standards-integration`,
+`update/update-default-model` — their PRs merged long ago; safe to prune after a check.
