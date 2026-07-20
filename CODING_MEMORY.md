@@ -146,12 +146,12 @@ how this file and its linked files should be written (plain language, major chan
 0. **Statusline token bar — judge R1 (high), R2 (medium), R3 (medium) findings all FIXED
    (suite 17/20 → 50/50).** Next action: **fresh implementation-stage verdict @ HEAD**, then PR
    (judge-guard blocks `gh pr create` without one). Each round found the *same class* one level
-   deeper: R2, the lock's own cleanup was a lost update; R3, the cleanup's own backstop justified
-   a break by **age** then verified it by **PID**, and the breaker lock lacked the guards the
-   state lock had just gained. Rule now encoded, not remembered: **verify a break against whatever
+   deeper: R2, the lock's own cleanup was a lost update; R3, the cleanup's backstop justified a
+   break by **age** then verified it by **PID**, and the breaker lock lacked the guards the state
+   lock had just gained. Rule now encoded, not remembered: **verify a break against whatever
    justified it**, one shared implementation for both locks. R3 also caught that every R2 safety
    mechanism was untested — stripping them left the suite green; it now sources the script in a
-   subshell to call lock helpers directly.
+   subshell to call the lock helpers directly.
    Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
    **Still open, user's call:** the judge's "also worth doing" — split "field absent" from "field
    present but unparseable", logging the latter to `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG`,
@@ -196,6 +196,5 @@ plus vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. All branches deleted. No orp
 reachability — 3 conditional pointers + ADR 0004, a735fb4; judge R1 low/high, outcome clean).
 
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote). `feature/statusline-token-bar` @ d302479 has all judge
-findings fixed and the suite green at 44/44; it needs a **fresh implementation-stage judge verdict**
-before `gh pr create` will pass judge-guard. See Next Step 0.
+merged but not deleted (local + remote). `feature/statusline-token-bar` has all R1–R3 judge findings
+fixed, suite 50/50; needs a fresh verdict @ HEAD before `gh pr create`. See Next Step 0.
