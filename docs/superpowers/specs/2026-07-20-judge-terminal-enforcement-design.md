@@ -5,10 +5,17 @@
 - **Amends the approved design in two places:** §2's `claude --bare` is dropped (see §4.2), and the
   terminal ladder loses its iTerm2 rung, going from five rungs to four (see §6.1, user decision
   2026-07-20). Both are surfaced here rather than absorbed silently.
-- **Round 2 revision** (2026-07-20), addressing round 1's compliance fail (5 violations) and the
-  observability advisory (risk=medium, 3 concerns). One further defect was found during the revision
-  and is fixed here rather than deferred: the gate and the judge computed `spec_blob_sha` from
-  different content, which livelocks the revise loop — see §5.2.
+- **Round 3 revision** (2026-07-20). Round 1: compliance fail, 5 violations. Round 2: 3 closed, but
+  `writing-specs/api-contracts` and `gates/escalation-not-preserved` **persisted**, which tripped the
+  escalation rule this spec is itself about. Escalated to the user, who directed the fix rather than
+  waiving; nothing here is waived. Both persisted for one shared reason — round 2 designed the
+  launcher's argument contract without designing its *caller*, so a hook could not populate it. That
+  is now §6.2.1.
+- **Two claims in the round 2 text were wrong and are corrected, not quietly patched:** the
+  staged==worktree precondition did **not** cover `git commit -a` or pathspec commits (the reasoning
+  was circular, and real git disproved it — see §5.2), and the escalation ack's id-scoping deadlocked
+  the round-3 branch (§6.2.2). Round 2 also introduced, and this round fixes, a cap that could never
+  fire because nothing built `--prior-violations-file`.
 - **Builds on:** ADR-0001 (observability judge), ADR-0003 (compliance judge), ADR-0005 (lock discipline).
 
 This spec is self-contained: an implementer needs nothing but this file and the repo.
@@ -115,7 +122,12 @@ Verified on this machine 2026-07-20. An implementer must not substitute versions
 | bash | `3.2.57(1)` (`/bin/bash`, arm64-apple-darwin25) | **No bash-4 features** — no associative arrays, no `${v,,}`, no `mapfile` |
 | Python | `3.9.6` | JSON + `shlex` parsing, as existing hooks do. No `jq` dependency is introduced |
 | tmux | `3.6a` | Only rung that is scriptable in tests |
+| cmux | `0.64.20 (100)` (`14e3400b9`) | Ladder rung 1. CLI at `$CMUX_BUNDLED_CLI_PATH`, also on `PATH` |
 | git | `2.50.1` | `git rev-parse ":<path>"` for index blob sha |
+
+**cmux sets `TERM_PROGRAM=ghostty`, not `Apple_Terminal`** — it is built on Ghostty. Rung 3's
+`TERM_PROGRAM=Apple_Terminal` test therefore cannot false-positive inside cmux, and rung ordering is
+not load-bearing for correctness between those two. Verified on this machine 2026-07-20.
 
 ### 4.1 Judge agents
 
@@ -210,23 +222,46 @@ reads and records the *worktree* blob; the hook re-reads the store, still misses
 Every iteration costs a full judge session. Worse, the judge would be scoring content the commit is
 not going to record, which is precisely the substitution the paragraph above rejects.
 
-**Precondition (fail closed).** Before any freshness lookup, `spec-guard.sh` requires the spec's index
-blob to equal its worktree blob — `git diff --quiet -- <spec>` **and** `git diff --cached --quiet` is
-not the test; the test is `git rev-parse ":<spec>" == git hash-object <spec>`. On mismatch it exits 2
-with *"stage your edits to `<spec>` before committing — the gate judges staged content"* and launches
-nothing. The agent's fix is one `git add`.
+**The fix is per-form, not one precondition.** An earlier revision of this spec claimed a single
+staged==worktree precondition collapsed all three commit forms. That was wrong, and it was wrong
+circularly: the precondition only runs once a spec is detected as *staged*, and `-a` / pathspec are
+exactly the forms where nothing is staged. Tested against real git:
 
-**Why this one check is worth its keep:** it collapses a whole class rather than one bug.
+```
+$ git diff --cached --name-only     # -> (empty)
+$ git commit -aqm x                 # commits the modified spec anyway
+```
 
-- It makes the judge's existing worktree hash provably equal to the index blob, so **neither agent
-  definition needs to change** (§4.1) and the skill's freshness rule stays correct as written.
-- `git commit -a` stages tracked modifications *at commit time*, so the committed content is the
-  worktree, not the current index — the index-blob key would be reading the wrong side. Under the
-  precondition both sides are identical, so `-a` needs no separate handling.
-- `git commit -- <path>` commits from the worktree, bypassing the index, with the same resolution.
+The gate would have exited 0 on its fast path and never reached the precondition at all. So detection
+comes first, and each form is resolved to the blob it will actually record:
 
-The precondition is therefore load-bearing for three commit forms, not a tidiness rule, and its
-regression test must cover all three (§10).
+| Commit form | Files it will record | Effective blob for the spec |
+|---|---|---|
+| `git commit` | index vs HEAD — `git diff --cached --name-only` | **index**: `git rev-parse ":<spec>"` |
+| `git commit -a` / `--all` | tracked worktree mods too — `git diff --name-only HEAD` | **worktree**: `git hash-object <spec>` |
+| `git commit -- <pathspec>` | worktree at those paths — `git diff --name-only HEAD -- <pathspec>` | **worktree**: `git hash-object <spec>` |
+
+`-a` stages tracked modifications only, never untracked files, so `git diff --name-only HEAD` is the
+correct listing for it. `spec-guard.sh` therefore parses `commit`'s **own** options far enough to
+detect `-a`/`--all` and a `--` pathspec, and picks the listing and the hash together.
+
+**The precondition survives, narrowed to the one form that needs it.** For a plain `git commit`, the
+commit records the *index* while `agents/compliance-judge.md` hashes the *worktree*; when those
+diverge the hook misses forever and relaunches the judge every round — a livelock, each iteration a
+full judge session. So for that form only, the gate requires `git rev-parse ":<spec>"` to equal
+`git hash-object <spec>`, and on mismatch exits 2 with *"stage your edits to `<spec>` before
+committing — the gate judges staged content"*, launching nothing. The agent's fix is one `git add`.
+
+For `-a` and pathspec the divergence cannot arise: the worktree *is* what commits, and the worktree is
+what the judge hashes, so they agree by construction and no precondition applies.
+
+Either way **neither agent definition needs to change** (§4.1) and the skill's freshness rule stays
+correct as written. §10 requires all three forms tested **against real git**, not against this table —
+the claim this paragraph replaces passed review twice by being read rather than run.
+
+One parsing note, since it is a live ambiguity: `commit`'s own `-c <commit>` (reuse message) is not
+git's global `-c <k=v>` (config). The global-option walker stops at the first non-option token, so it
+never sees `commit`'s flags, and the two cannot be confused.
 
 ### 5.1 Run directory
 
@@ -291,10 +326,10 @@ own unit rather than a section of a larger script.
 
 ```
 judge-launch.sh --judge compliance --spec <path> --round <N>
-                --context-file <path> [--prior-violations-file <path>]
+                [--context-file <path>] [--prior-violations-file <path>]
                 [--waived id,id] [--acked id,id] [--wait [--deadline <secs>]]
 judge-launch.sh --judge observability --stage architecting|implementation
-                --decisions-file <path> [--spec <path>] [--test-cmd-file <path>]
+                [--decisions-file <path>] [--spec <path>] [--test-cmd-file <path>]
                 [--wait [--deadline <secs>]]
 ```
 
@@ -302,6 +337,12 @@ The `*-file` arguments exist because the judges require inputs that no flag-size
 compliance judge scores YAGNI *against a stated need* and, from round 2, reuses ids from the prior
 round's `violations` array; the observability judge scores the **decisions summary** as its trajectory
 evidence. Passing these as files rather than as argument text is what keeps §9.2 intact — see §6.1.3.
+
+**Every one of them is optional, and that is the point.** A launcher whose required arguments only an
+interactive agent can supply is not usable by a hook, and the hook path is the whole reason this design
+exists. Each optional input therefore has a **specified deterministic fallback** (§6.2.2) rather than
+being merely omittable — an absent input never means the judge silently receives less than its
+definition requires.
 
 **Argument validation — fail closed on any miss:**
 
@@ -328,13 +369,15 @@ whole.
 ```
 You are judging as the <judge> agent. Inputs follow.
 
-spec_path: <validated --spec>          # compliance only
+spec_path: <validated --spec>          # compliance: the spec to judge
 round: <validated --round>             # compliance only
 stage: <validated --stage>             # observability only
+design_doc: <validated --spec>         # observability: optional design/spec doc
+test_command: <contents of --test-cmd-file, or "none — nothing runnable at this stage">
 base_branch: main
 waived: <validated --waived, or "none">
 
---- BEGIN CONTEXT SUMMARY ---          # verbatim --context-file / --decisions-file
+--- BEGIN CONTEXT SUMMARY ---          # verbatim --context-file / --decisions-file, or the §6.2.2 fallback
 <file contents>
 --- END CONTEXT SUMMARY ---
 
@@ -344,6 +387,12 @@ waived: <validated --waived, or "none">
 
 Follow your agent definition. Persist your verdict before returning.
 ```
+
+Both judges' declared inputs are now covered: compliance's `spec_path`, `round`, context summary,
+`waived`, base branch and prior violations; observability's `stage`, decisions summary, design doc,
+test command and base branch. `--test-cmd-file` is a file rather than a flag value for one reason: a
+test command is shell text, and a flag would invite it onto a command line. It is written into
+`prompt.txt` as data, and the judge — not the launcher — decides whether to run it.
 
 **Why this does not reopen the injection surface §9.2 closed.** The threat model there is untrusted
 text becoming *terminal command text* — an AppleScript `do script` argument. Here no rung ever sees the
@@ -390,12 +439,22 @@ would therefore land in the repo root, not the run dir.
 
 **Terminal ladder** — first available rung wins; the chosen rung is recorded in the manifest:
 
-| # | Detected by | Spawn | Why this rung exists |
-|---|---|---|---|
-| 1 | `CMUX_WORKSPACE_ID` | cmux pane | The user's primary environment |
-| 2 | `TMUX` | `tmux split-window -d` (pane id → `terminal_ref`) | In active use; the only scriptable rung (§10) |
-| 3 | `TERM_PROGRAM=Apple_Terminal` | Terminal `do script` via `osascript` | In active use; the only rung when neither multiplexer is running |
-| 4 | — (always available) | headless `nohup` (`mode=headless`, `terminal_ref` = PID) | Correctness floor: the gate must work when detection fails |
+| # | Detected by | Spawn | `terminal_ref` | Liveness probe |
+|---|---|---|---|---|
+| 1 | `CMUX_WORKSPACE_ID` | `cmux new-workspace --name "judge: <judge>" --cwd <repo root> --command "bash <run-dir>/run.sh" --focus false` | workspace ref on stdout | `cmux list-workspaces`, ref still present |
+| 2 | `TMUX` | `tmux split-window -d bash <run-dir>/run.sh` | pane id | `tmux list-panes`, id still present |
+| 3 | `TERM_PROGRAM=Apple_Terminal` | Terminal `do script "bash <run-dir>/run.sh"` via `osascript` | window id | none available — deadline only |
+| 4 | — (always available) | `nohup bash <run-dir>/run.sh &` (`mode=headless`) | PID | `kill -0 <pid>` |
+
+Every rung executes the identical string `bash <run-dir>/run.sh` and differs only in how it is
+delivered. Note that rung 1's `--command` takes *text*, so it is an interpolation point exactly like
+rung 3's AppleScript — which is why §6.1.2 charset-asserts the launcher-generated run-dir path before
+any rung sees it, and why the indirection matters on the first rung as much as the third.
+
+**Why each rung exists:** 1 is the user's primary environment; 2 is in active use and the only rung
+scriptable in tests (§10); 3 is the only rung when neither multiplexer is running; 4 is the
+correctness floor — the gate must still work when detection fails, which is what keeps S2 a
+non-blocking spike.
 
 **Four rungs, not five — and each answers a need the user actually has.** iTerm2 is dropped: the user
 does not run it, so a fifth rung would have been speculative surface. The remaining three named rungs
@@ -463,7 +522,54 @@ commit staging no `docs/superpowers/specs/*.md` file exits 0 after one `git diff
 **Decision order:** `JUDGE_SESSION` → `SPEC_EXEMPT` → staged==worktree precondition (§5.2) → freshness
 → **escalation check** → launch → re-verify.
 
-#### 6.2.1 Round accounting and the escalation cap
+#### 6.2.1 How the hook populates the launcher's arguments
+
+Round 2 specified the launcher's argument contract but never said where a *hook* — running
+non-interactively inside a `git commit`, with no conversation to draw on — obtains those arguments.
+Both of round 1's persistent violations trace to that single omission: the interface was designed
+without its caller. Every argument the hook passes is derived deterministically from the repo and the
+store, with no main-agent input at any point.
+
+| Argument | How the hook produces it |
+|---|---|
+| `--spec` | the staged/effective spec path from detection (§5.2) |
+| `--round` | `max(stored round for repo + spec_path) + 1`, or `1` if none (§6.2.2) |
+| `--prior-violations-file` | **built from the store**: the hook extracts the `violations` array of the most recent stored round for this repo + spec_path and writes it to `<run-dir>/prior-violations.json`. Omitted only when `round == 1`. Uses the python it already runs to parse the store — no new dependency |
+| `--waived` | the union of `waived` ids across this spec's stored verdicts |
+| `--acked` | `SPEC_ESCALATION_ACK`, when set (§6.2.2) |
+| `--context-file` | **not passed** — see below |
+| `--decisions-file` | **not passed** on the `judge-guard` path — see below |
+
+**`--prior-violations-file` is what makes the cap real.** The "same id in two consecutive rounds"
+tripwire depends on the judge *reusing* violation ids, and `agents/compliance-judge.md` only reuses
+ids when handed the prior round's array. Without this row the tripwire silently no-ops: it would
+compare ids that the judge had no reason to keep stable, so persistence would read as novelty and the
+loop would never escalate. The store already holds the array, so this is an extraction, not new state.
+
+**Why the hook passes no `--context-file`, and why that is better than passing one.** The compliance
+judge scores YAGNI against a *stated need*. On the hook path the stated need is already in the
+artifact under judgment: §1 Background gives the why, §2 Scope gives the boundaries, and this spec
+claims on line 1 to be self-contained. When `--context-file` is absent the launcher emits, in the
+context slot, a fixed instruction to read the spec's own Background and Scope as the stated need.
+
+That is not a degradation. An agent-authored summary is precisely the injection vector §6.1.3 flags —
+the agent that wrote the spec would also be writing the standard the spec is judged against, and a
+summary that quietly restates a speculative feature as a requirement turns a YAGNI violation into a
+pass. Judging the spec on its own terms removes that lever. The `--context-file` argument survives for
+the skill path, where a human-directed summary carries genuine information the spec cannot (for
+example: *"the user does not use iTerm2"*), and the skill continues to supply it.
+
+**Same reasoning for `--decisions-file` on the `judge-guard` path.** When absent, the launcher's
+fallback names the deterministic trajectory evidence that already exists: the branch's commit messages
+(`git log <base>..HEAD`) and the branch log under `coding-memory/branches/`. This repo writes commit
+messages that state decisions and their reasons, so the evidence is real rather than a placeholder.
+The skill path keeps passing an explicit summary.
+
+**The fallback text is a launcher constant, not a runtime string.** It is compiled into
+`judge-rundir.sh`, never derived from the command being gated, so it introduces no new input to
+validate.
+
+#### 6.2.2 Round accounting and the escalation cap
 
 `rules/gates.md` requires that persistent violations escalate to the user and are never silently
 waived. Today that cap lives in `running-the-compliance-judge`: escalate when the same violation `id`
@@ -504,10 +610,17 @@ flowchart TD
 history that triggered escalation is immutable, so every subsequent attempt would re-escalate without
 ever launching. The ack is the agent's assertion that *the user has been consulted about these exact
 ids*. It is parsed exactly like `SPEC_EXEMPT` (leading env-assignment, value logged to stderr),
-suppresses the escalation check for precisely the listed ids, and is **single-use**: it authorises one
-launch and is recorded in the run manifest. It is not persisted as state, so if the same id recurs on a
-later round the ack is no longer set and the escalation fires again — each escalation costs a fresh
-human decision, which is the intended price.
+suppresses the escalation check and is **single-use**: it authorises one launch and is recorded in the
+run manifest. It is not persisted as state, so if the same id recurs on a later round the ack is no
+longer set and the escalation fires again — each escalation costs a fresh human decision, which is the
+intended price.
+
+**The ack releases both escalation branches, not just the id-scoped one.** An earlier revision said the
+ack was scoped "to precisely the listed ids" while the round-3 branch has no ids in its predicate —
+read strictly, a spec that reached round 3 failing could never launch a judge again, which is the same
+deadlock the ack exists to prevent, merely relocated. Resolved explicitly: a set `SPEC_ESCALATION_ACK`
+suppresses the escalation check for that one launch, whichever branch fired. The listed ids are
+recorded for attribution, not used as a filter.
 
 **The ack is deliberately not passed to the judge.** It reaches the manifest and the hook's stderr, but
 never `prompt.txt`. Telling a judge "the user has been consulted about `core-conduct/yagni`" is an
@@ -532,6 +645,12 @@ Unchanged through detection, `JUDGE_EXEMPT`, and the freshness check. Only the t
 "no fresh verdict → exit 2" branch changes: it now launches `--stage implementation --wait`,
 re-checks, then exits 0 or 2. Adds the `JUDGE_SESSION=1` short-circuit.
 
+It passes no `--decisions-file`, taking the §6.2.1 fallback (branch commit messages plus the branch
+log) for the same reason `spec-guard` passes no `--context-file`: a hook has no conversation to
+summarise, and a summary it could fabricate would be worse than the evidence already in the repo.
+`judge-guard` has **no escalation cap** — its loop is bounded by the PR attempt itself rather than by
+rounds, and `stage: implementation` verdicts key on `head_sha`, so each retry follows a new commit.
+
 ### 6.4 Exemptions
 
 **Separate `SPEC_EXEMPT=<reason>`**, parsed exactly like `JUDGE_EXEMPT` (leading env-assignment,
@@ -541,15 +660,29 @@ opens — per-door keys, not a master key.
 Three keys exist and they are not interchangeable. The distinction is what keeps "nothing is waived
 silently" true:
 
-| Key | Opens | Who may set it |
+| Key | Opens | Authorised source |
 |---|---|---|
-| `SPEC_EXEMPT=<reason>` | the whole spec gate, once | user only |
-| `JUDGE_EXEMPT=<reason>` | the whole PR gate, once | user only |
-| `SPEC_ESCALATION_ACK=<ids>` | the escalation cap only, for listed ids, once (§6.2.1) | agent, **after** consulting the user |
+| `SPEC_EXEMPT=<reason>` | the whole spec gate, once | user |
+| `JUDGE_EXEMPT=<reason>` | the whole PR gate, once | user |
+| `SPEC_ESCALATION_ACK=<ids>` | the escalation cap only, once (§6.2.2) | agent, **after** consulting the user |
 
 `SPEC_ESCALATION_ACK` never suppresses a violation and never allows an unjudged commit — the judge
-still runs and still cites. An agent that sets it without having consulted the user has misreported,
-which is why its value is logged to stderr where the user sees it.
+still runs and still cites.
+
+**"Authorised source" is a convention, not an enforcement, and the spec says so rather than implying
+otherwise.** All three are indistinguishable leading env-assignments; the hook cannot tell whether a
+human or the agent set one, and nothing prevents an agent from re-supplying an ack every round to keep
+a loop alive indefinitely. This is stated plainly because the alternative — writing the table as though
+the hook enforced provenance — would be a claim the code cannot back, and this branch has already
+shipped one of those.
+
+What the design does provide is **visibility, not prevention**: every key's value is echoed to stderr
+where the user sees it, the ack is recorded in the run manifest, and every round is a store row with a
+timestamp, so a fabricated ack or a spinning loop is reconstructible after the fact. The deterministic
+part of the cap is the *detection*; the release is advisory by construction, for the same reason
+`SPEC_EXEMPT` is — a gate whose bypass cannot be reached is a gate that gets deleted. Making the
+release enforceable would require provenance the hook does not have, and is listed in §11 rather than
+pretended here.
 
 ### 6.5 `settings.json`
 
@@ -581,8 +714,11 @@ Both `running-the-*-judge` skills change "dispatch subagent (Agent tool)" → "r
 background Bash task". At spec-done both judges still launch in parallel (two windows); the main
 window receives the harness background-task notification on each exit, then reads the stores.
 
-Each skill keeps its own capped loop for the `Agent`-tool and ad-hoc paths, with thresholds identical
-to §6.2.1's. `running-the-compliance-judge`'s freshness sentence — *"a verdict is fresh only while its
+The skills keep supplying `--context-file` / `--decisions-file` explicitly: a human-directed summary
+carries information the artifact genuinely cannot (*"the user does not use iTerm2"* decided this
+design's ladder), which is exactly why those arguments exist even though the hook path declines them
+(§6.2.1). Each skill also keeps its own capped loop for the `Agent`-tool and ad-hoc paths, with
+thresholds identical to §6.2.2's. `running-the-compliance-judge`'s freshness sentence — *"a verdict is fresh only while its
 `spec_blob_sha` matches `git hash-object <spec_path>`"* — stays correct as written **only under §5.2's
 staged==worktree precondition**, and the skill gains a sentence saying so.
 
@@ -708,10 +844,27 @@ Scenario: An ack is used where a waiver was meant
   Then the violation is still cited and the commit is still blocked
   And only SPEC_EXEMPT can bypass the gate itself
 
-Scenario: Commit uses -a rather than a staged spec
-  Given `git commit -a` will commit worktree content, not the current index
-  Then the staged==worktree precondition makes both sides identical
-  And the index-blob freshness key is correct without special-casing -a
+Scenario: Commit uses -a with the spec modified but never staged
+  Given `git diff --cached --name-only` is empty, so the fast path would exit 0
+  When the agent runs `git commit -am "..."`
+  Then detection uses `git diff --name-only HEAD` instead, and sees the spec
+  And the effective blob is the worktree hash, matching what the judge records
+  And the gate applies — -a is not an escape hatch
+
+Scenario: Commit names a pathspec
+  When the agent runs `git commit -- docs/superpowers/specs/x.md`
+  Then detection lists `git diff --name-only HEAD -- <pathspec>` and sees the spec
+  And the worktree blob is used, because that is what the commit will record
+
+Scenario: Pathspec stages an unrelated file alongside a modified spec
+  Given a non-empty staged listing would let the fast path proceed
+  Then detection still resolves the effective file set for the actual form
+  And a spec that will be committed is never missed because something else was staged
+
+Scenario: An escalation fires on the round-3 branch, which cites no ids
+  When the agent retries with SPEC_ESCALATION_ACK set
+  Then the escalation check is suppressed for that launch regardless of branch
+  And the loop is not deadlocked by an id-scoped release
 
 Scenario: Commit runs against another repo via -C
   When the agent runs `git -C ../other commit`
@@ -743,7 +896,8 @@ Scenario: A Bash command that cannot be a commit
 | `claude` missing | preflight | exit 4, distinct message |
 | Run-dir mode wrong | `stat` assertion after create | exit 4, "run dir not private" |
 | Store unreadable | read error | exit 2, fail closed |
-| Spec staged ≠ worktree | hash comparison (§5.2) | exit 2, "stage your edits first"; nothing launched |
+| Spec staged ≠ worktree (plain `commit` only) | hash comparison (§5.2) | exit 2, "stage your edits first"; nothing launched |
+| Spec committed via `-a` / pathspec | per-form detection + worktree blob (§5.2) | gate applies normally; no precondition needed |
 | Violation survives its fix | same id in two most recent rounds | exit 2 ESCALATE; nothing launched |
 | Loop reaches round 3 failing | stored round ≥ 3, verdict fail | exit 2 ESCALATE; nothing launched |
 | Exotic git global option | classifier cannot resolve | exit 0 + logged warning (open, by §6.2's stated posture) |
@@ -806,8 +960,12 @@ vs worktree divergence.
 | Ack is not a waiver | violation still cited, commit still blocked |
 | Ack never reaches the judge | id present in `manifest.json`, absent from `prompt.txt` |
 | Skill/hook threshold agreement | the two-consecutive and round-3 constants match across `spec-guard.sh` and `running-the-compliance-judge` |
-| Precondition: unstaged spec edit | exit 2, nothing launched |
-| Precondition: `git commit -a` and `git commit -- <path>` | both gated on the same blob as plain `commit` |
+| Precondition: unstaged spec edit on a plain `commit` | exit 2, nothing launched |
+| **`git commit -am` with the spec modified, never staged** | gate applies; **written against real git**, not against §7's wording — this exact case passed review twice by being read rather than run |
+| `git commit -- <pathspec>`, and pathspec + unrelated staged file | gate applies; effective blob is the worktree hash |
+| `--prior-violations-file` is built and passed | round 2 launch carries round 1's array; its absence is what silently disabled the cap in an earlier revision |
+| Context/decisions fallback | with no `--context-file`, `prompt.txt` contains the fixed instruction, not an empty section |
+| Ack releases the round-3 branch | escalation with no cited ids is released by a set ack |
 | Global options `-C` / `-c` / `--git-dir` / `--work-tree` | consumed **and passed through** to the hook's own git calls |
 | Unrecognized value-taking global option | exit 0 + warning logged |
 | Pre-filter | no python spawn without the substring; **no block decision reachable from the substring** |
@@ -818,8 +976,13 @@ vs worktree divergence.
 **Falsification targets for the new logic.** Per the mandate above, each of these is validated by
 re-introducing the bug class: count rounds per `spec_blob_sha` instead of per `spec_path` (cap never
 fires); persist the ack (escalation never re-fires); let the substring pre-filter decide a block
-(bypass returns); drop `-C` pass-through (hook reasons about the wrong repo). A test that still passes
-under its mutation does not count as coverage.
+(bypass returns); drop `-C` pass-through (hook reasons about the wrong repo); **stop passing
+`--prior-violations-file`** (ids drift, persistence reads as novelty, the cap silently no-ops);
+**revert detection to `git diff --cached --name-only` only** (`git commit -am` walks through the gate).
+A test that still passes under its mutation does not count as coverage.
+
+The last two mutations matter most, because both bugs were *present in a reviewed revision of this
+spec* and neither was caught by reading it. The `-am` case in particular was found only by running git.
 
 **Spikes — do these first, they gate the design:**
 
@@ -829,6 +992,10 @@ under its mutation does not count as coverage.
   deadlock-shaped.
 - **S2 [non-blocking]:** confirm hooks inherit `TMUX` / `TERM_PROGRAM` / `CMUX_WORKSPACE_ID`.
   Undocumented; the headless rung covers a miss, so this bounds visibility, not correctness.
+  *Partial evidence, not a result:* a Bash **tool call** in this session does see `CMUX_WORKSPACE_ID`,
+  `CMUX_BUNDLED_CLI_PATH` and `TERM_PROGRAM=ghostty` (observed 2026-07-20). A tool call's environment
+  is not proven identical to a hook's, so this raises the prior and does not close the spike — the
+  measurement is still owed.
 - **S3 [blocking]:** register a hook with `"timeout": 900`, make it sleep past that, and observe
   whether the tool call is **blocked or allowed**. All of §6.5 rests on the answer and no hook in this
   repo has ever set an explicit timeout. Record the measured effective cap. If it is below 840s, take
@@ -848,6 +1015,13 @@ a green suite.
 - Chained-command detection (`foo && git commit`) — accepted limitation, consistent with existing hooks.
 - Exotic git global options failing open rather than closed (§6.2) — accepted; revisit if a real
   invocation is ever seen slipping the gate.
+- **Enforcing the provenance of `SPEC_ESCALATION_ACK`** (§6.4). The hook cannot distinguish a
+  user-authorised ack from an agent-fabricated one, so the release is advisory and audited rather than
+  prevented. Closing this needs provenance the hook does not have; revisit if the audit trail ever
+  shows an ack that no user decision backs.
+- **Round counting resets on a spec rename**, because rounds key on `spec_path`. A rename mid-loop
+  restarts the count at 1 and clears the cap. Accepted: renames are rare and visible in the store's
+  history; keying on content instead would defeat the cap entirely (§6.2.2).
 - No automated test exercises a real judge; rungs cmux and Terminal rest on a manual checklist (§10).
 - A `spec-guard` equivalent for ADRs and READMEs.
 
