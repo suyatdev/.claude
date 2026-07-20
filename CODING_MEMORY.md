@@ -6,12 +6,13 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/statusline-token-bar
-- current work: **judge terminal-enforcement brainstorm — MID-DESIGN, checkpointed for /clear.**
-  Deterministic hook gates for both judges + per-judge terminal sessions (own tokens) via a shared
-  launcher. Locked: verify-store-else-spawn+wait hybrid; compliance guards `git commit` staging
-  `docs/superpowers/specs/*` (resolves ADR-0003's deferred spec-guard), observability stays on
-  `gh pr create`; Approach A (launcher shared by skills + hooks). Section 1 of 4 presented,
-  **NOT yet approved**. Full write-up + platform facts + resume script:
+- current work: **judge terminal-enforcement — DESIGN COMPLETE, §1–§4 all approved 2026-07-20.**
+  Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
+  Key approvals: runner-script indirection (no AppleScript interpolation), tmux split-pane,
+  10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
+  mkdir-atomic launch lock with piggyback-wait, falsification-backed tests. Spec NOT yet
+  written — next: new branch off `main`, spec doc, judges, user review, writing-plans.
+  Full approved design + resume script:
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
@@ -120,12 +121,13 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement brainstorm (2026-07-20) — RESUME HERE.** Mid-design: section 1
-   (component breakdown) presented, awaiting approval; §2–§4 unpresented; then spec doc →
-   self-review → compliance judge → user review → writing-plans. Model-switch gate first on
-   resume. All locked decisions, platform facts (hook timeout **fails open**; `claude --bare -p
-   --agent`), and the resume script: `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
-   New work branches off `main`, not `feature/statusline-token-bar`.
+0. **Judge terminal-enforcement (2026-07-20) — RESUME HERE. Design COMPLETE (§1–§4 approved).**
+   Next: Hard Model Gate → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
+   NOT off statusline branch) → spec doc → self-review → compliance + observability judges
+   (current skill procedure — spec-guard doesn't exist yet) → user review → writing-plans.
+   The spec must be self-contained: this write-up lives on `feature/statusline-token-bar` only.
+   Approved design + platform facts (hook timeout **fails open**; `claude --bare -p --agent`):
+   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 1. **Statusline token bar — PAUSED 2026-07-19 at the user's direction. Do NOT auto-PR on resume.**
    R1 (high) → R2/R3/R4 (medium) findings all FIXED, suite 17/20 → 50/50, everything pushed
    @ 9c82cdd (21 commits ahead of `main`). **R5 was never run** — there is no verdict at HEAD, so

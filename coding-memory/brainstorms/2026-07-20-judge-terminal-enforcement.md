@@ -1,7 +1,9 @@
 # Brainstorm: Deterministic judge enforcement + per-judge terminal sessions (2026-07-20)
 
-**Status: MID-DESIGN — section 1 of 4 presented, NOT yet approved. No spec written, no code.**
-Skill flow: `superpowers:brainstorming` (tasks 1–4 done, task 5 in progress).
+**Status: DESIGN COMPLETE — §1–§4 ALL APPROVED (2026-07-20, resumed session; model gate re-run
+at resume: stay on Fable 5). Spec NOT yet written, no code.**
+Skill flow: `superpowers:brainstorming` (tasks 1–5 done; next: write spec → self-review →
+compliance+observability judges → user review gate → writing-plans).
 
 ## The ask (user's words, condensed)
 
@@ -66,6 +68,46 @@ flowchart TD
     G -- deadline --> I[exit 2: still running, retry —\nnever let harness timeout fail open]
 ```
 
+## §2 launcher internals — APPROVED with tweaks (2026-07-20)
+
+- **Runner-script indirection kills the AppleScript injection risk:** launcher materializes
+  `prompt.txt` + `run.sh` into the per-run dir; every ladder rung executes only
+  `bash <run-dir>/run.sh`. Run-dir path is launcher-generated, asserted `^[A-Za-z0-9/_.-]+$`
+  before interpolation, fail closed. `run.sh`: `set -euo pipefail`, cd repo root,
+  `trap 'echo $? > done' EXIT` (sentinel on every exit path incl. crash),
+  `claude --bare -p "$(cat prompt.txt)" --agent <judge> --output-format json > result.json`.
+- **Run-id:** `<UTC ts>-<judge>-<HEAD short sha>-<launcher PID>` (PID makes the parallel
+  two-judge spec-done launch collision-free). `manifest.json` written BEFORE spawn (judge,
+  stage/spec + staged blob sha, repo, branch, sha, round, waived ids, ladder rung, terminal
+  ref, argv). `result.json` keeps `total_cost_usd`.
+- **Gitignore `coding-memory/judge-runs/`** (approved): stores stay the sole durable record.
+- **Prompt from validated args only** (path-inside-repo, stage enum, round numeric, waived-id
+  charset), frozen to `prompt.txt`; `--allowedTools` pinned to the agent's declared tool list.
+- **Ladder:** cmux pane → **tmux `split-window -d`** (TWEAK: side-by-side pane, not new
+  window; pane id captured) → iTerm2 tab via osascript → Terminal `do script` → headless
+  `nohup` (manifest `mode=headless`).
+- **Wait mode:** poll sentinel every **10s** (TWEAK, was 2s); deadline 840s / hook timeout
+  900s (confirmed as designed). Deadline → exit 3 "still running in <ref>".
+
+## §3 hook decision flow — APPROVED (2026-07-20)
+
+- **spec-guard.sh:** detection = judge-guard's shlex classification (rtk strip, env-assignment
+  walk, anchored `git commit` match incl. `git -C` global-option handling; `-C` also redirects
+  the staged checks). Fast path: no staged `docs/superpowers/specs/*.md` → silent exit 0.
+  Freshness key: repo + spec_path + **staged blob sha** (`git rev-parse ":<path>"` — the index
+  blob, what the commit records) + verdict==pass, against the existing compliance store. Miss →
+  round = max stored round + 1 → launcher `--wait` → re-check → exit 0, or exit 2 citing
+  violations from the store ("revise and retry"); each revision's new blob sha forces a new
+  round. Deadline → exit 2 still-running. Fails CLOSED (no python → block); chained-command
+  limitation accepted as in judge-guard/git-guard.
+- **Recursion guard:** run.sh exports `JUDGE_SESSION=1`; both guards exit 0 when set (judge's
+  own session inherits user-global hooks — without this, deadlock-shaped).
+- **judge-guard.sh:** unchanged through the exempt/freshness checks; the "no fresh verdict →
+  exit 2" terminal branch becomes launch `--stage implementation --wait` → re-check → 0/2.
+- **Exemptions (user decision): separate `SPEC_EXEMPT=<reason>`** for the compliance gate,
+  parsed like JUDGE_EXEMPT (leading env-assignment), logged; each gate's bypass stays as
+  narrow as the gate. Rationale discussed in laymen terms: master-key vs per-door keys.
+
 ## Platform facts (claude-code-guide lookup, 2026-07-20)
 
 - `claude --bare -p "<prompt>" --agent <name>` runs a named agent from `~/.claude/agents/`
@@ -81,28 +123,44 @@ flowchart TD
   but verify empirically before relying on the ladder. Also unverified: loading agent defs from
   file via `--agents`.
 
-## Remaining design sections (unpresented)
+## §4 error handling & testing — APPROVED (2026-07-20)
 
-- §2 launcher internals & terminal ladder detail (incl. prompt construction, run-id scheme,
-  AppleScript quoting for iTerm2/Terminal — the template's `$JUDGE_CMD` interpolation into
-  AppleScript is an injection-shaped risk to design around).
-- §3 hook decision flow detail (staged-spec detection via `git diff --cached --name-only`,
-  freshness re-check, exemption env vars — does compliance get its own `SPEC_EXEMPT`?).
-- §4 error handling & testing (judge crash, pane closed mid-run, concurrent runs/lock — ADR-0005
-  lock lessons apply: mkdir-atomic, verify-break-against-justifier; test harness alongside
-  `judge-guard.test.sh`; falsification-backed per statusline lessons).
+- **Failure paths (closed gate, never a hang):** judge crash → trap still writes sentinel with
+  exit code; hook message distinguishes "ran and failed the spec" (violations cited) from
+  "crashed" (no verdict, points at `<run-dir>/stderr.log`). Pane killed (SIGKILL, no trap) →
+  best-effort per-rung liveness probe (tmux pane exists / headless PID alive) exits early
+  "terminated without completing"; 840s deadline is the universal backstop. Concurrency →
+  **mkdir-atomic** launch lock per judge+repo+target-key holding the owning run-id; a second
+  caller piggyback-waits on the FIRST run's sentinel instead of duplicating; stale-lock break
+  re-verifies its justifier (dead owner PID) immediately before breaking (ADR-0005 rules).
+  Spawn failure → rung falls through toward headless, failures recorded in manifest; preflight
+  (claude on PATH, agent def exists) exits distinct code. Wait exit codes: 0 sentinel /
+  3 deadline / other launch-failure — hooks map all non-zero to exit 2 with tailored reasons.
+  Store re-read after sentinel skips unparseable (mid-append) lines.
+- **Testing:** `spec-guard.test.sh` + `judge-launch.test.sh` alongside the judge-guard harness;
+  every regression test validated by MUTATING the code to re-introduce the bug class and
+  confirming the test fails; lock tests plant state exactly as the real writer produces it.
+  Seams: `SPEC_VERDICTS_FILE`, `JUDGE_LAUNCH_MODE=headless` (force rung), fake `claude` via
+  PATH injection writing canned verdicts (full end-to-end with tiny deadlines). Integration
+  cases: block-with-violations, pass→allowed, `JUDGE_SESSION=1` short-circuit, `SPEC_EXEMPT`
+  logged bypass, deadline expiry, crash-vs-fail distinction. Terminal rungs iTerm2/Terminal/
+  cmux: manual live checklist in the branch log (tmux is scriptable); env-inheritance
+  platform fact = explicit early spike task in the implementation plan.
 
 ## Resume script for next session
 
-1. Model-switch gate (per-task planning check) — ask before continuing design work.
-2. Get section-1 approval (component breakdown above), revise if needed.
-3. Present §2–§4 one at a time, approval each.
-4. Write spec to `docs/superpowers/specs/2026-07-20-judge-terminal-enforcement-design.md`
-   (re-date if resumed later), self-review, commit — NOTE: once spec-guard exists this commit
-   moment is exactly what it will guard; for now the compliance judge runs via the current
-   skill procedure (`running-the-compliance-judge`, parallel with observability architecting).
+1. Design is DONE (§1–§4 approved above — they are the design of record).
+2. Hard Model Gate before spec/branch/commit work (asked at 2026-07-20 checkpoint; re-ask if
+   resuming fresh).
+3. New branch off `main` (NOT off `feature/statusline-token-bar`), naming via
+   `preparing-pull-requests` — proposed: `feature/judge-terminal-enforcement`.
+4. Write spec to `docs/superpowers/specs/<date>-judge-terminal-enforcement-design.md`
+   (date of writing), self-review, commit — NOTE: once spec-guard exists this commit moment is
+   exactly what it will guard; for now run judges via the current skill procedure
+   (`running-the-compliance-judge`, parallel with observability architecting).
 5. User review gate → `superpowers:writing-plans`.
 6. Implementation notes-to-self: update ADR-0003 (spec-guard deferral resolved) + new ADR for
    this decision (class a — structural); `triaging-new-instructions` already walked → hook tier
-   confirmed; branch naming via `preparing-pull-requests`; session was on
-   `feature/statusline-token-bar` — new work needs its own branch off `main`.
+   confirmed. NOTE: this brainstorm write-up + CODING_MEMORY updates live on
+   `feature/statusline-token-bar` (memory-checkpoint pattern); the spec branch off `main` won't
+   contain them — the spec must be self-contained (it is: §1–§4 carry the full design).
