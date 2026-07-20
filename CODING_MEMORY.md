@@ -13,8 +13,9 @@ how this file and its linked files should be written (plain language, major chan
   Recovered by cherry-picking onto `main` via a docs-only PR #22 (`JUDGE_EXEMPT`, docs-only).
   Full picks table: **ADR 0006**; execution detail: `coding-memory/branches/add-claude-code-handoff.md`.
   settings.json dual-version staging policy unchanged (Orca hooks + fable-model line stay uncommitted).
-  **Open cleanup: `feature/add-claude-code-handoff` merged but not deleted — its tip 77b59ad is
-  byte-identical to the merged 7337186, so a force-delete (`-D`) is safe but was deferred to the user.**
+  **Orphan sweep DONE 2026-07-20: all 8 merged orphan branches pruned local + remote (each
+  tip verified reachable from `main`; handoff force-deleted, content ≡ 7337186). Only `main`
+  and `feature/judge-terminal-enforcement` remain.**
 - parked: **judge terminal-enforcement — design complete (§1–§4 approved), spec phase not
   started.** Resume via Next Steps 0b; full design + approvals:
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
@@ -136,8 +137,7 @@ how this file and its linked files should be written (plain language, major chan
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
-   **Only cleanup left:** force-delete the merged `feature/add-claude-code-handoff` (local +
-   remote) — safe (tip 77b59ad ≡ merged 7337186) but pending user OK; see Orphans below.
+   **Branch cleanup DONE:** all 8 merged orphans pruned local + remote (see Orphans below).
    Ongoing duty (unchanged): add handoff state-file gitignore entries per project repo on
    first work there (recorded in `managing-session-memory`).
 0b. **Judge terminal-enforcement (2026-07-20) — parked. Design COMPLETE (§1–§4 approved).**
@@ -188,10 +188,10 @@ vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-r
 **#20 (statusline token bar, merged 04:01Z)**, **#21 (claude-code-handoff cherry-pick, 3c58363,
 22:02Z)**, **#22 (docs-only follow-up landing PR #21's stranded judge audit trail, 284478a)**.
 
-**Orphans outstanding:** branches `feature/statusline-command`, `docs/diagramming-pointers`,
-`feature/statusline-token-bar`, and now `feature/add-claude-code-handoff` are merged but not
-deleted (local + remote). The handoff branch needs a force-delete (`git branch -D`) because its
-tip 77b59ad landed on `main` under a different SHA (7337186, via PR #22) — content-identical, so
-safe. Also unmerged and unexplained by memory: remote branches `feature/documentation-enforcement`,
-`feature/modular-coding-memory`, `feature/vibe-coding-standards-integration`,
-`update/update-default-model` — their PRs merged long ago; safe to prune after a check.
+**Orphans: ALL PRUNED 2026-07-20.** The 8 merged orphans (`feature/statusline-command`,
+`docs/diagramming-pointers`, `feature/statusline-token-bar`, `feature/add-claude-code-handoff`,
+`feature/documentation-enforcement`, `feature/modular-coding-memory`,
+`feature/vibe-coding-standards-integration`, `update/update-default-model`, plus local-only
+`chore/ports-registry-snatch-8001` and `feature/diagramming-skill`) were deleted local + remote
+after verifying each tip is reachable from `main`. Repo now holds only `main` and the active
+`feature/judge-terminal-enforcement`.
