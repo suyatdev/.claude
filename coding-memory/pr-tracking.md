@@ -183,3 +183,20 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   end, and a `/compact` between can drop it). The change is also unfalsifiable — nothing can report
   that it failed. Watch the next 2-3 branch logs for a structured one landing with no diagram.
 - detail: coding-memory/branches/diagramming-pointers.md
+
+## PR #21 — feature/add-claude-code-handoff (suyatdev/.claude)
+
+- repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/21 · status: OPEN (created 2026-07-20)
+- opened_by session_origin: desktop · last push: desktop
+- scope: vendored Sonovore/claude-code-handoff @ c6cb717 (1d9312c), then the per-feature
+  cherry-pick against the house memory system (a9a84b7) + judge-R1 doc fixes (e56c2f2).
+  Decision table + rationale: ADR 0006. 3 commits.
+- judge verdicts: R1 a9a84b7 **medium/high** (stale gates.md pre-compact promise; ADR
+  overstated the trio as carrying the git-status warning — both fixed in e56c2f2);
+  R2 e56c2f2 **low/high**, nothing blocking. outcome: null (backfill post-merge).
+- process note: metadata written after `gh pr create`, keeping the verdict matched to HEAD
+  (same ordering as PR #19; the pattern PR #18 got wrong).
+- watch item: first unattended autocompaction with an active task/bug file — the handoff
+  PreCompact trio's AskUserQuestion may stall it (accepted risk, ADR 0006).
+- detail: coding-memory/branches/add-claude-code-handoff.md

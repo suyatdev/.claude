@@ -5,17 +5,17 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
-- current work: **judge terminal-enforcement — DESIGN COMPLETE, §1–§4 all approved 2026-07-20.**
-  Spec phase starting on Opus 4.8 (model gate answered). Brainstorm landed on `main` via a
-  docs-only merge 2026-07-20 (user's call over cherry-pick), so branches forked from `main`
-  now inherit the design instead of it being stranded on a merged branch.
-  Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
-  Key approvals: runner-script indirection (no AppleScript interpolation), tmux split-pane,
-  10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
-  mkdir-atomic launch lock with piggyback-wait, falsification-backed tests. Spec NOT yet
-  written — next: new branch off `main`, spec doc, judges, user review, writing-plans.
-  Full approved design + resume script:
+- session_origin: desktop · session_started_at: 2026-07-20 (3rd session) · last_active_branch: feature/add-claude-code-handoff
+- current work: **claude-code-handoff cherry-pick EXECUTED (model gate: Fable 5) — judge + PR
+  remain.** User's per-row picks applied: handoff SessionStart loader removed, doc-guard
+  PreCompact registration removed (handoff trio owns the event), live-handoff/tracker/PreCompact
+  trio stay, tracker's upstream bug patched locally (verified live), `/handoff` = manual
+  checkpoint UX while committed CODING_MEMORY stays the source of truth, philosophy + gitignore
+  duty absorbed into `managing-session-memory`. Full table: **ADR 0006**; execution detail:
+  `coding-memory/branches/add-claude-code-handoff.md`. settings.json dual-version staging
+  policy unchanged (Orca hooks + fable-model line stay uncommitted).
+- parked: **judge terminal-enforcement — design complete (§1–§4 approved), spec phase not
+  started.** Resume via Next Steps 0b; full design + approvals:
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
@@ -115,6 +115,12 @@ how this file and its linked files should be written (plain language, major chan
   dispatch-prompt self-check instruction). Not hook-enforced by design. **PR #15 MERGED
   2026-07-18** (merge commit 417e8e7); branch deleted. Judge (impl, head 367da77): risk=low
   conf=high, outcome=clean.
+- feature/add-claude-code-handoff (2026-07-20) — vendored Sonovore/claude-code-handoff @
+  c6cb717, then cherry-picked per the user's 15-row picks (ADR 0006): handoff SessionStart
+  loader + doc-guard PreCompact removed, tracker bug patched locally (verified live),
+  `/handoff` = checkpoint UX, committed memory stays authoritative. Judge R1 medium→fixed,
+  R2 **low/high** @ e56c2f2. **PR #21 OPEN** (2026-07-20).
+  Detail: `coding-memory/branches/add-claude-code-handoff.md`, `coding-memory/pr-tracking.md`.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
@@ -124,7 +130,14 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement (2026-07-20) — RESUME HERE. Design COMPLETE (§1–§4 approved).**
+0. **claude-code-handoff cherry-pick (2026-07-20) — EXECUTED; judge + PR remain.** Picks
+   applied per ADR 0006 (settings removals, local tracker fix verified live, skill
+   adaptations). Chart artifact e570411a now persists picks via localStorage (was in-page
+   only — the original picks were unrecoverable and were re-supplied by paste). Remaining:
+   observability judge (implementation stage) → PR. Ongoing duty: add handoff state-file
+   gitignore entries per project repo on first work there (recorded in
+   `managing-session-memory`).
+0b. **Judge terminal-enforcement (2026-07-20) — parked. Design COMPLETE (§1–§4 approved).**
    Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
    on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
    NOT off statusline branch) → spec doc → self-review → compliance + observability judges

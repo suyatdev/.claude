@@ -17,6 +17,7 @@ An agent's context resets between sessions; a repo's `CODING_MEMORY.md` is the o
 - **Keep it an index, ≤200 lines:** active session, repo/PR pointers, next steps only. Move PR history, session logs, decisions, branch logs, and brainstorm write-ups into `coding-memory/<topic>.md` files, linked by path — never inlined back into the index. An index that re-accumulates history is one that stops getting read in full.
 - **Diagram the relocated detail, not the index:** when a `coding-memory/` branch log, decision entry, or brainstorm write-up describes something with structure — a component topology, a call sequence, a state machine, a tradeoff space — embed a rendered Mermaid diagram in that file; see `diagramming-technical-docs`. The index itself stays plain pointers: a diagram inlined into `CODING_MEMORY.md` spends the ≤200-line budget on something the linked file should be carrying.
 - **Plain-language summaries:** session summaries, PR descriptions, and any diff/architecture/error output shown in chat should be major-changes-only, in language a non-engineer or junior developer can follow. Skip routine or local steps; cover only what affects other files, systems, or components.
+- **Write for the NEXT context window** (absorbed 2026-07-20 from claude-code-handoff): every save is read by a future session with zero shared memory. Lead with forward-looking direction — what to do next and why — and keep history terse (git recovers it). Preserve what cannot be re-derived: exact commands run, verbatim results, user-stated intent. When trimming, cut narrative before facts.
 
 ## Session Startup
 
@@ -26,6 +27,7 @@ An agent's context resets between sessions; a repo's `CODING_MEMORY.md` is the o
 - **Resuming in a different environment than the one that started the work:** read `CODING_MEMORY.md` first, note the `session_origin` switch explicitly, and confirm the branch is up to date before continuing — never assume local state matches remote state across environments.
 - **Most-recent session wins:** the session block with the latest `session_started_at` is authoritative. Older in-progress work that conflicts with it defers to the newer one.
 - **If the working tree has uncommitted changes memory doesn't account for** — e.g. a prior session was `/clear`'d before it could checkpoint — reconcile before proceeding: verify the content, confirm with the user how to handle it, then commit and log it. Don't silently carry it forward, and don't silently discard it.
+- **Handoff state files are machine-local:** the claude-code-handoff hooks (registered globally) write per-repo state under `.claude/` — `session-state.md`, `context.md`, `current-task.md`, `current-bug.md`, `bug-test-log.md`, `recent-prompts.md`, `tasks.md`, `task-history.md`, `mode`. On first work in a repo, confirm its `.gitignore` covers those files specifically — not all of `.claude/`, since committed project settings can live there too. They never substitute for `CODING_MEMORY.md` (2026-07-20 cherry-pick: committed memory is the single durable source of truth).
 
 ## The Model-Switch Gates
 
@@ -46,6 +48,8 @@ Save memory and offer a session clear on two triggers:
 2. After roughly every ~35k tokens of new conversation since the last save/clear checkpoint — incremental growth since the last checkpoint, not the absolute context total, and an estimate rather than an exact measurement.
 
 On either trigger, in this order: finish the current step cleanly, update `CODING_MEMORY.md` (index + relevant `coding-memory/*.md`) and push, **then** prompt the user to clear the session. Never prompt to clear before the save+push — a `/clear` run mid-checkpoint is a session gone before its state was captured, and the next session inherits an out-of-sync memory file.
+
+`/handoff` (2026-07-20 cherry-pick) is the user-facing manual checkpoint command — it captures the machine-local session state (`.claude/session-state.md`, task/bug files, mode transitions). It complements the save+push above and never replaces it: the committed `CODING_MEMORY.md` remains the durable record.
 
 ## Token-Limit Checkpoint
 

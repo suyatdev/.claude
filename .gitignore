@@ -58,3 +58,7 @@ tasks/
 
 # memsearch index cache (regenerable, potentially sensitive)
 /memory-index/
+
+# claude-code-handoff session state (this repo is itself a git toplevel, so the
+# vendored handoff hooks write their session files to a nested .claude/ here)
+/.claude/

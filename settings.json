@@ -46,7 +46,36 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/doc-guard.sh"
+            "command": "$HOME/.claude/hooks/handoff/pre-compact.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/handoff/proactive-handoff.sh save"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/handoff/pre-compact-handoff.sh"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/handoff/live-handoff.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/handoff/post-edit-hook.sh"
           }
         ]
       }
