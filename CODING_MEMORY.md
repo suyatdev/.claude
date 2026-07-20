@@ -114,7 +114,8 @@ how this file and its linked files should be written (plain language, major chan
   5 of 6 commits are judge-driven; taken to the user rather than resolved unilaterally. No ADR
   (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
-- statusline token bar + weekly quota (2026-07-19, **UNCOMMITTED — no branch yet**) — follow-on to
+- feature/statusline-token-bar (2026-07-19, **pushed, judge findings fixed, not yet PR'd**) —
+  follow-on to
   PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
   model's window — against 1M a 143k session rendered nearly-empty-but-red), cumulative Σ counting
   input+output only (cache traffic swamped it ~16x), purple weekly-quota segment. A cost-estimate
@@ -123,7 +124,13 @@ how this file and its linked files should be written (plain language, major chan
   for the same reason: docs confirm `rate_limits` exposes `used_percentage` + `resets_at` only, so
   "tokens left" is uncomputable. Schema check caught a silent bug: `resets_at` is epoch seconds, not
   ISO — the countdown would have never rendered and looked merely absent.
-  Detail: `coding-memory/branches/statusline-token-bar.md`.
+  Judge R1 (b24d422) risk=**high**; all three findings fixed across 4 commits (fc67ab1 tests,
+  888449e race repro RED, d7a2861 lock GREEN + ADR 0005, d302479 lock-recovery tests).
+  Recurring lesson, now three-for-three on this branch: **writing the check is not the same as the
+  check working.** The first lock regression test planted its PID file with a trailing newline —
+  a condition the buggy writer cannot produce — so re-introducing the bug passed 44/44. Only the
+  mutation revealed it. Every claim on this branch is now falsification-backed.
+  Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
@@ -140,23 +147,26 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Statusline token bar — pushed @ b24d422, judge says risk=HIGH. Do not PR until fixed.**
-   Verdict: `coding-memory/observability-judge/2026-07-19-feature-statusline-token-bar.md`.
-   Three real failures, in priority order:
-   (a) **`statusline-command.test.sh` is RED (17/20) and was never run** — 3 assertions still expect
-   the old `"N tokens"` format. The branch doc's "all verified by execution" is misleading: ~15
-   hand-built payloads were run live, the regression suite was not. Fix the assertions, reword the
-   claim, and port those payloads into the suite (they currently exist only in a transcript).
-   (b) **Σ counter loses concurrent updates** — reproduced: seed 200, concurrent +1000/+1400 → 1200,
-   not 2600. Atomic `mv` prevents torn *reads*, not lost *updates*; the in-script comment conflates
-   the two, and the winner stores the loser's `sig` so it stays desynced. Needs a lockfile or an
-   honest documented undercount.
-   (c) **Injection-test slack regressed 0→4 bytes** — the new bar inflated `BASE_PAYLOAD` but not the
-   injection payloads, so ~2 colour sequences could leak and the test would still pass. No actual
-   hole found (stripping verified, `../` in session_id contained). Give the payloads matching segments.
-   Also worth doing: split "field absent" from "field present but unparseable", logging the latter to
-   `$STATE_DIR/debug.log` behind `STATUSLINE_DEBUG` — never stdout. Would have caught the epoch bug on
-   render one. Cosmetics deliberately left: duration floors, bar rounds full at 95k, no MB rollover.
+0. **Statusline token bar — all three judge findings FIXED 2026-07-19 (suite 17/20 → 44/44).**
+   Needs a fresh implementation-stage judge verdict before `gh pr create` (judge-guard blocks it).
+   Original verdict: `coding-memory/observability-judge/2026-07-19-feature-statusline-token-bar.md`.
+   (a) DONE — assertions corrected and the hand-run payloads ported in (bar tiers/rounding, Σ
+   accumulation + no-double-count + cache exclusion + per-session isolation, weekly quota incl. the
+   epoch-seconds countdown). Branch doc's verification claim rewritten again.
+   (b) DONE — read-modify-write serialised with a `mkdir` lock, re-read *inside* the lock; state
+   moved JSON → 2-line plain text so the critical section holds no `jq` fork. **ADR 0005.** Was far
+   worse than the verdict framed it: at 20 writers the total was 1213 of an expected 20410 — the
+   seed plus exactly one writer.
+   (c) DONE — and wider than scoped. Replaced the global `BASE_ESC` with a per-payload **benign
+   twin**, so the ceiling cannot drift when a segment is added. Fixing it exposed a *larger* hole
+   the finding did not name: the `$PWD`-fallback group had **8** bytes of slack, not 4.
+   Everything above was validated by **falsification** (mutate the script, watch the right
+   assertions go red), not by passing.
+   **Still open (deliberately not done, user's call):** the judge's "also worth doing" — split
+   "field absent" from "field present but unparseable", logging the latter to `$STATE_DIR/debug.log`
+   behind `STATUSLINE_DEBUG`, never stdout. Would have caught the epoch bug on render one. Left
+   because this branch has already overrun scope once and that was escalated rather than absorbed.
+   Cosmetics still deliberately left: duration floors, bar rounds full at 95k, no MB rollover.
 1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
@@ -195,5 +205,6 @@ plus vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. All branches deleted. No orp
 reachability — 3 conditional pointers + ADR 0004, a735fb4; judge R1 low/high, outcome clean).
 
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote). `feature/statusline-token-bar` is pushed @ b24d422 but
-**not PR-ready** — judge risk=high, see Next Step 0.
+merged but not deleted (local + remote). `feature/statusline-token-bar` @ d302479 has all judge
+findings fixed and the suite green at 44/44; it needs a **fresh implementation-stage judge verdict**
+before `gh pr create` will pass judge-guard. See Next Step 0.
