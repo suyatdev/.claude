@@ -52,8 +52,9 @@ RACE_HOME="$(mktemp -d)"  # separate again: the concurrency case writes from man
                           # processes at once and would perturb the serial cases
 LOCK_HOME="$(mktemp -d)"  # lock-recovery cases, which plant hand-built lock dirs
 BREAK_HOME="$(mktemp -d)" # stale-lock breaking UNDER concurrency
+UNIT_HOME="$(mktemp -d)"  # direct lock-helper calls, created here so the trap owns it
 JSON_HOME="$(mktemp -d)"  # legacy-state-format migration case
-trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME"' EXIT
+trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME" "$UNIT_HOME"' EXIT
 
 BASE_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 4.8"},"context_window":{"total_input_tokens":100}}'
 BASE_OUT="$(render "$BASE_PAYLOAD")"
@@ -371,7 +372,6 @@ rm -rf "$LOCK_DIR"
 # in a SUBSHELL with stdin closed and output discarded. The subshell is what
 # keeps the sourced script's many globals from colliding with this file's.
 unit_lock_helpers() {
-  UNIT_HOME="$(mktemp -d)"
   # shellcheck disable=SC1090
   HOME="$UNIT_HOME" . "$SCRIPT" >/dev/null 2>&1 </dev/null
 
@@ -405,6 +405,53 @@ unit_lock_helpers() {
   break_lock_verified "$fresh" "age"
   [ -d "$aged" ] && { printf 'age-mode break kept an aged lock\n'; return 1; }
   [ -d "$fresh" ] || { printf 'age-mode break destroyed a FRESH lock\n'; return 1; }
+
+  # A restored lock must come back INTACT, not nested. `mv dirA dirB` moves dirA
+  # inside dirB when dirB exists rather than failing, so a restore written with
+  # mv can bury the capture inside a live lock -- putting the capture's pid file
+  # at the live lock's path, where it defeats the true owner's ownership check.
+  [ -f "$differ/pid" ] || { printf 'restored lock lost its pid file\n'; return 1; }
+  nested="$(find "$differ" -mindepth 1 -type d | wc -l | tr -d ' ')"
+  [ "$nested" = "0" ] || { printf 'restore nested %s directories inside the lock\n' "$nested"; return 1; }
+  read -r restored_pid <"$differ/pid"
+  [ "$restored_pid" = "7777" ] || { printf 'restored lock has pid %s, not its owner 7777\n' "$restored_pid"; return 1; }
+
+  # Force the OCCUPIED-PATH restore. While age verification forks `find`, the
+  # lock path stands empty, so a new holder can take it before the restore runs.
+  # That interleaving is the only thing that makes a restore written with mkdir
+  # distinguishable from one written with mv: mv nests the capture inside the
+  # new holder's lock and its pid file displaces the owner's, defeating the
+  # owner's ownership check. Without this case the mv form passes the suite.
+  occupied=0
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    raced="$UNIT_HOME/raced$attempt.lock"
+    mkdir -p "$raced"; printf '%s\n' "1111" >"$raced/pid"
+    break_lock_verified "$raced" "age" &
+    bpid=$!
+    spins=0
+    while [ -d "$raced" ] && [ "$spins" -lt 200000 ]; do spins=$((spins + 1)); done
+    if mkdir "$raced" 2>/dev/null; then
+      printf '%s\n' "2222" >"$raced/pid"
+      occupied=1
+    fi
+    wait "$bpid" 2>/dev/null
+    [ "$occupied" = "1" ] && break
+  done
+  [ "$occupied" = "1" ] || { printf 'could not construct the occupied-path restore in 20 attempts\n'; return 1; }
+  nested_live="$(find "$raced" -mindepth 1 -type d | wc -l | tr -d ' ')"
+  [ "$nested_live" = "0" ] || { printf 'occupied-path restore nested %s dirs inside the LIVE lock\n' "$nested_live"; return 1; }
+  read -r raced_pid <"$raced/pid" 2>/dev/null
+  [ "$raced_pid" = "2222" ] || { printf 'occupied-path restore displaced the live holder pid (got %s)\n' "$raced_pid"; return 1; }
+
+  # A leftover grave from a killed render must make the break fail closed, not
+  # nest the new capture inside the stale one.
+  blocked="$UNIT_HOME/blocked.lock"
+  mkdir -p "$blocked" "$blocked.dead.$$"
+  printf '%s\n' "4242" >"$blocked/pid"
+  break_lock_verified "$blocked" "pid:4242"
+  [ -d "$blocked" ] || { printf 'break proceeded despite a leftover grave\n'; return 1; }
+  [ -f "$blocked/pid" ] || { printf 'break disturbed a lock it should have left alone\n'; return 1; }
+  rm -rf "$blocked.dead.$$"
 
   # Nothing may be left behind on any path.
   leftovers="$(find "$UNIT_HOME" -name '*.dead.*' | wc -l | tr -d ' ')"
