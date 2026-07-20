@@ -65,3 +65,29 @@ plain text in GitHub / VS Code / Artifacts, and rendering it needs a Java+Graphv
 sends private diagram source to a public `plantuml.com` server. Mermaid renders natively in all
 three and has a `mindmap` type, so no diagram category needs PlantUML. See
 `coding-memory/branches/diagramming-skill.md`.
+
+## Never render a metric the payload cannot source (decided 2026-07-19)
+
+Two features were requested for the status line that the available data could not honestly support,
+and both were resolved the same way: **show the real measurement, or show nothing — never compute a
+plausible-looking substitute.**
+
+*Cost display.* Requested as lime-green session cost + blue cost-till-reset. The account is on a
+subscription plan: `stats-cache.json` reports `costUSD: 0` for every model, and the statusline
+payload carries no cost field. Producing a dollar figure would have required a hand-maintained price
+table, and the result would have read as a bill while being an estimate that silently rots at the
+next pricing change. The `statusline-setup` subagent, told not to write rates from memory, left all
+16 constants empty and gated the segments behind an always-false `have_rates()` rather than render
+`$0.00` — the right call, and the feature was then removed outright.
+
+*"Tokens left before the weekly reset."* Confirmed against the official statusline docs:
+`rate_limits` exposes `used_percentage` and `resets_at` only, for both windows, with no allowance
+and nothing per-model. An absolute remaining-token count is therefore uncomputable from the payload.
+Shipped the percentage instead, which answers the same question without inventing a denominator.
+
+The generalisation worth keeping: when a requested display has no backing field, the failure mode is
+not an error — it is a confident-looking number. Prefer the honest weaker metric, and say plainly
+which one the data actually supports. Corollary from the same session: a *guessed* field name or
+type fails closed, and failing closed is indistinguishable from the feature being switched off
+(`resets_at` was epoch seconds, not ISO — the countdown would have silently never appeared). Verify
+the schema before building on it. See `coding-memory/branches/statusline-token-bar.md`.

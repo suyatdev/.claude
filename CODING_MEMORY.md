@@ -5,15 +5,20 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop (VSCode)
-- session_started_at: 2026-07-19 (post-/clear continuation)
+- session_origin: desktop (VSCode) · session_started_at: 2026-07-19 (post-/clear continuation)
 - last_active_branch: main (both PRs merged; branch `docs/diagramming-pointers` not yet deleted)
-- **UNCOMMITTED PARALLEL WORK IN TREE — not this session's, do not commit blind.** After PR #19
-  merged, `statusline-command.sh` (+317/-15) and `.gitignore` (+3, ignoring `/statusline-state/`)
-  appeared modified. Reads as an in-progress statusline rewrite adding cumulative token/cost
-  tracking, plus an untracked `stats-cache.json`. Written by a parallel agent or the user, not by
-  this session — it appeared mid-session, between one `git status` and the next. Left untouched
-  per the parallel-agent invariant. **Verify authorship before committing or discarding it.**
+- **AUTHORSHIP RESOLVED (was: "uncommitted parallel work, do not commit blind").** The modified
+  `statusline-command.sh` + `.gitignore` are **this session's work**, not a parallel agent's —
+  a statusline follow-on to PR #18 (orange model name, 100k-referenced context bar, cumulative
+  input+output counter, purple weekly-quota segment; cost display built then deliberately removed).
+  The earlier "verify authorship before committing or discarding" warning was written by a
+  *concurrent* session that saw the file change mid-session and correctly refused to guess.
+  Safe to commit. Detail: `coding-memory/branches/statusline-token-bar.md`.
+- **A concurrent session was active on 2026-07-19.** It merged PR #19, advanced `main` to f574213,
+  and wrote the memory entry above — all while this session was editing `statusline-command.sh`.
+  Evidence: this session opened on branch `docs/diagramming-pointers` @ ff9d215 and later found
+  itself on `main` @ f574213 with no local checkout. Not a problem in itself, but the parallel-agent
+  invariant applied in both directions and neither session could see the other's intent.
 - current work: **diagramming reachability — PR #19 MERGED** 2026-07-20 (merge commit a735fb4,
   3 commits). The
   `diagramming-technical-docs` standard was reachable only from the ADR bullet in
@@ -36,17 +41,13 @@ how this file and its linked files should be written (plain language, major chan
   direction, so the working tree stays permanently modified. Worth knowing: `claude-hook.sh`
   sources `$ORCA_AGENT_HOOK_ENDPOINT` *before* its token check, and that file's stdout becomes
   hook stdout — a channel into the agent control plane. Not resolved; user's call pending.
-- untracked `chrome/chrome-native-host` in working tree: Claude Code auto-generated Chrome
-  native-messaging wrapper (machine-local tooling) — not repo work, leave untracked. Note it
-  keeps the tree permanently dirty, so the new status line's `✗` marker always shows in this
-  repo; gitignoring it is an open question flagged to the user, not yet decided.
-- Model gate: this session started on **Sonnet 5** and the user switched to **Opus 4.8** via
-  /model before any commit. (Correction: the previous entry here read "session was on Fable 5" —
-  that described PR #17's session, not this one. Both are accurate for their own session; the
-  earlier wording was overwritten rather than superseded, noted here per the same convention as
-  commit 69cc063.)
-- `settings.json` model/theme preference changes are now committed on this branch, following
-  the existing `chore(settings):` precedent — superseding the earlier "not mine to commit" note.
+- untracked `chrome/`, `telemetry/`, `stats-cache.json`: machine-local Claude Code artifacts, not
+  repo work — leave untracked. They keep the tree permanently dirty, so the status line's `✗`
+  always shows here; gitignoring them is still an open question for the user.
+- Model gate: session started on **Sonnet 5**, user switched to **Opus 4.8** before any commit.
+  (An earlier entry misattributed PR #17's "Fable 5" here; each is right for its own session.)
+- `settings.json` model/theme preference changes follow the `chore(settings):` precedent —
+  superseding the earlier "not mine to commit" note. Distinct from the Orca hooks below.
 
 ## Repositories
 
@@ -73,30 +74,22 @@ how this file and its linked files should be written (plain language, major chan
   (Mermaid docs standard: SKILL.md + references/assets/scripts validator; Mermaid-not-PlantUML).
   Detail: `coding-memory/branches/diagramming-skill.md`.
 - feature/observability-judge (2026-07-16) — the observability judge (16 commits, 17/17 tests):
-  `agents/observability-judge.md` (subagent scoring 10 dims → JSONL+markdown verdict + junior-dev
-  layman summary), `hooks/judge-guard.sh` (+17-case test + settings.json) blocking `gh pr create`
-  without a fresh strict-freshness verdict, `skills/running-the-observability-judge/`, `rules/gates.md`
-  stub + `CLAUDE.md` catalog, ADR `docs/decisions/0001-observability-judge.md`, spec
-  `docs/superpowers/specs/2026-07-16-observability-judge-design.md`, verdict store. Command detection
-  took 2 review-driven security fixes (substring→anchored→python shlex, closing a quoted-env-prefix
-  bypass); Opus whole-branch review fixed the verdict-filename-on-slashed-branches bug + a stale
-  `hooks/README.md` "only git-guard installed" claim. **PR #13 MERGED 2026-07-17 (bootstrap self-gate → JUDGE_EXEMPT).**
+  scoring subagent (10 dims → JSONL+markdown verdict + layman summary), `hooks/judge-guard.sh`
+  blocking `gh pr create` without a fresh strict-freshness verdict, skill + gate stub + catalog,
+  ADR 0001, spec, verdict store. Command detection took 2 review-driven security fixes
+  (substring→anchored→python shlex, closing a quoted-env-prefix bypass). **PR #13 MERGED
+  2026-07-17** (bootstrap self-gate → JUDGE_EXEMPT).
   Detail: `coding-memory/branches/observability-judge.md`; PR status: `coding-memory/pr-tracking.md`.
 - feature/memory-rag-index (2026-07-17→18) — `memsearch`: local SQLite (sqlite-vec + FTS5) RAG over
-  session transcripts + curated docs, Qwen3-Embedding-0.6B embeddings, qwen3.6:35b-mlx digests,
-  hybrid retrieval, silent SessionStart nudge. 15-task plan, subagent-driven (Sonnet 5 implementers/
-  reviewers), 60-test suite green, full backfill 228 sources / 2332 chunks / 0 errors / p95 149ms,
-  golden bar 16/16, digest audit 11/12 supported. **PR #14 MERGED 2026-07-18** (merge commit
-  7015369); branch deleted. Judge (impl): risk=low conf=high, outcome=clean.
+  transcripts + curated docs, Qwen3 embeddings, hybrid retrieval, silent SessionStart nudge.
+  60-test suite green, backfill 228 sources / 2332 chunks / 0 errors / p95 149ms, golden 16/16.
+  **PR #14 MERGED 2026-07-18** (7015369). Judge (impl): risk=low conf=high, outcome=clean.
   Detail: `coding-memory/branches/memory-rag-index.md`.
-- feature/compliance-judge (2026-07-18) — the compliance judge: `agents/compliance-judge.md`
-  (subagent judging ONE finished spec against live rules — writing-specs + core-conduct/security —
-  blocking pass/fail verdict, per-rule citations, JSONL + markdown store), `skills/running-the-
-  compliance-judge/` (parallel dispatch with observability judge, capped auto-revise loop,
-  escalation on persistent ids, explicit-only waivers), gates stub + catalog line, ADR 0003,
-  golden eval 12/12 + loop dry-run (convergence + escalation). **PR #16 MERGED 2026-07-18**
-  (merge commit 4c2abec); branch deleted. Judge (impl, head 85d8982): risk=low conf=high,
-  outcome=clean. Post-merge live-verify of real dispatch → real store: confirmed.
+- feature/compliance-judge (2026-07-18) — subagent judging ONE finished spec against live rules
+  (writing-specs + core-conduct/security): blocking pass/fail, per-rule citations, JSONL+markdown
+  store; skill with parallel dispatch alongside the observability judge, capped auto-revise loop,
+  escalation, explicit-only waivers; gates stub + catalog, ADR 0003, golden eval 12/12.
+  **PR #16 MERGED 2026-07-18** (4c2abec). Judge (impl @ 85d8982): risk=low conf=high, clean.
   Detail: `coding-memory/branches/compliance-judge.md`.
 - feature/writing-project-readmes-skill (2026-07-19) — `writing-project-readmes` skill: house
   README standard from the user-supplied template (check-then-create, real facts only, `[TODO:]`
@@ -110,17 +103,30 @@ how this file and its linked files should be written (plain language, major chan
   segments: new `statusline-command.sh`, `statusLine` entry in `settings.json`, README table
   row; model → opus[1m] and theme → dark split into their own `chore(settings)` commit.
   Observability judge ran **5 rounds**, each finding something real in the round before: terminal-escape
-  injection via four distinct paths (`printf %b` expansion, real control bytes through jq, the unstripped
-  `$PWD` fallback, then a **second** unstripped fallback introduced by the fix for the third), false
-  "pushed" claims, and an unverified `context_window` schema — all fixed, schema confirmed against the
-  official docs. `statusline-command.test.sh`: 20 assertions, validated by falsification against all 5
-  historical versions (9/20, 10/20, 15/20, 20/20, 19/20) rather than by passing alone;
-  `statusline-command.falsify.py` makes that reproducible, with each expected count derived from what the
-  version does rather than fitted to its output. Recurring lesson: **the write-up ran ahead of the code in
-  every round**, including a "Cosmetic, no leak" claim about a path that did leak. Scope overran badly —
-  5 of 6 commits are judge-driven; taken to the user rather than resolved unilaterally. No ADR
-  (presentation-only — misses all three ADR triggers).
+  injection via four distinct paths (incl. a **second** unstripped fallback introduced by the fix for the
+  third), false "pushed" claims, and an unverified `context_window` schema — all fixed. Test suite
+  validated by falsification against all 5 historical versions rather than by passing alone
+  (`statusline-command.falsify.py` makes that reproducible). Recurring lesson: **the write-up ran ahead
+  of the code in every round**, including a "Cosmetic, no leak" claim about a path that did leak. Scope
+  overran badly — 5 of 6 commits judge-driven; taken to the user rather than resolved unilaterally.
+  No ADR (presentation-only — misses all three ADR triggers).
   Detail: `coding-memory/branches/statusline-command.md`.
+- feature/statusline-token-bar (2026-07-19, **pushed, judge findings fixed, not yet PR'd**) — follow-on
+  to PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
+  model's window — against 1M a 143k session rendered nearly-empty-but-red), cumulative Σ counting
+  input+output only (cache traffic swamped it ~16x), purple weekly-quota segment. A cost-estimate
+  feature was requested, built, then **removed entirely**: subscription plan, `costUSD: 0`, no cost
+  field in the payload — any dollar figure would have been invented. Weekly quota is a percentage
+  for the same reason: docs confirm `rate_limits` exposes `used_percentage` + `resets_at` only, so
+  "tokens left" is uncomputable. Schema check caught a silent bug: `resets_at` is epoch seconds, not
+  ISO — the countdown would have never rendered and looked merely absent.
+  Judge R1 (b24d422) risk=**high**; all three findings fixed across 4 commits (fc67ab1 tests,
+  888449e race repro RED, d7a2861 lock GREEN + ADR 0005, d302479 lock-recovery tests).
+  Recurring lesson, now three-for-three on this branch: **writing the check is not the same as the
+  check working.** The first lock regression test planted its PID file with a trailing newline —
+  a condition the buggy writer cannot produce — so re-introducing the bug passed 44/44. Only the
+  mutation revealed it. Every claim on this branch is now falsification-backed.
+  Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
   in the target checkout that it actually landed there, before trusting the report. Harvested from
@@ -137,6 +143,24 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
+0. **Statusline token bar — PAUSED 2026-07-19 at the user's direction. Do NOT auto-PR on resume.**
+   R1 (high) → R2/R3/R4 (medium) findings all FIXED, suite 17/20 → 50/50, everything pushed
+   @ 9c82cdd (21 commits ahead of `main`). **R5 was never run** — there is no verdict at HEAD, so
+   judge-guard will block `gh pr create` until one exists. On resume: decide PR vs. more hardening
+   *first* (see the diminishing-returns note below), then run the judge only if PRing.
+   Also still open, deliberately unabsorbed: R1's `STATUSLINE_DEBUG` logging to
+   `$STATE_DIR/debug.log` splitting "field absent" from "field present but unparseable" — the judge
+   noted it would have caught the epoch-seconds bug on render one.
+   Every round found the *same class* one level deeper, and the last
+   three were all inside the fix for the one before: R2, the lock's cleanup was itself a lost
+   update; R3, the cleanup's backstop justified a break by **age** then verified it by **PID**,
+   and the breaker lock lacked the guards the state lock had just gained; R4, `mv dirA dirB`
+   **nests** when dirB exists rather than failing. A wrong assumption about a shell builtin sat
+   underneath all three. Rules now encoded: verify a break against whatever justified it; use
+   `mkdir` (atomic, fails if present) where "rename or fail" is meant. **Impact ceiling since R2
+   has been a wrong cosmetic total that self-heals — no round has been a merge blocker.**
+   Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
+   Cosmetics still left: duration floors, bar rounds full at 95k, no MB rollover.
 1. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
    the store is global but writeup filenames carry no repo component (final-review
    recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
@@ -150,40 +174,25 @@ how this file and its linked files should be written (plain language, major chan
 3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
-4. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/`, which is already
-   live and now holds ADRs 0001-**0004** — the "adopt" framing was stale, the directory was never
-   the blocker. Diagramming-pointers half **DONE 2026-07-19** (PR #19), and wider than this item
-   scoped it: `managing-session-memory` was the actual gap, not just the two skills named here.
+4. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/` (now ADRs
+   0001-**0005**) — the "adopt" framing was stale, the directory was never the blocker.
+   Diagramming-pointers half **DONE 2026-07-19** (PR #19), wider than this item scoped it.
 4a. **Watch the next 2-3 `coding-memory/` branch logs** (ADR-0004 revisit trigger). If one lands with
-   real structure and no diagram, the `managing-session-memory:18` pointer is in the wrong place —
-   move it from the index-description bullet into the save-time procedure section. Escalation if that
-   also fails is a **gate stub, never the hook**: the hook's rejection is structural (a script cannot
-   judge warrant), the gate's is cost/benefit and could be legitimately overturned. Evidence so far:
-   1 of 3 (`coding-memory/branches/diagramming-pointers.md` carries a flowchart).
-5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
-   `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
-   *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
-   clean). See `coding-memory/observability-judge/verdicts.jsonl`.
+   real structure and no diagram, move the `managing-session-memory:18` pointer from the
+   index-description bullet into the save-time procedure section. Escalation if that also fails is a
+   **gate stub, never the hook** (the hook's rejection is structural; the gate's is cost/benefit).
+   Evidence: **2 of 3** — `diagramming-pointers.md` has a flowchart; `statusline-token-bar.md` now
+   describes a lock protocol with real structure and carries **none** (its diagram went to ADR 0005).
+5. (Optional) Backfill `outcome` for the remaining `null` verdicts (all known-clean):
+   `feature/observability-judge` @ fdbd7b9 and @ 381bd79, memsearch *architecting* @ c2b23fe.
+   See `coding-memory/observability-judge/verdicts.jsonl`.
 
-**Merged 2026-07-16:** `.claude` PR #10 (documentation-enforcement) + PR #11 (PORTS.md reconcile) +
-PR #12 (diagramming-technical-docs skill); vibe-scape (Tayvyx-Lab/VibeSpace) PR #6 (ADR backfill
-0001-0003 + template) + PR #7 (Plan 4a-1 + memory reconcile). No orphans outstanding.
+**Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
+documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
+hook, live and global), memsearch RAG index, verifying-subagent-commits, compliance judge; plus
+vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-readmes, d242e69),
+#18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4).
 
-**Merged 2026-07-17:** `.claude` PR #13 (observability judge — agent + judge-guard hook + skill +
-gate/catalog + verdict store; merge commit 82d7b9b). Judge + gate now live and global.
-
-**Merged 2026-07-18:** `.claude` PR #14 (memsearch — local RAG index; merge commit 7015369) + PR #15
-(verifying-subagent-commits skill — controller-side subagent-checkout verification gate; merge
-commit 417e8e7) + PR #16 (compliance judge — agent + skill + gate stub + catalog + store + ADR 0003;
-merge commit 4c2abec). All three feature branches deleted, local + remote. No orphans outstanding.
-
-**Merged 2026-07-19:** `.claude` PR #17 (writing-project-readmes skill + trigger wiring; merge
-commit d242e69) + PR #18 (statusline — robbyrussell-style status line, 4 rounds of escape-injection
-hardening; merge commit b6362ff). PR #17 branch deleted local + remote; verdicts backfilled clean.
-
-**Merged 2026-07-20:** `.claude` PR #19 (diagramming reachability — 3 conditional pointers into
-`managing-session-memory` / `writing-specs` / `designing-agentic-architecture`, + ADR 0004; merge
-commit a735fb4). Judge R1 low/high first pass, no `JUDGE_EXEMPT`; outcome backfilled clean.
 **Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
-merged but not deleted (local + remote), and the tree carries the unattributed statusline rewrite
-noted in Active Session.
+merged but not deleted (local + remote). `feature/statusline-token-bar` has all R1–R4 judge findings
+fixed, suite 50/50; needs a fresh verdict @ HEAD before `gh pr create`. See Next Step 0.
