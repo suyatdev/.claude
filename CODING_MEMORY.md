@@ -88,21 +88,13 @@ how this file and its linked files should be written (plain language, major chan
   (`statusline-command.falsify.py`). Origin of the recurring lesson: **the write-up ran ahead of the
   code in every round.** No ADR (presentation-only).
   Detail: `coding-memory/branches/statusline-command.md`.
-- feature/statusline-token-bar (2026-07-19) — **PR #20 MERGED 2026-07-20 04:01Z.** Follow-on
-  to PR #18: model name orange, context bar scaled to a fixed 100k "time to clear" reference (not the
-  model's window — against 1M a 143k session rendered nearly-empty-but-red), cumulative Σ counting
-  input+output only (cache traffic swamped it ~16x), purple weekly-quota segment. A cost-estimate
-  feature was requested, built, then **removed entirely**: subscription plan, `costUSD: 0`, no cost
-  field in the payload — any dollar figure would have been invented. Weekly quota is a percentage
-  for the same reason: docs confirm `rate_limits` exposes `used_percentage` + `resets_at` only, so
-  "tokens left" is uncomputable. Schema check caught a silent bug: `resets_at` is epoch seconds, not
-  ISO — the countdown would have never rendered and looked merely absent.
-  Judge R1 (b24d422) risk=**high**; all three findings fixed across 4 commits (fc67ab1 tests,
-  888449e race repro RED, d7a2861 lock GREEN + ADR 0005, d302479 lock-recovery tests).
-  Recurring lesson, now three-for-three on this branch: **writing the check is not the same as the
-  check working.** The first lock regression test planted its PID file with a trailing newline —
-  a condition the buggy writer cannot produce — so re-introducing the bug passed 44/44. Only the
-  mutation revealed it. Every claim on this branch is now falsification-backed.
+- feature/statusline-token-bar (2026-07-19) — **PR #20 MERGED 2026-07-20 04:01Z.** Follow-on to
+  PR #18: bar scaled to a fixed 100k reference, Σ counts input+output only, weekly-quota segment.
+  A cost-estimate feature was built then **removed entirely** — subscription plan, `costUSD: 0`, so
+  any dollar figure would have been invented; quota is a percentage for the same reason. Judge R1
+  (b24d422) risk=**high**, all three findings fixed across 4 commits (ADR 0005). Recurring lesson:
+  **writing the check is not the same as the check working** — a lock test planted state the real
+  writer cannot produce, so re-introducing the bug still passed 44/44.
   Detail: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
 - feature/verifying-subagent-commits (2026-07-18) — new skill: after a dispatched implementer/fix
   subagent reports DONE with a commit SHA, the controller independently confirms via `git log -1`
