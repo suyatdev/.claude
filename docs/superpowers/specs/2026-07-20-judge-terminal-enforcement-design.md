@@ -224,21 +224,23 @@ git commit --dry-run --porcelain -z <same args>
 ```
 
 — the gated command's arguments unchanged (global options passed through, §6.2) plus those three
-flags. Each NUL-delimited entry is `XY <path>`; column 1 (`X`, the index column) says whether this
-commit records that path:
+flags, re-executed as the **parsed argv list** from the same `shlex` split detection used — never as
+re-joined shell text, which would reopen the quoting surface the split closed. Each NUL-delimited
+entry is `XY <path>`; column 1 (`X`, the index column) says whether this commit records that path.
+**Entries decide first; the exit code is consulted only when no spec entry answers:**
 
 | Dry-run result | Meaning | Gate behaviour |
 |---|---|---|
 | entry for `docs/superpowers/specs/*.md` with `X` in `M A R C` | commit records new spec content | continue to the precondition |
-| entry for a spec with `X` = `D` | spec deletion — no new content to judge | exit 0 |
-| no spec entry with non-space `X` — including `??`/`!!` (untracked/ignored) | commit records no spec | exit 0 |
-| exit 1, empty output | nothing to commit | exit 0 — git will refuse the real commit too; **not** a detection failure |
-| any other nonzero exit | real error | exit 2 — fail closed |
+| spec entry with `X` = `D` | spec deletion — no new content to judge | exit 0 |
+| no spec entry outside `??`/`!!` (untracked/ignored — never recorded), exit 0 **or 1** | commit records no spec; exit 1 means git will itself refuse it as "nothing to commit" — and its output is **not** always empty, because untracked files still print `??` entries | exit 0 |
+| exit > 1 (usage or repo error) | real error | exit 2 — fail closed |
 
 A rename entry (`R`) carries the **recorded** (new) path; its source path follows as one extra
 NUL-terminated field the parser must consume to stay aligned. `-z` also disables C-style path
 quoting, so paths compare raw. Verified against real git 2.50.1 on 2026-07-20 — all five forms
-re-run this round, plus the untracked and rename cases:
+re-run this round, plus the untracked and rename cases and both exit-1 shapes (fully clean → exit 1
+with empty output; only-untracked → exit 1 with `??` entries — both allow):
 
 | Form (spec staged, `other.txt` modified) | `X` for the spec | recorded |
 |---|---|---|
@@ -381,7 +383,10 @@ launcher can generate. Moving the extraction inside the launcher, after run-dir 
 fix that ordering — it **deletes** it: everything needed is already in the launcher's hands
 (`--spec`, `--round`, the store), no caller sequences anything, and no caller can silently disable
 the escalation cap by forgetting an argument (§6.2.2). The flag survives as an explicit override for
-ad-hoc runs, validated like every other `--*-file`.
+ad-hoc runs, validated like every other `--*-file`. One asserted edge: if `--round > 1` but the
+store holds no prior round for this spec and no override is given, preflight fails (exit 4) — a
+round above 1 claims a history, and a claim the store cannot back fails closed rather than judging
+with silently absent priors.
 
 **Argument validation — fail closed on any miss:**
 
@@ -391,7 +396,7 @@ ad-hoc runs, validated like every other `--*-file`.
 | `--stage` | enum: `architecting` \| `implementation` |
 | `--round` | numeric, `>= 1` |
 | `--waived`, `--acked` | comma-separated, charset `^[A-Za-z0-9_.,-]+$` |
-| `--*-file` | resolves inside repo or run dir, exists, regular file (not symlink/FIFO), non-empty, ≤ 64 KiB, UTF-8 decodable |
+| `--*-file` | resolves inside the repo, exists, regular file (not symlink/FIFO), non-empty, ≤ 64 KiB, UTF-8 decodable. (The former "or run dir" branch is gone with the hook-provisioned file: callers only pass files they authored, and the launcher's own `<run-dir>/prior-violations.json` is internal, never an argument) |
 | run-dir path | launcher-generated, asserted `^[A-Za-z0-9/_.-]+$` before any interpolation |
 
 Only the **paths** are validated; file *contents* are never validated, never parsed, and never reach a
@@ -900,7 +905,7 @@ Scenario: A pathspec names only unrelated files
   And the spec stays staged, gated on its own eventual commit
 
 Scenario: Nothing to commit
-  Given the dry-run exits 1 with empty output
+  Given the dry-run exits 1 — output empty, or only `??` entries for untracked files
   Then spec-guard exits 0 — git itself will refuse the real commit
 
 Scenario: Untracked spec file present
@@ -949,7 +954,7 @@ Scenario: A Bash command that cannot be a commit
 | Store unreadable | read error | exit 2, fail closed |
 | Spec in recorded set, index ≠ worktree (any form) | universal precondition (§5.2) | exit 2, "stage your edits"; nothing launched |
 | Spec committed via `-a` / `-i` / pathspec / `--amend` | dry-run set-resolution (§5.2) | gate applies iff the spec is in the recorded set |
-| Dry-run exits 1 with empty output | nothing to commit (§5.2) | exit 0 — git refuses the real commit anyway |
+| Dry-run exits 1 (no recorded spec entry; output may hold `??` noise) | nothing to commit (§5.2) | exit 0 — git refuses the real commit anyway |
 | Violation survives its fix | same id in two most recent rounds | exit 2 ESCALATE; nothing launched |
 | Loop reaches round 3 failing | stored round ≥ 3, verdict fail | exit 2 ESCALATE; nothing launched |
 | Exotic git global option | classifier cannot resolve | exit 0 + logged warning (open, by §6.2's stated posture) |
@@ -1014,7 +1019,7 @@ vs worktree divergence.
 | Skill/hook threshold agreement | the two-consecutive and round-3 constants match across `spec-guard.sh` and `running-the-compliance-judge` |
 | Precondition: spec in recorded set, index ≠ worktree | exit 2, nothing launched — asserted on `-a` and pathspec forms too, not just plain `commit` |
 | **Dry-run set resolution: all five §5.2 forms + untracked + rename** | recorded set matches §5.2's evidence table exactly; `??` never reads as detection; **written against real git**, not against the table — two form-table claims passed review by being read rather than run |
-| Dry-run caveats | exit 1 + empty output allows; `--amend` atop a spec commit re-triggers the gate |
+| Dry-run caveats | exit 1 allows on both shapes (empty output, and `??`-only output from an untracked-only tree); `--amend` atop a spec commit re-triggers the gate |
 | Prior violations launcher-derived | a `--round 2` launch with **no** file flags still carries round 1's array in `prompt.txt`; an explicit `--prior-violations-file` override wins |
 | Context/decisions fallback | with no `--context-file`, `prompt.txt` contains the fixed instruction, not an empty section |
 | Ack releases the round-3 branch | escalation with no cited ids is released by a set ack |
