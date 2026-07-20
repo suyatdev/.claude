@@ -1,7 +1,8 @@
 # Branch Implementation Log: docs/diagramming-pointers
 
-**Status:** OPEN (PR #19, 2026-07-19, branch `docs/diagramming-pointers` from `origin/main` @ b6362ff).
-Tree carries the permanent Orca `settings.json` dirt only.
+**Status:** MERGED (PR #19, 2026-07-20, merge commit `a735fb4`; branch `docs/diagramming-pointers`
+from `origin/main` @ b6362ff, 3 commits). Branch **not yet deleted** local or remote.
+Judge outcome backfilled `clean`.
 
 ## Why
 

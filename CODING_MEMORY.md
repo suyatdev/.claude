@@ -7,8 +7,15 @@ how this file and its linked files should be written (plain language, major chan
 ## Active Session
 - session_origin: desktop (VSCode)
 - session_started_at: 2026-07-19 (post-/clear continuation)
-- last_active_branch: docs/diagramming-pointers (branched off `origin/main` after #18 merged)
-- current work: **diagramming reachability — PR #19 OPEN** (`docs/diagramming-pointers`). The
+- last_active_branch: main (both PRs merged; branch `docs/diagramming-pointers` not yet deleted)
+- **UNCOMMITTED PARALLEL WORK IN TREE — not this session's, do not commit blind.** After PR #19
+  merged, `statusline-command.sh` (+317/-15) and `.gitignore` (+3, ignoring `/statusline-state/`)
+  appeared modified. Reads as an in-progress statusline rewrite adding cumulative token/cost
+  tracking, plus an untracked `stats-cache.json`. Written by a parallel agent or the user, not by
+  this session — it appeared mid-session, between one `git status` and the next. Left untouched
+  per the parallel-agent invariant. **Verify authorship before committing or discarding it.**
+- current work: **diagramming reachability — PR #19 MERGED** 2026-07-20 (merge commit a735fb4,
+  3 commits). The
   `diagramming-technical-docs` standard was reachable only from the ADR bullet in
   `managing-session-memory` and the `CLAUDE.md:21` catalog line, so it never self-triggered
   while writing `coding-memory/`
@@ -17,7 +24,8 @@ how this file and its linked files should be written (plain language, major chan
   explicitly **not** a hook (a script can detect whether a mermaid block exists, not whether
   one is warranted) and **not** a gate (a missing diagram is recoverable later, so it fails
   the never-miss bar the other nine gates share). Judge R1 84a60bf low/high, no blocking
-  findings. ADR `docs/decisions/0004-diagramming-reachability-not-enforcement.md` (carries a
+  findings, **outcome backfilled `clean`**. ADR
+  `docs/decisions/0004-diagramming-reachability-not-enforcement.md` (carries a
   mindmap of the rejected tiers; escalation path if it underperforms is a gate stub, never the
   hook — the hook's rejection is structural, not evidentiary).
   Detail: `coding-memory/branches/diagramming-pointers.md`, `coding-memory/pr-tracking.md`.
@@ -142,11 +150,16 @@ how this file and its linked files should be written (plain language, major chan
 3. **Live-verify** doc-guard's PreCompact injection against a real `/compact` — still pending.
    SessionStart injection **VERIFIED live 2026-07-18**: post-/clear it surfaced the uncommitted
    verdict-store + settings.json changes exactly as designed (15-case harness had covered logic only).
-4. (Optional) Have the `.claude` repo itself adopt `docs/decisions/` (it now has ADRs 0001-0002 but
-   `coding-memory/decisions.md` still serves as the older equivalent). ~~diagramming pointers~~
-   **DONE 2026-07-19** on `docs/diagramming-pointers` — and wider than this item scoped it: the
-   memory-authoring path (`managing-session-memory`) was the actual gap, not just the two skills
-   named here.
+4. (Optional) Retire `coding-memory/decisions.md` in favour of `docs/decisions/`, which is already
+   live and now holds ADRs 0001-**0004** — the "adopt" framing was stale, the directory was never
+   the blocker. Diagramming-pointers half **DONE 2026-07-19** (PR #19), and wider than this item
+   scoped it: `managing-session-memory` was the actual gap, not just the two skills named here.
+4a. **Watch the next 2-3 `coding-memory/` branch logs** (ADR-0004 revisit trigger). If one lands with
+   real structure and no diagram, the `managing-session-memory:18` pointer is in the wrong place —
+   move it from the index-description bullet into the save-time procedure section. Escalation if that
+   also fails is a **gate stub, never the hook**: the hook's rejection is structural (a script cannot
+   judge warrant), the gate's is cost/benefit and could be legitimately overturned. Evidence so far:
+   1 of 3 (`coding-memory/branches/diagramming-pointers.md` carries a flowchart).
 5. (Optional) Backfill `outcome` for the remaining `null` judge verdicts now that results are known:
    `feature/observability-judge` @ fdbd7b9 and @ 381bd79 (PR #13 merged clean), and the memsearch
    *architecting*-stage verdict @ c2b23fe (superseded by the implementation-stage verdict, also
@@ -165,5 +178,12 @@ commit 417e8e7) + PR #16 (compliance judge — agent + skill + gate stub + catal
 merge commit 4c2abec). All three feature branches deleted, local + remote. No orphans outstanding.
 
 **Merged 2026-07-19:** `.claude` PR #17 (writing-project-readmes skill + trigger wiring; merge
-commit d242e69). Branch deleted local + remote; judge verdicts backfilled outcome=clean.
-No orphans outstanding.
+commit d242e69) + PR #18 (statusline — robbyrussell-style status line, 4 rounds of escape-injection
+hardening; merge commit b6362ff). PR #17 branch deleted local + remote; verdicts backfilled clean.
+
+**Merged 2026-07-20:** `.claude` PR #19 (diagramming reachability — 3 conditional pointers into
+`managing-session-memory` / `writing-specs` / `designing-agentic-architecture`, + ADR 0004; merge
+commit a735fb4). Judge R1 low/high first pass, no `JUDGE_EXEMPT`; outcome backfilled clean.
+**Orphans outstanding:** branches `feature/statusline-command` and `docs/diagramming-pointers` are
+merged but not deleted (local + remote), and the tree carries the unattributed statusline rewrite
+noted in Active Session.

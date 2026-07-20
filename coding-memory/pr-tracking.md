@@ -155,9 +155,10 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   plane, not just code execution.
 - detail: coding-memory/branches/statusline-command.md
 
-### docs/diagramming-pointers (OPEN, 2026-07-19)
+### docs/diagramming-pointers (MERGED 2026-07-20)
 - repo: suyatdev/.claude · remote: origin (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/19 · status: OPEN (opened 2026-07-19)
+- PR: https://github.com/suyatdev/.claude/pull/19 · status: MERGED 2026-07-20T00:14Z (merge commit
+  a735fb4). Branch NOT yet deleted, local or remote.
 - opened_by session_origin: desktop (VSCode) · last push: desktop (VSCode)
 - scope: makes the `diagramming-technical-docs` standard (PR #12) reachable from the three
   authoring paths that write documentation — `managing-session-memory` (the actual gap: nothing
@@ -168,7 +169,10 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   a gate (a missing diagram is recoverable later at zero cost, failing the never-miss bar the other
   9 gates share). `CLAUDE.md`, `core-conduct.md`, `gates.md` untouched — zero always-on context.
 - judge verdicts: R1 84a60bf **low/high**, no blocking findings, cleared to ship on the first pass.
-  outcome: null (backfill on merge). Judge caught 2 overstatements in the commit body (the
+  outcome: **clean** (backfilled 2026-07-20). All 6 recorded concerns were addressed pre-merge:
+  the 2 commit-body overstatements corrected in the PR description, the ADR written (0004), and
+  the 3 structural concerns (unfalsifiability, weak memory trigger, strikethrough style) accepted
+  and recorded as the ADR's revisit trigger rather than fixed. Judge caught 2 overstatements in the commit body (the
   "each pointer carries the conditional" claim is true of 1 of 3; "reachable only from the ADR
   bullet" omitted `CLAUDE.md:21`) — corrected in the PR description rather than by amending, since
   an amend moves HEAD and re-stales the gate.
