@@ -5,17 +5,17 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-20 · last_active_branch: feature/judge-terminal-enforcement
-- current work: **judge terminal-enforcement — DESIGN COMPLETE, §1–§4 all approved 2026-07-20.**
-  Spec phase starting on Opus 4.8 (model gate answered). Brainstorm landed on `main` via a
-  docs-only merge 2026-07-20 (user's call over cherry-pick), so branches forked from `main`
-  now inherit the design instead of it being stranded on a merged branch.
-  Deterministic hook gates for both judges + per-judge terminal sessions via a shared launcher.
-  Key approvals: runner-script indirection (no AppleScript interpolation), tmux split-pane,
-  10s poll / 840s deadline / 900s hook timeout, gitignored judge-runs/, separate SPEC_EXEMPT,
-  mkdir-atomic launch lock with piggyback-wait, falsification-backed tests. Spec NOT yet
-  written — next: new branch off `main`, spec doc, judges, user review, writing-plans.
-  Full approved design + resume script:
+- session_origin: desktop · session_started_at: 2026-07-20 (2nd session) · last_active_branch: feature/add-claude-code-handoff
+- current work: **claude-code-handoff vendored install — COMMITTED, awaiting user cherry-pick.**
+  Full verbatim install of github.com/Sonovore/claude-code-handoff @ c6cb717 (user chose full
+  install over adapt-into-existing; model gate: Fable 5). `/handoff` command + 6 scripts under
+  `hooks/handoff/` + 4 hook registrations (SessionStart, UserPromptSubmit, PostToolUse,
+  PreCompact). Comparison chart delivered (link in branch log); user cherry-picks per-feature
+  defaults next — nothing disabled yet, both memory systems currently run. settings.json
+  committed as HEAD+handoff-only via index staging (Orca hooks + fable-model change stay
+  uncommitted, policy unchanged). Detail: `coding-memory/branches/add-claude-code-handoff.md`.
+- parked: **judge terminal-enforcement — design complete (§1–§4 approved), spec phase not
+  started.** Resume via Next Steps 0b; full design + approvals:
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
@@ -115,6 +115,11 @@ how this file and its linked files should be written (plain language, major chan
   dispatch-prompt self-check instruction). Not hook-enforced by design. **PR #15 MERGED
   2026-07-18** (merge commit 417e8e7); branch deleted. Judge (impl, head 367da77): risk=low
   conf=high, outcome=clean.
+- feature/add-claude-code-handoff (2026-07-20) — vendored Sonovore/claude-code-handoff @
+  c6cb717 verbatim (user's call): `/handoff` command, `hooks/handoff/` scripts, 4 hook
+  registrations, nested `.claude/` gitignored. Both memory systems live pending per-feature
+  cherry-pick (comparison chart sent). Judge + PR deferred until after the cherry-pick.
+  Detail: `coding-memory/branches/add-claude-code-handoff.md`.
 
 ## Pointers
 - PR tracking (all repos, all branches): `coding-memory/pr-tracking.md`
@@ -124,7 +129,14 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0. **Judge terminal-enforcement (2026-07-20) — RESUME HERE. Design COMPLETE (§1–§4 approved).**
+0. **claude-code-handoff cherry-pick (2026-07-20) — AWAITING USER PICKS.** Comparison chart
+   delivered (artifact e570411a-795d-4b79-bda2-d0017ad9794e; content regenerable from
+   `coding-memory/branches/add-claude-code-handoff.md`). On reply: disable losing hook
+   registrations in settings.json, adapt winners (standouts: bug-test-log ledger,
+   recent-prompts capture, forward-looking handoff principle), per-repo gitignore guidance,
+   observability judge, then PR (judge deferred to PR time by design). Known upstream bug:
+   PostToolUse tracker no-ops when live-handoff created session-state.md.
+0b. **Judge terminal-enforcement (2026-07-20) — parked. Design COMPLETE (§1–§4 approved).**
    Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
    on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
    NOT off statusline branch) → spec doc → self-review → compliance + observability judges
