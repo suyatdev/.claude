@@ -26,11 +26,16 @@ how this file and its linked files should be written (plain language, major chan
   assumptions — ZERO spec edits, so both verdicts remain fresh.** Spec status line
   intentionally left saying "pending" (editing the file would invalidate the blob-sha-keyed
   verdicts); the authoritative approval record is
-  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md` §"User review gate". **NEXT
-  (fresh session, on the branch): `superpowers:writing-plans` on Opus 4.8 (user's standing
-  direction); formal pre-implementation model gate still asked at code start.** Full design
-  history: the brainstorm file; earlier session blocks (Q&A, design-doc write, judge round):
-  git history of this file (98faa38, c252135).
+  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md` §"User review gate". **PLAN
+  WRITTEN same session (user said "continue for now" on Fable 5 = per-task planning gate
+  answer; Hard Model Gate untouched):
+  `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` — 8 tasks, TDD, live probe FIRST
+  (P1–P7 resolve the 4 assumptions + respawn quoting), unverified tree schema quarantined
+  in `layout_normalize_tree` validated against a live-captured fixture; self-review caught
+  and fixed a T4/T5 fixture state collision. NEXT: Hard Model Gate (user's standing
+  direction = Opus 4.8) + execution-approach choice, then execute the plan; implementation-
+  stage obs judge before PR.** Full design history: the brainstorm file; earlier session
+  blocks: git history of this file (98faa38, c252135).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -156,11 +161,12 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0-ACTIVE. **pane-layout-v2: user review gate CLEARED (aux-reuse + all 4 assumptions signed
-   off, zero spec edits). NEXT = `superpowers:writing-plans` on Opus 4.8**, fresh session on
-   `feature/pane-layout-v2`; formal pre-implementation model gate at code start; after plan
-   execution → implementation-stage obs judge → PR. Judge implementation notes are in the
-   CURRENT block above.
+0-ACTIVE. **pane-layout-v2: review gate CLEARED + IMPLEMENTATION PLAN WRITTEN
+   (`docs/superpowers/plans/2026-07-21-pane-layout-v2.md`). NEXT = Hard Model Gate (standing
+   direction Opus 4.8) → execute the plan on `feature/pane-layout-v2`** (subagent-driven
+   per the plan header; plan-task implementers are PANE-routed per dispatching-pane-agents)
+   → implementation-stage obs judge → PR. Task 1 (live probe) runs FIRST and gates the
+   rest; judge implementation notes are in the CURRENT block above.
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
