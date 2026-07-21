@@ -56,6 +56,68 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
     after a command substitution trips SC2181 → captured into `rc` first, matching the
     happy-path idiom already in the file.
 
+- **Task 4 (`cmux-layout.sh` part 1 — normalize / classify / finished) — DONE 2026-07-21.**
+  New `panes/adapters/cmux-layout.sh` (pure, sourced, never calls cmux) with
+  `layout_normalize_tree`, `layout_managed`, `layout_run_finished`, plus
+  `cmux-layout.test.sh`. 12/0 green; `shellcheck -x` clean on both.
+  - **RED first (Step 2, 2 passed / 10 failed):** source line `No such file or
+    directory`, then `layout_normalize_tree/layout_managed/layout_run_finished:
+    command not found` for every case. Two of the twelve passed *vacuously*
+    (empty == empty for the builder-equivalence check, exit 127 read as "running")
+    — which is exactly why the content-pinned fixture assertion carries falsification 3
+    rather than the equivalence assertion.
+  - **Correction 1 — the normalize selector (plan's returns EMPTY).** The plan assumed
+    panes carry `pane_ref`+`surfaces` and surfaces carry `surface_ref`+`title`. Per probe
+    P2 and the fixture, **neither is true**: a pane keys its own ref as `ref`, and a
+    surface keys its own as `ref` while carrying `pane_ref` + `title`. Landed selector:
+    `[.. | objects | select(has("ref") and has("pane_ref") and has("title"))]` →
+    `[.pane_ref, .ref, .title] | @tsv`.
+  - **Correction 2 — the workspace filter (plan's was a silent total failure).**
+    Workspace objects carry `ref`; their `workspace_ref` is `null`. The only objects with
+    a non-null `workspace_ref` are the root `active`/`caller` objects, which have no
+    surfaces beneath them — so the plan's `select(.workspace_ref? == $ws)` matched those
+    two and yielded nothing. Net effect: **whenever `CMUX_WORKSPACE_ID` is set (the normal
+    case) the whole layout feature would silently degrade to legacy**, and the plan's own
+    test could not catch it. Filter now matches the workspace object's own `ref`
+    (`select(has("panes") and .ref? == $ws)`), keeping the "not matchable → return
+    everything" fallback exactly as the contract words it. Also **dropped the plan's
+    `case … ws="workspace:$ws"` munging**: `$CMUX_WORKSPACE_ID` is a UUID (P7) while tree
+    refs are `workspace:8`, so rewriting it as `workspace:<uuid>` matches nothing. In live
+    use this client-side filter is *expected* not to match and to fall through — primary
+    scoping is **server-side** via `cmux --json tree --workspace "$CMUX_WORKSPACE_ID"`
+    (P1: the UUID is accepted directly). The filter is defence-in-depth for a ref-form
+    value; the fallback is load-bearing. Both facts are recorded in the file's comment.
+  - **Correction 3 — the test builders (wrong shape, would have masked 1 and 2).** The
+    plan's `pane()`/`tree()` emitted the imagined shape, so the canned cases would stay
+    green while live silently returned nothing. Rewritten to mirror
+    `fixtures/tree-live.json` exactly (`windows[] → workspaces[] → panes[] → surfaces[]`,
+    with `surface_count`/`surface_refs`/`index_in_pane`), and pinned by an assertion that a
+    hand-built canned tree and the live fixture normalize **through the same code path to
+    identical output**. The workspace-filter case now uses a **ref-form** value
+    (`workspace:1`) since a UUID legitimately will not match, plus a new case asserting the
+    UUID form falls back to the whole tree.
+  - **Falsification (all four run against the final code, each reverted; file restored
+    byte-identical):**
+    1. `LAYOUT_MANAGED_RE` trailing space — near-miss `impl.1:1700000001-1-1x` added to
+       the input *first* and confirmed green (correctly excluded); dropping the trailing
+       space → `unmanaged/malformed excluded` RED (want 2, got 3). 11/1.
+    2. `layout_run_finished` → `return 0` unconditionally → `no marker => running` RED. 11/1.
+    3. Plan's original selector restored → **5 RED**, including the content-pinned
+       `live fixture normalizes to its 3 known surfaces`. 7/5. The fixture test does pin
+       the real shape.
+    4. Plan's original `.workspace_ref? == $ws` restored → `workspace filter excludes
+       foreign panes` RED (foreign `other-ws` line leaks back in). 11/1.
+  - **Smaller fixes.** Dropped `layout_run_finished`'s dead `dir="$1"` initializer
+    (immediately overwritten). Added `|| [ -n "$pane" ]` to `layout_managed`'s read loop so
+    the final line survives stdin without a trailing newline (command substitution strips
+    it — a live footgun for Task 5's `norm="$(layout_normalize_tree)"` usage), with the
+    loop vars initialized to `""` for `set -u`. Two `shellcheck disable` directives in the
+    house style: file-wide SC2015 in the test (ok/bad always return 0) and inline SC2016 at
+    the jq call (`$ws`/`$p` are jq vars bound by `--arg`).
+  - **Known, not a defect:** Task 2's marker path resolves through `cd`+`pwd` (realpath,
+    `/private/var/…`) while `layout_run_finished` builds from `PANE_STATE_DIR`
+    unnormalized. Same file on macOS.
+
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
 Re-runnable via `panes/cmux-layout-probe.sh` after any cmux upgrade. Findings recorded
@@ -242,9 +304,12 @@ Reviewed before commit: synthetic titles only, no real paths, `tty` null, no URL
 
 ## Carry-forward into Tasks 2–8
 
-1. **Task 4** — rewrite `layout_normalize_tree`'s jq to the P2 shape; drop the client-side
+1. ~~**Task 4** — rewrite `layout_normalize_tree`'s jq to the P2 shape; drop the client-side
    workspace filter in favour of `tree --workspace`; rewrite the `pane()`/`tree()` test
-   builders to the real shape.
+   builders to the real shape.~~ **Discharged in Task 4**, with one deliberate divergence:
+   the client-side filter was **kept** (repaired to match on the workspace's own `ref`)
+   as defence-in-depth for a ref-form value, rather than dropped. `tree --workspace` is
+   still the primary scoping mechanism — Task 5/6 must pass it.
 2. **Task 6/7** — every mutating cmux call carries an explicit `--workspace` (P5).
 3. **Task 7** — reuse via `cmux send`, shell-quoted (P4); **verify-after-rename** replaces
    plain retry-once (P6).
