@@ -101,5 +101,95 @@ layout_run_finished 1700000001-1-1 && ok "marker => finished" || bad "marker => 
 layout_run_finished 1700000002-1-1 && bad "no marker => running" || ok "no marker => running"
 layout_run_finished 1699999999-9-9 && ok "missing run dir => finished" || bad "missing run dir => finished"
 
+# --- layout_decide: implementer path -----------------------------------------
+# Every tree() below goes through workspace(): feeding pane blobs straight into
+# the workspaces slot still normalizes correctly (recursive descent looks right
+# through the missing level), so a drifted builder would stay green here and
+# only fail live — exactly the hazard the fixture equivalence check above exists
+# to catch.
+decide()  { printf '%s' "$1" | layout_decide "$2" "$3" "$4"; }
+running() { mkrun "$1"; rm -f "$PANE_STATE_DIR/runs/$1/agent-exit"; }  # reset to running
+NEW=1700000099-9-9
+
+t_empty="$(tree "$(workspace workspace:1 "$(pane pane:1 'surface:10|zsh')")")"
+eq "empty ws -> create slot 1" "$(decide "$t_empty" implementer $NEW lbl)" \
+   "$(printf 'PLAN: split right env\nTITLE: impl.1:%s lbl' $NEW)"
+
+# The finished-check cases above left 1700000001-1-1 marked finished. A stale
+# marker silently turns a create into a reuse, so every run-id these cases touch
+# is reset explicitly rather than assumed.
+running 1700000001-1-1
+t_s1="$(tree "$(workspace workspace:1 \
+  "$(pane pane:1 'surface:10|zsh')" \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 a')")")"
+eq "slot1 busy -> create slot 2" "$(decide "$t_s1" implementer $NEW lbl)" \
+   "$(printf 'PLAN: split down surface:20\nTITLE: impl.2:%s lbl' $NEW)"
+
+running 1700000002-1-1; running 1700000003-1-1
+t_s124="$(tree "$(workspace workspace:1 \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 a')" \
+  "$(pane pane:3 'surface:30|impl.2:1700000002-1-1 b')" \
+  "$(pane pane:5 'surface:50|impl.4:1700000003-1-1 d')")")"
+eq "lowest missing slot (3) from slot1" "$(decide "$t_s124" implementer $NEW lbl)" \
+   "$(printf 'PLAN: split right surface:20\nTITLE: impl.3:%s lbl' $NEW)"
+
+# TWO finished surfaces, so "oldest" genuinely discriminates: with only one,
+# the assertion passes whichever way the comparison points and proves nothing.
+mkdone 1700000002-1-1; mkdone 1700000003-1-1
+eq "finished slot reused before growth (oldest finished)" \
+   "$(decide "$t_s124" implementer $NEW lbl)" \
+   "$(printf 'PLAN: reuse surface:30\nTITLE: impl.2:%s lbl' $NEW)"
+running 1700000002-1-1; running 1700000003-1-1
+
+mkrun 1700000004-1-1
+t_full="$(tree "$(workspace workspace:1 \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 a' 'surface:21|zsh')" \
+  "$(pane pane:3 'surface:30|impl.2:1700000002-1-1 b')" \
+  "$(pane pane:4 'surface:40|impl.3:1700000003-1-1 c' 'surface:41|zsh')" \
+  "$(pane pane:5 'surface:50|impl.4:1700000004-1-1 d')")")"
+eq "full busy quadrant -> tab fewest-surfaces, tie lowest slot" \
+   "$(decide "$t_full" implementer $NEW lbl)" \
+   "$(printf 'PLAN: tab pane:3\nTITLE: impl.2:%s lbl' $NEW)"
+
+# duplicate slot: newest run-id's pane wins; loser is invisible
+mkrun 1700000005-1-1
+t_dup="$(tree "$(workspace workspace:1 \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 old')" \
+  "$(pane pane:6 'surface:60|impl.1:1700000005-1-1 new')")")"
+eq "duplicate slot -> newest wins as split target" "$(decide "$t_dup" implementer $NEW lbl)" \
+   "$(printf 'PLAN: split down surface:60\nTITLE: impl.2:%s lbl' $NEW)"
+
+# --- layout_decide: aux path -------------------------------------------------
+t_noaux="$(tree "$(workspace workspace:1 \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 a')" \
+  "$(pane pane:4 'surface:40|impl.3:1700000003-1-1 c')")")"
+eq "no aux pane -> aux-create, fallback slot3" "$(decide "$t_noaux" aux $NEW judgelbl)" \
+   "$(printf 'PLAN: aux-create surface:40\nTITLE: aux:%s judgelbl' $NEW)"
+eq "no aux, no quadrant -> aux-create env" "$(decide "$t_empty" aux $NEW judgelbl)" \
+   "$(printf 'PLAN: aux-create env\nTITLE: aux:%s judgelbl' $NEW)"
+
+mkrun 1700000006-1-1
+t_aux="$(tree "$(workspace workspace:1 \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 a')" \
+  "$(pane pane:7 'surface:70|aux:1700000006-1-1 judge')")")"
+eq "busy aux pane -> tab on it" "$(decide "$t_aux" aux $NEW lbl)" \
+   "$(printf 'PLAN: tab pane:7\nTITLE: aux:%s lbl' $NEW)"
+mkdone 1700000006-1-1
+eq "finished aux surface reused (extension, user-approved)" "$(decide "$t_aux" aux $NEW lbl)" \
+   "$(printf 'PLAN: reuse surface:70\nTITLE: aux:%s lbl' $NEW)"
+
+# mixed pane: impl wins -> pane is a slot, its aux surface never aux-targets
+t_mixed="$(tree "$(workspace workspace:1 \
+  "$(pane pane:2 'surface:20|impl.1:1700000001-1-1 a' 'surface:21|aux:1700000006-1-1 j')")")"
+eq "mixed pane is impl -> aux creates its own column" "$(decide "$t_mixed" aux $NEW lbl)" \
+   "$(printf 'PLAN: aux-create env\nTITLE: aux:%s lbl' $NEW)"
+
+# --- titles ------------------------------------------------------------------
+eq "empty run_id -> unmanaged bare label" "$(layout_compose_title impl.1 '' plainlabel)" "plainlabel"
+long_label="$(printf 'L%.0s' $(seq 1 80))"
+composed="$(layout_compose_title impl.2 $NEW "$long_label")"
+eq "title truncated to 64" "${#composed}" "64"
+case "$composed" in "impl.2:$NEW "*) ok "prefix never truncated" ;; *) bad "prefix never truncated" "$composed" ;; esac
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

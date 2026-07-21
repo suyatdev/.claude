@@ -62,3 +62,117 @@ layout_run_finished() {
   [ -d "$dir" ] || return 0
   [ -f "$dir/agent-exit" ]
 }
+
+# $1 prefix (impl.<slot>|aux), $2 run_id ("" = unmanaged), $3 label.
+# Truncates from the RIGHT at 64 so the managed prefix always survives (spec).
+layout_compose_title() {
+  if [ -n "$2" ]; then printf '%.64s' "$1:$2 $3"; else printf '%.64s' "$3"; fi
+}
+
+# $1 role (implementer|aux), $2 run_id (may be ""), $3 label; tree JSON on
+# stdin. Prints one PLAN: line and one TITLE: line (contract in the header).
+# Reuse is per-SURFACE (any finished impl surface, oldest run-id epoch first) —
+# the Gherkin "only slot 2's run-id has a marker" scenario pins this reading.
+#
+# The classification passes read from here-strings, not a pipe: a pipe would put
+# the loop in a subshell and discard the arrays it builds. Expansion results are
+# never re-scanned, so a hostile ref in "$managed" cannot inject.
+layout_decide() {
+  local role="$1" new_run="$2" label="$3"
+  local norm managed kind slot rid pane surface epoch s
+  norm="$(layout_normalize_tree)"
+  managed="$(printf '%s\n' "$norm" | layout_managed)"
+
+  # Pass A — winning pane per slot (duplicate slot: newest run-id epoch wins;
+  # losers are unmanaged from here on and never touched). All five indices stay
+  # initialized: the file is sourced under `set -u`, where a gap is fatal.
+  local slot_pane=("" "" "" "" "") slot_max=("" -1 -1 -1 -1) slot_ref=("" "" "" "" "")
+  while IFS=$'\t' read -r kind slot rid pane surface; do
+    [ "$kind" = impl ] || continue
+    epoch="${rid%%-*}"
+    # 2>/dev/null: a run-id too large for shell arithmetic loses, never errors.
+    if [ "$epoch" -gt "${slot_max[$slot]}" ] 2>/dev/null; then
+      slot_max[slot]="$epoch"; slot_pane[slot]="$pane"
+    fi
+  done <<< "$managed"
+
+  # Pass B — per-slot target refs and the oldest finished reusable surface.
+  local reuse_ref="" reuse_slot="" reuse_epoch=""
+  while IFS=$'\t' read -r kind slot rid pane surface; do
+    [ "$kind" = impl ] || continue
+    [ "$pane" = "${slot_pane[$slot]}" ] || continue
+    [ -n "${slot_ref[$slot]}" ] || slot_ref[slot]="$surface"
+    if layout_run_finished "$rid"; then
+      epoch="${rid%%-*}"
+      if [ -z "$reuse_ref" ] || [ "$epoch" -lt "$reuse_epoch" ]; then
+        reuse_ref="$surface"; reuse_slot="$slot"; reuse_epoch="$epoch"
+      fi
+    fi
+  done <<< "$managed"
+
+  if [ "$role" = implementer ]; then
+    if [ -n "$reuse_ref" ]; then
+      printf 'PLAN: reuse %s\n' "$reuse_ref"
+      printf 'TITLE: %s\n' "$(layout_compose_title "impl.$reuse_slot" "$new_run" "$label")"
+      return 0
+    fi
+    local missing=""
+    for s in 1 2 3 4; do [ -n "${slot_pane[$s]}" ] || { missing="$s"; break; }; done
+    if [ -n "$missing" ]; then
+      # Split table (spec): deps are well-founded — 2,3 need 1; 4 needs 2; a
+      # missing slot 1 is env-implicit from main again, so lowest-missing-first
+      # self-heals user-closed slots.
+      case "$missing" in
+        1) printf 'PLAN: split right env\n' ;;
+        2) printf 'PLAN: split down %s\n'  "${slot_ref[1]}" ;;
+        3) printf 'PLAN: split right %s\n' "${slot_ref[1]}" ;;
+        4) printf 'PLAN: split right %s\n' "${slot_ref[2]}" ;;
+      esac
+      printf 'TITLE: %s\n' "$(layout_compose_title "impl.$missing" "$new_run" "$label")"
+      return 0
+    fi
+    # Tab overflow: fewest surfaces wins, ties go to the LOWEST slot — hence
+    # strict -lt, which leaves an equal count on the slot already chosen.
+    local best_slot="" best_count=0 count
+    for s in 1 2 3 4; do
+      count="$(printf '%s\n' "$norm" | awk -F'\t' -v p="${slot_pane[$s]}" '$1==p' | grep -c .)"
+      if [ -z "$best_slot" ] || [ "$count" -lt "$best_count" ]; then best_slot="$s"; best_count="$count"; fi
+    done
+    printf 'PLAN: tab %s\n' "${slot_pane[$best_slot]}"
+    printf 'TITLE: %s\n' "$(layout_compose_title "impl.$best_slot" "$new_run" "$label")"
+    return 0
+  fi
+
+  # aux path. Aux pane = pane with >=1 aux surface and NO impl surface (impl
+  # wins mixed panes); among several, the one holding the newest aux run-id.
+  local aux_pane="" aux_newest=-1 aux_reuse_ref="" aux_reuse_epoch=""
+  while IFS=$'\t' read -r kind slot rid pane surface; do
+    [ "$kind" = aux ] || continue
+    # END {exit found} inverts the sense: this pane HAVING an impl surface exits
+    # non-zero, so `|| continue` drops it. Uninitialized found => exit 0 => keep.
+    printf '%s\n' "$managed" | awk -F'\t' -v p="$pane" '$1=="impl" && $4==p {found=1} END {exit found}' || continue
+    if [ "${rid%%-*}" -gt "$aux_newest" ] 2>/dev/null; then aux_newest="${rid%%-*}"; aux_pane="$pane"; fi
+  done <<< "$managed"
+  if [ -n "$aux_pane" ]; then
+    while IFS=$'\t' read -r kind slot rid pane surface; do
+      [ "$kind" = aux ] || continue
+      [ "$pane" = "$aux_pane" ] || continue
+      if layout_run_finished "$rid"; then
+        epoch="${rid%%-*}"
+        if [ -z "$aux_reuse_ref" ] || [ "$epoch" -lt "$aux_reuse_epoch" ]; then
+          aux_reuse_ref="$surface"; aux_reuse_epoch="$epoch"
+        fi
+      fi
+    done <<< "$managed"
+    if [ -n "$aux_reuse_ref" ]; then printf 'PLAN: reuse %s\n' "$aux_reuse_ref"
+    else printf 'PLAN: tab %s\n' "$aux_pane"; fi
+  else
+    # No aux column yet: prefer splitting off a right-column slot, else let cmux
+    # target env-implicitly from main (spec: Aux path fallbacks).
+    local fb="env"
+    if [ -n "${slot_ref[3]}" ]; then fb="${slot_ref[3]}"
+    elif [ -n "${slot_ref[4]}" ]; then fb="${slot_ref[4]}"; fi
+    printf 'PLAN: aux-create %s\n' "$fb"
+  fi
+  printf 'TITLE: %s\n' "$(layout_compose_title aux "$new_run" "$label")"
+}

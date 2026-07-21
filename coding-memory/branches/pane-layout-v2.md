@@ -118,6 +118,68 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
     `/private/var/…`) while `layout_run_finished` builds from `PANE_STATE_DIR`
     unnormalized. Same file on macOS.
 
+- **Task 5 (`cmux-layout.sh` part 2 — decision algorithm + title composition) — DONE
+  2026-07-21.** `layout_compose_title` (right-truncate at 64, prefix always survives;
+  empty run-id ⇒ bare unmanaged label) and `layout_decide` (tree JSON on stdin → one
+  `PLAN:` line + one `TITLE:` line) appended to `panes/adapters/cmux-layout.sh`; 14 new
+  cases in `cmux-layout.test.sh`. **26/0 green** (12 from Task 4 + 14 new);
+  `shellcheck -x` clean on both. Sibling `adapters.test.sh` still 24/0 — `cmux.sh` does
+  not source the helper until Task 6.
+  - **RED first (Step 2, 12 passed / 14 failed):** every new case RED with
+    `layout_decide: command not found` / `layout_compose_title: command not found`;
+    Task 4's twelve stayed green. **Zero vacuous passes this time** — checked explicitly,
+    since Task 3 had one (`garbage --role`) and Task 4 had two. The `PLAN:`/`TITLE:`
+    assertions all compare against non-empty expected text, so a missing function cannot
+    satisfy them.
+  - **Correction 8 — every `tree` call in the plan's Task 5 tests was malformed.** They
+    passed `pane()` blobs straight into `tree()`'s workspaces slot, skipping the
+    `workspace()` level Task 4 built. This does **not** fail loudly:
+    `layout_normalize_tree` uses recursive descent (`..`), so a malformed tree still
+    yields the right surfaces and every assertion still passes — silently re-introducing
+    the exact builder-drift hazard Correction 3 was written to eliminate. All eight
+    fixtures (`t_empty`, `t_s1`, `t_s124`, `t_full`, `t_dup`, `t_noaux`, `t_aux`,
+    `t_mixed`) now go through `workspace workspace:1`.
+  - **Correction 9 — the plan's reuse falsification could not discriminate.** With only
+    ONE finished surface in `t_s124`, "oldest finished wins" passes whichever way the
+    comparison points, so the mutation would not have gone red. The case now marks **two**
+    surfaces finished (`1700000002-1-1` → surface:30, `1700000003-1-1` → surface:50) and
+    asserts the older epoch's surface is picked.
+  - **Explicit run-state resets.** Task 4's finished-check cases left `1700000001-1-1`
+    marked finished and the new cases mark/unmark four more run-ids; a stale `agent-exit`
+    silently turns a create into a reuse. Added a `running()` helper (mkdir + `rm -f`
+    marker) and reset every run-id each case touches instead of assuming — including
+    `1700000003-1-1`, which the plan never resets after Correction 9 marks it done and
+    which `t_full`/`t_noaux` both need RUNNING.
+  - **Falsification (all three run against the final code, each reverted; file restored
+    and re-verified 26/0):**
+    1. Reuse pick `-lt` → `-gt` → `finished slot reused before growth (oldest finished)`
+       RED (picks surface:50, the newer epoch). 25/1.
+    2. Split-table slot-3 / slot-4 targets swapped → `lowest missing slot (3) from slot1`
+       RED. 25/1. *First attempt's `perl -0pi` regex silently did not match and the suite
+       stayed green — a no-op mutation reads exactly like a passing falsification. Redone
+       with an asserted anchor (`assert s.count(a)==1`) before the write.*
+    3. Tab tie-break `-lt` → `-le` → `full busy quadrant -> tab fewest-surfaces, tie
+       lowest slot` RED (got `tab pane:5`, i.e. a tie starts selecting the *highest* slot).
+       25/1. Added beyond the plan's two, since nothing else pinned tie direction.
+  - **Deviations from the plan snippet.** (a) The three classification loops read from
+    here-strings (`done <<< "$managed"`) rather than the plan's `<<EOF` heredocs —
+    identical semantics (a pipe would subshell away the arrays), no column-0 `EOF`
+    markers breaking the function's indentation. Expansion results are never re-scanned,
+    so neither form can inject from a hostile ref. (b) Three array *assignment* subscripts
+    written bare (`slot_max[slot]=`) to clear SC2004; the read side keeps `${slot_max[$slot]}`,
+    which shellcheck does not flag. Task 4's file was lint-clean and stays that way.
+  - **Verified, not assumed (bash 3.2 is the interpreter here — `/bin/bash` 3.2.57):**
+    `local a=("" …) b=("" -1 …)` multi-array on one line works; `awk 'END {exit found}'`
+    with `found` uninitialized exits **0** (so a pane with no impl surface is kept as an
+    aux candidate — the inverted sense the comment documents); `grep -c .` on empty input
+    prints `0` and exits **1**, which is safe only because `cmux.sh` is `set -u` and not
+    `set -e` — worth remembering before Task 6 adds flags.
+  - **Documented deviation from the spec's wording, carried from the plan:** the spec says
+    a slot is FINISHED ⇔ *every* impl surface on it has a marker, but reuse here is
+    per-SURFACE (any finished impl surface, oldest run-id epoch first). The Gherkin
+    "only slot 2's run-id has a marker" scenario pins the per-surface reading; the
+    function's header comment records it.
+
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
 Re-runnable via `panes/cmux-layout-probe.sh` after any cmux upgrade. Findings recorded
