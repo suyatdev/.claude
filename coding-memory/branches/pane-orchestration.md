@@ -96,3 +96,4 @@ left in place.)
 ## Final-review fix wave (2026-07-21)
 
 Whole-branch review at HEAD 747a715 — one wave, 5 findings, TDD RED→GREEN each: F1 (Important) unique default result path `$agent-$(date +%s)-$$-$RANDOM.md`; F2 (Important) guard honors the `adapter-failed-nosession` cooldown key (env-drift deny loop); F3 wait `|| sleep "$POLL_SECS"` instead of `|| true` (no hot-spin); F4 relative `--result-file` canonicalized to absolute at parse time; F5 watcher conditions the pane-ready additionalContext on the handoff dispatch's exit. Suites green: dispatcher 33, guard 14, watcher 19; regression sweep 9/24/6; shellcheck clean on all six touched files. Report: `.superpowers/sdd/task-12-report.md`.
+- Final review fix wave ad5e59f re-reviewed: all 5 confirmed fixed, READY TO MERGE (2026-07-21).

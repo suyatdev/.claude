@@ -5,18 +5,17 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (plan session, Opus 4.8) · last_active_branch: feature/pane-orchestration
-- current work: **pane-orchestration — PLAN WRITTEN 2026-07-21
-  (`docs/superpowers/plans/2026-07-21-pane-orchestration.md`, 12 TDD tasks). Spec approved
-  as-is (compliance PASS r2, obs risk=low; three obs advisories folded into the plan).
-  Next: implementation model gate + execution mode — see Next Steps 0c.** Real separate
-  headless Claude sessions in terminal panes for substantial agents (judges + plan
-  implementers), file contract + wait, all four terminal adapters, 75k context-handoff
-  pane. **Supersedes judge-terminal-enforcement — ADR 0007.**
-  **Plan flags one spec ADDITION for user review: pane runner passes
-  `--dangerously-skip-permissions`** (machine-wide posture — shell alias + cmux launch
-  argv already use it; a headless `-p` without it auto-denies non-allowlisted tools and
-  kills agents mid-run; the flag skips prompts, not hooks/guards).
+- session_origin: desktop · session_started_at: 2026-07-21 (impl session, Fable 5 controller + Opus subagents) · last_active_branch: feature/pane-orchestration
+- current work: **pane-orchestration — IMPLEMENTATION COMPLETE 2026-07-21, final review
+  READY TO MERGE at ad5e59f.** All 12 plan tasks executed subagent-driven, each task-reviewed
+  clean (commits 322aaaa..747a715); final whole-branch review (Fable) found 2 Important
+  cross-task seams + 3 Minors, all fixed test-first in ad5e59f, re-review confirmed clean.
+  Live cmux smoke PASSED (real pane, PONG, sentinel). Hooks live since Task 11 (watcher
+  fired once this session — designed). Spec addition `--dangerously-skip-permissions`
+  USER-APPROVED 2026-07-21; user also set global defaultMode=bypassPermissions (79495c5).
+  Full per-task history + accepted-debt triage: `.superpowers/sdd/progress.md` (RUN section)
+  and `coding-memory/branches/pane-orchestration.md`. **Next: obs judge from a FRESH
+  session (first live pane-guard exercise), then PR — see Next Steps 0c.**
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -152,20 +151,20 @@ how this file and its linked files should be written (plain language, major chan
    Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
    into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
    ever observed (spec-guard remedy).
-0c. **Pane orchestration — PLAN WRITTEN 2026-07-21 on Opus 4.8**
-   (`docs/superpowers/plans/2026-07-21-pane-orchestration.md`; spec approved as-is,
-   compliance PASS r2 fresh at 468387a). All three obs advisories folded into plan tasks
-   (T9 watcher flag-first, T6+T8 session-id source + divergence warning, T1 ADR fix).
-   Planning resolved the spec's open questions: cmux `new-split` verified live from
-   non-TTY (env-targeted, `OK surface:N workspace:M`); matcher = register `Task|Agent`
-   both; wait >10min = background Bash (skill); `--agent` loading = T2 spike.
-   **Spec addition needing user eyes: runner passes `--dangerously-skip-permissions`
-   (see Active Session).** DECIDED 2026-07-21: execution = **subagent-driven**
-   (`superpowers:subagent-driven-development`), in a **fresh session**. Next session, in
-   order: (1) implementation model gate [CRITICAL] — ask before any code; (2) execute the
-   plan task-by-task with per-task review + `verifying-subagent-commits`; (3) after
-   implementation: observability judge from a NEW session (first live exercise of the new
-   guard), then PR.
+0c. **Pane orchestration — IMPLEMENTED 2026-07-21, ready-to-merge at ad5e59f.** 12/12 tasks
+   subagent-driven (Opus implementers/reviewers per user gate), all task reviews clean;
+   pre-flight found 2 plan test defects (user ruled: fix + log as deviations), reviewers
+   ratified 3 more same-class test fixes + shellcheck-disable precedent. Final whole-branch
+   review (Fable) → fix wave ad5e59f (result-file `$$-$RANDOM` uniqueness; guard `nosession`
+   cooldown key; wait sleep-on-fail; relative result-file canonicalized; watcher no longer
+   overclaims on failed handoff) → re-review READY TO MERGE, remaining Minors ACCEPTED-DEBT
+   (triage table in ledger). Remaining, in order: (1) **fresh session → observability judge
+   (impl stage)** — the redirect guard is now LIVE, so the judge dispatch itself is its first
+   live acceptance test (expect deny + pane redirect via `dispatching-pane-agents` skill);
+   (2) after verdict, **do not commit before `gh pr create`** (strict freshness), open the PR
+   (`preparing-pull-requests`); (3) post-merge watch items: first concurrent two-implementer
+   pane dispatch; `nosession` cooldown is shared across env-less sessions (fail-open, 7-day
+   window). Branch pushed; only chrome/chrome-native-host stays uncommitted (machine-local).
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
