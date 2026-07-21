@@ -137,16 +137,19 @@ surface titles survive `restore-session` after an app restart is UNVERIFIED — 
 adapter sees unmanaged panes and starts fresh splits (degraded: possible extra panes; never
 broken). Flag in spec, don't probe.
 
-## Next step (fresh session)
+## Next step (fresh session) — DESIGN SECTIONS DONE, WRITE THE DOC
 
-Present design sections per superpowers:brainstorming, approval after each: (1) architecture
-overview + component boundaries (dispatcher hint vs. adapter smarts); (2) title convention +
-role/slot derivation rules from `tree --json`; (3) dispatch decision algorithm (reuse →
-progressive split → tab overflow, exact split-direction sequence, far-right aux path);
-(4) error handling/degradation (jq missing, tree call fails, title collisions —
-degrade-never-block); (5) testing (both suites; how to fake `cmux` in tests). Then design
-doc → `docs/superpowers/specs/`, self-review, compliance+observability judges, user review,
-writing-plans. Pre-implementation model gate still open.
+**ALL FIVE design sections APPROVED 2026-07-21 (same-day resume session; drafts below are
+the approved content, including the section-3 slot-number amendment to section 2's grammar
+and the aux-reuse extension).** Remaining flow: (1) write the design doc from the approved
+sections → `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md` (include the four
+flagged assumptions + the beyond-Q&A aux-reuse extension explicitly; Mermaid diagram of the
+dispatch decision flow per diagramming-technical-docs); (2) spec self-review (inline);
+(3) compliance + observability judges in parallel per running-the-compliance-judge (pane-
+dispatched); (4) user review gate; (5) superpowers:writing-plans. **Model: user directed
+Opus 4.8 for writing-plans + implementation** (formal pre-implementation gate still gets
+asked at code start); spec writing + judge rounds stay on the session's current model
+unless the user says otherwise.
 
 ## Design section drafts (presented one at a time per superpowers:brainstorming)
 
@@ -278,7 +281,7 @@ dumb path's failure escalates to cooldown.** PR #23's cooldown contract keeps it
   existing adapter call; degradation policy targets errors, not hangs (macOS lacks stock
   `timeout(1)`; adding machinery = YAGNI until a hang is ever observed).
 
-### Section 5 — Testing (drafted 2026-07-21; PRESENTED, awaiting approval)
+### Section 5 — Testing (APPROVED 2026-07-21 — ALL FIVE SECTIONS NOW APPROVED)
 
 (Ground truth: suites are `panes/adapters.test.sh` (table-driven dry-run + validation, no
 real panes), `dispatch-pane-agent.test.sh`, `run-pane-agent.test.sh`; the 4 adapters are

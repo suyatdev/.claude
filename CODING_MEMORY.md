@@ -30,11 +30,16 @@ how this file and its linked files should be written (plain language, major chan
   across `restore-session` unverified → degrade to fresh splits. Full record:
   `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered
   2026-07-21: stay Fable 5 for this brainstorm (implementation gate still open).
-  **Resume session 2026-07-21 (post-clear): section 1 (architecture/boundaries) drafted +
-  presented — awaiting approval; draft recorded in the brainstorm file §"Design section
-  drafts". Model routing recommended to user: Fable 5 through spec+judges, Opus 4.8 for
-  writing-plans + implementation (gate formally asked at code start). Handoff checkpoint
-  at ~77k tokens.**
+  **Resume session 2026-07-21 (post-clear): ALL FIVE design sections PRESENTED and
+  APPROVED one-by-one (arch/boundaries; title grammar + slot derivation with on-disk
+  agent-exit marker; decision algorithm with slot-numbered titles `impl.<slot>:<run-id>`
+  + split table + aux-reuse extension; two-tier degradation; 3-layer testing with
+  PANE_CMUX_BIN fake + falsification-by-mutation). Approved drafts + 4 flagged
+  assumptions: brainstorm file §"Design section drafts". NEXT (fresh session): write
+  design doc → docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md, self-review,
+  both judges, user review, writing-plans. Model: user directed Opus 4.8 for
+  writing-plans + implementation (formal gate at code start). Session ended at ~100k by
+  checkpoint+clear.**
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
