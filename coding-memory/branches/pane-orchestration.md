@@ -33,3 +33,62 @@ Planning-time findings (2026-07-21):
 - Task 8: pane-dispatch-guard, 13/13. Deviation (impl-only, repo convention): 2 inline `# shellcheck disable=SC2016` on the two deny-message printf lines whose single-quoted format strings show `"$HOME"` literally to the model (expanding it would be wrong); brief code transcribed verbatim otherwise, directives added to meet the brief's shellcheck-clean bar (same pattern as Tasks 5/6). Test file transcribed verbatim, no test defects.
 - Task 10: pane early-exit in 5 handoff hooks. Identical `CLAUDE_PANE_AGENT` guard inserted after `set -euo pipefail`, before first state-touching statement, in all 5. Verify: 5 ok early-exits + exit=0 no-regression. shellcheck: my insertion clean; proactive-handoff's 5 pre-existing `cleanup_state` findings (HEAD==WT) left untouched (not a drive-by task).
 - Task 11: hooks wired, skill + gates + catalogs.
+- Task 12: verification sweep — all suites green, shellcheck as expected, live cmux smoke PASSED.
+
+## Task 12 — verification sweep (2026-07-21)
+
+**Test suites (8, all `0 failed`, 117 assertions total):**
+
+| suite | result |
+| --- | --- |
+| panes/terminal-detect.test.sh | 9 passed, 0 failed |
+| panes/adapters.test.sh | 24 passed, 0 failed |
+| panes/run-pane-agent.test.sh | 6 passed, 0 failed |
+| panes/dispatch-pane-agent.test.sh | 30 passed, 0 failed |
+| hooks/pane-dispatch-guard.test.sh | 13 passed, 0 failed |
+| hooks/context-handoff-watch.test.sh | 13 passed, 0 failed |
+| hooks/judge-guard.test.sh (regression) | 17 passed, 0 failed |
+| hooks/memsearch-nudge.test.sh (regression) | 5 passed, 0 failed |
+
+Both pre-existing regression suites still green — no collateral damage.
+
+**shellcheck (`shellcheck -x panes/*.sh panes/adapters/*.sh hooks/pane-dispatch-guard.sh hooks/context-handoff-watch.sh hooks/handoff/*.sh`):**
+Clean on every branch-authored/branch-touched script. The only findings are 5 pre-existing
+ones in `hooks/handoff/proactive-handoff.sh` `cleanup_state()` (lines 122/129/131/138 SC2016 info
+on single-quoted `sed`/`grep` regex programs, line 125 SC2034 `remove_count` unused). Confirmed
+pre-existing: `git diff main -- hooks/handoff/proactive-handoff.sh` is only the 4-line
+`CLAUDE_PANE_AGENT` guard at line 15 (Task 10); those `cleanup_state` lines are byte-identical to
+`main`. Left unfixed per root-cause discipline — not a drive-by fix of vendored code (already noted
+at Task 10).
+
+**Live cmux smoke (acceptance scenario 1, real):**
+- Dispatch: `panes/dispatch-pane-agent.sh dispatch pane-echo --prompt-file /tmp/pane-smoke-prompt.md --cwd "$HOME/.claude"` → exit 0, printed `TERMINAL: cmux`, `PANE_REF: surface:40`, `RESULT_FILE: .../scratchpad/pane-results/pane-echo-1784617055.md`.
+- Pane opened in the **current** workspace (workspace:5, this session's). `cmux tree` shows
+  `surface:40 [terminal] "pane: pane-echo" ... tty=ttys015` — a live interactive shell; the
+  in-pane banner is run-pane-agent's `=== pane agent: pane-echo ===`.
+- Wait: `panes/dispatch-pane-agent.sh wait --result-file <rf> --timeout 300` → exit 0; printed
+  `PONG` then `PANE_RESULT: DONE`.
+- Result file on disk: body `PONG`, final line exactly `PANE_RESULT: DONE\n` (od-verified). New run
+  dir `1784617055-87037-30548` mode 700 with `launch.sh` (700) + `prompt.md`; launcher ends
+  `exec /bin/zsh -i`, so the pane stays open for inspection.
+- Timing: dispatch 02:57:35, result present by first `wait` poll at 02:57:45 (haiku pane-echo, far
+  under the 300s timeout).
+
+**SPEC ADDITION — flagged again for user review:** pane invocations pass
+`--dangerously-skip-permissions` (`run-pane-agent.sh`). It matches the machine-wide posture (shell
+alias `claude --allow-dangerously-skip-permissions` + cmux launch argv) and is required — without it
+a headless pane auto-denies non-allowlisted tool calls and the agent dies mid-task. It skips
+permission prompts, not hooks/guards (recursion guard `CLAUDE_PANE_AGENT` still exported; the smoke
+run confirmed hooks/CLAUDE.md still load since `--bare` is deliberately not used). **Please confirm
+this posture during review.**
+
+**Live guard/watcher verification deferred to first NEW session after merge:** the
+`pane-dispatch-guard` (PreToolUse) and `context-handoff-watch` (PreCompact/context) hooks load at
+session start from `settings.json`; this session began before the Task 11 wiring landed, so it
+cannot exercise them live. Their unit suites pass (13/13 each). First live proof is the
+post-merge observability-judge dispatch: from a fresh session the guard should, for the first time
+live, deny the in-process judge and route it through a pane — that dispatch is the guard's live
+acceptance test. (Note: the 75k watcher already fired once mid-session after the wiring went live —
+flag `panes/state/handoff-fired-93770c21-…` + run dir `1784616541-80835-24061` + the live
+`surface:39 "handoff: press Enter"` pane — designed once-per-session behavior, not stale state;
+left in place.)
