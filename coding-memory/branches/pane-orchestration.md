@@ -22,3 +22,5 @@ Planning-time findings (2026-07-21):
   older than 7 days on every invocation.
 
 ## Progress
+
+- Task 2: toolchain verified (shellcheck 0.11.0); pane-echo fixture; --agent spike PASSED headless.
