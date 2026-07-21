@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# Pane agent sessions must not clobber the interactive session's handoff state
+# (pane-orchestration spec, error-handling table).
+[ -n "${CLAUDE_PANE_AGENT:-}" ] && exit 0
+
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 mkdir -p "$REPO_ROOT/.claude"

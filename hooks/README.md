@@ -107,6 +107,24 @@ It does **not** block:
 
 **The skill asks the questions; the hook makes sure they actually get asked.**
 
+### `pane-dispatch-guard.sh`
+
+PreToolUse, matcher `Task|Agent`. Denies in-process dispatch of subagent types
+listed in `panes/redirect-agents.conf` (the two judges) when
+`panes/terminal-detect.sh` finds a supported terminal, redirecting the model to
+`panes/dispatch-pane-agent.sh`. Fails open on parse errors, missing conf, no
+terminal, `CLAUDE_PANE_AGENT=1`, or a per-session `adapter-failed-*` cooldown
+flag — every fallback is today's in-process behavior. Momentum redirect, not a
+security boundary.
+
+### `context-handoff-watch.sh`
+
+PostToolUse, matcher `*`. Once per session, when the transcript's last assistant
+usage entry sums to ≥75k tokens, it writes a fired-flag, prepares a press-Enter
+handoff pane (`dispatch-pane-agent.sh handoff`), and nudges the freshness
+checkpoint via `additionalContext`. The fired-flag check precedes any transcript
+parsing, so after firing the per-call cost is one stat. Never blocks.
+
 ---
 
 ## They fail loud, not silent

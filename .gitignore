@@ -8,6 +8,10 @@
 # Statusline cumulative-token counters (machine-specific, regenerable)
 /statusline-state/
 
+# Pane-orchestration runtime state (session flags + per-run launchers, which
+# contain copied prompts — machine-local, never committed)
+/panes/state/
+
 # Backup files
 settings.json.bak
 backups/

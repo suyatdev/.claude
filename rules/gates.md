@@ -18,3 +18,5 @@ Judgment-based checkpoints that must never be silently skipped. Each stub is del
   verdict blocks `superpowers:writing-plans`. Persistent violations escalate to the user, never silently waived.
   Not hook-enforced (a `spec-guard` hook is deferred until this gate is observed being skipped).
   Procedure: `running-the-compliance-judge`.
+- **Pane-dispatch redirect:** substantial agents run in terminal panes, not in-process — the two judges are hook-enforced (`hooks/pane-dispatch-guard.sh` denies their Agent dispatch when a terminal is available; fails open, with a per-session cooldown after an adapter failure), plan implementers are skill-routed. Procedure: `dispatching-pane-agents`.
+- **Context-handoff watch:** at ≥75k session tokens `hooks/context-handoff-watch.sh` nudges the freshness checkpoint and prepares a press-Enter handoff pane, once per session — the automated arm of the session-freshness checkpoint above; the save-then-clear order still holds.

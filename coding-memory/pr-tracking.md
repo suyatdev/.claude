@@ -222,3 +222,19 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - lesson: committing a branch's judge trail *after* its PR merges strands it — the verdict
   files belong in the same commit train as the source, or in a follow-up before merge. Here
   the cherry-pick + follow-up PR was the clean recovery once already stranded.
+
+### PR #23 — feature/pane-orchestration
+- repo: suyatdev/.claude · branch: feature/pane-orchestration · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/23 · status: OPEN (created 2026-07-21)
+- opened_by session_origin: desktop · last push: desktop
+- scope: pane orchestration — panes/ dispatcher + 4 adapters, pane-dispatch-guard.sh,
+  context-handoff-watch.sh, dispatching-pane-agents skill, pane-echo fixture, gate stubs,
+  settings.json hook wiring, ADR 0007, spec + plan. Rider: 79495c5 (global
+  defaultMode=bypassPermissions, user-requested).
+- judge (impl @ 5c846b2): risk=low conf=high, outcome=null. PR created BEFORE committing the
+  audit trail (strict freshness), trail committed to the branch immediately after — the PR #22
+  lesson applied.
+- live acceptance during PR session: guard denied in-process judge dispatch → cmux pane →
+  result-file DONE; context-handoff-watch fired at ~76k and staged the handoff pane.
+- post-merge watch: first concurrent two-implementer dispatch; adapter-failed-nosession
+  cooldown; second adapter (tmux/iTerm) live test; bypassPermissions ADR question.

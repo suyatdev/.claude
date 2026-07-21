@@ -1,6 +1,6 @@
 {
   "permissions": {
-    "defaultMode": "acceptEdits"
+    "defaultMode": "bypassPermissions"
   },
   "model": "claude-fable-5[1m]",
   "hooks": {
@@ -27,6 +27,15 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/merge-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/pane-dispatch-guard.sh"
           }
         ]
       },
@@ -164,6 +173,15 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/handoff/post-edit-hook.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/context-handoff-watch.sh"
           }
         ]
       }

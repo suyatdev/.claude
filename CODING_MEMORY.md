@@ -5,15 +5,16 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (new session) · last_active_branch: main
-- current work: **pane-orchestration brainstorm — design approved, spec written
-  (`docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`), pending compliance +
-  observability judges, then user review.** Real separate headless Claude sessions in terminal
-  panes for substantial agents (judges + plan implementers), file contract + wait, all four
-  terminal adapters (cmux/tmux/iTerm2/Terminal.app), 75k context-handoff pane (prepare,
-  user presses Enter). **Supersedes judge-terminal-enforcement — ADR 0007** (user chose
-  absorb-old-into-new 2026-07-21; gate-moment verify-else-spawn dropped, dispatch-time
-  redirect kept; always-run guarantee unchanged from today).
+- session_origin: desktop · session_started_at: 2026-07-21 (PR session, Fable 5) · last_active_branch: feature/pane-orchestration
+- current work: **pane-orchestration — PR #23 OPEN 2026-07-21**
+  (https://github.com/suyatdev/.claude/pull/23). Obs judge (impl @ 5c846b2): **risk=low
+  conf=high**; PR created before committing the audit trail (strict freshness), trail
+  committed to the branch right after. Live acceptances this session: pane-dispatch-guard
+  denied the in-process judge → cmux pane → result-file DONE; judge-guard passed
+  `gh pr create` on the fresh verdict; context-handoff-watch fired at ~76k and staged the
+  handoff pane. **Next: user merges via GitHub UI — see Next Steps 0c for judge flags +
+  post-merge watch items.** Per-task history: `.superpowers/sdd/progress.md` (RUN section)
+  and `coding-memory/branches/pane-orchestration.md`.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -25,12 +26,13 @@ how this file and its linked files should be written (plain language, major chan
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
-- Carried over, still open: **Orca hooks in `settings.json` deliberately uncommitted** (third-party,
-  machine-local, absolute paths; user's call pending; `claude-hook.sh` sources
-  `$ORCA_AGENT_HOOK_ENDPOINT` before its token check and that stdout becomes hook stdout — a channel
-  into the agent control plane). Untracked `chrome/`, `telemetry/`, `stats-cache.json` stay untracked
-  (machine-local; tree permanently dirty so the status line always shows `✗`; gitignore an open
-  question for the user).
+- **CORRECTED 2026-07-21 (was stale): the Orca hooks and the fable-model line are now IN
+  committed `settings.json`** (HEAD == live, last touched by a3aedc8 "Add merge guard") —
+  the old "stay uncommitted / dual-version staging" policy no longer reflects reality.
+  Whether committing them was intended is the user's call (flagged 2026-07-21). The Orca
+  channel caveat still stands: `claude-hook.sh` sources `$ORCA_AGENT_HOOK_ENDPOINT` before
+  its token check and that stdout becomes hook stdout. Untracked `chrome/`, `telemetry/`,
+  `stats-cache.json` stay untracked (machine-local; gitignore an open question).
 - 2026-07-19 session notes — statusline-edit authorship resolved as that session's own work,
   concurrent-session evidence, model-gate history (Sonnet 5 → Opus 4.8), `chore(settings):`
   precedent for model/theme changes: `coding-memory/branches/statusline-token-bar.md` and
@@ -148,10 +150,20 @@ how this file and its linked files should be written (plain language, major chan
    Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
    into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
    ever observed (spec-guard remedy).
-0c. **Pane orchestration (2026-07-21) — spec written, judges pending.** Next: compliance +
-   observability judges on the spec → user review gate → `superpowers:writing-plans` →
-   implement on `feature/pane-orchestration`. Spec:
-   `docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`; supersession: ADR 0007.
+0c. **Pane orchestration — PR #23 OPEN 2026-07-21** (judge impl @ 5c846b2 risk=low conf=high;
+   full detail `coding-memory/pr-tracking.md`, `coding-memory/branches/pane-orchestration.md`).
+   Awaiting user merge via GitHub UI. Judge flags for the user to weigh at merge time:
+   (a) rider 79495c5 flips global defaultMode=bypassPermissions — user-requested
+   but security-material, commit-message-only rationale; judge suggests a short ADR;
+   (b) only cmux is live-proven — tmux/iTerm/Terminal are dry-run green only, first real
+   iTerm failure fails open + cools down silently; (c) accepted debt: shared `nosession`
+   cooldown key can mute pane redirect for all env-less sessions up to 7 days — watch for
+   `adapter-failed-nosession`. Post-merge watch: first concurrent two-implementer pane
+   dispatch; live-verify a second adapter; backfill this verdict's `outcome` in
+   `coding-memory/observability-judge/verdicts.jsonl` once merge result is known. README has
+   no Roadmap section (55-line non-template README) — the feature-PR roadmap rule couldn't
+   apply; standardizing via `writing-project-readmes` is its own task if wanted. Only
+   chrome/chrome-native-host stays uncommitted (machine-local).
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
