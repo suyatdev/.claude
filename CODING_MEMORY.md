@@ -183,9 +183,20 @@ how this file and its linked files should be written (plain language, major chan
    **Task 4 (`cmux-layout.sh`) DONE + pushed (5da1cad)** — layout 12/0, siblings
    39/24/10/9 all 0 failed, `shellcheck -x` clean; all 4 falsifications RED and reverted
    (I independently re-ran the two jq ones: 7/5 and 11/1, restored byte-identical 12/0).
-   NEXT: **Task 5** (decision algorithm + title composition) of
-   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 6–8 →
+   **Task 5 (decide + title composition) DONE + pushed (8ad7d7a)** — layout 26/0, siblings
+   39/24/10/9 all 0 failed, `shellcheck -x` clean; 3 falsifications RED and reverted (I
+   re-ran the tab tie-break one myself: 25/1 → restored byte-identical 26/0).
+   **Correction 8:** every Task 5 test fixture called `tree "$(pane …)"`, skipping Task 4's
+   new `workspace` level — and would have PASSED anyway, because normalize uses recursive
+   descent. Silent builder drift, the exact hazard Task 4 existed to kill. All 8 fixtures
+   now wrap through `workspace workspace:1`. **Correction 9:** the plan's reuse
+   falsification couldn't discriminate with only one finished surface; needs two.
+   NEXT: **Task 6** (cmux.sh Tier-1 degradation shell / legacy floor / dryrun) of
+   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 7–8 →
    implementation-stage obs judge (OWED — not yet run; judge-guard blocks PR) → PR.
+   **Task 6 gotcha (verified on bash 3.2.57):** `grep -c .` on empty input prints 0 but
+   EXITS 1 — `layout_decide`'s tab-count loop is safe only because these files are `set -u`
+   and NOT `set -e`. Introducing `set -e` in Task 6 would break it.
    **Task 4 = plan corrections 5–7, all verified against the live fixture before dispatch:**
    (a) the normalize selector returns EMPTY (real shape keys each level's own ref as `ref`;
    surfaces carry `pane_ref`+`title`); (b) **the workspace filter was a SILENT TOTAL
