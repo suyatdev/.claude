@@ -2,7 +2,7 @@
   "permissions": {
     "defaultMode": "acceptEdits"
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -23,6 +23,20 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/judge-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/merge-guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
           }
         ]
       }
@@ -64,18 +78,116 @@
         "hooks": [
           {
             "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/handoff/live-handoff.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
           }
         ]
       }
     ],
     "PostToolUse": [
       {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/handoff/post-edit-hook.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -r '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ] && [ -x '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/marksuyat/.orca/agent-hooks/claude-hook.sh'; else cat >/dev/null 2>&1 || :; fi",
+            "timeout": 10
           }
         ]
       }
