@@ -177,9 +177,14 @@ how this file and its linked files should be written (plain language, major chan
 0-ACTIVE. **pane-layout-v2 — EXECUTING. Task 1 (live probe) DONE + pushed (ffe22d2)
    2026-07-21. Gates answered, do not re-ask: model = Opus 4.8 (user ran `/model`
    this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.
-   NEXT: Task 2 (agent-exit marker) of
-   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 3–8 →
+   **Task 2 (agent-exit marker) DONE + pushed (ba9a91b)** — first pane-routed implementer,
+   commit-verified + independently re-run (10/0, shellcheck clean). NEXT: Task 3
+   (`--role` flag / `PANE_AGENT_ROLE` / handoff rename) of
+   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 4–8 →
    implementation-stage obs judge → PR.
+   Task 2 note for later tasks: the plan's `> file 2>/dev/null` idiom does NOT suppress a
+   redirect failure (left-to-right); put the stderr redirect FIRST. Also
+   `dispatch-pane-agent.sh --role` does not exist until Task 3 lands — don't pass it.
    **The probe changed the plan in three places — full verbatim findings in
    `coding-memory/branches/pane-layout-v2.md` §Live probe; read it before Tasks 4/6/7:**
    (a) the real tree JSON shape differs from the plan's assumption at EVERY level (each
