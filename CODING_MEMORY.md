@@ -24,11 +24,12 @@ how this file and its linked files should be written (plain language, major chan
   `rename-tab --surface` sets titles. Recon round 3 (live probe): `--json new-split`
   RETURNS refs; `respawn-pane`/`close-surface` = slot-reuse primitives; refs die with the
   app process (persisted maps must revalidate → undermines slot-map approach).
-  **APPROACHES PROPOSED (A live-derived smart adapter — recommended / B persistent slot
-  map — killed / C dispatcher primitives — YAGNI); AWAITING USER PICK, then design
-  sections.** Full record: `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`.
-  Model gate re-answered 2026-07-21: stay Fable 5 for this brainstorm (implementation
-  gate still open).
+  **APPROACH A PICKED (live-derived smart cmux adapter; B killed by ref-lifetime, C YAGNI).
+  NEXT: design sections 1-5 (numbered list in the brainstorm file), approval after each,
+  then design doc + judges + user review + writing-plans.** Spec assumption: title survival
+  across `restore-session` unverified → degrade to fresh splits. Full record:
+  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered
+  2026-07-21: stay Fable 5 for this brainstorm (implementation gate still open).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.

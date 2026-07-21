@@ -102,7 +102,7 @@ The layout is fully expressible:
   dies with the cmux app process → **any persisted ref map must revalidate against live
   `tree` anyway** — directly undermines a persistent-slot-map approach.
 
-## Approaches proposed (2026-07-21 — awaiting user pick)
+## Approaches proposed (2026-07-21 — **USER PICKED A**)
 
 **A. Smart cmux adapter, live-derived layout (RECOMMENDED).** Dispatcher exports an optional
 role hint env var (e.g. `PANE_AGENT_ROLE=implementer|aux`); only `cmux.sh` reads it. Per
@@ -127,6 +127,26 @@ explicitly declined (cmux-only). YAGNI.
 
 Recommendation rationale: A is the only option with zero new persistent state, honors Q4's
 cmux-only scope, and the probe confirmed every primitive it needs.
+
+**DECIDED 2026-07-21: Approach A.** Pre-pick clarification asked and answered: A's layout
+state survives session handoffs by construction — the tree/titles live in the cmux app
+process and run results in `state/runs/`; no layout state exists in any Claude session's
+context, so any session re-derives identically. Only a cmux APP quit reissues refs; A never
+holds refs beyond one dispatch. **Design assumption to carry into the spec:** whether
+surface titles survive `restore-session` after an app restart is UNVERIFIED — if lost, the
+adapter sees unmanaged panes and starts fresh splits (degraded: possible extra panes; never
+broken). Flag in spec, don't probe.
+
+## Next step (fresh session)
+
+Present design sections per superpowers:brainstorming, approval after each: (1) architecture
+overview + component boundaries (dispatcher hint vs. adapter smarts); (2) title convention +
+role/slot derivation rules from `tree --json`; (3) dispatch decision algorithm (reuse →
+progressive split → tab overflow, exact split-direction sequence, far-right aux path);
+(4) error handling/degradation (jq missing, tree call fails, title collisions —
+degrade-never-block); (5) testing (both suites; how to fake `cmux` in tests). Then design
+doc → `docs/superpowers/specs/`, self-review, compliance+observability judges, user review,
+writing-plans. Pre-implementation model gate still open.
 
 ## Constraints to carry into the design
 
