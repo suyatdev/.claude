@@ -26,3 +26,4 @@ Planning-time findings (2026-07-21):
 - Task 2: toolchain verified (shellcheck 0.11.0); pane-echo fixture; --agent spike PASSED headless.
 - Task 3: terminal-detect.sh (9/9).
 - Task 4: adapter layer, 24/24 dry-run.
+- Task 5: runner + result contract, 6/6. Deviation: 2 `# shellcheck disable=SC2016` directives on deliberate single-quoted stub bodies (repo convention; meets brief's shellcheck-clean bar).
