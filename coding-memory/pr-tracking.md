@@ -241,3 +241,11 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   result-file DONE; context-handoff-watch fired at ~76k and staged the handoff pane.
 - post-merge watch: first concurrent two-implementer dispatch; adapter-failed-nosession
   cooldown; second adapter (tmux/iTerm) live test; bypassPermissions ADR question.
+
+### PR #24 — docs/pr23-outcome-backfill
+- repo: suyatdev/.claude · branch: docs/pr23-outcome-backfill · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/24 · status: OPEN (created 2026-07-21)
+- opened_by session_origin: desktop · last push: desktop
+- scope: docs-only. PR #23 close-out (memory index, pr-tracking, Merged list) + outcome=clean
+  backfill on 4 verdicts (5c846b2, fdbd7b9, 381bd79, c2b23fe). JUDGE_EXEMPT (docs-only,
+  PR #22 precedent). 16 nulls deliberately left pending a rework-vs-clean calibration policy.
