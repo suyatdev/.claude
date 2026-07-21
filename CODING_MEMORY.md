@@ -161,12 +161,13 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0-ACTIVE. **pane-layout-v2: review gate CLEARED + IMPLEMENTATION PLAN WRITTEN
-   (`docs/superpowers/plans/2026-07-21-pane-layout-v2.md`). NEXT = Hard Model Gate (standing
-   direction Opus 4.8) → execute the plan on `feature/pane-layout-v2`** (subagent-driven
-   per the plan header; plan-task implementers are PANE-routed per dispatching-pane-agents)
-   → implementation-stage obs judge → PR. Task 1 (live probe) runs FIRST and gates the
-   rest; judge implementation notes are in the CURRENT block above.
+0-ACTIVE. **pane-layout-v2: plan WRITTEN + BOTH GATES ANSWERED 2026-07-21 (explicit user
+   choices, do not re-ask): Hard Model Gate = Opus 4.8 in a FRESH session; execution =
+   SUBAGENT-DRIVEN (superpowers:subagent-driven-development; implementers PANE-routed per
+   dispatching-pane-agents). NEXT SESSION (Opus 4.8, on `feature/pane-layout-v2`): execute
+   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` task-by-task — Task 1 (live
+   probe) FIRST, it gates the rest** → implementation-stage obs judge → PR. Judge
+   implementation notes are in the CURRENT block above.
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
