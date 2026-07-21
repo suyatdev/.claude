@@ -171,14 +171,17 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Exact Next Steps
 0-ACTIVE. **pane-layout-v2: plan WRITTEN + BOTH GATES ANSWERED 2026-07-21 (explicit user
-   choices, do not re-ask): Hard Model Gate = Opus 4.8 in a FRESH session; execution =
+   choices, do not re-ask): Hard Model Gate = Opus 4.8; execution =
    SUBAGENT-DRIVEN (superpowers:subagent-driven-development; implementers PANE-routed per
-   dispatching-pane-agents). NEXT SESSION (Opus 4.8, on `feature/pane-layout-v2`): execute
+   dispatching-pane-agents). NEXT: execute
    `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` task-by-task — Task 1 (live
    probe) FIRST, it gates the rest** → implementation-stage obs judge → PR. Judge
-   implementation notes are in the CURRENT block above. **Launch caveat (resume #5
-   stopped here): start the session with `claude --model claude-opus-4-8` — plain
-   `claude` and the handoff pane both default to Fable 5 via settings.json.**
+   implementation notes are in the CURRENT block above. **Resume #6 (Sonnet 5): gate
+   re-triggered again (session ran Sonnet 5, not Opus 4.8). User chose to switch models
+   IN-SESSION via `/model claude-opus-4-8` rather than relaunch — STILL PENDING, ask has
+   not been run yet; block Task 1 until it is. Also found: settings.json's `model` field
+   is unstable — a `fable-5`→`sonnet` edit self-reverted within ~1 min with no git hook
+   involved, so don't trust an old diff of it; re-`grep` fresh before acting.**
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
