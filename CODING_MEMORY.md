@@ -160,10 +160,12 @@ how this file and its linked files should be written (plain language, major chan
    non-TTY (env-targeted, `OK surface:N workspace:M`); matcher = register `Task|Agent`
    both; wait >10min = background Bash (skill); `--agent` loading = T2 spike.
    **Spec addition needing user eyes: runner passes `--dangerously-skip-permissions`
-   (see Active Session).** Next, in order: (1) implementation model gate [CRITICAL],
-   (2) execution mode — subagent-driven (recommended) or inline `executing-plans` —
-   likely fresh session per session-budget preference; (3) after implementation:
-   observability judge from a NEW session (first live exercise of the new guard), then PR.
+   (see Active Session).** DECIDED 2026-07-21: execution = **subagent-driven**
+   (`superpowers:subagent-driven-development`), in a **fresh session**. Next session, in
+   order: (1) implementation model gate [CRITICAL] — ask before any code; (2) execute the
+   plan task-by-task with per-task review + `verifying-subagent-commits`; (3) after
+   implementation: observability judge from a NEW session (first live exercise of the new
+   guard), then PR.
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
