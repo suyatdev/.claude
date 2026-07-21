@@ -153,7 +153,7 @@ how this file and its linked files should be written (plain language, major chan
    hooks/CLAUDE.md, API-key-only auth). Three obs advisories deliberately NOT applied to
    the spec — **fold into the implementation plan**: (1) watcher checks fired-flag before
    parsing transcript, (2) CLAUDE_CODE_SESSION_ID as dispatcher session-id source +
-   hook-side equivalence check, (3) ADR 0007 Options "four rounds"→six. Next: model gate →
+   hook-side equivalence check, (3) ADR 0007 Options "four rounds"→six. Next (model gate ANSWERED 2026-07-21: plan on Opus 4.8, fresh session):
    `superpowers:writing-plans` → implement on `feature/pane-orchestration`. Spec:
    `docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`; ADR 0007.
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
