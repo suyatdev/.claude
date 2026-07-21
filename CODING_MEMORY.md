@@ -5,19 +5,23 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-20 (3rd session) · last_active_branch: feature/add-claude-code-handoff
-- current work: **claude-code-handoff cherry-pick SHIPPED — PR #21 MERGED (3c58363, 2026-07-20
-  22:02Z); PR #22 MERGED (284478a) landed the stranded judge audit trail.** The `/clear` that
-  opened this session interrupted the checkpoint: PR #21's judge verdicts + writeups had been
-  committed to the branch as `77b59ad` *after* #21 already merged, so they never reached `main`.
-  Recovered by cherry-picking onto `main` via a docs-only PR #22 (`JUDGE_EXEMPT`, docs-only).
-  Full picks table: **ADR 0006**; execution detail: `coding-memory/branches/add-claude-code-handoff.md`.
+- session_origin: desktop · session_started_at: 2026-07-21 (new session) · last_active_branch: main
+- current work: **pane-orchestration brainstorm — design approved, spec written
+  (`docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`), pending compliance +
+  observability judges, then user review.** Real separate headless Claude sessions in terminal
+  panes for substantial agents (judges + plan implementers), file contract + wait, all four
+  terminal adapters (cmux/tmux/iTerm2/Terminal.app), 75k context-handoff pane (prepare,
+  user presses Enter). **Supersedes judge-terminal-enforcement — ADR 0007** (user chose
+  absorb-old-into-new 2026-07-21; gate-moment verify-else-spawn dropped, dispatch-time
+  redirect kept; always-run guarantee unchanged from today).
+- prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
+  audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
+  `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
   settings.json dual-version staging policy unchanged (Orca hooks + fable-model line stay uncommitted).
-  **Orphan sweep DONE 2026-07-20: all 8 merged orphan branches pruned local + remote (each
-  tip verified reachable from `main`; handoff force-deleted, content ≡ 7337186). Only `main`
-  and `feature/judge-terminal-enforcement` remain.**
-- parked: **judge terminal-enforcement — design complete (§1–§4 approved), spec phase not
-  started.** Resume via Next Steps 0b; full design + approvals:
+- **SUPERSEDED (was parked): judge terminal-enforcement.** Branch
+  `feature/judge-terminal-enforcement` retired, NOT deleted (~3,400 lines unmerged judged
+  spec work; deletion = explicit user cleanup). Reference text for any future `spec-guard`
+  resurrection. ADR 0007;
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
@@ -140,15 +144,14 @@ how this file and its linked files should be written (plain language, major chan
    **Branch cleanup DONE:** all 8 merged orphans pruned local + remote (see Orphans below).
    Ongoing duty (unchanged): add handoff state-file gitignore entries per project repo on
    first work there (recorded in `managing-session-memory`).
-0b. **Judge terminal-enforcement (2026-07-20) — parked. Design COMPLETE (§1–§4 approved).**
-   Next: **spec phase on Opus 4.8** (model gate answered 2026-07-20 — prompt `/model` if not
-   on it) → new branch off `main` (proposed `feature/judge-terminal-enforcement`,
-   NOT off statusline branch) → spec doc → self-review → compliance + observability judges
-   (current skill procedure — spec-guard doesn't exist yet) → user review → writing-plans.
-   Branch `feature/judge-terminal-enforcement` cut off `main` 2026-07-20. The write-up now lives
-   on `main`, so the branch inherits it; the spec should still stand alone as the build artifact.
-   Approved design + platform facts (hook timeout **fails open**; `claude --bare -p --agent`):
-   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
+0b. **Judge terminal-enforcement — SUPERSEDED by pane orchestration (ADR 0007, 2026-07-21).**
+   Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
+   into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
+   ever observed (spec-guard remedy).
+0c. **Pane orchestration (2026-07-21) — spec written, judges pending.** Next: compliance +
+   observability judges on the spec → user review gate → `superpowers:writing-plans` →
+   implement on `feature/pane-orchestration`. Spec:
+   `docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`; supersession: ADR 0007.
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
