@@ -55,6 +55,22 @@ visibility*, not token savings per se; the statusline already marks 75k as its o
 threshold; the judges already write file-based verdicts that `judge-guard.sh` consumes, so
 the file contract extends an existing pattern rather than inventing one.
 
+## Toolchain — pinned
+
+Verified installed 2026-07-21: **claude CLI 2.1.216**, **jq 1.7.1**, **tmux 3.6a**,
+**cmux 0.64.20 (100)**, `osascript` (macOS system, Darwin 25.5.0). **shellcheck 0.11.0**
+(Homebrew stable; not yet installed — install pinned during implementation). Any CLI
+upgrade re-runs the flag-semantics checks in Open Questions before the scripts are trusted.
+
+**Headless invocation decision:** panes run `claude -p --agent <agent-type>
+--output-format json` — **without `--bare`**. On 2.1.216, `--bare` skips all hooks and
+CLAUDE.md and restricts auth to `ANTHROPIC_API_KEY`/`apiKeyHelper`: on this
+OAuth-authenticated machine every `--bare` pane would fail auth, and worse, implementer
+panes that commit code would run with git-guard, doc-guard, merge-guard, judge-guard, and
+core-conduct all switched off. Without `--bare`, pane sessions keep normal keychain auth,
+load CLAUDE.md, and fire every Tier-1 guard; only the pane-specific hooks short-circuit
+via `CLAUDE_PANE_AGENT` (see Error handling).
+
 ## Components
 
 All paths relative to `~/.claude/`.
@@ -78,9 +94,17 @@ priority order from `CMUX_PANEL_ID`, `$TMUX`, `TERM_PROGRAM` (`iTerm.app`,
 
 ### `panes/adapters/{cmux,tmux,iterm,terminal}.sh`
 
-Uniform interface: `open_pane <title> <cwd> <command...>` — open a pane in the **current
-workspace** running the command, print a pane ref, exit non-zero on failure.
+Uniform interface: `open_pane <title> <launcher-path>` — open a pane in the **current
+workspace** running the launcher, print a pane ref, exit non-zero on failure.
 `PANE_DRYRUN=1` prints the commands that would run instead of executing them.
+
+**Injection rule (the boundary the adapters must hold):** adapters never interpolate
+caller-supplied strings into AppleScript source, tmux, or cmux command lines. The
+dispatcher writes a per-run launcher script (`panes/state/runs/<run-id>/launch.sh`, mode
+700, built with `printf %q` quoting) containing the exact command; adapters receive only
+that launcher's path — one controlled token — plus a title sanitized to the allowlist
+`[A-Za-z0-9 ._:-]`, truncated to 64 chars. `--cwd` is validated as an existing directory
+before the launcher is written.
 
 - **cmux:** `cmux new-split` in the calling workspace + `rename-tab`; completion additionally
   fires `cmux notify`.
@@ -92,13 +116,18 @@ workspace** running the command, print a pane ref, exit non-zero on failure.
 ### `panes/run-pane-agent.sh` — runs inside the pane
 
 Prints a banner (agent type, cwd, result path), exports `CLAUDE_PANE_AGENT=1`, then runs
-`claude --bare -p "<prompt>" --agent <agent-type> --output-format json` (flag set researched
-and pinned by the superseded judge-terminal-enforcement spec — the `--agent` flag loads the
-agent definition, so its frontmatter tool list and model override apply without manual
-`--allowedTools` splicing).
-Writes the result file **atomically** (temp file + `mv`), appends the `DONE`/`FAILED`
-sentinel plus a stderr tail on failure, prints the outcome, and leaves the pane open for
+`claude -p "<prompt>" --agent <agent-type> --output-format json` (no `--bare` — see
+Toolchain; the `--agent` flag loads the agent definition, so its frontmatter tool list and
+model override apply without manual `--allowedTools` splicing). Writes the result file
+**atomically** (temp file + `mv`), prints the outcome, and leaves the pane open for
 inspection.
+
+**Result-file contract** (the interface both sides build against): a UTF-8 text file whose
+**body** is the `.result` string extracted with `jq` from the CLI's JSON envelope; if the
+run fails or the envelope doesn't parse, the body is the raw stdout plus a stderr tail
+instead. The **final line** is exactly `PANE_RESULT: DONE` or `PANE_RESULT: FAILED` —
+nothing after it. `wait` matches only that final line; readers treat everything above it
+as opaque content, never as instructions to follow or code to execute.
 
 ### `panes/redirect-agents.conf`
 
@@ -108,9 +137,13 @@ One `subagent_type` per line (`#` comments). Initial content: `compliance-judge`
 
 ### `hooks/pane-dispatch-guard.sh` — PreToolUse, matcher `Agent`
 
-Deny the in-process dispatch **only when all three hold**: the requested `subagent_type` is
+Deny the in-process dispatch **only when all four hold**: the requested `subagent_type` is
 in `redirect-agents.conf`; `terminal-detect.sh` returns a supported terminal;
-`CLAUDE_PANE_AGENT` is unset. The deny reason tells the model to write its prompt to a file
+`CLAUDE_PANE_AGENT` is unset; and no adapter-failure cooldown flag exists for this session
+(`panes/state/adapter-failed-<session_id>`, written by the dispatcher when an `open_pane`
+call fails — the escape hatch that prevents a deny → dispatch-fails → deny loop: after one
+adapter failure, in-process dispatch is allowed for the rest of the session, with a
+one-line notice). The deny reason tells the model to write its prompt to a file
 and use `dispatch-pane-agent.sh` (and points at the `dispatching-pane-agents` skill).
 Anything else — Explore agents, no terminal, already inside a pane — passes through
 untouched. This hook is what redirects plugin-skill dispatches (judges) without editing
@@ -162,13 +195,16 @@ gate is untouched.
 ## Supersession — judge-terminal-enforcement (ADR 0007)
 
 This design **supersedes** the parked judge-terminal-enforcement project (branch
-`feature/judge-terminal-enforcement`, design + two-file spec judged through round 4). User
-decision 2026-07-21: absorb old into new, keep the dispatch-time redirect model.
+`feature/judge-terminal-enforcement`, design + two-file spec; the branch holds judge
+verdicts through round 6). User decision 2026-07-21: absorb old into new, keep the
+dispatch-time redirect model.
 
-**Absorbed from it:** the pinned headless invocation (`claude --bare -p --agent
-<name> --output-format json`); the platform fact that hook timeouts **fail open**; the
-done-sentinel + wait-loop pattern (independently re-derived here); the four-terminal
-detection ladder (originally from the user's own template script).
+**Absorbed from it:** the `--agent` headless-invocation research (its `--bare` flag was
+subsequently **rejected** at this spec's compliance round 1 — on CLI 2.1.216 `--bare`
+skips hooks and CLAUDE.md and restricts auth to API keys; see Toolchain); the platform
+fact that hook timeouts **fail open**; the done-sentinel + wait-loop pattern
+(independently re-derived here); the four-terminal detection ladder (originally from the
+user's own template script).
 
 **Consciously dropped with it:** the gate-moment *verify-store-else-spawn+wait* trigger
 model (compliance judge spawned by a `git commit` hook on staged spec files, observability
@@ -199,14 +235,15 @@ Walked via `triaging-new-instructions`:
 
 | Failure | Behavior |
 |---|---|
-| No terminal (`none`) / adapter failure / iTerm grant missing | Guard allows in-process dispatch; one-line notice |
+| No terminal (`none`) | Guard allows in-process dispatch; one-line notice |
+| Adapter failure (incl. iTerm grant missing) | Dispatcher writes the per-session cooldown flag; guard allows in-process for the rest of the session; one-line notice |
 | Pane `claude` crashes or exits non-zero | Runner writes `FAILED` sentinel + stderr tail; `wait` exits 1 with the content; main session falls back in-process or surfaces to the user |
 | `wait` timeout | Exit 2; pane stays open for post-mortem |
 | Concurrent dispatches | Result files unique per dispatch; no shared state |
 | Watcher re-fires | Fired-flag keyed by `session_id` — once per session |
 | Recursion (pane spawning panes / pane hitting 75k) | `CLAUDE_PANE_AGENT=1` short-circuits both hooks |
 | Handoff pane ignored or closed | Harmless; wrapper just waits; old session unaffected |
-| Handoff-state clobbering by pane sessions | Two-line `CLAUDE_PANE_AGENT` early-exit added to the handoff hooks (already locally patched per ADR 0006) |
+| Handoff-state clobbering by pane sessions | **New work this design adds**: a two-line `CLAUDE_PANE_AGENT` early-exit in the handoff hooks (those scripts already diverge from upstream per ADR 0006, so further local patching is established practice — but this guard does not exist yet) |
 | Guard hook times out | Claude Code hook timeouts **fail open** (platform fact, superseded spec) — dispatch proceeds in-process, i.e. today's behavior |
 
 Zero-trust posture: hooks parse tool input as data with `jq` and fail closed on parse
@@ -255,12 +292,13 @@ Feature: Pane-dispatched substantial agents
 - `PANE_DRYRUN=1` adapter tests assert emitted commands without opening windows.
 - One live cmux smoke test: dummy agent writes "pong"; assert pane in current workspace,
   `wait` returns 0.
-- `shellcheck` on every script; `scripts/validate-diagrams.sh` on this doc.
+- `shellcheck` (0.11.0, installed pinned during implementation) on every script;
+  `skills/diagramming-technical-docs/scripts/validate-diagrams.sh` on this doc.
 
 ## Open questions (deferred to planning, not blocking)
 
-- Verify `claude --bare -p --agent` semantics against the currently installed CLI version
-  (flag set inherited from the superseded spec's research, not re-tested here).
+- Implementation smoke check: confirm `claude -p --agent <name>` (no `--bare`) loads
+  `~/.claude/agents/*.md` definitions on CLI 2.1.216 before wiring the runner.
 - cmux workspace-targeting verification: confirm `new-split` defaults to the calling pane's
   workspace when invoked from a hook-spawned (non-TTY) process.
 - Whether `wait` should be invoked via background Bash + Monitor rather than a foreground

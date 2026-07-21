@@ -6,7 +6,8 @@
 
 Two designs, brainstormed one day apart, solved overlapping problems with different
 mechanisms. **Judge-terminal-enforcement** (branch `feature/judge-terminal-enforcement`,
-design approved 2026-07-20, two-file spec judged through round 4, never implemented) put
+design approved 2026-07-20, two-file spec with judge verdicts through round 6, never
+implemented) put
 both judges in their own terminal sessions via a shared launcher, triggered at *gate
 moments* by verify-store-else-spawn+wait hooks on `git commit` (spec files staged) and
 `gh pr create`. **Pane orchestration** (spec
@@ -29,10 +30,13 @@ both meant two parallel terminal-spawn stacks with overlapping four-terminal ada
 ## Decision
 
 The user chose absorption (2026-07-21). The pane-orchestration spec is the single system.
-Absorbed from the superseded spec: the pinned `claude --bare -p --agent <name>
---output-format json` invocation, the hook-timeouts-fail-open platform fact, the
-done-sentinel/wait pattern, the four-terminal detection ladder. Dropped with it: the
-verify-store-else-spawn+wait gate-moment enforcement.
+Absorbed from the superseded spec: the `--agent` headless-invocation research (its
+`--bare` flag was later rejected at the new spec's compliance round 1 — on CLI 2.1.216 it
+skips hooks/CLAUDE.md and restricts auth to API keys, which would disable the Tier-1
+guards in implementer panes and fail OAuth auth on this machine), the
+hook-timeouts-fail-open platform fact, the done-sentinel/wait pattern, the four-terminal
+detection ladder. Dropped with it: the verify-store-else-spawn+wait gate-moment
+enforcement.
 
 ## Consequences
 
