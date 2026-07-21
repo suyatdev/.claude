@@ -5,17 +5,16 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (impl session, Fable 5 controller + Opus subagents) · last_active_branch: feature/pane-orchestration
-- current work: **pane-orchestration — IMPLEMENTATION COMPLETE 2026-07-21, final review
-  READY TO MERGE at ad5e59f.** All 12 plan tasks executed subagent-driven, each task-reviewed
-  clean (commits 322aaaa..747a715); final whole-branch review (Fable) found 2 Important
-  cross-task seams + 3 Minors, all fixed test-first in ad5e59f, re-review confirmed clean.
-  Live cmux smoke PASSED (real pane, PONG, sentinel). Hooks live since Task 11 (watcher
-  fired once this session — designed). Spec addition `--dangerously-skip-permissions`
-  USER-APPROVED 2026-07-21; user also set global defaultMode=bypassPermissions (79495c5).
-  Full per-task history + accepted-debt triage: `.superpowers/sdd/progress.md` (RUN section)
-  and `coding-memory/branches/pane-orchestration.md`. **Next: obs judge from a FRESH
-  session (first live pane-guard exercise), then PR — see Next Steps 0c.**
+- session_origin: desktop · session_started_at: 2026-07-21 (PR session, Fable 5) · last_active_branch: feature/pane-orchestration
+- current work: **pane-orchestration — PR #23 OPEN 2026-07-21**
+  (https://github.com/suyatdev/.claude/pull/23). Obs judge (impl @ 5c846b2): **risk=low
+  conf=high**; PR created before committing the audit trail (strict freshness), trail
+  committed to the branch right after. Live acceptances this session: pane-dispatch-guard
+  denied the in-process judge → cmux pane → result-file DONE; judge-guard passed
+  `gh pr create` on the fresh verdict; context-handoff-watch fired at ~76k and staged the
+  handoff pane. **Next: user merges via GitHub UI — see Next Steps 0c for judge flags +
+  post-merge watch items.** Per-task history: `.superpowers/sdd/progress.md` (RUN section)
+  and `coding-memory/branches/pane-orchestration.md`.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -151,20 +150,20 @@ how this file and its linked files should be written (plain language, major chan
    Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
    into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
    ever observed (spec-guard remedy).
-0c. **Pane orchestration — IMPLEMENTED 2026-07-21, ready-to-merge at ad5e59f.** 12/12 tasks
-   subagent-driven (Opus implementers/reviewers per user gate), all task reviews clean;
-   pre-flight found 2 plan test defects (user ruled: fix + log as deviations), reviewers
-   ratified 3 more same-class test fixes + shellcheck-disable precedent. Final whole-branch
-   review (Fable) → fix wave ad5e59f (result-file `$$-$RANDOM` uniqueness; guard `nosession`
-   cooldown key; wait sleep-on-fail; relative result-file canonicalized; watcher no longer
-   overclaims on failed handoff) → re-review READY TO MERGE, remaining Minors ACCEPTED-DEBT
-   (triage table in ledger). Remaining, in order: (1) **fresh session → observability judge
-   (impl stage)** — the redirect guard is now LIVE, so the judge dispatch itself is its first
-   live acceptance test (expect deny + pane redirect via `dispatching-pane-agents` skill);
-   (2) after verdict, **do not commit before `gh pr create`** (strict freshness), open the PR
-   (`preparing-pull-requests`); (3) post-merge watch items: first concurrent two-implementer
-   pane dispatch; `nosession` cooldown is shared across env-less sessions (fail-open, 7-day
-   window). Branch pushed; only chrome/chrome-native-host stays uncommitted (machine-local).
+0c. **Pane orchestration — PR #23 OPEN 2026-07-21** (judge impl @ 5c846b2 risk=low conf=high;
+   full detail `coding-memory/pr-tracking.md`, `coding-memory/branches/pane-orchestration.md`).
+   Awaiting user merge via GitHub UI. Judge flags for the user to weigh at merge time:
+   (a) rider 79495c5 flips global defaultMode=bypassPermissions — user-requested
+   but security-material, commit-message-only rationale; judge suggests a short ADR;
+   (b) only cmux is live-proven — tmux/iTerm/Terminal are dry-run green only, first real
+   iTerm failure fails open + cools down silently; (c) accepted debt: shared `nosession`
+   cooldown key can mute pane redirect for all env-less sessions up to 7 days — watch for
+   `adapter-failed-nosession`. Post-merge watch: first concurrent two-implementer pane
+   dispatch; live-verify a second adapter; backfill this verdict's `outcome` in
+   `coding-memory/observability-judge/verdicts.jsonl` once merge result is known. README has
+   no Roadmap section (55-line non-template README) — the feature-PR roadmap rule couldn't
+   apply; standardizing via `writing-project-readmes` is its own task if wanted. Only
+   chrome/chrome-native-host stays uncommitted (machine-local).
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
