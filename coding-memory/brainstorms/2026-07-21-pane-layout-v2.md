@@ -86,14 +86,47 @@ The layout is fully expressible:
 - `new-surface` confirms the tab mechanism: `--pane <ref>`, `--working-directory`, `--focus`.
   (Also offers `--type agent-session --provider claude` — noted, likely out of scope.)
 
-## Next step (fresh session)
+## cmux recon round 3 — live probe (2026-07-21, fresh session; scratch workspace, cleaned up)
 
-Propose 2-3 approaches (per superpowers:brainstorming), then design sections. Leading
-candidate to formalize (NOT yet proposed to the user): smart cmux adapter with layout state
-derived LIVE from `tree --json` + title conventions — no persistent slot map, which would
-eliminate the new-state/stale-cleanup constraint below and self-heal when the user closes
-panes manually. Contrast against: (b) persistent slot map in `state/`, (c) layout policy
-lifted into dispatcher with new adapter primitives.
+- **`--json new-split` RETURNS REFS** — verified live: `{"pane_ref": "pane:30",
+  "surface_ref": "surface:51", "type": "terminal", "window_ref": "window:1",
+  "workspace_ref": "workspace:7"}`. Plain form prints `OK surface:50 workspace:7`.
+  Ref capture is direct; the tree-diff fallback is unnecessary.
+- `--focus false` respected on `new-split` and `new-workspace` (no focus steal).
+- Full command sweep — slot-REUSE primitives exist: `close-surface --surface <ref>`,
+  **`respawn-pane [--surface <ref>] [--command <cmd>]`** (relaunch a command in an existing
+  surface, in place — likely THE reuse mechanism), `send`/`send-key` (typing into the idle
+  zsh — fragile, avoid). Also available: `new-pane --direction`, `move-surface`,
+  `tab-action`, `set-status`/`set-progress`/`notify` (out of scope, noted).
+- Refs are app-session-scoped shorts (`pane:30`; UUIDs via `--id-format both`). Either form
+  dies with the cmux app process → **any persisted ref map must revalidate against live
+  `tree` anyway** — directly undermines a persistent-slot-map approach.
+
+## Approaches proposed (2026-07-21 — awaiting user pick)
+
+**A. Smart cmux adapter, live-derived layout (RECOMMENDED).** Dispatcher exports an optional
+role hint env var (e.g. `PANE_AGENT_ROLE=implementer|aux`); only `cmux.sh` reads it. Per
+dispatch the adapter derives layout from `cmux --json tree` + a title convention (set via
+`rename-tab --surface` at creation, e.g. `[impl:run-id] task`), then: reuse a finished slot
+(`respawn-pane`/`close-surface`+`new-surface`), split progressively (1 → stack → 2x2), or
+tab overflow (`new-surface --pane`). No persistent state; tree is ground truth; self-heals
+on manual pane closes. Env-var hint = zero changes to other adapters and no `common.sh`
+arg-validation churn. Cost: cmux.sh grows significantly; title convention is load-bearing;
+needs jq (or python) for tree parsing.
+
+**B. Persistent slot map in `state/workspaces/<ws>/slots.json`.** Explicit slot→ref map
+written from `--json new-split` output. Killed by the round-3 finding: refs die on app
+restart, so every read must revalidate against live tree — B degenerates into A plus a
+cache with staleness bugs, plus the new-state/stale-cleanup burden, plus desync when the
+user closes panes manually.
+
+**C. Layout policy in dispatcher + new adapter primitives** (`open_pane_at <slot>`,
+`open_tab_in <pane>`, `query_layout`). Adapter-agnostic policy, testable without cmux — but
+widest blast radius (dispatcher + 4 adapters + both suites) and builds generality Q4
+explicitly declined (cmux-only). YAGNI.
+
+Recommendation rationale: A is the only option with zero new persistent state, honors Q4's
+cmux-only scope, and the probe confirmed every primitive it needs.
 
 ## Constraints to carry into the design
 
