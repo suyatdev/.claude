@@ -14,16 +14,18 @@ how this file and its linked files should be written (plain language, major chan
   `coding-memory/pr-tracking.md` §PR #24. Obs judge (impl @ 5c846b2) outcome=clean.
   **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
   `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
-- **NEXT UP — brainstorm IN PROGRESS (2026-07-21, clarifying Q&A 3/5 done): pane-layout v2**
-  — one workspace, main far-left | 2x2 implementer quadrant middle | far-right additional
-  pane, >6 → tabs on pane 6, 6-pane cap. DECIDED this session: quadrant = implementers/
-  reviewers ONLY (judges, handoff pane, user extras → far-right); finished quadrant slots
-  REUSED (surface replaced; `state/runs/` result files are the durable record); quadrant
-  builds PROGRESSIVELY (1 pane → stack → 2x2). Remaining: Q4 adapter scope (recommend
-  cmux-only), Q5 quadrant overflow — then propose 2-3 approaches per
-  superpowers:brainstorming. Full Q&A record + cmux recon:
-  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered 2026-07-21
-  close-out session: stay Fable 5 for this brainstorm (implementation gate still open).
+- **NEXT UP — brainstorm: pane-layout v2 — clarifying Q&A COMPLETE (5/5, 2026-07-21) +
+  recon round 2 done.** One workspace, main far-left | 2x2 implementer quadrant middle |
+  far-right additional pane, >6 → tabs, 6-pane cap. ALL DECIDED: quadrant = implementers/
+  reviewers ONLY (judges/handoff/extras → far-right); finished slots REUSED; PROGRESSIVE
+  construction (1 → stack → 2x2); adapter scope CMUX-ONLY; overflow = TABS ON A QUADRANT
+  PANE (role separation preserved). Recon round 2: `tree --json` exposes surface titles but
+  pane list is FLAT (no geometry) → roles must ride on title conventions/stored refs;
+  `rename-tab --surface` sets titles; `new-split` ref-output unverified (live-probe next).
+  **Next: propose 2-3 approaches per superpowers:brainstorming** (leading candidate: smart
+  cmux adapter, live-derived layout, no persistent slot map). Full record:
+  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered 2026-07-21:
+  stay Fable 5 for this brainstorm (implementation gate still open).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
