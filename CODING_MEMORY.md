@@ -36,6 +36,12 @@ how this file and its linked files should be written (plain language, major chan
   in a FRESH session; subagent-driven execution, pane-routed implementers.** Full design
   history: the brainstorm file; earlier session blocks: git history of this file
   (98faa38, c252135).
+- **Resume #7 (2026-07-21, Opus 4.8): Task 6 DONE + pushed (aa2cc42).** Pane-dispatched
+  implementer (`--role implementer`, surface:78); commit verified in-checkout, all five
+  suites independently re-run, one falsification independently re-run by me. Corrections
+  10–15 — detail in Next Steps 0-ACTIVE and `coding-memory/branches/pane-layout-v2.md`.
+  Session note: ~82k of this session's budget went to context RESTORE before any output,
+  which is the recurring cost of task-by-task execution on this branch.
 - **Resume #6 (2026-07-21): Task 1 live probe EXECUTED on Opus 4.8 (ffe22d2).** Probe is
   re-runnable: `panes/cmux-layout-probe.sh`; fixture `panes/adapters/fixtures/tree-live.json`.
   Three plan corrections + one user-approved spec deviation — see Next Steps 0-ACTIVE and
@@ -191,12 +197,31 @@ how this file and its linked files should be written (plain language, major chan
    descent. Silent builder drift, the exact hazard Task 4 existed to kill. All 8 fixtures
    now wrap through `workspace workspace:1`. **Correction 9:** the plan's reuse
    falsification couldn't discriminate with only one finished surface; needs two.
-   NEXT: **Task 6** (cmux.sh Tier-1 degradation shell / legacy floor / dryrun) of
-   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 7–8 →
+   **Task 6 (cmux.sh v2 frame — tiered degradation, legacy floor, dryrun) DONE (aa2cc42)**
+   — new `cmux-exec.test.sh` 24/0, siblings 26/39/10/9 + adapters 24/0 (file untouched),
+   `shellcheck -x` clean. 5 falsifications RED and reverted; **I independently re-ran the
+   workspace-scoping one** (anchor asserted to match exactly once, non-empty diff, 23/1 RED
+   on that exact case, restored byte-identical by sha256 → 24/0). RED run was 5/18 with
+   **all five passes vacuous** — enumerated in the branch log.
+   **Corrections 10–15** (10: `T_EMPTY` in the imagined shape normalizes to 0 bytes yet
+   passes every plan assertion — 3rd builder-drift occurrence, so a `T_SLOT1` fixture whose
+   plan is reachable only if the tree really parsed was added; 11: tree fetch must carry
+   `--workspace`, bare is window-scoped; 12: `send`/`rename-tab` carry it too, `new-split`
+   deliberately does not; 13: dryrun comment contradicted its own load-bearing guard;
+   **14: the plan's Step 2 RED run is UNSAFE here** — v1 hardcodes the real cmux path and
+   ignores `PANE_CMUX_BIN`, so a literal RED run inside a live cmux workspace fires ~10 real
+   `new-split down` calls at the user's window; run RED against a `cp -R` copy in `$TMP`
+   instead — **Task 7 needs the same precaution**; 15: the plan's `legacy_open` falsification
+   could not discriminate — `|| true` left the suite green because the ref-shape guard exits
+   on its own).
+   NEXT: **Task 7** (plan execution + verify-after-rename) → Task 8 →
    implementation-stage obs judge (OWED — not yet run; judge-guard blocks PR) → PR.
-   **Task 6 gotcha (verified on bash 3.2.57):** `grep -c .` on empty input prints 0 but
-   EXITS 1 — `layout_decide`'s tab-count loop is safe only because these files are `set -u`
-   and NOT `set -e`. Introducing `set -e` in Task 6 would break it.
+   **Still gotchas for Task 7:** `grep -c .` on empty input prints 0 but EXITS 1 —
+   `layout_decide`'s tab-count loop is safe only because these files are `set -u` and NOT
+   `set -e`; introducing `set -e` breaks it. **Nothing in Task 6 touched the real cmux
+   binary** — every execution assertion runs against the fake, so the `--workspace`
+   placement on `send`/`rename-tab` rests on `--help` + probe P5, **not** a live mutating
+   call. That live confirmation is owed at Task 8 alongside Task 3's handoff-wrapper rename.
    **Task 4 = plan corrections 5–7, all verified against the live fixture before dispatch:**
    (a) the normalize selector returns EMPTY (real shape keys each level's own ref as `ref`;
    surfaces carry `pane_ref`+`title`); (b) **the workspace filter was a SILENT TOTAL
