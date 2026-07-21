@@ -244,8 +244,14 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 
 ### PR #24 — docs/pr23-outcome-backfill
 - repo: suyatdev/.claude · branch: docs/pr23-outcome-backfill · remote: origin
-- PR: https://github.com/suyatdev/.claude/pull/24 · status: OPEN (created 2026-07-21)
+- PR: https://github.com/suyatdev/.claude/pull/24 · status: **MERGED 2026-07-21 13:05Z** (23dd2e3)
 - opened_by session_origin: desktop · last push: desktop
 - scope: docs-only. PR #23 close-out (memory index, pr-tracking, Merged list) + outcome=clean
   backfill on 4 verdicts (5c846b2, fdbd7b9, 381bd79, c2b23fe). JUDGE_EXEMPT (docs-only,
   PR #22 precedent). 16 nulls deliberately left pending a rework-vs-clean calibration policy.
+- **stranding incident (PR #21/77b59ad failure mode, second occurrence):** the brainstorm
+  checkpoint 9e16d7f was pushed to the branch too late and PR #24 merged at 7368174 without
+  it. Recovered by cherry-pick onto `main` as 2d8a416 (memory-only files — git-guard's
+  brainstorm exception; user-approved route, no PR #25). Content parity verified before the
+  branch was pruned local+remote. Lesson: after `gh pr create`, any further branch commit
+  must be pushed AND confirmed present in the PR before the user merges — or held for main.

@@ -5,20 +5,22 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (PR session, Fable 5) · last_active_branch: feature/pane-orchestration
-- current work: **pane-orchestration — PR #23 MERGED 2026-07-21 12:35Z** (merge commit
-  8f40e05; branch pruned local+remote after reachability check). Obs judge (impl @ 5c846b2)
-  risk=low conf=high, **outcome backfilled: clean**. Live acceptances during the PR session:
-  pane-dispatch-guard deny → cmux pane → result-file DONE; judge-guard passed `gh pr create`
-  on the fresh verdict; context-handoff-watch fired at ~76k. Close-out housekeeping (this
-  entry + outcome backfills) rides docs-only PR #24 branch `docs/pr23-outcome-backfill`.
+- session_origin: desktop · session_started_at: 2026-07-21 (close-out session, Fable 5) · last_active_branch: main
+- current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
+  PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
+  merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
+  mode, 2nd occurrence) — recovered by cherry-pick onto `main` as 2d8a416 (memory-only →
+  git-guard brainstorm exception; user-approved), parity verified, then pruned. Detail:
+  `coding-memory/pr-tracking.md` §PR #24. Obs judge (impl @ 5c846b2) outcome=clean.
   **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
   `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
-- **NEW brainstorm IN PROGRESS (2026-07-21, checkpointed at intake): pane-layout v2** — one
-  workspace, main far-left | 2x2 subagent quadrant middle | far-right additional pane, >6 →
-  tabs on pane 6, 6-pane cap. Intake + cmux CLI recon done (layout fully expressible:
+- **NEXT UP — brainstorm IN PROGRESS (2026-07-21, checkpointed at intake): pane-layout v2** —
+  one workspace, main far-left | 2x2 subagent quadrant middle | far-right additional pane,
+  >6 → tabs on pane 6, 6-pane cap. Intake + cmux CLI recon done (layout fully expressible:
   `new-split --surface`, `new-surface --pane`); clarifying questions NOT yet asked — resume
-  from the open-questions list in `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`.
+  by asking them ONE at a time from the open-questions list in
+  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered 2026-07-21
+  close-out session: stay Fable 5 for this brainstorm (implementation gate still open).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -207,7 +209,9 @@ vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-r
 #18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4),
 **#20 (statusline token bar, merged 04:01Z)**, **#21 (claude-code-handoff cherry-pick, 3c58363,
 22:02Z)**, **#22 (docs-only follow-up landing PR #21's stranded judge audit trail, 284478a)**.
-**07-21:** **#23 (pane orchestration, 8f40e05, 12:35Z)**.
+**07-21:** **#23 (pane orchestration, 8f40e05, 12:35Z)**, **#24 (docs-only PR #23 close-out +
+outcome backfills, 23dd2e3, 13:05Z; late brainstorm-checkpoint commit stranded → cherry-picked
+to main as 2d8a416)**.
 
 **Orphans: ALL PRUNED 2026-07-20.** The 8 merged orphans (`feature/statusline-command`,
 `docs/diagramming-pointers`, `feature/statusline-token-bar`, `feature/add-claude-code-handoff`,
