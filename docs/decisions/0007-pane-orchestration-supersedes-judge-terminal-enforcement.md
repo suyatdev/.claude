@@ -19,7 +19,7 @@ both meant two parallel terminal-spawn stacks with overlapping four-terminal ada
 ## Options weighed
 
 1. **Rescope new on old** — resume the nearly-done judge spec, shrink the new design to
-   implementers + handoff. Preserves four rounds of judged work; keeps the gate-moment
+   implementers + handoff. Preserves six rounds of judged work; keeps the gate-moment
    always-run guarantee; but ships the judge-only launcher first and the generalization
    second, with the adapter layer split across two artifacts.
 2. **Absorb old into new (chosen)** — one unified system under the new spec; the old
