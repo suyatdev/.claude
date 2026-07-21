@@ -180,6 +180,102 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
     "only slot 2's run-id has a marker" scenario pins the per-surface reading; the
     function's header comment records it.
 
+- **Task 6 (`cmux.sh` v2 frame — tiered degradation, legacy floor, derive-then-print
+  dryrun) — DONE 2026-07-21.** `panes/adapters/cmux.sh` rewritten (116 lines): env
+  overrides, workspace-arg construction, role mapping, run-id extraction, `derive_plan`
+  (all Tier-1 checks), `finish_surface`, `legacy_open`, and a dryrun that derives when a
+  fake cmux is wired in. Plan EXECUTION still falls to the legacy floor (Task 7 adds it).
+  New `panes/adapters/cmux-exec.test.sh` (179 lines): **24/0 green**. All five siblings
+  unchanged and green — `adapters.test.sh` 24/0 (file untouched), `cmux-layout.test.sh`
+  26/0, `dispatch-pane-agent.test.sh` 39/0, `run-pane-agent.test.sh` 10/0,
+  `terminal-detect.test.sh` 9/0. `shellcheck -x` clean on both touched files.
+  - **RED first (Step 2, 5 passed / 18 failed of 23 cases).** All **five passes were
+    vacuous**, listed explicitly: `legacy split failure -> nonzero (Tier 2)` and `send
+    failure -> nonzero (Tier 2)` (v1 died for an unrelated reason and never reached
+    either call), `no empty --workspace when unset` (the fake log was empty, so nothing
+    could match), `dryrun sans fake -> legacy plan` (v1's dryrun only ever prints the
+    legacy plan — a compat assertion, vacuous by design), and `raw role value never
+    reaches output or argv` (v1 ignores `PANE_AGENT_ROLE` entirely). Two of these were
+    the plan's own nominated falsification targets, which is why Step 5 mattered.
+  - **Correction 10 — the plan's `T_EMPTY` fixture was in the IMAGINED tree shape**
+    (`workspace_ref`/`pane_ref`/`surface_ref`). Re-verified live before writing code:
+    it normalizes to **0 bytes**, yet `layout_decide` still prints exactly `PLAN: split
+    right env` / `TITLE: impl.1:<run> lbl` — so every dryrun assertion in the plan passes
+    green on a silently-dead fixture. Third occurrence of the builder-drift hazard
+    (cf. Corrections 3 and 8). Fixtures rebuilt with the `surfaces_of`/`pane`/`workspace`/
+    `tree` builders copied from `cmux-layout.test.sh`. **Beyond the brief:** builders alone
+    only move the hazard, so a second fixture `T_SLOT1` (slot 1 occupied and RUNNING) was
+    added whose expected plan — `split down surface:65`, title `impl.2:` — is reachable
+    *only* if the tree was really parsed. A wrong-shaped fixture now falls back to the
+    slot-1 plan and goes RED instead of passing.
+  - **Correction 11 — `derive_plan` scopes the tree fetch server-side.** Bare
+    `--json tree` is window-scoped (P1: five workspaces), so an unscoped fetch would
+    classify foreign panes and place implementers against them. Landed
+    `--json tree --workspace "$CMUX_WORKSPACE_ID"` when set, bare when not, flags after
+    the subcommand. Verified independently: `cmux tree --help` lists
+    `--workspace <id|ref|index>` and documents the bare form as "current window only".
+    Two new tests assert the scoped and bare argv against `$FAKE_LOG`.
+  - **Correction 12 — `finish_surface`'s mutating calls carry an explicit `--workspace`.**
+    Verified independently this session: `cmux send --help` and `cmux rename-tab --help`
+    both list `--workspace <id|ref|index>` defaulting to `$CMUX_WORKSPACE_ID`, so it is a
+    semantic no-op for the legacy floor and correct targeting for Task 7's tree-sourced
+    refs. `new-split down` left verbatim (no ref to resolve), pinned by an anchored
+    `grep -qxF "new-split down"`. bash 3.2 aborts on `"${arr[@]}"` for an empty array under
+    `set -u` (verified 3.2.57), so `WS_ARGS` is guarded with `${WS_ARGS[@]+"${WS_ARGS[@]}"}`
+    at each use site and is only populated when the variable is non-empty.
+  - **Correction 13 — the dryrun comment contradicted its code.** Condition kept
+    (`PANE_CMUX_BIN` is load-bearing: `adapters.test.sh` never sets it, asserts the legacy
+    plan, and runs on this machine where the real cmux exists); comment rewritten to state
+    why, including that deriving there would also reach the user's live workspace from a
+    test.
+  - **Correction 14 (found, not briefed) — the plan's Step 2 is UNSAFE on a machine with
+    cmux installed.** v1 `cmux.sh` hardcodes the real app path and ignores `PANE_CMUX_BIN`,
+    and this session runs *inside* a live cmux workspace (`CMUX_WORKSPACE_ID` set, app
+    running). A literal RED run would have fired ~10 real `new-split down` calls at the
+    user's own window and typed `bash <launcher>` into each. The RED run was instead done
+    against a `cp -R` copy of `panes/adapters/` in `$TMP` with only the copy's `CMUX_BIN`
+    neutered — same evidence, zero repo mutation, no real panes. Task 7's RED step must
+    take the same precaution.
+  - **Correction 15 (found, not briefed) — the plan's second falsification could not
+    discriminate, and initially passed while the code was broken.** Mutating `legacy_open`
+    to `|| true` left the suite at **24/0**: with an empty new-split response `ref` comes
+    out empty and the *ref-shape* guard exits 1 by itself, so a bare `RC -ne 0` assertion
+    cannot tell the two guards apart. Fixed by asserting the *reason* (`new-split failed`
+    on stderr) and adding a case where new-split fails **while printing a plausible
+    `OK surface:42`** — under the mutation that path returns `rc=0 out=surface:42`, i.e. a
+    silent success. Suite grew 23 -> 24 cases.
+  - **Falsification (five; each anchor asserted to match exactly once, each reverted and
+    confirmed byte-identical by sha256, final state re-verified 24/0):**
+    1. `derive_plan` jq-missing `return 1` -> `exit 1` -> `jq missing -> legacy` RED. 22/1.
+    2. `legacy_open` new-split failure -> `|| true` -> `legacy split failure -> nonzero
+       (Tier 2)` **and** `new-split exit status beats plausible stdout` both RED. 22/2.
+       *First attempt against the pre-Correction-15 test stayed green at 24/0 — see above.*
+    3. Tree fetch drops `${WS_ARGS[@]+…}` -> `tree fetch is workspace-scoped when
+       CMUX_WORKSPACE_ID set` RED. 22/1.
+    4. `finish_surface` send failure -> `|| true` -> `send failure -> nonzero (Tier 2)`
+       RED. 23/1. Added beyond the plan's two; nothing else pinned that guard.
+    5. `WS_ARGS` populated unconditionally -> `tree fetch is bare when CMUX_WORKSPACE_ID
+       unset` and `no empty --workspace when unset` both RED. 22/2. *First attempt died on
+       a perl quoting error and applied nothing while the suite read 24/0 — the exact
+       no-op-mutation trap; the asserted anchor and an empty `diff` caught it, and it was
+       redone with a python exact-string replace.*
+  - **Deviations from the plan snippet.** (a) `WS_ARGS` array + the bash-3.2 `+` guard,
+    which the snippet has no equivalent of (Corrections 11/12). (b) Test helpers
+    `split_ok`/`running` factored out of repeated literals, and `reset_fake` truncates
+    `$FAKE_LOG` rather than only deleting it, so assertions on a call-free run do not make
+    `grep` complain about a missing file. (c) The fake logs with `printf '%s\n'` instead of
+    `echo`, matching house style. (d) The suite also unsets `CMUX_SURFACE_ID` (the plan
+    unsets only `CMUX_WORKSPACE_ID`) because it may itself be run from inside a real pane.
+    (e) Four cases added beyond the plan for role handling — aux derives the aux plan and
+    title, an unknown role is noted and falls back, and its raw value (`evil-role"; id #`)
+    is asserted absent from stdout, stderr and the argv log, which is the standing
+    "raw `PANE_AGENT_ROLE` never reaches a command line or title" constraint.
+  - **Not verified — stated plainly.** No cmux call in this task was exercised against the
+    real binary; every execution assertion runs against the fake. The `--workspace`
+    placement on `send`/`rename-tab` is verified only from `--help` output and probe P5,
+    not by a live mutating call. Live confirmation is still owed at Task 8, together with
+    Task 3's handoff-wrapper rename.
+
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
 Re-runnable via `panes/cmux-layout-probe.sh` after any cmux upgrade. Findings recorded
@@ -373,6 +469,9 @@ Reviewed before commit: synthetic titles only, no real paths, `tty` null, no URL
    as defence-in-depth for a ref-form value, rather than dropped. `tree --workspace` is
    still the primary scoping mechanism — Task 5/6 must pass it.
 2. **Task 6/7** — every mutating cmux call carries an explicit `--workspace` (P5).
+   **Task 6's half discharged**: `send` and `rename-tab` in `finish_surface` carry it when
+   `CMUX_WORKSPACE_ID` is set, and the tree fetch is scoped server-side; `new-split down`
+   stays bare by design (no ref to resolve). Task 7's new calls must follow suit.
 3. **Task 7** — reuse via `cmux send`, shell-quoted (P4); **verify-after-rename** replaces
    plain retry-once (P6).
 4. **Judge** — surface the `respawn-pane`→`send` deviation explicitly at the
