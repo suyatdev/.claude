@@ -55,5 +55,37 @@ if grep -q -- '--agent pane-echo' "$TMP/args" && grep -q -- '--output-format jso
   printf 'ok   — invocation flags per spec\n'; pass=$((pass+1))
 else printf 'FAIL — invocation flags wrong: %s\n' "$(cat "$TMP/args")"; fail=$((fail+1)); fi
 
+# 7-10. agent-exit marker (pane-layout v2): written only after a successful
+# result write, containing the status; fail_early and non-runs-shaped run dirs
+# write no marker.
+RUNS="$TMP/state/runs/1700000000-2-2"; mkdir -p "$RUNS"
+cp "$PROMPT" "$RUNS/prompt.md"
+make_stub 'printf "{\"result\":\"ok\"}\n"'
+PANE_CLAUDE_BIN="$TMP/claude-stub" bash "$RUNNER" pane-echo "$RUNS/prompt.md" "$TMP/r7.md" "$TMP" >/dev/null 2>&1
+if [ "$(cat "$RUNS/agent-exit" 2>/dev/null)" = "DONE" ]; then
+  printf 'ok   — marker DONE after clean run\n'; pass=$((pass+1))
+else printf 'FAIL — marker DONE after clean run\n'; fail=$((fail+1)); fi
+
+RUNS2="$TMP/state/runs/1700000000-3-3"; mkdir -p "$RUNS2"; cp "$PROMPT" "$RUNS2/prompt.md"
+make_stub 'exit 3'
+PANE_CLAUDE_BIN="$TMP/claude-stub" bash "$RUNNER" pane-echo "$RUNS2/prompt.md" "$TMP/r8.md" "$TMP" >/dev/null 2>&1
+if [ "$(cat "$RUNS2/agent-exit" 2>/dev/null)" = "FAILED" ]; then
+  printf 'ok   — marker FAILED after failed run\n'; pass=$((pass+1))
+else printf 'FAIL — marker FAILED after failed run\n'; fail=$((fail+1)); fi
+
+RUNS3="$TMP/state/runs/1700000000-4-4"; mkdir -p "$RUNS3"
+# fail_early path: prompt file missing entirely
+PANE_CLAUDE_BIN="$TMP/claude-stub" bash "$RUNNER" pane-echo "$RUNS3/prompt.md" "$TMP/r9.md" "$TMP" >/dev/null 2>&1
+if [ ! -e "$RUNS3/agent-exit" ]; then
+  printf 'ok   — fail_early writes no marker\n'; pass=$((pass+1))
+else printf 'FAIL — fail_early writes no marker\n'; fail=$((fail+1)); fi
+
+# prompt outside a runs/ dir (shape guard): no marker anywhere near it
+make_stub 'printf "{\"result\":\"ok\"}\n"'
+PANE_CLAUDE_BIN="$TMP/claude-stub" bash "$RUNNER" pane-echo "$PROMPT" "$TMP/r10.md" "$TMP" >/dev/null 2>&1
+if [ ! -e "$TMP/agent-exit" ]; then
+  printf 'ok   — shape guard: no marker outside runs dirs\n'; pass=$((pass+1))
+else printf 'FAIL — shape guard: no marker outside runs dirs\n'; fail=$((fail+1)); fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

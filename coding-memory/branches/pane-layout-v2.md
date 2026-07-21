@@ -13,6 +13,13 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
 - **Task 1 (live probe) — DONE 2026-07-21.** All of P1–P7 resolved against live
   cmux 0.64.20 (100). Findings below. Three plan-level corrections and one
   user-approved spec deviation came out of it.
+- **Task 2 (agent-exit marker) — DONE 2026-07-21.** `run-pane-agent.sh` writes
+  `state/runs/<run-id>/agent-exit` (`DONE`/`FAILED`) only after a successful result
+  write; `fail_early` writes none, and a `*/runs/*` guard on the `cd`+`pwd`-normalized
+  prompt dir rejects untrusted paths. 10/0 green; both guards falsified RED before
+  being trusted. One plan-snippet fix: `> file 2>/dev/null` does not suppress a
+  redirect failure (shell reports it before the trailing redirect applies) — stderr
+  redirect moved first.
 
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
