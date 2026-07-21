@@ -48,21 +48,31 @@ The layout is fully expressible:
   `resize-pane`, and `new-workspace --layout <json>` (upfront JSON layout — only for NEW
   workspaces, so likely irrelevant: the main session already lives in an existing workspace).
 
+## Decisions (clarifying Q&A, 2026-07-21 resume session)
+
+1. **Role classification — DECIDED: implementers only → quadrant.** The 2x2 quadrant is
+   reserved for plan-task implementers/reviewers. The two judges (compliance/observability),
+   the context-handoff pane, and user-requested extra sessions ALL route to the far-right
+   "additional" pane (tabbing there when full). User explicitly chose this over the
+   recommended "all agents → quadrant" option.
+2. **Slot reclamation — DECIDED: reuse finished slots.** A quadrant slot whose agent has
+   exited (result file written) is fair game — the next implementer dispatch replaces that
+   surface. Scrollback is lost; `state/runs/<id>/` result files + transcripts remain the
+   durable record. Quadrant never overflows from finished work.
+3. **Construction timing — DECIDED: progressive splits.** 1st implementer = one middle pane;
+   2nd splits it into a stack; 3rd/4th complete the 2x2. Deterministic split sequence, no
+   empty panes; single-implementer runs stay a clean two-pane layout.
+
 ## Open clarifying questions (ask ONE at a time, next session)
 
-1. **Role classification:** which dispatch types map to the quadrant vs. the far-right pane?
-   Implementers → quadrant per requirement 1. But the two judges (compliance/observability)?
-   The context-handoff pane? User-requested extra sessions? "Additional" needs a precise list.
-2. **Slot reclamation:** panes stay open for inspection after an agent exits. Does the next
-   dispatch reuse a finished agent's quadrant slot (replacing its surface), or do finished
-   panes keep their slot until closed manually (pushing new dispatches toward overflow)?
-3. **Construction timing:** does the quadrant build progressively (1st implementer = one
-   middle pane, splitting into 2x2 as more spawn) or are all 4 quadrant panes created upfront
-   when the first implementation dispatch fires?
 4. **Adapter scope:** layout smarts cmux-only (the only live-proven adapter), with tmux/iterm
    keeping today's dumb `new-split down`? (Recommended default: yes, cmux-only.)
 5. **Quadrant overflow:** a 5th concurrent implementer — far-right pane first, then tabs? Or
-   straight to tabs on a quadrant pane?
+   straight to tabs on a quadrant pane? (Note: with implementers-only in the quadrant and
+   judges/handoff/extras far-right, spilling implementers far-right mixes roles — probe
+   whether the user prefers tabs on a quadrant pane to keep role separation clean.)
+
+After Q5: propose 2-3 approaches (per superpowers:brainstorming), then design sections.
 
 ## Constraints to carry into the design
 

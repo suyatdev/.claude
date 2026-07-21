@@ -14,11 +14,14 @@ how this file and its linked files should be written (plain language, major chan
   `coding-memory/pr-tracking.md` §PR #24. Obs judge (impl @ 5c846b2) outcome=clean.
   **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
   `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
-- **NEXT UP — brainstorm IN PROGRESS (2026-07-21, checkpointed at intake): pane-layout v2** —
-  one workspace, main far-left | 2x2 subagent quadrant middle | far-right additional pane,
-  >6 → tabs on pane 6, 6-pane cap. Intake + cmux CLI recon done (layout fully expressible:
-  `new-split --surface`, `new-surface --pane`); clarifying questions NOT yet asked — resume
-  by asking them ONE at a time from the open-questions list in
+- **NEXT UP — brainstorm IN PROGRESS (2026-07-21, clarifying Q&A 3/5 done): pane-layout v2**
+  — one workspace, main far-left | 2x2 implementer quadrant middle | far-right additional
+  pane, >6 → tabs on pane 6, 6-pane cap. DECIDED this session: quadrant = implementers/
+  reviewers ONLY (judges, handoff pane, user extras → far-right); finished quadrant slots
+  REUSED (surface replaced; `state/runs/` result files are the durable record); quadrant
+  builds PROGRESSIVELY (1 pane → stack → 2x2). Remaining: Q4 adapter scope (recommend
+  cmux-only), Q5 quadrant overflow — then propose 2-3 approaches per
+  superpowers:brainstorming. Full Q&A record + cmux recon:
   `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered 2026-07-21
   close-out session: stay Fable 5 for this brainstorm (implementation gate still open).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
