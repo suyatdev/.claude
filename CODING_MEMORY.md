@@ -6,15 +6,14 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-21 (PR session, Fable 5) · last_active_branch: feature/pane-orchestration
-- current work: **pane-orchestration — PR #23 OPEN 2026-07-21**
-  (https://github.com/suyatdev/.claude/pull/23). Obs judge (impl @ 5c846b2): **risk=low
-  conf=high**; PR created before committing the audit trail (strict freshness), trail
-  committed to the branch right after. Live acceptances this session: pane-dispatch-guard
-  denied the in-process judge → cmux pane → result-file DONE; judge-guard passed
-  `gh pr create` on the fresh verdict; context-handoff-watch fired at ~76k and staged the
-  handoff pane. **Next: user merges via GitHub UI — see Next Steps 0c for judge flags +
-  post-merge watch items.** Per-task history: `.superpowers/sdd/progress.md` (RUN section)
-  and `coding-memory/branches/pane-orchestration.md`.
+- current work: **pane-orchestration — PR #23 MERGED 2026-07-21 12:35Z** (merge commit
+  8f40e05; branch pruned local+remote after reachability check). Obs judge (impl @ 5c846b2)
+  risk=low conf=high, **outcome backfilled: clean**. Live acceptances during the PR session:
+  pane-dispatch-guard deny → cmux pane → result-file DONE; judge-guard passed `gh pr create`
+  on the fresh verdict; context-handoff-watch fired at ~76k. Close-out housekeeping (this
+  entry + outcome backfills) rides docs-only PR #24 branch `docs/pr23-outcome-backfill`.
+  **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
+  `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -150,20 +149,16 @@ how this file and its linked files should be written (plain language, major chan
    Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
    into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
    ever observed (spec-guard remedy).
-0c. **Pane orchestration — PR #23 OPEN 2026-07-21** (judge impl @ 5c846b2 risk=low conf=high;
-   full detail `coding-memory/pr-tracking.md`, `coding-memory/branches/pane-orchestration.md`).
-   Awaiting user merge via GitHub UI. Judge flags for the user to weigh at merge time:
-   (a) rider 79495c5 flips global defaultMode=bypassPermissions — user-requested
-   but security-material, commit-message-only rationale; judge suggests a short ADR;
-   (b) only cmux is live-proven — tmux/iTerm/Terminal are dry-run green only, first real
-   iTerm failure fails open + cools down silently; (c) accepted debt: shared `nosession`
-   cooldown key can mute pane redirect for all env-less sessions up to 7 days — watch for
-   `adapter-failed-nosession`. Post-merge watch: first concurrent two-implementer pane
-   dispatch; live-verify a second adapter; backfill this verdict's `outcome` in
-   `coding-memory/observability-judge/verdicts.jsonl` once merge result is known. README has
-   no Roadmap section (55-line non-template README) — the feature-PR roadmap rule couldn't
-   apply; standardizing via `writing-project-readmes` is its own task if wanted. Only
-   chrome/chrome-native-host stays uncommitted (machine-local).
+0c. **Pane orchestration — PR #23 MERGED 2026-07-21 (8f40e05); branch pruned.** Verdict
+   outcome backfilled `clean`. Open post-merge items, none blocking: (a) judge suggested a
+   short ADR for the bypassPermissions rider (79495c5, user-requested, commit-message-only
+   rationale) — user's call; (b) live-verify a second adapter (tmux or iTerm) — only cmux is
+   live-proven, a real iTerm failure fails open + cools down silently; (c) watch for
+   `adapter-failed-nosession` (shared cooldown can mute pane redirect for all env-less
+   sessions up to 7 days) and the first concurrent two-implementer pane dispatch; (d) README
+   has no Roadmap section (non-template, 55 lines) — standardizing via
+   `writing-project-readmes` is its own task if wanted. Only chrome/chrome-native-host stays
+   uncommitted (machine-local).
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
@@ -191,9 +186,14 @@ how this file and its linked files should be written (plain language, major chan
    Evidence: **2 of 3** — `diagramming-pointers.md` has a flowchart; `statusline-token-bar.md` now
    describes a lock protocol with real structure and carries **none** (its diagram went to ADR 0005).
    The 07-20 brainstorm write-up carries its flowchart inline (counts toward the healthy side).
-6. (Optional) Backfill `outcome` for the remaining `null` verdicts (all known-clean):
-   `feature/observability-judge` @ fdbd7b9 and @ 381bd79, memsearch *architecting* @ c2b23fe.
-   See `coding-memory/observability-judge/verdicts.jsonl`.
+6. **DONE 2026-07-21** — backfilled `outcome: clean` for the three known-clean nulls
+   (`feature/observability-judge` @ fdbd7b9 + @ 381bd79, memsearch architecting @ c2b23fe)
+   alongside PR #23's verdict. 16 nulls remain, deliberately untouched: they're intermediate
+   rounds on multi-round branches (statusline ×6, token-bar ×4, handoff ×2, pane-orch
+   architecting ×2, plus verifying-subagent-commits @ 8701ca8 and compliance-judge @ cf4efc7
+   early rounds) where the honest value is likely `rework`, not `clean` — needs a calibration
+   policy decision (does a judge-driven fix wave after round N mean round N's outcome is
+   `rework`?) before bulk-backfilling.
 
 **Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
@@ -202,6 +202,7 @@ vibe-scape (Tayvyx-Lab/VibeSpace) PRs #6–#7. **07-19:** #17 (writing-project-r
 #18 (statusline, b6362ff). **07-20:** #19 (diagramming reachability + ADR 0004, a735fb4),
 **#20 (statusline token bar, merged 04:01Z)**, **#21 (claude-code-handoff cherry-pick, 3c58363,
 22:02Z)**, **#22 (docs-only follow-up landing PR #21's stranded judge audit trail, 284478a)**.
+**07-21:** **#23 (pane orchestration, 8f40e05, 12:35Z)**.
 
 **Orphans: ALL PRUNED 2026-07-20.** The 8 merged orphans (`feature/statusline-command`,
 `docs/diagramming-pointers`, `feature/statusline-token-bar`, `feature/add-claude-code-handoff`,
