@@ -21,8 +21,11 @@ export CLAUDE_CODE_SESSION_ID="test-session-123"
 
 mkdir -p "$PANE_ADAPTERS_DIR"
 printf '#!/usr/bin/env bash\necho cmux\n' > "$TMP/detect.sh"; chmod 700 "$TMP/detect.sh"
-# ok-adapter records its args and succeeds; bad-adapter fails
-printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s/adapter-args"\necho surface:99\n' "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
+# ok-adapter records its args and the role env, and succeeds; bad-adapter fails.
+# The single quotes around ${PANE_AGENT_ROLE:-unset} are deliberate: it must reach
+# the generated stub UNexpanded so the stub reads the dispatcher's exported value.
+# shellcheck disable=SC2016
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s/adapter-args"\nprintf "%%s\\n" "${PANE_AGENT_ROLE:-unset}" > "%s/adapter-role"\necho surface:99\n' "$TMP" "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
 chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
 PROMPT="$TMP/prompt.md"; printf 'judge this\n' > "$PROMPT"
 
@@ -47,7 +50,22 @@ grep -q 'run-pane-agent.sh' "$launcher" && ok "launcher runs runner" || bad "lau
 grep -q 'observability-judge' "$launcher" && ok "launcher carries agent type" || bad "launcher carries agent type"
 grep -q 'prompt.md' "$launcher" && ok "prompt copied into run dir" || bad "prompt copied into run dir"
 title=$(sed -n '2p' "$TMP/adapter-args")
-[ "$title" = "pane: observability-judge" ] && ok "sanitized title passed" || bad "sanitized title passed" "$title"
+[ "$title" = "observability-judge" ] && ok "bare agent-type title passed" || bad "bare agent-type title passed" "$title"
+
+role_seen=$(cat "$TMP/adapter-role" 2>/dev/null)
+[ "$role_seen" = "aux" ] && ok "role defaults to aux" || bad "role defaults to aux" "$role_seen"
+
+# --- --role validation and export
+# Test-only plan deviation: the brief's `[ $? -eq 0 ]` trips SC2181 after a
+# command substitution; captured into rc first, matching the happy-path idiom above.
+out=$(bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file "$TMP/role1.md" --cwd "$TMP" --role implementer 2>&1)
+rc=$?
+[ "$rc" -eq 0 ] && ok "--role implementer accepted" || bad "--role implementer accepted" "rc=$rc: $out"
+[ "$(cat "$TMP/adapter-role" 2>/dev/null)" = "implementer" ] && ok "implementer role exported" || bad "implementer role exported"
+rm -f "$TMP/adapter-args"
+bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file "$TMP/role2.md" --cwd "$TMP" --role wizard >/dev/null 2>&1
+[ $? -eq 64 ] && ok "garbage --role -> usage exit 64" || bad "garbage --role -> usage exit 64"
+[ ! -f "$TMP/adapter-args" ] && ok "garbage --role never reaches adapter" || bad "garbage --role never reaches adapter"
 
 # --- validation failures
 bash "$DISPATCH" dispatch 'x;rm' --prompt-file "$PROMPT" >/dev/null 2>&1
@@ -105,7 +123,8 @@ bash "$DISPATCH" wait --result-file "$RF" --timeout xx >/dev/null 2>&1
 [ $? -eq 64 ] && ok "non-numeric timeout rejected" || bad "non-numeric timeout rejected"
 
 # --- handoff
-printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s/handoff-args"\necho surface:7\n' "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
+# shellcheck disable=SC2016 # role expansion belongs to the generated stub (see line 25)
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s/handoff-args"\nprintf "%%s\\n" "${PANE_AGENT_ROLE:-unset}" > "%s/adapter-role"\necho surface:7\n' "$TMP" "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
 chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
 # Task-7 test-only plan deviation: the brief keyed the launcher search off
 # "$TMP/adapter-args", but the no-terminal / adapter-failure / stale-state
@@ -123,6 +142,7 @@ grep -q 'handoff-wrapper.sh' "$hl" && ok "handoff launcher runs wrapper" || bad 
 # (the same fix Task 6 applied to its dispatch-title assertion), so line 2.
 htitle=$(sed -n '2p' "$TMP/handoff-args")
 [ "$htitle" = "handoff: press Enter" ] && ok "handoff title" || bad "handoff title" "$htitle"
+[ "$(cat "$TMP/adapter-role" 2>/dev/null)" = "aux" ] && ok "handoff role is aux" || bad "handoff role is aux"
 bash "$DISPATCH" handoff --cwd "$TMP/nodir" >/dev/null 2>&1
 [ $? -eq 64 ] && ok "handoff bad cwd rejected" || bad "handoff bad cwd rejected"
 

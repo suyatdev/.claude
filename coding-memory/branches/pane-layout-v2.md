@@ -20,6 +20,41 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
   being trusted. One plan-snippet fix: `> file 2>/dev/null` does not suppress a
   redirect failure (shell reports it before the trailing redirect applies) — stderr
   redirect moved first.
+- **Task 3 (`--role` + role env + title prefix drop + handoff rename) — DONE 2026-07-21.**
+  `dispatch-pane-agent.sh` grows `--role implementer|aux` (default `aux`), allowlisted
+  before any adapter call, exported as `PANE_AGENT_ROLE`; the dispatch title is now the
+  bare agent type (the `pane: ` prefix is gone, freeing the managed grammar's 64-char
+  budget); `handoff` exports `PANE_AGENT_ROLE=aux`. 39/0 green; other three pane suites
+  still 24/10/9 green; shellcheck clean on all three touched scripts.
+  - **RED first (Step 2, 34 passed / 5 failed):** `bare agent-type title passed
+    (pane: observability-judge)`, `role defaults to aux (unset)`, `--role implementer
+    accepted (dispatch-pane-agent: unknown option: --role)`, `implementer role exported`,
+    `handoff role is aux`.
+  - **Plan mispredicted its own RED set.** Step 2 expected `garbage --role -> usage
+    exit 64` to fail; it passes **vacuously** pre-implementation, because `--role` is an
+    unknown option that already exits 64 for a different reason. `--role implementer
+    accepted` fails in its place. Exactly the trap the falsification rule exists for.
+  - **Falsification (mandatory, run against the final committed code):** neutering
+    `case "$role" in implementer|aux) …` drops the suite to 37/2 with
+    `garbage --role -> usage exit 64` and `garbage --role never reaches adapter` both RED;
+    restored → 39/0. The allowlist guard is genuinely load-bearing.
+  - **Step 5 correction (handoff-wrapper rename).** The plan's
+    `rename-tab --surface "$CMUX_SURFACE_ID"` with **no `--workspace`** is unsafe on this
+    build: P5 says a bare `--surface` with no workspace context errors `not_found`, P7
+    records `$CMUX_SURFACE_ID` as a **UUID** (only `--workspace` was proven to accept
+    UUIDs), and P6 records that an unresolvable target falls through to the **focused
+    tab** at exit 0 — so the plan's form would most likely rename whatever pane the user
+    is looking at to "main session", silently, `|| true` swallowing it. Landed instead:
+    `--workspace "$CMUX_WORKSPACE_ID"` (UUID form P7 proved) and **no `--surface`**,
+    letting cmux resolve the target from this pane's own `$CMUX_TAB_ID`/`$CMUX_SURFACE_ID`
+    — which is what that link of the resolution chain is for, since the wrapper runs
+    *inside* the pane it renames. Guarded on both env vars being set. No automated test
+    (no wrapper suite exists); **verify live at the end of Task 8.**
+  - **Two test-only shellcheck fixes to plan snippets:** the stub `printf` format keeps
+    `${PANE_AGENT_ROLE:-unset}` single-quoted on purpose (it must reach the generated stub
+    unexpanded) → inline `disable=SC2016` with the why; and the brief's `[ $? -eq 0 ]`
+    after a command substitution trips SC2181 → captured into `rc` first, matching the
+    happy-path idiom already in the file.
 
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
