@@ -14,57 +14,23 @@ how this file and its linked files should be written (plain language, major chan
   `coding-memory/pr-tracking.md` §PR #24. Obs judge (impl @ 5c846b2) outcome=clean.
   **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
   `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
-- **NEXT UP — brainstorm: pane-layout v2 — clarifying Q&A COMPLETE (5/5, 2026-07-21) +
-  recon round 2 done.** One workspace, main far-left | 2x2 implementer quadrant middle |
-  far-right additional pane, >6 → tabs, 6-pane cap. ALL DECIDED: quadrant = implementers/
-  reviewers ONLY (judges/handoff/extras → far-right); finished slots REUSED; PROGRESSIVE
-  construction (1 → stack → 2x2); adapter scope CMUX-ONLY; overflow = TABS ON A QUADRANT
-  PANE (role separation preserved). Recon round 2: `tree --json` exposes surface titles but
-  pane list is FLAT (no geometry) → roles must ride on title conventions/stored refs;
-  `rename-tab --surface` sets titles. Recon round 3 (live probe): `--json new-split`
-  RETURNS refs; `respawn-pane`/`close-surface` = slot-reuse primitives; refs die with the
-  app process (persisted maps must revalidate → undermines slot-map approach).
-  **APPROACH A PICKED (live-derived smart cmux adapter; B killed by ref-lifetime, C YAGNI).
-  NEXT: design sections 1-5 (numbered list in the brainstorm file), approval after each,
-  then design doc + judges + user review + writing-plans.** Spec assumption: title survival
-  across `restore-session` unverified → degrade to fresh splits. Full record:
-  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered
-  2026-07-21: stay Fable 5 for this brainstorm (implementation gate still open).
-  **Resume session 2026-07-21 (post-clear): ALL FIVE design sections PRESENTED and
-  APPROVED one-by-one (arch/boundaries; title grammar + slot derivation with on-disk
-  agent-exit marker; decision algorithm with slot-numbered titles `impl.<slot>:<run-id>`
-  + split table + aux-reuse extension; two-tier degradation; 3-layer testing with
-  PANE_CMUX_BIN fake + falsification-by-mutation). Approved drafts + 4 flagged
-  assumptions: brainstorm file §"Design section drafts". NEXT (fresh session): write
-  design doc → docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md, self-review,
-  both judges, user review, writing-plans. Model: user directed Opus 4.8 for
-  writing-plans + implementation (formal gate at code start). Session ended at ~100k by
-  checkpoint+clear.**
-- **Design-doc session 2026-07-21 (resume #2, Fable 5): SPEC WRITTEN + inline self-review +
-  Mermaid validated → `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md`,
-  committed on NEW branch `feature/pane-layout-v2` (no PR yet).** Carries all 5 approved
-  sections, the 4 flagged assumptions as their own section, the aux-reuse extension flagged
-  for user sign-off, 8 Gherkin scenarios, pinned toolchain (cmux 0.64.20/jq 1.7.1/CLI
-  2.1.216/shellcheck 0.11.0). NEXT (fresh session, on the branch): (1) compliance +
-  observability judges in parallel, pane-dispatched per running-the-compliance-judge →
-  capped auto-revise loop; (2) user review gate (incl. aux-reuse sign-off); (3)
-  superpowers:writing-plans on Opus 4.8 (formal pre-implementation model gate asked at code
-  start). Session restored at ~82k context (handoff pane prepared by hook); checkpointed
-  immediately after the doc write.
-- **Judge session 2026-07-21 (resume #3, Fable 5): ROUND 1 BOTH JUDGES CLEAN, pane-dispatched
-  (cmux surfaces 55/56).** Compliance: **pass**, conf=high, 0 violations @ spec blob aeb0074 /
-  HEAD bb4050b; 4 non-blocking notes (pin `respawn-pane --command` quoting during the live
-  probe before REUSE is coded; this pass ≠ aux-reuse sign-off; spec path shorthand
-  `state/runs/` really resolves to `panes/state/runs/`; suites/pins independently verified).
-  Obs (architecting, advisory): risk=low conf=high; 1 concern = success_masking ("run folder
-  missing = finished" infers success from absence — out-of-band `state/runs/` cleanup could
-  recycle a busy pane); wants live probes logged first thing at implementation + fallback
-  tests asserting the exact legacy command sequence. Judge audit trail committed on the
-  branch (pre-PR, merges with it). NEXT: **user review gate** — user reads the spec, explicit
-  sign-off on (a) the aux-reuse extension, (b) the 4 flagged assumptions; any spec edit
-  invalidates the verdicts (blob-sha freshness) → re-run both judges before writing-plans.
-  Then superpowers:writing-plans on Opus 4.8 (formal pre-implementation model gate at code
-  start).
+- **CURRENT: pane-layout-v2 — USER REVIEW GATE CLEARED 2026-07-21 (resume #4, Fable 5).**
+  Spec: `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md` @ blob aeb0074
+  (commit bb4050b on `feature/pane-layout-v2`, pushed, no PR). Round-1 judges clean,
+  pane-dispatched: compliance **pass**/high 0 violations; obs advisory **low**/high, 1
+  concern = success_masking ("run folder missing = finished" infers success from absence —
+  out-of-band `panes/state/runs/` cleanup could recycle a busy pane). Judge notes for
+  implementation: pin `respawn-pane --command` quoting during the live probe before REUSE
+  is coded; log live probes first thing; fallback tests assert the exact legacy command
+  sequence. **User sign-off EXPLICIT on (a) the aux-reuse extension and (b) all 4 flagged
+  assumptions — ZERO spec edits, so both verdicts remain fresh.** Spec status line
+  intentionally left saying "pending" (editing the file would invalidate the blob-sha-keyed
+  verdicts); the authoritative approval record is
+  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md` §"User review gate". **NEXT
+  (fresh session, on the branch): `superpowers:writing-plans` on Opus 4.8 (user's standing
+  direction); formal pre-implementation model gate still asked at code start.** Full design
+  history: the brainstorm file; earlier session blocks (Q&A, design-doc write, judge round):
+  git history of this file (98faa38, c252135).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -190,6 +156,11 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
+0-ACTIVE. **pane-layout-v2: user review gate CLEARED (aux-reuse + all 4 assumptions signed
+   off, zero spec edits). NEXT = `superpowers:writing-plans` on Opus 4.8**, fresh session on
+   `feature/pane-layout-v2`; formal pre-implementation model gate at code start; after plan
+   execution → implementation-stage obs judge → PR. Judge implementation notes are in the
+   CURRENT block above.
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
