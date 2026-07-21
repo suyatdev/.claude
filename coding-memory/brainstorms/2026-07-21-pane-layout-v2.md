@@ -246,7 +246,7 @@ writing-plans. Pre-implementation model gate still open.
   (respawn covers reuse); pane proportions/`resize-pane` = out of scope (user-draggable;
   future nicety).
 
-### Section 4 — Error handling / degradation (drafted 2026-07-21; PRESENTED, awaiting approval)
+### Section 4 — Error handling / degradation (APPROVED 2026-07-21)
 
 **Principle: layout smarts may only ever fail INTO the dumb-but-working path; only the
 dumb path's failure escalates to cooldown.** PR #23's cooldown contract keeps its meaning
@@ -278,9 +278,41 @@ dumb path's failure escalates to cooldown.** PR #23's cooldown contract keeps it
   existing adapter call; degradation policy targets errors, not hangs (macOS lacks stock
   `timeout(1)`; adding machinery = YAGNI until a hang is ever observed).
 
-### Section 5 — not yet drafted
+### Section 5 — Testing (drafted 2026-07-21; PRESENTED, awaiting approval)
 
-(5) testing: both suites; how to fake `cmux` in tests. See "Next step" list above.
+(Ground truth: suites are `panes/adapters.test.sh` (table-driven dry-run + validation, no
+real panes), `dispatch-pane-agent.test.sh`, `run-pane-agent.test.sh`; the 4 adapters are
+cmux/tmux/iterm/terminal — earlier "kitty" mentions were wrong.)
+
+- **Layer 1 — NEW `panes/adapters/cmux-layout.test.sh` (pure decision tests):** source the
+  helper, feed canned tree-JSON fixtures + a fake `PANE_STATE_DIR` (runs dirs ±
+  `agent-exit`) → assert the emitted plan. Case matrix: empty→create slot1;
+  lowest-missing-slot fill; reuse-oldest-finished; full+busy→tab fewest-surfaces (tie →
+  lowest slot); aux exists/absent/reuse; duplicate slot → newest wins; malformed titles →
+  unmanaged; missing run dir = finished; absent role → aux. Real jq, no cmux, fast.
+- **Layer 2 — fake cmux binary:** make `CMUX_BIN` overridable as
+  `${PANE_CMUX_BIN:-/Applications/...}` (precedent: PANE_CLAUDE_BIN / PANE_STATE_DIR;
+  env-only, test-only — controlling env = controlling process, no boundary weakening).
+  Fake = bash script that logs argv and replays scripted per-subcommand responses from a
+  fixture dir. Asserts CALL SEQUENCES (respawn for reuse, correct `--surface` targets,
+  rename carries prefix) and the §4 matrix: garbage tree → legacy call + stderr breadcrumb
+  + NO cooldown flag; respawn fails once → re-derive → legacy; legacy split fails → exit
+  nonzero (cooldown-flag assertion lives in dispatch-pane-agent.test.sh).
+- **Layer 3 — existing suites extended, PANE_DRYRUN redefined as derive-then-print:**
+  derivation is read-only, so dryrun derives (via PANE_CMUX_BIN if set) and prints the
+  plan; with no cmux available it prints the legacy plan → existing `"new-split down"`
+  assertions keep passing on cmux-less machines. tmux/iterm/terminal loop cases unchanged.
+  dispatch-pane-agent.test.sh += `--role` validation (valid/invalid/absent);
+  run-pane-agent.test.sh += marker cases (written after result write, DONE/FAILED content,
+  fail_early → NO marker, shape guard → no marker outside runs/).
+- **Falsification discipline (token-bar lesson, mandatory):** every degradation/guard test
+  is validated by mutating the code it guards and watching it go red before trusting
+  green — e.g. helper exits nonzero on missing jq → the "Tier-1 never cooldowns" test must
+  catch the flag write.
+- **Live probe checklist (implementation start, NOT CI):** scripted scratch-workspace
+  probe resolving assumptions #1/#2/#4 (workspace scoping, in-pane rename, `new-pane
+  --direction`); #3 (restore-session titles) stays observational. Results → branch log.
+  2x2 visual correctness: one manual live check, not automated.
 
 ## Constraints to carry into the design
 
