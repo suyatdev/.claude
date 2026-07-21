@@ -5,7 +5,7 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (design-doc session, Fable 5) · last_active_branch: feature/pane-layout-v2
+- session_origin: desktop · session_started_at: 2026-07-21 (judge session, Fable 5) · last_active_branch: feature/pane-layout-v2
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
@@ -51,6 +51,20 @@ how this file and its linked files should be written (plain language, major chan
   superpowers:writing-plans on Opus 4.8 (formal pre-implementation model gate asked at code
   start). Session restored at ~82k context (handoff pane prepared by hook); checkpointed
   immediately after the doc write.
+- **Judge session 2026-07-21 (resume #3, Fable 5): ROUND 1 BOTH JUDGES CLEAN, pane-dispatched
+  (cmux surfaces 55/56).** Compliance: **pass**, conf=high, 0 violations @ spec blob aeb0074 /
+  HEAD bb4050b; 4 non-blocking notes (pin `respawn-pane --command` quoting during the live
+  probe before REUSE is coded; this pass ≠ aux-reuse sign-off; spec path shorthand
+  `state/runs/` really resolves to `panes/state/runs/`; suites/pins independently verified).
+  Obs (architecting, advisory): risk=low conf=high; 1 concern = success_masking ("run folder
+  missing = finished" infers success from absence — out-of-band `state/runs/` cleanup could
+  recycle a busy pane); wants live probes logged first thing at implementation + fallback
+  tests asserting the exact legacy command sequence. Judge audit trail committed on the
+  branch (pre-PR, merges with it). NEXT: **user review gate** — user reads the spec, explicit
+  sign-off on (a) the aux-reuse extension, (b) the 4 flagged assumptions; any spec edit
+  invalidates the verdicts (blob-sha freshness) → re-run both judges before writing-plans.
+  Then superpowers:writing-plans on Opus 4.8 (formal pre-implementation model gate at code
+  start).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
