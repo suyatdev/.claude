@@ -178,10 +178,77 @@ writing-plans. Pre-implementation model gate still open.
 - Data flow: caller/skill → `dispatch --role implementer` → env → `cmux.sh` →
   `--json tree` → `cmux-layout.sh` plan → execute + rename → ref → send launcher.
 
-### Sections 2-5 — not yet drafted
+### Section 2 — Title convention + slot derivation (APPROVED 2026-07-21; slot-number amendment added by section 3)
 
-(2) title convention + role/slot derivation; (3) dispatch decision algorithm; (4) error
-handling/degradation; (5) testing. See "Next step" list above for scope of each.
+**Section 1 was APPROVED as drafted (user, 2026-07-21).**
+
+- **Title grammar** (inside the FROZEN allowlist `[A-Za-z0-9 ._:-]` ≤64 — the earlier
+  `[impl:run-id]` bracket sketch is amended; allowlist is a reviewed security boundary):
+  `impl:<run-id> <label>` (quadrant) | `aux:<run-id> <label>` (far-right). run-id =
+  `[0-9]+-[0-9]+-[0-9]+` (existing epoch-pid-random). Recognition is ANCHORED:
+  `^(impl|aux):[0-9]+-[0-9]+-[0-9]+ `. **Adapter composes the title** — extracts run-id
+  from the already-validated launcher path (`.../runs/<run-id>/launch.sh`), prefixes
+  role+run-id to the dispatcher's label, truncates at 64 from the RIGHT (prefix never
+  truncated). Dispatcher label drops the redundant `pane: ` prefix (1-word change).
+- **Finished-slot marking — DECIDED (recommend): on-disk marker, not title restamp.**
+  Runner writes `state/runs/<run-id>/agent-exit` (containing DONE/FAILED) immediately
+  AFTER a successful result-file write; run_dir derived from `dirname prompt_file` with a
+  shape guard (no contract change). fail_early paths write NO marker → slot never
+  auto-reused → error pane preserved for post-mortem. In-pane `rename-tab` restamp
+  REJECTED: unverified `$CMUX_SURFACE_ID` format for `--surface`, needs role plumbing into
+  the launcher, and adds a second title form — all for cosmetics `notify` already covers.
+- **Derivation rules** (per dispatch, from `--json tree`): managed surface ⇔ anchored
+  grammar match. impl slot = pane with ≥1 impl surface; slot FINISHED ⇔ every impl
+  surface's run-id has agent-exit marker OR its run dir is gone (7-day cleanup ⇒ finished);
+  else RUNNING. aux pane = pane with ≥1 aux surface and NO impl surface (impl wins mixed
+  panes). Unmanaged panes (incl. the user's main session) are INVISIBLE — never reused,
+  never tabbed, never split-targets. **Main pane needs NO tree identification**: "split
+  right of main" uses cmux's env-implicit targeting (bare `new-split right`, as today);
+  all other splits target managed surface refs read live from the tree.
+- **Flagged assumptions / edges:** (1) workspace scoping — managed titles in OTHER
+  workspaces must not attract splits; mechanism = bare `tree` env-scoping OR matching
+  `$CMUX_WORKSPACE_ID` to tree refs, verify at implementation, degrade to plain
+  `new-split down` if neither works. (2) Post-handoff, main runs in an `aux:`-titled
+  surface → handoff-wrapper best-effort renames its tab on adoption to strip the managed
+  prefix (assumes `rename-tab --surface "$CMUX_SURFACE_ID"` works in-pane; fallback = aux
+  tabs land on main's pane — annoying, functional). (3) restore-session title loss →
+  everything unmanaged → fresh splits (already flagged).
+
+### Section 3 — Dispatch decision algorithm (drafted 2026-07-21; PRESENTED, awaiting approval)
+
+- **Grammar amendment (to approved §2): slot number in the impl title —
+  `impl.<slot>:<run-id> <label>`, slot ∈ 1-4.** Rationale: the tree is FLAT and reuse
+  rewrites run-ids, so creation-epoch order cannot recover which pane is top/bottom; the
+  slot number in the title IS the positional memory (lives in the cmux app like all other
+  layout state; zero new files). Tabbed overflow surfaces carry their pane's slot. `.` is
+  in the frozen allowlist.
+- **Implementer path, in order:** (1) REUSE: any finished impl surface (per §2 marker
+  rules) → `respawn-pane --surface <ref> --command "bash <launcher>"` + rename; pick
+  OLDEST finished (run-id epoch). Never grows the quadrant. (2) CREATE (no reusable,
+  Q < 4 slots present): fill the LOWEST missing slot — slot1 = env-implicit
+  `new-split right` (splits main's cell); slot2 = `new-split down --surface <slot1>`;
+  slot3 = `new-split right --surface <slot1>`; slot4 = `new-split right --surface
+  <slot2>`. Either interleaving still converges to 2x2; lowest-missing-first also
+  self-heals user-closed slots (slot deps are well-founded: 2,3 need 1; 4 needs 2; slot1
+  missing → env-implicit split from main again). New surface gets the launcher via `send`
+  (proven path) + rename. (3) TAB OVERFLOW (Q == 4, none finished): `new-surface --pane`
+  on the slot with the FEWEST surfaces (tie → lowest slot) + send + rename.
+- **Aux path:** aux pane exists → reuse a finished aux surface (respawn, oldest first)
+  else new tab (`new-surface --pane` + send). No aux pane → create it: probe
+  `new-pane --direction right` (full-height right column — ASSUMPTION #4, unverified);
+  fallback `new-split right --surface <slot3|slot4|newest right-column surface>`
+  (imperfect geometry, functional); no quadrant at all → env-implicit `new-split right`.
+  **Aux-surface reuse is an extension beyond the literal Q&A** (Q2 covered the quadrant)
+  — recommended for symmetry + bounded tab growth; flagged for user sign-off.
+- **6-pane cap is EMERGENT, not counted:** managed layout never creates beyond
+  slot1-4 + aux (+ main) = 6. User-made unmanaged panes can push the visual total past 6;
+  they are invisible to the algorithm and unmolested. `close-surface` ends up UNUSED
+  (respawn covers reuse); pane proportions/`resize-pane` = out of scope (user-draggable;
+  future nicety).
+
+### Sections 4-5 — not yet drafted
+
+(4) error handling/degradation; (5) testing. See "Next step" list above for scope of each.
 
 ## Constraints to carry into the design
 
