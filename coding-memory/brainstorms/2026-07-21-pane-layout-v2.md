@@ -139,6 +139,11 @@ broken). Flag in spec, don't probe.
 
 ## Next step (fresh session) — DESIGN SECTIONS DONE, WRITE THE DOC
 
+**STATUS 2026-07-21 (design-doc session): steps (1)+(2) DONE — spec written and
+self-reviewed at `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md`, committed on
+branch `feature/pane-layout-v2`. Steps (3) judges, (4) user review, (5) writing-plans
+remain.**
+
 **ALL FIVE design sections APPROVED 2026-07-21 (same-day resume session; drafts below are
 the approved content, including the section-3 slot-number amendment to section 2's grammar
 and the aux-reuse extension).** Remaining flow: (1) write the design doc from the approved

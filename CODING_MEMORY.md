@@ -5,7 +5,7 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (close-out session, Fable 5) · last_active_branch: main
+- session_origin: desktop · session_started_at: 2026-07-21 (design-doc session, Fable 5) · last_active_branch: feature/pane-layout-v2
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
@@ -40,6 +40,17 @@ how this file and its linked files should be written (plain language, major chan
   both judges, user review, writing-plans. Model: user directed Opus 4.8 for
   writing-plans + implementation (formal gate at code start). Session ended at ~100k by
   checkpoint+clear.**
+- **Design-doc session 2026-07-21 (resume #2, Fable 5): SPEC WRITTEN + inline self-review +
+  Mermaid validated → `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md`,
+  committed on NEW branch `feature/pane-layout-v2` (no PR yet).** Carries all 5 approved
+  sections, the 4 flagged assumptions as their own section, the aux-reuse extension flagged
+  for user sign-off, 8 Gherkin scenarios, pinned toolchain (cmux 0.64.20/jq 1.7.1/CLI
+  2.1.216/shellcheck 0.11.0). NEXT (fresh session, on the branch): (1) compliance +
+  observability judges in parallel, pane-dispatched per running-the-compliance-judge →
+  capped auto-revise loop; (2) user review gate (incl. aux-reuse sign-off); (3)
+  superpowers:writing-plans on Opus 4.8 (formal pre-implementation model gate asked at code
+  start). Session restored at ~82k context (handoff pane prepared by hook); checkpointed
+  immediately after the doc write.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
