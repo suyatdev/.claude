@@ -179,10 +179,25 @@ how this file and its linked files should be written (plain language, major chan
    this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.
    **Tasks 2 (ba9a91b) + 3 (0711017) DONE + pushed** — both pane-routed, commit-verified
    and independently re-run (Task 3: dispatch 39/0, siblings 24/0 10/0 9/0, shellcheck
-   clean, `--role` guard falsified 37/2 → restored 39/0). NEXT: **Task 4** (`cmux-layout.sh`
-   — tree normalization / managed classification / finished check) of
-   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 5–8 →
-   implementation-stage obs judge → PR.
+   clean, `--role` guard falsified 37/2 → restored 39/0).
+   **Task 4 (`cmux-layout.sh`) DONE + pushed (5da1cad)** — layout 12/0, siblings
+   39/24/10/9 all 0 failed, `shellcheck -x` clean; all 4 falsifications RED and reverted
+   (I independently re-ran the two jq ones: 7/5 and 11/1, restored byte-identical 12/0).
+   NEXT: **Task 5** (decision algorithm + title composition) of
+   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 6–8 →
+   implementation-stage obs judge (OWED — not yet run; judge-guard blocks PR) → PR.
+   **Task 4 = plan corrections 5–7, all verified against the live fixture before dispatch:**
+   (a) the normalize selector returns EMPTY (real shape keys each level's own ref as `ref`;
+   surfaces carry `pane_ref`+`title`); (b) **the workspace filter was a SILENT TOTAL
+   FAILURE** — workspace objects carry `ref` and their `workspace_ref` is `null`, so
+   `select(.workspace_ref? == $ws)` matched only the root `active`/`caller` objects and
+   returned NOTHING whenever `CMUX_WORKSPACE_ID` was set (the normal case), degrading the
+   whole feature to legacy; repaired to filter on the workspace's own `.ref`, kept as
+   defence-in-depth with primary scoping SERVER-side via `tree --workspace` (P1);
+   (c) the canned `pane()`/`tree()` builders were in the imagined shape and would have kept
+   (a)+(b) green while live degraded — now mirror `fixtures/tree-live.json`.
+   Implementer also fixed a real footgun: `layout_managed` dropped its last line when stdin
+   lacked a trailing newline (Task 5 will feed it via `$(...)`, which strips it).
    Note for later tasks: the plan's `> file 2>/dev/null` idiom does NOT suppress a
    redirect failure (left-to-right); put the stderr redirect FIRST.
    **Task 3 = the plan's 4th correction:** its handoff `rename-tab --surface
