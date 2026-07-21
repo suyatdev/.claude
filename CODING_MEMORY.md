@@ -32,10 +32,19 @@ how this file and its linked files should be written (plain language, major chan
   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` — 8 tasks, TDD, live probe FIRST
   (P1–P7 resolve the 4 assumptions + respawn quoting), unverified tree schema quarantined
   in `layout_normalize_tree` validated against a live-captured fixture; self-review caught
-  and fixed a T4/T5 fixture state collision. NEXT: Hard Model Gate (user's standing
-  direction = Opus 4.8) + execution-approach choice, then execute the plan; implementation-
-  stage obs judge before PR.** Full design history: the brainstorm file; earlier session
-  blocks: git history of this file (98faa38, c252135).
+  and fixed a T4/T5 fixture state collision. GATES ANSWERED (do not re-ask): Opus 4.8
+  in a FRESH session; subagent-driven execution, pane-routed implementers.** Full design
+  history: the brainstorm file; earlier session blocks: git history of this file
+  (98faa38, c252135).
+- **Resume #5 (2026-07-21, Fable 5): NO execution — stopped at the model gate.** Session
+  ran Fable 5 vs the answered Opus 4.8; discovered pane implementers would ALSO run
+  Fable 5 (settings.json `"model": "claude-fable-5[1m]"`, dispatcher passes no model
+  flag). User chose stop + relaunch on Opus 4.8. **Next session MUST be started with
+  `claude --model claude-opus-4-8` (or `/model` immediately) — the handoff pane and a
+  plain `claude` both inherit the Fable 5 default (handoff-wrapper.sh execs claude with
+  no --model). Open: whether to pin pane implementers to Opus too (settings/dispatcher
+  change, user's call) or accept Fable 5 implementers.** Then execute the plan from
+  Task 1 (live probe); implementation-stage obs judge before PR.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -167,7 +176,9 @@ how this file and its linked files should be written (plain language, major chan
    dispatching-pane-agents). NEXT SESSION (Opus 4.8, on `feature/pane-layout-v2`): execute
    `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` task-by-task — Task 1 (live
    probe) FIRST, it gates the rest** → implementation-stage obs judge → PR. Judge
-   implementation notes are in the CURRENT block above.
+   implementation notes are in the CURRENT block above. **Launch caveat (resume #5
+   stopped here): start the session with `claude --model claude-opus-4-8` — plain
+   `claude` and the handoff pane both default to Fable 5 via settings.json.**
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
