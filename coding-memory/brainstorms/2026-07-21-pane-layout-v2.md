@@ -214,7 +214,7 @@ writing-plans. Pre-implementation model gate still open.
   tabs land on main's pane — annoying, functional). (3) restore-session title loss →
   everything unmanaged → fresh splits (already flagged).
 
-### Section 3 — Dispatch decision algorithm (drafted 2026-07-21; PRESENTED, awaiting approval)
+### Section 3 — Dispatch decision algorithm (APPROVED 2026-07-21, incl. slot-number amendment + aux-reuse extension)
 
 - **Grammar amendment (to approved §2): slot number in the impl title —
   `impl.<slot>:<run-id> <label>`, slot ∈ 1-4.** Rationale: the tree is FLAT and reuse
@@ -246,9 +246,41 @@ writing-plans. Pre-implementation model gate still open.
   (respawn covers reuse); pane proportions/`resize-pane` = out of scope (user-draggable;
   future nicety).
 
-### Sections 4-5 — not yet drafted
+### Section 4 — Error handling / degradation (drafted 2026-07-21; PRESENTED, awaiting approval)
 
-(4) error handling/degradation; (5) testing. See "Next step" list above for scope of each.
+**Principle: layout smarts may only ever fail INTO the dumb-but-working path; only the
+dumb path's failure escalates to cooldown.** PR #23's cooldown contract keeps its meaning
+("terminal unusable"), never "layout confused".
+
+- **Tier 1 — degrade to legacy `new-split down` + send + rename (one stderr breadcrumb
+  `cmux-layout: degraded (<reason>)`, NEVER cooldown):** jq missing; `--json tree` fails
+  or unparseable; workspace scoping unestablishable (assumption #1); derivation nonsense.
+  Malformed titles → those surfaces are simply unmanaged. Duplicate slot N → NEWEST run-id
+  wins, losers unmanaged (never touched). Derivation runs BEFORE any mutating call, so a
+  Tier-1 failure performs exactly one mutation path — no half-built layouts.
+- **TOCTOU race (target surface vanished between tree read and respawn/new-surface/
+  new-split):** retry ONCE with a fresh derivation, then legacy. Bounded, deterministic.
+- **Tier 2 — unchanged from today (adapter exits nonzero → dispatcher cooldown flag →
+  in-process for the session):** the legacy split itself fails, or `send` fails
+  post-creation (pane exists but empty — same partial state v1 ships today; no rollback,
+  no close-surface cleanup: destroying panes on error contradicts the post-mortem
+  philosophy).
+- **Role input:** dispatcher validates `--role` against the allowlist and dies loudly on
+  garbage (caller bug = fail fast, usage exit). At the adapter, absent/unknown env →
+  treated as `aux` + stderr note. The RAW env value never enters any command line or
+  title — only the adapter's own mapped constant (`impl`/`aux`) does.
+- **Marker + wrapper niceties are best-effort:** agent-exit write failure → stderr note,
+  slot just never looks finished (never reused; extra splits at worst) — the PANE_RESULT
+  contract is untouched. Handoff-wrapper rename failure → `|| true` (documented: aux tabs
+  may land on main's pane). Run-id extraction somehow failing → unprefixed title
+  (unmanaged surface) + stderr note, dispatch proceeds.
+- **Accepted risk (explicit):** no timeout wrappers on cmux calls — consistent with every
+  existing adapter call; degradation policy targets errors, not hangs (macOS lacks stock
+  `timeout(1)`; adding machinery = YAGNI until a hang is ever observed).
+
+### Section 5 — not yet drafted
+
+(5) testing: both suites; how to fake `cmux` in tests. See "Next step" list above.
 
 ## Constraints to carry into the design
 
