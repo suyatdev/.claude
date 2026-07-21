@@ -177,14 +177,21 @@ how this file and its linked files should be written (plain language, major chan
 0-ACTIVE. **pane-layout-v2 — EXECUTING. Task 1 (live probe) DONE + pushed (ffe22d2)
    2026-07-21. Gates answered, do not re-ask: model = Opus 4.8 (user ran `/model`
    this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.
-   **Task 2 (agent-exit marker) DONE + pushed (ba9a91b)** — first pane-routed implementer,
-   commit-verified + independently re-run (10/0, shellcheck clean). NEXT: Task 3
-   (`--role` flag / `PANE_AGENT_ROLE` / handoff rename) of
-   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 4–8 →
+   **Tasks 2 (ba9a91b) + 3 (0711017) DONE + pushed** — both pane-routed, commit-verified
+   and independently re-run (Task 3: dispatch 39/0, siblings 24/0 10/0 9/0, shellcheck
+   clean, `--role` guard falsified 37/2 → restored 39/0). NEXT: **Task 4** (`cmux-layout.sh`
+   — tree normalization / managed classification / finished check) of
+   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 5–8 →
    implementation-stage obs judge → PR.
-   Task 2 note for later tasks: the plan's `> file 2>/dev/null` idiom does NOT suppress a
-   redirect failure (left-to-right); put the stderr redirect FIRST. Also
-   `dispatch-pane-agent.sh --role` does not exist until Task 3 lands — don't pass it.
+   Note for later tasks: the plan's `> file 2>/dev/null` idiom does NOT suppress a
+   redirect failure (left-to-right); put the stderr redirect FIRST.
+   **Task 3 = the plan's 4th correction:** its handoff `rename-tab --surface
+   "$CMUX_SURFACE_ID"` (a UUID, and no `--workspace`) would have silently renamed the
+   user's FOCUSED tab (P5+P6+P7 combined) — shipped instead with
+   `--workspace "$CMUX_WORKSPACE_ID"` and NO `--surface`, resolving via the pane's own env.
+   **Unverified live — confirm at Task 8.** The plan's predicted RED set was also wrong
+   (the `--role` allowlist case passes vacuously pre-implementation) — exactly the failure
+   the mandatory falsification rule exists to catch.
    **The probe changed the plan in three places — full verbatim findings in
    `coding-memory/branches/pane-layout-v2.md` §Live probe; read it before Tasks 4/6/7:**
    (a) the real tree JSON shape differs from the plan's assumption at EVERY level (each
