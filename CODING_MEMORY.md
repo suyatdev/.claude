@@ -148,12 +148,13 @@ how this file and its linked files should be written (plain language, major chan
    Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
    into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
    ever observed (spec-guard remedy).
-0c. **Pane orchestration (2026-07-21) — compliance PASS round 2 (468387a), obs risk=low.**
-   At the user review gate. Round 1 FAIL killed `--bare` (2.1.216: skips hooks/CLAUDE.md,
-   API-key-only auth). Three sentence-sized obs advisories offered to user (fired-flag-first
-   wording, CLAUDE_CODE_SESSION_ID source + equivalence check, ADR "four rounds"→six) —
-   applying them re-runs the judge loop (freshness). Next: user review →
-   `superpowers:writing-plans`. Spec:
+0c. **Pane orchestration — SPEC APPROVED by user 2026-07-21** (as-is; compliance PASS r2
+   verdict stays fresh at 468387a). Round 1 FAIL killed `--bare` (2.1.216: skips
+   hooks/CLAUDE.md, API-key-only auth). Three obs advisories deliberately NOT applied to
+   the spec — **fold into the implementation plan**: (1) watcher checks fired-flag before
+   parsing transcript, (2) CLAUDE_CODE_SESSION_ID as dispatcher session-id source +
+   hook-side equivalence check, (3) ADR 0007 Options "four rounds"→six. Next: model gate →
+   `superpowers:writing-plans` → implement on `feature/pane-orchestration`. Spec:
    `docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`; ADR 0007.
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
