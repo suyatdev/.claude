@@ -5,16 +5,18 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (new session) · last_active_branch: main
-- current work: **pane-orchestration — spec judge-passed (compliance PASS r2, obs risk=low)
-  and USER APPROVED as-is 2026-07-21
-  (`docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`). Next: writing-plans
-  on Opus 4.8 in a fresh session — see Next Steps 0c.** Real separate headless Claude sessions in terminal
-  panes for substantial agents (judges + plan implementers), file contract + wait, all four
-  terminal adapters (cmux/tmux/iTerm2/Terminal.app), 75k context-handoff pane (prepare,
-  user presses Enter). **Supersedes judge-terminal-enforcement — ADR 0007** (user chose
-  absorb-old-into-new 2026-07-21; gate-moment verify-else-spawn dropped, dispatch-time
-  redirect kept; always-run guarantee unchanged from today).
+- session_origin: desktop · session_started_at: 2026-07-21 (plan session, Opus 4.8) · last_active_branch: feature/pane-orchestration
+- current work: **pane-orchestration — PLAN WRITTEN 2026-07-21
+  (`docs/superpowers/plans/2026-07-21-pane-orchestration.md`, 12 TDD tasks). Spec approved
+  as-is (compliance PASS r2, obs risk=low; three obs advisories folded into the plan).
+  Next: implementation model gate + execution mode — see Next Steps 0c.** Real separate
+  headless Claude sessions in terminal panes for substantial agents (judges + plan
+  implementers), file contract + wait, all four terminal adapters, 75k context-handoff
+  pane. **Supersedes judge-terminal-enforcement — ADR 0007.**
+  **Plan flags one spec ADDITION for user review: pane runner passes
+  `--dangerously-skip-permissions`** (machine-wide posture — shell alias + cmux launch
+  argv already use it; a headless `-p` without it auto-denies non-allowlisted tools and
+  kills agents mid-run; the flag skips prompts, not hooks/guards).
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -26,12 +28,13 @@ how this file and its linked files should be written (plain language, major chan
   `coding-memory/brainstorms/2026-07-20-judge-terminal-enforcement.md`.
 - **Session-budget preference (2026-07-20): keep each session below ~100k tokens; checkpoint memory
   after each task so the user can /clear before the next design task.**
-- Carried over, still open: **Orca hooks in `settings.json` deliberately uncommitted** (third-party,
-  machine-local, absolute paths; user's call pending; `claude-hook.sh` sources
-  `$ORCA_AGENT_HOOK_ENDPOINT` before its token check and that stdout becomes hook stdout — a channel
-  into the agent control plane). Untracked `chrome/`, `telemetry/`, `stats-cache.json` stay untracked
-  (machine-local; tree permanently dirty so the status line always shows `✗`; gitignore an open
-  question for the user).
+- **CORRECTED 2026-07-21 (was stale): the Orca hooks and the fable-model line are now IN
+  committed `settings.json`** (HEAD == live, last touched by a3aedc8 "Add merge guard") —
+  the old "stay uncommitted / dual-version staging" policy no longer reflects reality.
+  Whether committing them was intended is the user's call (flagged 2026-07-21). The Orca
+  channel caveat still stands: `claude-hook.sh` sources `$ORCA_AGENT_HOOK_ENDPOINT` before
+  its token check and that stdout becomes hook stdout. Untracked `chrome/`, `telemetry/`,
+  `stats-cache.json` stay untracked (machine-local; gitignore an open question).
 - 2026-07-19 session notes — statusline-edit authorship resolved as that session's own work,
   concurrent-session evidence, model-gate history (Sonnet 5 → Opus 4.8), `chore(settings):`
   precedent for model/theme changes: `coding-memory/branches/statusline-token-bar.md` and
@@ -149,14 +152,18 @@ how this file and its linked files should be written (plain language, major chan
    Branch retired, not deleted (user cleanup decision pending). Platform research absorbed
    into the pane-orchestration spec. Resurrect its §3 only if a skipped compliance judge is
    ever observed (spec-guard remedy).
-0c. **Pane orchestration — SPEC APPROVED by user 2026-07-21** (as-is; compliance PASS r2
-   verdict stays fresh at 468387a). Round 1 FAIL killed `--bare` (2.1.216: skips
-   hooks/CLAUDE.md, API-key-only auth). Three obs advisories deliberately NOT applied to
-   the spec — **fold into the implementation plan**: (1) watcher checks fired-flag before
-   parsing transcript, (2) CLAUDE_CODE_SESSION_ID as dispatcher session-id source +
-   hook-side equivalence check, (3) ADR 0007 Options "four rounds"→six. Next (model gate ANSWERED 2026-07-21: plan on Opus 4.8, fresh session):
-   `superpowers:writing-plans` → implement on `feature/pane-orchestration`. Spec:
-   `docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`; ADR 0007.
+0c. **Pane orchestration — PLAN WRITTEN 2026-07-21 on Opus 4.8**
+   (`docs/superpowers/plans/2026-07-21-pane-orchestration.md`; spec approved as-is,
+   compliance PASS r2 fresh at 468387a). All three obs advisories folded into plan tasks
+   (T9 watcher flag-first, T6+T8 session-id source + divergence warning, T1 ADR fix).
+   Planning resolved the spec's open questions: cmux `new-split` verified live from
+   non-TTY (env-targeted, `OK surface:N workspace:M`); matcher = register `Task|Agent`
+   both; wait >10min = background Bash (skill); `--agent` loading = T2 spike.
+   **Spec addition needing user eyes: runner passes `--dangerously-skip-permissions`
+   (see Active Session).** Next, in order: (1) implementation model gate [CRITICAL],
+   (2) execution mode — subagent-driven (recommended) or inline `executing-plans` —
+   likely fresh session per session-budget preference; (3) after implementation:
+   observability judge from a NEW session (first live exercise of the new guard), then PR.
 1. **Statusline token bar — DONE (PR #20 merged 2026-07-20 04:01Z).** Still open, deliberately
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
