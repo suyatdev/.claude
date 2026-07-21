@@ -44,13 +44,21 @@ mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
 
 cwd=$(printf '%s' "$payload" | "$JQ_BIN" -er '.cwd // empty' 2>/dev/null) || cwd=""
 [ -n "$cwd" ] && [ -d "$cwd" ] || cwd="$PWD"
-"$DISPATCH" handoff --cwd "$cwd" >/dev/null 2>&1 || true
+# Condition the nudge text on whether the handoff pane was actually prepared
+# (obs final-review F5): the failure is still swallowed so the hook's own
+# plumbing stays silent, but we must not tell the user a pane is ready when it
+# is not. Only the additionalContext wording changes; the hook still exits 0.
+if "$DISPATCH" handoff --cwd "$cwd" >/dev/null 2>&1; then
+  pane_note=" Then tell the user a handoff pane is ready: pressing Enter in it starts the fresh session."
+else
+  pane_note=" A handoff pane could not be prepared, so continue in this session after checkpointing."
+fi
 
 # shellcheck disable=SC2016  # single-quoted jq program: \($fill) is jq interpolation, not shell
-"$JQ_BIN" -nc --arg fill "$fill" '{
+"$JQ_BIN" -nc --arg fill "$fill" --arg pane "$pane_note" '{
   hookSpecificOutput: {
     hookEventName: "PostToolUse",
-    additionalContext: ("context-handoff-watch: session context is at \($fill) tokens (>= 75k). Run the freshness checkpoint now — update CODING_MEMORY.md, commit, push — then tell the user a handoff pane is ready: pressing Enter in it starts the fresh session.")
+    additionalContext: ("context-handoff-watch: session context is at \($fill) tokens (>= 75k). Run the freshness checkpoint now — update CODING_MEMORY.md, commit, push." + $pane)
   }
 }'
 exit 0

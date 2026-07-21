@@ -48,6 +48,12 @@ rm -f "$PANE_STATE_DIR/adapter-failed-s1"
 : > "$PANE_STATE_DIR/adapter-failed-env-sid"
 run_case "cooldown (env sid) -> allow"       0 "$(payload observability-judge s1)" CLAUDE_CODE_SESSION_ID=env-sid
 rm -f "$PANE_STATE_DIR/adapter-failed-env-sid"
+# F2 (regression): the dispatcher's empty-session fallback writes
+# adapter-failed-nosession (CLAUDE_CODE_SESSION_ID unset); the guard must honor
+# that key too, else the env-drift degrade case is a deny loop.
+: > "$PANE_STATE_DIR/adapter-failed-nosession"
+run_case "cooldown (nosession key) -> allow" 0 "$(payload observability-judge s1)" X=1
+rm -f "$PANE_STATE_DIR/adapter-failed-nosession"
 
 out=$(printf '%s' "$(payload observability-judge s1)" | CLAUDE_CODE_SESSION_ID=other bash "$HOOK" 2>&1 >/dev/null)
 if printf '%s' "$out" | grep -q 'session-id mismatch'; then

@@ -72,5 +72,23 @@ chk "garbage stdin: exit 0"    '[ $? -eq 0 ]'
 printf '%s' "$(payload s-x "$TMP/absent.jsonl")" | bash "$HOOK" >/dev/null 2>&1
 chk "missing transcript: exit 0" '[ $? -eq 0 ]'
 
+# --- F5 (regression): additionalContext must reflect whether the handoff
+# dispatch actually succeeded, not claim a ready pane unconditionally.
+# success path (default stub exits 0): the ready message is emitted.
+transcript "$TMP/t-f5ok.jsonl" 80000 0 0
+out=$(printf '%s' "$(payload s-f5ok "$TMP/t-f5ok.jsonl")" | bash "$HOOK")
+chk "F5 success: pane-ready message" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"pane is ready\")" >/dev/null'
+chk "F5 success: mentions checkpoint"  'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"checkpoint\")" >/dev/null'
+
+# failure path: a dispatcher stub that exits nonzero must NOT claim a ready pane.
+FAILDISPATCH="$TMP/dispatch-fail.sh"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$FAILDISPATCH"; chmod 700 "$FAILDISPATCH"
+transcript "$TMP/t-f5fail.jsonl" 80000 0 0
+out=$(printf '%s' "$(payload s-f5fail "$TMP/t-f5fail.jsonl")" | PANE_DISPATCH="$FAILDISPATCH" bash "$HOOK")
+chk "F5 failure: additionalContext still emitted" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext" >/dev/null'
+chk "F5 failure: no false pane-ready claim"       '! printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"pane is ready\")" >/dev/null'
+chk "F5 failure: says pane could not be prepared" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"could not be prepared\")" >/dev/null'
+chk "F5 failure: still mentions checkpoint"       'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"checkpoint\")" >/dev/null'
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

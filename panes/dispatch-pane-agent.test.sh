@@ -126,5 +126,29 @@ htitle=$(sed -n '2p' "$TMP/handoff-args")
 bash "$DISPATCH" handoff --cwd "$TMP/nodir" >/dev/null 2>&1
 [ $? -eq 64 ] && ok "handoff bad cwd rejected" || bad "handoff bad cwd rejected"
 
+# --- F1 (regression): the default result path is unique per dispatch.
+# Force the scratchpad-default branch by creating a real dir matching
+# scratchpad_dir()'s hardcoded /private/tmp/claude-<uid>/*/<sid>/scratchpad glob,
+# then dispatch the same agent type twice with no --result-file. Pre-fix, both
+# resolve to $agent-$(date +%s).md and collide within one second.
+printf '#!/usr/bin/env bash\necho surface:f1\n' > "$PANE_ADAPTERS_DIR/cmux.sh"; chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+F1SID="panetest-f1-$$-$RANDOM"
+F1ROOT="/private/tmp/claude-$(id -u)/panetest-$$-$RANDOM"
+F1SCRATCH="$F1ROOT/$F1SID/scratchpad"
+mkdir -p "$F1SCRATCH"
+rf1=$(CLAUDE_CODE_SESSION_ID="$F1SID" bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --cwd "$TMP" 2>/dev/null | sed -n 's/^RESULT_FILE: //p')
+rf2=$(CLAUDE_CODE_SESSION_ID="$F1SID" bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --cwd "$TMP" 2>/dev/null | sed -n 's/^RESULT_FILE: //p')
+case "$rf1" in "$F1SCRATCH"/pane-results/*) ok "default result lands in scratchpad pane-results" ;; *) bad "default result lands in scratchpad pane-results" "$rf1" ;; esac
+{ [ -n "$rf1" ] && [ -n "$rf2" ] && [ "$rf1" != "$rf2" ]; } && ok "same-type default result paths are unique" || bad "same-type default result paths are unique" "rf1=$rf1 rf2=$rf2"
+rm -rf "$F1ROOT"
+
+# --- F4 (regression): a relative --result-file is canonicalized to an absolute
+# path against the dispatcher's CWD, so dispatcher/runner/wait all name one file.
+printf '#!/usr/bin/env bash\necho surface:f4\n' > "$PANE_ADAPTERS_DIR/cmux.sh"; chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+mkdir -p "$TMP/relcwd"
+rfrel=$(cd "$TMP/relcwd" && bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file rel-out.md --cwd "$TMP" 2>/dev/null | sed -n 's/^RESULT_FILE: //p')
+rfrel_expect="$(cd "$TMP/relcwd" && pwd)/rel-out.md"
+{ [ -n "$rfrel" ] && [ "$rfrel" = "$rfrel_expect" ]; } && ok "relative --result-file canonicalized to absolute" || bad "relative --result-file canonicalized to absolute" "got=$rfrel want=$rfrel_expect"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

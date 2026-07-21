@@ -96,6 +96,17 @@ case "$cmd" in
     [ -d "$run_cwd" ] || die "--cwd is not an existing directory: $run_cwd"
     run_cwd="$(cd "$run_cwd" && pwd)" || die "cannot resolve --cwd"
 
+    # Canonicalize a user-supplied --result-file to an absolute path against the
+    # caller's CWD, the same way --cwd is resolved above (obs final-review F4).
+    # A relative path would otherwise resolve against three different CWDs in the
+    # dispatcher, the runner, and wait. The default path (computed below) is
+    # already absolute, so this only touches an explicit --result-file.
+    if [ -n "$result_file" ]; then
+      rf_parent="$(dirname "$result_file")"
+      rf_abs_parent="$(cd "$rf_parent" 2>/dev/null && pwd)" || die "result-file directory does not exist: $rf_parent"
+      result_file="$rf_abs_parent/$(basename "$result_file")"
+    fi
+
     mkdir -p "$RUNS_DIR"
     cleanup_stale
     run_dir="$(new_run_dir)" || die "could not create a unique run dir under $RUNS_DIR"
@@ -104,7 +115,10 @@ case "$cmd" in
       scratch="$(scratchpad_dir)"
       if [ -n "$scratch" ] && [ -d "$scratch" ]; then
         mkdir -p "$scratch/pane-results"
-        result_file="$scratch/pane-results/$agent_type-$(date +%s).md"
+        # Unique per dispatch (obs final-review F1): epoch-pid-random, the same
+        # recipe new_run_dir uses — two same-type dispatches in one second must
+        # not collide onto one file that both runners would mv over.
+        result_file="$scratch/pane-results/$agent_type-$(date +%s)-$$-$RANDOM.md"
       else
         result_file="$run_dir/result.md"
       fi
@@ -157,7 +171,10 @@ case "$cmd" in
       # Latency nicety per spec: block on cmux wait-for (runner signals it)
       # instead of a fixed sleep; correctness still comes from the file check.
       if [ -n "${CMUX_PANEL_ID:-}" ] && [ -x "$CMUX_BIN" ]; then
-        "$CMUX_BIN" wait-for "pane-$(basename "$result_file")" --timeout "$CMUX_WAIT_SECS" >/dev/null 2>&1 || true
+        # If cmux wait-for fails fast, fall back to the fixed poll interval so
+        # the loop cannot hot-spin (obs final-review F3); the file check below
+        # stays authoritative either way.
+        "$CMUX_BIN" wait-for "pane-$(basename "$result_file")" --timeout "$CMUX_WAIT_SECS" >/dev/null 2>&1 || sleep "$POLL_SECS"
       else
         sleep "$POLL_SECS"
       fi

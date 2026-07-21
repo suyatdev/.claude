@@ -49,7 +49,10 @@ env_sid="${CLAUDE_CODE_SESSION_ID:-}"
 if [ -n "$sid" ] && [ -n "$env_sid" ] && [ "$sid" != "$env_sid" ]; then
   printf 'pane-dispatch-guard: session-id mismatch (stdin %s vs env %s) — cooldown flags may not line up.\n' "$sid" "$env_sid" >&2
 fi
-for key in "$sid" "$env_sid"; do
+# "nosession" is the literal the dispatcher falls back to when
+# CLAUDE_CODE_SESSION_ID is empty (obs final-review F2) — honor that flag too, or
+# the env-drift degrade case loops (guard denies while dispatch keeps failing).
+for key in "$sid" "$env_sid" nosession; do
   if [ -n "$key" ] && [ -f "$STATE_DIR/adapter-failed-$key" ]; then
     printf 'pane-dispatch-guard: a pane adapter failed earlier this session — allowing in-process dispatch.\n' >&2
     exit 0
