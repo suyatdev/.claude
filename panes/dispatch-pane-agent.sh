@@ -165,7 +165,26 @@ case "$cmd" in
     ;;
 
   handoff)
-    die "handoff not implemented yet (Task 7)" 70
+    run_cwd="$PWD"
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --cwd) [ $# -ge 2 ] || die "--cwd needs a value"; run_cwd="$2"; shift 2 ;;
+        *) die "unknown option: $1" ;;
+      esac
+    done
+    [ -d "$run_cwd" ] || die "--cwd is not an existing directory: $run_cwd"
+    run_cwd="$(cd "$run_cwd" && pwd)" || die "cannot resolve --cwd"
+    mkdir -p "$RUNS_DIR"
+    cleanup_stale
+    run_dir="$(new_run_dir)" || die "could not create a unique run dir under $RUNS_DIR"
+    launcher="$run_dir/launch.sh"
+    {
+      printf '#!/usr/bin/env bash\n'
+      printf 'bash %q %q\n' "$PANES_DIR/handoff-wrapper.sh" "$run_cwd"
+      printf 'exec /bin/zsh -i\n'
+    } > "$launcher"
+    chmod 700 "$launcher"
+    open_pane_or_cooldown "$(sanitize_title "handoff: press Enter")" "$launcher"
     ;;
 
   *)

@@ -104,5 +104,27 @@ CMUX_PANEL_ID= bash "$DISPATCH" wait --result-file "$TMP/never.md" --timeout 3 >
 bash "$DISPATCH" wait --result-file "$RF" --timeout xx >/dev/null 2>&1
 [ $? -eq 64 ] && ok "non-numeric timeout rejected" || bad "non-numeric timeout rejected"
 
+# --- handoff
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s/handoff-args"\necho surface:7\n' "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+# Task-7 test-only plan deviation: the brief keyed the launcher search off
+# "$TMP/adapter-args", but the no-terminal / adapter-failure / stale-state
+# dispatches above each leave a launch.sh newer than adapter-args, so
+# `find ... | head -n1` nondeterministically picked a run-pane-agent launcher.
+# A fresh marker touched immediately before this dispatch makes the handoff
+# launcher the only newer match.
+touch "$TMP/handoff-marker"
+out=$(bash "$DISPATCH" handoff --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "handoff exits 0" || bad "handoff exits 0" "rc=$rc: $out"
+hl=$(find "$PANE_STATE_DIR/runs" -name launch.sh -newer "$TMP/handoff-marker" | head -n 1)
+grep -q 'handoff-wrapper.sh' "$hl" && ok "handoff launcher runs wrapper" || bad "handoff launcher runs wrapper"
+# Task-7 test-only plan deviation: brief read sed -n '1p' (= adapter argv[1]
+# "open_pane"); the sanitized title is argv[2] per the Task 4 adapter contract
+# (the same fix Task 6 applied to its dispatch-title assertion), so line 2.
+htitle=$(sed -n '2p' "$TMP/handoff-args")
+[ "$htitle" = "handoff: press Enter" ] && ok "handoff title" || bad "handoff title" "$htitle"
+bash "$DISPATCH" handoff --cwd "$TMP/nodir" >/dev/null 2>&1
+[ $? -eq 64 ] && ok "handoff bad cwd rejected" || bad "handoff bad cwd rejected"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
