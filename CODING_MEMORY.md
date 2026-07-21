@@ -6,9 +6,10 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-21 (new session) · last_active_branch: main
-- current work: **pane-orchestration brainstorm — design approved, spec written
-  (`docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`), pending compliance +
-  observability judges, then user review.** Real separate headless Claude sessions in terminal
+- current work: **pane-orchestration — spec judge-passed (compliance PASS r2, obs risk=low)
+  and USER APPROVED as-is 2026-07-21
+  (`docs/superpowers/specs/2026-07-20-pane-orchestration-design.md`). Next: writing-plans
+  on Opus 4.8 in a fresh session — see Next Steps 0c.** Real separate headless Claude sessions in terminal
   panes for substantial agents (judges + plan implementers), file contract + wait, all four
   terminal adapters (cmux/tmux/iTerm2/Terminal.app), 75k context-handoff pane (prepare,
   user presses Enter). **Supersedes judge-terminal-enforcement — ADR 0007** (user chose
