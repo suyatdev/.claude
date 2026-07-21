@@ -148,6 +148,41 @@ degrade-never-block); (5) testing (both suites; how to fake `cmux` in tests). Th
 doc → `docs/superpowers/specs/`, self-review, compliance+observability judges, user review,
 writing-plans. Pre-implementation model gate still open.
 
+## Design section drafts (presented one at a time per superpowers:brainstorming)
+
+### Section 1 — Architecture & component boundaries (drafted 2026-07-21 resume session; PRESENTED, awaiting approval)
+
+- **Dispatcher (`dispatch-pane-agent.sh`):** gains ONE optional flag — `dispatch ... --role
+  <implementer|aux>` (allowlist-validated; default `aux`; the `handoff` subcommand is always
+  `aux`). Its only new job is exporting `PANE_AGENT_ROLE=<role>` into the adapter call's
+  environment. No layout knowledge lives here. ~6 lines.
+- **Adapter argv contract FROZEN:** `open_pane <title> <launcher>` unchanged → `common.sh`
+  validation untouched; tmux/iterm/kitty adapters untouched (they never read the env var).
+  Q4's cmux-only scope made structural.
+- **`cmux.sh` = executor:** reads `PANE_AGENT_ROLE` (absent/unknown → `aux`), fetches
+  `cmux --json tree`, asks the decision helper for a plan, executes it
+  (`respawn-pane` / `new-split` / `new-surface --pane` + `rename-tab`), prints the surface
+  ref, sends the launcher. Legacy `new-split down` disappears as a role path but SURVIVES as
+  the degradation floor: any layout-derivation failure (jq missing, tree call fails,
+  unparseable JSON) → plain `new-split down` + rename, i.e. today's exact behavior. Hard
+  failure (→ cooldown) only where it hard-fails today: new-split/send themselves failing.
+- **New `panes/adapters/cmux-layout.sh`:** sourced PURE decision helper — functions take
+  (tree JSON, role) and return an action plan (`reuse <surface_ref>` | `split <dir>
+  <target_ref>` | `tab <pane_ref>`) + the title to stamp. Zero cmux invocations inside, so
+  it unit-tests against canned JSON fixtures with no cmux app (feeds section 5), and keeps
+  cmux.sh within file-size norms.
+- **Runner/launcher:** possibly a small completion-marking hook so finished slots are
+  detectable at the NEXT dispatch (exact mechanism — title restamp vs on-disk marker — is
+  section 2's decision).
+- **State added: none.** Live tree is ground truth; `state/runs/` unchanged.
+- Data flow: caller/skill → `dispatch --role implementer` → env → `cmux.sh` →
+  `--json tree` → `cmux-layout.sh` plan → execute + rename → ref → send launcher.
+
+### Sections 2-5 — not yet drafted
+
+(2) title convention + role/slot derivation; (3) dispatch decision algorithm; (4) error
+handling/degradation; (5) testing. See "Next step" list above for scope of each.
+
 ## Constraints to carry into the design
 
 - Degrade-never-block invariant from PR #23 stands (adapter failure → cooldown → in-process).
