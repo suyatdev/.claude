@@ -14,6 +14,11 @@ how this file and its linked files should be written (plain language, major chan
   entry + outcome backfills) rides docs-only PR #24 branch `docs/pr23-outcome-backfill`.
   **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
   `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
+- **NEW brainstorm IN PROGRESS (2026-07-21, checkpointed at intake): pane-layout v2** — one
+  workspace, main far-left | 2x2 subagent quadrant middle | far-right additional pane, >6 →
+  tabs on pane 6, 6-pane cap. Intake + cmux CLI recon done (layout fully expressible:
+  `new-split --surface`, `new-surface --pane`); clarifying questions NOT yet asked — resume
+  from the open-questions list in `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
