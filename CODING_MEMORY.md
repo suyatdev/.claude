@@ -36,6 +36,10 @@ how this file and its linked files should be written (plain language, major chan
   in a FRESH session; subagent-driven execution, pane-routed implementers.** Full design
   history: the brainstorm file; earlier session blocks: git history of this file
   (98faa38, c252135).
+- **Resume #6 (2026-07-21): Task 1 live probe EXECUTED on Opus 4.8 (ffe22d2).** Probe is
+  re-runnable: `panes/cmux-layout-probe.sh`; fixture `panes/adapters/fixtures/tree-live.json`.
+  Three plan corrections + one user-approved spec deviation — see Next Steps 0-ACTIVE and
+  `coding-memory/branches/pane-layout-v2.md`.
 - **Resume #5 (2026-07-21, Fable 5): NO execution — stopped at the model gate.** Session
   ran Fable 5 vs the answered Opus 4.8; discovered pane implementers would ALSO run
   Fable 5 (settings.json `"model": "claude-fable-5[1m]"`, dispatcher passes no model
@@ -170,18 +174,29 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
-0-ACTIVE. **pane-layout-v2: plan WRITTEN + BOTH GATES ANSWERED 2026-07-21 (explicit user
-   choices, do not re-ask): Hard Model Gate = Opus 4.8; execution =
-   SUBAGENT-DRIVEN (superpowers:subagent-driven-development; implementers PANE-routed per
-   dispatching-pane-agents). NEXT: execute
-   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` task-by-task — Task 1 (live
-   probe) FIRST, it gates the rest** → implementation-stage obs judge → PR. Judge
-   implementation notes are in the CURRENT block above. **Resume #6 (Sonnet 5): gate
-   re-triggered again (session ran Sonnet 5, not Opus 4.8). User chose to switch models
-   IN-SESSION via `/model claude-opus-4-8` rather than relaunch — STILL PENDING, ask has
-   not been run yet; block Task 1 until it is. Also found: settings.json's `model` field
-   is unstable — a `fable-5`→`sonnet` edit self-reverted within ~1 min with no git hook
-   involved, so don't trust an old diff of it; re-`grep` fresh before acting.**
+0-ACTIVE. **pane-layout-v2 — EXECUTING. Task 1 (live probe) DONE + pushed (ffe22d2)
+   2026-07-21. Gates answered, do not re-ask: model = Opus 4.8 (user ran `/model`
+   this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.
+   NEXT: Task 2 (agent-exit marker) of
+   `docs/superpowers/plans/2026-07-21-pane-layout-v2.md`** → Tasks 3–8 →
+   implementation-stage obs judge → PR.
+   **The probe changed the plan in three places — full verbatim findings in
+   `coding-memory/branches/pane-layout-v2.md` §Live probe; read it before Tasks 4/6/7:**
+   (a) the real tree JSON shape differs from the plan's assumption at EVERY level (each
+   level keys its own ref as `ref`; surfaces carry `pane_ref`+`title`) — the plan's jq
+   matches nothing, so Task 4 must rewrite both the jq AND the canned test builders, or
+   unit tests stay green while live silently degrades to legacy; (b) `rename-tab` does
+   NOT error on an unresolvable `--surface` — it silently renames the FOCUSED tab, so
+   Task 7 needs verify-after-rename, not retry-once; (c) `respawn-pane` destroys the
+   surface when its command exits → reuse uses `cmux send` instead (**user-approved
+   deviation; spec left unedited — flag it to the implementation-stage judge**).
+   Spec assumption 1 (bare tree workspace-scoped) is FALSE but the gate did not trip
+   (`tree --workspace` accepts `$CMUX_WORKSPACE_ID`); assumption 4 confirmed visually.
+   Also: every mutating cmux call needs an explicit `--workspace` (refs resolve relative
+   to it; UUIDs work for `--workspace` but not `--pane`).
+   **settings.json's `model` field tracks the ACTIVE session model — it is not a stable
+   committed preference. Now `opus[1m]` (user's /model), uncommitted. Re-`grep` fresh
+   rather than trusting any earlier diff.**
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.
