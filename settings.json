@@ -31,6 +31,15 @@
         ]
       },
       {
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/pane-dispatch-guard.sh"
+          }
+        ]
+      },
+      {
         "matcher": "*",
         "hooks": [
           {
@@ -164,6 +173,15 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/handoff/post-edit-hook.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/context-handoff-watch.sh"
           }
         ]
       }

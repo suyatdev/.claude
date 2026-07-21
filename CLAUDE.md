@@ -19,6 +19,7 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 
 - `writing-specs` — writing a spec an agent will build from: BDD/Gherkin, contracts, pinned versions.
 - `diagramming-technical-docs` — embedding rendered Mermaid diagrams (architecture, sequence, state, ER, mindmap) in technical docs, designs, plans, and ADRs.
+- `dispatching-pane-agents` — routing a substantial subagent (judge, plan implementer) into a terminal pane via the pane dispatcher; result-file contract, wait timeouts, fallback rules.
 - `designing-agentic-architecture` — single-agent-with-skills vs. multi-agent, splitting a monolith, orchestrator routing, DAG workflows.
 - `integrating-mcp` — connecting to or building an MCP server: transports, trust tiers, scoping, debugging.
 - `securing-agentic-systems` — sandboxing, supply chain, agent identity, tool-call policy gating, agent observability.
