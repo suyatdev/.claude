@@ -25,8 +25,12 @@ The geometry cannot be self-checked — the tree exposes none. The **release** c
   a second identical warning would read as two separate problems.
 - On mismatch: a **two-line** stderr warning naming both the found and the verified version, plus
   a durable marker at `$PANE_STATE_DIR/cmux-version-mismatch`. The marker is the part that
-  survives the scrollback, which is what made this also close the judge's second item — the
-  "silent degrade leaves one stderr breadcrumb and no persistent signal" concern.
+  survives the scrollback.
+- **Scope correction.** The round-2 judge framed this as *"one detector closes two open items"* and
+  this log repeated it. It closes **one item and part of a second**: a *version-driven* degrade now
+  leaves a persistent signal, but every other degrade path (`tree call failed`, `tree unparseable`,
+  `derivation failed`, `jq missing`) still emits one stderr line and no receipt. The judge flagged
+  its own wording as the source of the overstatement — recorded here so it does not calcify.
 - **Warns, never degrades.** An upgrade silently switching the layout off is precisely the failure
   this guards against, and a version bump is not itself evidence of breakage.
 - **Fails open** on anything unreadable — non-zero exit, empty output, or a field 2 that no longer

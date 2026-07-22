@@ -6,14 +6,17 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/pane-layout-v2
-- **PR #25 OPEN — pane-layout-v2 is feature-complete and awaiting review/merge.**
-  https://github.com/suyatdev/.claude/pull/25 (created 2026-07-22 @ ec03621). All 9 tasks done,
-  probe P8 done, ADR 0008 written, implementation judge PASSED across two rounds (risk=low).
-  **NEXT ACTION: nothing to build — merge via the GitHub UI, then backfill the verdict outcome.**
-  **First post-merge follow-up: the cmux version gate** (pin 0.64.20, compare at layout time, warn
-  loudly on mismatch) — closes the branch's main latent risk, since a cmux that changes pane-walk
-  order lands the aux column wrong while all 170 tests still pass. Detail:
-  `coding-memory/pr-tracking.md` §PR #25 and resume #9 below.
+- **PR #25 MERGED 2026-07-22 (`3491464`); branch pruned local + remote; verdict outcomes
+  backfilled.** pane-layout-v2 shipped: 9 tasks, probe P8, ADR 0008, implementation judge PASSED
+  over two rounds. Detail: `coding-memory/pr-tracking.md` §PR #25, resume #9 below.
+- **CURRENT: `feature/cmux-version-gate`** — PR #25's agreed first post-merge follow-up, and the
+  round-2 judge's top item. `check_cmux_version` in the adapter pins the verified cmux release and
+  warns + leaves a durable receipt when the live binary differs, because the aux-column anchor is
+  a heuristic that no test can catch drifting (every adapter test drives a FAKE binary). Suite
+  170 → 193. **Its own round-1 judge found a real bug by probing nine version strings: a
+  `[0-9.]`-only filter silently swallowed `0.65.0-rc1`/`0.64.20-beta`** — the pre-release builds
+  most likely to have moved behaviour — so the parser now tests version-SHAPED, not version-CLEAN.
+  Log: `coding-memory/branches/cmux-version-gate.md`.
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure

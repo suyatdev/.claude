@@ -43,17 +43,31 @@ LAYOUT_VERIFIED_CMUX_VERSION="0.64.20"
 
 check_cmux_version() {
   local line found marker
+  marker="${PANE_STATE_DIR:-$HOME/.claude/panes/state}/cmux-version-mismatch"
+  mkdir -p "$(dirname "$marker")" 2>/dev/null
   line="$("$CMUX_BIN" version </dev/null 2>/dev/null | head -n 1)"
-  # `cmux 0.64.20 (100) [14e3400b9]` -> field 2, accepted only if it still looks
-  # like a version; any other shape is treated as unreadable, never as a mismatch.
-  found="$(printf '%s\n' "$line" | awk '{print $2}')"
-  case "$found" in ''|*[!0-9.]*) return 0 ;; esac
-  [ "$found" = "$LAYOUT_VERIFIED_CMUX_VERSION" ] && return 0
+  found="$(printf '%s\n' "$line" | awk '{print $2}')"   # `cmux 0.64.20 (100) [sha]`
+  # Version-SHAPED is the test, not version-CLEAN: `0.65.0-rc1` is a different
+  # release, not an unreadable one. A stricter [0-9.]-only filter silently
+  # swallowed every pre-release — the builds most likely to have moved
+  # behaviour — which the round-1 judge caught by probing nine version strings.
+  case "$found" in
+    [0-9]*.[0-9]*) ;;
+    # Unreadable: stay silent on stderr (a changed `version` shape must not cry
+    # wolf every dispatch) but still leave a receipt, because an alarm that goes
+    # quiet FOREVER is indistinguishable from an alarm that is happy.
+    *) printf 'unreadable version output: %s\n' "$line" > "$marker" 2>/dev/null
+       return 0 ;;
+  esac
+  if [ "$found" = "$LAYOUT_VERIFIED_CMUX_VERSION" ]; then
+    # The receipt means "there is a problem RIGHT NOW". Left behind after an
+    # upgrade is reverted or re-verified, it reports a resolved fault.
+    rm -f "$marker" 2>/dev/null
+    return 0
+  fi
   printf 'cmux-layout: WARNING — cmux %s is not the verified %s.\n' \
     "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" >&2
   printf 'cmux-layout: pane placement rides an unverified heuristic; re-run panes/cmux-layout-probe.sh.\n' >&2
-  marker="${PANE_STATE_DIR:-$HOME/.claude/panes/state}/cmux-version-mismatch"
-  mkdir -p "$(dirname "$marker")" 2>/dev/null
   printf 'found %s, verified %s\n' "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" \
     > "$marker" 2>/dev/null
   return 0

@@ -417,9 +417,29 @@ for desc in "version call fails" "version output is unparseable"; do
   esac
   adapter implementer
   [ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "$desc -> dispatch proceeds" || bad "$desc -> dispatch proceeds" "rc=$RC out=$OUT err=$ERR"
-  printf '%s' "$ERR" | grep -qi 'version' && bad "$desc -> stays silent" "$ERR" || ok "$desc -> stays silent"
-  [ -e "$VER_MARKER" ] && bad "$desc -> leaves no marker" "marker exists" || ok "$desc -> leaves no marker"
+  printf '%s' "$ERR" | grep -qi 'version' && bad "$desc -> stays silent on stderr" "$ERR" || ok "$desc -> stays silent on stderr"
+  # ...but it must still leave a receipt. Silence on screen is to avoid crying
+  # wolf every dispatch; going silent FOREVER is how the alarm dies unnoticed.
+  grep -qi 'unreadable' "$VER_MARKER" 2>/dev/null && ok "$desc -> still leaves an unreadable-version receipt" || bad "$desc -> still leaves an unreadable-version receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
 done
+
+# A pre-release build is an ordinary way to land on a version whose behaviour
+# changed. Treating a suffixed version as "unreadable" makes the alarm deaf to
+# exactly the builds most likely to have moved — found by the round-1 judge,
+# which probed nine version strings rather than trusting the parser.
+for v in "0.65.0-rc1" "0.64.20-beta" "1.0.0"; do
+  ver_setup; printf 'cmux %s (101) [deadbeef]\n' "$v" > "$FAKE_DIR/version"
+  adapter implementer
+  printf '%s' "$ERR" | grep -qF "$v" && ok "pre-release/major $v is a MISMATCH, not unreadable" || bad "pre-release/major $v is a MISMATCH, not unreadable" "$ERR"
+  grep -qF "$v" "$VER_MARKER" 2>/dev/null && ok "$v leaves a mismatch receipt" || bad "$v leaves a mismatch receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
+done
+
+# The receipt means "there is a problem RIGHT NOW". Left behind after the
+# version is fixed, it is worse than nothing: it reports a resolved fault.
+ver_setup; printf 'stale mismatch\n' > "$VER_MARKER"
+printf 'cmux 0.64.20 (100) [14e3400b9]\n' > "$FAKE_DIR/version"
+adapter implementer
+[ -e "$VER_MARKER" ] && bad "a matching version CLEARS a stale receipt" "$(cat "$VER_MARKER")" || ok "a matching version CLEARS a stale receipt"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
