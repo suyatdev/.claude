@@ -27,6 +27,38 @@ validate_open_pane_args "$title" "$launcher" || exit 65
 
 degraded() { printf 'cmux-layout: degraded (%s)\n' "$1" >&2; }
 
+# The layout logic is calibrated against ONE cmux release: flag semantics, the
+# --json tree shape, and above all layout_rightmost_surface's far-right anchor,
+# which is a HEURISTIC — `index` is traversal order over a flat pane array, not
+# left-to-right (Correction 27, probe P8). None of that is self-checking, and
+# every adapter test drives a FAKE binary, so a cmux that walks panes
+# differently mis-places the aux column with the whole suite still green. The
+# release is the one thing that IS checkable, so it is checked.
+#
+# Warns, never degrades: an upgrade silently switching the layout off is the
+# exact failure this guards against, and a version bump is not itself evidence
+# of breakage. Fails OPEN on anything unreadable — a changed `version` output
+# shape must not cry wolf on every dispatch. See ADR 0008.
+LAYOUT_VERIFIED_CMUX_VERSION="0.64.20"
+
+check_cmux_version() {
+  local line found marker
+  line="$("$CMUX_BIN" version </dev/null 2>/dev/null | head -n 1)"
+  # `cmux 0.64.20 (100) [14e3400b9]` -> field 2, accepted only if it still looks
+  # like a version; any other shape is treated as unreadable, never as a mismatch.
+  found="$(printf '%s\n' "$line" | awk '{print $2}')"
+  case "$found" in ''|*[!0-9.]*) return 0 ;; esac
+  [ "$found" = "$LAYOUT_VERIFIED_CMUX_VERSION" ] && return 0
+  printf 'cmux-layout: WARNING — cmux %s is not the verified %s.\n' \
+    "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" >&2
+  printf 'cmux-layout: pane placement rides an unverified heuristic; re-run panes/cmux-layout-probe.sh.\n' >&2
+  marker="${PANE_STATE_DIR:-$HOME/.claude/panes/state}/cmux-version-mismatch"
+  mkdir -p "$(dirname "$marker")" 2>/dev/null
+  printf 'found %s, verified %s\n' "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" \
+    > "$marker" 2>/dev/null
+  return 0
+}
+
 # Refs resolve relative to a workspace context that defaults to
 # $CMUX_WORKSPACE_ID (probe P5), so every call that names or reads one carries
 # it explicitly when it is set. Never emit an empty --workspace. bash 3.2 treats
@@ -246,6 +278,10 @@ execute_plan() { # $1 "PLAN: ..." line, $2 composed title. rc 1 = retryable
 # Derive -> execute. A vanished target (TOCTOU) earns exactly ONE fresh
 # derivation, then the legacy floor. Tier-2 failures inside finish_surface/
 # legacy_open exit 1 directly — they are not retried (spec error table).
+#
+# Checked ONCE, before the loop: the retry arm re-derives, and a second
+# identical warning would read as two separate problems.
+check_cmux_version
 attempt=1
 while :; do
   TREE_RAW="$(fetch_tree)" || { legacy_open; exit 0; }
