@@ -5,6 +5,13 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
+  **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
+  dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
+  quadrant + 1 default `aux`) was being scoped when the 75k handoff fired. **Pre-existing
+  uncommitted `coding-memory/compliance-judge/verdicts.jsonl` (2-line diff) + new
+  `2026-07-22-0007-tea-room.md` predate this session and are unrelated to it — still awaiting a
+  user decision on whether to commit them.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/cmux-version-gate
 - **PR #25 MERGED 2026-07-22 (`3491464`); branch pruned local + remote; verdict outcomes
   backfilled.** pane-layout-v2 shipped: 9 tasks, probe P8, ADR 0008, implementation judge PASSED
