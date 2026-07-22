@@ -5,7 +5,11 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (judge session, Fable 5) · last_active_branch: feature/pane-layout-v2
+- session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/pane-layout-v2
+- **NEXT ACTION: open the pane-layout-v2 PR.** All 9 tasks done + pushed; probe P8 done;
+  ADR 0008 written; implementation judge PASSED (risk=low). `judge-guard.sh` is strict — the
+  verdict must match HEAD at `gh pr create`, so **do not commit between the verdict and the PR**;
+  commit the audit trail to the branch immediately after. Detail: resume #9 below.
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
@@ -36,6 +40,35 @@ how this file and its linked files should be written (plain language, major chan
   in a FRESH session; subagent-driven execution, pane-routed implementers.** Full design
   history: the brainstorm file; earlier session blocks: git history of this file
   (98faa38, c252135).
+- **Resume #9 (2026-07-22, Opus 4.8): probe P8 + implementation judge PASSED. PR is the only
+  step left.** HEAD `e12dc06`. **P8 finally supplied the live coverage Tasks 8/9 could not**
+  (`coding-memory/branches/pane-layout-v2.md` §P8, script `<scratchpad>/live-quadrant-probe.sh`):
+  four sequential `--role implementer` dispatches, each plan *predicted* from the live tree
+  before firing, all four matching exactly — **impl slots 3–4 are no longer fake-verified**,
+  because the agents were still booting so no `agent-exit` existed and reuse could not preempt
+  growth. Two corrections: **27** — `index` is traversal order over a FLAT panes array, NOT
+  left-to-right (Task 8's experiment only made horizontal splits; with a real quadrant impl.2
+  in the left column sorts *after* impl.3 in the right one), so `layout_rightmost_surface` is
+  a heuristic and its comment now says so — logic unchanged, nothing better is exposed; **28** —
+  `new-pane` *does* follow `focus-pane`, so it is anchorable after all, but that neither beats
+  `new-split --surface` nor fixes height. **Aux height is ordering-dependent and accepted as a
+  limitation → ADR 0008**: full-height when the column predates the quadrant (the common path —
+  handoff + judges open first), half-height bottom-right when created after, unfixable because
+  the tree is flat, both split verbs are pane-relative, and `--placement dock` is disabled.
+  Implementation judge **PASS, risk=low confidence=high**, no dimension failed, concerns
+  `success_masking` + `audit_trail`; it independently re-ran three recorded falsifications and
+  re-checked the unfixability argument. **Its sharpest catch, now the branch's main latent risk:
+  a future cmux changing pane-walk order lands the aux column wrong while all 170 tests still
+  pass** — every test drives a fake binary, so mitigation is procedural (re-run
+  `panes/cmux-layout-probe.sh` after any cmux upgrade). Live workspace restored and **diffed**
+  against its captured baseline. Judge follow-up not blocking: widen the one-line stderr notice
+  when the layout path degrades to legacy.
+- **Resume #8 (2026-07-21, Opus 4.8): Tasks 7–9 DONE + pushed (45fee28, 1d1e3c7, 17a0f44).**
+  Plan execution + verify-after-rename; Task 8's first-ever real-binary smoke check, which
+  **falsified spec assumption 4** (aux landed 2nd from left — `new-pane` splits off the current
+  pane); Task 9 added mid-flight to anchor aux on the rightmost pane. Also proved live: the P4
+  send-not-respawn reuse deviation (same surface re-used), `--workspace` scoping, title
+  stamping, the T3 handoff-wrapper rename. `--role` documented in the skill.
 - **Resume #7 (2026-07-21, Opus 4.8): Task 6 DONE + pushed (aa2cc42).** Pane-dispatched
   implementer (`--role implementer`, surface:78); commit verified in-checkout, all five
   suites independently re-run, one falsification independently re-run by me. Corrections
