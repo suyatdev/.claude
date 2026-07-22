@@ -418,6 +418,58 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
     - Live confirmation is still owed at Task 8, together with Task 3's
       handoff-wrapper rename and Task 6's `send`/`rename-tab` `--workspace` placement.
 
+- **Task 8 (skill doc, sweep, LIVE smoke check, close-out) — DONE 2026-07-21.** `--role` is
+  documented in `skills/dispatching-pane-agents/SKILL.md` (Procedure step 2: `implementer`
+  for plan-task implementers and their reviewers, default `aux` for judges/handoff/everything
+  else). Sweep: adapters 24/0, cmux-layout 26/0, cmux-exec 53/0, dispatch 39/0, run-pane 10/0,
+  terminal-detect 9/0; `shellcheck -x` silent on all eight scripts. **Then the smoke check —
+  the first time any of this branch's code met the real cmux binary. It paid for itself: seven
+  tasks of fake-verified green had hidden a spec-level design failure.**
+  - **Read-only phase, before touching anything.** `cmux --json tree --workspace
+    "$CMUX_WORKSPACE_ID"` piped through the real `layout_normalize_tree` returned 8 live
+    surfaces — the corrected P2 selector works against live 0.64.20, and the UUID is accepted
+    server-side (P1 re-confirmed). `layout_managed` correctly returned empty (nothing had ever
+    been stamped). **Task 3's handoff-wrapper rename is thereby verified live**: `surface:72`
+    carries exactly `main session`, and `panes/handoff-wrapper.sh:34` is the only writer of
+    that string in the tree — the rename that shipped untested with `|| true` swallowing its
+    failure does work. Task 3's `pane: ` prefix drop is visible in the wild too (an older
+    `pane: general-purpose` surface beside a newer bare `general-purpose`).
+  - **Mutating phase, in the user's own main workspace (their choice over a scratch one).**
+    Titles snapshotted first so any mis-stamp could be restored. Confirmed live, in order:
+    impl slot 1 created and classified `impl 1 <run-id>`; a second dispatch **reused** slot 1
+    (pane-echo finishes in seconds, so reuse correctly preempted growth) — **and the surface
+    survived, which is exactly what `respawn-pane` would have destroyed, validating the P4
+    deviation end-to-end**; with slot 1 held busy by a long-running agent, slot 2 was created
+    as a new pane splitting **down** off slot 1's own surface ref, proving the `--workspace`
+    flag order on `new-split --surface` that Task 7 could only infer; a default-role dispatch
+    produced an `aux:` titled surface. **No mis-target breadcrumb ever fired and not one
+    pre-existing title was altered, `main session` included.**
+  - **FAILURE — spec assumption 4 does not hold.** The user confirmed visually that the aux
+    pane opened **2nd from left, not far-right**. Root cause and its correction are recorded
+    in the rewritten P3 section; `new-pane --placement dock`, the one plausible escape hatch,
+    returns `Error: invalid_params: Dock placement is disabled` on this build. Fixed in Task 9.
+  - **Discovery that made the fix possible — panes expose `index`, and it IS left-to-right
+    order.** Proven by controlled experiment rather than inference: from a single pane,
+    `new-pane --direction right` produced `idx1`, then `new-split right` off that pane's
+    surface produced `idx2`, each index matching its visual position. This is what corrects
+    P3's "geometry is not exposed in the tree" — pixel geometry is not, ordering is.
+  - **Process error worth recording: a bug was misdiagnosed, by me, from a bad harness.**
+    Sourcing these bash scripts directly into the Bash tool's shell — which is **zsh** —
+    made `layout_managed` misreport a correct `impl.1:` title as `aux` with an empty run-id,
+    because `BASH_REMATCH` indexing differs between the shells. Re-running under
+    `/bin/bash -c` gave the correct `impl 1 <run-id> pane:61 surface:83`. The code was never
+    wrong. **Always run these helpers under `/bin/bash`, never the tool's default shell.**
+  - **Slots 3–4 could not be exercised live and are still unverified.** Reuse preempts growth
+    whenever an earlier slot has finished, so the quadrant only grows past 2 when three or
+    more agents are running *concurrently*; every attempt to force it saw the earlier agents
+    finish first and get reused instead. Not a defect — a property of the reuse rule — but it
+    means the slot-3/slot-4 split table remains fake-verified only.
+  - **Not verified — stated plainly.** The verify-after-rename **repair** path never executed
+    (no mis-target occurred to trigger it, which is itself good news); `%q`'s backslash form
+    was never put through a live receiving shell; Task 9's aux fix is derivation-correct but
+    **not visually confirmed**. The user's workspace was restored afterwards to `pane:13`
+    plus its four original surfaces, with every title intact.
+
 - **Task 9 (aux placement — anchor on the rightmost pane) — DONE 2026-07-21.** Fixes the bug
   Task 8's live smoke check found: the aux column landed **2nd from left**, not far-right.
   Root cause is recorded in the corrected P3 section — `new-pane` has no anchor flag and
