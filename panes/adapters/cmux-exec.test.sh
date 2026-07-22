@@ -31,13 +31,25 @@ WS_UUID="49F4D8B9-887A-44A0-985A-D8F779B73683"
 
 # the fake: first non-flag arg = subcommand; response file $FAKE_DIR/<sub>,
 # exit code file $FAKE_DIR/<sub>.rc (default 0). --json is a flag, skip it.
+#
+# Per-CALL overrides $FAKE_DIR/<sub>.<n> and $FAKE_DIR/<sub>.rc.<n> win over the
+# flat ones for the n-th call to that subcommand. Verify-after-rename (probe P6)
+# re-reads the tree, so a single static response cannot express "the tree the
+# adapter derived from" vs "the tree it sees after the stamp" — without the
+# sequence every case would look mis-targeted and the verification assertions
+# could not tell a pass from a failure.
 cat > "$PANE_CMUX_BIN" <<'FAKE'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_LOG"
 sub=""
 for a in "$@"; do case "$a" in --json) ;; *) sub="$a"; break ;; esac; done
-[ -f "$FAKE_DIR/$sub" ] && cat "$FAKE_DIR/$sub"
-rc=0; [ -f "$FAKE_DIR/$sub.rc" ] && rc="$(cat "$FAKE_DIR/$sub.rc")"
+n=1; [ -f "$FAKE_DIR/$sub.n" ] && n="$(cat "$FAKE_DIR/$sub.n")"
+printf '%s' "$((n+1))" > "$FAKE_DIR/$sub.n"
+if   [ -f "$FAKE_DIR/$sub.$n" ]; then cat "$FAKE_DIR/$sub.$n"
+elif [ -f "$FAKE_DIR/$sub" ];    then cat "$FAKE_DIR/$sub"; fi
+rc=0
+if   [ -f "$FAKE_DIR/$sub.rc.$n" ]; then rc="$(cat "$FAKE_DIR/$sub.rc.$n")"
+elif [ -f "$FAKE_DIR/$sub.rc" ];    then rc="$(cat "$FAKE_DIR/$sub.rc")"; fi
 exit "$rc"
 FAKE
 chmod 700 "$PANE_CMUX_BIN"
@@ -92,9 +104,11 @@ T_EMPTY="$(tree "$(workspace workspace:1 "$(pane pane:1 'surface:10|zsh')")")"
 # explicit run dir the missing dir would read as FINISHED and this would be a
 # reuse instead.
 running 1700000001-1-1
-T_SLOT1="$(tree "$(workspace workspace:1 \
-  "$(pane pane:1 'surface:10|zsh')" \
-  "$(pane pane:44 'surface:65|impl.1:1700000001-1-1 taskA')")")"
+S1_PANES=(
+  "$(pane pane:1 'surface:10|zsh')"
+  "$(pane pane:44 'surface:65|impl.1:1700000001-1-1 taskA')"
+)
+T_SLOT1="$(tree "$(workspace workspace:1 "${S1_PANES[@]}")")"
 
 # --- Tier 1: tree call fails -> legacy + breadcrumb + exit 0
 reset_fake; printf '1' > "$FAKE_DIR/tree.rc"; split_ok
@@ -184,6 +198,155 @@ OUT="$(PANE_DRYRUN=1 PANE_AGENT_ROLE="$ROLE_BOGUS" bash "$HERE/cmux.sh" open_pan
 printf '%s' "$OUT" | grep -q 'unknown PANE_AGENT_ROLE' && ok "unknown role noted on stderr" || bad "unknown role noted on stderr" "$OUT"
 printf '%s' "$OUT" | grep -q "DRYRUN: TITLE: aux:$RUN_ID lbl" && ok "unknown role falls back to aux" || bad "unknown role falls back to aux" "$OUT"
 printf '%s\n%s' "$OUT" "$(cat "$FAKE_LOG")" | grep -qF -- "$ROLE_BOGUS" && bad "raw role value never reaches output or argv" "$OUT" || ok "raw role value never reaches output or argv"
+
+# =============================================================================
+# Plan EXECUTION. Everything above pins the frame (derive, degrade, legacy
+# floor); everything below pins what the adapter does with a derived plan.
+# =============================================================================
+
+# new-split/new-surface/new-pane --json OUTPUT (probes P3/P5). This is NOT tree
+# shape — the created object keys its ref as "surface_ref" — so .surface_ref is
+# the right selector here even though the tree keys the same thing as "ref".
+JSON_SPLIT='{"pane_ref":"pane:30","surface_ref":"surface:51","type":"terminal","window_ref":"window:1","workspace_ref":"workspace:1"}'
+creates()    { printf '%s\n' "$JSON_SPLIT" > "$FAKE_DIR/$1"; }  # $1 = new-split|new-surface|new-pane
+set_tree_n() { printf '%s' "$2" > "$FAKE_DIR/tree.$1"; }        # $1 = which tree read
+
+# Composed titles this run: the adapter stamps these, so the post-rename trees
+# below have to carry them verbatim or verification reports a mis-target.
+MT1="impl.1:$RUN_ID lbl"; MT2="impl.2:$RUN_ID lbl"; MTA="aux:$RUN_ID lbl"
+
+# T_SLOT1 with one more surface — the tree as it looks AFTER a successful stamp.
+slot1_plus() { tree "$(workspace workspace:1 "${S1_PANES[@]}" "$(pane pane:30 "$1|$2")")"; }
+
+# A full, all-RUNNING quadrant. Slot 1's pane deliberately carries a SECOND
+# surface so the overflow tie-break is discriminating: fewest-surfaces wins, so
+# the expected answer is slot 2's pane, NOT the lowest-numbered one.
+FULL_PANES=(
+  "$(pane pane:44 'surface:65|impl.1:1700000011-1-1 a' 'surface:66|zsh')"
+  "$(pane pane:45 'surface:70|impl.2:1700000012-1-1 b')"
+  "$(pane pane:46 'surface:80|impl.3:1700000013-1-1 c')"
+  "$(pane pane:47 'surface:90|impl.4:1700000014-1-1 d')"
+)
+T_FULL="$(tree "$(workspace workspace:1 "${FULL_PANES[@]}")")"
+full_plus() { tree "$(workspace workspace:1 "${FULL_PANES[@]}" "$(pane pane:30 "$1|$2")")"; }
+
+# --- CREATE: slot 1 busy+running -> targeted split down, send, managed stamp
+running 1700000001-1-1
+reset_fake; set_tree "$T_SLOT1"; set_tree_n 2 "$(slot1_plus surface:51 "$MT2")"; creates new-split
+adapter implementer
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "create prints the json-captured ref" || bad "create prints the json-captured ref" "rc=$RC out=$OUT"
+grep -qF -- '--json new-split down --surface surface:65' "$FAKE_LOG" && ok "slot 2 splits down off slot 1's surface" || bad "slot 2 splits down off slot 1's surface" "$(cat "$FAKE_LOG")"
+grep -qF -- "send --surface surface:51 -- bash $LAUNCHER" "$FAKE_LOG" && ok "send targets the newly created surface" || bad "send targets the newly created surface" "$(cat "$FAKE_LOG")"
+grep -qF -- "rename-tab --surface surface:51 -- $MT2" "$FAKE_LOG" && ok "rename carries the managed impl.2 prefix" || bad "rename carries the managed impl.2 prefix" "$(cat "$FAKE_LOG")"
+[ "$(grep -c 'rename-tab' "$FAKE_LOG")" -eq 1 ] && ok "a rename that verifies issues no repair" || bad "a rename that verifies issues no repair" "$(cat "$FAKE_LOG")"
+
+# --- ...and every created call carries --workspace: a ref with no workspace
+# context resolves to not_found (probe P5). It is appended by split_capture
+# rather than written at each call site, so no site can forget it.
+reset_fake; set_tree "$T_SLOT1"; set_tree_n 2 "$(slot1_plus surface:51 "$MT2")"; creates new-split
+OUT="$(CMUX_WORKSPACE_ID="$WS_UUID" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$LAUNCHER" 2>"$TMP/err")"
+grep -qxF -- "--json new-split down --surface surface:65 --workspace $WS_UUID" "$FAKE_LOG" && ok "a created split carries --workspace" || bad "a created split carries --workspace" "$(cat "$FAKE_LOG")"
+
+# --- REUSE: a finished slot is typed into, never recreated and never respawned.
+# Probe P4: respawn-pane REPLACES the surface's process and the surface closes
+# when that process exits — live, it destroyed surface:67 and took its pane with
+# it, so respawning to reuse destroys the thing being reused. Reuse is `send`
+# (user-approved deviation 2026-07-21; the spec's intent is unchanged).
+mkdir -p "$PANE_STATE_DIR/runs/1700000001-1-1"
+printf 'DONE\n' > "$PANE_STATE_DIR/runs/1700000001-1-1/agent-exit"
+reset_fake; set_tree "$T_SLOT1"
+set_tree_n 2 "$(tree "$(workspace workspace:1 "$(pane pane:1 'surface:10|zsh')" "$(pane pane:44 "surface:65|$MT1")")")"
+adapter implementer
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:65" ] && ok "reuse prints the reused ref" || bad "reuse prints the reused ref" "rc=$RC out=$OUT"
+grep -qF -- "send --surface surface:65 -- bash $LAUNCHER" "$FAKE_LOG" && ok "reuse sends into the surviving shell" || bad "reuse sends into the surviving shell" "$(cat "$FAKE_LOG")"
+grep -Eq '(^|--json )(new-split|new-surface|new-pane)' "$FAKE_LOG" && bad "reuse creates nothing" "$(cat "$FAKE_LOG")" || ok "reuse creates nothing"
+grep -q 'respawn' "$FAKE_LOG" && bad "reuse never respawns (P4: respawn destroys the surface)" "$(cat "$FAKE_LOG")" || ok "reuse never respawns (P4: respawn destroys the surface)"
+grep -qF -- "rename-tab --surface surface:65 -- $MT1" "$FAKE_LOG" && ok "reuse restamps the surface for the new run" || bad "reuse restamps the surface for the new run" "$(cat "$FAKE_LOG")"
+rm -f "$PANE_STATE_DIR/runs/1700000001-1-1/agent-exit"
+
+# --- TAB overflow: a full busy quadrant tabs the fewest-surfaces slot
+for r in 1700000011-1-1 1700000012-1-1 1700000013-1-1 1700000014-1-1; do running "$r"; done
+reset_fake; set_tree "$T_FULL"; set_tree_n 2 "$(full_plus surface:51 "$MT2")"; creates new-surface
+adapter implementer
+grep -qF -- '--json new-surface --pane pane:45' "$FAKE_LOG" && ok "overflow tabs the fewest-surfaces slot" || bad "overflow tabs the fewest-surfaces slot" "$(cat "$FAKE_LOG")"
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "overflow prints the tabbed surface ref" || bad "overflow prints the tabbed surface ref" "rc=$RC out=$OUT"
+
+# --- AUX create: full-height right column first (probe P3), split-right of a
+# right-column slot as the fallback when that fails
+reset_fake; set_tree "$T_FULL"; set_tree_n 2 "$(full_plus surface:51 "$MTA")"
+printf '1' > "$FAKE_DIR/new-pane.rc"; creates new-split
+adapter aux
+grep -qF -- '--json new-pane --direction right' "$FAKE_LOG" && ok "aux tries the full-height right column first" || bad "aux tries the full-height right column first" "$(cat "$FAKE_LOG")"
+grep -qF -- '--json new-split right --surface surface:80' "$FAKE_LOG" && ok "aux falls back to split right of slot 3" || bad "aux falls back to split right of slot 3" "$(cat "$FAKE_LOG")"
+grep -qF -- "rename-tab --surface surface:51 -- $MTA" "$FAKE_LOG" && ok "aux rename carries the aux prefix" || bad "aux rename carries the aux prefix" "$(cat "$FAKE_LOG")"
+
+# --- TOCTOU: the plan target vanishes -> exactly ONE re-derivation, then the
+# legacy floor, still exit 0. Tree reads on this path: derive, one re-derive,
+# and the legacy stamp's verification read = 3. CEILING = 5. The 9th tree read
+# is scripted to fail so an unbounded-retry mutation blows the ceiling and lands
+# on legacy instead of hanging the suite.
+reset_fake; set_tree "$T_FULL"; set_tree_n 3 "$(full_plus surface:42 lbl)"
+printf '1' > "$FAKE_DIR/new-surface.rc"; printf '1' > "$FAKE_DIR/tree.rc.9"; split_ok
+adapter implementer
+[ "$RC" -eq 0 ] && ok "TOCTOU path stays exit 0" || bad "TOCTOU path stays exit 0" "rc=$RC $ERR"
+[ "$(printf '%s' "$ERR" | grep -c 'plan target vanished')" -eq 1 ] && ok "exactly one re-derivation, not a loop" || bad "exactly one re-derivation, not a loop" "$ERR"
+[ "$(grep -c '^--json tree' "$FAKE_LOG")" -lt 5 ] && ok "tree reads stay under the ceiling" || bad "tree reads stay under the ceiling" "reads=$(grep -c '^--json tree' "$FAKE_LOG")"
+grep -qxF -- 'new-split down' "$FAKE_LOG" && ok "TOCTOU falls to the legacy floor" || bad "TOCTOU falls to the legacy floor" "$(cat "$FAKE_LOG")"
+
+# --- VERIFY-AFTER-RENAME (probe P6). rename-tab resolves --tab -> --surface ->
+# $CMUX_TAB_ID/$CMUX_SURFACE_ID -> the FOCUSED tab, and an unresolvable ref
+# falls through that chain WITHOUT erroring (proven live against surface:9999 at
+# exit 0). So the stamp can land on an innocent surface — here surface:99, the
+# user's own main session — while cmux reports success. The adapter re-reads the
+# tree once, repairs the victim, and leaves the intended surface unmanaged.
+T_VICTIM="$(tree "$(workspace workspace:1 \
+  "$(pane pane:1 'surface:10|zsh' 'surface:99|main session')" \
+  "$(pane pane:44 'surface:65|impl.1:1700000001-1-1 taskA')")")"
+T_VICTIM_POST="$(tree "$(workspace workspace:1 \
+  "$(pane pane:1 'surface:10|zsh' "surface:99|$MT2")" \
+  "$(pane pane:44 'surface:65|impl.1:1700000001-1-1 taskA')" \
+  "$(pane pane:30 'surface:51|zsh')")")"
+reset_fake; set_tree "$T_VICTIM"; set_tree_n 2 "$T_VICTIM_POST"; creates new-split
+adapter implementer
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "a mis-targeted rename never fails the dispatch" || bad "a mis-targeted rename never fails the dispatch" "rc=$RC out=$OUT"
+printf '%s' "$ERR" | grep -q 'MIS-TARGETED' && ok "mis-target breadcrumb fires" || bad "mis-target breadcrumb fires" "$ERR"
+grep -qF -- 'rename-tab --surface surface:99 -- main session' "$FAKE_LOG" && ok "collateral victim is renamed back" || bad "collateral victim is renamed back" "$(cat "$FAKE_LOG")"
+[ "$(grep -c -- 'rename-tab --surface surface:51' "$FAKE_LOG")" -eq 1 ] && ok "intended surface left unmanaged, not re-stamped" || bad "intended surface left unmanaged, not re-stamped" "$(cat "$FAKE_LOG")"
+
+# --- a launcher path with no run-id in it stamps a bare, unmanaged title
+ODD="$PANE_STATE_DIR/runs/oddname"; mkdir -p "$ODD"
+printf '#!/usr/bin/env bash\necho hi\n' > "$ODD/launch.sh"; chmod 700 "$ODD/launch.sh"
+reset_fake; set_tree "$T_SLOT1"; set_tree_n 2 "$(slot1_plus surface:51 lbl)"; creates new-split
+OUT="$(PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$ODD/launch.sh" 2>"$TMP/err")"
+grep -qF -- 'rename-tab --surface surface:51 -- lbl' "$FAKE_LOG" && ok "no run-id -> bare unmanaged title" || bad "no run-id -> bare unmanaged title" "$(cat "$FAKE_LOG")"
+
+# --- a created ref that is not a surface is never sent into. `jq -e` only
+# rejects null/false, so an empty or pane-shaped ref would otherwise reach
+# `send --surface` blind; the shape is checked exactly as legacy_open checks
+# its own. Both derivations get the bad shape, the legacy floor gets a good one.
+reset_fake; set_tree "$T_SLOT1"; set_tree_n 3 "$(slot1_plus surface:42 lbl)"
+printf '{"surface_ref":"pane:9"}\n' > "$FAKE_DIR/new-split.1"
+printf '{"surface_ref":"pane:9"}\n' > "$FAKE_DIR/new-split.2"
+split_ok
+adapter implementer
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:42" ] && ok "a non-surface created ref falls to the legacy floor" || bad "a non-surface created ref falls to the legacy floor" "rc=$RC out=$OUT"
+grep -q -- 'send .*--surface pane:9' "$FAKE_LOG" && bad "a non-surface ref is never sent into" "$(cat "$FAKE_LOG")" || ok "a non-surface ref is never sent into"
+
+# --- a launcher path containing a space is escaped before it is sent. The sent
+# text has SHELL semantics (probe P4: 'A B' survived as one argument), and
+# validate_open_pane_args constrains only the run-id segment — the state-root
+# prefix is interpolated from $PANE_STATE_DIR/$HOME verbatim, so a home like
+# "/Users/Mark Suyat" yields an ACCEPTED launcher path with a space in it.
+# Unquoted, `bash /Users/Mark Suyat/.../launch.sh` runs `bash /Users/Mark`.
+SP_DIR="$TMP/sp ace"; mkdir -p "$SP_DIR/runs/1700000020-1-1"
+SP_LAUNCHER="$SP_DIR/runs/1700000020-1-1/launch.sh"
+printf '#!/usr/bin/env bash\necho hi\n' > "$SP_LAUNCHER"; chmod 700 "$SP_LAUNCHER"
+reset_fake; set_tree "$T_EMPTY"; creates new-split
+set_tree_n 2 "$(tree "$(workspace workspace:1 "$(pane pane:1 'surface:10|zsh')" \
+  "$(pane pane:30 "surface:51|impl.1:1700000020-1-1 lbl")")")"
+OUT="$(PANE_STATE_DIR="$SP_DIR" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$SP_LAUNCHER" 2>"$TMP/err")"
+grep -qF -- "bash $SP_LAUNCHER" "$FAKE_LOG" && bad "space in a launcher path is escaped before send" "$(cat "$FAKE_LOG")" || ok "space in a launcher path is escaped before send"
+grep -qF -- "bash ${SP_LAUNCHER// /\\ }" "$FAKE_LOG" && ok "the escaped launcher still names the real path" || bad "the escaped launcher still names the real path" "$(cat "$FAKE_LOG")"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

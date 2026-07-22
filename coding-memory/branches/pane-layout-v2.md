@@ -276,6 +276,148 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
     not by a live mutating call. Live confirmation is still owed at Task 8, together with
     Task 3's handoff-wrapper rename.
 
+- **Task 7 (`cmux.sh` plan execution + verify-after-rename) — DONE 2026-07-21.**
+  `panes/adapters/cmux.sh` (258 lines) now executes the derived plan: `json_ref`,
+  `split_capture`, `execute_plan` (reuse/split/tab/aux-create), `send_launcher`,
+  `stamp_title` (verify-after-rename), and a derive→execute loop with a one-shot
+  re-derivation before the legacy floor. `cmux-exec.test.sh` grew to 352 lines /
+  **53 cases, 0 failed** (24 from Task 6 + 29 new). All five siblings unchanged and
+  green — `cmux-layout.test.sh` 26/0, `adapters.test.sh` 24/0,
+  `dispatch-pane-agent.test.sh` 39/0, `run-pane-agent.test.sh` 10/0,
+  `terminal-detect.test.sh` 9/0. `shellcheck -x` clean on both touched files.
+  `respawn-pane` appears nowhere in the final adapter (grep count 0).
+  - **RED first (Step 2, 29 passed / 22 failed of 51 cases).** Run against a `cp -R`
+    copy of `panes/adapters/` in `$TMP` with only the copy's `CMUX_BIN` default
+    neutered (Correction 14's procedure — this session runs inside a live cmux
+    workspace, and Task 7 is where real execution lands). All 24 Task-6 cases stayed
+    green. **Five vacuous passes, each listed with its reason:**
+    1. `reuse never respawns (P4: respawn destroys the surface)` — an absence
+       assertion; nothing in the v2 frame respawns, so it passes before the code
+       exists.
+    2. `TOCTOU path stays exit 0` — the frame *always* takes the legacy floor, which
+       succeeds here, so exit 0 arrives for an unrelated reason.
+    3. `tree reads stay under the ceiling` — the frame does exactly one tree read.
+    4. `TOCTOU falls to the legacy floor` — again, the frame always does.
+    5. `a non-surface ref is never sent into` — the frame dies at `legacy_open`'s
+       ref-shape guard before any send, so nothing could match.
+    Two further cases (the launcher-quoting pair) were added *after* implementation
+    and so were never in this RED set; they were red-verified by falsification F6
+    instead. Stated plainly rather than folded into the RED count.
+  - **Correction 16 — the unquoted launcher interpolation is genuinely reachable.**
+    The brief asked whether `validate_open_pane_args` forecloses a space or shell
+    metacharacter in `$launcher`. It does **not**, verified live two ways: (a) with
+    `PANE_STATE_DIR="/tmp/qtest/a b"` the validator **ACCEPTS**
+    `/tmp/qtest/a b/runs/1700000010-1-1/launch.sh` — only the run-id segment is
+    constrained (`[A-Za-z0-9-]+`), while the state-root prefix comes from
+    `$PANE_STATE_DIR`/`$HOME` verbatim, and a macOS home like `/Users/Mark Suyat` is
+    entirely legal; (b) the `.` of `$HOME/.claude/...` is interpolated into the regex
+    **unescaped**, so it is a wildcard — `/tmp/qtest2/;claude/panes/state/runs/aa/launch.sh`
+    matches the pattern built for `.claude`. Combined with P4 (sent text has shell
+    semantics), `"bash $launcher\n"` could run `bash /Users/Mark` or splice a `;`.
+    Landed `launcher_q="$(printf '%q' "$launcher")"`: verified byte-identical output
+    for an ordinary path (so the v1-proven form is unchanged in the normal case) and
+    escaping only when it must. Pinned by two new cases and falsification F6.
+  - **Correction 17 — reuse must NOT go through `finish_surface`.** A failing send on
+    a *reused* surface is RETRYABLE (nothing was created; the target vanished between
+    the tree fetch and the send), whereas a failing send on a *freshly created*
+    surface is Tier 2. Task 6's `finish_surface` exits 1 on send failure, so routing
+    reuse through it would turn the exact TOCTOU case the retry exists for into a
+    dispatcher cooldown. Landed: `send_launcher` factored out; reuse `return 1`s,
+    `finish_surface` still `exit 1`s.
+  - **Correction 18 — `derive_plan` had to be split to keep the pre-rename tree.**
+    Verify-after-rename needs the tree the plan was derived from, but
+    `plan_out="$(derive_plan)"` runs in a **subshell**, so any global the function
+    sets is discarded. Split into `fetch_tree` (raw JSON) + `decide_plan` (tree on
+    stdin); the main loop assigns `TREE_RAW` in the main shell and `derive_plan`
+    survives only as the dryrun's composition, keeping Task 6's dryrun tests intact.
+  - **Correction 19 — the plan's TOCTOU test mechanism is unusable.** It drives the
+    failure with `respawn-pane.rc=1`, and that subcommand is gone (Correction A).
+    `send.rc=1` cannot substitute: the legacy floor's own send would fail too,
+    converting a Tier-1 assertion into a Tier-2 exit. Landed: drive it through
+    `new-surface.rc=1` against a full quadrant (a `tab` plan), which leaves the
+    legacy `new-split` path healthy. **Measured** tree reads on that path: **3**
+    (derive, one re-derive, the legacy stamp's verification read); the asserted
+    ceiling is 5.
+  - **Correction 20 — a single static fake response cannot express verification at
+    all.** With one `tree` response the verification read returns the same tree the
+    plan was derived from, so the intended surface never carries the composed title,
+    *every* case reports a mis-target, and no assertion can tell a verification pass
+    from a failure. The fake grew per-call response and rc sequencing
+    (`$FAKE_DIR/<sub>.<n>`, `<sub>.rc.<n>`), additive and inert for the Task-6 cases.
+  - **Correction 21 — the plan's unbounded-retry falsification never reaches the
+    TOCTOU case.** With the bound removed the suite hangs at case 9 (the Task-6
+    workspace-scoping case), which incidentally exercises the same fallback: its
+    non-JSON `new-split` response makes `split_capture` fail on every attempt. So a
+    hang is the only available signal there. A second, non-hanging mutation was added
+    to get a discriminating count — see F1b.
+  - **Falsification (six; each anchor asserted to match exactly once *before* writing
+    and each diff confirmed non-empty, each reverted by `cp` from a backup and
+    re-verified byte-identical by sha256; final state re-verified 53/0):**
+    1. **F1a — retry bound removed** (`attempt -eq 1` → `-ge 1`): the suite **hangs**
+       at case 9 and never reaches its summary. A hang is the red; killed it.
+    2. **F1b — bound loosened to two re-derivations** (`-le 2`, `attempt+1`): suite
+       completes at **52/1** with `exactly one re-derivation, not a loop` RED. Added
+       beyond the brief so the bound is pinned by a concrete count, not only a hang.
+    3. **F2 — reuse arm falls through to a creating verb** (`send`+stamp replaced by
+       `split_capture new-split down --surface` + `finish_surface`): **49/4** —
+       `reuse creates nothing`, `reuse prints the reused ref`, `reuse sends into the
+       surviving shell`, `reuse restamps the surface` all RED.
+    4. **F3 — verification neutered** (`return 0` before the tree re-read, accepting
+       the rename unconditionally): **51/2** — `mis-target breadcrumb fires` and
+       `collateral victim is renamed back` RED.
+    5. **F4 — `split_capture`'s ref-shape guard removed**: **51/2**, and the failure
+       output shows `rc=0 out=pane:9` — without the guard the adapter really does send
+       into a pane-shaped ref and print it as a surface. Added beyond the brief.
+    6. **F5 — `split_capture` drops the appended `--workspace`**: **52/1** —
+       `a created split carries --workspace` RED. Added beyond the brief.
+    7. **F6 — `%q` reverted to the unquoted interpolation**: **51/2** — both
+       launcher-quoting cases RED. This is what red-verifies Correction 16's pair,
+       which post-dated the Step-2 RED run.
+  - **Deviations from the plan snippet.** (a) Reuse is `send`, not the respawn
+    subcommand (Correction A / probe P4), so the plan's two reuse tests and its
+    Step-5 reuse falsification are void and were replaced. (b) `stamp_title` adds
+    verify-after-rename (Correction B / probe P6) — the plan had a bare `rename ||
+    breadcrumb`. (c) `--workspace` is appended inside `split_capture` rather than
+    written at each call site, so no site can forget it; flag order is immaterial
+    (P5 proved `--pane <ref> --workspace <ws>`). (d) The plan's brittle
+    `grep -c '^--json tree' == 2` is replaced by three bound assertions: the
+    re-derivation breadcrumb appears exactly once, the legacy floor is reached, and
+    total tree reads stay under an explicit ceiling of 5. (e) A ref-shape guard on
+    the captured JSON ref, mirroring `legacy_open`'s. (f) Test fixtures rebuilt with
+    the real-shape builders — the plan's `T_S1BUSY`/`T_S1DONE`/`T_FULL` were in the
+    imagined shape for the **fourth** time (cf. Corrections 3, 8, 10); `T_FULL`'s
+    slot-1 pane deliberately carries a second surface so the overflow tie-break
+    picks slot 2 rather than the lowest slot, making the fixture load-bearing.
+  - **Process note — an errant `git checkout --` destroyed the implementation
+    mid-task.** Reverting falsification F1a with `git checkout -- panes/adapters/cmux.sh`
+    restored the file from **HEAD**, i.e. the Task-6 version, silently discarding all
+    uncommitted Task-7 work. It was reconstructed from the edit history and every
+    verification re-run from scratch (53/0, all six suites, shellcheck) rather than
+    assumed; the reconstruction differs from the pre-loss file only in comment line
+    wrapping, which is why its sha256 differs. All later reverts use `cp` from a
+    backup copy. Uncommitted work must never be reverted with `git checkout --`.
+  - **Not verified — stated plainly.**
+    - **No cmux call in this task ran against the real binary.** Every execution
+      assertion runs against the fake. The whole of Task 7 is fake-verified.
+    - The **repair path has never executed live.** No live rename was made to
+      mis-target on purpose; that a wrongly-renamed tab appears in `--json tree` as a
+      *surface* carrying the composed title — which is what victim identification
+      depends on — is inferred from the probe's fixture-build loop, not proven for
+      P6's focused-tab fallback case. If a mis-targeted tab does not surface that way,
+      verification still correctly detects the mis-target and emits the breadcrumb,
+      but the repair silently finds no victim.
+    - `--workspace` on `new-pane` is **unproven live**: P3 probed a bare
+      `new-pane --direction right`. For `new-surface`, P5 proved exactly the appended
+      order used here; for `new-split ... --surface X --workspace W` the order is
+      inferred, not probed.
+    - That the receiving shell accepts `%q`'s backslash-escaped form rests on P4
+      proving shell semantics generally (`'A B'` survived as one argument); the
+      backslash form itself was not the exact text probed.
+    - Reuse end-to-end against a genuinely finished agent's surface (marker written by
+      Task 2, surface typed into) is untested outside the fake.
+    - Live confirmation is still owed at Task 8, together with Task 3's
+      handoff-wrapper rename and Task 6's `send`/`rename-tab` `--workspace` placement.
+
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
 Re-runnable via `panes/cmux-layout-probe.sh` after any cmux upgrade. Findings recorded
@@ -472,7 +614,9 @@ Reviewed before commit: synthetic titles only, no real paths, `tty` null, no URL
    **Task 6's half discharged**: `send` and `rename-tab` in `finish_surface` carry it when
    `CMUX_WORKSPACE_ID` is set, and the tree fetch is scoped server-side; `new-split down`
    stays bare by design (no ref to resolve). Task 7's new calls must follow suit.
-3. **Task 7** — reuse via `cmux send`, shell-quoted (P4); **verify-after-rename** replaces
-   plain retry-once (P6).
+3. ~~**Task 7** — reuse via `cmux send`, shell-quoted (P4); **verify-after-rename** replaces
+   plain retry-once (P6).~~ **Discharged in Task 7**: reuse is `send`, the launcher is
+   `%q`-quoted (Correction 16), and `stamp_title` verifies the rename against a re-read
+   tree and repairs the collateral victim best-effort. All of it fake-verified only.
 4. **Judge** — surface the `respawn-pane`→`send` deviation explicitly at the
    implementation-stage observability judge.
