@@ -450,10 +450,25 @@ RO_STATE="$TMP/ro-state"; mkdir -p "$RO_STATE/runs/$RUN_ID"
 RO_LAUNCHER="$RO_STATE/runs/$RUN_ID/launch.sh"
 printf '#!/usr/bin/env bash\necho hi\n' > "$RO_LAUNCHER"; chmod 700 "$RO_LAUNCHER"
 chmod 500 "$RO_STATE"
-ver_setup; printf 'cmux 0.65.0 (101) [deadbeef]\n' > "$FAKE_DIR/version"
+# BOTH receipt writes must be covered. The brace fix has two halves, and a test
+# driving only the mismatch half leaves the unreadable half — the path the leak
+# was originally reported on — unguarded: reinstating the bug there kept the
+# whole suite green (round-3 judge).
+for vline in 'cmux 0.65.0 (101) [deadbeef]' 'garbage'; do
+  chmod 700 "$RO_STATE"; rm -f "$RO_STATE/cmux-version-mismatch"
+  ver_setup; printf '%s\n' "$vline" > "$FAKE_DIR/version"
+  chmod 500 "$RO_STATE"
+  OUT="$(PANE_STATE_DIR="$RO_STATE" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$RO_LAUNCHER" 2>"$TMP/err")"
+  ERR="$(cat "$TMP/err")"; chmod 700 "$RO_STATE"
+  case "$vline" in 'garbage') half=unreadable ;; *) half=mismatch ;; esac
+  printf '%s' "$ERR" | grep -qiE 'denied|cannot create|not permitted' && bad "unwritable state dir leaks nothing ($half write)" "$ERR" || ok "unwritable state dir leaks nothing ($half write)"
+done
+# The mismatch half must still say its piece on screen even when it cannot write.
+printf '%s' "$ERR" | grep -qF '0.65.0' && bad "the last loop iteration was the unreadable half" "$ERR" || ok "the last loop iteration was the unreadable half"
+chmod 700 "$RO_STATE"; rm -f "$RO_STATE/cmux-version-mismatch"
+ver_setup; printf 'cmux 0.65.0 (101) [deadbeef]\n' > "$FAKE_DIR/version"; chmod 500 "$RO_STATE"
 OUT="$(PANE_STATE_DIR="$RO_STATE" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$RO_LAUNCHER" 2>"$TMP/err")"
 ERR="$(cat "$TMP/err")"; chmod 700 "$RO_STATE"
-printf '%s' "$ERR" | grep -qiE 'denied|cannot create|not permitted' && bad "an unwritable state dir does not leak a redirection error" "$ERR" || ok "an unwritable state dir does not leak a redirection error"
 printf '%s' "$ERR" | grep -qF '0.65.0' && ok "an unwritable state dir still warns on screen" || bad "an unwritable state dir still warns on screen" "$ERR"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"

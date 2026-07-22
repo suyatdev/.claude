@@ -85,7 +85,7 @@ calcify.
 
 ## Verification
 
-**Suite 170 → 195** (`cmux-exec.test.sh` 54 → 79), shellcheck clean.
+**Suite 170 → 197** (`cmux-exec.test.sh` 54 → 81), shellcheck clean.
 
 The setup for these cases is a **genuinely succeeding layout path** (slot 1 created, stamped, and
 verified against the second tree read), not the legacy floor. The first draft used `T_EMPTY` +
@@ -102,19 +102,28 @@ The unwritable-state-dir case also passed **vacuously** on first write: `PANE_ST
 repointed without moving the launcher, so `validate_open_pane_args` rejected the path and the run
 aborted before the version check ever executed.
 
-### Falsification — all six single-anchor, syntax-valid, non-empty diff
+### Falsification — all seven single-anchor, syntax-valid, non-empty diff
 
 Regenerated after the round-2 fixes; an earlier table in this file quoted a `73/4` row that did
 not reproduce, because that mutation was compound.
 
-| Mutation | Result (baseline 79/0) |
+| Mutation | Result (baseline 81/0) |
 |---|---|
-| pin `0.64.20` → `0.65.0` | **73/6** RED |
-| check never called | **65/14** RED |
-| filter back to version-CLEAN (the round-1 bug) | **75/4** RED |
-| stale receipt never cleared | **78/1** RED |
-| no receipt on unreadable output | **77/2** RED |
-| mismatch receipt write unbraced | **78/1** RED |
+| pin `0.64.20` → `0.65.0` | **75/6** RED |
+| check never called | **67/14** RED |
+| filter back to version-CLEAN (the round-1 bug) | **77/4** RED |
+| stale receipt never cleared | **80/1** RED |
+| no receipt on unreadable output | **79/2** RED |
+| unbrace the **mismatch** receipt write | **80/1** RED |
+| unbrace the **unreadable** receipt write | **80/1** RED |
+
+The last two rows are separate deliberately. The brace fix has two halves, and the first
+regression test drove only the mismatch one — so reinstating the leak on the *unreadable* half,
+the path it was originally reported on, left **all 79 tests green**. Found by the round-3 judge;
+the test now loops over both a mismatching and an unreadable version, and each half fails
+independently. Every row was **re-measured** against the 81/0 baseline after that test
+landed — not adjusted arithmetically from the previous table, which would have been a computed
+number wearing a measurement's clothes.
 
 Restored from a `cp` backup, **never `git checkout --`** (which restores from HEAD and once
 destroyed uncommitted work mid-falsification on the parent branch). A seventh mutation — deleting
