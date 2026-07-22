@@ -402,7 +402,7 @@ grep -q '^new-split down$' "$FAKE_LOG" && bad "a version mismatch does not fall 
 printf '%s' "$ERR" | grep -qF '0.65.0' && printf '%s' "$ERR" | grep -qF '0.64.20' \
   && ok "the warning names both the found and the verified version" || bad "the warning names both the found and the verified version" "$ERR"
 [ "$(printf '%s' "$ERR" | grep -c .)" -ge 2 ] && ok "the mismatch warning is louder than one line" || bad "the mismatch warning is louder than one line" "$ERR"
-grep -qF '0.65.0' "$VER_MARKER" 2>/dev/null && ok "a mismatch leaves a durable marker naming the version" || bad "a mismatch leaves a durable marker naming the version" "$(cat "$VER_MARKER" 2>/dev/null)"
+grep -q '^found 0.65.0, verified 0.64.20$' "$VER_MARKER" 2>/dev/null && ok "a mismatch leaves a durable marker naming the version" || bad "a mismatch leaves a durable marker naming the version" "$(cat "$VER_MARKER" 2>/dev/null)"
 
 # One warning per dispatch, not per cmux call: the check must run once.
 [ "$(grep -c '^version$' "$FAKE_LOG")" -eq 1 ] && ok "the version is checked exactly once per dispatch" || bad "the version is checked exactly once per dispatch" "$(grep -c '^version$' "$FAKE_LOG") calls"
@@ -420,7 +420,7 @@ for desc in "version call fails" "version output is unparseable"; do
   printf '%s' "$ERR" | grep -qi 'version' && bad "$desc -> stays silent on stderr" "$ERR" || ok "$desc -> stays silent on stderr"
   # ...but it must still leave a receipt. Silence on screen is to avoid crying
   # wolf every dispatch; going silent FOREVER is how the alarm dies unnoticed.
-  grep -qi 'unreadable' "$VER_MARKER" 2>/dev/null && ok "$desc -> still leaves an unreadable-version receipt" || bad "$desc -> still leaves an unreadable-version receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
+  grep -q '^unreadable version output:' "$VER_MARKER" 2>/dev/null && ok "$desc -> still leaves an UNREADABLE-kind receipt" || bad "$desc -> still leaves an UNREADABLE-kind receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
 done
 
 # A pre-release build is an ordinary way to land on a version whose behaviour
@@ -431,7 +431,9 @@ for v in "0.65.0-rc1" "0.64.20-beta" "1.0.0"; do
   ver_setup; printf 'cmux %s (101) [deadbeef]\n' "$v" > "$FAKE_DIR/version"
   adapter implementer
   printf '%s' "$ERR" | grep -qF "$v" && ok "pre-release/major $v is a MISMATCH, not unreadable" || bad "pre-release/major $v is a MISMATCH, not unreadable" "$ERR"
-  grep -qF "$v" "$VER_MARKER" 2>/dev/null && ok "$v leaves a mismatch receipt" || bad "$v leaves a mismatch receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
+  # KIND, not substring: the unreadable receipt copies the whole version line,
+  # which contains $v, so `grep -F "$v"` passes even when misclassified.
+  grep -q "^found $v, verified " "$VER_MARKER" 2>/dev/null && ok "$v leaves a MISMATCH-kind receipt" || bad "$v leaves a MISMATCH-kind receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
 done
 
 # The receipt means "there is a problem RIGHT NOW". Left behind after the
@@ -440,6 +442,19 @@ ver_setup; printf 'stale mismatch\n' > "$VER_MARKER"
 printf 'cmux 0.64.20 (100) [14e3400b9]\n' > "$FAKE_DIR/version"
 adapter implementer
 [ -e "$VER_MARKER" ] && bad "a matching version CLEARS a stale receipt" "$(cat "$VER_MARKER")" || ok "a matching version CLEARS a stale receipt"
+
+# The launcher must live INSIDE this state dir or validate_open_pane_args
+# rejects it and the run aborts before the version check ever executes -- which
+# is how the first draft of this case passed vacuously.
+RO_STATE="$TMP/ro-state"; mkdir -p "$RO_STATE/runs/$RUN_ID"
+RO_LAUNCHER="$RO_STATE/runs/$RUN_ID/launch.sh"
+printf '#!/usr/bin/env bash\necho hi\n' > "$RO_LAUNCHER"; chmod 700 "$RO_LAUNCHER"
+chmod 500 "$RO_STATE"
+ver_setup; printf 'cmux 0.65.0 (101) [deadbeef]\n' > "$FAKE_DIR/version"
+OUT="$(PANE_STATE_DIR="$RO_STATE" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$RO_LAUNCHER" 2>"$TMP/err")"
+ERR="$(cat "$TMP/err")"; chmod 700 "$RO_STATE"
+printf '%s' "$ERR" | grep -qiE 'denied|cannot create|not permitted' && bad "an unwritable state dir does not leak a redirection error" "$ERR" || ok "an unwritable state dir does not leak a redirection error"
+printf '%s' "$ERR" | grep -qF '0.65.0' && ok "an unwritable state dir still warns on screen" || bad "an unwritable state dir still warns on screen" "$ERR"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

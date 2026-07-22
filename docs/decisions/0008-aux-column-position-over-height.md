@@ -67,11 +67,17 @@ in the `layout_rightmost_surface` header comment.
 - **Mitigated 2026-07-22 by a version gate** (`check_cmux_version` in `panes/adapters/cmux.sh`,
   round-2 judge's top follow-up). `LAYOUT_VERIFIED_CMUX_VERSION` pins the one release all of this
   was verified against; every dispatch compares the live `cmux version` against it and, on a
-  mismatch, prints a two-line warning naming both versions and writes a durable marker at
-  `$PANE_STATE_DIR/cmux-version-mismatch`. It **warns and never degrades** — an upgrade silently
-  switching the layout off is the failure being guarded against, and a version bump is not itself
-  evidence of breakage — and **fails open** on unreadable output so a changed `version` shape
-  cannot cry wolf on every dispatch. This detects the *trigger*, not the *defect*: a geometric
+  mismatch, prints a two-line warning naming both versions and writes a receipt at
+  `$PANE_STATE_DIR/cmux-version-mismatch`. A **matching** version deletes that receipt, so its
+  presence means "wrong now", not "wrong once"; an **unreadable** version stays silent on stderr
+  (a changed `version` shape must not cry wolf every dispatch) but still leaves a receipt, because
+  an alarm that goes quiet forever is indistinguishable from a happy one. The version test is
+  deliberately *shaped* (`[0-9]*.[0-9]*`) rather than *clean*: an earlier `[0-9.]`-only filter
+  silently swallowed `0.65.0-rc1` and `0.64.20-beta`, the pre-release builds most likely to have
+  moved behaviour. It **warns and never degrades** — an upgrade silently switching the layout off
+  is the failure being guarded against, and a version bump is not itself evidence of breakage.
+  Nothing yet *reads* the receipt; it is forensics, not notification (open follow-up: a statusline
+  reader). This detects the *trigger*, not the *defect*: a geometric
   self-check remains impossible while the tree exposes no geometry, so re-running
   `panes/cmux-layout-probe.sh` after an upgrade is still the confirming step.
 - Revisit if cmux ever re-enables dock placement or exposes pane geometry/nesting in

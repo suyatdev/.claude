@@ -56,7 +56,11 @@ check_cmux_version() {
     # Unreadable: stay silent on stderr (a changed `version` shape must not cry
     # wolf every dispatch) but still leave a receipt, because an alarm that goes
     # quiet FOREVER is indistinguishable from an alarm that is happy.
-    *) printf 'unreadable version output: %s\n' "$line" > "$marker" 2>/dev/null
+    # Braced: `cmd > "$f" 2>/dev/null` does NOT suppress a failing REDIRECTION --
+    # the shell reports it before the 2>/dev/null applies, so an unwritable state
+    # dir would print "Permission denied" on every dispatch, on the one path
+    # documented as silent. Same trap as run-pane-agent.sh:81.
+    *) { printf 'unreadable version output: %s\n' "$line" > "$marker"; } 2>/dev/null
        return 0 ;;
   esac
   if [ "$found" = "$LAYOUT_VERIFIED_CMUX_VERSION" ]; then
@@ -68,8 +72,8 @@ check_cmux_version() {
   printf 'cmux-layout: WARNING — cmux %s is not the verified %s.\n' \
     "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" >&2
   printf 'cmux-layout: pane placement rides an unverified heuristic; re-run panes/cmux-layout-probe.sh.\n' >&2
-  printf 'found %s, verified %s\n' "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" \
-    > "$marker" 2>/dev/null
+  { printf 'found %s, verified %s\n' "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" \
+    > "$marker"; } 2>/dev/null
   return 0
 }
 
