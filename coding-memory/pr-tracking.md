@@ -316,3 +316,23 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   Cheapest reader is the statusline, and it must handle both receipt kinds or the blind spot moves.
 - correction noted in the PR body, not by rewriting a pushed commit: commit aedf3d1's trailer says
   `186 -> 195`; the true intermediate figure was **193**.
+
+### PR #26 — STRANDING (3rd occurrence of this failure mode)
+- PR #26 merged 2026-07-22 04:03:51Z at `6291edc`, capturing the branch only up to `0ecec9a`.
+  **Three later pushes were stranded**: `9107345` (test: cover both halves of the braced receipt
+  write — the round-3 judge's only finding), `dbe9289` (all three judge verdicts + PR #26 tracking),
+  `27d3877` (memory corrections). Recovered on `fix/pr26-stranded-commits`, cherry-picked clean,
+  content verified byte-identical to the originals by an empty `git diff` against the merged branch.
+- **Root cause, now clearly a pattern rather than bad luck (PR #21, PR #24, PR #26).** The workflow
+  itself pushes after `gh pr create` — judge-guard's strict freshness *requires* opening the PR
+  before committing the audit trail, so there is always a window where the PR exists but is
+  incomplete. The user merges from the GitHub UI when they see a green PR, which is the correct
+  thing for them to do. Nothing warns either side.
+- **Mitigation that actually fits the constraint:** the freshness rule cannot move, so the signal
+  has to. After `gh pr create`, state explicitly in the reply that more commits are coming and the
+  PR is **not yet safe to merge**, then say plainly when it is. A `gh pr edit --add-label` or a
+  "🚧 do not merge yet" title prefix cleared on completion would make it visible in the UI, where
+  the merge decision is actually made — worth doing if this recurs a 4th time.
+- Nothing was lost in any of the three occurrences, but only because each was caught by checking
+  reachability after the merge. **Always verify `git merge-base --is-ancestor <tip> origin/main`
+  after a PR merges — never assume the merge captured the branch tip.**
