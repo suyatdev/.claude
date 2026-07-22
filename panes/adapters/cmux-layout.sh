@@ -12,28 +12,58 @@
 LAYOUT_JQ="${PANE_JQ_BIN:-/usr/bin/jq}"
 LAYOUT_MANAGED_RE='^(impl\.([1-4])|aux):([0-9]+-[0-9]+-[0-9]+) '
 
-# stdin: `cmux --json tree` output -> normalized TSV. Recursive descent keeps
-# this resilient to wrapper objects; the live-captured fixture test pins it to
-# the real 0.64.20 shape (probe P2), in which a pane keys its own ref as "ref"
-# and a surface keys its own as "ref" while carrying "pane_ref" + "title".
-#
 # Workspace scoping is SERVER-side: the caller passes --workspace
 # "$CMUX_WORKSPACE_ID" to `cmux --json tree` (probe P1 — the UUID is accepted
-# directly). The filter below is defence-in-depth for a ref-form value only.
+# directly). The prelude below is defence-in-depth for a ref-form value only.
 # $CMUX_WORKSPACE_ID is a UUID (probe P7) while the tree's own refs are of the
 # form workspace:8, so in live use this client-side filter will normally NOT
 # match and will correctly fall through to returning everything. That fallback
 # is load-bearing — without it a UUID would scope the tree down to nothing and
 # the whole layout feature would silently degrade to legacy. Do not try to
 # make a UUID match by rewriting it as workspace:<uuid>; that matches nothing.
+#
+# Spliced into every tree-reading function rather than copied, so the two
+# cannot drift apart. Output is an ARRAY of documents to descend into.
+# shellcheck disable=SC2016  # $ws is a jq variable bound by --arg, not a shell one
+LAYOUT_JQ_WS_SCOPE='
+  (if $ws != "" and ([.. | objects | select(has("panes") and .ref? == $ws)] | length) > 0
+   then [.. | objects | select(has("panes") and .ref? == $ws)] else [.] end)'
+
+# stdin: `cmux --json tree` output -> normalized TSV. Recursive descent keeps
+# this resilient to wrapper objects; the live-captured fixture test pins it to
+# the real 0.64.20 shape (probe P2), in which a pane keys its own ref as "ref"
+# and a surface keys its own as "ref" while carrying "pane_ref" + "title".
 layout_normalize_tree() {
   local ws="${CMUX_WORKSPACE_ID:-}"
-  # shellcheck disable=SC2016  # $ws/$p are jq variables bound by --arg, not shell ones
-  "$LAYOUT_JQ" -r --arg ws "$ws" '
-    (if $ws != "" and ([.. | objects | select(has("panes") and .ref? == $ws)] | length) > 0
-     then [.. | objects | select(has("panes") and .ref? == $ws)] else [.] end)
+  "$LAYOUT_JQ" -r --arg ws "$ws" "$LAYOUT_JQ_WS_SCOPE"'
     | [.[] | .. | objects | select(has("ref") and has("pane_ref") and has("title"))]
     | .[] | [.pane_ref, .ref, .title] | @tsv' 2>/dev/null
+}
+
+# stdin: `cmux --json tree` output -> the surface ref to anchor a far-right
+# split on, or NOTHING when no pane qualifies. Same workspace scoping as
+# layout_normalize_tree, including the load-bearing fallback.
+#
+# A pane carries an "index" and it IS left-to-right order — verified live
+# 2026-07-21 by a controlled experiment: each new pane took the index matching
+# its visual position (idx0 -> idx0,idx1 -> idx0,idx1,idx2). So the rightmost
+# pane is the one with the MAX index. This corrects probe P3's "geometry is not
+# exposed in the tree": pixel geometry is not, but ordering is, and that is all
+# a far-right anchor needs. The anchor itself is the pane's
+# "selected_surface_ref" — the surface it is actually showing, which is what a
+# split anchors against, and a scalar, so there is no empty-array case.
+#
+# "index" is REQUIRED to be a number rather than defaulted: a tree without it
+# yields no anchor and the caller falls back to env-implicit targeting, a
+# visible degradation, instead of max_by silently ranking every pane equal and
+# returning whichever happened to come last in the document.
+layout_rightmost_surface() {
+  local ws="${CMUX_WORKSPACE_ID:-}"
+  "$LAYOUT_JQ" -r --arg ws "$ws" "$LAYOUT_JQ_WS_SCOPE"'
+    | [.[] | .. | objects
+       | select(has("surface_refs") and (.index | type) == "number"
+                and (.selected_surface_ref | type) == "string")]
+    | max_by(.index) | .selected_surface_ref // empty' 2>/dev/null
 }
 
 # stdin: normalized TSV -> managed surfaces only:
@@ -79,8 +109,11 @@ layout_compose_title() {
 # never re-scanned, so a hostile ref in "$managed" cannot inject.
 layout_decide() {
   local role="$1" new_run="$2" label="$3"
-  local norm managed kind slot rid pane surface epoch s
-  norm="$(layout_normalize_tree)"
+  local raw norm managed kind slot rid pane surface epoch s
+  # stdin is consumed ONCE and kept: the aux path needs the raw JSON a second
+  # time for layout_rightmost_surface, and stdin is gone after the first read.
+  raw="$(cat)"
+  norm="$(printf '%s' "$raw" | layout_normalize_tree)"
   managed="$(printf '%s\n' "$norm" | layout_managed)"
 
   # Pass A — winning pane per slot (duplicate slot: newest run-id epoch wins;
@@ -167,12 +200,16 @@ layout_decide() {
     if [ -n "$aux_reuse_ref" ]; then printf 'PLAN: reuse %s\n' "$aux_reuse_ref"
     else printf 'PLAN: tab %s\n' "$aux_pane"; fi
   else
-    # No aux column yet: prefer splitting off a right-column slot, else let cmux
-    # target env-implicitly from main (spec: Aux path fallbacks).
-    local fb="env"
-    if [ -n "${slot_ref[3]}" ]; then fb="${slot_ref[3]}"
-    elif [ -n "${slot_ref[4]}" ]; then fb="${slot_ref[4]}"; fi
-    printf 'PLAN: aux-create %s\n' "$fb"
+    # No aux column yet: anchor the new column on the RIGHTMOST pane, whichever
+    # it is, so the split lands at the far right. The anchor cannot come from
+    # `new-pane --direction right`: that verb has no anchor flag and splits
+    # relative to the CURRENT pane, which is the caller's own far-left main
+    # session, so live it placed the aux column 2nd from left (observed
+    # 2026-07-21). No usable pane at all -> env-implicit targeting from main
+    # (spec: Aux path fallbacks).
+    local anchor
+    anchor="$(printf '%s' "$raw" | layout_rightmost_surface)"
+    printf 'PLAN: aux-create %s\n' "${anchor:-env}"
   fi
   printf 'TITLE: %s\n' "$(layout_compose_title aux "$new_run" "$label")"
 }

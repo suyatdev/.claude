@@ -224,11 +224,18 @@ execute_plan() { # $1 "PLAN: ..." line, $2 composed title. rc 1 = retryable
       finish_surface "$ref" "$2"
       ;;
     aux-create)
-      # Primary: full-height right column (probe P3 confirmed the geometry);
-      # fallback: split right of a right-column slot (imperfect geometry, still
-      # functional); last: let cmux target env-implicitly from main.
-      if ref="$(split_capture new-pane --direction right)"; then :
-      elif [ "$rest" = env ]; then ref="$(split_capture new-split right)" || return 1
+      # `new-pane --direction right` is deliberately NOT used, despite probe P3:
+      # `new-pane --help` has no anchor flag, only --direction, and it splits
+      # relative to the CURRENT pane. The adapter runs from the user's far-left
+      # main session, so it always landed the aux column 2nd from left (observed
+      # live 2026-07-21). P3's visual confirmation happened in a scratch
+      # workspace where the current pane WAS the rightmost, so "right of
+      # current" only coincided with "far right" there. --placement dock is not
+      # an escape hatch either: it errors "Dock placement is disabled" on this
+      # build. So the far-right position comes from the ANCHOR instead —
+      # layout_decide hands over the rightmost pane's surface (max pane index),
+      # or "env" when there is no usable pane.
+      if [ "$rest" = env ]; then ref="$(split_capture new-split right)" || return 1
       else ref="$(split_capture new-split right --surface "$rest")" || return 1; fi
       finish_surface "$ref" "$2"
       ;;

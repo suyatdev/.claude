@@ -418,6 +418,138 @@ from `cmux --json tree` plus a title convention, with zero persistent layout sta
     - Live confirmation is still owed at Task 8, together with Task 3's
       handoff-wrapper rename and Task 6's `send`/`rename-tab` `--workspace` placement.
 
+- **Task 9 (aux placement — anchor on the rightmost pane) — DONE 2026-07-21.** Fixes the bug
+  Task 8's live smoke check found: the aux column landed **2nd from left**, not far-right.
+  Root cause is recorded in the corrected P3 section — `new-pane` has no anchor flag and
+  splits relative to the *current* pane, which is the user's far-left main session.
+  New pure `layout_rightmost_surface` in `panes/adapters/cmux-layout.sh` (max-`index` pane's
+  `selected_surface_ref`); `layout_decide`'s aux-create branch emits that ref as the anchor;
+  `execute_plan`'s aux-create arm drops `new-pane` entirely and splits right off the anchor.
+  `cmux-layout.test.sh` **34/0** (26 + 8 new), `cmux-exec.test.sh` **54/0** (53 − 2 void + 3).
+  The four siblings unchanged and green — `adapters.test.sh` 24/0,
+  `dispatch-pane-agent.test.sh` 39/0, `run-pane-agent.test.sh` 10/0,
+  `terminal-detect.test.sh` 9/0. `shellcheck -x` clean on all four touched files.
+  `new-pane` now appears in `cmux.sh` only inside the comment explaining why it is not used.
+  - **RED first (27 passed / 7 failed of 34 layout; 51 passed / 3 failed of 54 exec).**
+    Layout RED: `live fixture rightmost surface is the max-index pane's`, `rightmost is the
+    max-index pane, not the last in document order`, `rightmost anchor respects the workspace
+    filter`, `unmatchable workspace id keeps the whole tree in play for the anchor`, and the
+    three changed aux expectations (`no aux pane -> aux-create anchors on the rightmost pane`,
+    `no quadrant -> aux-create anchors on main's own pane`, `mixed pane is impl -> aux creates
+    its own column`). Exec RED: `aux role derives the aux plan`, `aux anchors the new column on
+    the rightmost pane's surface`, `aux-create never calls new-pane`.
+    **Five vacuous passes, each listed with its reason:**
+    1. `canned builders pick the same rightmost surface as the live fixture` — with the
+       function absent BOTH sides are empty, so the equivalence holds. This is why the
+       content-pinned `surface:66` assertion sits next to it; falsification F2 shows the
+       equivalence assertion alone stays green under a real defect.
+    2. `no pane at all -> no anchor` — expects empty output; a missing function prints
+       nothing, so it passes before any code exists.
+    3. `a pane with no index yields no anchor` — same absence-assertion shape.
+    4. `no pane at all -> aux-create env` — the superseded slot3/slot4/env ladder also
+       answered `env` for a paneless tree.
+    5. (exec) `aux with no usable pane splits right env-implicitly` — under the old arm the
+       fake's unscripted `new-pane` returns nothing, `split_capture` rejects the empty ref,
+       and the `env` branch runs the *identical* bare `new-split right`. Right log line,
+       wrong reason.
+  - **Correction 22 — `layout_decide` had already drained stdin.** The brief's design (aux
+    branch emits the rightmost surface) is not implementable as written: `layout_normalize_tree`
+    consumes stdin on the first line of the function, so the tree is gone before the aux branch
+    runs. Landed `raw="$(cat)"` at the top, with `layout_normalize_tree` fed from `$raw`. Same
+    correction shape as Task 7's Correction 18 (a subshell discarding the tree), different
+    mechanism.
+  - **Correction 23 — dropping the slot3/slot4 ladder is wider than the brief scoped.** The
+    brief named two exec cases to replace. In fact **five** existing expectations were
+    `aux-create env` or a slot-derived ref and all had to change: layout's `no aux, no quadrant`
+    and `mixed pane is impl`, plus exec's aux dryrun case, on top of the two named. `env` would
+    then have had **no** pinning case left at all, so a new paneless fixture (`t_nopane`,
+    plus its exec twin) was added specifically to keep the env branch tested.
+  - **Correction 24 (found, not briefed) — `max_by` on a missing `index` fails SILENTLY, which
+    is precisely the drift trap the brief warned about.** With `index` absent every pane ranks
+    equal (jq sorts `null` lowest) and `max_by` returns whichever came last in the document —
+    so a builder that forgot `index` would keep the canned tests green on document order while
+    live regressed. Landed a strict `(.index | type) == "number"` requirement: no numeric index
+    anywhere ⇒ **no anchor** ⇒ the caller degrades visibly to `aux-create env`. Pinned by a
+    hand-written (deliberately not builder-made) fixture and falsification F4.
+  - **Correction 25 (found, not briefed) — the workspace-scope filter would have become a
+    second verbatim copy.** The brief requires `layout_rightmost_surface` to apply "the same
+    workspace filtering … with the same load-bearing fallback". Two hand-maintained copies of
+    that jq prelude is exactly the drift hazard this branch has hit four times, so it was
+    factored into a single `LAYOUT_JQ_WS_SCOPE` constant spliced into both functions. See
+    Deviations (a): this touches `layout_normalize_tree`'s body, which the brief asked to leave
+    alone. Its **output is byte-for-byte unchanged** (the content-pinned live-fixture test and
+    all 26 pre-existing layout cases stayed green), and F6 proves both functions really do
+    consume the shared constant.
+  - **Correction 26 (found, not briefed) — an equivalence assertion cannot discriminate on its
+    own.** Extending the builder/fixture equivalence check to the new field, as briefed, yields
+    an assertion that passes when both sides are empty (RED-set vacuous pass 1) *and* when both
+    sides are wrong in the same way (F2: the equivalence stayed GREEN while the live-fixture
+    content assertion went RED). Both a content-pinned assertion and the equivalence assertion
+    are therefore present; only the first is load-bearing.
+  - **Falsification (six; each anchor asserted by an exact-string replace that aborts unless it
+    matches exactly once, each diff confirmed non-empty before the run, each reverted by `cp`
+    from a backup and re-confirmed byte-identical by sha256; final state re-verified 34/0 and
+    54/0 with shellcheck silent):**
+    1. **F1 — `max_by(.index)` → `last`** (last in document order): layout **33/1**,
+       `rightmost is the max-index pane, not the last in document order` RED (got `surface:10`,
+       want `surface:20`). Exec unaffected at 54/0 — by design: exec's `T_FULL` lists its panes
+       in index order, and the layout suite is where the discrimination lives.
+    2. **F2 — `max_by(.index)` → `first`**: layout **31/3** — `live fixture rightmost surface is
+       the max-index pane's` RED (got `surface:65`, i.e. pane:44's), plus the whole-tree
+       fallback and the rightmost-anchor aux case. The live fixture is the mirror image of the
+       `t_order` fixture (max-index pane written LAST vs FIRST), so between F1 and F2 both
+       document-order drifts are excluded. See Correction 26 for what stayed green here.
+    3. **F3 — the aux-create anchor dropped** (`new-split right --surface "$rest"` → bare
+       `new-split right`): exec **53/1**, `aux anchors the new column on the rightmost pane's
+       surface` RED. This is the mutation that reproduces the original bug's *effect*.
+    4. **F4 — the numeric-index guard neutered** (`(.index | type) == "number"` → `true`):
+       layout **33/1**, `a pane with no index yields no anchor` RED (got `surface:10`).
+       Added beyond the brief; nothing else pins Correction 24's guard.
+    5. **F5 — `new-pane --direction right` reinstated as the primary**: exec **53/1**,
+       `aux-create never calls new-pane` RED — and, importantly, `aux anchors the new column on
+       the rightmost pane's surface` stayed **GREEN**, because the fake's unscripted `new-pane`
+       fails and the arm falls through to the correct anchored call. The absence assertion is
+       the *only* thing that catches this regression, which is exactly why the brief demanded
+       it and why it was checked for vacuity in the RED run.
+    6. **F6 — the shared prelude's fallback killed** (`else [.] end` → `else [] end`): layout
+       **17/17**, with normalize cases AND rightmost cases both RED. Blunt by design: its job is
+       to prove the spliced `LAYOUT_JQ_WS_SCOPE` is genuinely consumed by both functions rather
+       than being a dead constant beside a surviving copy (Correction 25).
+  - **Deviations.** (a) `LAYOUT_JQ_WS_SCOPE` refactor touches `layout_normalize_tree`'s body,
+    which the brief scoped as "additive only" — output identical, rationale in Correction 25.
+    (b) The `pane()` builders take an explicit **index positional** (`pane <ref> <index>
+    <surface|title>…`), updated at ~35 call sites across both suites. Auto-incrementing a
+    counter is impossible here — every `pane()` call runs inside its own command-substitution
+    subshell — and deriving the index from the ref number (`pane:44` → 44) would drift from the
+    fixture (which pairs `pane:44` with index **0**), i.e. the exact hazard. An explicit
+    positional also forces each fixture to state its own left-to-right order, which is now
+    semantically load-bearing. (c) The anchor is `selected_surface_ref`, not `surface_refs[0]`:
+    it is the surface the pane is actually showing (what a split anchors against) and it is a
+    scalar, so there is no empty-array case to reason about; a null/absent value yields no
+    anchor and degrades to `env`. Both fields are in the live fixture and the builders now emit
+    both. (d) Three cases added beyond the brief: `no pane at all -> no anchor`, `a pane with no
+    index yields no anchor`, and exec's `aux with no usable pane splits right env-implicitly`.
+  - **Not verified — stated plainly.**
+    - **Placement is NOT visually confirmed.** No cmux call was made in this task at all; every
+      assertion runs against canned JSON or the fake binary. That the aux column now appears at
+      the far right needs the user's eyes in the live workspace. The fix is *derivation*-correct
+      (the anchor is provably the max-`index` pane) — that is not the same as confirmed on
+      screen, and it must not be reported as though it were.
+    - **Full-height geometry is an open question, and the fix may have traded it away.** P3's
+      full-height observation was for `new-pane`, which is no longer used. `new-split right
+      --surface X` splits the pane holding X, so when the quadrant is populated the anchor is a
+      half-height quadrant pane and the new aux pane is plausibly half-height too. Position is
+      now right by construction; height is unproven either way. Worth checking at the next live
+      smoke run, and worth remembering that the spec's aux column is described as full-height.
+    - **`index` as left-to-right order rests on ONE controlled experiment with three panes**,
+      all created by `new-pane --direction right` / `new-split right`. Not probed: what happens
+      to indices after a vertical (`down`) split, after a pane is closed, or after a drag
+      reorder. If cmux renumbers on close, a stale max index is still *a* pane, so the failure
+      mode is a mis-placed column, never a wrong-target send.
+    - The `--placement dock` rejection and the `new-pane --help` flag list are carried from the
+      Task 8 smoke check's evidence; neither was re-run in this task.
+    - Everything Tasks 6 and 7 listed as fake-verified-only remains so.
+
 ## Live probe (cmux 0.64.20 (100), jq 1.7.1-apple, macOS Darwin 25.5.0)
 
 Re-runnable via `panes/cmux-layout-probe.sh` after any cmux upgrade. Findings recorded
@@ -484,15 +616,54 @@ the probe-first ordering paying for itself.
 **and** rewrite the `pane()`/`tree()` test builders to emit the real shape — otherwise
 canned tests pass while live behaviour fails.
 
-### P3 — `new-pane --direction right` · **exists; assumption 4 HOLDS**
+### P3 — `new-pane --direction right` · **exists, but spec assumption 4 FAILED LIVE**
+
+> **CORRECTED 2026-07-21 after Task 8's live smoke check.** The original finding read
+> "assumption 4 HOLDS" and "geometry is **not** exposed in the tree". Both readings misled
+> Task 8 and produced the aux-placement bug Task 9 fixes. The verbatim probe output is kept
+> below; the conclusions drawn from it are replaced.
 
 ```json
 { "pane_ref": "pane:45", "surface_ref": "surface:66", "type": "terminal",
   "window_ref": "window:1", "workspace_ref": "workspace:8" }
 ```
 
-Geometry is **not** exposed in the tree; confirmed visually by the user in the scratch
-workspace: the right pane **is a full-height column**. Spec assumption 4 holds.
+**What the probe actually proved, and what it did not.** `new-pane --direction right` exists
+and returns refs. The user's visual confirmation that the new pane was a full-height column
+happened in the *scratch* workspace, where the probe's own current pane WAS the rightmost —
+so "right of current" coincided with "far right" there, and the coincidence was mistaken for
+a general property.
+
+**Assumption 4 (a right-direction new-pane lands at the far right) is FALSE in the real
+workspace.** Established by Task 8's live smoke check: the aux pane landed **2nd from left**,
+confirmed visually by the user. Root cause, from `cmux new-pane --help`: `new-pane` has **no
+anchor flag** — only `--direction <left|right|up|down>`, described as "Split direction" —
+and it splits relative to the **current** pane. The adapter runs from the user's main session
+at the far left, so `new-pane --direction right` can only ever land at position 1.
+`--placement dock` is not an escape hatch either:
+`new-pane --placement dock` → `Error: invalid_params: Dock placement is disabled`.
+
+**Ordering IS exposed — the "geometry is not exposed" note was too broad.** *Pixel* geometry
+is not in the tree, but **panes carry an `index` field and it is left-to-right order**.
+Proven by a controlled experiment in the live workspace:
+
+```
+start:                                   idx0=pane:13
+new-pane --direction right (off main) -> idx0=pane:13  idx1=pane:65
+new-split right --surface <pane:65's> -> idx0=pane:13  idx1=pane:65  idx2=pane:66
+```
+
+Each new pane took the index matching its visual position, so **the rightmost pane is the one
+with max `index`**. That is the whole mechanism Task 9's fix rests on.
+
+**Consequence for the aux path (discharged in Task 9):** the far-right position comes from the
+ANCHOR, not from the verb. `new-pane` is dropped from the adapter entirely;
+`new-split right --surface <max-index pane's surface>` replaces it.
+
+**What is still confirmed from the impl side (Task 8's smoke check, live):** quadrant slots 1
+and 2 and the reuse path all work — slot 1 created, slot 2 split down off slot 1's surface,
+managed titles stamped correctly, reuse re-used the *same* surface (proving the P4
+`send`-not-`respawn` deviation), no mis-target, no pre-existing title altered.
 
 ### P4 — `respawn-pane --command` · **shell semantics AND destructive**
 
@@ -620,3 +791,10 @@ Reviewed before commit: synthetic titles only, no real paths, `tty` null, no URL
    tree and repairs the collateral victim best-effort. All of it fake-verified only.
 4. **Judge** — surface the `respawn-pane`→`send` deviation explicitly at the
    implementation-stage observability judge.
+5. **Live confirmation still owed (Task 9 could not supply it).** Three things need the user's
+   eyes in the real workspace, in one pass: (a) the aux column now lands at the **far right**;
+   (b) whether it is **full-height** or half-height when the quadrant is populated (see Task 9's
+   "not verified" — the `new-pane`→anchored-`new-split` change may have traded height for
+   position); (c) Task 3's handoff-wrapper rename and Task 6's `send`/`rename-tab`
+   `--workspace` placement, both still unconfirmed live. Restore the workspace to `pane:13` +
+   its 4 original surfaces afterwards, as Task 8 did.
