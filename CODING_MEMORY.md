@@ -6,10 +6,14 @@ how this file and its linked files should be written (plain language, major chan
 
 ## Active Session
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/pane-layout-v2
-- **NEXT ACTION: open the pane-layout-v2 PR.** All 9 tasks done + pushed; probe P8 done;
-  ADR 0008 written; implementation judge PASSED (risk=low). `judge-guard.sh` is strict — the
-  verdict must match HEAD at `gh pr create`, so **do not commit between the verdict and the PR**;
-  commit the audit trail to the branch immediately after. Detail: resume #9 below.
+- **PR #25 OPEN — pane-layout-v2 is feature-complete and awaiting review/merge.**
+  https://github.com/suyatdev/.claude/pull/25 (created 2026-07-22 @ ec03621). All 9 tasks done,
+  probe P8 done, ADR 0008 written, implementation judge PASSED across two rounds (risk=low).
+  **NEXT ACTION: nothing to build — merge via the GitHub UI, then backfill the verdict outcome.**
+  **First post-merge follow-up: the cmux version gate** (pin 0.64.20, compare at layout time, warn
+  loudly on mismatch) — closes the branch's main latent risk, since a cmux that changes pane-walk
+  order lands the aux column wrong while all 170 tests still pass. Detail:
+  `coding-memory/pr-tracking.md` §PR #25 and resume #9 below.
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
