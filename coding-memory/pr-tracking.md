@@ -323,16 +323,28 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   write — the round-3 judge's only finding), `dbe9289` (all three judge verdicts + PR #26 tracking),
   `27d3877` (memory corrections). Recovered on `fix/pr26-stranded-commits`, cherry-picked clean,
   content verified byte-identical to the originals by an empty `git diff` against the merged branch.
-- **Root cause, now clearly a pattern rather than bad luck (PR #21, PR #24, PR #26).** The workflow
-  itself pushes after `gh pr create` — judge-guard's strict freshness *requires* opening the PR
-  before committing the audit trail, so there is always a window where the PR exists but is
-  incomplete. The user merges from the GitHub UI when they see a green PR, which is the correct
-  thing for them to do. Nothing warns either side.
-- **Mitigation that actually fits the constraint:** the freshness rule cannot move, so the signal
-  has to. After `gh pr create`, state explicitly in the reply that more commits are coming and the
-  PR is **not yet safe to merge**, then say plainly when it is. A `gh pr edit --add-label` or a
-  "🚧 do not merge yet" title prefix cleared on completion would make it visible in the UI, where
-  the merge decision is actually made — worth doing if this recurs a 4th time.
+- **Root cause — separated into FORCED and CHOSEN, because the first draft of this entry blurred
+  them in my own favour** (judge's catch on the recovery branch):
+  - **Forced (`dbe9289` only).** judge-guard's freshness rule demands a verdict matching the exact
+    commit being shipped, so committing the audit trail instantly staleness-invalidates it. You
+    cannot have both; the PR must exist before the trail lands. Genuinely unavoidable.
+  - **CHOSEN (`9107345`).** A test fix pushed after the PR opened, deliberately, to avoid spending
+    a fourth judge round on a test-only change. That was a judgment call, not a constraint — and
+    the first version of this entry filed it under the blameless heading anyway. Recorded so the
+    next reader inherits the shortcut labelled as a shortcut.
+  In both cases the user merging a green PR from the UI is behaving correctly. Nothing warned them.
+- **ENFORCEABLE MITIGATION — `gh pr create --draft`** (judge's proposal; adopted immediately rather
+  than waiting for a 4th occurrence). GitHub refuses to merge a draft, and `hooks/judge-guard.sh`
+  matches on `gh pr create`, so a draft clears the *identical* freshness gate with no hook change.
+  Flow: `gh pr create --draft` → commit + push the audit trail → `gh pr ready`. This removes the
+  Merge button for exactly the window that causes stranding, instead of asking a human to remember.
+  **First applied on PR #27, the branch recovering this very incident.**
+- **Why the previous mitigation was replaced rather than restated:** it was "remember to say it out
+  loud," and this file already contained two earlier versions of that same promise, each written
+  after an incident and each followed by another. Advisory mitigations are **0-for-3** by this
+  file's own evidence, and a chat message never reaches whoever clicks Merge days later.
+- Candidate follow-up: an ADR for judge-guard-freshness vs. audit-trail-ordering if `--draft`
+  becomes standing policy across all PRs rather than a per-incident habit.
 - Nothing was lost in any of the three occurrences, but only because each was caught by checking
   reachability after the merge. **Always verify `git merge-base --is-ancestor <tip> origin/main`
   after a PR merges — never assume the merge captured the branch tip.**
