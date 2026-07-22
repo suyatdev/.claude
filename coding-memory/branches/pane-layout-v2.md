@@ -843,10 +843,96 @@ Reviewed before commit: synthetic titles only, no real paths, `tty` null, no URL
    tree and repairs the collateral victim best-effort. All of it fake-verified only.
 4. **Judge** — surface the `respawn-pane`→`send` deviation explicitly at the
    implementation-stage observability judge.
-5. **Live confirmation still owed (Task 9 could not supply it).** Three things need the user's
+5. ~~**Live confirmation still owed (Task 9 could not supply it).** Three things need the user's
    eyes in the real workspace, in one pass: (a) the aux column now lands at the **far right**;
-   (b) whether it is **full-height** or half-height when the quadrant is populated (see Task 9's
-   "not verified" — the `new-pane`→anchored-`new-split` change may have traded height for
-   position); (c) Task 3's handoff-wrapper rename and Task 6's `send`/`rename-tab`
-   `--workspace` placement, both still unconfirmed live. Restore the workspace to `pane:13` +
-   its 4 original surfaces afterwards, as Task 8 did.
+   (b) whether it is **full-height** or half-height when the quadrant is populated; (c) Task 3's
+   handoff-wrapper rename and Task 6's `send`/`rename-tab` `--workspace` placement.~~
+   **Discharged by probe P8 below**: (a) confirmed far-right; (b) answered — **ordering-dependent,
+   and half-height is unfixable**; (c) confirmed. Workspace restored and diffed against the
+   captured baseline.
+
+## P8 — live quadrant + aux placement probe (2026-07-21, cmux 0.64.20)
+
+Discharges carry-forward 5. First live exercise of impl slots **3–4** and of the aux-create
+anchor against a populated quadrant. Method: workspace baselined to `pane:13` + its 4 surfaces,
+then five sequential dispatches of the `pane-echo` fixture. Each plan was **predicted** by
+running `layout_decide` against the live tree *before* firing, so a wrong prediction would be
+visible instead of rationalized afterwards — this branch's vacuous-pass record made
+predict-then-observe mandatory. Script + all captured trees:
+`<scratchpad>/live-quadrant-probe.sh`, `<scratchpad>/probe-out/`.
+
+### Impl slots 1–4 — PASS, predictions matched exactly
+
+| # | Predicted | Observed pane | Quadrant position |
+|---|---|---|---|
+| impl.1 | `split right env` | `pane:70` | top-left |
+| impl.2 | `split down surface:98` | `pane:71` | bottom-left |
+| impl.3 | `split right surface:98` | `pane:72` | top-right |
+| impl.4 | `split right surface:99` | `pane:73` | bottom-right |
+
+All four runs were still booting when the next dispatch derived its plan, so no `agent-exit`
+marker existed and **reuse never preempted growth** — the condition Task 8 could not create.
+User confirmed the 2x2 block visually. Slots 3–4 are no longer fake-verified only.
+
+The quadrant also grew **between** main and a pre-existing aux pane: that pane went idx 1 → 5
+as the four impl panes were inserted before it, never losing its rightmost position.
+
+### Correction 27 — `index` is traversal order, NOT left-to-right
+
+Task 8's "controlled experiment" concluded index = visual left-to-right. **False**, and it only
+held there because every split in that experiment was horizontal. With a real quadrant the order
+was impl.1(1), **impl.3(2)**, **impl.2(3)**, impl.4(4) — impl.2 is in the *left* column yet sorts
+after impl.3 in the *right* one. `index` is position in the flat `panes` array.
+
+`layout_rightmost_surface` is **unchanged** and still correct in practice — max index landed in
+the rightmost column in every observed case — but its header comment claimed the falsified
+reading and has been corrected to state it is a heuristic. The tree offers nothing better
+(see below), so there is no stronger anchor to switch to.
+
+### Aux column height — ordering-dependent, and NOT fixable
+
+- Aux created **before** the quadrant (anchored on main, which is full-height): **full-height
+  far-right column.** ✓ spec assumption 4. This is the common real path — the handoff pane and
+  judges usually open before any quadrant exists.
+- Aux created **after** the quadrant is populated: anchor resolves to max-index = `pane:73` =
+  impl.**4** = *bottom*-right, and the new pane inherits that container → **half-height,
+  bottom-right.** Position ✓, height ✗. User-confirmed visually.
+
+Task 9 therefore fixed the *column* (it was 2nd-from-left) but inherits the anchor's height.
+**Unfixable from the current CLI**, on three independent grounds:
+
+1. `workspace.panes` is **FLAT** — keys are only `index`, `ref`, `selected_surface_ref`,
+   `surface_refs`, `surface_count`, `surfaces`. No nesting, no orientation, no geometry. This
+   **confirms P3's original reading** and refutes Task 8's partial walk-back of it. The adapter
+   cannot identify which panes are root-level (hence full-height) children.
+2. `new-split` and `new-pane` are both **pane-relative**; the new pane inherits its anchor's
+   container, so height follows the anchor.
+3. `--placement dock`, the one true sidebar mechanism, is **disabled** by cmux
+   (`Error: invalid_params: Dock placement is disabled`).
+
+Accepted as a documented limitation. The trade is explicit: full-height-but-2nd-from-left
+(`new-pane` off main) vs. right-column-but-half-height (Task 9). Task 9's choice is right,
+because position is always wrong in the first case while height is only sometimes wrong in
+the second.
+
+### Correction 28 — `new-pane` has no anchor flag but DOES follow `focus-pane`
+
+Task 8 recorded `new-pane` as unanchorable. More precisely: it has no `--surface`/`--pane` flag,
+but it splits off the **focused** pane. Controlled test: `focus-pane --pane pane:74` then
+`new-pane --direction right` placed the new pane at idx 7, past the aux column, whereas the same
+call without the focus change reproduced Task 8's 2nd-from-left result exactly. So
+focus-then-create is a viable alternative anchoring mechanism. Not adopted — it is racier than
+`new-split --surface` (it mutates user-visible focus) and does **not** solve height.
+
+### Incidental
+
+- `close-surface --surface <ref> --workspace <ws>` resolves refs correctly and showed **no**
+  P6-style silent focused-surface fallback. Closing a pane's last surface removes the pane;
+  there is no `close-pane` verb. Used one-at-a-time with a tree re-read between calls, since
+  P6 proved a sibling verb mis-targets on an unresolvable ref.
+- The 75k `context-handoff-watch` hook fired mid-probe and dispatched its own aux handoff pane.
+  Harmless, and it usefully supplied the "aux pre-exists the quadrant" case above — but it means
+  a probe of the aux path must check for a pre-existing aux pane, or it silently tests the `tab`
+  branch instead of `aux-create`.
+- Workspace restored to `pane:13` + surfaces 57/58/59/72 and **diffed against the captured
+  baseline — identical.**

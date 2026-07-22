@@ -44,14 +44,25 @@ layout_normalize_tree() {
 # split on, or NOTHING when no pane qualifies. Same workspace scoping as
 # layout_normalize_tree, including the load-bearing fallback.
 #
-# A pane carries an "index" and it IS left-to-right order — verified live
-# 2026-07-21 by a controlled experiment: each new pane took the index matching
-# its visual position (idx0 -> idx0,idx1 -> idx0,idx1,idx2). So the rightmost
-# pane is the one with the MAX index. This corrects probe P3's "geometry is not
-# exposed in the tree": pixel geometry is not, but ordering is, and that is all
-# a far-right anchor needs. The anchor itself is the pane's
-# "selected_surface_ref" — the surface it is actually showing, which is what a
-# split anchors against, and a scalar, so there is no empty-array case.
+# A pane carries an "index", and MAX index is the best available far-right
+# anchor — but it is a heuristic, not a guarantee. Probe P8 (2026-07-21, live)
+# falsified the earlier "index IS left-to-right order" reading: with a populated
+# 2x2 quadrant the order was impl.1(1), impl.3(2), impl.2(3), impl.4(4) — impl.2
+# sits in the LEFT column yet sorts after impl.3 in the right one. So "index" is
+# position in the flat panes array (traversal order), which coincides with
+# left-to-right only while every split is horizontal.
+#
+# It is kept anyway because the tree exposes nothing better: `workspace.panes`
+# is FLAT — no nesting, no orientation, no geometry (probe P8 confirmed P3's
+# original reading) — so no pane can be identified as root-level or rightmost by
+# construction. Max index did land in the rightmost column in every observed
+# case. The anchor itself is the pane's "selected_surface_ref" — the surface it
+# is actually showing, which is what a split anchors against, and a scalar, so
+# there is no empty-array case.
+#
+# Height is NOT controllable here: a split inherits its anchor's container, so
+# an aux column created against a populated quadrant is half-height (P8). See
+# the branch log's P8 for why that is unfixable from the current cmux CLI.
 #
 # "index" is REQUIRED to be a number rather than defaulted: a tree without it
 # yields no anchor and the caller falls back to env-implicit targeting, a
