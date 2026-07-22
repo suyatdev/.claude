@@ -5,15 +5,15 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/pane-layout-v2
+- session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/cmux-version-gate
 - **PR #25 MERGED 2026-07-22 (`3491464`); branch pruned local + remote; verdict outcomes
   backfilled.** pane-layout-v2 shipped: 9 tasks, probe P8, ADR 0008, implementation judge PASSED
   over two rounds. Detail: `coding-memory/pr-tracking.md` §PR #25, resume #9 below.
 - **CURRENT: `feature/cmux-version-gate`** — PR #25's agreed first post-merge follow-up, and the
   round-2 judge's top item. `check_cmux_version` in the adapter pins the verified cmux release and
   warns + leaves a durable receipt when the live binary differs, because the aux-column anchor is
-  a heuristic that no test can catch drifting (every adapter test drives a FAKE binary). Suite
-  170 → 193. **Its own round-1 judge found a real bug by probing nine version strings: a
+  a heuristic that no test can catch drifting (every adapter test drives a FAKE binary).
+  **Its own round-1 judge found a real bug by probing nine version strings: a
   `[0-9.]`-only filter silently swallowed `0.65.0-rc1`/`0.64.20-beta`** — the pre-release builds
   most likely to have moved behaviour — so the parser now tests version-SHAPED, not version-CLEAN.
   **PR #26 OPEN** (https://github.com/suyatdev/.claude/pull/26) — 3 judge rounds, all risk=low,
