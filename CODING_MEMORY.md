@@ -346,12 +346,18 @@ how this file and its linked files should be written (plain language, major chan
    The 07-20 brainstorm write-up carries its flowchart inline (counts toward the healthy side).
 6. **DONE 2026-07-21** — backfilled `outcome: clean` for the three known-clean nulls
    (`feature/observability-judge` @ fdbd7b9 + @ 381bd79, memsearch architecting @ c2b23fe)
-   alongside PR #23's verdict. 16 nulls remain, deliberately untouched: they're intermediate
-   rounds on multi-round branches (statusline ×6, token-bar ×4, handoff ×2, pane-orch
-   architecting ×2, plus verifying-subagent-commits @ 8701ca8 and compliance-judge @ cf4efc7
-   early rounds) where the honest value is likely `rework`, not `clean` — needs a calibration
-   policy decision (does a judge-driven fix wave after round N mean round N's outcome is
-   `rework`?) before bulk-backfilling.
+   alongside PR #23's verdict. **CALIBRATION POLICY DECIDED 2026-07-22 (user):** on a branch with
+   multiple judge rounds, the **final** round that shipped is `clean` and **earlier** rounds whose
+   findings changed the code or docs before merge are `rework`. Chosen over "every round on a
+   merged PR is clean" precisely because that would make the calibration history show the judge
+   never prompting rework, which is false and useless for tuning it. Applied to pane-layout-v2:
+   e12dc06 → `rework`, ec03621 → `clean`.
+   **17 nulls remain**, now resolvable under that policy but NOT bulk-applied — each needs its
+   per-branch history read to identify which round was final: statusline ×6, token-bar ×4,
+   handoff ×2, pane-orch architecting ×2, verifying-subagent-commits @ 8701ca8,
+   compliance-judge @ cf4efc7, and pane-layout-v2 architecting @ bb4050b. **Architecting-stage
+   entries are the genuinely unclear case** — there is no merge event for a design, so "did it
+   ship clean" has no direct meaning; decide that sub-policy before touching them.
 
 **Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
