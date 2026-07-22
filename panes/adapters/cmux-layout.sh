@@ -64,6 +64,12 @@ layout_normalize_tree() {
 # an aux column created against a populated quadrant is half-height (P8). See
 # the branch log's P8 for why that is unfixable from the current cmux CLI.
 #
+# The heuristic below cannot detect its own failure, so the guard lives next to
+# it rather than inside it: `check_cmux_version` in cmux.sh warns when the live
+# cmux is not the release this ordering was verified against. If you are here
+# because pane placement looks wrong, check
+# $PANE_STATE_DIR/cmux-version-mismatch first, then re-run cmux-layout-probe.sh.
+#
 # "index" is REQUIRED to be a number rather than defaulted: a tree without it
 # yields no anchor and the caller falls back to env-implicit targeting, a
 # visible degradation, instead of max_by silently ranking every pane equal and

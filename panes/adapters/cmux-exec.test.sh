@@ -365,5 +365,96 @@ OUT="$(PANE_STATE_DIR="$SP_DIR" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh"
 grep -qF -- "bash $SP_LAUNCHER" "$FAKE_LOG" && bad "space in a launcher path is escaped before send" "$(cat "$FAKE_LOG")" || ok "space in a launcher path is escaped before send"
 grep -qF -- "bash ${SP_LAUNCHER// /\\ }" "$FAKE_LOG" && ok "the escaped launcher still names the real path" || bad "the escaped launcher still names the real path" "$(cat "$FAKE_LOG")"
 
+# --- cmux version gate -------------------------------------------------------
+# The layout logic is calibrated against ONE cmux release. layout_rightmost_surface
+# in particular ships a max-index HEURISTIC (Correction 27: `index` is traversal
+# order, not left-to-right), and every assertion in this file drives a FAKE binary
+# — so a real cmux that walks panes differently mis-places the aux column with the
+# whole suite still green. The version is the one thing that IS checkable, so a
+# mismatch must be announced loudly and durably. It must never degrade: an upgrade
+# silently switching the feature off is the failure this gate exists to prevent.
+#
+# The setup below is a genuinely SUCCEEDING layout path (slot 1 created, stamped,
+# and verified against the second tree read), not the legacy floor — otherwise
+# "still dispatches" would pass on surface:42 from split_ok and prove nothing.
+VER_MARKER="$PANE_STATE_DIR/cmux-version-mismatch"
+ver_setup() {
+  reset_fake; rm -f "$VER_MARKER"; set_tree "$T_EMPTY"; creates new-split
+  set_tree_n 2 "$(tree "$(workspace workspace:1 "$(pane pane:1 0 'surface:10|zsh')" \
+    "$(pane pane:30 1 "surface:51|$MT1")")")"
+}
+
+# Guard the guard: the setup must reach the layout path with no version file at
+# all. If this ever fails, every assertion below is measuring the legacy floor.
+ver_setup; adapter implementer
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "version-gate baseline reaches the layout path" || bad "version-gate baseline reaches the layout path" "rc=$RC out=$OUT err=$ERR"
+
+ver_setup; printf 'cmux 0.64.20 (100) [14e3400b9]\n' > "$FAKE_DIR/version"
+adapter implementer
+[ "$OUT" = "surface:51" ] && ok "the pinned version dispatches through the layout path" || bad "the pinned version dispatches through the layout path" "rc=$RC out=$OUT err=$ERR"
+printf '%s' "$ERR" | grep -qi 'version' && bad "the pinned version warns about nothing" "$ERR" || ok "the pinned version warns about nothing"
+[ -e "$VER_MARKER" ] && bad "the pinned version leaves no marker" "marker exists" || ok "the pinned version leaves no marker"
+
+ver_setup; printf 'cmux 0.65.0 (101) [deadbeef]\n' > "$FAKE_DIR/version"
+adapter implementer
+[ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "a version mismatch still dispatches (warn, never degrade)" || bad "a version mismatch still dispatches (warn, never degrade)" "rc=$RC out=$OUT err=$ERR"
+grep -q '^new-split down$' "$FAKE_LOG" && bad "a version mismatch does not fall to legacy" "$(cat "$FAKE_LOG")" || ok "a version mismatch does not fall to legacy"
+printf '%s' "$ERR" | grep -qF '0.65.0' && printf '%s' "$ERR" | grep -qF '0.64.20' \
+  && ok "the warning names both the found and the verified version" || bad "the warning names both the found and the verified version" "$ERR"
+[ "$(printf '%s' "$ERR" | grep -c .)" -ge 2 ] && ok "the mismatch warning is louder than one line" || bad "the mismatch warning is louder than one line" "$ERR"
+grep -q '^found 0.65.0, verified 0.64.20$' "$VER_MARKER" 2>/dev/null && ok "a mismatch leaves a durable marker naming the version" || bad "a mismatch leaves a durable marker naming the version" "$(cat "$VER_MARKER" 2>/dev/null)"
+
+# One warning per dispatch, not per cmux call: the check must run once.
+[ "$(grep -c '^version$' "$FAKE_LOG")" -eq 1 ] && ok "the version is checked exactly once per dispatch" || bad "the version is checked exactly once per dispatch" "$(grep -c '^version$' "$FAKE_LOG") calls"
+
+# Fail OPEN: an unreadable version must never warn and never block. A cmux whose
+# `version` output shape changed would otherwise cry wolf on every dispatch.
+for desc in "version call fails" "version output is unparseable"; do
+  ver_setup
+  case "$desc" in
+    "version call fails")            printf '1\n' > "$FAKE_DIR/version.rc" ;;
+    "version output is unparseable") printf 'garbage\n' > "$FAKE_DIR/version" ;;
+  esac
+  adapter implementer
+  [ "$RC" -eq 0 ] && [ "$OUT" = "surface:51" ] && ok "$desc -> dispatch proceeds" || bad "$desc -> dispatch proceeds" "rc=$RC out=$OUT err=$ERR"
+  printf '%s' "$ERR" | grep -qi 'version' && bad "$desc -> stays silent on stderr" "$ERR" || ok "$desc -> stays silent on stderr"
+  # ...but it must still leave a receipt. Silence on screen is to avoid crying
+  # wolf every dispatch; going silent FOREVER is how the alarm dies unnoticed.
+  grep -q '^unreadable version output:' "$VER_MARKER" 2>/dev/null && ok "$desc -> still leaves an UNREADABLE-kind receipt" || bad "$desc -> still leaves an UNREADABLE-kind receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
+done
+
+# A pre-release build is an ordinary way to land on a version whose behaviour
+# changed. Treating a suffixed version as "unreadable" makes the alarm deaf to
+# exactly the builds most likely to have moved — found by the round-1 judge,
+# which probed nine version strings rather than trusting the parser.
+for v in "0.65.0-rc1" "0.64.20-beta" "1.0.0"; do
+  ver_setup; printf 'cmux %s (101) [deadbeef]\n' "$v" > "$FAKE_DIR/version"
+  adapter implementer
+  printf '%s' "$ERR" | grep -qF "$v" && ok "pre-release/major $v is a MISMATCH, not unreadable" || bad "pre-release/major $v is a MISMATCH, not unreadable" "$ERR"
+  # KIND, not substring: the unreadable receipt copies the whole version line,
+  # which contains $v, so `grep -F "$v"` passes even when misclassified.
+  grep -q "^found $v, verified " "$VER_MARKER" 2>/dev/null && ok "$v leaves a MISMATCH-kind receipt" || bad "$v leaves a MISMATCH-kind receipt" "$(cat "$VER_MARKER" 2>/dev/null)"
+done
+
+# The receipt means "there is a problem RIGHT NOW". Left behind after the
+# version is fixed, it is worse than nothing: it reports a resolved fault.
+ver_setup; printf 'stale mismatch\n' > "$VER_MARKER"
+printf 'cmux 0.64.20 (100) [14e3400b9]\n' > "$FAKE_DIR/version"
+adapter implementer
+[ -e "$VER_MARKER" ] && bad "a matching version CLEARS a stale receipt" "$(cat "$VER_MARKER")" || ok "a matching version CLEARS a stale receipt"
+
+# The launcher must live INSIDE this state dir or validate_open_pane_args
+# rejects it and the run aborts before the version check ever executes -- which
+# is how the first draft of this case passed vacuously.
+RO_STATE="$TMP/ro-state"; mkdir -p "$RO_STATE/runs/$RUN_ID"
+RO_LAUNCHER="$RO_STATE/runs/$RUN_ID/launch.sh"
+printf '#!/usr/bin/env bash\necho hi\n' > "$RO_LAUNCHER"; chmod 700 "$RO_LAUNCHER"
+chmod 500 "$RO_STATE"
+ver_setup; printf 'cmux 0.65.0 (101) [deadbeef]\n' > "$FAKE_DIR/version"
+OUT="$(PANE_STATE_DIR="$RO_STATE" PANE_AGENT_ROLE=implementer bash "$HERE/cmux.sh" open_pane "lbl" "$RO_LAUNCHER" 2>"$TMP/err")"
+ERR="$(cat "$TMP/err")"; chmod 700 "$RO_STATE"
+printf '%s' "$ERR" | grep -qiE 'denied|cannot create|not permitted' && bad "an unwritable state dir does not leak a redirection error" "$ERR" || ok "an unwritable state dir does not leak a redirection error"
+printf '%s' "$ERR" | grep -qF '0.65.0' && ok "an unwritable state dir still warns on screen" || bad "an unwritable state dir still warns on screen" "$ERR"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

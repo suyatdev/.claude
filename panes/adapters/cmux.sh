@@ -27,6 +27,56 @@ validate_open_pane_args "$title" "$launcher" || exit 65
 
 degraded() { printf 'cmux-layout: degraded (%s)\n' "$1" >&2; }
 
+# The layout logic is calibrated against ONE cmux release: flag semantics, the
+# --json tree shape, and above all layout_rightmost_surface's far-right anchor,
+# which is a HEURISTIC — `index` is traversal order over a flat pane array, not
+# left-to-right (Correction 27, probe P8). None of that is self-checking, and
+# every adapter test drives a FAKE binary, so a cmux that walks panes
+# differently mis-places the aux column with the whole suite still green. The
+# release is the one thing that IS checkable, so it is checked.
+#
+# Warns, never degrades: an upgrade silently switching the layout off is the
+# exact failure this guards against, and a version bump is not itself evidence
+# of breakage. Fails OPEN on anything unreadable — a changed `version` output
+# shape must not cry wolf on every dispatch. See ADR 0008.
+LAYOUT_VERIFIED_CMUX_VERSION="0.64.20"
+
+check_cmux_version() {
+  local line found marker
+  marker="${PANE_STATE_DIR:-$HOME/.claude/panes/state}/cmux-version-mismatch"
+  mkdir -p "$(dirname "$marker")" 2>/dev/null
+  line="$("$CMUX_BIN" version </dev/null 2>/dev/null | head -n 1)"
+  found="$(printf '%s\n' "$line" | awk '{print $2}')"   # `cmux 0.64.20 (100) [sha]`
+  # Version-SHAPED is the test, not version-CLEAN: `0.65.0-rc1` is a different
+  # release, not an unreadable one. A stricter [0-9.]-only filter silently
+  # swallowed every pre-release — the builds most likely to have moved
+  # behaviour — which the round-1 judge caught by probing nine version strings.
+  case "$found" in
+    [0-9]*.[0-9]*) ;;
+    # Unreadable: stay silent on stderr (a changed `version` shape must not cry
+    # wolf every dispatch) but still leave a receipt, because an alarm that goes
+    # quiet FOREVER is indistinguishable from an alarm that is happy.
+    # Braced: `cmd > "$f" 2>/dev/null` does NOT suppress a failing REDIRECTION --
+    # the shell reports it before the 2>/dev/null applies, so an unwritable state
+    # dir would print "Permission denied" on every dispatch, on the one path
+    # documented as silent. Same trap as run-pane-agent.sh:81.
+    *) { printf 'unreadable version output: %s\n' "$line" > "$marker"; } 2>/dev/null
+       return 0 ;;
+  esac
+  if [ "$found" = "$LAYOUT_VERIFIED_CMUX_VERSION" ]; then
+    # The receipt means "there is a problem RIGHT NOW". Left behind after an
+    # upgrade is reverted or re-verified, it reports a resolved fault.
+    rm -f "$marker" 2>/dev/null
+    return 0
+  fi
+  printf 'cmux-layout: WARNING — cmux %s is not the verified %s.\n' \
+    "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" >&2
+  printf 'cmux-layout: pane placement rides an unverified heuristic; re-run panes/cmux-layout-probe.sh.\n' >&2
+  { printf 'found %s, verified %s\n' "$found" "$LAYOUT_VERIFIED_CMUX_VERSION" \
+    > "$marker"; } 2>/dev/null
+  return 0
+}
+
 # Refs resolve relative to a workspace context that defaults to
 # $CMUX_WORKSPACE_ID (probe P5), so every call that names or reads one carries
 # it explicitly when it is set. Never emit an empty --workspace. bash 3.2 treats
@@ -246,6 +296,10 @@ execute_plan() { # $1 "PLAN: ..." line, $2 composed title. rc 1 = retryable
 # Derive -> execute. A vanished target (TOCTOU) earns exactly ONE fresh
 # derivation, then the legacy floor. Tier-2 failures inside finish_surface/
 # legacy_open exit 1 directly — they are not retried (spec error table).
+#
+# Checked ONCE, before the loop: the retry arm re-derives, and a second
+# identical warning would read as two separate problems.
+check_cmux_version
 attempt=1
 while :; do
   TREE_RAW="$(fetch_tree)" || { legacy_open; exit 0; }

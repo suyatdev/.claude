@@ -62,8 +62,23 @@ in the `layout_rightmost_surface` header comment.
   nothing better is exposed, so the logic is unchanged and only the misleading comment was fixed.
 - **This is the change's main latent risk** (flagged by the implementation-stage observability
   judge, verdict `2026-07-22-feature-pane-layout-v2.md`): if a future cmux alters how it walks
-  panes, the column quietly lands wrong and **all 170 tests still pass**, because every test
-  drives a fake binary. Mitigation is procedural, not automated — re-run
-  `panes/cmux-layout-probe.sh` after any cmux upgrade.
+  panes, the column quietly lands wrong and **all tests still pass**, because every test drives a
+  fake binary.
+- **Mitigated 2026-07-22 by a version gate** (`check_cmux_version` in `panes/adapters/cmux.sh`,
+  round-2 judge's top follow-up). `LAYOUT_VERIFIED_CMUX_VERSION` pins the one release all of this
+  was verified against; every dispatch compares the live `cmux version` against it and, on a
+  mismatch, prints a two-line warning naming both versions and writes a receipt at
+  `$PANE_STATE_DIR/cmux-version-mismatch`. A **matching** version deletes that receipt, so its
+  presence means "wrong now", not "wrong once"; an **unreadable** version stays silent on stderr
+  (a changed `version` shape must not cry wolf every dispatch) but still leaves a receipt, because
+  an alarm that goes quiet forever is indistinguishable from a happy one. The version test is
+  deliberately *shaped* (`[0-9]*.[0-9]*`) rather than *clean*: an earlier `[0-9.]`-only filter
+  silently swallowed `0.65.0-rc1` and `0.64.20-beta`, the pre-release builds most likely to have
+  moved behaviour. It **warns and never degrades** — an upgrade silently switching the layout off
+  is the failure being guarded against, and a version bump is not itself evidence of breakage.
+  Nothing yet *reads* the receipt; it is forensics, not notification (open follow-up: a statusline
+  reader). This detects the *trigger*, not the *defect*: a geometric
+  self-check remains impossible while the tree exposes no geometry, so re-running
+  `panes/cmux-layout-probe.sh` after an upgrade is still the confirming step.
 - Revisit if cmux ever re-enables dock placement or exposes pane geometry/nesting in
   `--json tree`; either one makes option 3 reachable and this ADR supersedable.
