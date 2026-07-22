@@ -5,7 +5,15 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- session_origin: desktop · session_started_at: 2026-07-21 (design-doc session, Fable 5) · last_active_branch: feature/pane-layout-v2
+- session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/pane-layout-v2
+- **PR #25 OPEN — pane-layout-v2 is feature-complete and awaiting review/merge.**
+  https://github.com/suyatdev/.claude/pull/25 (created 2026-07-22 @ ec03621). All 9 tasks done,
+  probe P8 done, ADR 0008 written, implementation judge PASSED across two rounds (risk=low).
+  **NEXT ACTION: nothing to build — merge via the GitHub UI, then backfill the verdict outcome.**
+  **First post-merge follow-up: the cmux version gate** (pin 0.64.20, compare at layout time, warn
+  loudly on mismatch) — closes the branch's main latent risk, since a cmux that changes pane-walk
+  order lands the aux column wrong while all 170 tests still pass. Detail:
+  `coding-memory/pr-tracking.md` §PR #25 and resume #9 below.
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
@@ -14,43 +22,76 @@ how this file and its linked files should be written (plain language, major chan
   `coding-memory/pr-tracking.md` §PR #24. Obs judge (impl @ 5c846b2) outcome=clean.
   **Remaining: post-merge watch items in Next Steps 0c.** Per-task history:
   `.superpowers/sdd/progress.md` (RUN section), `coding-memory/branches/pane-orchestration.md`.
-- **NEXT UP — brainstorm: pane-layout v2 — clarifying Q&A COMPLETE (5/5, 2026-07-21) +
-  recon round 2 done.** One workspace, main far-left | 2x2 implementer quadrant middle |
-  far-right additional pane, >6 → tabs, 6-pane cap. ALL DECIDED: quadrant = implementers/
-  reviewers ONLY (judges/handoff/extras → far-right); finished slots REUSED; PROGRESSIVE
-  construction (1 → stack → 2x2); adapter scope CMUX-ONLY; overflow = TABS ON A QUADRANT
-  PANE (role separation preserved). Recon round 2: `tree --json` exposes surface titles but
-  pane list is FLAT (no geometry) → roles must ride on title conventions/stored refs;
-  `rename-tab --surface` sets titles. Recon round 3 (live probe): `--json new-split`
-  RETURNS refs; `respawn-pane`/`close-surface` = slot-reuse primitives; refs die with the
-  app process (persisted maps must revalidate → undermines slot-map approach).
-  **APPROACH A PICKED (live-derived smart cmux adapter; B killed by ref-lifetime, C YAGNI).
-  NEXT: design sections 1-5 (numbered list in the brainstorm file), approval after each,
-  then design doc + judges + user review + writing-plans.** Spec assumption: title survival
-  across `restore-session` unverified → degrade to fresh splits. Full record:
-  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md`. Model gate re-answered
-  2026-07-21: stay Fable 5 for this brainstorm (implementation gate still open).
-  **Resume session 2026-07-21 (post-clear): ALL FIVE design sections PRESENTED and
-  APPROVED one-by-one (arch/boundaries; title grammar + slot derivation with on-disk
-  agent-exit marker; decision algorithm with slot-numbered titles `impl.<slot>:<run-id>`
-  + split table + aux-reuse extension; two-tier degradation; 3-layer testing with
-  PANE_CMUX_BIN fake + falsification-by-mutation). Approved drafts + 4 flagged
-  assumptions: brainstorm file §"Design section drafts". NEXT (fresh session): write
-  design doc → docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md, self-review,
-  both judges, user review, writing-plans. Model: user directed Opus 4.8 for
-  writing-plans + implementation (formal gate at code start). Session ended at ~100k by
-  checkpoint+clear.**
-- **Design-doc session 2026-07-21 (resume #2, Fable 5): SPEC WRITTEN + inline self-review +
-  Mermaid validated → `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md`,
-  committed on NEW branch `feature/pane-layout-v2` (no PR yet).** Carries all 5 approved
-  sections, the 4 flagged assumptions as their own section, the aux-reuse extension flagged
-  for user sign-off, 8 Gherkin scenarios, pinned toolchain (cmux 0.64.20/jq 1.7.1/CLI
-  2.1.216/shellcheck 0.11.0). NEXT (fresh session, on the branch): (1) compliance +
-  observability judges in parallel, pane-dispatched per running-the-compliance-judge →
-  capped auto-revise loop; (2) user review gate (incl. aux-reuse sign-off); (3)
-  superpowers:writing-plans on Opus 4.8 (formal pre-implementation model gate asked at code
-  start). Session restored at ~82k context (handoff pane prepared by hook); checkpointed
-  immediately after the doc write.
+- **CURRENT: pane-layout-v2 — USER REVIEW GATE CLEARED 2026-07-21 (resume #4, Fable 5).**
+  Spec: `docs/superpowers/specs/2026-07-21-pane-layout-v2-design.md` @ blob aeb0074
+  (commit bb4050b on `feature/pane-layout-v2`, pushed, no PR). Round-1 judges clean,
+  pane-dispatched: compliance **pass**/high 0 violations; obs advisory **low**/high, 1
+  concern = success_masking ("run folder missing = finished" infers success from absence —
+  out-of-band `panes/state/runs/` cleanup could recycle a busy pane). Judge notes for
+  implementation: pin `respawn-pane --command` quoting during the live probe before REUSE
+  is coded; log live probes first thing; fallback tests assert the exact legacy command
+  sequence. **User sign-off EXPLICIT on (a) the aux-reuse extension and (b) all 4 flagged
+  assumptions — ZERO spec edits, so both verdicts remain fresh.** Spec status line
+  intentionally left saying "pending" (editing the file would invalidate the blob-sha-keyed
+  verdicts); the authoritative approval record is
+  `coding-memory/brainstorms/2026-07-21-pane-layout-v2.md` §"User review gate". **PLAN
+  WRITTEN same session (user said "continue for now" on Fable 5 = per-task planning gate
+  answer; Hard Model Gate untouched):
+  `docs/superpowers/plans/2026-07-21-pane-layout-v2.md` — 8 tasks, TDD, live probe FIRST
+  (P1–P7 resolve the 4 assumptions + respawn quoting), unverified tree schema quarantined
+  in `layout_normalize_tree` validated against a live-captured fixture; self-review caught
+  and fixed a T4/T5 fixture state collision. GATES ANSWERED (do not re-ask): Opus 4.8
+  in a FRESH session; subagent-driven execution, pane-routed implementers.** Full design
+  history: the brainstorm file; earlier session blocks: git history of this file
+  (98faa38, c252135).
+- **Resume #9 (2026-07-22, Opus 4.8): probe P8 + implementation judge PASSED. PR is the only
+  step left.** HEAD `e12dc06`. **P8 finally supplied the live coverage Tasks 8/9 could not**
+  (`coding-memory/branches/pane-layout-v2.md` §P8, script `<scratchpad>/live-quadrant-probe.sh`):
+  four sequential `--role implementer` dispatches, each plan *predicted* from the live tree
+  before firing, all four matching exactly — **impl slots 3–4 are no longer fake-verified**,
+  because the agents were still booting so no `agent-exit` existed and reuse could not preempt
+  growth. Two corrections: **27** — `index` is traversal order over a FLAT panes array, NOT
+  left-to-right (Task 8's experiment only made horizontal splits; with a real quadrant impl.2
+  in the left column sorts *after* impl.3 in the right one), so `layout_rightmost_surface` is
+  a heuristic and its comment now says so — logic unchanged, nothing better is exposed; **28** —
+  `new-pane` *does* follow `focus-pane`, so it is anchorable after all, but that neither beats
+  `new-split --surface` nor fixes height. **Aux height is ordering-dependent and accepted as a
+  limitation → ADR 0008**: full-height when the column predates the quadrant (the common path —
+  handoff + judges open first), half-height bottom-right when created after, unfixable because
+  the tree is flat, both split verbs are pane-relative, and `--placement dock` is disabled.
+  Implementation judge **PASS, risk=low confidence=high**, no dimension failed, concerns
+  `success_masking` + `audit_trail`; it independently re-ran three recorded falsifications and
+  re-checked the unfixability argument. **Its sharpest catch, now the branch's main latent risk:
+  a future cmux changing pane-walk order lands the aux column wrong while all 170 tests still
+  pass** — every test drives a fake binary, so mitigation is procedural (re-run
+  `panes/cmux-layout-probe.sh` after any cmux upgrade). Live workspace restored and **diffed**
+  against its captured baseline. Judge follow-up not blocking: widen the one-line stderr notice
+  when the layout path degrades to legacy.
+- **Resume #8 (2026-07-21, Opus 4.8): Tasks 7–9 DONE + pushed (45fee28, 1d1e3c7, 17a0f44).**
+  Plan execution + verify-after-rename; Task 8's first-ever real-binary smoke check, which
+  **falsified spec assumption 4** (aux landed 2nd from left — `new-pane` splits off the current
+  pane); Task 9 added mid-flight to anchor aux on the rightmost pane. Also proved live: the P4
+  send-not-respawn reuse deviation (same surface re-used), `--workspace` scoping, title
+  stamping, the T3 handoff-wrapper rename. `--role` documented in the skill.
+- **Resume #7 (2026-07-21, Opus 4.8): Task 6 DONE + pushed (aa2cc42).** Pane-dispatched
+  implementer (`--role implementer`, surface:78); commit verified in-checkout, all five
+  suites independently re-run, one falsification independently re-run by me. Corrections
+  10–15 — detail in Next Steps 0-ACTIVE and `coding-memory/branches/pane-layout-v2.md`.
+  Session note: ~82k of this session's budget went to context RESTORE before any output,
+  which is the recurring cost of task-by-task execution on this branch.
+- **Resume #6 (2026-07-21): Task 1 live probe EXECUTED on Opus 4.8 (ffe22d2).** Probe is
+  re-runnable: `panes/cmux-layout-probe.sh`; fixture `panes/adapters/fixtures/tree-live.json`.
+  Three plan corrections + one user-approved spec deviation — see Next Steps 0-ACTIVE and
+  `coding-memory/branches/pane-layout-v2.md`.
+- **Resume #5 (2026-07-21, Fable 5): NO execution — stopped at the model gate.** Session
+  ran Fable 5 vs the answered Opus 4.8; discovered pane implementers would ALSO run
+  Fable 5 (settings.json `"model": "claude-fable-5[1m]"`, dispatcher passes no model
+  flag). User chose stop + relaunch on Opus 4.8. **Next session MUST be started with
+  `claude --model claude-opus-4-8` (or `/model` immediately) — the handoff pane and a
+  plain `claude` both inherit the Fable 5 default (handoff-wrapper.sh execs claude with
+  no --model). Open: whether to pin pane implementers to Opus too (settings/dispatcher
+  change, user's call) or accept Fable 5 implementers.** Then execute the plan from
+  Task 1 (live probe); implementation-stage obs judge before PR.
 - prior session (2026-07-20): claude-code-handoff cherry-pick SHIPPED — PRs #21+#22 MERGED;
   audit-trail recovery + 8-branch orphan sweep. Detail: ADR 0006,
   `coding-memory/branches/add-claude-code-handoff.md`, Next Steps 0.
@@ -176,6 +217,86 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
+0-ACTIVE. **pane-layout-v2 — EXECUTING. Task 1 (live probe) DONE + pushed (ffe22d2)
+   2026-07-21. Gates answered, do not re-ask: model = Opus 4.8 (user ran `/model`
+   this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.
+   **Tasks 2 (ba9a91b) + 3 (0711017) DONE + pushed** — both pane-routed, commit-verified
+   and independently re-run (Task 3: dispatch 39/0, siblings 24/0 10/0 9/0, shellcheck
+   clean, `--role` guard falsified 37/2 → restored 39/0).
+   **Task 4 (`cmux-layout.sh`) DONE + pushed (5da1cad)** — layout 12/0, siblings
+   39/24/10/9 all 0 failed, `shellcheck -x` clean; all 4 falsifications RED and reverted
+   (I independently re-ran the two jq ones: 7/5 and 11/1, restored byte-identical 12/0).
+   **Task 5 (decide + title composition) DONE + pushed (8ad7d7a)** — layout 26/0, siblings
+   39/24/10/9 all 0 failed, `shellcheck -x` clean; 3 falsifications RED and reverted (I
+   re-ran the tab tie-break one myself: 25/1 → restored byte-identical 26/0).
+   **Correction 8:** every Task 5 test fixture called `tree "$(pane …)"`, skipping Task 4's
+   new `workspace` level — and would have PASSED anyway, because normalize uses recursive
+   descent. Silent builder drift, the exact hazard Task 4 existed to kill. All 8 fixtures
+   now wrap through `workspace workspace:1`. **Correction 9:** the plan's reuse
+   falsification couldn't discriminate with only one finished surface; needs two.
+   **Task 6 (cmux.sh v2 frame — tiered degradation, legacy floor, dryrun) DONE (aa2cc42)**
+   — new `cmux-exec.test.sh` 24/0, siblings 26/39/10/9 + adapters 24/0 (file untouched),
+   `shellcheck -x` clean. 5 falsifications RED and reverted; **I independently re-ran the
+   workspace-scoping one** (anchor asserted to match exactly once, non-empty diff, 23/1 RED
+   on that exact case, restored byte-identical by sha256 → 24/0). RED run was 5/18 with
+   **all five passes vacuous** — enumerated in the branch log.
+   **Corrections 10–15** (10: `T_EMPTY` in the imagined shape normalizes to 0 bytes yet
+   passes every plan assertion — 3rd builder-drift occurrence, so a `T_SLOT1` fixture whose
+   plan is reachable only if the tree really parsed was added; 11: tree fetch must carry
+   `--workspace`, bare is window-scoped; 12: `send`/`rename-tab` carry it too, `new-split`
+   deliberately does not; 13: dryrun comment contradicted its own load-bearing guard;
+   **14: the plan's Step 2 RED run is UNSAFE here** — v1 hardcodes the real cmux path and
+   ignores `PANE_CMUX_BIN`, so a literal RED run inside a live cmux workspace fires ~10 real
+   `new-split down` calls at the user's window; run RED against a `cp -R` copy in `$TMP`
+   instead — **Task 7 needs the same precaution**; 15: the plan's `legacy_open` falsification
+   could not discriminate — `|| true` left the suite green because the ref-shape guard exits
+   on its own).
+   NEXT: **Task 7** (plan execution + verify-after-rename) → Task 8 →
+   implementation-stage obs judge (OWED — not yet run; judge-guard blocks PR) → PR.
+   **Still gotchas for Task 7:** `grep -c .` on empty input prints 0 but EXITS 1 —
+   `layout_decide`'s tab-count loop is safe only because these files are `set -u` and NOT
+   `set -e`; introducing `set -e` breaks it. **Nothing in Task 6 touched the real cmux
+   binary** — every execution assertion runs against the fake, so the `--workspace`
+   placement on `send`/`rename-tab` rests on `--help` + probe P5, **not** a live mutating
+   call. That live confirmation is owed at Task 8 alongside Task 3's handoff-wrapper rename.
+   **Task 4 = plan corrections 5–7, all verified against the live fixture before dispatch:**
+   (a) the normalize selector returns EMPTY (real shape keys each level's own ref as `ref`;
+   surfaces carry `pane_ref`+`title`); (b) **the workspace filter was a SILENT TOTAL
+   FAILURE** — workspace objects carry `ref` and their `workspace_ref` is `null`, so
+   `select(.workspace_ref? == $ws)` matched only the root `active`/`caller` objects and
+   returned NOTHING whenever `CMUX_WORKSPACE_ID` was set (the normal case), degrading the
+   whole feature to legacy; repaired to filter on the workspace's own `.ref`, kept as
+   defence-in-depth with primary scoping SERVER-side via `tree --workspace` (P1);
+   (c) the canned `pane()`/`tree()` builders were in the imagined shape and would have kept
+   (a)+(b) green while live degraded — now mirror `fixtures/tree-live.json`.
+   Implementer also fixed a real footgun: `layout_managed` dropped its last line when stdin
+   lacked a trailing newline (Task 5 will feed it via `$(...)`, which strips it).
+   Note for later tasks: the plan's `> file 2>/dev/null` idiom does NOT suppress a
+   redirect failure (left-to-right); put the stderr redirect FIRST.
+   **Task 3 = the plan's 4th correction:** its handoff `rename-tab --surface
+   "$CMUX_SURFACE_ID"` (a UUID, and no `--workspace`) would have silently renamed the
+   user's FOCUSED tab (P5+P6+P7 combined) — shipped instead with
+   `--workspace "$CMUX_WORKSPACE_ID"` and NO `--surface`, resolving via the pane's own env.
+   **Unverified live — confirm at Task 8.** The plan's predicted RED set was also wrong
+   (the `--role` allowlist case passes vacuously pre-implementation) — exactly the failure
+   the mandatory falsification rule exists to catch.
+   **The probe changed the plan in three places — full verbatim findings in
+   `coding-memory/branches/pane-layout-v2.md` §Live probe; read it before Tasks 4/6/7:**
+   (a) the real tree JSON shape differs from the plan's assumption at EVERY level (each
+   level keys its own ref as `ref`; surfaces carry `pane_ref`+`title`) — the plan's jq
+   matches nothing, so Task 4 must rewrite both the jq AND the canned test builders, or
+   unit tests stay green while live silently degrades to legacy; (b) `rename-tab` does
+   NOT error on an unresolvable `--surface` — it silently renames the FOCUSED tab, so
+   Task 7 needs verify-after-rename, not retry-once; (c) `respawn-pane` destroys the
+   surface when its command exits → reuse uses `cmux send` instead (**user-approved
+   deviation; spec left unedited — flag it to the implementation-stage judge**).
+   Spec assumption 1 (bare tree workspace-scoped) is FALSE but the gate did not trip
+   (`tree --workspace` accepts `$CMUX_WORKSPACE_ID`); assumption 4 confirmed visually.
+   Also: every mutating cmux call needs an explicit `--workspace` (refs resolve relative
+   to it; UUIDs work for `--workspace` but not `--pane`).
+   **settings.json's `model` field tracks the ACTIVE session model — it is not a stable
+   committed preference. Now `opus[1m]` (user's /model), uncommitted. Re-`grep` fresh
+   rather than trusting any earlier diff.**
 0. **claude-code-handoff cherry-pick (2026-07-20) — DONE. PR #21 + PR #22 both MERGED.** Picks
    applied per ADR 0006; judge R1 medium→R2 low/high; PR #21 merged 22:02Z. The audit trail
    stranded off `main` (committed post-merge as 77b59ad) was recovered via docs-only PR #22.

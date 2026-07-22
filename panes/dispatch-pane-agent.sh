@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-pane-agent.sh — entry point for pane orchestration.
 #
-#   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>]
+#   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]
 #   wait --result-file <f> [--timeout <secs>]
 #   handoff [--cwd <dir>]
 #
@@ -81,17 +81,21 @@ case "$cmd" in
   dispatch)
     agent_type="${1:-}"
     # shellcheck disable=SC2015 # non-empty agent_type guarantees $1 exists, so shift never fails into die
-    [ -n "$agent_type" ] && shift || die "usage: dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>]"
-    prompt_file=""; result_file=""; run_cwd="$PWD"
+    [ -n "$agent_type" ] && shift || die "usage: dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]"
+    prompt_file=""; result_file=""; run_cwd="$PWD"; role="aux"
     while [ $# -gt 0 ]; do
       case "$1" in
         --prompt-file) [ $# -ge 2 ] || die "--prompt-file needs a value"; prompt_file="$2"; shift 2 ;;
         --result-file) [ $# -ge 2 ] || die "--result-file needs a value"; result_file="$2"; shift 2 ;;
         --cwd)         [ $# -ge 2 ] || die "--cwd needs a value";         run_cwd="$2";     shift 2 ;;
+        --role)        [ $# -ge 2 ] || die "--role needs a value";        role="$2";        shift 2 ;;
         *) die "unknown option: $1" ;;
       esac
     done
     [[ "$agent_type" =~ $AGENT_TYPE_RE ]] || die "agent-type must match [A-Za-z0-9_-]{1,64}"
+    # Allowlist, fail fast: a garbage role is a caller bug and must die before
+    # any adapter call (spec error table).
+    case "$role" in implementer|aux) ;; *) die "--role must be implementer or aux (got: $role)" ;; esac
     { [ -f "$prompt_file" ] && [ -r "$prompt_file" ]; } || die "--prompt-file missing or unreadable: $prompt_file"
     [ -d "$run_cwd" ] || die "--cwd is not an existing directory: $run_cwd"
     run_cwd="$(cd "$run_cwd" && pwd)" || die "cannot resolve --cwd"
@@ -140,7 +144,10 @@ case "$cmd" in
     } > "$launcher"
     chmod 700 "$launcher"
 
-    open_pane_or_cooldown "$(sanitize_title "pane: $agent_type")" "$launcher"
+    # Layout-v2: the adapter composes the managed title from this bare label plus
+    # the role; the old "pane: " prefix would eat the managed grammar's budget.
+    export PANE_AGENT_ROLE="$role"
+    open_pane_or_cooldown "$(sanitize_title "$agent_type")" "$launcher"
     printf 'RESULT_FILE: %s\n' "$result_file"
     ;;
 
@@ -201,6 +208,9 @@ case "$cmd" in
       printf 'exec /bin/zsh -i\n'
     } > "$launcher"
     chmod 700 "$launcher"
+    # The handoff pane is a side pane like any judge — it belongs in the aux
+    # column, never the implementer quadrant.
+    export PANE_AGENT_ROLE=aux
     open_pane_or_cooldown "$(sanitize_title "handoff: press Enter")" "$launcher"
     ;;
 

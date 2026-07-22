@@ -255,3 +255,33 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   brainstorm exception; user-approved route, no PR #25). Content parity verified before the
   branch was pruned local+remote. Lesson: after `gh pr create`, any further branch commit
   must be pushed AND confirmed present in the PR before the user merges — or held for main.
+
+### PR #25 — feature/pane-layout-v2
+- repo: suyatdev/.claude · branch: feature/pane-layout-v2 · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/25 · status: **OPEN** (created 2026-07-22, HEAD ec03621)
+- opened_by session_origin: desktop (Opus 4.8) · last push: desktop
+- scope: deterministic cmux layout for pane-dispatched agents — `panes/adapters/cmux-layout.sh`
+  (new pure decision helper), `cmux.sh` plan execution + verify-after-rename, `agent-exit`
+  completion marker, `--role` flag, 88 new test assertions across two new suites, captured live
+  fixture, ADR 0008, spec + plan. 24 commits, ~4.3k insertions.
+- judge (impl): **round 1 @ e12dc06 PASS** (risk=low conf=high; concerns `success_masking`,
+  `audit_trail`) → its two gate items actioned (ADR 0008 + memory), which moved HEAD →
+  **round 2 @ ec03621 PASS** (`audit_trail` → pass; `success_masking` held — documenting a
+  heuristic aids diagnosis, not detection; **`context_budget` newly `concern`** — CODING_MEMORY.md
+  369 lines vs its own 200 ceiling). outcome=null. PR created BEFORE committing the audit trail
+  (strict freshness), trail committed immediately after — PR #22/#23 lesson applied.
+- live acceptance during PR session (probe P8, workspace baselined + restored + **diffed**):
+  impl slots 1–4 filled as a 2x2 with all four plans predicted before firing; aux placement in
+  both orderings; aux surface **reuse re-used the same surface** (`surface:115`, round 1 → round 2)
+  — the P4 send-not-respawn deviation working in production.
+- **agreed first post-merge follow-up: cmux version gate.** Pin 0.64.20 (already in three places;
+  `cmux-layout-probe.sh:26` already shells `cmux version`), compare at layout time, warn loudly on
+  mismatch. Closes the branch's main latent risk — a cmux that changes pane-walk order lands the
+  aux column wrong while all 170 tests still pass, since every test drives a fake binary — and
+  doubles as the louder degrade signal the judge deferred.
+- other post-merge watch: trim CODING_MEMORY.md to its 200-line budget; verify-after-rename
+  *repair* path and `%q` backslash form still fake-verified only; README has no Roadmap section
+  (adding one is its own task, deliberately not bundled here).
+- local hygiene: `chrome/chrome-native-host` + `settings.json` now carry `skip-worktree` (judge
+  round 2) so a stray `git commit -a` cannot publish them. Clear with `--no-skip-worktree` if
+  upstream ever changes them.

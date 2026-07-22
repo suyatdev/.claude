@@ -67,6 +67,21 @@ fi
 
 write_result "$body" "$status" || fail_early "cannot write result file: $result_file"
 
+# Layout-v2 completion marker: written ONLY after a successful result write, so
+# a fail_early run leaves no marker and its pane is never auto-reused (spec:
+# the error pane is preserved for post-mortem). Run dir comes from the prompt
+# file's directory with a shape guard — never trust it blindly. `cd`+`pwd`
+# normalizes first, so the guard tests a resolved absolute path and a caller
+# path laced with `../` cannot sneak past it.
+marker_dir="$(cd "$(dirname "$prompt_file")" 2>/dev/null && pwd)" || marker_dir=""
+case "$marker_dir" in
+  # stderr redirect goes FIRST: a failing `> file` is reported by the shell
+  # before a trailing 2>/dev/null would apply, and our breadcrumb is the one
+  # message worth printing.
+  */runs/*) printf '%s\n' "$status" 2>/dev/null > "$marker_dir/agent-exit" \
+              || printf 'run-pane-agent: could not write agent-exit marker\n' >&2 ;;
+esac
+
 # cmux niceties, best-effort: unblock any `wait` using wait-for, then notify.
 if [ -n "${CMUX_SURFACE_ID:-}" ] && [ -x "$CMUX_BIN" ]; then
   "$CMUX_BIN" wait-for -S "pane-$(basename "$result_file")" >/dev/null 2>&1 || true

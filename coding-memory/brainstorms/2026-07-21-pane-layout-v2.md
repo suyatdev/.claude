@@ -331,3 +331,26 @@ cmux/tmux/iterm/terminal — earlier "kitty" mentions were wrong.)
   as `state/runs/`.
 - Model-switch gate: user implicitly stayed on Fable 5 for the brainstorm (2026-07-21); the
   pre-implementation gate must still be asked separately when this reaches code.
+
+## User review gate — CLEARED 2026-07-21
+
+Spec reviewed at blob aeb0074 (commit bb4050b) with round-1 judge verdicts fresh. Explicit
+user sign-off recorded on both flagged items, with ZERO spec edits (verdicts remain valid):
+
+1. **Aux-reuse extension APPROVED** — finished aux surfaces are respawned oldest-first
+   before tabbing (the extension beyond Q2's literal quadrant-only scope). Accepted trade:
+   reused surface's scrollback is lost; `state/runs/<id>/` stays the durable record.
+2. **All 4 flagged assumptions SIGNED OFF** as implementation-time verifications: live
+   probe at implementation start resolves #1/#2/#4, #3 stays observational; degrade paths
+   as specced.
+
+The spec's status line intentionally still says "pending judges + user review" — editing
+the file would change its blob SHA and invalidate both judge verdicts over a cosmetic fix.
+THIS entry is the authoritative approval record.
+
+Next: `superpowers:writing-plans` on Opus 4.8 (user's standing direction), on
+`feature/pane-layout-v2`; the formal pre-implementation model gate is still asked when
+code starts. Carry the judges' notes into implementation: pin `respawn-pane --command`
+quoting during the live probe before REUSE is coded; obs success_masking concern
+(out-of-band `state/runs/` cleanup could recycle a busy pane); fallback tests assert the
+exact legacy command sequence.

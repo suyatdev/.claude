@@ -27,6 +27,12 @@ back through a file contract. Design:
 
 1. Write the full agent prompt to a file in the scratchpad (one file per dispatch).
 2. `"$HOME"/.claude/panes/dispatch-pane-agent.sh dispatch <agent-type> --prompt-file <f> --cwd <repo-the-agent-works-in>`
+
+   Add `--role implementer` ONLY for plan-task implementers and their
+   reviewers during plan execution — they fill the 2x2 quadrant. Judges,
+   handoff, and every other agent take the default (`aux`, the far-right
+   column); the flag exists so the cmux layout can tell the two apart and
+   is ignored by every other terminal.
 3. Capture the `RESULT_FILE:` line from its output.
 4. Wait:
    - Judges: `... wait --result-file <f> --timeout 540` in a foreground Bash

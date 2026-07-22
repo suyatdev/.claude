@@ -17,4 +17,21 @@ printf '=== Context handoff ===\n'
 printf 'The main session crossed 75k tokens. A fresh session will continue the work in:\n  %s\n\n' "$target_cwd"
 printf 'Press Enter to start handoff session\n'
 IFS= read -r _
+
+# Layout-v2 (spec assumption 2): this pane was opened under a managed
+# "aux:<run-id>" title. Once adopted as the main session that title must stop
+# matching the managed grammar, or future aux dispatches would tab onto main's
+# pane. Best-effort by design — documented consequence if it fails.
+#
+# Deliberately NO --surface: probe P7 recorded $CMUX_SURFACE_ID as a UUID and only
+# --workspace was proven to accept UUIDs, while P6 recorded that an unresolvable
+# --surface silently falls through to the FOCUSED tab (exit 0). Passing the UUID
+# would risk branding an innocent pane. With --surface omitted, cmux resolves via
+# $CMUX_TAB_ID/$CMUX_SURFACE_ID from this pane's own environment — the correct
+# target, no ref-format guessing. Unverified live; confirm at the end of Task 8.
+CMUX_BIN="/Applications/cmux.app/Contents/Resources/bin/cmux"
+if [ -n "${CMUX_SURFACE_ID:-}" ] && [ -n "${CMUX_WORKSPACE_ID:-}" ] && [ -x "$CMUX_BIN" ]; then
+  "$CMUX_BIN" rename-tab --workspace "$CMUX_WORKSPACE_ID" -- "main session" >/dev/null 2>&1 || true
+fi
+
 exec "$CLAUDE_BIN" --dangerously-skip-permissions "$SEED_PROMPT"
