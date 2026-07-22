@@ -285,3 +285,34 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - local hygiene: `chrome/chrome-native-host` + `settings.json` now carry `skip-worktree` (judge
   round 2) so a stray `git commit -a` cannot publish them. Clear with `--no-skip-worktree` if
   upstream ever changes them.
+
+### PR #26 — feature/cmux-version-gate
+- repo: suyatdev/.claude · branch: feature/cmux-version-gate · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/26 · status: **OPEN** (created 2026-07-22 @ 0ecec9a)
+- opened_by session_origin: desktop (Opus 4.8) · last push: desktop
+- scope: PR #25's agreed first post-merge follow-up. `check_cmux_version` in the cmux adapter pins
+  the verified cmux release (0.64.20) and, on mismatch, warns on stderr + writes a self-clearing
+  receipt to `$PANE_STATE_DIR/cmux-version-mismatch`. Warns, never degrades; fails open (silent,
+  but still leaves a receipt) on unreadable output. Also carries PR #25's verdict-outcome backfill.
+  Suite 170 → 197. Log: `coding-memory/branches/cmux-version-gate.md`.
+- judge (impl): **3 rounds, all risk=low conf=high, none blocking.** r1 @ 9797191 held
+  `success_masking` at `concern`; r2 @ 758b1fa moved it to `pass` but dropped `traceability` to
+  `concern`; r3 @ 0ecec9a returned `traceability` to `pass`. outcome=null on all three.
+- **the judge found two real defects, both fixed here** — it probed rather than reasoned each time:
+  1. **r1, nine version strings:** a `[0-9.]`-only filter classified `0.65.0-rc1`/`0.64.20-beta` as
+     *unreadable* rather than *mismatch*, leaving the alarm deafest to pre-release builds. Parser
+     is now version-SHAPED, not version-CLEAN. r2 re-probed with 28 strings.
+  2. **r2:** `printf … > "$f" 2>/dev/null` does not suppress a failing *redirection*, so an
+     unwritable state dir printed `Permission denied` every dispatch on the path documented as
+     silent. Both writes braced. **`run-pane-agent.sh:81` already documented this trap** — the
+     codebase knew, the implementation walked into it anyway.
+  It also caught two assertions weaker than they read, a falsification row that did not reproduce
+  (compound mutation), a branch log still asserting the deleted rule as fact, and — r3 — that the
+  brace regression test covered only one of the fix's two halves.
+- **PR created BEFORE the r3 follow-up landed**, deliberately: `judge-guard.sh` gates
+  `gh pr create` only, so the one-line test fix (9107345) was pushed to the open PR rather than
+  spending a fourth judge round on a test-only change. Audit trail committed immediately after.
+- known gap carried into the PR: **nothing reads the receipt** — forensics, not notification.
+  Cheapest reader is the statusline, and it must handle both receipt kinds or the blind spot moves.
+- correction noted in the PR body, not by rewriting a pushed commit: commit aedf3d1's trailer says
+  `186 -> 195`; the true intermediate figure was **193**.

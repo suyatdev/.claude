@@ -16,7 +16,11 @@ how this file and its linked files should be written (plain language, major chan
   170 → 193. **Its own round-1 judge found a real bug by probing nine version strings: a
   `[0-9.]`-only filter silently swallowed `0.65.0-rc1`/`0.64.20-beta`** — the pre-release builds
   most likely to have moved behaviour — so the parser now tests version-SHAPED, not version-CLEAN.
-  Log: `coding-memory/branches/cmux-version-gate.md`.
+  **PR #26 OPEN** (https://github.com/suyatdev/.claude/pull/26) — 3 judge rounds, all risk=low,
+  none blocking; it found two real defects (the pre-release deafness above, and a `2>/dev/null`
+  that does not suppress a failing *redirection* — a trap `run-pane-agent.sh:81` already
+  documented). Suite 170 → 197. Log: `coding-memory/branches/cmux-version-gate.md`,
+  `coding-memory/pr-tracking.md` §PR #26.
 - current work: **pane-orchestration FULLY CLOSED OUT — PR #23 MERGED (8f40e05) and docs-only
   PR #24 MERGED 2026-07-21 13:05Z (23dd2e3); both branches pruned local+remote.** PR #24
   merged WITHOUT the late-pushed brainstorm checkpoint 9e16d7f (PR #21 stranding failure
