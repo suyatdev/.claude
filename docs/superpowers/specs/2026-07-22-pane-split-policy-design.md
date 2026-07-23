@@ -163,18 +163,47 @@ Consistent with the pane system's existing header contract ("Degrades, never blo
 
 ## Acceptance scenarios
 
-- **First dispatch, no policy:** eligible worker dispatched, no policy file → guard denies with ask →
-  model records `inline` → every subsequent governed dispatch runs in-process; no panes open.
-- **Panes with overflow:** policy `panes max=3`, a fan-out of 5 workers → workers 1–3 open panes,
-  workers 4–5 open tabs in existing panes; nothing runs inline, nothing blocks.
-- **Read-only excluded:** under `panes max=3`, an `Explore` dispatch → runs in-process (never
-  governed), does not consume a pane slot.
-- **Pane frees:** a pane's agent completes, then a new eligible dispatch fires with live count now < N
-  → it claims a pane again (not a tab).
-- **Adapter can't tab:** `open_tab` returns non-zero → dispatcher degrades that spawn to in-process,
-  writes the cooldown flag, session continues without blocking.
-- **Inline session, judge:** policy `inline`, a compliance-judge dispatch → runs in-process this
-  session (judges are governed, and `inline` means no panes).
+```gherkin
+Feature: Per-session pane-split policy for governed subagent dispatches
+
+  Scenario: First governed dispatch with no policy prompts once, then honors inline
+    Given a session with no recorded policy file (no state/pane-policy-<key>)
+    When a governed worker (a judge, implementer, or worker agent) is dispatched
+    Then the guard denies the in-process dispatch with exit 2 and structured ask guidance
+    And the model calls AskUserQuestion, writes "inline" to state/pane-policy-<key>, and retries
+    And that dispatch and every subsequent governed dispatch run in-process
+    And no pane is opened for the rest of the session
+
+  Scenario: Panes fill to the max, then overflow to tabs
+    Given a recorded policy of "panes max=3" and no live panes for this session
+    When a fan-out of 5 governed workers is dispatched
+    Then workers 1-3 each open a new pane while the live count is below 3
+    And workers 4-5 each open a new tab in an existing live pane, selected round-robin
+    And nothing runs in-process and nothing blocks or waits
+
+  Scenario: Read-only agents are never governed and consume no slot
+    Given a recorded policy of "panes max=3"
+    When an Explore (read-only) agent is dispatched
+    Then the guard allows it in-process because it is on the exclusion set
+    And it does not consume a pane slot toward the max
+
+  Scenario: A freed pane is reclaimed rather than tabbed
+    Given a policy of "panes max=N" where a pane's agent has completed so the live count is below N
+    When a new governed worker is dispatched
+    Then it opens a new pane, not a tab, because the live count is below N
+
+  Scenario: An adapter that cannot tab degrades to in-process without blocking
+    Given a policy of "panes max=N" with N live panes on an adapter whose open_tab returns non-zero
+    When an overflow governed worker is dispatched
+    Then the dispatcher degrades that spawn to in-process
+    And it writes the session cooldown flag and the session continues without blocking
+
+  Scenario: An inline session opens no pane even for a governed judge
+    Given a recorded policy of "inline"
+    When a compliance-judge (a governed type) is dispatched
+    Then it runs in-process this session and opens no pane
+    And inline means no panes at all this session, judges included
+```
 
 ## Testing
 
