@@ -12,16 +12,21 @@ how this file and its linked files should be written (plain language, major chan
   NOT mine, left as-is. **HARD MODEL GATE ANSWERED THIS SESSION: Opus 4.8 for `superpowers:writing-plans`;
   IMPLEMENTATION tier still deferred — re-ask before any coding.** **writing-plans IN PROGRESS:** read the
   spec + all target infra (`hooks/pane-dispatch-guard.sh`, `panes/dispatch-pane-agent.sh`,
-  `panes/redirect-agents.conf`, adapters). **Plan doc NOT yet drafted →
-  `docs/superpowers/plans/2026-07-23-pane-split-policy.md` (create next).** Plan must sequence, as its
-  FIRST hard-gate task, the live cmux tab-primitive probe; then guard 3-lane routing, dispatcher
-  count+overflow, new `open_tab` adapter verb, `panes/state/pane-policy-<key>`, config split (narrow
-  `redirect-agents.conf` to judges + new read-only exclusion), docs. Carry-forward (do NOT lose):
-  ADR for the include→exclude 3-lane flip; CORRECT the stale `rules/gates.md` "plan implementers are
-  skill-routed" line in place; `open_tab` inherits the orchestration frozen boundary (no interpolation,
-  title `[A-Za-z0-9 ._:-]`≤64); validate N as a bounded positive int; prove worker-count + worker/judge
-  lane-tag on REAL `state/runs/` fixtures. **Context hit 84.5k mid-read → freshness checkpoint; asked
-  user continue-warm vs clear (re-restore here costs ~85k, the branch's recurring tax).**
+  `panes/redirect-agents.conf`, adapters). **PLAN WRITTEN + self-reviewed →
+  `docs/superpowers/plans/2026-07-23-pane-split-policy.md` (committed).** 8 TDD tasks: T1 live cmux
+  tab-primitive probe (HARD GATE, operator-run on real cmux — gates T5); T2 `pane-policy-<key>` state +
+  `set-policy` subcommand + `read_policy` (bounded N 1..16); T3 guard 3-lane routing + new
+  `inprocess-agents.conf` (Explore/Plan) + narrowed `redirect-agents.conf` (judges); T4 `open_tab`
+  adapter verb + `validate_open_tab_args` (surface-ref allowlist `[A-Za-z0-9:%_.-]`≤64) for
+  tmux/iterm/terminal; T5 cmux `open_tab` (probe-verified `new-surface --pane`); T6 dispatcher
+  lane/session/surface markers + `count_live_workers` (proven on REAL run-dir fixtures) + judge bypass;
+  T7 overflow → `open_tab` round-robin (`pane-rr-<key>`); T8 skill + gate-stub correction + ADR 0009 +
+  Mermaid. Config decision RESOLVED (two flat include-lists). All 7 Gherkin scenarios + 4 flagged
+  assumptions mapped to tasks. **NEXT: EXECUTION — this crosses the Hard Model Gate again (implementation
+  tier, deferred all along) → re-ask before any coding. T1 is an operator live-probe gate, not a
+  fake-binary subagent task. Then subagent-driven-development (recommended) or executing-plans.**
+  **Freshness: plan-write pushed session past ~100k (user chose continue-warm to avoid a 2nd ~85k
+  restore); checkpoint + offer clear now, before implementation.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
