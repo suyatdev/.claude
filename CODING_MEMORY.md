@@ -22,11 +22,15 @@ how this file and its linked files should be written (plain language, major chan
   lane/session/surface markers + `count_live_workers` (proven on REAL run-dir fixtures) + judge bypass;
   T7 overflow → `open_tab` round-robin (`pane-rr-<key>`); T8 skill + gate-stub correction + ADR 0009 +
   Mermaid. Config decision RESOLVED (two flat include-lists). All 7 Gherkin scenarios + 4 flagged
-  assumptions mapped to tasks. **NEXT: EXECUTION — this crosses the Hard Model Gate again (implementation
-  tier, deferred all along) → re-ask before any coding. T1 is an operator live-probe gate, not a
-  fake-binary subagent task. Then subagent-driven-development (recommended) or executing-plans.**
-  **Freshness: plan-write pushed session past ~100k (user chose continue-warm to avoid a 2nd ~85k
-  restore); checkpoint + offer clear now, before implementation.**
+  assumptions mapped to tasks. **HARD MODEL GATE ANSWERED 2026-07-23 (impl tier): Opus 4.8 (1M) for the
+  whole 8-task implementation; execution = SUBAGENT-DRIVEN (pane-routed implementers). `settings.json` is
+  `opus[1m]` so pane implementers inherit Opus — no Fable 5 surprise. Do NOT re-ask either gate for this
+  branch's execution.** **NEXT: T1 is an OPERATOR live-probe gate — user runs it on REAL cmux
+  (probe-verify `new-surface --pane`); it gates T5 and is NOT a fake-binary subagent task. T2/T3/T4 can
+  proceed first (T1 only blocks T5). Then dispatch pane implementers per subagent-driven-development,
+  verifying each commit in-checkout before advancing (`verifying-subagent-commits`).** **Freshness:
+  2026-07-23 restore alone costs ~77k (large memory index); prev session chose continue-warm over a 2nd
+  big restore — same tradeoff holds. Checkpoint saved WITH the gate answer, so a clear is safe if chosen.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
