@@ -22,6 +22,8 @@ CMUX_BIN="/Applications/cmux.app/Contents/Resources/bin/cmux"
 STALE_DAYS=7
 DEFAULT_TIMEOUT=900
 POLL_SECS=2
+MAX_PANES=16                 # upper bound on 'panes max=N' (spec: bounded positive int)
+POLICY_RE='^panes max=([0-9]+)$'
 CMUX_WAIT_SECS=15
 AGENT_TYPE_RE='^[A-Za-z0-9_-]{1,64}$'
 TIMEOUT_RE='^[0-9]+$'
@@ -50,6 +52,21 @@ new_run_dir() {
 }
 
 sanitize_title() { printf '%s' "$1" | tr -cd 'A-Za-z0-9 ._:-' | cut -c1-64; }
+
+# read_policy <file> -> prints "inline" or "panes max=N" for a VALID line, else
+# nothing (missing/corrupt/out-of-range => caller treats as "no policy"). Never
+# errors: a malformed policy is a safe re-ask, not a failure (spec error table).
+read_policy() {
+  local f="$1" line n
+  [ -f "$f" ] && [ -r "$f" ] || return 0
+  line="$(head -n 1 "$f" 2>/dev/null)"
+  if [ "$line" = "inline" ]; then printf 'inline\n'; return 0; fi
+  if [[ "$line" =~ $POLICY_RE ]]; then
+    n="${BASH_REMATCH[1]}"
+    if [ "$n" -ge 1 ] && [ "$n" -le "$MAX_PANES" ] 2>/dev/null; then printf 'panes max=%s\n' "$n"; fi
+  fi
+  return 0
+}
 
 # Default result location per spec: the session scratchpad's pane-results/.
 # Derivable because the scratchpad path ends .../<session-id>/scratchpad and
@@ -212,6 +229,30 @@ case "$cmd" in
     # column, never the implementer quadrant.
     export PANE_AGENT_ROLE=aux
     open_pane_or_cooldown "$(sanitize_title "handoff: press Enter")" "$launcher"
+    ;;
+
+  set-policy)
+    mode="${1:-}"
+    # shellcheck disable=SC2015 # non-empty mode guarantees $1 exists, so shift never fails into die
+    [ -n "$mode" ] && shift || die "usage: set-policy {inline|panes --max N}"
+    max=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --max) [ $# -ge 2 ] || die "--max needs a value"; max="$2"; shift 2 ;;
+        *) die "unknown option: $1" ;;
+      esac
+    done
+    key="${CLAUDE_CODE_SESSION_ID:-nosession}"
+    mkdir -p "$STATE_DIR"
+    case "$mode" in
+      inline) printf 'inline\n' > "$STATE_DIR/pane-policy-$key" || die "cannot write policy file" ;;
+      panes)
+        [[ "$max" =~ ^[0-9]+$ ]] || die "--max must be a whole number 1..$MAX_PANES"
+        { [ "$max" -ge 1 ] && [ "$max" -le "$MAX_PANES" ]; } || die "--max out of range (1..$MAX_PANES)"
+        printf 'panes max=%s\n' "$max" > "$STATE_DIR/pane-policy-$key" || die "cannot write policy file" ;;
+      *) die "set-policy mode must be inline or panes" ;;
+    esac
+    printf 'POLICY: %s\n' "$(cat "$STATE_DIR/pane-policy-$key")"
     ;;
 
   *)

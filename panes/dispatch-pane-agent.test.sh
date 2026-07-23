@@ -170,5 +170,19 @@ rfrel=$(cd "$TMP/relcwd" && bash "$DISPATCH" dispatch pane-echo --prompt-file "$
 rfrel_expect="$(cd "$TMP/relcwd" && pwd)/rel-out.md"
 { [ -n "$rfrel" ] && [ "$rfrel" = "$rfrel_expect" ]; } && ok "relative --result-file canonicalized to absolute" || bad "relative --result-file canonicalized to absolute" "got=$rfrel want=$rfrel_expect"
 
+# --- set-policy writes and validates the per-session policy file
+export PANE_STATE_DIR="$TMP/state"   # already set at top; restated for locality
+SP_SID="policy-sess-$$"
+CLAUDE_CODE_SESSION_ID="$SP_SID" bash "$DISPATCH" set-policy inline >/dev/null 2>&1
+[ "$(cat "$PANE_STATE_DIR/pane-policy-$SP_SID" 2>/dev/null)" = "inline" ] && ok "set-policy inline written" || bad "set-policy inline written"
+CLAUDE_CODE_SESSION_ID="$SP_SID" bash "$DISPATCH" set-policy panes --max 3 >/dev/null 2>&1
+[ "$(cat "$PANE_STATE_DIR/pane-policy-$SP_SID" 2>/dev/null)" = "panes max=3" ] && ok "set-policy panes max=3 written" || bad "set-policy panes max=3 written"
+bash "$DISPATCH" set-policy panes --max 0 >/dev/null 2>&1
+[ $? -eq 64 ] && ok "set-policy max=0 rejected" || bad "set-policy max=0 rejected"
+bash "$DISPATCH" set-policy panes --max 99 >/dev/null 2>&1
+[ $? -eq 64 ] && ok "set-policy max=99 (>16) rejected" || bad "set-policy max=99 rejected"
+bash "$DISPATCH" set-policy panes --max abc >/dev/null 2>&1
+[ $? -eq 64 ] && ok "set-policy non-numeric max rejected" || bad "set-policy non-numeric max rejected"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
