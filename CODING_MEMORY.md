@@ -5,13 +5,28 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
+  **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
+  Session pane-split policy: at the first pane-eligible dispatch the model asks once —
+  `inline` (all in-process this session) or `panes max=N` (N concurrent panes; spawns beyond N open
+  as **tabs inside existing panes**, round-robin, never inline/blocked). Read-only `Explore`/`Plan`
+  never governed (exclude-list, flipping today's `redirect-agents.conf` include-list). cmux primary
+  (user's terminal); others degrade. Spec:
+  `docs/superpowers/specs/2026-07-22-pane-split-policy-design.md`; provenance + Q&A + gate answers:
+  `coding-memory/brainstorms/2026-07-22-pane-split-policy.md`. Prior-session Snatch-Bracket verdicts
+  committed to main (`7854ae3`) before branching. **GATES ANSWERED (do not re-ask this design):
+  Hard Model Gate = Opus 4.8 for the spec, implementation tier deferred; freshness = write-then-clear.**
+  **NEXT (fresh session, IN ORDER): (1) compliance judge on the spec — BLOCKING, deliberately deferred
+  to preserve checkpoint budget, run via `running-the-compliance-judge` alongside the obs architecting
+  read; (2) user review gate on the spec; (3) re-ask model gate before implementation;
+  (4) `superpowers:writing-plans`. cmux tab primitive must be live-probed FIRST in the plan.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
   **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
   quadrant + 1 default `aux`) was being scoped when the 75k handoff fired. **Pre-existing
   uncommitted `coding-memory/compliance-judge/verdicts.jsonl` (2-line diff) + new
-  `2026-07-22-0007-tea-room.md` predate this session and are unrelated to it — still awaiting a
-  user decision on whether to commit them.**
+  `2026-07-22-0007-tea-room.md` predate this session and are unrelated to it — committed to main
+  as `7854ae3` by the later Opus 4.8 session above.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/cmux-version-gate
 - **PR #25 MERGED 2026-07-22 (`3491464`); branch pruned local + remote; verdict outcomes
   backfilled.** pane-layout-v2 shipped: 9 tasks, probe P8, ADR 0008, implementation judge PASSED
