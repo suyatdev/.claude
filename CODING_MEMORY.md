@@ -20,17 +20,22 @@ how this file and its linked files should be written (plain language, major chan
   to preserve checkpoint budget, run via `running-the-compliance-judge` alongside the obs architecting
   read; (2) user review gate on the spec; (3) re-ask model gate before implementation;
   (4) `superpowers:writing-plans`. cmux tab primitive must be live-probed FIRST in the plan.**
-  **JUDGES DONE (2026-07-22, Opus 4.8, both pane-dispatched to cmux):** Obs architecting read
-  risk=low/high (advisory). **Compliance R1 FAIL** (1 violation `writing-specs/bdd-gherkin-scenarios`
-  — acceptance scenarios were arrow-prose) → reformatted to a `gherkin` Feature block, content
-  verbatim, commit `9bd9966` (blob `ef3996b`) → **Compliance R2 PASS, high conf. Blocking gate
-  cleared.** Verdicts persisted in `coding-memory/compliance-judge/` + `observability-judge/`.
-  **NOW AT THE USER REVIEW GATE.** Non-spec, plan-time carry-forward (do NOT lose): ADR for the
-  include→exclude flip (ADR 0007 precedent); CORRECT (not append) the stale `rules/gates.md` line
-  "plan implementers are skill-routed"; `open_tab` surface-ref inherits the orchestration spec's
-  no-interpolation + title-allowlist boundary; validate `N` as a bounded positive int; prove the
-  `state/runs/` liveness count early; live cmux tab probe as a hard gate. Open question for review:
-  should `inline` also silence the judges' existing always-on pane redirect (spec leans yes)?**
+  **JUDGES RAN TWICE (2026-07-22, Opus 4.8, all pane-dispatched to cmux).** Round A: obs low/high;
+  compliance R1 FAIL (arrow-prose scenarios) → Gherkin reformat `9bd9966` → compliance R2 PASS.
+  **User review gate → 2 design decisions:** (1) `inline` must NOT silence the two judges; (2) `max=N`
+  caps the worker fan-out only, judge panes uncounted. → Spec reshaped into a **THREE-lane model**
+  (read-only in-process / judges always-paned OUTSIDE policy / worker fan-out policy-governed),
+  commit `2815bba` (blob `cdc777a`). Round B (re-entry on the revised spec): **compliance PASS, high
+  conf; obs low/high — obs judged the revision MORE correct** (inline would have "cut power to the
+  judges' PR-gate enforcement"). Verdicts in `coding-memory/{compliance,observability}-judge/`.
+  **NOW BACK AT THE USER REVIEW GATE to confirm the three-lane revision.** Plan-time carry-forward
+  (do NOT lose, all non-spec): **ADR for the three-lane governance model** (ADR 0007 precedent);
+  CORRECT (not append) the stale `rules/gates.md` "plan implementers are skill-routed" line (the
+  "judges are hook-enforced" line stays true); `open_tab` verb inherits the orchestration spec's
+  no-interpolation + title-allowlist boundary; validate `N` as a bounded positive int; **prove the
+  worker-pane count AND the worker/judge lane-tag early on REAL run-dir fixtures** (the "judge not
+  counted" test rides on both); live cmux tab probe as a hard gate. Optional: a small three-lane
+  decision diagram would aid review (costs a re-judge if added now).**
 - session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
   **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
