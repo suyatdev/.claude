@@ -85,3 +85,74 @@ fallthrough string `:111` still `{dispatch|wait|handoff}`, omits `set-policy` (s
 reject assertions (`test:135-140` only check `$?==64`, which `die` returns for ANY failure — they
 don't pin the out-of-range/non-numeric path); add real branch coverage for `read_policy` (5 branches,
 currently no asserter). Both plan-scoped to Task 3.
+
+## Task 3 — guard three-lane routing + policy read (2026-07-23)
+
+**DONE + committed `6bead2d7`** (parent `6fb9b20`), subagent-driven: pane Opus implementer +
+pane task-reviewer, both cmux `surface:83`. Commit **verified in-checkout** (toplevel
+`/Users/marksuyat/.claude`, branch `feat/pane-split-policy`, exactly the 4 domain files:
+`hooks/pane-dispatch-guard.sh`, `hooks/pane-dispatch-guard.test.sh`, `panes/inprocess-agents.conf`,
+`panes/redirect-agents.conf`; 140+/39-). Guard test **23/0 independently re-run by controller**;
+`shellcheck -x` clean on both shell files; `dispatch-pane-agent.test.sh` still 44/0 (redirect-conf
+header rewrite didn't disturb Task 2). Routing body + `in_conf` + both confs verbatim-faithful to the
+plan; the `^panes max=([1-9]|1[0-6])$` bound verified across 1/9/16→redirect, 0/17/99→ask.
+Implementer deviations (all sound): preserved an existing SC2016 rationale comment the plan dropped;
+rewrote the old "missing conf → allow" test into two "missing conf + inline → exit 0" cases (the
+three-lane design makes a missing conf mean "unlisted for that lane", not global allow); added an
+out-of-range `max=99 → ask` case.
+
+**Reviewer verdict: CHANGES-REQUESTED** (narrow — architecture stands, T4 unblocked). Every finding
+reproduced end-to-end. Controller independently traced both Importants — mechanisms confirmed real,
+accepted (not performative). **These must land before the branch PR (several tasks away); recorded
+here rather than fixed this session to stay under the ~100k ceiling.**
+
+- **FAIL-OPEN missing-conf question → RULED ACCEPTABLE (not a violation).** Exit-2-"ask" never
+  blocks/waits: pane sessions bail at the `CLAUDE_PANE_AGENT` recursion guard before any conf is read;
+  no-terminal exits 0 at the floor before confs matter; "ask" is the spec's already-blessed
+  unconfigured state, one `set-policy` from resolved. The Global Constraint wording "missing conf →
+  allow" describes the OLD two-outcome guard; re-read as "missing conf → unlisted for THAT lane".
+  → **Task 8 ADR must state this refinement; Important-3 (below) fixes the now-false guard header.**
+
+- **Important-1 — zero-padded N ask-loop (writer/reader asymmetry).** `guard:91` regex rejects padded
+  ints but `set-policy` (`dispatch-pane-agent.sh:250-251`, `^panes max=([0-9]+)$` + range) accepts
+  them. Repro: `set-policy panes --max 03` → exit 0, prints `POLICY: panes max=03`; guard then reads
+  `panes max=03` → **ASK forever**, no error naming the cause. Same for `--max 08`. **Fix:** normalize
+  N to canonical base-10 at write time in `set-policy` (`max=$((10#$max))` after validation) AND make
+  the guard parse `^panes max=([0-9]+)$` + `10#`-based range 1..16 (matches `read_policy`), removing
+  the divergent magic regex (also fixes Minor-6). Touches both files (Task 2 + Task 3) — justified
+  cross-file fix.
+- **Important-2 — stale `nosession` overrides a MALFORMED primary policy → allow.** `guard:85-92` loop
+  only `break`s on a *valid* line, so a garbage file at the real key falls through to `nosession`.
+  Repro: primary key=`garbage`, `pane-policy-nosession`=`inline` → **exit 0 in-process allow**,
+  contradicting "malformed → re-ask". Also leaks another session's policy (state persists 7 days).
+  **Fix:** break on the first *existing* policy file regardless of validity (malformed → policy empty
+  → ask); consult `nosession` only when `env_sid` is empty (the condition that creates that file).
+- **Important-3 — guard header comment (`:5-10`) now states the opposite of the code** ("redirect-
+  listed types", "missing conf → allow … today's behavior", "ALL four spec conditions"). Rewrite to
+  three-lane reality.
+- **Minor-4** vacuous test `test:82` (passes whether or not `in_conf` missing-branch is correct — with
+  `inline`, `Explore` exits 0 via lane 1 OR lane 3) → set `panes max=2` so a correct guard must exit 2.
+- **Minor-5** two mutants survive 23/0: widening bound to `1[0-9]` (accepts 17-19) and dropping
+  `nosession` from the policy loop → add `max=17` boundary test + an `env_sid`/`nosession` precedence
+  case (the session-key triple, a Global Constraint, is currently untested — suite `unset`s
+  `CLAUDE_CODE_SESSION_ID` throughout).
+- **Minor-6** magic `16` in the regex vs. named `MAX_PANES=16` in the dispatcher — folded into
+  Important-1's fix.
+- **Minor-7** unvalidated session key interpolated into a path (`guard:87`, pre-existing at `:61`) — a
+  `../` key escapes `STATE_DIR`; bounded (both key sources Claude-Code-supplied, content never echoed),
+  NOT a regression. Optional `^[A-Za-z0-9._-]{1,64}$` shared key-check at both loops for consistency
+  with the spec's frozen injection boundary — **deferred (touches pre-existing code, keep fix scoped)**.
+- **Nit-8** last conf line dropped if trailing newline missing (`guard:23`, no `|| [ -n "$line" ]`) —
+  latent, both confs currently end `\n`; pre-existing pattern the plan told the implementer to keep.
+- **Nit-9** two redirect messages duplicate 3 byte-identical `printf` lines (`:72-77`,`:99-103`) →
+  a shared `redirect_steps()`; key order differs cooldown (`sid,env_sid,nosession`) vs policy
+  (`env_sid,sid,nosession`) with no comment (env-first is *correct* for policy — `set-policy` keys by
+  `env_sid` — but the reasoning is invisible).
+- **Security boundary CLEAN:** no `eval`/unquoted expansion; hostile policy content reaches only
+  `[ "$line" = inline ]` and `grep` via *stdin* (no pattern/option injection). shellcheck clean.
+
+**NEXT-SESSION Task 3a (do FIRST, before T4):** fix Important-1/2/3 + cheap Minors-4/5 via a pane
+implementer under TDD (reproduce each Important as a RED test first). Then T4 (adapter `open_tab` +
+`validate_open_tab_args`) — independent, dispatchable in parallel with 3a if budget allows. Minor-7 +
+Nits-8/9 optional, carry to final review. Reviewer result file:
+`<scratchpad>/pane-results/general-purpose-1784836895-68040-24084.md`.

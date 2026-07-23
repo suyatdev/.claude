@@ -35,12 +35,21 @@ how this file and its linked files should be written (plain language, major chan
   `8fb4534`, commit-verified in-checkout; policy state file — `set-policy` writer + `read_policy`
   reader (bounded N 1..16, dual-validated at write+read, fail-open), `read_policy` defined-but-uncalled
   (consumed by T3/6/7). 44/44 tests, shellcheck -x clean, review Spec ✅/Approved/0 Crit-Imp. Detail +
-  T3 carry-forwards: `coding-memory/branches/pane-split-policy.md` §Task 2. **NEXT: T3** (guard
-  three-lane routing + new `inprocess-agents.conf` + narrowed `redirect-agents.conf` header); then T4.
-  T3/T4 dispatchable now (no inter-task dependency). Per-task loop: pane implementer → verify commit
-  in-checkout (`verifying-subagent-commits`) → pane task-reviewer → mark ledger → checkpoint.
-  **Freshness: checkpoint after T2 = saved+pushed; controller near the ~100k ceiling, clear offered
-  before T3.**
+  T3 carry-forwards: `coding-memory/branches/pane-split-policy.md` §Task 2. **T3 DONE 2026-07-23
+  (subagent-driven: pane Opus implementer + pane reviewer, both cmux surface:83):** commit `6bead2d7`,
+  **verified in-checkout** (4 domain files only), guard test **23/0 re-run by controller**, shellcheck
+  clean, Task 2 suite still 44/0. Guard now three-lane (read-only `inprocess-agents.conf` → judges
+  `redirect-agents.conf` → per-session policy). **Reviewer = CHANGES-REQUESTED (narrow; arch stands,
+  T4 unblocked).** Fail-open missing-conf ruled ACCEPTABLE. **2 Important defects reproduced end-to-end
+  (must fix before branch PR): (1) zero-padded N ask-loop — `set-policy --max 03` writes `panes max=03`
+  but guard regex rejects it → ASK forever; (2) stale `pane-policy-nosession` overrides a MALFORMED
+  primary policy → wrongly allows.** + Important-3 stale guard header + Minors 4-7 + Nits. Full repro +
+  fixes: `coding-memory/branches/pane-split-policy.md` §Task 3. **NEXT (in order): Task 3a — fix
+  Important-1/2/3 + cheap Minors-4/5 via pane implementer under TDD (RED-first), do BEFORE T4; then T4**
+  (adapter `open_tab` + `validate_open_tab_args`, independent, parallelizable with 3a). Per-task loop:
+  pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer → mark
+  ledger → checkpoint. **Freshness: checkpoint after T3 = saved+pushed; controller near the ~100k
+  ceiling (~92k, mostly restore), clear offered after T3.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
