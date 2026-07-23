@@ -20,6 +20,17 @@ how this file and its linked files should be written (plain language, major chan
   to preserve checkpoint budget, run via `running-the-compliance-judge` alongside the obs architecting
   read; (2) user review gate on the spec; (3) re-ask model gate before implementation;
   (4) `superpowers:writing-plans`. cmux tab primitive must be live-probed FIRST in the plan.**
+  **RESUME NOTE (2026-07-22, Opus 4.8): a resume session restored, prepped the judge dispatch, then
+  cleared at the 75k handoff-watch (which is pure restore cost on this branch — no new work). Judges
+  still pending, unchanged. Dispatch is fully worked out, execute directly next session: both judges
+  via the pane dispatcher, DEFAULT aux role (NO `--role implementer`):
+  `"$HOME"/.claude/panes/dispatch-pane-agent.sh dispatch compliance-judge --prompt-file <f> --cwd "$HOME"/.claude`
+  and the same for `observability-judge`, in ONE message (parallel). Foreground wait each:
+  `... wait --result-file <f> --timeout 540`. compliance-judge inputs: round 1, waived=none,
+  base=main, spec `docs/superpowers/specs/2026-07-22-pane-split-policy-design.md`; obs-judge:
+  stage=architecting (advisory, never blocks). writing-secure-code IS in scope (shell exec +
+  session-keyed state file). If the guard fails open (allows the Agent call), dispatch in-process —
+  a one-line notice is expected.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
   **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
