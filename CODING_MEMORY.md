@@ -31,11 +31,16 @@ how this file and its linked files should be written (plain language, major chan
   `send --surface <new-ref>`). So "spawns beyond N open as tabs inside existing panes" is achievable.
   Findings + exact verb/flags + the surface→pane resolution note that feeds T4/T5 in
   `coding-memory/branches/pane-split-policy.md`; probe `panes/cmux-tab-probe.sh`, fixture
-  `panes/adapters/fixtures/tab-live.json`.** **NEXT: T2 (policy state file — `set-policy` writer +
-  `read_policy`, bounded N 1..16). T2/T3/T4 are subagent-dispatchable NOW (only T5 depended on T1).
-  Dispatch pane implementers per subagent-driven-development, verify each commit in-checkout
-  (`verifying-subagent-commits`) before advancing.** **Freshness: controller restore ~77k; T1
-  (the operator gate) now behind us = clean checkpoint. Saved+pushed.**
+  `panes/adapters/fixtures/tab-live.json`.** **T2 DONE 2026-07-23 (subagent-driven: pane Opus implementer + pane task-reviewer):** commit
+  `8fb4534`, commit-verified in-checkout; policy state file — `set-policy` writer + `read_policy`
+  reader (bounded N 1..16, dual-validated at write+read, fail-open), `read_policy` defined-but-uncalled
+  (consumed by T3/6/7). 44/44 tests, shellcheck -x clean, review Spec ✅/Approved/0 Crit-Imp. Detail +
+  T3 carry-forwards: `coding-memory/branches/pane-split-policy.md` §Task 2. **NEXT: T3** (guard
+  three-lane routing + new `inprocess-agents.conf` + narrowed `redirect-agents.conf` header); then T4.
+  T3/T4 dispatchable now (no inter-task dependency). Per-task loop: pane implementer → verify commit
+  in-checkout (`verifying-subagent-commits`) → pane task-reviewer → mark ledger → checkpoint.
+  **Freshness: checkpoint after T2 = saved+pushed; controller near the ~100k ceiling, clear offered
+  before T3.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —

@@ -56,3 +56,32 @@ already yields `pane_ref` per surface) before calling `new-surface --pane <pane_
 Task 4 chooses to accept a pane-ref directly. Either way the adapter call ends in
 `new-surface --pane <pane_ref>`, and the caller-supplied ref stays under the frozen
 no-interpolation + allowlist boundary the spec inherits from the orchestration spec.
+
+## Task 2 — policy state file (`set-policy` writer + `read_policy` reader) — DONE 2026-07-23
+
+Commit `8fb4534` (pane-dispatched implementer on Opus; commit-verified in-checkout: HEAD, parent
+`1f70f58`, branch `feat/pane-split-policy`, only `dispatch-pane-agent.sh` +41 / `.test.sh` +14, a
+`Doc-Exempt` trailer). Tests 44/44 (5 new `set-policy` assertions + 39 pre-existing), `shellcheck -x`
+clean, TDD RED 42/2 → GREEN 44/0.
+
+What landed in `panes/dispatch-pane-agent.sh`:
+- `MAX_PANES=16` + `POLICY_RE='^panes max=([0-9]+)$'` (after `POLL_SECS`).
+- `read_policy <file>` (after `sanitize_title`): prints `inline` or `panes max=N` for a VALID line,
+  else nothing; fail-open (every branch → `return 0`), N range-gated 1..16 at read time. Defined but
+  intentionally UNCALLED — consumed by the guard (Task 3) and dispatcher (Tasks 6/7).
+- `set-policy` case arm: `set-policy inline` / `set-policy panes --max N` → writes
+  `state/pane-policy-<key>` (key `${CLAUDE_CODE_SESSION_ID:-nosession}`); exit 0 on success, 64 on
+  bad/out-of-range/non-numeric N. Bounded N validated at write time too (dual validation, both sites).
+
+Reviewer (pane, Opus): **Spec ✅ / Approved / 0 Critical-Important**, every binding constraint traced
+with file:line. Disclosed deviation (split the `set-policy` `mode` one-liner + `# shellcheck
+disable=SC2015` at :236) byte-matches the `dispatch` arm's existing suppression at :100 — controller
+confirmed, shellcheck clean, behavior-preserving, repo precedent.
+
+Minors deferred to final review: `read_policy:62` `2>/dev/null` guards only the 2nd range test
+(negligible — writer can't emit a >int64 value; group both under one redirect if touched); usage
+fallthrough string `:111` still `{dispatch|wait|handoff}`, omits `set-policy` (stale help, unscoped).
+**CARRY-FORWARD → Task 3** (when it wires `read_policy` into the guard): tighten the three `set-policy`
+reject assertions (`test:135-140` only check `$?==64`, which `die` returns for ANY failure — they
+don't pin the out-of-range/non-numeric path); add real branch coverage for `read_policy` (5 branches,
+currently no asserter). Both plan-scoped to Task 3.
