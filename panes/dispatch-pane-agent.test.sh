@@ -177,12 +177,51 @@ CLAUDE_CODE_SESSION_ID="$SP_SID" bash "$DISPATCH" set-policy inline >/dev/null 2
 [ "$(cat "$PANE_STATE_DIR/pane-policy-$SP_SID" 2>/dev/null)" = "inline" ] && ok "set-policy inline written" || bad "set-policy inline written"
 CLAUDE_CODE_SESSION_ID="$SP_SID" bash "$DISPATCH" set-policy panes --max 3 >/dev/null 2>&1
 [ "$(cat "$PANE_STATE_DIR/pane-policy-$SP_SID" 2>/dev/null)" = "panes max=3" ] && ok "set-policy panes max=3 written" || bad "set-policy panes max=3 written"
-bash "$DISPATCH" set-policy panes --max 0 >/dev/null 2>&1
-[ $? -eq 64 ] && ok "set-policy max=0 rejected" || bad "set-policy max=0 rejected"
-bash "$DISPATCH" set-policy panes --max 99 >/dev/null 2>&1
-[ $? -eq 64 ] && ok "set-policy max=99 (>16) rejected" || bad "set-policy max=99 rejected"
-bash "$DISPATCH" set-policy panes --max abc >/dev/null 2>&1
-[ $? -eq 64 ] && ok "set-policy non-numeric max rejected" || bad "set-policy non-numeric max rejected"
+# Important-1 repro: a zero-padded N must be normalized to canonical base-10
+# at write time, else the guard (which does not accept padded ints) loops the
+# session into "ask" forever even though set-policy reported success.
+CLAUDE_CODE_SESSION_ID="$SP_SID" bash "$DISPATCH" set-policy panes --max 03 >/dev/null 2>&1
+sp_got=$(cat "$PANE_STATE_DIR/pane-policy-$SP_SID" 2>/dev/null)
+[ "$sp_got" = "panes max=3" ] && ok "set-policy panes --max 03 normalized" || bad "set-policy panes --max 03 normalized" "$sp_got"
+CLAUDE_CODE_SESSION_ID="$SP_SID" bash "$DISPATCH" set-policy panes --max 08 >/dev/null 2>&1
+sp_got=$(cat "$PANE_STATE_DIR/pane-policy-$SP_SID" 2>/dev/null)
+[ "$sp_got" = "panes max=8" ] && ok "set-policy panes --max 08 normalized" || bad "set-policy panes --max 08 normalized" "$sp_got"
+# T2 carry-forward A: pin the specific cause, not just die's generic exit 64.
+out=$(bash "$DISPATCH" set-policy panes --max 0 2>&1); rc=$?
+{ [ "$rc" -eq 64 ] && printf '%s' "$out" | grep -q 'out of range'; } \
+  && ok "set-policy max=0 rejected (out of range)" || bad "set-policy max=0 rejected (out of range)" "rc=$rc: $out"
+out=$(bash "$DISPATCH" set-policy panes --max 99 2>&1); rc=$?
+{ [ "$rc" -eq 64 ] && printf '%s' "$out" | grep -q 'out of range'; } \
+  && ok "set-policy max=99 (>16) rejected (out of range)" || bad "set-policy max=99 (>16) rejected (out of range)" "rc=$rc: $out"
+out=$(bash "$DISPATCH" set-policy panes --max abc 2>&1); rc=$?
+{ [ "$rc" -eq 64 ] && printf '%s' "$out" | grep -q 'whole number'; } \
+  && ok "set-policy non-numeric max rejected (whole number)" || bad "set-policy non-numeric max rejected (whole number)" "rc=$rc: $out"
+
+# --- T2 carry-forward B: read_policy direct branch coverage (5 branches).
+# Sources everything above the CLI dispatch (the stable `cmd=` line) so the
+# function/constant definitions load without running the script's case
+# statement (which would `die`/exit on an empty or bogus $1).
+RP_DIR="$TMP/read_policy_cases"; mkdir -p "$RP_DIR"
+call_read_policy() { f="$1" bash -c "$(sed '/^cmd=/,$d' "$DISPATCH")"$'\nread_policy "$f"'; }
+
+printf 'inline\n' > "$RP_DIR/inline"
+rp_got=$(call_read_policy "$RP_DIR/inline")
+[ "$rp_got" = "inline" ] && ok "read_policy: inline" || bad "read_policy: inline" "$rp_got"
+
+printf 'panes max=5\n' > "$RP_DIR/valid"
+rp_got=$(call_read_policy "$RP_DIR/valid")
+[ "$rp_got" = "panes max=5" ] && ok "read_policy: valid panes max=N" || bad "read_policy: valid panes max=N" "$rp_got"
+
+printf 'panes max=99\n' > "$RP_DIR/oorange"
+rp_got=$(call_read_policy "$RP_DIR/oorange")
+[ -z "$rp_got" ] && ok "read_policy: out-of-range N -> empty" || bad "read_policy: out-of-range N -> empty" "$rp_got"
+
+printf 'garbage\n' > "$RP_DIR/malformed"
+rp_got=$(call_read_policy "$RP_DIR/malformed")
+[ -z "$rp_got" ] && ok "read_policy: malformed -> empty" || bad "read_policy: malformed -> empty" "$rp_got"
+
+rp_got=$(call_read_policy "$RP_DIR/missing")
+[ -z "$rp_got" ] && ok "read_policy: missing file -> empty" || bad "read_policy: missing file -> empty" "$rp_got"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

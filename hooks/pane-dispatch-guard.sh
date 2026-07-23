@@ -2,12 +2,18 @@
 # pane-dispatch-guard.sh — PreToolUse hook, matcher "Task|Agent" (registered
 # under both candidate tool names; only the one the installed CLI emits fires).
 #
-# Denies in-process dispatch of redirect-listed subagent types when a terminal
-# pane can carry them instead, pointing the model at dispatch-pane-agent.sh.
-# This is a momentum redirect, NOT a security boundary: it fails OPEN — any
-# parse failure, missing conf, no terminal, or a prior adapter failure this
-# session (cooldown flag) means "allow", which is exactly today's behavior.
-# Deny only when ALL four spec conditions hold. Exit 0 allow, exit 2 deny.
+# Three-lane routing, NOT a security boundary — it fails OPEN on any parse
+# failure, missing/unreadable conf, no terminal, or a prior adapter failure
+# this session (cooldown flag): those cases exit 0 (allow in-process).
+#   Lane 1 — read-only helpers (inprocess-agents.conf): always in-process.
+#   Lane 2 — judges (redirect-agents.conf): always redirected to a pane.
+#   Lane 3 — everything else (a governed worker): consult the session's
+#     recorded pane-split policy — inline allows, panes redirects, and no
+#     policy (missing or malformed) asks the user once (exit 2) instead of
+#     allowing.
+# "Missing conf" now means "unlisted for THAT lane", not a global allow: the
+# type just falls through to the next lane instead of being denied outright.
+# Exit 0 allow, exit 2 deny.
 set -u
 
 CONF="${PANE_REDIRECT_CONF:-$HOME/.claude/panes/redirect-agents.conf}"
@@ -15,6 +21,8 @@ INPROCESS_CONF="${PANE_INPROCESS_CONF:-$HOME/.claude/panes/inprocess-agents.conf
 STATE_DIR="${PANE_STATE_DIR:-$HOME/.claude/panes/state}"
 DETECT="${PANE_TERMINAL_DETECT:-$HOME/.claude/panes/terminal-detect.sh}"
 JQ_BIN="/usr/bin/jq"
+MAX_PANES=16                 # must match panes/dispatch-pane-agent.sh's MAX_PANES
+POLICY_RE='^panes max=([0-9]+)$'
 
 # in_conf <conf-file> <type> -> 0 if the type is a non-comment line in the file.
 in_conf() {
@@ -80,15 +88,32 @@ if in_conf "$CONF" "$subagent_type"; then
   exit 2
 fi
 
-# Lane 3: governed worker — consult the per-session policy (first matching key).
+# Lane 3: governed worker — consult the per-session policy. Break on the
+# FIRST EXISTING key's file, valid or not: a malformed file at the real
+# session key must never fall through to a stale/foreign policy (that would
+# both defeat "malformed -> re-ask" and leak another session's choice).
+# "nosession" is consulted only when env_sid is empty — the exact condition
+# under which set-policy falls back to writing that key
+# (key="${CLAUDE_CODE_SESSION_ID:-nosession}") — so it can never override a
+# real session's own (possibly malformed) policy file.
+keys="$env_sid"
+[ -n "$sid" ] && keys="$keys $sid"
+[ -z "$env_sid" ] && keys="$keys nosession"
+
 policy=""
-for key in "$env_sid" "$sid" nosession; do
+for key in $keys; do
   [ -n "$key" ] || continue
   pf="$STATE_DIR/pane-policy-$key"
   [ -f "$pf" ] || continue
   line="$(head -n 1 "$pf" 2>/dev/null)"
-  if [ "$line" = "inline" ]; then policy="inline"; break; fi
-  if printf '%s' "$line" | grep -Eq '^panes max=([1-9]|1[0-6])$'; then policy="panes"; break; fi
+  if [ "$line" = "inline" ]; then
+    policy="inline"
+  elif [[ "$line" =~ $POLICY_RE ]]; then
+    n="${BASH_REMATCH[1]}"
+    n10=$((10#$n))
+    if [ "$n10" -ge 1 ] && [ "$n10" -le "$MAX_PANES" ]; then policy="panes"; fi
+  fi
+  break
 done
 
 case "$policy" in

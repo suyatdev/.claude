@@ -249,6 +249,9 @@ case "$cmd" in
       panes)
         [[ "$max" =~ ^[0-9]+$ ]] || die "--max must be a whole number 1..$MAX_PANES"
         { [ "$max" -ge 1 ] && [ "$max" -le "$MAX_PANES" ]; } || die "--max out of range (1..$MAX_PANES)"
+        # Canonicalize (e.g. "03" -> "3") so the file can never contain a
+        # zero-padded value the guard's reader would fail to recognize.
+        max=$((10#$max))
         printf 'panes max=%s\n' "$max" > "$STATE_DIR/pane-policy-$key" || die "cannot write policy file" ;;
       *) die "set-policy mode must be inline or panes" ;;
     esac
