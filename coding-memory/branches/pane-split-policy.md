@@ -156,3 +156,51 @@ implementer under TDD (reproduce each Important as a RED test first). Then T4 (a
 `validate_open_tab_args`) — independent, dispatchable in parallel with 3a if budget allows. Minor-7 +
 Nits-8/9 optional, carry to final review. Reviewer result file:
 `<scratchpad>/pane-results/general-purpose-1784836895-68040-24084.md`.
+
+## Task 3a — resolve the T3 CHANGES-REQUESTED (2026-07-23) — DONE, reviewer APPROVED
+
+**Commit `c74e285`** (parent `3d3e089`), subagent-driven: pane Opus implementer + pane reviewer, both
+cmux `surface:83`. **Verified in-checkout by controller** (toplevel `/Users/marksuyat/.claude`, branch
+`feat/pane-split-policy`, exactly the 4 domain files — `hooks/pane-dispatch-guard.sh` +
+`.test.sh`, `panes/dispatch-pane-agent.sh` + `.test.sh`; 146+/17-; NO `coding-memory/compliance-judge/`
+files). Controller independently re-ran: guard **28/0**, dispatcher **51/0**, `shellcheck -x` clean.
+`Doc-Exempt` trailer on the code commit (this doc checkpoint is separate). Not pushed by the implementer;
+controller checkpoints + pushes.
+
+What landed (all seven review items resolved, each confirmed by the reviewer *running* it):
+- **Important-1** (padded-N asymmetry): `set-policy` normalizes N to base-10 (`max=$((10#$max))`,
+  `dispatch-pane-agent.sh:254`, after regex+range gate) so files never hold a padded value; guard reader
+  unified to `^panes max=([0-9]+)$` + `10#`-based range 1..16 via named `MAX_PANES` (`guard:24-25,111-114`),
+  matching `read_policy`. Legacy padded files (`panes max=03`) now ACCEPTED by the guard. Magic `16`-in-regex
+  gone (Minor-6 folded in).
+- **Important-2** (nosession leak on malformed primary): guard Lane-3 loop breaks on the first *existing*
+  policy file regardless of validity (malformed → empty policy → ask); `nosession` appended to the key list
+  only when `env_sid` empty (matches `set-policy`'s key `${CLAUDE_CODE_SESSION_ID:-nosession}`). Repro
+  (garbage primary + `inline` nosession) now exits 2 (ask), was exit 0 (allow) on the parent.
+- **Important-3**: guard header (`:5-16`) rewritten to three-lane reality; comment-only.
+- **Minors-4/5 + T2 carry-forward A/B**: de-vacuumed the `in_conf` miss test (`panes max=2` → must exit 2);
+  added `max=17→ask` boundary + env_sid/nosession precedence + nosession-fallback tests (kills the two
+  surviving mutants); tightened the 3 `set-policy` reject asserts to grep the specific cause; added direct
+  5-branch `read_policy` coverage. TDD: new Important repros are RED against parent `3d3e089` (guard 26/2,
+  dispatcher 49/2), green at HEAD.
+
+**Reviewer VERDICT: APPROVED.** Reviewer result file:
+`<scratchpad>/pane-results/general-purpose-1784838763-48447-16048.md`.
+
+**TWO NEW Minor findings from the 3a review → CARRY TO FINAL REVIEW (fold into the Minor-7 pass):**
+- **NEW-A (guard 64-bit wrap):** `guard:113` — a hand-corrupted `panes max=<2^64+3>` wraps to 3 in bash
+  arithmetic → guard accepts (redirect) while `read_policy` (test-builtin) rejects → the two disagree once
+  Tasks 6/7 wire `read_policy` into the dispatcher. Unreachable via `set-policy` (dies on huge N). Fix: cap
+  digits in `POLICY_RE` to `([0-9]{1,2})` on BOTH readers.
+- **NEW-B (newly-introduced by `c74e285` — PRIORITIZE):** the rewritten Important-2 key loop is now
+  `for key in $keys` (`guard:104`), an UNQUOTED expansion that word-splits + glob-expands session ids; the
+  pre-fix loop quoted each key. Reproduced: `session_id="*"` + a `pane-policy-sidfile` in CWD → guard reads
+  the wrong file (toward "allow"). Nil real threat (session ids are harness UUIDs) but it's a real new
+  unquoted expansion. Fix: build the key list with `set --` (or quote), folded into Minor-7's shared
+  `^[A-Za-z0-9._-]{1,64}$` key validation at both loop sites.
+
+**NEXT: Task 4** (adapter `open_tab` verb + `validate_open_tab_args`, surface-ref allowlist
+`[A-Za-z0-9:%_.-]`≤64, for tmux/iterm/terminal) — independent of 3a, dispatchable now. Then T5 (cmux
+`open_tab`, probe-verified `new-surface --pane`) which T4 gates, T6, T7, T8. Final-review pass before the
+branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9; run both full pane suites green + implementation
+observability judge before `gh pr create`.

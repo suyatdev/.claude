@@ -44,12 +44,20 @@ how this file and its linked files should be written (plain language, major chan
   (must fix before branch PR): (1) zero-padded N ask-loop — `set-policy --max 03` writes `panes max=03`
   but guard regex rejects it → ASK forever; (2) stale `pane-policy-nosession` overrides a MALFORMED
   primary policy → wrongly allows.** + Important-3 stale guard header + Minors 4-7 + Nits. Full repro +
-  fixes: `coding-memory/branches/pane-split-policy.md` §Task 3. **NEXT (in order): Task 3a — fix
-  Important-1/2/3 + cheap Minors-4/5 via pane implementer under TDD (RED-first), do BEFORE T4; then T4**
-  (adapter `open_tab` + `validate_open_tab_args`, independent, parallelizable with 3a). Per-task loop:
-  pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer → mark
-  ledger → checkpoint. **Freshness: checkpoint after T3 = saved+pushed; controller near the ~100k
-  ceiling (~92k, mostly restore), clear offered after T3.**
+  fixes: `coding-memory/branches/pane-split-policy.md` §Task 3. **T3a DONE + reviewer APPROVED 2026-07-23
+  (subagent-driven: pane Opus implementer + pane reviewer, both cmux surface:83):** commit `c74e285`,
+  **verified in-checkout** (4 domain files only, 146+/17-, no store files), controller re-ran guard **28/0**
+  + dispatcher **51/0**, shellcheck clean. Fixed Important-1 (base-10 normalize N + unified guard regex),
+  Important-2 (break on first existing policy, nosession only when env_sid empty), Important-3 (three-lane
+  header), Minors-4/5 + T2 carry-forward A/B; TDD Important repros RED against parent (26/2, 49/2). **TWO NEW
+  Minors from the 3a review → final-review carry-forward (fold into Minor-7): NEW-A guard 64-bit `10#` wrap
+  vs read_policy (cap POLICY_RE digits `{1,2}`); NEW-B — PRIORITIZE — `c74e285` introduced an UNQUOTED
+  `for key in $keys` at guard:104 (quote via `set --`).** Detail: branch log §Task 3a. **NEXT: Task 4**
+  (adapter `open_tab` + `validate_open_tab_args`, independent, dispatchable now; gates T5). Per-task loop:
+  pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer → checkpoint.
+  Final-review pass before branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9; run full pane suites +
+  implementation obs judge before `gh pr create`. **Freshness: T3a = saved+pushed; controller past the ~100k
+  ceiling (restore ~77k + the 3a loop), clear offered after T3a.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
