@@ -28,7 +28,10 @@ how this file and its linked files should be written (plain language, major chan
   commit `2815bba` (blob `cdc777a`). Round B (re-entry on the revised spec): **compliance PASS, high
   conf; obs low/high — obs judged the revision MORE correct** (inline would have "cut power to the
   judges' PR-gate enforcement"). Verdicts in `coding-memory/{compliance,observability}-judge/`.
-  **NOW BACK AT THE USER REVIEW GATE to confirm the three-lane revision.** Plan-time carry-forward
+  **USER REVIEW GATE CLEARED 2026-07-22 — spec APPROVED as-is, LOCKED at blob `cdc777a`
+  (commit `2815bba`); do NOT re-edit or the verdicts invalidate.** NEXT (fresh session): re-ask the
+  Hard Model Gate, then `superpowers:writing-plans` (probe the cmux tab primitive FIRST). User
+  declined the optional three-lane diagram for now (would re-run the loop). Plan-time carry-forward
   (do NOT lose, all non-spec): **ADR for the three-lane governance model** (ADR 0007 precedent);
   CORRECT (not append) the stale `rules/gates.md` "plan implementers are skill-routed" line (the
   "judges are hook-enforced" line stays true); `open_tab` verb inherits the orchestration spec's
