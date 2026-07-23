@@ -5,6 +5,23 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- session_origin: desktop · session_started_at: 2026-07-23 (Opus 4.8) · last_active_branch:
+  **`feat/pane-split-policy`** — **RESUME after clear. Restored clean: HEAD `6888e16` in sync w/ origin;
+  spec blob VERIFIED still `cdc777a` (lock intact, compliance verdicts valid).** doc-guard's two flagged
+  files (`verdicts.jsonl` +3 vibe-scape lines, `css-visual-pass.md`) confirmed the vibe-scape session's —
+  NOT mine, left as-is. **HARD MODEL GATE ANSWERED THIS SESSION: Opus 4.8 for `superpowers:writing-plans`;
+  IMPLEMENTATION tier still deferred — re-ask before any coding.** **writing-plans IN PROGRESS:** read the
+  spec + all target infra (`hooks/pane-dispatch-guard.sh`, `panes/dispatch-pane-agent.sh`,
+  `panes/redirect-agents.conf`, adapters). **Plan doc NOT yet drafted →
+  `docs/superpowers/plans/2026-07-23-pane-split-policy.md` (create next).** Plan must sequence, as its
+  FIRST hard-gate task, the live cmux tab-primitive probe; then guard 3-lane routing, dispatcher
+  count+overflow, new `open_tab` adapter verb, `panes/state/pane-policy-<key>`, config split (narrow
+  `redirect-agents.conf` to judges + new read-only exclusion), docs. Carry-forward (do NOT lose):
+  ADR for the include→exclude 3-lane flip; CORRECT the stale `rules/gates.md` "plan implementers are
+  skill-routed" line in place; `open_tab` inherits the orchestration frozen boundary (no interpolation,
+  title `[A-Za-z0-9 ._:-]`≤64); validate N as a bounded positive int; prove worker-count + worker/judge
+  lane-tag on REAL `state/runs/` fixtures. **Context hit 84.5k mid-read → freshness checkpoint; asked
+  user continue-warm vs clear (re-restore here costs ~85k, the branch's recurring tax).**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
