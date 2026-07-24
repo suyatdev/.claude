@@ -105,6 +105,13 @@ is_judge() {
 # stop being reclaimable or a tab could become an overflow target.
 live_worker_panes() {
   local key="$1" d
+  # An empty key would match every run dir whose session marker is missing or
+  # empty — "no session" silently meaning "all sessions" — because the test
+  # below compares marker CONTENT. Unreachable from the CLI (every caller
+  # defaults to "nosession"), but this predicate is what both the count and the
+  # overflow target choice ride on, so it fails closed here instead of trusting
+  # its callers.
+  [ -n "$key" ] || return 0
   [ -d "$RUNS_DIR" ] || return 0
   for d in "$RUNS_DIR"/*/; do
     [ -d "$d" ] || continue

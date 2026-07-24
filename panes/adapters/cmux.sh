@@ -103,6 +103,15 @@ esac
 
 # run-id from the already-validated launcher path .../runs/<run-id>/launch.sh;
 # extraction failure -> unprefixed (unmanaged) title, dispatch proceeds.
+#
+# T5-Nit: this and $role above are open_pane-only — they feed layout_decide via
+# decide_plan, which the open_tab path never reaches. They still RUN on that
+# path, so a nonconforming run-id emits the "surface will be unmanaged" warning
+# below during a tab dispatch, where nothing consumes run_id and the tab's title
+# is stamped independently: cosmetic and misleading, never wrong. Left in place
+# deliberately — they cannot move below the open_tab dispatch, because the
+# open_pane dryrun block calls derive_plan -> decide_plan above it and would
+# read them unset under `set -u`. Real dispatcher run-ids conform.
 run_id="$(basename "$(dirname "$launcher")")"
 if ! [[ "$run_id" =~ ^[0-9]+-[0-9]+-[0-9]+$ ]]; then
   printf 'cmux: no run-id in launcher path; surface will be unmanaged\n' >&2
@@ -274,6 +283,13 @@ cmux_open_tab() {
   finish_surface "$new_ref" "$tab_title"
 }
 
+# T5-Nit: this exits before check_cmux_version (called below, ahead of the
+# derive->execute loop), so a version mismatch is never announced on a tab
+# dispatch. Left as-is rather than hoisting the check: an overflow tab only ever
+# happens after at least one same-session open_pane, which DOES warn, so the
+# warning is not lost — only repeated less often. Re-run panes/cmux-tab-probe.sh
+# after any cmux upgrade regardless; that, not this warning, is what validates
+# the new-surface primitive.
 if [ "$verb" = open_tab ]; then
   cmux_open_tab "$ref_in" "$title"
   exit $?

@@ -1,6 +1,6 @@
 ---
 name: dispatching-pane-agents
-description: Use when dispatching a substantial subagent — a judge, or a plan-task implementer during plan execution — so it runs as a real headless Claude session in a terminal pane via dispatch-pane-agent.sh, and when reading its result file. Not for Explore/search/read-only helpers (those stay in-process via the Agent tool) and not for the 75k context handoff (automatic, hook-owned).
+description: Use when dispatching a substantial subagent — a judge, a plan-task implementer, general-purpose, or a parallel fan-out — so it runs as a headless Claude session in a terminal pane via dispatch-pane-agent.sh, when reading its result file, and when choosing this session's pane-split policy. Not for Explore/Plan or other read-only helpers (those stay in-process via the Agent tool) and not for the 75k context handoff (automatic, hook-owned).
 ---
 
 # Dispatching Pane Agents

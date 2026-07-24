@@ -478,6 +478,19 @@ mo=$(grep -oE '> "\$run_dir/(kind|lane|session)"' "$DISPATCH" | sed 's|.*/||; s|
 [ "$mo" = "kind session lane " ] && ok "marker writes commit lane last (kind, session, lane)" \
   || bad "marker write order" "got: $mo want: kind session lane"
 
+# An empty session key must count nothing. It is unreachable from the CLI (every
+# caller defaults to "nosession"), but live_worker_panes' session test compares
+# marker CONTENT, so an empty key matches every run dir whose session marker is
+# missing or empty -- "no session" silently meaning "all sessions". The predicate
+# is shared by the count and the overflow target choice, so it fails closed
+# itself rather than trusting its callers. Called directly: the CLI cannot
+# express this input.
+call_count_workers() { k="$1" bash -c "$(sed '/^cmd=/,$d' "$DISPATCH")"$'\ncount_live_workers "$k"'; }
+EMPTYD="$(mktemp -d "$PANE_STATE_DIR/runs/$(date +%s)-$$-emptyXXXXXX")"
+printf 'worker\n' > "$EMPTYD/lane"; printf '\n' > "$EMPTYD/session"; printf 'surface:E1\n' > "$EMPTYD/surface"
+cw=$(call_count_workers "")
+[ "$cw" = "0" ] && ok "empty session key counts no live workers" || bad "empty session key counts no live workers" "got $cw want 0"
+
 # Usage-string drift (pre-existing): the fallthrough usage omitted the two
 # subcommands added since it was written.
 out=$(bash "$DISPATCH" bogus-subcommand 2>&1); rc=$?
