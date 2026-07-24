@@ -297,8 +297,15 @@ out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch general-purpose -
 UMAX_SID="under-max-$$"
 mk_run worker "$UMAX_SID" no >/dev/null   # one live worker fixture
 CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" set-policy panes --max 2 >/dev/null 2>&1
+rm -f "$TMP/adapter-args"
 out=$(CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/uw.md" --cwd "$TMP" 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "worker under max opens a pane" || bad "worker under max opens a pane" "rc=$rc: $out"
+# T6a-Minor: rc 0 alone does not prove the adapter ran. No clean exit-0 path
+# skips it today, but a refactor could open one, so assert the pane was really
+# opened — the ref the adapter printed, and the verb it was called with — to
+# match the happy-path test's rigor.
+printf '%s' "$out" | grep -q '^PANE_REF: surface:J1' && ok "worker under max actually reaches the adapter" || bad "worker under max reaches the adapter" "$out"
+[ "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)" = "open_pane" ] && ok "worker under max uses the open_pane verb" || bad "worker under max uses open_pane" "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)"
 
 # --- Task 7 fixtures: like mk_run but with an explicit surface ref and an
 # explicit surface KIND (pane|tab; "" writes no kind marker, which must be read
