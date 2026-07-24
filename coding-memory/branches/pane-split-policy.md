@@ -429,3 +429,145 @@ residual: dead-mark run dirs on failure OR count only dirs with a `surface` mark
 surfaces for round-robin; a phantom has none). Then Task 8 (skill + gate-stub correction + ADR 0009 + Mermaid).
 Final-review carry-forward now: Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits + M2
 (PANE_HOME conf split-brain) + the three Task 6 Nits + **T6a-Minor**.
+
+---
+
+## Task 7 — worker overflow to `open_tab` (round-robin) (2026-07-24) — DONE, reviewer APPROVED
+
+**Commit `7cb43b0`** (parent `4356802`), subagent-driven: pane `general-purpose` implementer, cmux
+`surface:83`, `--role implementer`. **Verified in-checkout by controller** (`git rev-parse --show-toplevel`
+= `/Users/marksuyat/.claude`, branch `feat/pane-split-policy`, `git worktree list` = single checkout;
+`git show --stat HEAD` = EXACTLY 2 domain files — `dispatch-pane-agent.sh` +89/−22, `.test.sh` +132/−2; NO
+`coding-memory/` files, the four other-session compliance-store files still staged and untouched via a
+pathspec commit). `Doc-Exempt` trailer present. Controller independently re-ran ALL SEVEN suites —
+guard 28/0, **dispatcher 82/0**, adapters 43/0, cmux-layout 34/0, cmux-exec 81/0, run-pane 10/0,
+detect 9/0 (287 total) — plus `shellcheck -x` clean on both files, and read the full `.sh` diff.
+
+### The plan was wrong against the LOCKED spec — two corrections the controller added to the brief
+
+Plan Task 7 (lines 942–1075) leaves the `lane`/`session` marker writes unconditional, so an overflow
+dispatch would be tagged `lane=worker` exactly like a pane dispatch. Both corrections were briefed
+BEFORE dispatch, TDD'd, and mutation-checked independently.
+
+- **A — a tab-run is not a pane.** Spec §3 caps "max CONCURRENT worker **panes**" and overflows into
+  "an existing live worker **pane**". Counting tab-runs breaks the Gherkin *"A freed worker pane is
+  reclaimed rather than tabbed"* (2 panes + 2 tabs = `live 4 >= 3`, so a freed pane is never reclaimed
+  — the implementer reproduced this literally as `worker max 3 reached (4 live)`), and selecting one
+  would hand `open_tab` a tab's ref → a tab nested in a tab. Fix: a `kind` marker (`pane`|`tab`), a
+  **MISSING `kind` reads as `pane`** (keeps pre-T7 run dirs + all Task 6 fixtures valid).
+- **B — the I1 residual pinned by Task 6a.** A dispatch that never gets a surface used to sit there
+  `lane=worker` with no `agent-exit` → counted live all session; phantoms inflate the count into
+  premature overflow and, having no `surface`, are not even selectable targets → the overflow dies
+  exit 3, i.e. in-process, which the spec forbids. Fix: `dead_mark` (writes `agent-exit`
+  `DISPATCH-FAILED`) on the no-terminal and adapter-failure paths. Chosen over "count only dirs with a
+  `surface`", which races an in-flight dispatch between its marker write and its surface write and
+  would let a concurrent dispatch exceed N.
+
+### Implementer's deviations from the plan's literal snippets (all controller-reviewed in the diff)
+
+1. **One shared predicate, not two.** `live_worker_panes <key>` prints one live worker-*pane* dir per
+   line; `count_live_workers` and `select_worker_surface` are both built on it. The two must never
+   disagree about what a live worker pane is — that disagreement IS correction A's bug class. One
+   mutant (delete the `kind=tab` line) kills 4 assertions across both functions.
+2. **No separate `open_tab_or_cooldown`.** Unified `open_surface_or_cooldown <verb> <run_dir|""> <args…>`
+   (3 call sites incl. `handoff` with an empty run dir); the plan would have duplicated the terminal
+   check + cooldown + dead-mark for the second verb, and the dead-mark is exactly what must not drift.
+3. **Target resolved BEFORE the marker writes**, so a no-target overflow dies having written no markers
+   at all — that phantom path is gone by construction, not by dead-marking. Task 6a's C1 ordering
+   (markers strictly after the worker gate) is intact; only a third write (`kind`) joined the two.
+4. `select_worker_surface` splits its `local` (`rr` needs its own — SC2318: `$key` is not yet in effect
+   within the same `local`). `count_live_workers` inherits the `[ -d "$RUNS_DIR" ]` early return from
+   `live_worker_panes` (re-verified: missing RUNS_DIR still prints `0`, rc 0).
+5. Test fixture helper `mk_run_ref` uses `mktemp -d`, NOT a counter: several call sites capture the dir
+   with `$(...)`, and a subshell's counter increment is lost to the parent, so fixtures silently reused
+   one dir and produced a **false RED** (`3 live` not `4`). **Latent hazard: the pre-existing `mk_run`
+   has the same bug**, harmless today only because every current call site is a plain redirect.
+
+### Evidence
+
+Baseline `4356802`: 61/0. Tests-first, implementation untouched → **67 passed, 15 failed**. After
+implementation → **82/0**. Mutants: revert only the `.sh` → 67/15 (restore → 82/0); delete the
+`kind=tab` exclusion → 78/4 (incl. `a freed worker pane is reclaimed (tab-target=surface:FT1)` — it
+tabbed INTO a tab); delete both `dead_mark` calls → 79/3. A and B each fail independently.
+
+### Carry-forwards raised by the implementer (fold into final review)
+
+- `dispatch-pane-agent.sh` is now **387 lines** — under the 400 soft limit with no headroom. Task 8 is
+  docs-only so nothing else lands here this branch; the next dispatcher change should split the
+  run-dir/marker helpers out.
+- `dispatch-pane-agent.test.sh` is **424 lines** (>400 soft, well under the 800 hard cap).
+- `mk_run`'s `$RANDOM`/subshell collision hazard (item 5) — latent, no current call site trips it.
+- The rr index advances even when the subsequent `open_tab` fails, so a failed overflow skips a pane in
+  the rotation. Cosmetic (round-robin is spec assumption 3, a fairness heuristic with least-loaded as
+  the named fallback), and after an `open_tab` failure the cooldown means no further overflow this session.
+- `live_worker_panes` iterates glob order (run-dir name = `epoch-pid-random`), so round-robin runs over
+  an arbitrary-but-stable order, not dispatch order. Spec-conformant; noted because a reviewer may
+  expect oldest-first.
+- **Unbounded tabs:** tab-runs are excluded from the count, so nothing caps how many tabs pile up.
+  Believed spec-intended (N caps panes; "does not block/wait") — flagged to the reviewer to judge.
+
+### Reviewer VERDICT: APPROVED (pane `general-purpose`, cmux `surface:83`, detached worktree `/tmp/pane-review-t7`, removed)
+
+Zero Criticals, zero Importants. All six required checks RUN, all eight adversarial angles RUN and
+reported. Independently reproduced: 287/0 across seven suites (twice, pristine tree), `shellcheck -x`
+v0.11.0 clean, RED at `4356802` = 67/15 with `worker max 3 reached (4 live)`, both correction-mutants
+kill (78/4 and 79/3), C1 non-regression proved end-to-end from an empty state dir (`max=1`/0-live →
+exactly one `open_pane`, `post-count: 1`, `kind marker: pane`). It added a THIRD mutant the brief did
+not ask for — hoist the marker writes above the gate → 77/5 — proving the target-resolution-before-
+markers **ordering** is load-bearing, not incidental. Result file:
+`<scratchpad>/pane-results/general-purpose-1784923348-87600-1119.md`.
+
+Angles it closed for good (no follow-up needed): **bash 3.2.57 is the only bash on PATH**, so
+`#!/usr/bin/env bash` really is 3.2 in production — the empty-array-under-`set -u` trap is REAL there
+(`"${refs[@]}"` does throw), but this code only ever uses `${#refs[@]}` and reaches the indexed
+expansion after the `-gt 0` guard; empty-`refs` exercised directly → `rc=1`, no error. **Injection
+boundary holds under active attack:** eight hostile `surface` marker payloads (`; touch`, `$(…)`,
+backticks, `--new-flag`, `../../../etc/passwd`, quote-splitting, 76-char overflow) fed through the
+REAL cmux adapter — all eight rejected by `validate_open_tab_args`' allowlist → exit 65 → dispatcher
+exit 4 + cooldown + dead_mark, no artifact created. A multi-line `surface` file cannot inject extra
+argv (command substitution keeps it one argument, which then fails the allowlist). The dispatcher does
+not pre-validate `target` — it relies wholly on the adapter, consistent with the existing design and
+failing closed. **`handoff`** with an empty run_dir: correct 3 args, no `surface`, no `lane`,
+`count-workers` = 0; `dead_mark ""` / no-arg / `/nonexistent` all rc 0, create nothing. **Missing
+RUNS_DIR** → `stdout=[0] rc=0`.
+
+**MINOR 1 — the one thing needing a human decision. Concurrent fan-out can still degrade an overflow
+to in-process, which spec §3 forbids.** `dispatch-pane-agent.sh:271-272` vs `:284-289`: a dispatch's
+`surface` marker is written only AFTER the adapter call returns, but its `lane`/`session` markers are
+written BEFORE it. So for the whole duration of a real `open_pane` (a live cmux call — seconds) that
+run is COUNTED as a live worker pane but is NOT selectable as an overflow target. A second dispatch
+arriving in that window sees `live >= n`, finds no selectable surface, and takes the exit-3 in-process
+path — violating spec line 63-64 ("does not overflow to inline") and the line-217 Gherkin ("nothing
+runs in-process" for a 5-worker fan-out at max=3). Parallel fan-out is explicitly the governed lane
+(spec line 47), so this IS the intended workload. Proved with a 2-second `open_pane` adapter at max=1:
+`B: rc=3 | worker max 1 reached (1 live) and no live worker pane to tab into` while `A: rc=0`.
+Graded Minor because it is **not a regression** (at `4356802` that same B also exited 3 — the whole
+over-max path was interim in-process), it degrades safely, and spec "Error handling" (line 175-181)
+blesses in-process degrade on every path. **There is no clean fix:** the ref does not exist until the
+adapter returns, so the alternatives are blocking (spec-forbidden) or inventing a ref. Inherent to the
+spec's own design → document as an accepted trade-off in `skills/dispatching-pane-agents` (T8), or
+raise a spec amendment with the user. Do NOT code around it.
+
+**MINOR 2 — free one-line hardening.** `:282-284` writes markers `lane` → `session` → `kind`, and the
+predicate gates on `lane==worker && session==key` before checking `kind`. Between the `session` and
+`kind` writes a `kind=tab` dispatch is visible to a concurrent counter as a PANE (missing `kind` reads
+as `pane` BY DESIGN). Materialized: `after lane only → count=0` (safe) · `after lane+session → count=1`
+(a TAB counted as a PANE) · `after all three → count=0`. Writing `kind` FIRST and `lane` LAST closes it
+and makes `lane` the single atomic commit point for the whole marker set. Microseconds, dwarfed by
+Minor 1, no downside → fold into T8.
+
+**NIT 1** the rr index advances even when `open_tab` fails (confirmed 1→2→3 across three failed
+overflows) and is written before the open succeeds — bounded to skipping one pane, and nearly
+unreachable because the FIRST `open_tab` failure writes the session cooldown. Within spec line 194-195's
+sanctioned tolerance. **NIT 2** glob order over `epoch-pid-random` = by PID then random within one epoch
+second; spec-conformant (the essential property — spreading overflows across distinct panes — holds for
+any stable order). **NIT 3** (report prose only, not the code): the plan's single-`local` form does not
+merely trip shellcheck — `local key="$1" rr="…$key"` resolves `$key` to the OUTER scope and ERRORS under
+`set -u` when no outer `key` exists; it would have produced the right filename only because the dispatch
+arm happens to have a global `key` of the same value. The code comment at `:123` is accurate.
+
+**Reviewer's carry-forward to FINAL review:** (1) Minor 1 — decide: document as accepted trade-off vs
+spec amendment. (2) Minor 2 reorder. (3) `mk_run`'s latent `$RANDOM`-in-subshell hazard — fix before
+anyone adds a capturing call site; it already produced one false RED. (4) No tab-run cap exists anywhere
+BY DESIGN — if "too many tabs" ever surfaces, the lever is spec §4's least-loaded fallback (line 194-195),
+not a cap.

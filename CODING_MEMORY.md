@@ -105,6 +105,30 @@ how this file and its linked files should be written (plain language, major chan
   **Freshness: 2026-07-24 resume paid the branch's recurring restore tax (~75k) before output; user chose
   proceed. T6a impl+review done in panes (light on controller ctx), saved+pushed at this checkpoint; clear
   offered before Task 7.**
+  **T7 DONE + reviewer APPROVED 2026-07-24 (subagent-driven: pane implementer + pane reviewer, both cmux
+  `surface:83`):** commit `7cb43b0` — worker overflow to `open_tab` with round-robin pane selection
+  (`state/pane-rr-<key>`), replacing T6's interim exit-3. Controller-verified in-checkout (exactly 2 `panes/`
+  files, `Doc-Exempt` trailer, single worktree, other-session compliance files still staged/untouched) and
+  independently re-ran all 7 suites (**287/0**, dispatcher 82/0 from 61/0) + `shellcheck -x` clean + read the
+  full `.sh` diff. **The controller caught, BEFORE dispatch, that the plan's Task 7 contradicts the LOCKED
+  spec** and briefed two corrections, each TDD'd and independently mutation-killed: **(A) a tab-run is not a
+  pane** — the plan leaves the `lane`/`session` writes unconditional, so an overflow would count toward N
+  (spec caps worker *panes*) and become a round-robin target (spec selects a *pane*), breaking the
+  "freed pane is reclaimed" Gherkin (reproduced literally as `worker max 3 reached (4 live)`) and nesting a
+  tab in a tab; fixed with a `kind` marker (missing = `pane`) behind ONE shared predicate `live_worker_panes`
+  so the count and the selection can never disagree. **(B) the I1 residual pinned by T6a** — `dead_mark`
+  writes `agent-exit` on the no-terminal + adapter-fail paths, and resolving the round-robin target BEFORE
+  the marker writes kills the third phantom path by construction. Reviewer: 0 Crit/0 Imp, all 6 checks + 8
+  adversarial angles RUN; **bash 3.2.57 is the only bash on PATH** (the empty-array-under-`set -u` trap is
+  real but unreachable here) and the Task-4 injection boundary held against 8 hostile `surface` payloads
+  through the REAL cmux adapter. **NEW Minor 1 = an OPEN USER DECISION** (spec-level, no clean fix): during a
+  real `open_pane` a run is counted live but not yet selectable, so a concurrent fan-out worker can still
+  degrade to in-process, which spec line 63-64 + the line-217 Gherkin forbid — not a regression, but decide
+  document-as-trade-off (T8) vs spec amendment. Plus Minor 2 (write `kind` first / `lane` last — free
+  atomicity, fold into T8) and 3 Nits. Detail: branch log §Task 7. **NEXT: Task 8** (skill + gate-stub
+  correction + ADR 0009 + Mermaid), then final branch review + obs judge + PR. Carry-forward now also
+  includes **T7: `dispatch-pane-agent.sh` at 387 lines (400 soft limit, no headroom), `.test.sh` at 424, and
+  `mk_run`'s latent `$RANDOM`-in-subshell fixture-collision hazard (already produced one false RED).**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
