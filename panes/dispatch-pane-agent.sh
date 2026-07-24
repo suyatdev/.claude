@@ -193,8 +193,6 @@ case "$cmd" in
 
     key="${CLAUDE_CODE_SESSION_ID:-nosession}"
     if is_judge "$agent_type"; then lane=judge; else lane=worker; fi
-    printf '%s\n' "$lane" > "$run_dir/lane"
-    printf '%s\n' "$key"  > "$run_dir/session"
 
     # Layout-v2: the adapter composes the managed title from this bare label plus
     # the role; the old "pane: " prefix would eat the managed grammar's budget.
@@ -210,11 +208,17 @@ case "$cmd" in
             # INTERIM (replaced by open_tab in Task 7): at/over the worker max,
             # degrade THIS spawn to in-process without a cooldown (capacity, not
             # an adapter failure). exit 3 = "run in-process", same as no-terminal.
+            # Gated BEFORE the lane/session markers are written (below), so a
+            # gated spawn leaves no lane=worker run dir behind (C1/I1 fix).
             die "worker max $n reached ($live live) — dispatch this spawn in-process; overflow-to-tab lands in Task 7" 3
           fi ;;
         *) : ;;   # inline/none reaching the dispatcher: single pane, no gating
       esac
     fi
+    # Written after the gate above: count_live_workers must not count THIS
+    # dispatch's own run dir as already-live (C1 off-by-one).
+    printf '%s\n' "$lane" > "$run_dir/lane"
+    printf '%s\n' "$key"  > "$run_dir/session"
     open_pane_or_cooldown "$title" "$launcher" "$run_dir"
     printf 'RESULT_FILE: %s\n' "$result_file"
     ;;

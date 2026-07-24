@@ -225,7 +225,13 @@ rp_got=$(call_read_policy "$RP_DIR/missing")
 
 # --- Task 6: lane/session markers + live worker count (real run-dir fixtures)
 export PANE_REDIRECT_CONF="$TMP/redirect.conf"   # dispatcher classifies lane via this
-printf 'compliance-judge\nobservability-judge\n' > "$PANE_REDIRECT_CONF"
+# M1: a comment-only line (must be ignored, never matched as an agent type), an
+# inline comment on compliance-judge (drop the `${line%%#*}` strip and this
+# entry misclassifies as a worker), and whitespace-padding on observability-judge
+# (drop the `tr -d '[:space:]'` strip and this entry misclassifies too) — both
+# strips are otherwise unexercised by a clean fixture and could be deleted
+# without the suite noticing.
+printf '# always-paned judges\ncompliance-judge   # spec compliance judge\n   observability-judge   \n' > "$PANE_REDIRECT_CONF"
 CSID="count-sess-$$"
 mk_run() { # $1 lane, $2 session, $3 exited(yes/no) -> makes a fake run dir
   local d; d="$PANE_STATE_DIR/runs/$(date +%s)-$$-$RANDOM"; mkdir -p "$d"
@@ -260,10 +266,29 @@ jrd="$(dirname "${jd:-/nonexistent}")"
 [ "$(cat "$jrd/session" 2>/dev/null)" = "$CSID" ] && ok "judge run tagged session key" || bad "judge run tagged session key" "$(cat "$jrd/session" 2>/dev/null)"
 [ "$(cat "$jrd/surface" 2>/dev/null)" = "surface:J1" ] && ok "surface ref recorded after open_pane" || bad "surface ref recorded after open_pane" "$(cat "$jrd/surface" 2>/dev/null)"
 
+# --- M1: the whitespace-padded observability-judge conf entry ("   observability-judge   ")
+# is still recognized as always-paned — never gated — under the same panes
+# max=1 + 2-live-workers conditions as the compliance-judge case above.
+touch "$TMP/obs-judge-lane-marker"
+out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch observability-judge --prompt-file "$PROMPT" --result-file "$TMP/oj.md" --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "observability-judge (whitespace-padded conf entry) opens a pane" || bad "observability-judge (whitespace-padded conf entry) opens a pane" "rc=$rc: $out"
+ojd=$(find "$PANE_STATE_DIR/runs" -name lane -newer "$TMP/obs-judge-lane-marker" -exec grep -l judge {} \; | head -n1)
+[ -n "$ojd" ] && ok "observability-judge run tagged lane=judge" || bad "observability-judge run tagged lane=judge"
+
 # --- Task 6: worker under panes max=1 with 2 live workers -> interim in-process (exit 3), no cooldown
 out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/w.md" --cwd "$TMP" 2>&1); rc=$?
 [ "$rc" -eq 3 ] && ok "worker over max -> interim in-process exit 3" || bad "worker over max exit 3" "rc=$rc: $out"
 [ ! -f "$PANE_STATE_DIR/adapter-failed-$CSID" ] && ok "over-max does not write cooldown" || bad "over-max writes no cooldown"
+
+# --- Task 6a (C1 regression): a worker strictly UNDER max opens a pane (exit 0).
+# Isolated session key + a single live-worker fixture so this is unaffected by
+# the CSID fixtures above; pre-fix, the dispatching run counts itself as an
+# already-live worker (1 fixture + itself = 2 >= max 2), wrongly gating it.
+UMAX_SID="under-max-$$"
+mk_run worker "$UMAX_SID" no >/dev/null   # one live worker fixture
+CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" set-policy panes --max 2 >/dev/null 2>&1
+out=$(CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/uw.md" --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "worker under max opens a pane" || bad "worker under max opens a pane" "rc=$rc: $out"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
