@@ -147,6 +147,24 @@ how this file and its linked files should be written (plain language, major chan
   NEXT: pre-PR cleanup pass** (NEW-B unquoted `for key in $keys` at guard:104 first — a real
   word-splitting bug; then NEW-A, Minor 2's marker reorder, `mk_run`, the skill-description call, and the
   remaining T3–T6a minors/nits) → full pane suites → implementation obs judge → PR.
+  **CLEANUP PASS DONE 2026-07-24 (pane implementer; all 16 carry-forwards cleared):** commits `4d9e713`
+  (fix — guard key handling + marker ordering), `f6d83ac` (test — the four escaping-mutant gaps),
+  `3c2ad2c` (docs — the three judgment calls). Controller-verified in-checkout + independently re-ran all
+  seven suites: **302 passed, 0 failed** (287 baseline), shellcheck clean on six shell files, guard diff
+  read in full. NEW-B reproduced literally (a `"*"` session id + a decoy file made the guard exit 0 off a
+  FOREIGN policy file) and fixed with `set --`. **Minor-7's anchors were stale — the brief said verify,
+  not trust, and that caught it**; its RED (`d/../../outside-policy` resolving above `STATE_DIR`) has NO
+  glob char, proving the key-validation and the quoting fixes are independent. **M2 came back WIDER than
+  filed and correctly so:** the guard also read `STATE_DIR` from a hardcoded `$HOME`, so under `PANE_HOME`
+  it would never see the policy `set-policy` had just written — an unbreakable ask loop, worse than the
+  conf split; all four defaults now match the dispatcher. Nit-9's refactor was proven safe by
+  byte-comparing both stderr messages against the pre-change guard. Group 3's tightening is the sharpest
+  evidence in the branch: the three adapter mutants ALL escaped the old suite (43/0) and are caught by the
+  new one (42/3). **Two things deliberately NOT fixed:** `CLAUDE.md`'s skills-catalog line still says
+  "(judge, plan implementer)" (pre-three-lane, the other trigger surface — user's global file, out of
+  scope), and **`panes/dispatch-pane-agent.sh` is now 410 lines, over the 400 soft limit** — split the
+  run-dir/marker helpers out as the FIRST move of the next dispatcher change, not at the tail of this
+  branch. **NEXT: implementation obs judge (must match final HEAD), then PR `--draft` → `gh pr ready`.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —

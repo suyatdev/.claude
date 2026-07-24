@@ -628,3 +628,70 @@ archived dispatch prompts, not docs. Spec line 57 already tenses the flip correc
 **ALL 8 TASKS DONE. NEXT: pre-PR cleanup pass** (NEW-B unquoted `for key in $keys` at guard:104 first —
 a real word-splitting bug; then NEW-A, Minor 2, `mk_run`, the skill description call, and the remaining
 T3–T6a minors/nits) → full pane suites → implementation obs judge → PR (`--draft` then `gh pr ready`).
+
+---
+
+## Pre-PR cleanup pass (2026-07-24) — DONE, all 16 carry-forwards cleared
+
+Pane `general-purpose` implementer, cmux `surface:83`. **THREE commits** (it split group 4 out rather
+than put code+docs in a test commit — correct call): **`4d9e713`** fix — guard key handling + marker
+ordering (guard.sh +60/−23, guard.test.sh +73, dispatcher +26, dispatcher.test +59); **`f6d83ac`** test —
+the four escaping-mutant gaps (+29/−9); **`3c2ad2c`** docs — the three judgment calls (cmux.sh +16,
+dispatcher +7, dispatcher.test +13, SKILL.md +2/−1). **Controller-verified in-checkout** (right toplevel
++ branch, only intended files per commit, other-session compliance files still staged/untouched) and
+independently re-ran all seven suites: **34 / 89 / 45 / 34 / 81 / 10 / 9 = 302 passed, 0 failed** (287 at
+baseline), `shellcheck -x` clean on all six shell files. Controller also read the full guard diff.
+
+**Group 1 — all FIXED** (RED first: guard 28/6, dispatcher 83/3 → 34/0, 86/0):
+- **NEW-B** reproduced exactly — `sid="*"` + a decoy `sidfile` in CWD made the guard exit **0** off a
+  foreign `pane-policy-sidfile`. Key list now built with `set --`, iterated `"$@"`.
+- **Minor-7** — anchors were STALE (`:87`/`:61` → `:106`/`:69`; the brief said verify, it did). Added
+  `valid_key` (`^[A-Za-z0-9._-]{1,64}$`) at both loop sites. RED used key `d/../../outside-policy`
+  resolving ABOVE `STATE_DIR` → exit 0. **It has no glob char, so quoting alone does NOT fix it** — the
+  two fixes are genuinely independent and independently tested.
+- **NEW-A** — both readers capped `([0-9]{1,2})`. Split verified live: `[ 2^64+3 -ge 1 ]` → rc 2
+  (read_policy rejects) while `$((10#…))` → **3** (guard accepted). Dispatcher side is
+  behavior-preserving (3+ digits already failed the range check) so its test is a pair-pin, not a RED —
+  labelled as such in the code.
+- **Nit-8** — BOTH parsers fixed in one commit (`|| [ -n "$line" ]`). `panes max=03` still matches, so
+  legacy zero-padded files keep working.
+- **M2 — WIDER than filed, and rightly so (flagged by the implementer, controller-reviewed).** Fixing
+  only `CONF` would have been near-cosmetic: the guard ALSO read `STATE_DIR` from a hardcoded `$HOME`,
+  so under `PANE_HOME` it would never see the policy `set-policy` just wrote — **an unbreakable ask
+  loop**, worse than the conf split. All four defaults now hang off a `PANES_DIR` that matches the
+  dispatcher line-for-line, with a test each for conf and state dir. Four lines, no restructuring.
+- **Nit-9** — `redirect_steps()` extracted; stderr **byte-compared against the pre-change guard for both
+  messages → identical**. Added the comment that env-first is CORRECT for the policy loop (`set-policy`
+  keys by `env_sid`) rather than "fixing" the order to match the cooldown loop.
+- **Minor 2** — reorder to `kind` → `session` → `lane`, all three still strictly AFTER the worker gate
+  (C1 intact). The window is a race with no reachable end state, so the regression guard is a
+  source-order assertion, flagged in the test as exactly that.
+- Usage string now names `set-policy`/`count-workers` in both the fallthrough and the header synopsis.
+
+**Group 2 — FIXED:** `mk_run` → `mktemp -d`, same recipe as `mk_run_ref`.
+
+**Group 3 — all FIXED, each mutation-proven.** Strongest evidence: the three adapter mutants against the
+PRE-tightening suite → **43/0 (all escaped)**; against the tightened suite → **42 passed, 3 failed**.
+T5-Minor (`print $1`→`print $2` now caught, 44/1); T4-Minor (**T5 had already closed the cmux half**;
+tmux + iTerm now pinned — Terminal.app deliberately left unpinned: no splits, both verbs share one
+`do script` path, so no command discriminates them); T4-Nit (folded into `tab_case` via an optional verb
+arg, still bites: `terminal.sh exit 64`→`exit 0` → 44/1); T6a-Minor (under a no-op pane-dispatch mutant
+the OLD `rc -eq 0` assertion still passed while both new assertions failed, 72/16 — the predicted gap,
+now closed).
+
+**Group 4:** both T5-Nits **DOCUMENTED** with comments, not restructured — and the implementer found a
+concrete safety reason beyond "invasive": the open_pane **dryrun** block calls `derive_plan`→`decide_plan`
+ABOVE the tab dispatch, so moving `role`/`run_id` down would leave them unset under `set -u`. The
+**skill frontmatter description FIXED** (now covers `general-purpose` + parallel fan-out + the policy;
+`Explore/search` → `Explore/Plan` for three lanes; both "not for" clauses intact; registry shows the new
+string). It grew 394→459 chars vs the standard's ~200 target — the standard also mandates the
+exclusions and the file already made that trade. **Trigger accuracy is NOT eval-verified** (no eval
+harness exists here — the standard's own checklist says so). Item 16 fixed with the sanctioned one-liner
+in `live_worker_panes`, the shared predicate, so count AND selection both inherit it (RED 88/1 → 89/0).
+
+**Off-list, found not fixed:** `CLAUDE.md`'s skills-catalog line for `dispatching-pane-agents` still reads
+"(judge, plan implementer)" — the same pre-three-lane framing as item 15, on the other trigger surface;
+left alone as the user's global instruction file and out of scope (one-line fix if wanted).
+**`panes/dispatch-pane-agent.sh` is now 410 lines — OVER the 400-line soft limit** (hard cap 800).
+Recommendation: do NOT refactor at the tail of an 8-task branch; split the run-dir/marker helpers into
+their own file as the first move of the next dispatcher change. Test file is 503 lines.
