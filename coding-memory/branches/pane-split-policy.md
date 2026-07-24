@@ -374,3 +374,58 @@ must open a pane; currently gated) then fix by reordering the two marker writes 
 fixture lines. Pin I1's residual dead-marking to Task 7's contract. Then T7, T8. Implementer result file:
 `<scratchpad>/pane-results/general-purpose-1784862477-35934-9310.md`. Final-review carry-forward now also
 includes **M2 + the three Task 6 Nits**.
+
+## Task 6a — fix C1 off-by-one (marker writes after the gate) + M1 (2026-07-24) — DONE, reviewer APPROVED
+
+**Commit `8ef4868`** (parent `d76ca82`), subagent-driven: pane `general-purpose` implementer + pane reviewer,
+both cmux `surface:83`, `--role implementer`. **Verified in-checkout by controller** (toplevel
+`/Users/marksuyat/.claude`, branch `feat/pane-split-policy`; `git show --stat HEAD` = EXACTLY 2 domain files —
+`dispatch-pane-agent.sh` +6/−2, `.test.sh` +27/−1; NO `coding-memory/` files). Controller independently re-ran:
+suite **61/0**, `shellcheck -x` clean on both, and read the .sh diff to confirm the relocation is real.
+`Doc-Exempt` trailer on the code commit. **Index note:** the other-session `coding-memory/compliance-judge/*`
+files were **STAGED** (not just modified) this session — implementer used a pathspec commit
+(`git commit panes/… panes/…`), never `-a`/`add -A`, so they stayed staged and untouched.
+
+The fix (C1, the reviewer's Task 6 CRITICAL):
+- Moved ONLY the two marker-WRITE lines (`printf '%s\n' "$lane" > "$run_dir/lane"` and `… > "$run_dir/session"`)
+  from before the worker gate to just before `open_pane_or_cooldown`, after the whole `if [ "$lane" = worker ]`
+  block. `key="${…:-nosession}"` and the `is_judge` lane assignment stayed before the gate (the gate reads the
+  `$key`/`$lane` VARIABLES, not the files). Added C1/I1 rationale comments at both the gate `die` and the new
+  write point.
+- **Result:** `count_live_workers "$key"` (called in the gate) no longer sees THIS dispatch's own run dir →
+  capacity is N (not N−1). Boundary the bug was really about — `panes max=1`, 0 live — now opens exactly one
+  pane and `count-workers` reports 1 afterward (reviewer-reproduced).
+- **I1 dominant source killed for free:** a gated worker now `die … 3`s BEFORE any marker is written, so it
+  leaves no `lane=worker` run dir behind (reviewer reproduced: gated run dir at `max=1` holds only
+  `launch.sh` + `prompt.md`). Residual phantom paths (adapter-fail exit 4, no-terminal exit 3 that reach the
+  dispatcher — rare, guard fails open first) still write markers before an open failure → carry to Task 7's
+  dead-marking / count-only-dirs-with-`surface` contract, as before.
+
+M1 (weak-test fix): strengthened the judge-conf fixture (`$PANE_REDIRECT_CONF`) with a comment-only line, an
+INLINE comment on `compliance-judge`, and whitespace-padding on `observability-judge`, plus a new assertion that
+`observability-judge` is still recognized as a judge. Both `is_judge` strips are now asserted — controller AND
+reviewer independently verified the mutations bite: delete `${line%%#*}` → RED (57/4), delete
+`tr -d '[:space:]'` → RED (55/6).
+
+New positive test — "worker under max opens a pane" (`UMAX_SID`, 1 live-worker fixture, `panes max=2`, dispatch
+→ rc 0). RED against parent confirmed by BOTH implementer and reviewer: reverting only the .sh to `d76ca82`
+(keeping HEAD's test) fails with `rc=3: worker max 2 reached (2 live)` (60/1). The test genuinely discriminates
+C1 — the missing positive case that let C1 ship green in Task 6.
+
+**Reviewer VERDICT: APPROVED** — six required checks + three adversarial angles all RUN in an isolated detached
+worktree (`/tmp/pane-review-*`, removed; live index untouched). No Criticals/Importants. Confirmed statically +
+dynamically that nothing between the old and new marker location reads the marker *files* (only
+`count_live_workers` does, during the gate). Result file:
+`<scratchpad>/pane-results/general-purpose-1784904471-48929-5562.md`.
+- **T6a-Minor (carry-forward, non-blocking):** the new positive test asserts only `rc -eq 0`, not that the fake
+  adapter was invoked / a `surface` marker was written. Reviewer: no real gap today (control flow has no clean
+  exit-0 that skips `open_pane_or_cooldown`'s adapter success), but a future refactor could open one. Fold into
+  final review — add `grep -q '^PANE_REF:' <<<"$out"` or a `surface`-file check to match the happy-path test's
+  rigor.
+
+**NEXT: Task 7** (overflow → `open_tab` round-robin, `pane-rr-<key>`). The C1 fix is a hard prerequisite: Task 7
+overflows a worker into a LIVE worker pane's tab, which at `max=1` could not exist under the N−1 bug. Pin I1's
+residual: dead-mark run dirs on failure OR count only dirs with a `surface` marker (Task 7 reads live workers'
+surfaces for round-robin; a phantom has none). Then Task 8 (skill + gate-stub correction + ADR 0009 + Mermaid).
+Final-review carry-forward now: Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits + M2
+(PANE_HOME conf split-brain) + the three Task 6 Nits + **T6a-Minor**.

@@ -86,13 +86,25 @@ how this file and its linked files should be written (plain language, major chan
   scratch): move the 2 marker-writes to after the gate + add that positive test; also M1 (add commented/padded
   fixture-conf lines so `is_judge` comment-strip is asserted).** I1 (phantom workers) CONFIRMED — C1 reorder kills
   the dominant gated-exit-3 source; residual (no-terminal exit 3, adapter-fail exit 4) bounded, carry to Task 7 as
-  a dead-marking requirement. Security boundary CLEAN. Detail + full findings: branch log §Task 6. **NEXT: Task 6a
-  (do FIRST, before T7)** — TDD: reproduce C1 as a RED positive test, then reorder markers; then T7, T8. Per-task
-  loop: pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer → checkpoint.
-  Final-review carry-forward now: Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits +
-  **M2 (PANE_HOME conf split-brain) + T6 Nits**; run full pane suites + implementation obs judge before
-  `gh pr create`. **Freshness: fresh session paid ~84k on RESTORE alone (branch's recurring restore tax); user
-  chose proceed. T6 impl+review done, saved+pushed at this checkpoint; clear offered before Task 6a.**
+  a dead-marking requirement. Security boundary CLEAN. Detail + full findings: branch log §Task 6.
+  **T6a DONE + reviewer APPROVED 2026-07-24 (subagent-driven: pane Opus implementer + pane reviewer, both cmux
+  `surface:83`):** commit `8ef4868` (parent `d76ca82`), **verified in-checkout** (2 domain files only —
+  `dispatch-pane-agent.sh` +6/−2, `.test.sh` +27/−1; NO store files; the STAGED other-session compliance-judge
+  files left untouched via pathspec commit). Controller re-ran suite **61/0** + shellcheck clean + read the diff.
+  Fixed C1: moved the 2 marker WRITES to after the worker gate (kept `key=`/`lane=` before it) → capacity N not
+  N−1; `max=1`/0-live now opens exactly one pane (reviewer-reproduced). I1 dominant source killed for free
+  (gated `die 3` before tagging → no phantom). M1: judge-conf fixture now asserts both `is_judge` strips
+  (mutations RED 57/4 + 55/6). New positive test "worker under max opens a pane" RED-against-parent confirmed by
+  both agents. Reviewer ran all checks in an isolated worktree; APPROVED, 0 Crit/Imp. **NEW T6a-Minor** (new
+  test asserts only `rc 0`, not adapter-invoked — non-blocking, fold into final review). Detail: branch log
+  §Task 6a. **NEXT: Task 7** (overflow → `open_tab` round-robin `pane-rr-<key>`; C1 fix is its hard prereq),
+  then Task 8 (skill + gate-stub correction + ADR 0009 + Mermaid). Per-task loop: pane implementer → verify
+  commit in-checkout (`verifying-subagent-commits`) → pane reviewer → checkpoint. Final-review carry-forward:
+  Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits + M2 (PANE_HOME conf split-brain) +
+  T6 Nits + **T6a-Minor**; run full pane suites + implementation obs judge before `gh pr create`.
+  **Freshness: 2026-07-24 resume paid the branch's recurring restore tax (~75k) before output; user chose
+  proceed. T6a impl+review done in panes (light on controller ctx), saved+pushed at this checkpoint; clear
+  offered before Task 7.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
