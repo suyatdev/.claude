@@ -571,3 +571,60 @@ spec amendment. (2) Minor 2 reorder. (3) `mk_run`'s latent `$RANDOM`-in-subshell
 anyone adds a capturing call site; it already produced one false RED. (4) No tab-run cap exists anywhere
 BY DESIGN — if "too many tabs" ever surfaces, the lever is spec §4's least-loaded fallback (line 194-195),
 not a cap.
+
+**MINOR 1 RESOLVED by the user 2026-07-24 → document as an accepted trade-off.** Spec stays LOCKED at
+`cdc777a`; no compliance re-run; no code change. Rejected: a transient N+1 pane overshoot, and amending
+the spec. Landed in T8's SKILL section + ADR 0009 consequences. **Minor 2 is a CODE change → routed to
+the pre-PR cleanup pass, NOT the docs task** (folding code into a docs commit is how carry-forwards get
+lost). The T8 implementer independently flagged that this left Minor 2 "unimplemented and now unowned" —
+it is owned by the cleanup pass.
+
+---
+
+## Task 8 — docs: skill, gate stub, ADR 0009 (2026-07-24) — DONE (review folded into the FINAL branch review)
+
+**Commit `d801573`** (parent `ffe9ef4`), pane `general-purpose` implementer, cmux `surface:83`.
+**Verified in-checkout by controller** (toplevel `/Users/marksuyat/.claude`, branch
+`feat/pane-split-policy`, single worktree; `git show --stat HEAD` = EXACTLY the 3 doc files — ADR +80,
+`rules/gates.md` +1/−1, `SKILL.md` +53/−4; other-session compliance files still staged/untouched). No
+`Doc-Exempt` needed (the commit IS documentation). Both sanity suites still 28/0 and 82/0.
+**Controller read all three files in full** — hence no separate pane reviewer for a 134-line docs change;
+it is covered by the final branch review instead.
+
+- **`rules/gates.md:21` corrected IN PLACE** (not appended — that file is imported into EVERY session).
+  The controller caught before dispatch that the PLAN's verbatim replacement (line 1096) silently DROPS
+  "fails open, with a per-session cooldown after an adapter failure" — still true and load-bearing. The
+  brief required keeping it; the shipped bullet does. It now carries three lanes where it carried two
+  (~350 → ~505 chars), which the implementer judged the floor for saying something true.
+- **`SKILL.md` — new `## Session pane-split policy`**: three lanes, the lazy once-per-session
+  `AskUserQuestion` → `set-policy` → retry flow (N bounded 1..16), `inline` vs `panes max=N`, reclaim-a-
+  freed-pane-before-tabbing, all three non-blocking degrade paths, and the **accepted trade-off**
+  written in reader's terms. **Implementer's scope call (correct):** the file's own "What goes in a pane"
+  bullet still said plan implementers are "your judgment call, which is why no hook enforces it" — the
+  same stale claim as the gate stub, in the file it was editing. It corrected that too rather than ship a
+  self-contradictory file.
+- **ADR 0009** — three-lane governance + the `redirect-agents.conf` include→exclude reshaping. Records
+  the two user review-gate choices as the deciding factors (`inline` must not silence the judges; judge
+  panes are uncounted), why option 1 (a single include→exclude flip) fails both, and consequences: the
+  skill-routed→policy-governed reversal of 0007's stance, the `open_tab` verb + its allowlist as THE
+  security boundary for the whole overflow path, `pane-policy-<key>` state, uncapped-tabs-by-design, and
+  Minor 1 cross-referenced not restated. Reads as 0007's successor.
+- **Mermaid, honestly verified.** `skills/diagramming-technical-docs/scripts/validate-diagrams.sh` →
+  `PASS block 1, 0 failed`, rc 0 — the verification that skill prescribes. The implementer did NOT get a
+  browser render and **explicitly refused to claim one**: no `mmdc` installed or cached, so rendering
+  meant an unpinned `@mermaid-js/mermaid-cli` + Chromium — a unilateral dependency add core-conduct bars.
+  Its hand-audit against documented render-breakers caught a REAL defect the linter passes: three node
+  labels contained `--` (ambiguous with edge syntax inside unquoted brackets); all labels carrying
+  `--`/commas/colons/`?` are now double-quoted.
+
+**T8 carry-forwards (found, not fixed):** the skill's **frontmatter `description`** still frames the
+skill as "a judge, or a plan-task implementer during plan execution" — pre-three-lane, omits
+`general-purpose`/fan-out which are now equally governed; left alone deliberately because the
+description IS the trigger string and editing it shifts skill-matching behavior (decide in the cleanup
+pass). `CODING_MEMORY.md` + `.claude/session-state.md` still quote the old "skill-routed" line, correct
+AS HISTORY — do not let a checkpoint re-import it as current. `panes/state/runs/*/prompt.md` hits are
+archived dispatch prompts, not docs. Spec line 57 already tenses the flip correctly — no action.
+
+**ALL 8 TASKS DONE. NEXT: pre-PR cleanup pass** (NEW-B unquoted `for key in $keys` at guard:104 first —
+a real word-splitting bug; then NEW-A, Minor 2, `mk_run`, the skill description call, and the remaining
+T3–T6a minors/nits) → full pane suites → implementation obs judge → PR (`--draft` then `gh pr ready`).

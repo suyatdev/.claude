@@ -129,6 +129,24 @@ how this file and its linked files should be written (plain language, major chan
   correction + ADR 0009 + Mermaid), then final branch review + obs judge + PR. Carry-forward now also
   includes **T7: `dispatch-pane-agent.sh` at 387 lines (400 soft limit, no headroom), `.test.sh` at 424, and
   `mk_run`'s latent `$RANDOM`-in-subshell fixture-collision hazard (already produced one false RED).**
+  **MINOR 1 RESOLVED by the user 2026-07-24 → document as an accepted trade-off** (spec stays locked, no
+  compliance re-run, no code change; rejected a transient N+1 pane and a spec amendment). **T8 DONE
+  2026-07-24 (pane implementer; review folded into the FINAL branch review — 134 lines of docs, all read
+  by the controller):** commit `d801573`, verified in-checkout (exactly 3 doc files, sanity suites still
+  28/0 + 82/0). `rules/gates.md:21` corrected IN PLACE — the controller caught pre-dispatch that the
+  PLAN's own replacement prose silently drops "fails open, with a per-session cooldown after an adapter
+  failure", still true and load-bearing, so the brief required keeping it. `SKILL.md` gained the
+  three-lane policy section + the accepted trade-off in reader's terms, and the implementer correctly
+  also fixed that file's own stale "plan implementers are your judgment call" bullet rather than ship a
+  self-contradictory file. **ADR 0009** records the include→exclude reshaping, the two user review-gate
+  choices that decided three lanes (`inline` must not silence the judges; judge panes uncounted), and the
+  `open_tab` allowlist as THE security boundary for the overflow path. Mermaid verified with the repo's
+  `validate-diagrams.sh` (PASS); the implementer **refused to claim a browser render** it could not do
+  (no `mmdc`; rendering meant an unpinned dep add) and its hand-audit caught a real defect the linter
+  passes — labels containing `--` are ambiguous with edge syntax unless quoted. **ALL 8 TASKS DONE.
+  NEXT: pre-PR cleanup pass** (NEW-B unquoted `for key in $keys` at guard:104 first — a real
+  word-splitting bug; then NEW-A, Minor 2's marker reorder, `mk_run`, the skill-description call, and the
+  remaining T3–T6a minors/nits) → full pane suites → implementation obs judge → PR.
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
