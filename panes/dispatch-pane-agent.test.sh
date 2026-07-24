@@ -275,9 +275,11 @@ out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch observability-jud
 ojd=$(find "$PANE_STATE_DIR/runs" -name lane -newer "$TMP/obs-judge-lane-marker" -exec grep -l judge {} \; | head -n1)
 [ -n "$ojd" ] && ok "observability-judge run tagged lane=judge" || bad "observability-judge run tagged lane=judge"
 
-# --- Task 6: worker under panes max=1 with 2 live workers -> interim in-process (exit 3), no cooldown
+# --- Task 7: a worker at/over panes max=1 with 2 live worker panes overflows to
+# a TAB in one of them (this replaces Task 6's interim exit-3 assertion).
 out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/w.md" --cwd "$TMP" 2>&1); rc=$?
-[ "$rc" -eq 3 ] && ok "worker over max -> interim in-process exit 3" || bad "worker over max exit 3" "rc=$rc: $out"
+[ "$rc" -eq 0 ] && ok "worker over max overflows to a tab (exit 0)" || bad "worker over max overflows to a tab" "rc=$rc: $out"
+[ "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)" = "open_tab" ] && ok "over-max dispatch calls the adapter open_tab verb" || bad "over-max calls open_tab" "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)"
 [ ! -f "$PANE_STATE_DIR/adapter-failed-$CSID" ] && ok "over-max does not write cooldown" || bad "over-max writes no cooldown"
 
 # --- Task 6a (C1 regression): a worker strictly UNDER max opens a pane (exit 0).
@@ -289,6 +291,134 @@ mk_run worker "$UMAX_SID" no >/dev/null   # one live worker fixture
 CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" set-policy panes --max 2 >/dev/null 2>&1
 out=$(CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/uw.md" --cwd "$TMP" 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "worker under max opens a pane" || bad "worker under max opens a pane" "rc=$rc: $out"
+
+# --- Task 7 fixtures: like mk_run but with an explicit surface ref and an
+# explicit surface KIND (pane|tab; "" writes no kind marker, which must be read
+# as "pane" so every pre-Task-7 fixture above stays valid). Run ids come from
+# mktemp, not $RANDOM or a counter: several call sites capture the dir with
+# $(...), and a subshell's $RANDOM draw / counter bump is lost to the parent, so
+# the next fixture would silently reuse the same dir.
+mk_run_ref() { # $1 lane, $2 session, $3 exited(yes/no), $4 surface-ref(""=none), $5 kind(""=none)
+  local d
+  mkdir -p "$PANE_STATE_DIR/runs"
+  d="$(mktemp -d "$PANE_STATE_DIR/runs/$(date +%s)-$$-t7XXXXXX")"
+  printf '%s\n' "$1" > "$d/lane"; printf '%s\n' "$2" > "$d/session"
+  [ -n "$4" ] && printf '%s\n' "$4" > "$d/surface"
+  [ -n "${5:-}" ] && printf '%s\n' "$5" > "$d/kind"
+  [ "$3" = yes ] && printf 'DONE\n' > "$d/agent-exit"
+  printf '%s\n' "$d"
+}
+
+# --- Task 7: overflow targets a live worker pane's surface, round-robin, and
+# the resulting tab run does not itself consume a worker slot.
+# The fake adapter answers BOTH verbs and records each verb's argv separately.
+# shellcheck disable=SC2016 # $1/$@ must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) printf "%%s\\n" "$@" > "%s/adapter-args"; echo surface:P9 ;;\n  open_tab)  printf "%%s\\n" "$@" > "%s/tab-args"; echo surface:T1 ;;\n  *) exit 64 ;;\nesac\n' "$TMP" "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+OSID="overflow-sess-$$"
+CLAUDE_CODE_SESSION_ID="$OSID" bash "$DISPATCH" set-policy panes --max 2 >/dev/null 2>&1
+mk_run_ref worker "$OSID" no surface:AA "" >/dev/null   # live worker pane 1
+mk_run_ref worker "$OSID" no surface:BB "" >/dev/null   # live worker pane 2
+rm -f "$TMP/tab-args" "$TMP/adapter-args"
+out=$(CLAUDE_CODE_SESSION_ID="$OSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/o1.md" --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "overflow worker exits 0 (tab)" || bad "overflow worker exits 0" "rc=$rc: $out"
+# open_tab <surface> <title> <launcher>: argv[2] = surface, argv[3] = title.
+t1=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
+case "$t1" in surface:AA|surface:BB) ok "overflow open_tab targets a live worker surface" ;; *) bad "overflow open_tab targets a live worker surface" "$t1" ;; esac
+[ "$(sed -n '3p' "$TMP/tab-args" 2>/dev/null)" = "general-purpose" ] && ok "overflow open_tab carries the sanitized title" || bad "overflow open_tab title" "$(sed -n '3p' "$TMP/tab-args" 2>/dev/null)"
+printf '%s' "$out" | grep -q '^PANE_REF: surface:T1' && ok "overflow prints the new tab ref" || bad "overflow prints tab ref" "$out"
+# Round-robin: the next overflow must land on the OTHER live worker pane.
+out=$(CLAUDE_CODE_SESSION_ID="$OSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/o2.md" --cwd "$TMP" 2>&1); rc=$?
+t2=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
+{ [ "$rc" -eq 0 ] && [ -n "$t2" ] && [ "$t2" != "$t1" ]; } && ok "round-robin rotates to the other live worker pane" || bad "round-robin rotates to the other live worker pane" "first=$t1 second=$t2 rc=$rc"
+# Correction A: a run living in a tab is not a pane, so it must not count toward
+# N. Two overflow tabs are now live on top of the two panes; the count is 2.
+n=$(CLAUDE_CODE_SESSION_ID="$OSID" bash "$DISPATCH" count-workers 2>/dev/null)
+[ "$n" = "2" ] && ok "overflow tab runs are not counted as live worker panes" || bad "overflow tab runs not counted" "got $n want 2"
+
+# --- Task 7 / Correction A: spec Gherkin "A freed worker pane is reclaimed
+# rather than tabbed". panes max=3, three live worker panes plus two live
+# tab runs; free one pane -> live PANE count is 2 (< 3) so the next worker must
+# open a PANE. Counting the tab runs would report 4 and wrongly overflow.
+FSID="freed-pane-$$"
+CLAUDE_CODE_SESSION_ID="$FSID" bash "$DISPATCH" set-policy panes --max 3 >/dev/null 2>&1
+mk_run_ref worker "$FSID" no surface:FP1 pane >/dev/null
+mk_run_ref worker "$FSID" no surface:FP2 pane >/dev/null
+freed=$(mk_run_ref worker "$FSID" no surface:FP3 pane)
+mk_run_ref worker "$FSID" no surface:FT1 tab >/dev/null
+mk_run_ref worker "$FSID" no surface:FT2 tab >/dev/null
+printf 'DONE\n' > "$freed/agent-exit"    # that pane's agent completed -> slot freed
+rm -f "$TMP/tab-args" "$TMP/adapter-args"
+out=$(CLAUDE_CODE_SESSION_ID="$FSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/f1.md" --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "freed-pane dispatch exits 0" || bad "freed-pane dispatch exits 0" "rc=$rc: $out"
+[ "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)" = "open_pane" ] && ok "a freed worker pane is reclaimed (open_pane, not open_tab)" || bad "a freed worker pane is reclaimed" "verb=$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null) tab-target=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)"
+[ ! -f "$TMP/tab-args" ] && ok "freed-pane dispatch never calls open_tab" || bad "freed-pane dispatch never calls open_tab"
+
+# --- Task 7 / Correction A: a tab run is never an overflow TARGET (open_tab
+# into a tab would nest a tab in a tab). One live worker pane + one live tab run
+# at panes max=1: TWO consecutive overflows must BOTH target the pane. Two, not
+# one: if tab runs were eligible the round-robin would necessarily hand one of
+# the two dispatches a ref that is not the pane's.
+TSID="tab-target-$$"
+CLAUDE_CODE_SESSION_ID="$TSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+mk_run_ref worker "$TSID" no surface:KP pane >/dev/null
+mk_run_ref worker "$TSID" no surface:KT tab  >/dev/null
+rm -f "$TMP/tab-args"
+CLAUDE_CODE_SESSION_ID="$TSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/t1.md" --cwd "$TMP" >/dev/null 2>&1
+k1=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
+CLAUDE_CODE_SESSION_ID="$TSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/t2.md" --cwd "$TMP" >/dev/null 2>&1
+k2=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
+{ [ "$k1" = "surface:KP" ] && [ "$k2" = "surface:KP" ]; } && ok "overflow never targets a tab run surface" || bad "overflow never targets a tab run surface" "first=$k1 second=$k2"
+
+# --- Task 7 / Correction B: an overflow with no selectable target degrades this
+# spawn to in-process (exit 3, no cooldown — capacity, not an adapter failure)
+# and adds no phantom. The target is resolved BEFORE the lane/session markers
+# are written, so this dispatch leaves no lane=worker run dir at all.
+NOSID="no-target-$$"
+printf '#!/usr/bin/env bash\necho surface:Z1\n' > "$PANE_ADAPTERS_DIR/cmux.sh"; chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+CLAUDE_CODE_SESSION_ID="$NOSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+mk_run_ref worker "$NOSID" no "" pane >/dev/null   # live worker pane whose surface write never landed
+CLAUDE_CODE_SESSION_ID="$NOSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/n1.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 3 ] && ok "overflow with no selectable target -> exit 3 (in-process)" || bad "no-target overflow -> exit 3" "rc=$rc"
+[ ! -f "$PANE_STATE_DIR/adapter-failed-$NOSID" ] && ok "no-target overflow writes no cooldown" || bad "no-target overflow writes no cooldown"
+n=$(CLAUDE_CODE_SESSION_ID="$NOSID" bash "$DISPATCH" count-workers 2>/dev/null)
+[ "$n" = "1" ] && ok "no-target overflow adds no phantom live worker" || bad "no-target overflow adds no phantom" "got $n want 1 (the surfaceless fixture only)"
+
+# --- Task 7 / Correction B: a dispatch that fails to OPEN its surface must not
+# be counted live for the rest of the session (the I1 phantom-worker residual
+# pinned by Task 6a). A phantom inflates the count into premature overflow and,
+# having no surface, is not a selectable target either -> the next dispatch dies
+# exit 3, which the spec forbids for the overflow path.
+NTSID="no-term-$$"
+printf '#!/usr/bin/env bash\necho none\n' > "$TMP/detect.sh"
+CLAUDE_CODE_SESSION_ID="$NTSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/nt.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 3 ] && ok "no-terminal worker -> exit 3" || bad "no-terminal worker -> exit 3" "rc=$rc"
+n=$(CLAUDE_CODE_SESSION_ID="$NTSID" bash "$DISPATCH" count-workers 2>/dev/null)
+[ "$n" = "0" ] && ok "no-terminal failure leaves no phantom live worker" || bad "no-terminal failure leaves no phantom" "got $n want 0"
+printf '#!/usr/bin/env bash\necho cmux\n' > "$TMP/detect.sh"
+
+APSID="pane-fail-$$"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$PANE_ADAPTERS_DIR/cmux.sh"; chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+CLAUDE_CODE_SESSION_ID="$APSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/ap.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 4 ] && ok "open_pane failure -> exit 4" || bad "open_pane failure -> exit 4" "rc=$rc"
+n=$(CLAUDE_CODE_SESSION_ID="$APSID" bash "$DISPATCH" count-workers 2>/dev/null)
+[ "$n" = "0" ] && ok "open_pane failure leaves no phantom live worker" || bad "open_pane failure leaves no phantom" "got $n want 0"
+
+# --- Task 7: open_tab failure degrades this spawn to in-process (exit 4) and
+# writes the session cooldown flag, exactly as an open_pane failure does. Its
+# run dir is dead-marked too, so it can never be mistaken for a live run.
+# shellcheck disable=SC2016 # $1 must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) echo surface:P1 ;;\n  open_tab) exit 1 ;;\n  *) exit 64 ;;\nesac\n' > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+XSID="tab-fail-$$"
+CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+mk_run_ref worker "$XSID" no surface:XP pane >/dev/null
+touch "$TMP/tab-fail-marker"
+CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/x1.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 4 ] && ok "open_tab failure -> exit 4" || bad "open_tab failure -> exit 4" "rc=$rc"
+[ -f "$PANE_STATE_DIR/adapter-failed-$XSID" ] && ok "open_tab failure writes cooldown" || bad "open_tab failure writes cooldown"
+xd=$(find "$PANE_STATE_DIR/runs" -mindepth 1 -maxdepth 1 -type d -newer "$TMP/tab-fail-marker" | head -n 1)
+{ [ -n "$xd" ] && [ -f "$xd/agent-exit" ]; } && ok "open_tab failure dead-marks its run dir" || bad "open_tab failure dead-marks its run dir" "dir=$xd"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

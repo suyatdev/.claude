@@ -80,21 +80,57 @@ is_judge() {
   return 1
 }
 
-# count_live_workers <session-key> -> integer. Live = a run dir tagged
-# lane=worker for this session with no agent-exit marker yet. Judge runs
-# (lane=judge) and other sessions are excluded — the "judge not counted" and
-# "per-session" guarantees ride entirely on these two file checks.
-count_live_workers() {
-  local key="$1" d n=0
-  [ -d "$RUNS_DIR" ] || { printf '0\n'; return 0; }
+# live_worker_panes <session-key> -> one run-dir path per line (no trailing /).
+# Live = a run dir tagged lane=worker for this session with no agent-exit marker
+# yet. Three exclusions, all riding on plain file checks:
+#   - lane=judge      — judges sit outside the policy and never consume a slot
+#   - other sessions  — the per-session guarantee
+#   - kind=tab        — an overflow run LIVES IN someone else's pane, so it is
+#                       neither a pane for the max (spec: "max CONCURRENT worker
+#                       panes") nor a legal overflow target (open_tab into a tab
+#                       would nest a tab in a tab). A MISSING kind marker reads
+#                       as pane, keeping pre-Task-7 run dirs valid.
+# The count and the round-robin selection share this one predicate on purpose:
+# if they could disagree about what a live worker pane is, a freed pane would
+# stop being reclaimable or a tab could become an overflow target.
+live_worker_panes() {
+  local key="$1" d
+  [ -d "$RUNS_DIR" ] || return 0
   for d in "$RUNS_DIR"/*/; do
     [ -d "$d" ] || continue
     [ -f "${d}agent-exit" ] && continue
     [ "$(cat "${d}lane" 2>/dev/null)" = worker ] || continue
     [ "$(cat "${d}session" 2>/dev/null)" = "$key" ] || continue
-    n=$((n+1))
+    [ "$(cat "${d}kind" 2>/dev/null)" = tab ] && continue
+    printf '%s\n' "${d%/}"
   done
+}
+
+# count_live_workers <session-key> -> integer (0 when RUNS_DIR is missing).
+count_live_workers() {
+  local key="$1" line n=0
+  while IFS= read -r line; do n=$((n+1)); done < <(live_worker_panes "$key")
   printf '%s\n' "$n"
+}
+
+# select_worker_surface <session-key> -> one live worker pane's surface ref,
+# round-robin. Non-zero if no live worker pane has a recorded surface; the
+# caller then degrades that one spawn to in-process. The rotating index persists
+# in state so successive overflows spread across the panes instead of piling
+# every tab onto the first one.
+select_worker_surface() {
+  local key="$1" line ref i=0
+  local rr="$STATE_DIR/pane-rr-$key"   # its own 'local': $key would not yet be in effect in the one above
+  local refs=()
+  while IFS= read -r line; do
+    ref="$(cat "$line/surface" 2>/dev/null)"
+    [ -n "$ref" ] && refs+=("$ref")
+  done < <(live_worker_panes "$key")
+  [ "${#refs[@]}" -gt 0 ] || return 1
+  [ -f "$rr" ] && i="$(cat "$rr" 2>/dev/null)"
+  [[ "$i" =~ ^[0-9]+$ ]] || i=0
+  printf '%s\n' "$(( i + 1 ))" > "$rr" 2>/dev/null
+  printf '%s\n' "${refs[$(( i % ${#refs[@]} ))]}"
 }
 
 # Default result location per spec: the session scratchpad's pane-results/.
@@ -106,18 +142,38 @@ scratchpad_dir() {
   find "/private/tmp/claude-$(id -u)" -maxdepth 3 -type d -path "*/$sid/scratchpad" 2>/dev/null | head -n 1
 }
 
-open_pane_or_cooldown() { # $1 title, $2 launcher, $3 run_dir(optional) — prints TERMINAL/PANE_REF
-  local term ref sid
+# dead_mark <run_dir> — write the completion marker for a dispatch that never
+# got a surface (I1). Without it the run dir sits there tagged lane=worker with
+# no agent-exit and counts as a live worker for the rest of the session: a
+# phantom that inflates the count into premature overflow and, having no surface
+# of its own, is not even a selectable overflow target. Best-effort by design —
+# the caller is already on its way to die.
+dead_mark() {
+  { [ -n "${1:-}" ] && [ -d "$1" ]; } || return 0
+  printf 'DISPATCH-FAILED\n' > "$1/agent-exit" 2>/dev/null
+  return 0
+}
+
+# open_surface_or_cooldown <verb> <run_dir|""> <adapter args...> — prints
+# TERMINAL/PANE_REF. One body for both verbs (open_pane <title> <launcher> and
+# open_tab <target-surface> <title> <launcher>): the terminal check, the
+# cooldown flag, the dead-mark, and the surface record must never drift apart
+# between them.
+open_surface_or_cooldown() {
+  local verb="$1" run_dir="$2" term ref sid
+  shift 2
   term="$("$DETECT" 2>/dev/null)" || term=none
   if [ "$term" = "none" ] || [ ! -x "$ADAPTERS_DIR/$term.sh" ]; then
+    dead_mark "$run_dir"
     die "no supported terminal ('$term') — dispatch in-process via the Agent tool instead" 3
   fi
-  if ! ref="$("$ADAPTERS_DIR/$term.sh" open_pane "$1" "$2")"; then
+  if ! ref="$("$ADAPTERS_DIR/$term.sh" "$verb" "$@")"; then
     sid="${CLAUDE_CODE_SESSION_ID:-nosession}"
     : > "$STATE_DIR/adapter-failed-$sid"
-    die "adapter '$term' failed; cooldown flag written — in-process dispatch is allowed for the rest of this session" 4
+    dead_mark "$run_dir"
+    die "adapter '$term' $verb failed; cooldown flag written — in-process dispatch is allowed for the rest of this session" 4
   fi
-  [ -n "${3:-}" ] && printf '%s\n' "$ref" > "$3/surface" 2>/dev/null
+  [ -n "$run_dir" ] && printf '%s\n' "$ref" > "$run_dir/surface" 2>/dev/null
   printf 'TERMINAL: %s\nPANE_REF: %s\n' "$term" "$ref"
 }
 
@@ -198,6 +254,7 @@ case "$cmd" in
     # the role; the old "pane: " prefix would eat the managed grammar's budget.
     export PANE_AGENT_ROLE="$role"
     title="$(sanitize_title "$agent_type")"
+    kind=pane; target=""
     if [ "$lane" = worker ]; then
       policy="$(read_policy "$STATE_DIR/pane-policy-$key")"
       case "$policy" in
@@ -205,21 +262,31 @@ case "$cmd" in
           n="${policy#panes max=}"
           live="$(count_live_workers "$key")"
           if [ "$live" -ge "$n" ]; then
-            # INTERIM (replaced by open_tab in Task 7): at/over the worker max,
-            # degrade THIS spawn to in-process without a cooldown (capacity, not
-            # an adapter failure). exit 3 = "run in-process", same as no-terminal.
-            # Gated BEFORE the lane/session markers are written (below), so a
-            # gated spawn leaves no lane=worker run dir behind (C1/I1 fix).
-            die "worker max $n reached ($live live) — dispatch this spawn in-process; overflow-to-tab lands in Task 7" 3
+            # At/over the worker max this spawn overflows into an existing live
+            # worker pane as a tab — never inline, never blocking (spec). If no
+            # live worker pane has a surface to tab into there is nothing to
+            # overflow into, so degrade THIS spawn to in-process without a
+            # cooldown (capacity, not an adapter failure); exit 3 = "run
+            # in-process", same as no-terminal.
+            target="$(select_worker_surface "$key")" \
+              || die "worker max $n reached ($live live) and no live worker pane to tab into — dispatch this spawn in-process" 3
+            kind=tab
           fi ;;
         *) : ;;   # inline/none reaching the dispatcher: single pane, no gating
       esac
     fi
     # Written after the gate above: count_live_workers must not count THIS
-    # dispatch's own run dir as already-live (C1 off-by-one).
+    # dispatch's own run dir as already-live (C1 off-by-one). select_worker_surface
+    # runs above them for the same reason, and so that a no-target overflow dies
+    # before it can leave a phantom lane=worker dir behind (I1).
     printf '%s\n' "$lane" > "$run_dir/lane"
     printf '%s\n' "$key"  > "$run_dir/session"
-    open_pane_or_cooldown "$title" "$launcher" "$run_dir"
+    printf '%s\n' "$kind" > "$run_dir/kind"
+    if [ "$kind" = tab ]; then
+      open_surface_or_cooldown open_tab "$run_dir" "$target" "$title" "$launcher"
+    else
+      open_surface_or_cooldown open_pane "$run_dir" "$title" "$launcher"
+    fi
     printf 'RESULT_FILE: %s\n' "$result_file"
     ;;
 
@@ -283,7 +350,7 @@ case "$cmd" in
     # The handoff pane is a side pane like any judge — it belongs in the aux
     # column, never the implementer quadrant.
     export PANE_AGENT_ROLE=aux
-    open_pane_or_cooldown "$(sanitize_title "handoff: press Enter")" "$launcher"
+    open_surface_or_cooldown open_pane "" "$(sanitize_title "handoff: press Enter")" "$launcher"
     ;;
 
   set-policy)
