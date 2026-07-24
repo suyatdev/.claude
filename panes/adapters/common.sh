@@ -23,3 +23,17 @@ validate_open_pane_args() {
     printf 'adapter: launcher does not exist: %s\n' "$launcher" >&2; return 1
   fi
 }
+
+# validate_open_tab_args <surface-ref> <title> <launcher-path> -> 0 ok, 1 reject.
+# The surface-ref is a NEW caller-supplied token crossing into adapter command
+# lines; pin it to a strict allowlist covering every adapter's ref shape
+# (surface:99, %3, a UUID, window-123) with no spaces/quotes/shell metacharacters.
+# Title + launcher reuse the open_pane boundary exactly.
+validate_open_tab_args() {
+  local ref="$1" title="$2" launcher="$3"
+  local ref_re='^[A-Za-z0-9:%_.-]{1,64}$'
+  if ! [[ "$ref" =~ $ref_re ]]; then
+    printf 'adapter: surface-ref outside allowlist [A-Za-z0-9:%%_.-] (max 64)\n' >&2; return 1
+  fi
+  validate_open_pane_args "$title" "$launcher"
+}
