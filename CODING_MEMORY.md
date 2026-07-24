@@ -52,12 +52,20 @@ how this file and its linked files should be written (plain language, major chan
   header), Minors-4/5 + T2 carry-forward A/B; TDD Important repros RED against parent (26/2, 49/2). **TWO NEW
   Minors from the 3a review → final-review carry-forward (fold into Minor-7): NEW-A guard 64-bit `10#` wrap
   vs read_policy (cap POLICY_RE digits `{1,2}`); NEW-B — PRIORITIZE — `c74e285` introduced an UNQUOTED
-  `for key in $keys` at guard:104 (quote via `set --`).** Detail: branch log §Task 3a. **NEXT: Task 4**
-  (adapter `open_tab` + `validate_open_tab_args`, independent, dispatchable now; gates T5). Per-task loop:
-  pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer → checkpoint.
-  Final-review pass before branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9; run full pane suites +
-  implementation obs judge before `gh pr create`. **Freshness: T3a = saved+pushed; controller past the ~100k
-  ceiling (restore ~77k + the 3a loop), clear offered after T3a.**
+  `for key in $keys` at guard:104 (quote via `set --`).** Detail: branch log §Task 3a. **T4 DONE + reviewer APPROVED 2026-07-23
+  (subagent-driven: pane `general-purpose` implementer + pane reviewer, both cmux `surface:83`):** commit
+  `86d796b` (parent `57b3eb0`), **verified in-checkout** (5 adapter files only, +114/−32, `Doc-Exempt`),
+  controller re-ran adapters suite **36/0** + shellcheck clean. `open_tab` verb on tmux(`new-window`)/
+  iterm(`create tab`)/terminal(shared path) + `validate_open_tab_args` (anchored allowlist
+  `^[A-Za-z0-9:%_.-]{1,64}$`); ref not yet interpolated anywhere (defense-in-depth for T7); reviewer
+  adversarially probed the boundary, all rejected 65; open_pane byte-identical vs parent. **NEW T4
+  carry-forward → final review:** T4-Minor `adapters.test.sh:55` (open_tab dryrun cases don't pin
+  `new-window`/`create tab` — a revert would pass) + T4-Nit (inline unknown-verb test). Detail: branch log
+  §Task 4. **NEXT: Task 5** (cmux `open_tab`, probe-verified `new-surface --pane`; T4 gated it). Per-task
+  loop: pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer →
+  checkpoint. Final-review pass before branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor/Nit;
+  run full pane suites + implementation obs judge before `gh pr create`. **Freshness: T4 saved+pushed at this
+  checkpoint (clears the 75k watch); controller ~85k, clear offered before T5 (cmux — delicate).**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —

@@ -204,3 +204,47 @@ What landed (all seven review items resolved, each confirmed by the reviewer *ru
 `open_tab`, probe-verified `new-surface --pane`) which T4 gates, T6, T7, T8. Final-review pass before the
 branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9; run both full pane suites green + implementation
 observability judge before `gh pr create`.
+
+## Task 4 — adapter `open_tab` verb + `validate_open_tab_args` (2026-07-23) — DONE, reviewer APPROVED
+
+**Commit `86d796b`** (parent `57b3eb0`), subagent-driven: pane `general-purpose` implementer + pane
+reviewer, both cmux `surface:83`. **Verified in-checkout by controller** (toplevel
+`/Users/marksuyat/.claude`, branch `feat/pane-split-policy`, exactly the 5 domain files —
+`panes/adapters/{common,tmux,iterm,terminal}.sh` + `panes/adapters.test.sh`; +114/−32; NO `coding-memory/`
+files). Controller independently re-ran: adapters suite **36/0**, `shellcheck -x` clean on all four shell
+files. `Doc-Exempt` trailer on the code commit (this doc checkpoint is separate). Not pushed by the
+implementer; controller checkpoints + pushes.
+
+What landed:
+- **`validate_open_tab_args <ref> <title> <launcher>`** in `common.sh` — surface-ref pinned to the anchored
+  allowlist `^[A-Za-z0-9:%_.-]{1,64}$` (covers `surface:42`, `%3`, UUID, `window-123`), then delegates
+  title/launcher to `validate_open_pane_args`. Reject → stderr reason + `return 1` (adapters exit 65).
+- **`open_tab` verb** across all three adapters (each single-verb guard → `case`): tmux = `new-window`,
+  iTerm = `create tab`, Terminal.app shares its existing new-tab path (already tab-per-agent). Contract
+  65/1/64 exit codes preserved; each prints the new surface ref on success. `open_pane` behaviorally
+  untouched (reviewer confirmed byte-identical stdout/stderr/exit vs parent).
+- **Tests** (`adapters.test.sh`, +24): `tab_case` helper + open_tab loop over tmux/iterm/terminal —
+  dryrun-ok, bad-ref→65, bad-title→65, unknown-verb→64 (12 new cases). TDD RED-first: 9 fails at exit 64
+  (adapters only knew `open_pane`) before impl → 36/0 after.
+
+**Security note (reviewer):** in THIS commit the ref is NEVER interpolated into a tmux command line or
+osascript heredoc — the allowlist is defense-in-depth for the Task 7 dispatcher, so zero current injection
+surface. Reviewer adversarially probed space/`;`/quotes/backtick/`$(id)`/`$HOME`/backslash/newlines/
+overlength — all rejected 65 on all three adapters; the 4 documented ref shapes pass.
+
+**Reviewer VERDICT: APPROVED** (no Critical/Important). Result file:
+`<scratchpad>/pane-results/general-purpose-1784856585-34789-7236.md`.
+
+**Findings → CARRY TO FINAL REVIEW:**
+- **T4-Minor (test tightening):** `adapters.test.sh:55` — open_tab dryrun-ok cases only grep the launcher
+  path, not the adapter-specific command; a revert of tmux `open_tab` to `split-window` would still pass
+  (the `open_pane` block DOES pin these at `:48-51`). Fix: add `tab_case` asserts for `new-window` (tmux) +
+  `create tab` (iterm). The plan's own snippet had the same gap → carry-forward, not a deviation.
+- **T4-Nit:** `adapters.test.sh:58-61` unknown-verb check is inline vs. the sibling helper pattern — fold
+  into a `want=64` path in `tab_case`. `terminal.sh:16-18` validation moved into the case arm (vs the
+  plan's trailing line) — conscious deviation, functionally identical, no action.
+
+**NEXT: Task 5** (cmux adapter `open_tab`, probe-verified `new-surface --pane` — see §Task 1 "exact
+primitive"). T4 gated T5; now unblocked. Then T6, T7, T8. Final-review pass before the branch PR must clear
+Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor/Nit; run both full pane suites + adapters suite green +
+implementation observability judge before `gh pr create`.
