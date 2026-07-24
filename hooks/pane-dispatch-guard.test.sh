@@ -175,5 +175,78 @@ if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'dispatch-pane-agent.sh' \
 else printf 'FAIL — nosession fallback (rc=%s got: %s)\n' "$rc" "$out"; fail=$((fail+1)); fi
 rm -f "$PANE_STATE_DIR/pane-policy-nosession"
 
+# --- final-review carry-forwards -------------------------------------------
+
+# NEW-B: the Lane-3 key loop must not word-split or glob-expand session ids.
+# `for key in $keys` (unquoted) expands "*" against the CWD listing, so a decoy
+# file name that happens to have a state file reads as THIS session's policy --
+# and the decoy here says "inline", i.e. the corruption biases toward allowing
+# in-process. A correct guard consults only the literal keys and falls through
+# to "ask". Nil real threat (session ids are harness UUIDs); it is a genuine
+# unquoted expansion introduced by c74e285.
+GLOBDIR="$TMP/globcwd"; mkdir -p "$GLOBDIR"; : > "$GLOBDIR/sidfile"
+printf 'inline\n' > "$PANE_STATE_DIR/pane-policy-sidfile"
+out=$(cd "$GLOBDIR" && printf '%s' "$(payload general-purpose '*')" | bash "$HOOK" 2>&1 >/dev/null); rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'AskUserQuestion'; then
+  printf 'ok   — glob-shaped session id does not expand into a foreign policy file\n'; pass=$((pass+1))
+else printf 'FAIL — glob-shaped session id expanded (rc=%s got: %s)\n' "$rc" "$out"; fail=$((fail+1)); fi
+rm -f "$PANE_STATE_DIR/pane-policy-sidfile"
+
+# Minor-7: the session key is interpolated into "$STATE_DIR/pane-policy-$key",
+# so a key carrying `/` and `..` reads a file OUTSIDE the state dir. Here
+# "d/../../outside-policy" resolves to $TMP/outside-policy (one level above
+# $PANE_STATE_DIR) and says "inline" -> allow. Both key loops must refuse any
+# key outside ^[A-Za-z0-9._-]{1,64}$ and fall through to "ask". Not fixed by
+# quoting alone: this key has no glob character and no whitespace.
+mkdir -p "$PANE_STATE_DIR/pane-policy-d"
+printf 'inline\n' > "$TMP/outside-policy"
+out=$(printf '%s' "$(payload general-purpose 'd/../../outside-policy')" | bash "$HOOK" 2>&1 >/dev/null); rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'AskUserQuestion'; then
+  printf 'ok   — traversal-shaped session key cannot read outside the state dir\n'; pass=$((pass+1))
+else printf 'FAIL — traversal-shaped session key escaped the state dir (rc=%s got: %s)\n' "$rc" "$out"; fail=$((fail+1)); fi
+rm -rf "$PANE_STATE_DIR/pane-policy-d" "$TMP/outside-policy"
+
+# NEW-A: a hand-corrupted N past 2^64 wraps to a small in-range number in bash
+# arithmetic ($((10#$n))), so the guard would ACCEPT what the dispatcher's
+# read_policy rejects (the test builtin errors on it) -- the two readers must
+# never disagree. Capping the digits in POLICY_RE fixes both sides.
+printf 'panes max=18446744073709551619\n' > "$POLICY"
+out=$(printf '%s' "$(payload general-purpose s1)" | bash "$HOOK" 2>&1 >/dev/null); rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'AskUserQuestion'; then
+  printf 'ok   — 64-bit-wrapping max is no policy, not a redirect\n'; pass=$((pass+1))
+else printf 'FAIL — 64-bit-wrapping max accepted as a policy (rc=%s got: %s)\n' "$rc" "$out"; fail=$((fail+1)); fi
+rm -f "$POLICY"
+
+# Nit-8: `while read -r line` drops a final line with no trailing newline, so a
+# hand-edited conf could silently lose its last entry. An inline policy here
+# means the pre-fix guard exits 0 (allow) instead of 2 (judge deny), so the
+# exit code alone discriminates.
+printf '# judges\ncompliance-judge' > "$TMP/nonl-redirect.conf"   # deliberately unterminated
+printf 'inline\n' > "$POLICY"
+run_case "conf entry with no trailing newline still parses" 2 "$(payload compliance-judge s1)" \
+  PANE_REDIRECT_CONF="$TMP/nonl-redirect.conf"
+rm -f "$POLICY"
+
+# M2: the dispatcher's conf/state defaults hang off $PANE_HOME; the guard
+# hardcoded $HOME/.claude/panes. With PANE_HOME set and no explicit override the
+# two read DIFFERENT files -- guard says worker, dispatcher says judge. Both
+# tests use names that cannot exist in the real ~/.claude tree, so a guard that
+# still reads $HOME misses them.
+PH="$TMP/panehome"; mkdir -p "$PH/state"
+printf '# judges\nfake-judge\n' > "$PH/redirect-agents.conf"
+printf 'Explore\n' > "$PH/inprocess-agents.conf"
+out=$(printf '%s' "$(payload fake-judge s1)" | env -u PANE_REDIRECT_CONF PANE_HOME="$PH" bash "$HOOK" 2>&1 >/dev/null); rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'is a judge'; then
+  printf 'ok   — redirect conf default honors PANE_HOME\n'; pass=$((pass+1))
+else printf 'FAIL — redirect conf default ignores PANE_HOME (rc=%s got: %s)\n' "$rc" "$out"; fail=$((fail+1)); fi
+
+M2SID="m2-statedir-sid"
+printf 'inline\n' > "$PH/state/pane-policy-$M2SID"
+printf '%s' "$(payload general-purpose "$M2SID")" \
+  | env -u PANE_STATE_DIR PANE_HOME="$PH" bash "$HOOK" >/dev/null 2>&1; rc=$?
+if [ "$rc" -eq 0 ]; then
+  printf 'ok   — state dir default honors PANE_HOME\n'; pass=$((pass+1))
+else printf 'FAIL — state dir default ignores PANE_HOME (rc=%s)\n' "$rc"; fail=$((fail+1)); fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -4,6 +4,8 @@
 #   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]
 #   wait --result-file <f> [--timeout <secs>]
 #   handoff [--cwd <dir>]
+#   set-policy {inline | panes --max <N>}      (this session's pane-split policy)
+#   count-workers                              (debug: live worker panes)
 #
 # Design: docs/superpowers/specs/2026-07-20-pane-orchestration-design.md.
 # Degrades, never blocks: one adapter failure writes a per-session cooldown
@@ -24,7 +26,12 @@ STALE_DAYS=7
 DEFAULT_TIMEOUT=900
 POLL_SECS=2
 MAX_PANES=16                 # upper bound on 'panes max=N' (spec: bounded positive int)
-POLICY_RE='^panes max=([0-9]+)$'
+# Digits capped at 2 (MAX_PANES is 16) to keep this reader and the guard's in
+# lockstep: a hand-corrupted N past 2^64 ERRORS in the test builtin below but
+# WRAPS into range in the guard's $((10#$n)), so an uncapped regex lets the two
+# disagree about whether a policy exists. Behavior is otherwise unchanged —
+# anything with 3+ digits already failed the 1..MAX_PANES range check.
+POLICY_RE='^panes max=([0-9]{1,2})$'
 CMUX_WAIT_SECS=15
 AGENT_TYPE_RE='^[A-Za-z0-9_-]{1,64}$'
 TIMEOUT_RE='^[0-9]+$'
@@ -70,10 +77,13 @@ read_policy() {
 }
 
 # is_judge <agent-type> -> 0 if listed in the always-paned judge conf.
+# The `|| [ -n "$line" ]` keeps a final line with no trailing newline; the
+# guard's in_conf carries the same guard, and the two parsers must agree or a
+# judge is a judge to one of them and a gated worker to the other.
 is_judge() {
   local want="$1" line
   [ -f "$REDIRECT_CONF" ] || return 1
-  while IFS= read -r line; do
+  while IFS= read -r line || [ -n "$line" ]; do
     line="${line%%#*}"; line=$(printf '%s' "$line" | tr -d '[:space:]')
     [ -n "$line" ] && [ "$line" = "$want" ] && return 0
   done < "$REDIRECT_CONF"
@@ -279,9 +289,15 @@ case "$cmd" in
     # dispatch's own run dir as already-live (C1 off-by-one). select_worker_surface
     # runs above them for the same reason, and so that a no-target overflow dies
     # before it can leave a phantom lane=worker dir behind (I1).
-    printf '%s\n' "$lane" > "$run_dir/lane"
-    printf '%s\n' "$key"  > "$run_dir/session"
+    #
+    # Order within the set matters: `kind` first, `lane` LAST. live_worker_panes
+    # gates on lane=worker && session=key before it ever reads kind, and a
+    # MISSING kind reads as "pane" by design — so writing lane first exposes a
+    # window where a concurrent dispatch counts this tab as a pane. Writing lane
+    # last makes it the single commit point for the whole marker set.
     printf '%s\n' "$kind" > "$run_dir/kind"
+    printf '%s\n' "$key"  > "$run_dir/session"
+    printf '%s\n' "$lane" > "$run_dir/lane"
     if [ "$kind" = tab ]; then
       open_surface_or_cooldown open_tab "$run_dir" "$target" "$title" "$launcher"
     else
@@ -383,5 +399,5 @@ case "$cmd" in
   count-workers) count_live_workers "${CLAUDE_CODE_SESSION_ID:-nosession}" ;;
 
   *)
-    die "usage: dispatch-pane-agent.sh {dispatch|wait|handoff} ..." ;;
+    die "usage: dispatch-pane-agent.sh {dispatch|wait|handoff|set-policy|count-workers} ..." ;;
 esac

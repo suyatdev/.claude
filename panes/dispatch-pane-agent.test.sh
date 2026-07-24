@@ -233,8 +233,16 @@ export PANE_REDIRECT_CONF="$TMP/redirect.conf"   # dispatcher classifies lane vi
 # without the suite noticing.
 printf '# always-paned judges\ncompliance-judge   # spec compliance judge\n   observability-judge   \n' > "$PANE_REDIRECT_CONF"
 CSID="count-sess-$$"
+# Run ids come from mktemp, not $RANDOM: several call sites capture the dir with
+# $(...), and a subshell's $RANDOM draw is lost to the parent, so the next
+# fixture would silently reuse the same dir (that hazard already produced one
+# false RED during Task 7 — "3 live" where the fixture meant 4). Harmless while
+# every mk_run call site is a plain redirect; fixed so the next one cannot be
+# poisoned. Same recipe as mk_run_ref below.
 mk_run() { # $1 lane, $2 session, $3 exited(yes/no) -> makes a fake run dir
-  local d; d="$PANE_STATE_DIR/runs/$(date +%s)-$$-$RANDOM"; mkdir -p "$d"
+  local d
+  mkdir -p "$PANE_STATE_DIR/runs"
+  d="$(mktemp -d "$PANE_STATE_DIR/runs/$(date +%s)-$$-XXXXXX")"
   printf '%s\n' "$1" > "$d/lane"; printf '%s\n' "$2" > "$d/session"; printf 'surface:%s\n' "$RANDOM" > "$d/surface"
   [ "$3" = yes ] && printf 'DONE\n' > "$d/agent-exit"; printf '%s\n' "$d"
 }
@@ -419,6 +427,55 @@ CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" dispatch general-purpose --promp
 [ -f "$PANE_STATE_DIR/adapter-failed-$XSID" ] && ok "open_tab failure writes cooldown" || bad "open_tab failure writes cooldown"
 xd=$(find "$PANE_STATE_DIR/runs" -mindepth 1 -maxdepth 1 -type d -newer "$TMP/tab-fail-marker" | head -n 1)
 { [ -n "$xd" ] && [ -f "$xd/agent-exit" ]; } && ok "open_tab failure dead-marks its run dir" || bad "open_tab failure dead-marks its run dir" "dir=$xd"
+
+# --- final-review carry-forwards -------------------------------------------
+
+# Nit-8: `while read -r line` drops a conf's final line when it has no trailing
+# newline, so a hand-edited conf silently loses its last entry -- and is_judge
+# misclassifying a judge as a worker subjects it to the max-N gate it is meant
+# to sit outside. Under panes max=1 with one live worker pane, a judge opens a
+# PANE while a misclassified worker overflows to a TAB, so the verb the adapter
+# records is the discriminator. The guard's in_conf has the same parser and is
+# fixed in the same commit: if only one side were fixed they would disagree.
+# shellcheck disable=SC2016 # $1/$@ must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) printf "%%s\\n" "$@" > "%s/adapter-args"; echo surface:NL9 ;;\n  open_tab)  printf "%%s\\n" "$@" > "%s/tab-args"; echo surface:NLT ;;\n  *) exit 64 ;;\nesac\n' "$TMP" "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+NLSID="nonl-judge-$$"
+printf '# always-paned judges\ncompliance-judge' > "$TMP/redirect-nonl.conf"   # deliberately unterminated
+CLAUDE_CODE_SESSION_ID="$NLSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+mk_run_ref worker "$NLSID" no surface:NLP pane >/dev/null
+rm -f "$TMP/tab-args" "$TMP/adapter-args"
+PANE_REDIRECT_CONF="$TMP/redirect-nonl.conf" CLAUDE_CODE_SESSION_ID="$NLSID" bash "$DISPATCH" \
+  dispatch compliance-judge --prompt-file "$PROMPT" --result-file "$TMP/nl.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
+{ [ "$rc" -eq 0 ] && [ "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)" = "open_pane" ]; } \
+  && ok "judge on an unterminated final conf line still bypasses the worker gate" \
+  || bad "unterminated final conf line dropped by is_judge" "rc=$rc verb=$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)"
+
+# NEW-A (pair pin): read_policy already rejects an N past 2^64 -- the test
+# builtin errors on it where the guard's $((10#$n)) wrapped it into range. This
+# pins that read_policy still rejects it once POLICY_RE caps the digit count,
+# so the two readers cannot drift apart again. Green on both sides by design.
+printf 'panes max=18446744073709551619\n' > "$RP_DIR/wrap"
+rp_got=$(call_read_policy "$RP_DIR/wrap")
+[ -z "$rp_got" ] && ok "read_policy: 64-bit-wrapping N -> empty" || bad "read_policy: 64-bit-wrapping N -> empty" "$rp_got"
+
+# T7 reviewer Minor 2: `lane` must be the single commit point for the marker
+# set. live_worker_panes gates on lane=worker && session=key BEFORE it reads
+# kind, and a MISSING kind reads as "pane" by design -- so with lane written
+# first, a concurrent counter can see a half-written tab dispatch as a pane.
+# Writing kind first and lane last closes that window. The window is a race, not
+# a reachable end state (all three writes complete before the adapter is ever
+# called), so the regression guard is the source order itself.
+# shellcheck disable=SC2016 # $run_dir is grep's literal search text, not an expansion
+mo=$(grep -oE '> "\$run_dir/(kind|lane|session)"' "$DISPATCH" | sed 's|.*/||; s|"||' | tr '\n' ' ')
+[ "$mo" = "kind session lane " ] && ok "marker writes commit lane last (kind, session, lane)" \
+  || bad "marker write order" "got: $mo want: kind session lane"
+
+# Usage-string drift (pre-existing): the fallthrough usage omitted the two
+# subcommands added since it was written.
+out=$(bash "$DISPATCH" bogus-subcommand 2>&1); rc=$?
+{ [ "$rc" -eq 64 ] && printf '%s' "$out" | grep -q 'set-policy' && printf '%s' "$out" | grep -q 'count-workers'; } \
+  && ok "usage names every subcommand" || bad "usage names every subcommand" "rc=$rc: $out"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
