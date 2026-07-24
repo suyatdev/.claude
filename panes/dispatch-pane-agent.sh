@@ -150,6 +150,21 @@ select_worker_surface() {
   printf '%s\n' "${refs[$(( i % ${#refs[@]} ))]}"
 }
 
+# run_dir_for_surface <session-key> <surface-ref> -> the live worker-pane run dir
+# holding that ref, or nothing. Rides the SAME live_worker_panes predicate as the
+# count and the round-robin selection, deliberately: a ref select_worker_surface
+# just handed out must resolve back to the very dir the next selection would
+# re-pick, or retiring it would miss.
+run_dir_for_surface() {
+  local key="$1" want="$2" d
+  [ -n "$want" ] || return 0
+  while IFS= read -r d; do
+    [ "$(cat "$d/surface" 2>/dev/null)" = "$want" ] || continue
+    printf '%s\n' "$d"; return 0
+  done < <(live_worker_panes "$key")
+  return 0
+}
+
 # Default result location per spec: the session scratchpad's pane-results/.
 # Derivable because the scratchpad path ends .../<session-id>/scratchpad and
 # CLAUDE_CODE_SESSION_ID matches that segment (verified 2026-07-21).
@@ -177,8 +192,9 @@ dead_mark() {
 # cooldown flag, the dead-mark, and the surface record must never drift apart
 # between them.
 open_surface_or_cooldown() {
-  local verb="$1" run_dir="$2" term ref sid
+  local verb="$1" run_dir="$2" term ref sid tgt
   shift 2
+  tgt="${1:-}"                 # open_tab's target surface (the title for open_pane)
   term="$("$DETECT" 2>/dev/null)" || term=none
   if [ "$term" = "none" ] || [ ! -x "$ADAPTERS_DIR/$term.sh" ]; then
     dead_mark "$run_dir"
@@ -186,8 +202,24 @@ open_surface_or_cooldown() {
   fi
   if ! ref="$("$ADAPTERS_DIR/$term.sh" "$verb" "$@")"; then
     sid="${CLAUDE_CODE_SESSION_ID:-nosession}"
-    : > "$STATE_DIR/adapter-failed-$sid"
     dead_mark "$run_dir"
+    if [ "$verb" = open_tab ]; then
+      # A failed open_tab is STALE LOCAL STATE, not a broken adapter: a worker
+      # pane closed by hand, lost to a cmux restart, or holding an agent hung
+      # past the wait timeout never gets its completion marker, so it stays
+      # counted live AND keeps a surface ref that no longer resolves. Retire that
+      # target so the next overflow picks a different pane, and degrade only THIS
+      # spawn — exit 3, no cooldown, the same classification the no-target path
+      # uses. Retiring is right even if the adapter really IS broken: a pane we
+      # cannot tab into is not usable as a tab host either way, and the count then
+      # drains one pane per failure until it falls under N, at which point the
+      # next worker takes the open_pane path, fails, and writes the cooldown — so
+      # the session still converges on the cooldown, just without one stale pane
+      # poisoning a healthy session.
+      dead_mark "$(run_dir_for_surface "$sid" "$tgt")"
+      die "cannot tab into '$tgt' — stale or unusable target surface, now retired; dispatch this spawn in-process" 3
+    fi
+    : > "$STATE_DIR/adapter-failed-$sid"
     die "adapter '$term' $verb failed; cooldown flag written — in-process dispatch is allowed for the rest of this session" 4
   fi
   [ -n "$run_dir" ] && printf '%s\n' "$ref" > "$run_dir/surface" 2>/dev/null
@@ -271,7 +303,7 @@ case "$cmd" in
     # the role; the old "pane: " prefix would eat the managed grammar's budget.
     export PANE_AGENT_ROLE="$role"
     title="$(sanitize_title "$agent_type")"
-    kind=pane; target=""
+    kind=pane; target=""; live="-"; n="-"     # "-" = not applicable to this lane/policy
     if [ "$lane" = worker ]; then
       policy="$(read_policy "$STATE_DIR/pane-policy-$key")"
       case "$policy" in
@@ -305,6 +337,14 @@ case "$cmd" in
     printf '%s\n' "$kind" > "$run_dir/kind"
     printf '%s\n' "$key"  > "$run_dir/session"
     printf '%s\n' "$lane" > "$run_dir/lane"
+    # The decisive computation, on one line. The markers above record WHAT was
+    # chosen; only this records WHY — "counted 2 live, max is 2, so tabbed into
+    # surface:X" is otherwise unrecoverable and has to be re-derived by hand at
+    # exactly the moment routing surprised someone. stderr reaches the caller now;
+    # the run-dir copy outlives the session (and this dispatch's own failure).
+    route="lane=$lane live=$live max=$n kind=$kind target=${target:--}"
+    printf 'ROUTE: %s\n' "$route" >&2
+    printf '%s\n' "$route" > "$run_dir/route" 2>/dev/null
     if [ "$kind" = tab ]; then
       open_surface_or_cooldown open_tab "$run_dir" "$target" "$title" "$launcher"
     else

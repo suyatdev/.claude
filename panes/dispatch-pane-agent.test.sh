@@ -306,6 +306,10 @@ out=$(CLAUDE_CODE_SESSION_ID="$UMAX_SID" bash "$DISPATCH" dispatch general-purpo
 # match the happy-path test's rigor.
 printf '%s' "$out" | grep -q '^PANE_REF: surface:J1' && ok "worker under max actually reaches the adapter" || bad "worker under max reaches the adapter" "$out"
 [ "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)" = "open_pane" ] && ok "worker under max uses the open_pane verb" || bad "worker under max uses open_pane" "$(sed -n '1p' "$TMP/adapter-args" 2>/dev/null)"
+# Obs-judge finding 2: the decisive computation — count, max in force, outcome —
+# must be recorded, not just the resulting markers. Pane case: no tab target.
+printf '%s' "$out" | grep -q '^ROUTE: lane=worker live=1 max=2 kind=pane target=-$' \
+  && ok "under-max dispatch records the routing decision (live/max/pane)" || bad "under-max records the routing decision" "$out"
 
 # --- Task 7 fixtures: like mk_run but with an explicit surface ref and an
 # explicit surface KIND (pane|tab; "" writes no kind marker, which must be read
@@ -342,6 +346,10 @@ t1=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
 case "$t1" in surface:AA|surface:BB) ok "overflow open_tab targets a live worker surface" ;; *) bad "overflow open_tab targets a live worker surface" "$t1" ;; esac
 [ "$(sed -n '3p' "$TMP/tab-args" 2>/dev/null)" = "general-purpose" ] && ok "overflow open_tab carries the sanitized title" || bad "overflow open_tab title" "$(sed -n '3p' "$TMP/tab-args" 2>/dev/null)"
 printf '%s' "$out" | grep -q '^PANE_REF: surface:T1' && ok "overflow prints the new tab ref" || bad "overflow prints tab ref" "$out"
+# Obs-judge finding 2, tab case: the line must name the surface actually tabbed
+# into, so a routing surprise never has to be re-derived by hand.
+printf '%s' "$out" | grep -qE '^ROUTE: lane=worker live=2 max=2 kind=tab target=surface:(AA|BB)$' \
+  && ok "overflow records the routing decision (live/max/target)" || bad "overflow records the routing decision" "$out"
 # Round-robin: the next overflow must land on the OTHER live worker pane.
 out=$(CLAUDE_CODE_SESSION_ID="$OSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/o2.md" --cwd "$TMP" 2>&1); rc=$?
 t2=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
@@ -416,24 +424,51 @@ APSID="pane-fail-$$"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$PANE_ADAPTERS_DIR/cmux.sh"; chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
 CLAUDE_CODE_SESSION_ID="$APSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/ap.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 4 ] && ok "open_pane failure -> exit 4" || bad "open_pane failure -> exit 4" "rc=$rc"
+# Regression pin for the open_tab reclassification below: open_pane failing IS an
+# adapter failure and must keep both halves of that classification.
+[ -f "$PANE_STATE_DIR/adapter-failed-$APSID" ] && ok "open_pane failure still writes the cooldown" || bad "open_pane failure still writes the cooldown"
 n=$(CLAUDE_CODE_SESSION_ID="$APSID" bash "$DISPATCH" count-workers 2>/dev/null)
 [ "$n" = "0" ] && ok "open_pane failure leaves no phantom live worker" || bad "open_pane failure leaves no phantom" "got $n want 0"
 
-# --- Task 7: open_tab failure degrades this spawn to in-process (exit 4) and
-# writes the session cooldown flag, exactly as an open_pane failure does. Its
-# run dir is dead-marked too, so it can never be mistaken for a live run.
-# shellcheck disable=SC2016 # $1 must reach the generated stub unexpanded (see line 25)
-printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) echo surface:P1 ;;\n  open_tab) exit 1 ;;\n  *) exit 64 ;;\nesac\n' > "$PANE_ADAPTERS_DIR/cmux.sh"
+# --- Obs-judge finding: an open_tab failure is STALE LOCAL STATE, not a broken
+# adapter. A worker pane closed by hand (or lost to a cmux restart, or an agent
+# hung past the wait timeout) never gets its completion marker, so it stays
+# counted live AND keeps a surface ref that no longer resolves; the next overflow
+# tabs into nothing. Required: exit 3 with NO cooldown (degrade this ONE spawn to
+# in-process, the same classification the no-target path uses), dead-mark the
+# stale TARGET so the next overflow picks a different pane, and dead-mark this
+# dispatch's own run dir so it leaves no phantom.
+# CONTRACT CHANGE: this replaces Task 7's "open_tab failure -> exit 4" and
+# "open_tab failure writes cooldown" assertions, which pinned the old behavior.
+# shellcheck disable=SC2016 # $1/$@ must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) echo surface:P1 ;;\n  open_tab) printf "%%s\\n" "$@" > "%s/tab-args"; exit 1 ;;\n  *) exit 64 ;;\nesac\n' "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"
 chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
 XSID="tab-fail-$$"
 CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
-mk_run_ref worker "$XSID" no surface:XP pane >/dev/null
+xp=$(mk_run_ref worker "$XSID" no surface:XP pane)
+xq=$(mk_run_ref worker "$XSID" no surface:XQ pane)
+rm -f "$TMP/tab-args"
 touch "$TMP/tab-fail-marker"
 CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/x1.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
-[ "$rc" -eq 4 ] && ok "open_tab failure -> exit 4" || bad "open_tab failure -> exit 4" "rc=$rc"
-[ -f "$PANE_STATE_DIR/adapter-failed-$XSID" ] && ok "open_tab failure writes cooldown" || bad "open_tab failure writes cooldown"
-xd=$(find "$PANE_STATE_DIR/runs" -mindepth 1 -maxdepth 1 -type d -newer "$TMP/tab-fail-marker" | head -n 1)
-{ [ -n "$xd" ] && [ -f "$xd/agent-exit" ]; } && ok "open_tab failure dead-marks its run dir" || bad "open_tab failure dead-marks its run dir" "dir=$xd"
+[ "$rc" -eq 3 ] && ok "open_tab failure -> exit 3 (in-process, not an adapter failure)" || bad "open_tab failure -> exit 3" "rc=$rc"
+[ ! -f "$PANE_STATE_DIR/adapter-failed-$XSID" ] && ok "open_tab failure writes no cooldown" || bad "open_tab failure writes no cooldown"
+xt1=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
+case "$xt1" in surface:XP) xdead="$xp" ;; surface:XQ) xdead="$xq" ;; *) xdead="" ;; esac
+{ [ -n "$xdead" ] && [ -f "$xdead/agent-exit" ]; } && ok "open_tab failure dead-marks the stale target's run dir" || bad "open_tab failure dead-marks the stale target" "target=$xt1"
+# The dispatch's OWN run dir is the one created after the marker; the target's
+# dir is excluded by path because dead-marking it also bumps its mtime.
+xown=$(find "$PANE_STATE_DIR/runs" -mindepth 1 -maxdepth 1 -type d -newer "$TMP/tab-fail-marker" ! -path "${xdead:-/nonexistent}" | head -n 1)
+{ [ -n "$xown" ] && [ -f "$xown/agent-exit" ]; } && ok "open_tab failure dead-marks its own run dir (no phantom)" || bad "open_tab failure dead-marks its own run dir" "dir=$xown"
+# The durable half of the routing record: stderr reaches the caller now, this
+# copy outlives the session — and this is the failure that most needs it.
+xroute=$(cat "${xown:-/nonexistent}/route" 2>/dev/null)
+[ "$xroute" = "lane=worker live=2 max=1 kind=tab target=$xt1" ] && ok "the failed overflow's routing decision survives in its run dir" || bad "failed overflow's routing decision in run dir" "$xroute"
+# Rewind the round-robin index so rotation ALONE would re-pick the same target:
+# only the dead-mark above can change the answer here.
+printf '0\n' > "$PANE_STATE_DIR/pane-rr-$XSID"
+CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/x2.md" --cwd "$TMP" >/dev/null 2>&1
+xt2=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
+{ [ -n "$xt2" ] && [ "$xt2" != "$xt1" ]; } && ok "a later overflow selects a different target after an open_tab failure" || bad "later overflow selects a different target" "first=$xt1 second=$xt2"
 
 # --- final-review carry-forwards -------------------------------------------
 
