@@ -21,9 +21,16 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=/dev/null
 . "$HERE/cmux-layout.sh"
 
-[ "${1:-}" = "open_pane" ] || { printf 'usage: cmux.sh open_pane <title> <launcher>\n' >&2; exit 64; }
-title="${2:-}"; launcher="${3:-}"
-validate_open_pane_args "$title" "$launcher" || exit 65
+# Validation only — open_tab's execution is dispatched further down, after the
+# helpers it reuses (fetch_tree, split_capture, finish_surface) are defined.
+verb="${1:-}"
+case "$verb" in
+  open_pane) title="${2:-}"; launcher="${3:-}"
+             validate_open_pane_args "$title" "$launcher" || exit 65 ;;
+  open_tab)  ref_in="${2:-}"; title="${3:-}"; launcher="${4:-}"
+             validate_open_tab_args "$ref_in" "$title" "$launcher" || exit 65 ;;
+  *) printf 'usage: cmux.sh {open_pane|open_tab} <...>\n' >&2; exit 64 ;;
+esac
 
 degraded() { printf 'cmux-layout: degraded (%s)\n' "$1" >&2; }
 
@@ -210,7 +217,7 @@ legacy_open() { # v1 behavior verbatim — the degradation floor (Tier 2 inside)
   finish_surface "$ref" "$title"
 }
 
-if [ "${PANE_DRYRUN:-}" = "1" ]; then
+if [ "$verb" = open_pane ] && [ "${PANE_DRYRUN:-}" = "1" ]; then
   # Derivation is read-only, so dryrun derives the real plan when a fake cmux is
   # wired in via PANE_CMUX_BIN. The guard is on PANE_CMUX_BIN specifically and
   # NOT on "a cmux exists": adapters.test.sh never sets it and asserts the
@@ -244,6 +251,33 @@ split_capture() {
   case "$ref" in surface:*) ;; *) return 1 ;; esac
   printf '%s\n' "$ref"
 }
+
+# cmux_open_tab <surface-ref> <title> — attach a new agent tab to the pane that
+# currently holds <surface-ref>. Probe (Task 1) confirmed `new-surface --pane
+# <pane-ref>` opens an in-pane tab, and `new-surface --pane` needs a PANE ref
+# while the dispatcher tracks workers by SURFACE ref, hence the tree resolve.
+# Any resolution or creation failure returns non-zero so the dispatcher
+# degrades to in-process — never blocks. TREE_RAW stays empty on this path, so
+# stamp_title's verify-after-rename short-circuits: a tab title is cosmetic and
+# the send has already landed by then.
+cmux_open_tab() {
+  local ref="$1" tab_title="$2" tree pane new_ref
+  if [ "${PANE_DRYRUN:-}" = "1" ]; then
+    printf 'DRYRUN: %s new-surface --pane <pane-of %s>\n' "$CMUX_BIN" "$ref"
+    printf 'DRYRUN: %s send --surface <ref> -- "bash %s\\n"\n' "$CMUX_BIN" "$launcher"
+    return 0
+  fi
+  tree="$(fetch_tree)" || { printf 'cmux open_tab: no tree; cannot resolve %s\n' "$ref" >&2; return 1; }
+  pane="$(printf '%s' "$tree" | layout_normalize_tree | awk -F'\t' -v r="$ref" '$2==r{print $1; exit}')"
+  [ -n "$pane" ] || { printf 'cmux open_tab: surface %s not in tree; degrade\n' "$ref" >&2; return 1; }
+  new_ref="$(split_capture new-surface --pane "$pane")" || { printf 'cmux open_tab: new-surface failed on pane %s\n' "$pane" >&2; return 1; }
+  finish_surface "$new_ref" "$tab_title"
+}
+
+if [ "$verb" = open_tab ]; then
+  cmux_open_tab "$ref_in" "$title"
+  exit $?
+fi
 
 execute_plan() { # $1 "PLAN: ..." line, $2 composed title. rc 1 = retryable
   local verb rest ref dir target

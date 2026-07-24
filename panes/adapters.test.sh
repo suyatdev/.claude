@@ -50,8 +50,8 @@ run_case "tmux dryrun shows split-window"  0  tmux "t" "$LAUNCHER" "split-window
 run_case "iterm dryrun shows osascript"    0  iterm "t" "$LAUNCHER" "osascript"
 run_case "terminal dryrun shows do script" 0  terminal "t" "$LAUNCHER" "do script"
 
-# --- open_tab: surface-ref validation + per-adapter dryrun (cmux lands in Task 5)
-for a in tmux iterm terminal; do
+# --- open_tab: surface-ref validation + per-adapter dryrun
+for a in cmux tmux iterm terminal; do
   tab_case "$a open_tab dryrun ok"               0  "$a" "surface:42" "worker.1" "$LAUNCHER" "$LAUNCHER"
   tab_case "$a open_tab rejects bad surface ref" 65 "$a" 'surface 42; rm' "worker.1" "$LAUNCHER" ""
   tab_case "$a open_tab rejects bad title"       65 "$a" "surface:42" 'bad"title' "$LAUNCHER" ""
@@ -60,5 +60,36 @@ for a in tmux iterm terminal; do
   if [ "$got" -eq 64 ]; then printf 'ok   — %s rejects unknown verb\n' "$a"; pass=$((pass+1))
   else printf 'FAIL — %s rejects unknown verb (got %s)\n' "$a" "$got"; fail=$((fail+1)); fi
 done
+tab_case "cmux open_tab dryrun names new-surface" 0 cmux "surface:42" "worker.1" "$LAUNCHER" "new-surface"
+
+# --- cmux open_tab live path: surface->pane resolution against the Task 1 probe
+# fixture, driven by a fake cmux (precedent: PANE_CMUX_BIN). Opens no real panes.
+FAKE_CMUX="$TMP/fake-cmux.sh"
+cat > "$FAKE_CMUX" <<FCE
+#!/usr/bin/env bash
+case "\$*" in
+  *"--json tree"*) cat "$ADAPTERS/fixtures/tab-live.json" ;;
+  *"new-surface"*) echo '{"surface_ref":"surface:777"}' ;;
+  *) : ;;
+esac
+FCE
+chmod 700 "$FAKE_CMUX"
+
+out=$(PANE_CMUX_BIN="$FAKE_CMUX" bash "$ADAPTERS/cmux.sh" open_tab "surface:77" "worker.1" "$LAUNCHER" 2>/dev/null)
+got=$?
+if [ "$got" -eq 0 ] && [ "$out" = "surface:777" ]; then
+  printf 'ok   — cmux open_tab live resolves surface to pane\n'; pass=$((pass+1))
+else
+  printf 'FAIL — cmux open_tab live resolves surface to pane (got %s: %s)\n' "$got" "$out"; fail=$((fail+1))
+fi
+
+PANE_CMUX_BIN="$FAKE_CMUX" bash "$ADAPTERS/cmux.sh" open_tab "surface:9999" "worker.1" "$LAUNCHER" >/dev/null 2>&1
+got=$?
+if [ "$got" -eq 1 ]; then
+  printf 'ok   — cmux open_tab degrades on unknown surface\n'; pass=$((pass+1))
+else
+  printf 'FAIL — cmux open_tab degrades on unknown surface (got %s)\n' "$got"; fail=$((fail+1))
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
