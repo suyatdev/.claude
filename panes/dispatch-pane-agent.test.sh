@@ -223,5 +223,47 @@ rp_got=$(call_read_policy "$RP_DIR/malformed")
 rp_got=$(call_read_policy "$RP_DIR/missing")
 [ -z "$rp_got" ] && ok "read_policy: missing file -> empty" || bad "read_policy: missing file -> empty" "$rp_got"
 
+# --- Task 6: lane/session markers + live worker count (real run-dir fixtures)
+export PANE_REDIRECT_CONF="$TMP/redirect.conf"   # dispatcher classifies lane via this
+printf 'compliance-judge\nobservability-judge\n' > "$PANE_REDIRECT_CONF"
+CSID="count-sess-$$"
+mk_run() { # $1 lane, $2 session, $3 exited(yes/no) -> makes a fake run dir
+  local d; d="$PANE_STATE_DIR/runs/$(date +%s)-$$-$RANDOM"; mkdir -p "$d"
+  printf '%s\n' "$1" > "$d/lane"; printf '%s\n' "$2" > "$d/session"; printf 'surface:%s\n' "$RANDOM" > "$d/surface"
+  [ "$3" = yes ] && printf 'DONE\n' > "$d/agent-exit"; printf '%s\n' "$d"
+}
+mk_run worker "$CSID" no  >/dev/null   # live worker 1
+mk_run worker "$CSID" no  >/dev/null   # live worker 2
+mk_run worker "$CSID" yes >/dev/null   # completed -> not counted
+mk_run judge  "$CSID" no  >/dev/null   # judge -> not counted
+mk_run worker other-sess no >/dev/null # other session -> not counted
+n=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" count-workers 2>/dev/null)
+[ "$n" = "2" ] && ok "count_live_workers excludes exited/judge/other-session" || bad "count_live_workers" "got $n want 2"
+
+# --- Task 6: judge dispatch -> open_pane, lane=judge, never blocked by policy count
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "%s/adapter-args"\necho surface:J1\n' "$TMP" > "$PANE_ADAPTERS_DIR/cmux.sh"; chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+# Test-only plan deviation: the brief keyed the lane-file search off "$PROMPT",
+# but the mk_run judge fixture above also creates a lane file containing
+# "judge" newer than $PROMPT, so the assertion would pass before the dispatcher
+# writes any lane marker (vacuous). A marker touched immediately before this
+# dispatch makes the dispatcher's run dir the only newer match (the same
+# pattern as handoff-marker above).
+touch "$TMP/judge-lane-marker"
+out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch compliance-judge --prompt-file "$PROMPT" --result-file "$TMP/j.md" --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "judge dispatch under panes max=1 still opens a pane" || bad "judge dispatch under panes" "rc=$rc: $out"
+jd=$(find "$PANE_STATE_DIR/runs" -name lane -newer "$TMP/judge-lane-marker" -exec grep -l judge {} \; | head -n1)
+[ -n "$jd" ] && ok "judge run tagged lane=judge" || bad "judge run tagged lane=judge"
+# Test-only additions beyond the brief's sketch: the session and surface
+# markers are Task 6 deliverables too — assert them on the same run dir.
+jrd="$(dirname "${jd:-/nonexistent}")"
+[ "$(cat "$jrd/session" 2>/dev/null)" = "$CSID" ] && ok "judge run tagged session key" || bad "judge run tagged session key" "$(cat "$jrd/session" 2>/dev/null)"
+[ "$(cat "$jrd/surface" 2>/dev/null)" = "surface:J1" ] && ok "surface ref recorded after open_pane" || bad "surface ref recorded after open_pane" "$(cat "$jrd/surface" 2>/dev/null)"
+
+# --- Task 6: worker under panes max=1 with 2 live workers -> interim in-process (exit 3), no cooldown
+out=$(CLAUDE_CODE_SESSION_ID="$CSID" bash "$DISPATCH" dispatch general-purpose --prompt-file "$PROMPT" --result-file "$TMP/w.md" --cwd "$TMP" 2>&1); rc=$?
+[ "$rc" -eq 3 ] && ok "worker over max -> interim in-process exit 3" || bad "worker over max exit 3" "rc=$rc: $out"
+[ ! -f "$PANE_STATE_DIR/adapter-failed-$CSID" ] && ok "over-max does not write cooldown" || bad "over-max writes no cooldown"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

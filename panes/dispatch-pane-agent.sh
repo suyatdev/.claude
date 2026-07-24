@@ -17,6 +17,7 @@ PANES_DIR="${PANE_HOME:-$HOME/.claude/panes}"
 STATE_DIR="${PANE_STATE_DIR:-$PANES_DIR/state}"
 ADAPTERS_DIR="${PANE_ADAPTERS_DIR:-$PANES_DIR/adapters}"
 DETECT="${PANE_TERMINAL_DETECT:-$PANES_DIR/terminal-detect.sh}"
+REDIRECT_CONF="${PANE_REDIRECT_CONF:-$PANES_DIR/redirect-agents.conf}"
 RUNS_DIR="$STATE_DIR/runs"
 CMUX_BIN="/Applications/cmux.app/Contents/Resources/bin/cmux"
 STALE_DAYS=7
@@ -68,6 +69,34 @@ read_policy() {
   return 0
 }
 
+# is_judge <agent-type> -> 0 if listed in the always-paned judge conf.
+is_judge() {
+  local want="$1" line
+  [ -f "$REDIRECT_CONF" ] || return 1
+  while IFS= read -r line; do
+    line="${line%%#*}"; line=$(printf '%s' "$line" | tr -d '[:space:]')
+    [ -n "$line" ] && [ "$line" = "$want" ] && return 0
+  done < "$REDIRECT_CONF"
+  return 1
+}
+
+# count_live_workers <session-key> -> integer. Live = a run dir tagged
+# lane=worker for this session with no agent-exit marker yet. Judge runs
+# (lane=judge) and other sessions are excluded — the "judge not counted" and
+# "per-session" guarantees ride entirely on these two file checks.
+count_live_workers() {
+  local key="$1" d n=0
+  [ -d "$RUNS_DIR" ] || { printf '0\n'; return 0; }
+  for d in "$RUNS_DIR"/*/; do
+    [ -d "$d" ] || continue
+    [ -f "${d}agent-exit" ] && continue
+    [ "$(cat "${d}lane" 2>/dev/null)" = worker ] || continue
+    [ "$(cat "${d}session" 2>/dev/null)" = "$key" ] || continue
+    n=$((n+1))
+  done
+  printf '%s\n' "$n"
+}
+
 # Default result location per spec: the session scratchpad's pane-results/.
 # Derivable because the scratchpad path ends .../<session-id>/scratchpad and
 # CLAUDE_CODE_SESSION_ID matches that segment (verified 2026-07-21).
@@ -77,7 +106,7 @@ scratchpad_dir() {
   find "/private/tmp/claude-$(id -u)" -maxdepth 3 -type d -path "*/$sid/scratchpad" 2>/dev/null | head -n 1
 }
 
-open_pane_or_cooldown() { # $1 title, $2 launcher — prints TERMINAL/PANE_REF
+open_pane_or_cooldown() { # $1 title, $2 launcher, $3 run_dir(optional) — prints TERMINAL/PANE_REF
   local term ref sid
   term="$("$DETECT" 2>/dev/null)" || term=none
   if [ "$term" = "none" ] || [ ! -x "$ADAPTERS_DIR/$term.sh" ]; then
@@ -88,6 +117,7 @@ open_pane_or_cooldown() { # $1 title, $2 launcher — prints TERMINAL/PANE_REF
     : > "$STATE_DIR/adapter-failed-$sid"
     die "adapter '$term' failed; cooldown flag written — in-process dispatch is allowed for the rest of this session" 4
   fi
+  [ -n "${3:-}" ] && printf '%s\n' "$ref" > "$3/surface" 2>/dev/null
   printf 'TERMINAL: %s\nPANE_REF: %s\n' "$term" "$ref"
 }
 
@@ -161,10 +191,31 @@ case "$cmd" in
     } > "$launcher"
     chmod 700 "$launcher"
 
+    key="${CLAUDE_CODE_SESSION_ID:-nosession}"
+    if is_judge "$agent_type"; then lane=judge; else lane=worker; fi
+    printf '%s\n' "$lane" > "$run_dir/lane"
+    printf '%s\n' "$key"  > "$run_dir/session"
+
     # Layout-v2: the adapter composes the managed title from this bare label plus
     # the role; the old "pane: " prefix would eat the managed grammar's budget.
     export PANE_AGENT_ROLE="$role"
-    open_pane_or_cooldown "$(sanitize_title "$agent_type")" "$launcher"
+    title="$(sanitize_title "$agent_type")"
+    if [ "$lane" = worker ]; then
+      policy="$(read_policy "$STATE_DIR/pane-policy-$key")"
+      case "$policy" in
+        panes\ max=*)
+          n="${policy#panes max=}"
+          live="$(count_live_workers "$key")"
+          if [ "$live" -ge "$n" ]; then
+            # INTERIM (replaced by open_tab in Task 7): at/over the worker max,
+            # degrade THIS spawn to in-process without a cooldown (capacity, not
+            # an adapter failure). exit 3 = "run in-process", same as no-terminal.
+            die "worker max $n reached ($live live) — dispatch this spawn in-process; overflow-to-tab lands in Task 7" 3
+          fi ;;
+        *) : ;;   # inline/none reaching the dispatcher: single pane, no gating
+      esac
+    fi
+    open_pane_or_cooldown "$title" "$launcher" "$run_dir"
     printf 'RESULT_FILE: %s\n' "$result_file"
     ;;
 
@@ -257,6 +308,8 @@ case "$cmd" in
     esac
     printf 'POLICY: %s\n' "$(cat "$STATE_DIR/pane-policy-$key")"
     ;;
+
+  count-workers) count_live_workers "${CLAUDE_CODE_SESSION_ID:-nosession}" ;;
 
   *)
     die "usage: dispatch-pane-agent.sh {dispatch|wait|handoff} ..." ;;
