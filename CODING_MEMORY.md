@@ -58,14 +58,29 @@ how this file and its linked files should be written (plain language, major chan
   controller re-ran adapters suite **36/0** + shellcheck clean. `open_tab` verb on tmux(`new-window`)/
   iterm(`create tab`)/terminal(shared path) + `validate_open_tab_args` (anchored allowlist
   `^[A-Za-z0-9:%_.-]{1,64}$`); ref not yet interpolated anywhere (defense-in-depth for T7); reviewer
-  adversarially probed the boundary, all rejected 65; open_pane byte-identical vs parent. **NEW T4
+  adversarially probed the boundary, all rejected 65; open_pane byte-identical vs parent. **T4
   carry-forward → final review:** T4-Minor `adapters.test.sh:55` (open_tab dryrun cases don't pin
-  `new-window`/`create tab` — a revert would pass) + T4-Nit (inline unknown-verb test). Detail: branch log
-  §Task 4. **NEXT: Task 5** (cmux `open_tab`, probe-verified `new-surface --pane`; T4 gated it). Per-task
-  loop: pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer →
-  checkpoint. Final-review pass before branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor/Nit;
-  run full pane suites + implementation obs judge before `gh pr create`. **Freshness: T4 saved+pushed at this
-  checkpoint (clears the 75k watch); controller ~85k, clear offered before T5 (cmux — delicate).**
+  `new-window`/`create tab` — a revert would pass; **FIXED in T5's cmux case**) + T4-Nit (inline unknown-verb
+  test). Detail: branch log §Task 4. **T5 DONE + reviewer APPROVED 2026-07-23 (subagent-driven: pane
+  `general-purpose` implementer + pane reviewer, both cmux `surface:83`):** commit `a443b82` (parent
+  `3f7b575`), **verified in-checkout** (2 domain files only — `cmux.sh` +38/−4, `adapters.test.sh` +33/−2;
+  vibe-scape's 3 uncommitted compliance-judge files untouched), controller re-ran adapters **43/0** +
+  shellcheck clean. cmux verb guard → `case`; new `cmux_open_tab` resolves surface-ref → its `pane_ref` via
+  `fetch_tree`+`layout_normalize_tree`+awk, then `new-surface --pane <pane_ref>` (Task 1 primitive) + send;
+  every failure → return 1 (degrade). Implementer caught + fixed the plan's call-before-define (split
+  validation-at-top / execution-after-`split_capture`). Reviewer probed live: 10 injection attempts → zero
+  reached a cmux line, 7 degrade paths all rc 1, open_pane byte-identical vs `a443b82~1`. **T5 carry-forwards
+  → final review:** T5-Minor (live fake's `new-surface` arm doesn't pin `--pane` → wrong-column mutation
+  `print $1`→`print $2` stays green; fix: match `--pane pane:36` + else-arm `exit 1`) + T5-Nit
+  (`check_cmux_version` unreachable on open_tab path) + T5-Nit (open_pane-only role/run_id derivations run
+  harmlessly on tab path). Detail: branch log §Task 5. **NEXT: Task 6** (dispatcher lane/session/surface
+  markers + `count_live_workers` on REAL run-dir fixtures + judge bypass; interim `count>=N`→in-process exit
+  3, replaced by open_tab overflow in T7). Per-task loop: pane implementer → verify commit in-checkout
+  (`verifying-subagent-commits`) → pane reviewer → checkpoint. Final-review pass before branch PR must clear
+  Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits; run full pane suites +
+  implementation obs judge before `gh pr create`. **Freshness: this session paid ~97k on RESTORE alone before
+  T5 (branch's recurring restore tax); user chose proceed-past-budget over re-paying restore. T5 saved+pushed
+  at this checkpoint; clear offered before T6.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —

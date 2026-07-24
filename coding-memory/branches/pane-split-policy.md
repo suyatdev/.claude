@@ -248,3 +248,62 @@ overlength — all rejected 65 on all three adapters; the 4 documented ref shape
 primitive"). T4 gated T5; now unblocked. Then T6, T7, T8. Final-review pass before the branch PR must clear
 Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor/Nit; run both full pane suites + adapters suite green +
 implementation observability judge before `gh pr create`.
+
+## Task 5 — cmux adapter `open_tab` verb (2026-07-23) — DONE, reviewer APPROVED
+
+**Commit `a443b82`** (parent `3f7b575` — the prompt's expected parent `86d796b` was stale by one docs
+checkpoint; chain `a443b82 → 3f7b575 → 86d796b`, no anomaly). Subagent-driven: pane `general-purpose`
+implementer + pane reviewer, both cmux `surface:83`. **Verified in-checkout by controller** (toplevel
+`/Users/marksuyat/.claude`, branch `feat/pane-split-policy`, exactly 2 domain files —
+`panes/adapters/cmux.sh` +38/−4, `panes/adapters.test.sh` +33/−2; NO `coding-memory/` files; vibe-scape's
+3 uncommitted compliance-judge files untouched). Controller independently re-ran: adapters suite **43/0**,
+`shellcheck -x panes/adapters/cmux.sh` clean. `Doc-Exempt` trailer on the code commit. Not pushed by the
+implementer; controller checkpoints + pushes.
+
+What landed in `panes/adapters/cmux.sh`:
+- Single-verb guard (`[ "$1" = open_pane ] || …`) → a `case` (`:27-33`): `open_pane` binds `$2/$3`,
+  `open_tab` binds `ref_in/$3-title/$4-launcher` + `validate_open_tab_args … || exit 65`, `*` → usage/64.
+  Validation stays at the TOP (before any cmux call) so the injection boundary holds.
+- **`cmux_open_tab <surface-ref> <title>`** (defined `:263`, after `split_capture`): dryrun → prints the
+  `new-surface`/`send` intent, returns 0. Live → `fetch_tree` → `layout_normalize_tree` (TSV
+  `pane_ref\tref\ttitle`) → awk `$2==ref{print $1}` resolves the surface's **pane_ref** →
+  `split_capture new-surface --pane <pane_ref>` (appends `WS_ARGS`) → `finish_surface` sends launcher +
+  prints new ref. Every failure (no tree / surface-not-in-tree / new-surface fail) → `return 1` so the
+  dispatcher degrades. Dispatched by `if [ "$verb" = open_tab ]; then cmux_open_tab …; exit $?; fi` (`:277`).
+- One-line fix: open_pane dryrun block gated `[ "$verb" = open_pane ] && [ "$PANE_DRYRUN" = 1 ]` (`:220`) so
+  an open_tab dryrun isn't swallowed by the open_pane preview.
+
+**Implementer deviations from the plan's sketch (reality won, both sound):** (1) the plan called
+`cmux_open_tab` directly from the top-of-file `case` — where the function + `fetch_tree`/`split_capture`
+aren't defined yet → would die "command not found"; split into validation-at-top / execution-dispatched-
+after-`split_capture`. (2) Dropped the in-function `launcher_q` recompute: binding `launcher` at the case
+arm lets the pre-existing top-level `launcher_q="$(printf %q …)"` (`:120`) quote the tab's launcher — verified
+equivalent by trace. Confirmed (not deviated): `layout_normalize_tree` exists under that name
+(cmux-layout.sh:36), `stamp_title`'s `[ -n "$TREE_RAW" ] || return 0` short-circuit exists (`:174`, so the
+tab title is best-effort — cosmetic, the send already landed), `validate_open_tab_args` reused from common.sh.
+
+**Reviewer VERDICT: APPROVED** (no Critical/Important) — probed live, not just read: 10 metachar/space/quote/
+`;`/`$()`/backtick/newline injection attempts → **zero** reached a cmux command line (ref only hits awk `-v`
++ `printf %s`; `--pane` is tree-derived); 64-char ref accepts, 65 rejects; **7** degrade paths all rc 1;
+`open_pane` **byte-identical** stdout/stderr/rc vs `a443b82~1`. Result file:
+`<scratchpad>/pane-results/general-purpose-1784859305-76407-30719.md`.
+
+**Findings → CARRY TO FINAL REVIEW:**
+- **T5-Minor (test tightening):** `adapters.test.sh` live fake's `*"new-surface"*` arm doesn't pin `--pane`,
+  so the resolution's **output column** is unverified — mutating `cmux.sh:271` `print $1`→`print $2` (passes
+  the surface ref, not pane ref, to `--pane`) leaves the suite GREEN (only the wrong-column class escapes;
+  removing resolution entirely IS caught). Fix: match `*"new-surface --pane pane:36"*` + add else-arm
+  `*"new-surface"*) exit 1`. NB the T4-Minor (dryrun not pinning the command) **was fixed** here —
+  `adapters.test.sh:63` pins `new-surface` and fails on revert.
+- **T5-Nit:** `check_cmux_version` (`cmux.sh:336`) is unreachable from the `open_tab` dispatch (exits at
+  `:279` first) — version-mismatch warning/receipt never fires on tab dispatch. Mitigated: overflow tabs only
+  occur after ≥1 same-session `open_pane`, which does warn. (Re-probe cmux after any upgrade regardless.)
+- **T5-Nit:** open_pane-only top-level derivations (`role` `:97`, `run_id` `:106`) run on the open_tab path
+  though unused there; a nonconforming run-id would emit a misleading "surface unmanaged" stderr line.
+  Cosmetic; real dispatcher run-ids conform.
+
+**NEXT: Task 6** (dispatcher lane/session/surface markers + `count_live_workers` on REAL run-dir fixtures +
+judge bypass; interim `count >= N` → in-process exit 3, replaced by `open_tab` overflow in Task 7). Then T7,
+T8. Final-review pass before the branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor/Nit +
+**T5-Minor + T5-Nits**; run both full pane suites + adapters suite green + implementation observability judge
+before `gh pr create`.
