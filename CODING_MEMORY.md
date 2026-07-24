@@ -73,14 +73,26 @@ how this file and its linked files should be written (plain language, major chan
   → final review:** T5-Minor (live fake's `new-surface` arm doesn't pin `--pane` → wrong-column mutation
   `print $1`→`print $2` stays green; fix: match `--pane pane:36` + else-arm `exit 1`) + T5-Nit
   (`check_cmux_version` unreachable on open_tab path) + T5-Nit (open_pane-only role/run_id derivations run
-  harmlessly on tab path). Detail: branch log §Task 5. **NEXT: Task 6** (dispatcher lane/session/surface
-  markers + `count_live_workers` on REAL run-dir fixtures + judge bypass; interim `count>=N`→in-process exit
-  3, replaced by open_tab overflow in T7). Per-task loop: pane implementer → verify commit in-checkout
-  (`verifying-subagent-commits`) → pane reviewer → checkpoint. Final-review pass before branch PR must clear
-  Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits; run full pane suites +
-  implementation obs judge before `gh pr create`. **Freshness: this session paid ~97k on RESTORE alone before
-  T5 (branch's recurring restore tax); user chose proceed-past-budget over re-paying restore. T5 saved+pushed
-  at this checkpoint; clear offered before T6.**
+  harmlessly on tab path). Detail: branch log §Task 5. **T6 DONE + reviewer CHANGES-REQUESTED → Task 6a
+  2026-07-23 (subagent-driven: pane `general-purpose` implementer + pane reviewer, both cmux `surface:83`):**
+  commit `e6ef22c` (parent `6cb8687`), **verified in-checkout** (2 domain files only — `dispatch-pane-agent.sh`
+  +55/−2, `.test.sh` +42; no store files), controller re-ran dispatcher **58/0** + shellcheck clean, `Doc-Exempt`.
+  Landed: `is_judge`, `count_live_workers` (runs/* with `lane=worker`+`session=key`+no `agent-exit`), lane/session/
+  surface markers, `count-workers` subcommand, worker gate (`count>=N`→interim exit 3 no-cooldown). **Reviewer
+  verified by running (RED baseline 53/5, 6/7 mutants killed, parsers compared, live repros). VERDICT:
+  CHANGES-REQUESTED — C1 CRITICAL: dispatch counts ITSELF (markers written BEFORE the gate) → off-by-one,
+  `max=1` never opens a worker pane, capacity is N−1, BREAKS Task 7.** Plan Step 4 had the ordering bug; shipped
+  green only because there's NO "worker under max opens a pane" positive test. **Task 6a fix (reviewer-verified in
+  scratch): move the 2 marker-writes to after the gate + add that positive test; also M1 (add commented/padded
+  fixture-conf lines so `is_judge` comment-strip is asserted).** I1 (phantom workers) CONFIRMED — C1 reorder kills
+  the dominant gated-exit-3 source; residual (no-terminal exit 3, adapter-fail exit 4) bounded, carry to Task 7 as
+  a dead-marking requirement. Security boundary CLEAN. Detail + full findings: branch log §Task 6. **NEXT: Task 6a
+  (do FIRST, before T7)** — TDD: reproduce C1 as a RED positive test, then reorder markers; then T7, T8. Per-task
+  loop: pane implementer → verify commit in-checkout (`verifying-subagent-commits`) → pane reviewer → checkpoint.
+  Final-review carry-forward now: Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits +
+  **M2 (PANE_HOME conf split-brain) + T6 Nits**; run full pane suites + implementation obs judge before
+  `gh pr create`. **Freshness: fresh session paid ~84k on RESTORE alone (branch's recurring restore tax); user
+  chose proceed. T6 impl+review done, saved+pushed at this checkpoint; clear offered before Task 6a.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —

@@ -307,3 +307,70 @@ judge bypass; interim `count >= N` → in-process exit 3, replaced by `open_tab`
 T8. Final-review pass before the branch PR must clear Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor/Nit +
 **T5-Minor + T5-Nits**; run both full pane suites + adapters suite green + implementation observability judge
 before `gh pr create`.
+
+## Task 6 — dispatcher lane/session markers + live-worker count + judge bypass (2026-07-23) — DONE, reviewer CHANGES-REQUESTED (→ Task 6a)
+
+**Commit `e6ef22c`** (parent `6cb8687`), subagent-driven: pane `general-purpose` implementer + pane reviewer,
+both cmux `surface:83`. **Verified in-checkout by controller** (toplevel `/Users/marksuyat/.claude`, branch
+`feat/pane-split-policy`, exactly 2 domain files — `dispatch-pane-agent.sh` +55/−2, `.test.sh` +42; NO
+`coding-memory/` files; vibe-scape's 4 uncommitted compliance-judge files untouched). Controller independently
+re-ran: dispatcher suite **58/0**, `shellcheck -x` clean on both files. `Doc-Exempt` trailer on the code commit.
+
+What landed in `panes/dispatch-pane-agent.sh`:
+- `REDIRECT_CONF="${PANE_REDIRECT_CONF:-$PANES_DIR/redirect-agents.conf}"` (after `DETECT=`).
+- `is_judge <type>` — 0 if the type is listed in the judge conf (comment/whitespace stripped).
+- `count_live_workers <key>` — counts `runs/*/` dirs with `lane=worker` + `session=key` + no `agent-exit`;
+  missing `RUNS_DIR` → `0`. Judge/other-session/exited excluded by two file checks (the least-proven piece).
+- `open_pane_or_cooldown` gains an optional 3rd arg (run dir) → writes `<dir>/surface` after `open_pane` OK.
+- `dispatch)` arm: tag `lane`+`session`; worker under `panes max=N` → gate on `count_live_workers` (`>=N` →
+  `die … 3` interim in-process, NO cooldown; comment marks it "replaced by open_tab in Task 7"). Judge → always
+  `open_pane`, never counted/gated.
+- `count-workers` debug subcommand.
+TDD RED confirmed by BOTH implementer and reviewer against parent `6cb8687`: baseline 51/0 → 53/5 with the 5
+load-bearing new cases failing pre-impl.
+
+**Reviewer VERDICT: CHANGES-REQUESTED** — verified by running (RED baseline 53/5, 6/7 mutants killed, parsers
+compared over a hostile conf, live repros). Result file:
+`<scratchpad>/pane-results/general-purpose-1784862912-50292-28807.md`.
+
+- **C1 (CRITICAL) — dispatch counts ITSELF → off-by-one, `max=1` never opens a worker pane.** Markers
+  (`sh:196-197`) are written BEFORE the gate (`:203-217`), so `count_live_workers` always includes the run
+  being dispatched. Live repro (empty runs dir): `set-policy panes --max 1` → first worker dispatch →
+  `worker max 1 reached (1 live)` exit 3, with ZERO other workers. Capacity is N−1 (`max=3`→2 panes; `max=1`→0
+  ever). Violates the task contract ("count < N → open_pane") and BREAKS Task 7 (overflow must `open_tab` into a
+  live worker pane that can't exist at `max=1`). Plan Step 4 had the same ordering — plan bug faithfully
+  implemented. **Shipped green only because the suite has NO "worker under max opens a pane" positive case.**
+  **Fix (reviewer verified in scratch, suite stays 58/0): move the two marker-write lines to just before the
+  `open_pane_or_cooldown` call (after the gate) + add the missing positive test (`max=2`, 1 live fixture,
+  dispatch → rc 0).**
+- **I1 (IMPORTANT) — phantom live workers (implementer-flagged, CONFIRMED).** Three die-after-marker paths
+  leave a `lane=worker` dir with no `agent-exit`, counted live until 7-day cleanup: over-max exit 3, no-terminal
+  exit 3, adapter-fail exit 4. Traced: at `max=1` a gated dispatch bumped count 1→2; after the real worker
+  exited it stayed 2 → next dispatch gated again → permanent pane-path starvation. **The C1 reorder kills the
+  dominant (gated exit-3) source for free** (dispatch dies before tagging). Residual two are bounded (no-terminal
+  rarely reaches the dispatcher — guard fails open first; adapter-fail writes the cooldown flag so the phantom is
+  never consulted again; per-session keying blocks cross-session pollution) → **acceptable carry-forward, but
+  PIN to Task 7's contract: dead-mark the run dir (`agent-exit`) on failure paths OR count only dirs with a
+  `surface` marker** (Task 7's round-robin reads live workers' surfaces; a phantom has none). Nuance: a
+  `fail_early` runner death also leaves no `agent-exit` by design (pane preserved) — counting that one is
+  defensible (the pane genuinely holds a slot).
+- **M1 (Minor) — weak test: `is_judge` comment-stripping unasserted.** Removing `line="${line%%#*}"` survives
+  58/0 (fixture conf has no comments; real conf is 7/9 comment lines). Fix in 6a: add a commented + a
+  whitespace-padded entry to the fixture conf.
+- **M2 (Minor) — conf-path split-brain under `PANE_HOME`.** Dispatcher default honors `PANE_HOME`
+  (`$PANES_DIR/redirect-agents.conf`); the guard hardcodes `$HOME/.claude/panes/redirect-agents.conf`. With
+  `PANE_HOME` set but no `PANE_REDIRECT_CONF`, the two read different files (guard says judge, dispatcher says
+  worker). Low likelihood (tests + hook set `PANE_REDIRECT_CONF`). **Carry-forward:** align the guard's default
+  or document the constraint.
+- **Nits:** both parsers drop a final line with no trailing newline (they AGREE — no split-brain; real conf ends
+  `\n`); `count-workers`/`set-policy` absent from the usage string (pre-existing drift); `count_live_workers ""`
+  would match empty-session dirs (unreachable via CLI). All carry-forward.
+- **Security boundary CLEAN** — Task 6 did NOT widen exposure. Session key hits only marker-file *content* +
+  quoted string tests; count glob `"$RUNS_DIR"/*/` never interpolates the key; `pane-policy-$key` is the
+  pre-existing bounded read (Minor-7). `agent_type` regex-validated before `is_judge`/title.
+
+**NEXT: Task 6a** (do FIRST, before T7) — under TDD, reproduce C1 as a RED positive test (worker under `max`
+must open a pane; currently gated) then fix by reordering the two marker writes to after the gate; add the M1
+fixture lines. Pin I1's residual dead-marking to Task 7's contract. Then T7, T8. Implementer result file:
+`<scratchpad>/pane-results/general-purpose-1784862477-35934-9310.md`. Final-review carry-forward now also
+includes **M2 + the three Task 6 Nits**.
