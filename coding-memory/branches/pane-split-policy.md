@@ -695,3 +695,66 @@ left alone as the user's global instruction file and out of scope (one-line fix 
 **`panes/dispatch-pane-agent.sh` is now 410 lines — OVER the 400-line soft limit** (hard cap 800).
 Recommendation: do NOT refactor at the tail of an 8-task branch; split the run-dir/marker helpers into
 their own file as the first move of the next dispatcher change. Test file is 503 lines.
+
+---
+
+## Implementation observability judge (2026-07-24) — `risk=medium confidence=high`
+
+Verdict at `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy.md`, `head_sha b38aa24`.
+Judge dispatched to its OWN pane (`surface:107`) while workers were on `surface:83` — the judge lane
+bypassing the policy, observed working end-to-end. It re-ran all seven suites itself (302/0).
+
+**It found what eight task-reviewers missed.** A worker run is marked finished only on NORMAL
+completion — there is no exit trap and `wait` deliberately skips the marker on timeout. So a pane
+**closed by hand** (or a cmux restart, or a hung agent) stays "live" all session AND keeps its recorded
+`surface` ref. The next overflow tabs into a surface that no longer exists → `open_tab` fails → the
+dispatcher called that an ADAPTER failure → session cooldown → everything in-process for the rest of the
+session, with a message blaming cmux. Cause = stale local state; the code already had the right
+vocabulary (the no-target path uses exit 3 WITHOUT a cooldown) and just wasn't using it.
+
+It also **rejected the controller's framing** of the observability question: exit 3 covering three
+causes is NOT the problem (the consumer is a model reading English; nothing branches on `$?`). The real
+gap: the decisive computation is never recorded — "counted 3 live, max 3, tabbed into surface:X" existed
+nowhere, so the failure that most needs explaining was the one least explainable. On evaluation it was
+specific rather than generous: 302 green assertions COULD be theater and here are not (real run-dir
+fixtures, a live cmux probe committed as a fixture before the adapter was trusted, 8 hostile payloads
+through the real adapter) — "closes the ADR-0008 trap". The unmeasured skill `description` it scored as
+DECLARED, not a defect.
+
+### Fix — commit `8c2b07f` (user chose "fix it now, re-run the judge")
+
+Controller-verified in-checkout (exactly 3 files), suites **308/0** (+6), shellcheck clean.
+- **Reclassified:** `open_tab` failure → exit 3, NO cooldown, and **dead-mark the stale target's run
+  dir** so the next `select_worker_surface` picks a different pane. `open_pane` failure unchanged
+  (cooldown + exit 4) and gained an explicit cooldown assertion so the two classifications cannot
+  silently re-converge. Convergence argument, in a comment: with a genuinely broken adapter the count
+  drains one pane per failure until it falls under N, then `open_pane` fails and writes the cooldown —
+  same end state, without one stale pane poisoning a healthy session.
+- **Two Task-7 tests REPLACED, not repaired** (deliberate contract change, called out by the
+  implementer): they correctly pinned T7's stated intent ("exactly as an open_pane failure does") — that
+  INTENT is what the judge found wrong.
+- **Decision record** (the judge's real finding), one line to BOTH stderr and `<run-dir>/route`:
+  `ROUTE: lane=worker live=2 max=2 kind=tab target=surface:AA`. Written after the `lane` commit point
+  and BEFORE the adapter call, so it survives a failed open — exactly the case worth explaining. stderr
+  reaches whoever ran the dispatch; the run-dir copy survives to a post-mortem when the pane and its
+  stderr are gone (run dirs are the existing durable trail, reaped at 7 days by `cleanup_stale`).
+  `live`/`max` are `-` when the lane doesn't consume the budget, which itself answers "why a pane?".
+- `CLAUDE.md` catalog line corrected to the three lanes (the one always-on surface still carrying
+  pre-three-lane framing). RED 88/7 → GREEN 95/0; three mutants (revert the reclassification 91/4; drop
+  ONLY the target dead-mark 93/2; drop the two routing printfs 92/3) each die independently.
+
+### Still open after the fix — the implementer's own honest flags
+
+- **ROOT CAUSE UNADDRESSED:** this fixes the MISCLASSIFICATION. Nothing yet writes `agent-exit` when a
+  pane dies abnormally, so a hand-closed pane still inflates the live count until an overflow happens to
+  try tabbing into it and retires it. Proper close: an exit trap in `run-pane-agent.sh`, or a liveness
+  probe in `live_worker_panes`. **Next branch.**
+- **Task 7's NIT 1 lost its mitigation.** The rr index still advances on a failed `open_tab`; that was
+  "nearly unreachable" ONLY because the first failure wrote the cooldown and ended overflow for the
+  session. It no longer does, so the skip can now repeat. Still cosmetic (round-robin is a spec-level
+  fairness heuristic) but the branch memo's stated reasoning for the old behavior is now stale.
+- **`hooks/doc-guard.sh:149` classifies `CLAUDE.md` as SOURCE, not documentation** (its doc set is only
+  `CODING_MEMORY.md`, `coding-memory/*`, `docs/*`), so the commit needed a `Doc-Exempt:` trailer after
+  all. Worth deciding separately whether `CLAUDE.md` belongs in the hook's doc set.
+- `panes/dispatch-pane-agent.sh` is now **450 lines** (was 410) — 50 more lines of debt for the deferred
+  file split. Test file 536. The `route` marker has no consumer by design (a breadcrumb, not an API).

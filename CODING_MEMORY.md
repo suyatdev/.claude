@@ -165,6 +165,28 @@ how this file and its linked files should be written (plain language, major chan
   scope), and **`panes/dispatch-pane-agent.sh` is now 410 lines, over the 400 soft limit** — split the
   run-dir/marker helpers out as the FIRST move of the next dispatcher change, not at the tail of this
   branch. **NEXT: implementation obs judge (must match final HEAD), then PR `--draft` → `gh pr ready`.**
+  **OBS JUDGE RUN 2026-07-24 → `risk=medium confidence=high`** (verdict
+  `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy.md`, `head_sha b38aa24`; judge
+  took its OWN pane `surface:107` while workers sat on `surface:83` — the judge lane bypassing the
+  policy, observed working). **It found what eight task-reviewers missed:** a worker run is marked
+  finished only on NORMAL completion (no exit trap; `wait` skips the marker on timeout), so a
+  hand-closed pane stays "live" WITH its surface ref → the next overflow tabs into a dead surface →
+  `open_tab` fails → the dispatcher called it an ADAPTER failure → session cooldown → everything
+  in-process for the rest of the session, blaming cmux. It also rejected the controller's framing of the
+  observability question: exit 3 covering three causes is NOT the problem (nothing branches on `$?`); the
+  real gap was that the decisive computation ("counted 3 live, max 3, tabbed into surface:X") was
+  recorded NOWHERE. **User chose fix-now → commit `8c2b07f`** (suites **308/0**, +6; controller-verified):
+  `open_tab` failure reclassified to exit 3 + no cooldown + dead-mark the stale target so the next
+  selection picks a different pane (`open_pane` failure keeps cooldown/exit 4, now explicitly asserted);
+  a one-line `ROUTE: lane=… live=… max=… kind=… target=…` decision record to BOTH stderr and
+  `<run-dir>/route`, written before the adapter call so it survives a failed open; `CLAUDE.md`'s catalog
+  line corrected to the three lanes. Two Task-7 tests REPLACED not repaired — they pinned T7's stated
+  intent, and that intent is what the judge found wrong. **Still open (next branch):** the ROOT CAUSE —
+  nothing writes `agent-exit` when a pane dies abnormally (needs an exit trap in `run-pane-agent.sh` or a
+  liveness probe); T7's NIT 1 lost its mitigation (the rr index still advances on a failed `open_tab`,
+  previously "unreachable" only because the first failure ended overflow for the session); **`doc-guard.sh:149`
+  classifies `CLAUDE.md` as SOURCE not documentation** — decide whether it belongs in the hook's doc set;
+  dispatcher now **450 lines**. **NEXT: re-run the obs judge at the new HEAD, then PR `--draft` → `gh pr ready`.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
