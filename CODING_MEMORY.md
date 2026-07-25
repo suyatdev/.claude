@@ -9,13 +9,19 @@ how this file and its linked files should be written (plain language, major chan
   **first** `docs/features/` file, dogfooding ADR 0010. Isolated worktree, branch
   `worktree-phase-guard-hook` (pushed) — created to escape a concurrent session on the primary
   checkout, **NOT** the implementation branch; `branch:` stays `none` until the gate.
-  **NEXT SESSION STARTS HERE: all design questions are closed; write the Spec.** Read
-  "Design detail settled during planning" in the feature file — the algorithm, fail-open exits,
-  registration, deny-message contract and toolchain are all recorded there, so do not re-derive
-  them. Turn them into `writing-specs` Gherkin *inline in the feature file* (not
-  `docs/superpowers/specs/` — see the process finding), then run the compliance judge, then the
-  user review gate. The checklist freezes at the gate, which opens only on the literal
-  `gate confirmed`. Still `phase: planning`, `branch: none`, `model_tier: high` (reconfirmed).
+  **Spec + Tasks are now WRITTEN and committed (`e9055ca`)** — inline in the feature file per
+  ADR 0010. Gherkin covers all 8 fail-open exits, the 4 permission rows, and the parser contract;
+  the 10-task checklist is ordered test-before-implementation and is frozen.
+  **NEXT SESSION STARTS HERE: run the compliance judge** (paned, per the pane-dispatch gate),
+  then the user review gate, then the Q1 build/defer call. Do **not** re-derive the design —
+  everything is in the feature file. Still `phase: planning`, `branch: none`, `model_tier: high`.
+- **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
+  carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
+  `file_path` alone, which would have failed open on every notebook write. Corrected, with a
+  regression scenario. (2) System `bash` is **3.2.57**, so the hook may not use associative arrays,
+  `mapfile`, or `${var,,}`. (3) `git cat-file --batch` output is **asymmetric** — a blob emits
+  `<sha> blob <size>` *without* echoing its request, a miss echoes the request verbatim + ` missing`
+  — so the un-superseded filter must consume results in input order or it mis-attributes every blob.
 - **User decisions, 2026-07-25.** Q2 **accepted** with one narrowing — the *un-superseded check*:
   a `planning` file stops denying once any branch records it as `implementation`, because its gate
   has already opened. Fixes the `main`/hotfix write-lock at the root cause (a stale copy on `main`
