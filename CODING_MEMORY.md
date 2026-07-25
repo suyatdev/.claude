@@ -5,12 +5,28 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- **CURRENT: `phase-guard-hook` — PLANNING.** `docs/features/phase-guard-hook.md` (`4f923ba`) is
-  the repo's **first** `docs/features/` file, dogfooding ADR 0010. In an isolated worktree, branch
+- **CURRENT: `phase-guard-hook` — PLANNING.** `docs/features/phase-guard-hook.md` is the repo's
+  **first** `docs/features/` file, dogfooding ADR 0010. Isolated worktree, branch
   `worktree-phase-guard-hook` (pushed) — created to escape a concurrent session on the primary
-  checkout, NOT the implementation branch. Blocked on open Q1: ADR 0010 defers this hook until
-  "the gate is observed being skipped", which has not happened — building now amends that ADR.
-  No spec/checklist yet (both freeze at the gate). Detail: `.claude/session-state.md`.
+  checkout, **NOT** the implementation branch; `branch:` stays `none` until the gate.
+  **NEXT SESSION STARTS HERE:** two user decisions are open, both recorded in the feature file —
+  (a) accept or reject the proposed **branch-scoped permission** design answering Q2, and
+  (b) pick the Q6 escape hatch. Nothing else proceeds until (a) is answered; the spec is still
+  unwritten and freezes at the gate, which opens only on the literal `gate confirmed`.
+- **Q2 was the crux and now has a candidate answer.** ADR 0010 deferred this hook because
+  "which feature file is active" is unresolvable at `branch: none`. That framing is avoidable: the
+  hook never attributes a write to a feature, it asks only whether the *current branch* carries
+  implementation permission. Deny when any feature file is `phase: planning` AND the branch is not
+  claimed by an `implementation` file. It holds during planning precisely *because* planning forbids
+  branch creation — an unclaimed branch is the signal, not ambiguity. Known holes are written down,
+  not hidden: branch-granularity (not per-feature), `main` stays write-locked after the gate opens,
+  and a stale `planning` file locks the repo. Q3/Q4/Q5 resolved; **Q6 found a real defect in the
+  house pattern** — `JUDGE_EXEMPT`-style bypasses need a Bash command line, which `Edit`/`Write`
+  payloads do not have, so `PHASE_EXEMPT` cannot work the way the other guards do.
+- **Deliberate fail-mode split from `judge-guard.sh`, decided this session:** that hook fires on one
+  rare command and fails closed on infrastructure errors; this one fires on *every write in every
+  repo*, so it fails closed only once a `planning` file is positively identified, and fails **open**
+  on missing python / unresolvable git root / unparseable frontmatter. Blast radius, not sloppiness.
 - **PR #29 MERGED 2026-07-25** (`122b8a5`); branch pruned local+remote; ancestor-check verified.
   Phase-frontmatter permission system (ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`)
   now on `main` — every feature-scale change gets a `docs/features/<name>.md` with `phase` in
