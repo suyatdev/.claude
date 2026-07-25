@@ -42,7 +42,7 @@ Every PR description covers, in this order:
 
 - Track PR status per repository in `CODING_MEMORY.md` (pointer) and `coding-memory/pr-tracking.md` (detail).
 - Per repo, record: repo identifier, branch name, remote name/URL, PR URL or number, whether it's currently open, the `session_origin` that created the PR, and the `session_origin` of the most recent push.
-- Maintain a branch-specific implementation log (`coding-memory/branches/<branch>.md`) capturing what's already implemented, what's pending, and the latest checkpoint.
+- For feature-scale branches, implementation state lives in the branch's `docs/features/<name>.md` (frontmatter + checklist) per `managing-session-memory` — `coding-memory/branches/<branch>.md` is retired for new work. Non-feature-scale branches (a fix, a chore) have no such file; `CODING_MEMORY.md` and the commit history are the record.
 - Commit and push these memory updates as part of the same branch, so continuity context ships inside the PR itself.
 
 ## Before Requesting Review
