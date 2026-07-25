@@ -212,7 +212,55 @@ how this file and its linked files should be written (plain language, major chan
   sequence is checkpoint-commit → judge at that HEAD → `gh pr create --draft` with the verdict still
   uncommitted in the working tree → THEN commit + push the verdict onto the open PR (pushing after
   creation adds to the PR, so nothing strands).
-  **NEXT: obs judge RUN 3 pinned to `9073b2b`, then PR `--draft` → `gh pr ready`. Nothing else.**
+  **OBS JUDGE RUN 3 DONE 2026-07-24 @ `2454d1d` → `risk=medium confidence=high`** (verdict
+  `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy-round3.md`, commit `6c717d0`;
+  judge pane `surface:109`, `ROUTE: lane=judge` — the judge lane bypassing the policy, observed
+  working a third time). Controller independently confirmed **316/0** and `shellcheck -x` clean at
+  that HEAD before dispatching. **RUN 3 broke TWO CLAIMS THIS BRANCH HAD WRITTEN INTO ITS OWN
+  DURABLE RECORD** (ADR 0009 + branch log), each with a ~10-line repro:
+  **(F1) the pane-growth bound belongs to the GUARD, not the streak** — `dispatch-pane-agent.sh`
+  never reads its own cooldown flag, only `pane-dispatch-guard.sh` does; at `max=2`, 10 DIRECT
+  dispatches opened **6 real panes, two of them after the cooldown was written**. Normal operation is
+  bounded because the guard is the gatekeeper; a direct dispatch is not.
+  **(F2) "3 tolerates a cmux restart" is FALSE at N≥3** — a restart leaves exactly N ghosts, so with
+  N≥3 the limit trips and a HEALTHY adapter is declared tab-incapable, silently discarding
+  `panes max=N` for the session with a message blaming cmux (RUN 1's finding, back in bounded form).
+  **(F3, the sharpest) RUN 2's "cosmetic" rr-index nit is the CAUSE of F2** — advancing the index on a
+  failed tab marches the selector through every ghost in turn, skipping exactly the healthy panes
+  whose success would reset the streak. Judge pinned the index as a counterfactual: **the scenario
+  then self-heals completely, zero cooldowns.** The nit was graded cosmetic BEFORE the streak existed
+  and was never re-graded after the change that altered its consequence — **the reusable lesson: a
+  nit's grade expires when the code around it changes.**
+  Also: the 8 new assertions test the MECHANISM (streak fires at 3), never the PROPERTY RUN 2 raised
+  (pane count stays under `max`) — **nothing anywhere counts panes against `max`**, which is why F1
+  sailed through 316 green tests. All three share the one deferred root cause (no EXIT trap → no
+  `agent-exit` on abnormal pane death), and RUN 2 priced that deferral too cheaply: "self-healing" is
+  false at N≥3. Judge credited the mutation discipline (RED 101/2 with only the discriminating
+  assertions failing; 3 mutants each killing two assertions).
+  **PR #28 OPENED as a DRAFT 2026-07-25 — https://github.com/suyatdev/.claude/pull/28** (base `main`,
+  40 commits). Sequence used, and the reason for it: the fresh RUN 3 verdict matched HEAD exactly, so
+  `gh pr create` ran FIRST while it was valid, and the verdict was committed onto the already-open PR
+  afterwards (`6c717d0`) — the PR #26 anti-stranding flow. F1+F2+F3 are declared in the PR
+  description as KNOWN-NOT-FIXED, which was the judge's explicit ship condition.
+  **OWED BEFORE `gh pr ready` (user chose "draft PR now, then fix on it", 2026-07-25):** (1) correct
+  the two overstated sentences in ADR 0009 + the branch log — a decision record asserting a safety
+  guarantee that does not exist is the worst of the three findings; (2) the ONE-LINE rr-index fix
+  (do not advance on a failed `open_tab`) which dissolves F2/F3 per the judge's own counterfactual;
+  (3) a PROPERTY test that counts panes against `max`; (4) **obs judge RUN 4** at the new HEAD
+  (judge-guard does not gate `gh pr ready`, but the user's chosen sequence does); then `gh pr ready`.
+  Root cause (EXIT trap in `run-pane-agent.sh`) stays deferred to the follow-up branch.
+  **Two corrections to this file's own state, found 2026-07-25:** **PR #27 is MERGED** (2026-07-22
+  23:39Z, `0a1f80e`), not open as recorded — reachability re-verified, **no 4th stranding**, but its
+  remote branch still exists so the prune and the verdict backfill are still owed. And the
+  `preparing-pull-requests` rule "feature PRs update the README Roadmap" **could not be satisfied:
+  README.md still has no Roadmap section at all** (the known open item 0c(d)) — flagged, not silently
+  skipped; standardizing it remains its own task.
+  **Process slip worth keeping: a bare `git commit -m` swept the 4 OTHER-SESSION compliance-judge
+  files that sit permanently STAGED in this shared checkout into a checkpoint commit.** Caught
+  immediately, undone with `reset --soft` (which restores the index exactly) + a pathspec commit +
+  `push --force-with-lease`. **The durable gotcha "commit by pathspec ONLY" means the pathspec must
+  be on `git commit` itself — `git add <file>` does not protect you, because `commit` without a
+  pathspec commits the WHOLE index.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
