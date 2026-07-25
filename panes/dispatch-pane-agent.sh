@@ -35,6 +35,15 @@ POLICY_RE='^panes max=([0-9]{1,2})$'
 CMUX_WAIT_SECS=15
 AGENT_TYPE_RE='^[A-Za-z0-9_-]{1,64}$'
 TIMEOUT_RE='^[0-9]+$'
+# Consecutive open_tab failures that mean "this adapter cannot tab" rather than
+# "that one pane is stale" (obs judge RUN 2). 3, not 2: the cost is asymmetric.
+# Over-triggering silently discards the user's explicit `panes max=N` for the
+# rest of the session; under-triggering leaks at most TAB_FAIL_LIMIT-1 surplus
+# panes, which are visible and stop the moment the cooldown lands. 3 tolerates
+# the benign multi-stale case (a couple of panes closed by hand, a cmux restart)
+# while an adapter that genuinely cannot tab still trips it within three
+# overflows.
+TAB_FAIL_LIMIT=3
 
 die() { printf 'dispatch-pane-agent: %s\n' "$1" >&2; exit "${2:-64}"; }
 
@@ -186,13 +195,26 @@ dead_mark() {
   return 0
 }
 
+# Consecutive-open_tab-failure streak, per session. Kept in STATE_DIR so it
+# expires with everything else via cleanup_stale, and read defensively: a
+# hand-corrupted counter must not wedge the session either way.
+bump_tab_failures() {   # <sid> -> prints the new streak
+  local f n
+  f="$STATE_DIR/tab-failed-$1"
+  n="$(head -n 1 "$f" 2>/dev/null)"
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  n=$((n + 1))
+  printf '%s\n' "$n" > "$f" 2>/dev/null
+  printf '%s\n' "$n"
+}
+
 # open_surface_or_cooldown <verb> <run_dir|""> <adapter args...> — prints
 # TERMINAL/PANE_REF. One body for both verbs (open_pane <title> <launcher> and
 # open_tab <target-surface> <title> <launcher>): the terminal check, the
 # cooldown flag, the dead-mark, and the surface record must never drift apart
 # between them.
 open_surface_or_cooldown() {
-  local verb="$1" run_dir="$2" term ref sid tgt
+  local verb="$1" run_dir="$2" term ref sid tgt streak
   shift 2
   tgt="${1:-}"                 # open_tab's target surface (the title for open_pane)
   term="$("$DETECT" 2>/dev/null)" || term=none
@@ -216,11 +238,31 @@ open_surface_or_cooldown() {
       # next worker takes the open_pane path, fails, and writes the cooldown — so
       # the session still converges on the cooldown, just without one stale pane
       # poisoning a healthy session.
+      #
+      # That convergence argument holds only while open_pane ALSO fails. An
+      # adapter that opens panes but cannot tab retires a healthy pane on every
+      # overflow, the freed slot immediately opens a new one, and the real pane
+      # count grows past max=N without bound (obs judge RUN 2). So the retirement
+      # is bounded by a streak: at TAB_FAIL_LIMIT consecutive open_tab failures
+      # the adapter — not the target — is what's broken, and this becomes an
+      # ordinary adapter failure with the cooldown that implies.
       dead_mark "$(run_dir_for_surface "$sid" "$tgt")"
-      die "cannot tab into '$tgt' — stale or unusable target surface, now retired; dispatch this spawn in-process" 3
+      streak="$(bump_tab_failures "$sid")"
+      if [ "$streak" -lt "$TAB_FAIL_LIMIT" ]; then
+        die "cannot tab into '$tgt' — stale or unusable target surface, now retired; dispatch this spawn in-process" 3
+      fi
+      : > "$STATE_DIR/adapter-failed-$sid"
+      die "adapter '$term' failed $streak consecutive open_tab calls — treating it as tab-incapable; cooldown flag written, in-process dispatch is allowed for the rest of this session" 4
     fi
     : > "$STATE_DIR/adapter-failed-$sid"
     die "adapter '$term' $verb failed; cooldown flag written — in-process dispatch is allowed for the rest of this session" 4
+  fi
+  # A completed tab is the ONLY evidence this adapter can tab, so it alone clears
+  # the streak. An open_pane success proves nothing about tab capability — and in
+  # the growth loop above one succeeds between every pair of tab failures, so
+  # clearing on it would make the limit unreachable.
+  if [ "$verb" = open_tab ]; then
+    rm -f "$STATE_DIR/tab-failed-${CLAUDE_CODE_SESSION_ID:-nosession}" 2>/dev/null
   fi
   [ -n "$run_dir" ] && printf '%s\n' "$ref" > "$run_dir/surface" 2>/dev/null
   printf 'TERMINAL: %s\nPANE_REF: %s\n' "$term" "$ref"

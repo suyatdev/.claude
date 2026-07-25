@@ -53,9 +53,19 @@ dispatch with no policy recorded, the guard denies with ask guidance. Ask via
 **Degrade paths — all non-blocking, none re-ask:**
 
 - No supported terminal → in-process (exit 3).
-- Adapter failure → per-session cooldown flag + in-process (exit 4); the guard then
+- **`open_pane` fails** → per-session cooldown flag + in-process (exit 4); the guard then
   allows in-process for the rest of the session.
+- **`open_tab` fails** → in-process for **this spawn only** (exit 3, *no* cooldown). A failed
+  tab usually means the target pane is stale — closed by hand, lost to a cmux restart, or
+  holding an agent hung past the wait timeout — so the dispatcher retires that target and the
+  next overflow picks a different pane. One stale pane self-heals without demoting the session.
+  **After 3 consecutive `open_tab` failures** the adapter, not the target, is judged
+  tab-incapable: that one is a full adapter failure (cooldown + exit 4). Only a *successful*
+  `open_tab` resets the streak — an `open_pane` success says nothing about tab capability.
 - Overflow with no live worker pane to tab into → in-process (exit 3).
+
+Exit 3 means "run this one in-process"; exit 4 means "in-process is allowed for the rest of
+the session". Neither ever blocks.
 
 ### Accepted trade-off: a simultaneous fan-out can still go in-process
 
@@ -111,3 +121,7 @@ Rationale: `docs/decisions/0009-pane-split-policy-three-lane-governance.md`.
   environmental (auth, crash), not if the agent itself concluded FAILED.
 - `wait` exit 2: inspect the open pane before anything else — the agent may
   still be working; re-run `wait` if so.
+- Surprised by where a dispatch landed? `dispatch` prints its routing decision as
+  `ROUTE:` on stderr and keeps a copy in `panes/state/runs/<run-id>/route`
+  (`lane=… live=… max=… kind=pane|tab target=…`) — it records *why*, survives the
+  session, and is written even when that dispatch then fails.

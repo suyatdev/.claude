@@ -470,6 +470,64 @@ CLAUDE_CODE_SESSION_ID="$XSID" bash "$DISPATCH" dispatch general-purpose --promp
 xt2=$(sed -n '2p' "$TMP/tab-args" 2>/dev/null)
 { [ -n "$xt2" ] && [ "$xt2" != "$xt1" ]; } && ok "a later overflow selects a different target after an open_tab failure" || bad "later overflow selects a different target" "first=$xt1 second=$xt2"
 
+# --- Obs-judge RUN 2 finding: retiring the target on EVERY open_tab failure
+# keeps max=N honest only while the adapter can actually tab. An adapter that
+# cannot tab at all fails every overflow, and each failure retires a HEALTHY
+# pane's marker — so the live count drops under N, the next worker opens a
+# brand-new pane, and the real pane count grows without bound while the session
+# never cools down. Fix: count CONSECUTIVE open_tab failures per session and
+# write the cooldown at the threshold (exit 4), restoring the bound.
+#
+# Only a SUCCESSFUL open_tab clears the streak. An open_pane success proves
+# nothing about tab capability, and in this very loop an open_pane succeeds
+# between every pair of tab failures — resetting on it would make the threshold
+# unreachable and pin the bug in place.
+TFSID="tab-streak-$$"
+# shellcheck disable=SC2016 # $1 must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) echo surface:TFP ;;\n  open_tab) exit 1 ;;\n  *) exit 64 ;;\nesac\n' > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+CLAUDE_CODE_SESSION_ID="$TFSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+mk_run_ref worker "$TFSID" no surface:TF1 pane >/dev/null   # the one live worker pane
+tf_dispatch() { # $1 = tag -> rc of one dispatch under $TFSID
+  CLAUDE_CODE_SESSION_ID="$TFSID" bash "$DISPATCH" dispatch general-purpose \
+    --prompt-file "$PROMPT" --result-file "$TMP/$1.md" --cwd "$TMP" >/dev/null 2>&1
+}
+# The growth loop, one full turn per pair: overflow fails and retires a pane,
+# then the freed slot opens a new one. Failures 1 and 2 must still degrade only
+# this spawn (exit 3, no cooldown) — one stale pane has to self-heal silently.
+tf_dispatch tf1; rc=$?
+[ "$rc" -eq 3 ] && ok "tab-failure streak 1 -> exit 3" || bad "tab-failure streak 1 -> exit 3" "rc=$rc"
+tf_dispatch tf2 >/dev/null 2>&1                              # freed slot -> open_pane succeeds
+tf_dispatch tf3; rc=$?
+[ "$rc" -eq 3 ] && ok "tab-failure streak 2 -> still exit 3, no cooldown" || bad "tab-failure streak 2 -> exit 3" "rc=$rc"
+[ ! -f "$PANE_STATE_DIR/adapter-failed-$TFSID" ] && ok "an open_pane success between tab failures does not reset the streak" || bad "open_pane success must not reset the streak"
+tf_dispatch tf4 >/dev/null 2>&1
+tf_dispatch tf5; rc=$?
+[ "$rc" -eq 4 ] && ok "tab-failure streak 3 -> exit 4 (adapter cannot tab)" || bad "tab-failure streak 3 -> exit 4" "rc=$rc"
+[ -f "$PANE_STATE_DIR/adapter-failed-$TFSID" ] && ok "the 3rd consecutive open_tab failure writes the cooldown" || bad "3rd consecutive open_tab failure writes the cooldown"
+
+# A successful open_tab is the only evidence the adapter CAN tab, so it clears
+# the streak: without the reset, two failures early in a long healthy session
+# would leave it one failure from a spurious cooldown forever.
+TRSID="tab-reset-$$"
+CLAUDE_CODE_SESSION_ID="$TRSID" bash "$DISPATCH" set-policy panes --max 1 >/dev/null 2>&1
+mk_run_ref worker "$TRSID" no surface:TR1 pane >/dev/null
+tr_dispatch() { CLAUDE_CODE_SESSION_ID="$TRSID" bash "$DISPATCH" dispatch general-purpose \
+    --prompt-file "$PROMPT" --result-file "$TMP/$1.md" --cwd "$TMP" >/dev/null 2>&1; }
+tr_dispatch tr1; tr_dispatch tr2; tr_dispatch tr3          # streak -> 2 (tr2 opens a pane)
+# shellcheck disable=SC2016 # $1 must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) echo surface:TRP ;;\n  open_tab) echo surface:TRT ;;\n  *) exit 64 ;;\nesac\n' > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+tr_dispatch tr4 >/dev/null 2>&1                            # open_pane: refills the freed slot
+tr_dispatch tr5; rc=$?
+[ "$rc" -eq 0 ] && ok "open_tab succeeds once the adapter can tab" || bad "open_tab succeeds" "rc=$rc"
+# shellcheck disable=SC2016 # $1 must reach the generated stub unexpanded (see line 25)
+printf '#!/usr/bin/env bash\ncase "$1" in\n  open_pane) echo surface:TRP ;;\n  open_tab) exit 1 ;;\n  *) exit 64 ;;\nesac\n' > "$PANE_ADAPTERS_DIR/cmux.sh"
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+tr_dispatch tr6; rc=$?
+[ "$rc" -eq 3 ] && ok "the failure after a successful tab restarts the streak (exit 3)" || bad "successful tab restarts the streak" "rc=$rc"
+[ ! -f "$PANE_STATE_DIR/adapter-failed-$TRSID" ] && ok "a successful open_tab clears the failure streak" || bad "successful open_tab clears the streak"
+
 # --- final-review carry-forwards -------------------------------------------
 
 # Nit-8: `while read -r line` drops a conf's final line when it has no trailing

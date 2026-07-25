@@ -758,3 +758,55 @@ Controller-verified in-checkout (exactly 3 files), suites **308/0** (+6), shellc
   all. Worth deciding separately whether `CLAUDE.md` belongs in the hook's doc set.
 - `panes/dispatch-pane-agent.sh` is now **450 lines** (was 410) — 50 more lines of debt for the deferred
   file split. Test file 536. The `route` marker has no consumer by design (a breadcrumb, not an API).
+
+## Obs judge RUN 2 fix — the consecutive-`open_tab`-failure streak (2026-07-24)
+
+The RUN 2 finding, in one line: **retiring the target on every `open_tab` failure keeps `max=N`
+honest only while the adapter can actually tab.** The reclassification above assumed a failed tab
+means a stale target, and argued the session still converges on the cooldown because the count
+"drains one pane per failure until `open_pane` fails". That argument holds only if `open_pane` also
+fails. An adapter that opens panes but cannot tab retires a *healthy* pane on every overflow, the
+freed slot immediately opens a new one, and the real pane count grows past N without bound — while
+the session never cools down. `max=N` became silently exceedable.
+
+**Fix (user-chosen, over accepting the growth in writing and over reverting to the spec-literal
+always-cooldown):** count CONSECUTIVE `open_tab` failures per session in
+`panes/state/tab-failed-<sid>`; at `TAB_FAIL_LIMIT` the adapter — not the target — is judged
+tab-incapable and it becomes an ordinary adapter failure (cooldown + exit 4). Below the limit,
+unchanged: retire the target, exit 3, no cooldown.
+
+- **No spec amendment needed** (this is why the direction was chosen): the locked spec's Gherkin
+  says an adapter that cannot tab writes the cooldown — it still does, only the timing changes.
+  The spec stays locked at blob `cdc777a`, so the existing compliance verdicts stay valid.
+- **Threshold = 3, and the reasoning is the asymmetry, not a hunch.** Over-triggering silently
+  discards the user's explicit `panes max=N` for the rest of the session — the exact thing this
+  branch exists to honor. Under-triggering leaks at most `TAB_FAIL_LIMIT-1` = 2 surplus panes,
+  which are visible on screen and stop dead when the cooldown lands. 3 also tolerates the benign
+  multi-stale case (a couple of panes closed by hand, a cmux restart) that 2 would misread as a
+  broken adapter.
+- **Only a successful `open_tab` clears the streak.** An `open_pane` success proves nothing about
+  tab capability — and in the growth loop one succeeds between *every* pair of tab failures, so
+  clearing on it would make the limit unreachable and pin the bug in place. This is the subtle
+  half; mutation 3 below exists solely to hold it.
+- Counter is read defensively (`case ''|*[!0-9]*`) and lives in `STATE_DIR`, so `cleanup_stale`
+  already reaps it at 7 days. No new housekeeping.
+
+**Evidence.** RED 101/2 (only the two discriminating assertions fail; the streak-1/streak-2 and
+reset assertions pass vacuously by design, as guard rails). GREEN 103/0. Three mutants, each dying
+independently: `TAB_FAIL_LIMIT=99` → 2 fail; drop the reset on tab success → 2 fail (different two);
+reset on ANY adapter success → 2 fail. Full suites **316 passed, 0 failed** (was 308); `shellcheck -x`
+clean on both files.
+
+**Judge items 2–4, same commit:** `skills/dispatching-pane-agents/SKILL.md` degrade-path list split
+into per-verb bullets (it stated the pre-reclassification behavior and was simply wrong about shipped
+code) plus an exit-3-vs-4 gloss; ADR 0009 consequence recording the growth mode and the threshold
+rationale; one line documenting `<run-dir>/route` under Fallbacks, giving the breadcrumb its first
+reader-facing mention.
+
+**Carried forward, unchanged by this fix:** the abnormal-pane-death root cause (nothing writes
+`agent-exit`) is still next-branch; T7 NIT 1 (rr index advances on a failed `open_tab`) is still
+cosmetic and now bounded by the streak; `panes/dispatch-pane-agent.sh` is now **492 lines** (test
+file 594) — past the 400 soft limit by 23%, and the file split stays the first move of the next
+dispatcher change. Deliberately not done here: a 37-commit branch one step from its PR is the wrong
+place for a whole-file reshuffle, and every reviewer sign-off on this branch was given against the
+current layout.

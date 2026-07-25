@@ -78,3 +78,14 @@ policy path — which is the three-lane model, written less clearly.
 - **A simultaneous fan-out can still degrade one worker to in-process** — a known, accepted
   deviation from the "never inline" guarantee, decided 2026-07-24. Documented for the reader in
   `skills/dispatching-pane-agents`; not restated here.
+- **A failed `open_tab` reports on the target, not the adapter — but only up to a point.** It
+  retires the unusable target and degrades that one spawn (exit 3, no cooldown), so a single
+  stale pane cannot demote a healthy session to in-process. That reclassification carried a
+  cost the first version missed: an adapter that opens panes but cannot tab retires a *healthy*
+  pane on every overflow, the freed slot immediately opens a new one, and the real pane count
+  grows past N without bound. `max=N` is therefore restored by a **streak** — 3 consecutive
+  `open_tab` failures are treated as a tab-incapable adapter and write the cooldown after all.
+  3, not 2, because over-triggering silently discards the user's explicit `panes max=N` for a
+  whole session while under-triggering leaks at most 2 surplus panes, which are visible and
+  self-limiting. Cleared only by a successful `open_tab`; an `open_pane` success is not
+  evidence of tab capability, and one occurs between every pair of failures in that very loop.
