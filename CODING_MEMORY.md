@@ -5,12 +5,12 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- **`feature-update-gate-checks-and-session-memory` — PR #29 OPEN, READY FOR REVIEW**
-  (https://github.com/suyatdev/.claude/pull/29, HEAD `7459ad8`). Phase-frontmatter permission
-  system shipped in `22fb409`. ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`.
-  Two obs-judge implementation-stage rounds, both risk=medium/confidence=high, no blocking
-  findings. Nothing pending this session; awaiting human review/merge. Detail lives in
-  `.claude/session-state.md` (machine-local) — do not restate spec content here.
+- **PR #29 MERGED 2026-07-25** (`122b8a5`); branch pruned local+remote; ancestor-check verified.
+  Phase-frontmatter permission system (ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`)
+  now on `main` — every feature-scale change gets a `docs/features/<name>.md` with `phase` in
+  frontmatter, checked on restore. **Mechanism is still undogfooded** — no such file exists yet
+  anywhere; the next feature-scale branch should be its first real user. Detail:
+  `.claude/session-state.md`.
 - session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
   **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
