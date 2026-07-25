@@ -173,7 +173,11 @@ an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
 3. `stat` `<root>/docs/features`; absent → ⊘. *(Q5's cheap early exit — the common case in every
    repo that never opted in. Deliberately **after** step 2, not before: a bare `stat ./docs/features`
    assumes the hook's CWD is the repo root and would silently stop working from a subdirectory.)*
-4. `python3` parse payload → `tool_name`, `tool_input.file_path`; no python / no `file_path` → ⊘.
+4. `python3` parse payload → `tool_name`, and the path: `tool_input.file_path` (`Edit`/`Write`),
+   falling back to `tool_input.notebook_path` (`NotebookEdit`). No python / neither key → ⊘.
+   *(Corrected 2026-07-25 against the live tool schema: `NotebookEdit` has **no** `file_path` — its
+   only path key is `notebook_path`. Reading `file_path` alone, as this step originally said, would
+   have failed open on every notebook write.)*
 5. Relativize `file_path` against the root (payload paths are absolute); outside the root → ⊘.
 6. Classify the path — **reuse `doc-guard.sh:149` verbatim**, plus `.claude/*`:
    `CODING_MEMORY.md`, `coding-memory/*`, `docs/*`, `.claude/*` → unguarded → ⊘. Else guarded.
@@ -214,16 +218,195 @@ amend `writing-specs` to carve out feature-scale work — but that is its own ta
 
 ## Spec
 
-<Not yet written — this is the next session's first task, and it is now unblocked: Q2 accepted with
-the un-superseded narrowing, Q3–Q6 resolved, Q7 out of scope. Q1 (should this be built at all)
-stays deliberately deferred to the gate decision. Write it from "Design detail settled" above in
-`writing-specs` form — Gherkin scenarios covering each table row plus every ⊘ fail-open exit, the
-payload contract, and the deny-message contract. The compliance judge gates it before user review.>
+### Artifacts
+
+| Path | Kind |
+|---|---|
+| `hooks/phase-guard.sh` | new, executable (755) |
+| `hooks/phase-guard.test.sh` | new, 644 — matches the sibling convention |
+| `settings.json` | one added `PreToolUse` block, matcher `Edit|Write|NotebookEdit` |
+| `rules/gates.md` | one gate stub, alongside the other Tier-1 hook stubs |
+| `docs/decisions/0011-*.md` | ADR — this **amends** ADR 0010, which deferred the hook |
+
+### Pinned toolchain
+
+Verified on this machine 2026-07-25; the hook must run under exactly these.
+
+| Tool | Version | Constraint it imposes |
+|---|---|---|
+| `bash` | 3.2.57 (system, `arm64-apple-darwin25`) | **No bash-4 features** — no associative arrays, no `mapfile`/`readarray`, no `${var,,}`. `#!/usr/bin/env bash` resolves here. |
+| `python3` | 3.9.6 | JSON payload parse **only**. No third-party imports, no PyYAML. |
+| `git` | 2.50.1 (Apple Git-155) | `rev-parse`, `for-each-ref`, `cat-file --batch`. |
+| frontmatter | `awk`/`sed` | Deliberately not a second parser — see "Toolchain" under *Design detail settled during planning*. |
+
+Regexes live in variables, never inline in `[[ ]]` (`git-guard.sh:22`).
+
+### Contracts
+
+**Input** — `PreToolUse` JSON on stdin:
+
+```yaml
+hook_event_name: PreToolUse
+tool_name: Edit | Write | NotebookEdit
+tool_input:
+  file_path: /absolute/path      # Edit, Write
+  notebook_path: /absolute/path  # NotebookEdit — the ONLY path key it carries
+```
+
+**Output** — exit `0` = allow, emitting nothing on stdout or stderr. Exit `2` = deny, reason on
+stderr. No other exit code is legitimate: under `set -u` an unbound variable exits 1, and a fail-open
+path that leaks a nonzero code is a defect regardless of how the harness classifies it. Every ⊘ path
+therefore exits 0 **explicitly**.
+
+**Deny message** — must contain all four, or the block is unactionable:
+
+1. every offending feature-file path, and its `phase:`;
+2. the current branch name;
+3. both legitimate fixes — open the gate (`gate confirmed` → advance `phase:`, record `branch:`),
+   or, if the file is stale/abandoned, advance or delete it;
+4. the literal statement that **no bypass environment variable exists** (Q6), so the session does
+   not go hunting for a `PHASE_EXEMPT` that was deliberately never built.
+
+### Scenarios
+
+```gherkin
+Background:
+  Given the global PreToolUse hook phase-guard.sh is registered for Edit|Write|NotebookEdit
+  And a guarded write is one whose path is NOT CODING_MEMORY.md, coding-memory/*, docs/*, or .claude/*
+```
+
+**Group A — out of scope: allow silently (exit 0, no output).** Each is a ⊘ exit from the
+order-of-operations, in order. The shared assertion is `exit 0 AND stderr is empty`.
+
+```gherkin
+Scenario Outline: fail open rather than block a session that never opted in
+  Given <precondition>
+  When any Edit/Write/NotebookEdit is attempted
+  Then the hook exits 0 and writes nothing
+
+Examples:
+  | # | precondition                                                          |
+  | 1 | stdin is empty                                                        |
+  | 2 | the working directory is not inside a git repository                  |
+  | 3 | <root>/docs/features/ does not exist                                  |
+  | 4 | python3 and python are both absent from PATH                          |
+  | 5 | tool_input carries neither file_path nor notebook_path                |
+  | 6 | the resolved path lies outside the repository root                    |
+  | 7 | every docs/features/*.md fails frontmatter parsing                    |
+  | 8 | no docs/features/*.md has phase: planning                             |
+```
+
+Scenario 3 must be reached **only after** the repo root is resolved (step 2). A bare
+`stat ./docs/features` assumes the hook's CWD is the repo root and silently stops guarding from any
+subdirectory — the failure mode is invisible, which is what makes it worth pinning here.
+
+```gherkin
+Scenario: an unguarded path is never blocked, even mid-planning
+  Given docs/features/a.md has phase: planning
+  And the current branch is claimed by no feature file
+  When a write targets docs/features/a.md, docs/decisions/0011.md, CODING_MEMORY.md,
+       coding-memory/x.md, or .claude/session-state.md
+  Then the hook exits 0 and writes nothing
+```
+
+This scenario *is* the escape hatch (Q6). A repo locked by a stale `planning` file is always
+unlocked by editing that file's frontmatter, because feature files live under `docs/**`.
+
+**Group B — permission decisions.** One scenario per row of the design table.
+
+```gherkin
+Scenario: planning file, unclaimed branch -> DENY            # the core case
+  Given docs/features/a.md has phase: planning
+  And no branch records docs/features/a.md at phase: implementation
+  And the current branch is main
+  When a guarded write is attempted
+  Then the hook exits 2
+  And stderr names docs/features/a.md, names branch main, gives both fixes,
+      and states that no bypass env var exists
+
+Scenario: the branch is claimed -> ALLOW
+  Given docs/features/a.md has phase: implementation and branch: feat/a
+  And the current branch is feat/a
+  When a guarded write is attempted
+  Then the hook exits 0
+
+Scenario: one feature planning must not revoke another's open gate -> ALLOW
+  Given docs/features/a.md has phase: implementation and branch: feat/a
+  And docs/features/b.md has phase: planning
+  And the current branch is feat/a
+  When a guarded write is attempted
+  Then the hook exits 0
+
+Scenario: superseded planning file stops denying everywhere -> ALLOW    # the narrowing
+  Given docs/features/a.md reads phase: planning in the working tree
+  And branch feat/a's copy of docs/features/a.md reads phase: implementation
+  And the current branch is hotfix/x, claimed by no feature file
+  When a guarded write is attempted
+  Then the hook exits 0
+
+Scenario: a NotebookEdit is guarded like any other write
+  Given docs/features/a.md has phase: planning and the branch is unclaimed
+  When NotebookEdit is attempted with tool_input.notebook_path = <root>/analysis.ipynb
+  Then the hook exits 2
+```
+
+The last scenario is the regression test for the `file_path`-only bug corrected above; without it,
+the guard silently exempts an entire tool.
+
+**Group C — the un-superseded lookup.** Behavioral contract, because a naive implementation is
+O(branches) subprocesses on a hook that fires on every write.
+
+```gherkin
+Scenario: every branch's copy is read in exactly one subprocess
+  Given N local branches and M candidate planning files
+  When the un-superseded filter runs
+  Then exactly one `git cat-file --batch` process is spawned
+  And it is fed N*M lines of the form <branch>:<path>
+```
+
+Parser contract, verified against git 2.50.1 — the two output forms are **not** symmetric:
+
+| Input line resolves to | `cat-file --batch` emits |
+|---|---|
+| a blob | `<sha> blob <size>` then the content — **the request is not echoed** |
+| nothing (path or branch absent) | the request line verbatim, then ` missing` |
+
+Because present objects do not echo their request, results **must** be consumed in input order; a
+parser that keys off the echoed line only will mis-attribute every blob. Ref names cannot contain
+`:` or whitespace, so splitting a request line on its first colon is safe.
+
+### Non-goals
+
+- **Reverse enforcement** (blocking spec/checklist edits during implementation) — Q7, out of scope.
+- **Per-feature attribution.** The hook enforces at *branch* granularity; on a claimed branch a
+  session can still write source for a different, still-planning feature. Stated as a known hole,
+  not a defect to fix — it is the honest boundary of what `PreToolUse` can know.
+- **Any bypass mechanism** — no env var, no sentinel file, no branch-name allowlist (Q6).
 
 ## Tasks
 
-- [ ] <Not yet built. The checklist is written during planning and frozen at the gate; adding
-      tasks after the gate opens is forbidden by the phase rules.>
+Frozen at the gate; adding tasks after the gate opens is forbidden by the phase rules. Tests precede
+implementation in every pair — the test is the unbiased baseline.
+
+- [ ] 1. `hooks/phase-guard.test.sh` — Group A scenarios (all 8 ⊘ exits + the unguarded-path
+      scenario), asserting exit 0 **and empty stderr**. Red against a nonexistent hook.
+- [ ] 2. `hooks/phase-guard.sh` — steps 1–6 of the order of operations (payload, git root,
+      `docs/features` stat, python parse incl. `notebook_path`, relativize, path classification
+      reusing `doc-guard.sh:149`). Green for Group A.
+- [ ] 3. Extend the test with Group B: the four permission rows + the NotebookEdit regression.
+- [ ] 4. Implement steps 7–10: frontmatter scan, un-superseded filter, claimed-branch check, deny.
+- [ ] 5. Extend the test with Group C: assert the single-subprocess contract and the
+      input-order parser against both `blob` and `missing` output forms.
+- [ ] 6. Deny-message contract test — assert all four required elements are present in stderr.
+- [ ] 7. Register the `PreToolUse` / `Edit|Write|NotebookEdit` block in `settings.json`. It is a
+      **fourth** matcher block (existing: `Bash`, `Task|Agent`, `*`), not an edit to one — verified
+      2026-07-25.
+- [ ] 8. Add the gate stub to `rules/gates.md`.
+- [ ] 9. ADR `docs/decisions/0011-*.md` — amends ADR 0010: records that its stated objection was
+      dismissed by reframing (branch-scoped permission), and that its "build only when the gate is
+      observed being skipped" deferral was deliberately overridden at the gate decision (Q1).
+- [ ] 10. Dogfood check: run the full test suite, then confirm the hook denies a real source write
+      in this worktree while `phase: planning` still holds.
 
 ## Verification
 
