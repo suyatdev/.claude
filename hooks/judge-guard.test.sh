@@ -49,7 +49,6 @@ line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"; run_case "gh pr list un
 rm -f "$VFILE"
 run_case "commit msg containing phrase -> ignore" 0 'git commit -m "feat: blocking gh pr create without a verdict"'
 run_case "echo containing phrase -> ignore"       0 "echo gh pr create"
-run_case "chained && (documented gap) -> ignore"  0 "cd /tmp && gh pr create --fill"
 
 # Regression (round 2): a quoted-space env prefix must NOT silently bypass the guard.
 rm -f "$VFILE"
@@ -72,6 +71,46 @@ rm -f "$VFILE"
 run_case "rtk-wrapped invocation, no verdict -> block"   2 "rtk gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_case "rtk-wrapped invocation, fresh verdict -> pass" 0 "rtk gh pr create --fill"
+
+# Regression: with no JUDGE_VERDICTS_FILE override, the guard must read the JUDGED REPO's
+# store. The judge writes verdicts repo-relative (agents/observability-judge.md: "Write ONLY
+# under coding-memory/observability-judge/"), but the guard used to read $HOME/.claude's copy.
+# Those two paths coincide only for the ~/.claude repo itself, so in every other repo the gate
+# was permanently unsatisfiable — no verdict could ever be found, however many were recorded.
+run_case_default() { # $1 desc, $2 want-exit, $3 command — runs with JUDGE_VERDICTS_FILE unset
+  local desc="$1" want="$2" cmd="$3" payload got
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  ( unset JUDGE_VERDICTS_FILE; printf '%s' "$payload" | bash "$HOOK" >/dev/null 2>&1 )
+  got=$?
+  if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); fi
+}
+
+RVFILE="$TMP/coding-memory/observability-judge/verdicts.jsonl"
+mkdir -p "$(dirname "$RVFILE")"
+rm -f "$RVFILE"
+run_case_default "repo store absent -> block"              2 "gh pr create --fill"
+line implementation "$REPO" "$BRANCH" "$SHA"   > "$RVFILE"
+run_case_default "fresh verdict in repo store -> pass"     0 "gh pr create --fill"
+line implementation "$REPO" "$BRANCH" deadbeef > "$RVFILE"
+run_case_default "stale sha in repo store -> block"        2 "gh pr create --fill"
+rm -f "$RVFILE"
+
+# Regression: a chained `gh pr create` must be GUARDED, not skipped. This inverts a previously
+# documented-and-asserted gap ("chained && -> ignore"): that gap is what let vibe-scape's PR #25
+# ship with no verdict at all, because push-then-create was issued as one chained Bash call.
+# The quoted-phrase cases above must keep passing — detection is per shell segment, not a
+# substring match, so `gh pr create` inside a commit message is still ignored.
+rm -f "$VFILE"
+run_case "chained && -> block"             2 "cd /tmp && gh pr create --fill"
+run_case "chained && no spaces -> block"   2 "git push&&gh pr create --fill"
+run_case "chained ; -> block"              2 "git push; gh pr create --fill"
+run_case "chained || -> block"             2 "git push || gh pr create --fill"
+run_case "piped | -> block"                2 "foo | gh pr create --fill"
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_case "chained && with fresh verdict -> pass" 0 "git push && gh pr create --fill"
+rm -f "$VFILE"
+run_case "chained && with JUDGE_EXEMPT on gh segment -> pass" 0 'git push && JUDGE_EXEMPT="docs only" gh pr create --fill'
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
