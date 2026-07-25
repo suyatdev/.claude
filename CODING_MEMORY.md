@@ -24,6 +24,27 @@ how this file and its linked files should be written (plain language, major chan
   under unguarded `docs/**`, so editing the frontmatter always unlocks a locked repo. A branch-name
   allowlist was rejected on the same ground: it is `PHASE_EXEMPT` through a different door.
   Q7 (reverse direction) stays out of scope. Q1 (build at all?) still deferred to the gate.
+- **APPROVED, NOT STARTED — doc-system consolidation (do this before more phase-guard work).**
+  User-approved 2026-07-25: trim this file to its own ≤200-line cap, delete the 18
+  `coding-memory/branches/*.md`, drop `coding-memory/pr-tracking.md`. **These are ONE coupled
+  commit, not three** — this index holds ~17 pointers into the delete targets (branches/: lines
+  68,77,102,132,138,150,168,179,189,201,263 · pr-tracking: 57,69,75,201,263,266,415), so deleting
+  without trimming leaves dangling pointers, and trimming removes most of them anyway. Order:
+  (1) rewrite §Active Session (7–170) and §Exact Next Steps (272–432) — 325 of 432 lines, both
+  accumulated history, keep current session + repo/PR pointers + next steps only; (2) `git rm` the
+  19 files (all tracked → recoverable); (3) fix `skills/preparing-pull-requests/SKILL.md:43`, which
+  mandates `pr-tracking.md` as a maintained running doc — PR descriptions get generated at PR time
+  from the checklist + diff; (4) tick `README.md:63`, which already tracks this reconciliation.
+  Inert trap: `docs/superpowers/plans/2026-07-18-compliance-judge.md:563,570` would recreate both
+  deleted artifacts if ever re-executed.
+- **Deferred to its own feature file `doc-system-consolidation` (amends ADR 0010 → earns an ADR).**
+  (a) **Judge-output shrink:** `coding-memory/observability-judge/` is 32 files / 5,007 lines and
+  compliance adds 757 — and *nothing reads them*, since `judge-guard.sh:22` consumes
+  `verdicts.jsonl`, not the `.md`. Shrink to pass/fail per area + open issues on the feature file.
+  (b) **Invert the canonical feature-file section order** to frontmatter → Tasks → Verification →
+  Spec → rationale. Today `## Tasks` sits at line 223 of 245, so "where are we" costs a full-file
+  read; reordered, a restore gets it from the first ~40 lines. The one-file design currently fights
+  selective loading instead of enabling it.
 - **Q2 was the crux.** ADR 0010 deferred this hook because
   "which feature file is active" is unresolvable at `branch: none`. That framing is avoidable: the
   hook never attributes a write to a feature, it asks only whether the *current branch* carries
