@@ -5,6 +5,12 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- **CURRENT: `phase-guard-hook` — PLANNING.** `docs/features/phase-guard-hook.md` (`4f923ba`) is
+  the repo's **first** `docs/features/` file, dogfooding ADR 0010. In an isolated worktree, branch
+  `worktree-phase-guard-hook` (pushed) — created to escape a concurrent session on the primary
+  checkout, NOT the implementation branch. Blocked on open Q1: ADR 0010 defers this hook until
+  "the gate is observed being skipped", which has not happened — building now amends that ADR.
+  No spec/checklist yet (both freeze at the gate). Detail: `.claude/session-state.md`.
 - **PR #29 MERGED 2026-07-25** (`122b8a5`); branch pruned local+remote; ancestor-check verified.
   Phase-frontmatter permission system (ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`)
   now on `main` — every feature-scale change gets a `docs/features/<name>.md` with `phase` in
