@@ -189,3 +189,146 @@ Each fix is small. None requires reopening a design decision.
 ### Waivers
 
 None. No user-waived violation ids were supplied for this round.
+
+---
+
+## Round 3 — 2026-07-25 — **FAIL** (1 violation, new — escalation round)
+
+**HEAD:** `2017dea1aba3ab968e67834b5e9c2994a18b3ccc` · **spec blob:** `7bb68d10f2998af6414478e852cee5b11178b975`
+**Branch:** `worktree-phase-guard-hook` · **Spec:** 824 lines (was 733) · **Confidence:** high
+
+### Layman summary
+
+All four round-2 violations are genuinely closed, and I checked each in every place it could have
+been closed in one spot and contradicted in another. The task list is now clean: no task writes
+tests and implementation together, all ten A1 examples are assigned exactly once, and every scenario
+group has exactly one owning task. `settings.json` now appears consistently in the Background, step
+6, Q4, Rollback and the unguarded-path scenario — the quartet agrees. The Flag contract is a real
+contract (store, path, per-reason keys, both-keys-empty, unwritable store, cleanup) and is
+implementable in bash 3.2.57 with no bash-4 features. The Group C shim now tees stdin, so the
+"fed N*M lines" assertion is finally observable by the mechanism pinned to observe it.
+
+Every new line reference is exact — I opened all three: `dispatch-pane-agent.sh:71` really is
+`: > "$STATE_DIR/adapter-failed-$sid"`, `context-handoff-watch.sh:14` really is the
+`${PANE_STATE_DIR:-...}` shape the Flag contract mirrors, and `core-conduct.md:17` is the testing
+invariant. The withdrawn layering claim is honestly withdrawn and factually right to withdraw:
+`git-guard.sh:90` gates its commit block behind `on_main`, so on a worktree branch nothing does
+stand behind the Bash hole. The sticky-supersession paragraph is accurate and, if anything,
+understates nothing.
+
+One thing blocks, and it is one sentence long. The Flag contract — written this round to fix
+round 2's violation — corrects one prior-art misattribution and introduces a new one: it states that
+**"no hook in this repo writes session state today,"** and concludes the pattern "must be specified,
+not borrowed." That is false. `hooks/context-handoff-watch.sh` is a registered `PostToolUse` hook in
+this very repo, and at lines 42–43 it writes exactly this kind of once-per-session flag file, keyed
+by the payload `session_id`, under the same `$STATE_DIR` the spec's own table cites at line 14 of
+that file. It even ships `hooks/context-handoff-watch.test.sh`, which already demonstrates the
+`$PANE_STATE_DIR` env-override test pattern the Flag contract reinvents. The instruction not to
+borrow therefore steers the implementer away from a tested sibling — and hides that the spec's
+unwritable-store rule (*print and continue*) is a deliberate-looking but unwitting divergence from
+that sibling's `mkdir -p ... || exit 0` silent bail. The spec's choice is the better one; it simply
+never gets to say so, because it believes there is nothing to diverge from.
+
+The contract itself is sound. Only the justification and the "do not borrow" instruction are wrong.
+
+### Violations
+
+| # | id | rule source | rule | where (spec) | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/false-prior-art-claim` | `skills/writing-specs/SKILL.md:13-14`, `:33` (reinforced by `rules/core-conduct.md:13` DRY and `:9` match the surrounding structure) | Maintain the spec with production rigor; drift between spec and code makes the agent describe behavior that does not exist — verify claims rather than report what is remembered | "Two exits that must not be silent" → **Flag contract**, opening paragraph (L291–292) | The spec asserts "no hook in this repo writes session state today. This is therefore new ground and must be specified, not borrowed" — but `hooks/context-handoff-watch.sh` is a registered `PostToolUse` hook (settings.json, matcher `*`) that writes a once-per-session flag keyed by payload `session_id` at `:42-43`, under the same `$STATE_DIR` the table cites at `:14`; the false premise directs the implementer away from a tested precedent (`hooks/context-handoff-watch.test.sh` already shows the env-override test pattern) and conceals that the Flag contract's unwritable-store rule diverges from that sibling's `mkdir -p ... \|\| exit 0` silent bail. |
+
+### Round-2 violations — all four resolved
+
+| Round-2 id | Status | Evidence checked |
+|---|---|---|
+| `core-conduct/test-impl-same-step` | **resolved** | All 16 tasks walked: 1/3/5/7/9/11 are test-only, 2/4/6/8/10/12 implementation-only, 13–15 registration/docs, 16 dogfood+measure. No task writes both. |
+| `writing-specs/contradictory-guarded-write-definition` | **resolved** | `settings.json` now in Background (L408–409), step 6 (L215–216), Q4's round-2 amendment (L112–115), the unguarded-path scenario (L520–521) and Rollback path 2 (L315–317) — all five agree on the same list. |
+| `writing-specs/underspecified-session-flag` | **resolved** (contract exists; see violation 1 for its justification) | Flag contract table (L294–302): store + `$PHASE_GUARD_STATE_DIR` override, `phase-guard-<reason>-<sid>` path, per-reason keying with `nopython` env-only, literal `nosession` for both-empty, print-and-continue when unwritable, no cleanup. Task 9 tests the unwritable case; task 10 implements. |
+| `writing-specs/unverifiable-group-c-assertion` | **resolved** | Shim now tees stdin on the `cat-file` branch (L586–591) with the non-recursion and count-perturbation arguments both stated; the fourth `Then` (L609) is now observable via `$STDIN_LOG`. |
+
+### Adversarial checks requested by the dispatch
+
+1. **The `settings.json` quartet** — consistent in all five places (above). **Flag contract vs. the
+   Contracts output rule** — one soft edge, not a contradiction: Contracts (L390–392) says the two
+   audible exits print "at most once per session" unconditionally, while the Flag contract's
+   unwritable-store row degrades to once-per-write. Noted below.
+2. **The 16 tasks, walked in order.** Every task is completable with only what precedes it. Task 2's
+   always-⊘ step-7 stub and task 4's real step 7 do not conflict — task 4 replaces the scaffold, the
+   normal walking-skeleton move, and nothing task 1 asserts breaks when it does. Coverage is exact:
+   A1 examples 1–5 → task 1, 6 → task 3, 7–10 → task 7 (round 2's double-assignment gone); A2 → 9;
+   A3's eight → 5; Group B's six → 3 (row 1) + 7 (five); Group C + no-local-branches → 7; deny
+   message → 11. Two green-claims overreach on stderr *content* — see the first note.
+3. **New line references** — all three exact. `panes/dispatch-pane-agent.sh:71` = `: >
+   "$STATE_DIR/adapter-failed-$sid"`; `hooks/context-handoff-watch.sh:14` =
+   `STATE_DIR="${PANE_STATE_DIR:-$HOME/.claude/panes/state}"`; `rules/core-conduct.md:17` = the
+   never-edit-tests-and-implementation invariant. Also re-verified: `doc-guard.sh:149`,
+   `doc-guard.sh:49`, `judge-guard.sh:28`, `git-guard.sh:22`, ADR 0010's objection quote (`:42-43`,
+   verbatim), and `settings.json`'s three `PreToolUse` matchers (`Bash`, `Task|Agent`, `*`) — a
+   fourth is still correct, and `PostToolUse` already proves the `Edit|Write|NotebookEdit` string.
+4. **Flag contract in bash 3.2.57** — implementable. `${PHASE_GUARD_STATE_DIR:-$HOME/...}`,
+   `mkdir -p`, `: >`, and per-reason filename construction are all POSIX; no associative arrays, no
+   `mapfile`, no `${var,,}`. Nothing in it contradicts fail-open: every row ends at exit 0, and the
+   unwritable-store row explicitly refuses to let a flag-write failure change the verdict.
+5. **The withdrawal is honest and the audit is complete.** `git-guard.sh:90` gates the commit block
+   behind `on_main()` (`:67-70`), so the round-2 layering claim was indeed false on a worktree
+   branch. I re-read every remaining layering claim: the Second-order-cost paragraph (L77–81) and
+   the narrowing's "the write cannot land" (L174–176) are both scoped to `main` specifically, where
+   `git-guard` does hold — those survive correctly. Sticky supersession (L181–189) is accurate,
+   including that round 1's `review` widening made it stickier. Withdrawing the one claim did not
+   leave a sibling standing.
+
+### Notes (non-blocking — improvements, not blockers)
+
+- **Two "Green for task N" claims overreach, and the re-sequencing preamble (L683–684) asserts all
+  six pairs are green-able.** Group B row 1's `Then` (L539–540) and A3's (L483–484) assert *stderr
+  content* — offending file, branch, both fixes, the no-bypass clause — which task 12 implements,
+  yet task 4 claims green for task 3 and task 6 for task 5. Harmless in practice (the suite is
+  cumulative, the implementer emits a minimal message early, and task 11 owns the contract), but one
+  clause fixes it: say that tasks 3 and 5 assert the exit code and file-naming only, with full
+  message content deferred to task 11. Worth doing in the same edit as the blocking fix.
+- Task 1's assertions are all `exit 0` + empty stderr, so they pass against a bare `exit 0` and
+  cannot verify steps 1–6. They regain meaning only when the cumulative suite is re-run after task 4
+  gives the hook a deny path — true, but unstated.
+- The Contracts output rule (L390–392) says the two audible exits print "at most once per session";
+  the Flag contract's unwritable-store row makes that once-per-*write*. Add "when the flag store is
+  writable" to Contracts, or the A2 scenario's "exactly one line in total" reads as violated by the
+  case task 9 explicitly tests.
+- **Supersession reads `refs/heads/` only.** In a fresh clone whose implementation branch exists
+  only as `refs/remotes/origin/*`, nothing supersedes and the repo is locked until the file is
+  edited or the branch checked out. Consistent with the disclosed stale-file behaviour and
+  fail-closed-in-scope, but local-vs-remote is a decision the spec never names.
+- Step 4 enumerates "neither key → ⊘" but not a *malformed* (non-empty, unparseable) JSON payload.
+  Same outcome under any sane implementation; one A1 example would pin it.
+- Step 3's "one `stat`" is an existence test on the hottest path in every repo on the machine;
+  `[ -d "$root/docs/features" ]` is a shell builtin and costs no subprocess, which is free headroom
+  against the ≤15ms non-opted-in budget. (The step-3 `stat` also passes if `docs/features` is a
+  regular file — carried from round 2, still harmless: the glob then yields nothing and step 7 ⊘s.)
+- The `python` fallback is still retained "for parity with the siblings, not because it is exercised
+  here", and it taxes the primary path with py2/py3-compatible syntax. Defensible house consistency;
+  carried, not cited, for the third round.
+- Spec is now 824 lines, over 20% of it judge-round scaffolding (L743–809). Once the gate opens,
+  moving the round logs out leaves the durable artifact as the design — the one-canonical-file rule
+  is about *state*, not about carrying every review transcript forever.
+- No `writing-secure-code` violation. Payload paths are `case`-matched, never evaluated; the
+  `<branch>:<path>` lines reach `cat-file --batch` on stdin, not through a shell; the deny message
+  carries no secrets; the flag files are zero-byte markers under `$HOME`, matching two siblings
+  exactly. The `<sid>` component of the flag path is harness-supplied and used identically by
+  `context-handoff-watch.sh:27` and `dispatch-pane-agent.sh:71` — house pattern, not a new boundary.
+- Architecture trade-offs remain human-owned (`rules/core-conduct.md:21`): Q1 deferred to the gate
+  decision, Q2 accepted by the user with the narrowing, Q6 resolved by the user, Q7 recommended and
+  uncontested.
+
+### Not cited (deliberate, carried from rounds 1–2)
+
+- **Spec location / inline Spec section** — excluded by dispatch; the `writing-specs` vs. ADR 0010
+  contradiction is disclosed and resolved to the newer project layer, with the real fix named as its
+  own task.
+- **No Mermaid diagram** — ADR 0004 is the project layer and makes diagramming reachable, not
+  enforced.
+- **`## Verification` → `<Appended during review.>`** — the canonical template placeholder.
+- **Rollback path 3 marked unverified** — an honestly-flagged open item with an owning task (16) and
+  a decision rule for either outcome, not a TBD.
+
+### Waivers
+
+None. No user-waived violation ids were supplied for this round.
