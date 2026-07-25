@@ -56,7 +56,17 @@ forward (branch → is it claimed?), never backward (write → which feature?).
 | A file is `implementation` with `branch: B` | `B` | **allow** |
 | A file is `planning` *and un-superseded* | branch unclaimed (`main`, worktree, hotfix) | **deny** |
 | Feature A `implementation` on `bA`; feature B `planning` | `bA` | **allow** — B's planning must not revoke A's permission |
-| File reads `planning` here, but some branch has it at `implementation` | any | **allow** — superseded; its gate already opened (the narrowing) |
+| File reads `planning` here, but some branch has it at `implementation` **or `review`** | any | **allow** — superseded; its gate already opened (the narrowing) |
+| Any of the above | **detached HEAD** (rebase, bisect, `git checkout <sha>`) | **allow**, silently — see below |
+
+**Detached HEAD (added round 2, compliance `writing-specs/edge-cases`).** `git rev-parse
+--abbrev-ref HEAD` returns the literal string `HEAD` when detached — verified on git 2.50.1. No
+feature file can ever record `branch: HEAD`, so the naive reading denies *every* source write
+throughout a rebase or bisect and advises the session to record a branch name that is not one.
+This file's own Notes record a concurrent session mid-rebase, so the state is not hypothetical.
+→ **Allow, silently.** A detached HEAD is a transient mechanical git state, not a statement about
+phase; the hook cannot infer permission from it either way, and Q3's blast-radius argument governs.
+Silent rather than warned because a rebase issues many writes and a per-write line would be noise.
 
 **Residual weakness, stated plainly:** the hook enforces permission at *branch* granularity, not
 per-feature attribution. While on a claimed implementation branch `bA`, a session could write source
@@ -118,6 +128,12 @@ way — the deny message must therefore name the offending file(s) so the fix is
    gate the hook exists to hold. A branch-name allowlist was also considered and rejected for the
    same reason — "name your branch `hotfix/` to write freely" is `PHASE_EXEMPT` through a
    different door, and shipping a bypass implicitly is worse than shipping one honestly.
+   → **Qualified in round 2:** "no bypass at all" is true of *deliberate* bypasses, but the
+   `Edit|Write|NotebookEdit` matcher leaves the whole **Bash-tool write surface** unguarded (see
+   Non-goals). That is an unclosed hole, not a designed escape hatch — but the deny message must
+   not claim otherwise, so it asserts that no bypass *environment variable* exists rather than that
+   no route exists. Shipping a bypass implicitly is worse than shipping one honestly, and the same
+   applies to a safety message that overclaims.
 
 ### New question raised by this design
 
@@ -173,34 +189,103 @@ an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
 3. `stat` `<root>/docs/features`; absent → ⊘. *(Q5's cheap early exit — the common case in every
    repo that never opted in. Deliberately **after** step 2, not before: a bare `stat ./docs/features`
    assumes the hook's CWD is the repo root and would silently stop working from a subdirectory.)*
-4. `python3` parse payload → `tool_name`, and the path: `tool_input.file_path` (`Edit`/`Write`),
-   falling back to `tool_input.notebook_path` (`NotebookEdit`). No python / neither key → ⊘.
+4. Resolve the interpreter as the siblings do — `py=$(command -v python3 || command -v python)`
+   (`judge-guard.sh:28`, `doc-guard.sh:49`) — and parse the payload → `tool_name`, and the path:
+   `tool_input.file_path` (`Edit`/`Write`), falling back to `tool_input.notebook_path`
+   (`NotebookEdit`). Neither key → ⊘. **No interpreter → ⊘ *and* print one line, once per session**
+   (see "Two exits that must not be silent").
    *(Corrected 2026-07-25 against the live tool schema: `NotebookEdit` has **no** `file_path` — its
    only path key is `notebook_path`. Reading `file_path` alone, as this step originally said, would
    have failed open on every notebook write.)*
 5. Relativize `file_path` against the root (payload paths are absolute); outside the root → ⊘.
-6. Classify the path — **reuse `doc-guard.sh:149` verbatim**, plus `.claude/*`:
-   `CODING_MEMORY.md`, `coding-memory/*`, `docs/*`, `.claude/*` → unguarded → ⊘. Else guarded.
-7. Parse `phase:`/`branch:` frontmatter of `docs/features/*.md` in the working tree; a file that
-   fails to parse is skipped (⊘ for that file only). Collect `planning_files`; empty → ⊘.
-8. **Un-superseded filter.** Drop any `F` that reads `implementation` on some branch. Read every
-   branch's copy in **one** subprocess — `git for-each-ref --format='%(refname:short)' refs/heads/`
-   piped into `git cat-file --batch` as `<branch>:<path>` lines — never one `git show` per branch,
-   which is O(branches) processes on a hook that fires on every write. Empty after filtering → ⊘.
-9. `claimed` = any working-tree feature file with `phase: implementation` **and** `branch:` equal to
-   `git rev-parse --abbrev-ref HEAD`. Claimed → ⊘.
+6. Classify the path — **reuse `doc-guard.sh:149` verbatim**, plus `.claude/*` and `settings.json`:
+   `CODING_MEMORY.md`, `coding-memory/*`, `docs/*`, `.claude/*`, `settings.json` → unguarded → ⊘.
+   Else guarded. *(`settings.json` is exempt because it is this hook's own off switch — see
+   "Rollback".)*
+7. Parse frontmatter of `docs/features/*.md` in the working tree per the **Frontmatter contract**
+   below; a file that violates it is skipped (⊘ for that file only). Collect `planning_files`;
+   empty → ⊘. If **every** file was skipped, ⊘ *and* print one line, once per session.
+8. **Un-superseded filter.** Drop any `F` that reads `implementation` **or `review`** on some
+   branch — `review` included because a *finished* feature whose `main` copy still reads `planning`
+   would otherwise block forever (observability round 1). Read every branch's copy in **one**
+   subprocess — `git for-each-ref --format='%(refname:short)' refs/heads/` piped into
+   `git cat-file --batch` as `<branch>:<path>` lines — never one `git show` per branch, which is
+   O(branches) processes on a hook that fires on every write. Empty after filtering → ⊘.
+   **Either git call failing (nonzero exit) → ⊘.** An empty `for-each-ref` (a repo with no local
+   branches) is not a failure: nothing supersedes, so every candidate survives to step 9.
+9. Read the current branch: `git rev-parse --abbrev-ref HEAD`. **Nonzero exit or empty output → ⊘.**
+   Output is the literal `HEAD` (detached) → ⊘. Otherwise `claimed` = any working-tree feature file
+   with `phase: implementation` **and** `branch:` equal to that value. Claimed → ⊘.
 10. Otherwise **deny (exit 2)**.
 
 **Fail-closed only at step 10** — after a `planning` file is positively identified, confirmed
-un-superseded, and the branch confirmed unclaimed. Everything upstream fails open (Q3): this hook
-fires on every write in every repo, so a false block costs the whole session, in repos that never
-opted in. That is the deliberate divergence from `judge-guard.sh`, which fails closed because it
-guards one rare command where a false block costs a single retry.
+un-superseded, and the branch confirmed unclaimed *and not detached*. Everything upstream fails open
+(Q3): this hook fires on every write in every repo, so a false block costs the whole session, in
+repos that never opted in. That is the deliberate divergence from `judge-guard.sh`, which fails
+closed because it guards one rare command where a false block costs a single retry.
 
-**Deny message must contain** — the offending file path(s), the current branch, both legitimate
-fixes (open the gate: `gate confirmed` → advance `phase:` and record `branch:`; or, if the file is
-stale, advance or delete it), and an explicit statement that **no bypass env var exists**, so a
-session does not go hunting for one.
+**The two git subprocesses in steps 8–9 are covered by that rule explicitly** (added round 2,
+compliance `core-conduct/explicit-error-handling`). Steps 1–7 each named a ⊘ exit; steps 8–9
+originally named none, and the only path onward from them is *deny* — so a transient `git` failure
+would have flipped the hook from fail-open to fail-everything, inverting Q3's own principle in the
+two steps most likely to fail on a large repo.
+
+### Frontmatter contract
+
+Added round 2 (compliance `writing-specs/ambiguity`). Without this, "fails frontmatter parsing" is
+undefined, Task 1's test cannot be written without inventing the rule, and a typo like
+`phase: plannning` silently disables a CRITICAL gate.
+
+A feature file is **well-formed** iff all of:
+
+1. its first line is exactly `---`, and a closing `---` appears on a later line;
+2. between them, a line matching `^phase:[[:space:]]*(planning|implementation|review)[[:space:]]*$`;
+3. between them, at most one `phase:` line and at most one `branch:` line.
+
+`branch:` is **optional** — its absence means unclaimed, which is the `branch: none` case and needs
+no special value. Any other content between the fences is ignored, so `model_tier` and future keys
+are forward-compatible.
+
+A file failing any of the three — including a `phase:` value outside the three legal ones — is
+**skipped**, never guessed at. Skipping fails open, per Q3. But a skipped file in a repo that *has*
+opted in is the "cannot evaluate" case, so it is one of the two exits that print.
+
+### Two exits that must not be silent
+
+Added round 2 (observability round 1). A working guard and a dead one are otherwise byte-identical:
+every ⊘ exit emits nothing, and the Group A tests assert exactly that. Six of the eight are
+correctly silent — they mean "not applicable here". Two are different in kind, because they mean
+**this repo opted in and the guard could not evaluate it**:
+
+| Exit | Why it is different |
+|---|---|
+| No python interpreter (step 4) | The guard is off in *every* repo, permanently, until PATH is fixed |
+| Every `docs/features/*.md` skipped (step 7) | This repo opted in and the guard cannot read its own input |
+
+Both print one line to stderr and **still exit 0**. Once per session, keyed off the payload's
+`session_id` with `$CLAUDE_CODE_SESSION_ID` as fallback — the pattern `pane-dispatch-guard.sh:43-50`
+already establishes, including surfacing a divergence between the two rather than silently missing
+the flag. Per-write printing is not acceptable on this hot path.
+
+### Rollback
+
+Added round 2 (observability round 1). Registered globally in `settings.json`, so a misbehaving
+build affects every repo on the machine. Three exits, cheapest first:
+
+1. **Edit the offending feature file** — the ordinary fix, and the one the deny message names.
+   Feature files live under `docs/**`, which is unguarded.
+2. **Delete the `PreToolUse` block from `settings.json`** — the hook exempts `settings.json`
+   (step 6) precisely so it can never block edits to its own off switch. Without that exemption a
+   misfiring guard would be reachable only through the Bash-tool hole, which the deny message would
+   have to advertise — telling every session where the bypass is.
+3. **`chmod -x hooks/phase-guard.sh`** — a non-executable hook is skipped by the harness.
+
+**Deny message must contain** — the offending file path(s) and their `phase:`, the current branch,
+both legitimate fixes (open the gate: `gate confirmed` → advance `phase:` and record `branch:`; or,
+if the file is stale, advance or delete it), and an explicit statement that **no bypass env var
+exists**, so a session does not go hunting for one. That last clause must say *env var*, not "no
+way around this": the Bash-tool write surface is unguarded (see Non-goals), and a safety message
+that overclaims is worse than one that is narrow and true.
 
 **Toolchain.** `bash` + `python3` (JSON payload only — frontmatter is `awk`/`sed`, no second
 parser) + `git`. Regexes in variables, never inline in `[[ ]]` — the trap documented at
@@ -225,7 +310,7 @@ amend `writing-specs` to carve out feature-scale work — but that is its own ta
 | `hooks/phase-guard.sh` | new, executable (755) |
 | `hooks/phase-guard.test.sh` | new, 644 — matches the sibling convention |
 | `settings.json` | one added `PreToolUse` block, matcher `Edit|Write|NotebookEdit` |
-| `rules/gates.md` | one gate stub, alongside the other Tier-1 hook stubs |
+| `rules/gates.md` | **amendment to the existing `Phase gate` stub at `:5`** — not a new bullet |
 | `docs/decisions/0011-*.md` | ADR — this **amends** ADR 0010, which deferred the hook |
 
 ### Pinned toolchain
@@ -236,8 +321,9 @@ Verified on this machine 2026-07-25; the hook must run under exactly these.
 |---|---|---|
 | `bash` | 3.2.57 (system, `arm64-apple-darwin25`) | **No bash-4 features** — no associative arrays, no `mapfile`/`readarray`, no `${var,,}`. `#!/usr/bin/env bash` resolves here. |
 | `python3` | 3.9.6 | JSON payload parse **only**. No third-party imports, no PyYAML. |
-| `git` | 2.50.1 (Apple Git-155) | `rev-parse`, `for-each-ref`, `cat-file --batch`. |
-| frontmatter | `awk`/`sed` | Deliberately not a second parser — see "Toolchain" under *Design detail settled during planning*. |
+| `python` (fallback) | whatever `command -v python` resolves to, **or absent** | Resolved as `command -v python3 \|\| command -v python`, the sibling convention (`judge-guard.sh:28`, `doc-guard.sh:49`). The hook must therefore use only syntax valid in **both** py2 and py3 — `json.load(sys.stdin)`, `print(...)` as a single-arg call, no f-strings. Absent on this machine; the fallback exists for parity with the siblings, not because it is exercised here. |
+| `awk` | BWK awk 20200816 (system) | **Not** GNU awk: no `gensub`, no `IGNORECASE`, no `\|` alternation in ERE without `--re-interval` caveats. |
+| `sed` | BSD sed (macOS; no `--version`) | **Not** GNU sed: no `-r` (use `-E`), no `\+`/`\?`, and **never a bare `sed -i`** — BSD requires an extension argument (`sed -i ''`). The same dialect trap `bash 3.2.57` is pinned against. |
 
 Regexes live in variables, never inline in `[[ ]]` (`git-guard.sh:22`).
 
@@ -253,10 +339,13 @@ tool_input:
   notebook_path: /absolute/path  # NotebookEdit — the ONLY path key it carries
 ```
 
-**Output** — exit `0` = allow, emitting nothing on stdout or stderr. Exit `2` = deny, reason on
-stderr. No other exit code is legitimate: under `set -u` an unbound variable exits 1, and a fail-open
-path that leaks a nonzero code is a defect regardless of how the harness classifies it. Every ⊘ path
-therefore exits 0 **explicitly**.
+**Output** — exit `0` = allow. Exit `2` = deny, reason on stderr. No other exit code is legitimate:
+under `set -u` an unbound variable exits 1, and a fail-open path that leaks a nonzero code is a
+defect regardless of how the harness classifies it. Every ⊘ path therefore exits 0 **explicitly**.
+
+An allow emits nothing on stdout or stderr, with exactly two exceptions — the no-interpreter and
+all-files-skipped exits of "Two exits that must not be silent", which print one stderr line at most
+once per session and still exit 0. stdout is empty on every path without exception.
 
 **Deny message** — must contain all four, or the block is unactionable:
 
@@ -275,26 +364,105 @@ Background:
   And a guarded write is one whose path is NOT CODING_MEMORY.md, coding-memory/*, docs/*, or .claude/*
 ```
 
-**Group A — out of scope: allow silently (exit 0, no output).** Each is a ⊘ exit from the
-order-of-operations, in order. The shared assertion is `exit 0 AND stderr is empty`.
+**Group A — out of scope: allow (exit 0).** Each is a ⊘ exit from the order-of-operations, in order.
+The shared assertion is `exit 0 AND stdout is empty`; stderr differs by subgroup.
+
+**A1 — silent fail-open.** Assertion: `exit 0 AND stderr is empty`. These mean *not applicable
+here*, and this is the common case in every repo that never opted in.
 
 ```gherkin
-Scenario Outline: fail open rather than block a session that never opted in
+Scenario Outline: fail open silently rather than block a session that never opted in
   Given <precondition>
   When any Edit/Write/NotebookEdit is attempted
-  Then the hook exits 0 and writes nothing
+  Then the hook exits 0 and writes nothing on stdout or stderr
 
 Examples:
-  | # | precondition                                                          |
-  | 1 | stdin is empty                                                        |
-  | 2 | the working directory is not inside a git repository                  |
-  | 3 | <root>/docs/features/ does not exist                                  |
-  | 4 | python3 and python are both absent from PATH                          |
-  | 5 | tool_input carries neither file_path nor notebook_path                |
-  | 6 | the resolved path lies outside the repository root                    |
-  | 7 | every docs/features/*.md fails frontmatter parsing                    |
-  | 8 | no docs/features/*.md has phase: planning                             |
+  | #  | precondition                                                           | step |
+  | 1  | stdin is empty                                                         | 1  |
+  | 2  | the working directory is not inside a git repository                   | 2  |
+  | 3  | <root>/docs/features/ does not exist                                   | 3  |
+  | 4  | tool_input carries neither file_path nor notebook_path                 | 4  |
+  | 5  | the resolved path lies outside the repository root                     | 5  |
+  | 6  | no docs/features/*.md has phase: planning                              | 7  |
+  | 7  | git for-each-ref exits nonzero                                         | 8  |
+  | 8  | git cat-file --batch exits nonzero                                     | 8  |
+  | 9  | git rev-parse --abbrev-ref HEAD exits nonzero or prints nothing        | 9  |
+  | 10 | git rev-parse --abbrev-ref HEAD prints the literal HEAD (detached)     | 9  |
 ```
+
+Examples 7–9 are the round-2 fix for `core-conduct/explicit-error-handling`: without them the only
+path onward from steps 8–9 is *deny*, so a transient `git` failure blocks every write. Example 10 is
+the detached-HEAD fix (`writing-specs/edge-cases`) — reachable during any rebase or bisect.
+
+```gherkin
+Scenario: a repo with no local branches supersedes nothing but does not fail
+  Given docs/features/a.md has phase: planning
+  And git for-each-ref refs/heads/ succeeds but returns no lines
+  And the current branch is claimed by no feature file
+  When a guarded write is attempted
+  Then the hook exits 2
+```
+
+Empty output from `for-each-ref` is **not** a failure — nothing supersedes, so every candidate
+survives to step 9. This scenario exists to stop an implementer conflating "no branches" with
+"git broke" and fail-opening a real deny.
+
+**A2 — fail-open, but audible.** Assertion: `exit 0 AND stderr contains one line AND a second
+invocation in the same session adds none`. These mean *this repo opted in and the guard could not
+evaluate it*, which a green test suite would otherwise render byte-identical to a dead hook.
+
+```gherkin
+Scenario Outline: say so when the repo opted in but the guard cannot evaluate it
+  Given <root>/docs/features/ exists
+  And <precondition>
+  When a guarded write is attempted twice in one session
+  Then the hook exits 0 both times
+  And stderr carries exactly one line in total, naming the reason
+
+Examples:
+  | # | precondition                                            | step |
+  | 1 | python3 and python are both absent from PATH            | 4  |
+  | 2 | every docs/features/*.md violates the frontmatter contract | 7 |
+```
+
+**A3 — the frontmatter contract is testable.** One scenario per clause, because "fails parsing" was
+undefined until round 2 and Task 1 could not otherwise be written.
+
+```gherkin
+Scenario Outline: a malformed feature file is skipped, never guessed at
+  Given docs/features/bad.md <defect>
+  And docs/features/good.md has phase: planning
+  And the current branch is claimed by no feature file
+  When a guarded write is attempted
+  Then the hook exits 2
+  And stderr names docs/features/good.md
+  And stderr does not name docs/features/bad.md
+
+Examples:
+  | # | defect                                                        |
+  | 1 | has no opening --- on line 1                                  |
+  | 2 | has an opening --- but no closing ---                         |
+  | 3 | has phase: plannning          (typo — not one of the three)   |
+  | 4 | has phase: Planning           (wrong case)                    |
+  | 5 | has two phase: lines                                          |
+  | 6 | has no phase: line at all                                     |
+
+Scenario: a missing branch: key means unclaimed, not malformed
+  Given docs/features/a.md has phase: implementation and no branch: key
+  And the current branch is feat/a
+  When a guarded write is attempted
+  Then the hook exits 2
+
+Scenario: unknown frontmatter keys are forward-compatible
+  Given docs/features/a.md has phase: planning, model_tier: high, and a future key
+  And the current branch is claimed by no feature file
+  When a guarded write is attempted
+  Then the hook exits 2
+  And stderr names docs/features/a.md
+```
+
+Example 3 is the one that matters most: before the contract existed, a one-character typo silently
+switched a CRITICAL gate off with no complaint.
 
 Scenario 3 must be reached **only after** the repo root is resolved (step 2). A bare
 `stat ./docs/features` assumes the hook's CWD is the repo root and silently stops guarding from any
@@ -305,12 +473,14 @@ Scenario: an unguarded path is never blocked, even mid-planning
   Given docs/features/a.md has phase: planning
   And the current branch is claimed by no feature file
   When a write targets docs/features/a.md, docs/decisions/0011.md, CODING_MEMORY.md,
-       coding-memory/x.md, or .claude/session-state.md
+       coding-memory/x.md, .claude/session-state.md, or settings.json
   Then the hook exits 0 and writes nothing
 ```
 
 This scenario *is* the escape hatch (Q6). A repo locked by a stale `planning` file is always
 unlocked by editing that file's frontmatter, because feature files live under `docs/**`.
+`settings.json` joins the list in round 2: it holds this hook's own registration, and a guard that
+can block edits to its own off switch is a footgun — see "Rollback".
 
 **Group B — permission decisions.** One scenario per row of the design table.
 
@@ -344,6 +514,13 @@ Scenario: superseded planning file stops denying everywhere -> ALLOW    # the na
   When a guarded write is attempted
   Then the hook exits 0
 
+Scenario: a finished feature stops denying too -> ALLOW              # review, not just implementation
+  Given docs/features/a.md reads phase: planning in the working tree
+  And branch feat/a's copy of docs/features/a.md reads phase: review
+  And the current branch is main, claimed by no feature file
+  When a guarded write is attempted
+  Then the hook exits 0
+
 Scenario: a NotebookEdit is guarded like any other write
   Given docs/features/a.md has phase: planning and the branch is unclaimed
   When NotebookEdit is attempted with tool_input.notebook_path = <root>/analysis.ipynb
@@ -356,13 +533,35 @@ the guard silently exempts an entire tool.
 **Group C — the un-superseded lookup.** Behavioral contract, because a naive implementation is
 O(branches) subprocesses on a hook that fires on every write.
 
+**Mechanism, pinned (round 2, observability round 1).** No sibling test counts processes, so left
+unspecified the test an implementer writes will assert *answers* — which the O(branches)
+implementation also produces, passing either way and measuring nothing. The assertion is therefore
+made structural, not behavioural:
+
+> The test prepends a temp dir to `PATH` containing an executable `git` shim. The shim appends its
+> own argv to a counter file, then `exec`s the real `git` (resolved by absolute path, captured
+> before the shim is installed, so it cannot recurse). The assertion reads the counter file.
+
+Chosen over a wall-clock or bytes budget: a timing threshold is flaky on a loaded machine and would
+be the kind of test that gets deleted the first time CI goes red for an unrelated reason.
+
 ```gherkin
 Scenario: every branch's copy is read in exactly one subprocess
   Given N local branches and M candidate planning files
+  And a counting git shim is first on PATH
   When the un-superseded filter runs
-  Then exactly one `git cat-file --batch` process is spawned
-  And it is fed N*M lines of the form <branch>:<path>
+  Then the counter file records exactly one `cat-file --batch` invocation
+  And exactly one `for-each-ref` invocation
+  And zero `git show` invocations
+  And the cat-file process is fed N*M lines of the form <branch>:<path>
 ```
+
+**Subprocess count is not the whole cost.** One `cat-file --batch` still streams every matching
+file *in full* — measured ~26KB / ~26ms with only one branch holding a feature file — and that grows
+linearly as this workflow succeeds and feature files accumulate. Recorded, not fixed: the fix is
+`--batch-check` plus a second pass for only the blobs whose size warrants reading, which is
+premature until a repo actually has enough feature files to feel it. Revisit if the hook is measured
+above ~50ms on a real repo.
 
 Parser contract, verified against git 2.50.1 — the two output forms are **not** symmetric:
 
@@ -382,31 +581,68 @@ parser that keys off the echoed line only will mis-attribute every blob. Ref nam
   session can still write source for a different, still-planning feature. Stated as a known hole,
   not a defect to fix — it is the honest boundary of what `PreToolUse` can know.
 - **Any bypass mechanism** — no env var, no sentinel file, no branch-name allowlist (Q6).
+- **Source writes issued through the Bash tool.** Added round 2
+  (compliance `writing-specs/coverage-gap`). The matcher is `Edit|Write|NotebookEdit`, so
+  `sed -i`, `cat > file`, `tee`, `python -c`, `git checkout -- <path>`, and every other shell route
+  to writing a file are **unguarded** — and none of the hooks already on the `Bash` matcher
+  (`git-guard.sh`, `merge-guard.sh`, `judge-guard.sh`) inspects file writes either. Out of scope
+  because closing it means classifying arbitrary shell as write-or-not, which is the parsing problem
+  `judge-guard.sh` needed `shlex` for and still only solves for a fixed command set; a guard that
+  catches 60% of shell writes invites more trust than one that honestly catches none.
+  **This is the hole that makes rollback path 2 reachable** if `settings.json` were ever guarded —
+  and the reason the deny message says "no bypass *environment variable* exists" rather than the
+  false "there is no way around this".
+
+**Why the Bash hole does not sink the design.** It is a momentum guardrail, not a security boundary
+— the same framing `merge-guard.sh` already carries in `rules/gates.md` ("a chained
+`foo && gh pr merge` is not caught"). The threat model is a session with genuine intent drifting
+into implementation while the card still reads *planning*, not an adversary routing around a hook it
+knows about. A session that reaches for `sed -i` to defeat the guard has made a deliberate choice
+the hook was never meant to prevent, and `git-guard.sh` and `doc-guard.sh` still stand between that
+write and a commit.
 
 ## Tasks
 
 Frozen at the gate; adding tasks after the gate opens is forbidden by the phase rules. Tests precede
 implementation in every pair — the test is the unbiased baseline.
 
-- [ ] 1. `hooks/phase-guard.test.sh` — Group A scenarios (all 8 ⊘ exits + the unguarded-path
-      scenario), asserting exit 0 **and empty stderr**. Red against a nonexistent hook.
-- [ ] 2. `hooks/phase-guard.sh` — steps 1–6 of the order of operations (payload, git root,
-      `docs/features` stat, python parse incl. `notebook_path`, relativize, path classification
-      reusing `doc-guard.sh:149`). Green for Group A.
-- [ ] 3. Extend the test with Group B: the four permission rows + the NotebookEdit regression.
-- [ ] 4. Implement steps 7–10: frontmatter scan, un-superseded filter, claimed-branch check, deny.
-- [ ] 5. Extend the test with Group C: assert the single-subprocess contract and the
-      input-order parser against both `blob` and `missing` output forms.
-- [ ] 6. Deny-message contract test — assert all four required elements are present in stderr.
-- [ ] 7. Register the `PreToolUse` / `Edit|Write|NotebookEdit` block in `settings.json`. It is a
+- [ ] 1. `hooks/phase-guard.test.sh` — Group A1 (the 10 silent ⊘ exits, asserting exit 0 **and
+      empty stderr**), the no-local-branches scenario, and the unguarded-path scenario incl.
+      `settings.json`. Red against a nonexistent hook.
+- [ ] 2. `hooks/phase-guard.sh` — steps 1–6 (payload, git root, `docs/features` stat, interpreter
+      resolution via `command -v python3 || command -v python`, parse incl. `notebook_path`,
+      relativize, path classification reusing `doc-guard.sh:149` plus `.claude/*` and
+      `settings.json`). Green for Group A1's steps 1–5 examples.
+- [ ] 3. Extend the test with Group A3 — the eight frontmatter-contract scenarios (six malformed
+      shapes, optional `branch:`, forward-compatible unknown keys).
+- [ ] 4. Implement step 7 to the Frontmatter contract. Green for A3.
+- [ ] 5. Extend the test with Group B: the five permission rows (incl. the `review`-supersession
+      scenario) + the NotebookEdit regression, and Group A1 examples 7–10 (both git failures,
+      empty/failed `rev-parse`, detached `HEAD`).
+- [ ] 6. Implement steps 8–10: un-superseded filter accepting **`implementation` or `review`**,
+      explicit ⊘ on either git call failing, detached-HEAD ⊘, claimed-branch check, deny.
+- [ ] 7. Extend the test with Group C: install the counting-`git` PATH shim, assert exactly one
+      `cat-file --batch` / one `for-each-ref` / zero `git show`, and assert the input-order parser
+      against both `blob` and `missing` output forms.
+- [ ] 8. Extend the test with Group A2 — the two audible fail-opens, asserting one stderr line and
+      that a second invocation in the same session adds none. Then implement the once-per-session
+      flag, keyed off `session_id` with `$CLAUDE_CODE_SESSION_ID` fallback
+      (`pane-dispatch-guard.sh:43-50`).
+- [ ] 9. Deny-message contract test — assert all four required elements, and that the no-bypass
+      clause says *environment variable* rather than overclaiming that no route exists.
+- [ ] 10. Register the `PreToolUse` / `Edit|Write|NotebookEdit` block in `settings.json`. It is a
       **fourth** matcher block (existing: `Bash`, `Task|Agent`, `*`), not an edit to one — verified
       2026-07-25.
-- [ ] 8. Add the gate stub to `rules/gates.md`.
-- [ ] 9. ADR `docs/decisions/0011-*.md` — amends ADR 0010: records that its stated objection was
-      dismissed by reframing (branch-scoped permission), and that its "build only when the gate is
-      observed being skipped" deferral was deliberately overridden at the gate decision (Q1).
-- [ ] 10. Dogfood check: run the full test suite, then confirm the hook denies a real source write
-      in this worktree while `phase: planning` still holds.
+- [ ] 11. **Amend the existing `Phase gate` stub at `rules/gates.md:5`** — not a new bullet. That
+      file is always-on context in every session, and a 26th bullet costs every future session
+      tokens to say what the existing stub can say in a clause.
+- [ ] 12. ADR `docs/decisions/0011-*.md` — amends ADR 0010: records that its stated objection was
+      dismissed by reframing (branch-scoped permission), that its "build only when the gate is
+      observed being skipped" deferral was deliberately overridden at the gate decision (Q1), and
+      that the Bash-tool write surface is a disclosed non-goal rather than an oversight.
+- [ ] 13. Dogfood check: run the full test suite, then confirm the hook denies a real source write
+      in this worktree while `phase: planning` still holds — and that it allows one to
+      `settings.json` and to this file.
 
 ## Verification
 
@@ -428,25 +664,25 @@ a fourth; bash 3.2.57 / python3 3.9.6 / git 2.50.1 match this machine; the Group
 
 ### Round-2 revision list — blocking (compliance)
 
-- [ ] **`writing-specs/coverage-gap`** — the matcher is `Edit|Write|NotebookEdit`, so a source
+- [x] **`writing-specs/coverage-gap`** — the matcher is `Edit|Write|NotebookEdit`, so a source
       write through the **Bash tool** (`sed -i`, `cat >`, `python -c`) is unguarded, and no hook on
       the existing `Bash` matcher inspects file writes. Add it as a fourth Non-goal, and reconcile
       it with the deny message's "no bypass exists" line (L267–268), which currently overclaims.
-- [ ] **`core-conduct/explicit-error-handling`** — steps 1–7 each name a ⊘ exit; steps 8–9 name
+- [x] **`core-conduct/explicit-error-handling`** — steps 1–7 each name a ⊘ exit; steps 8–9 name
       none, so a failing/empty `for-each-ref`, `cat-file --batch`, or `rev-parse --abbrev-ref`
       falls through to **deny**, inverting Q3's own fail-open-on-infrastructure rule. Specify ⊘ for
       each, plus the matching Group A example.
-- [ ] **`writing-specs/edge-cases`** — detached HEAD: `rev-parse --abbrev-ref HEAD` returns the
+- [x] **`writing-specs/edge-cases`** — detached HEAD: `rev-parse --abbrev-ref HEAD` returns the
       literal `HEAD` (verified, git 2.50.1), which no feature file can claim, so every source write
       during a rebase or bisect is denied and the message advises recording `branch: HEAD`. This
       file's own Notes record a concurrent mid-rebase session. Add a design-table row and a
       scenario; decide allow-vs-deny explicitly.
-- [ ] **`writing-specs/ambiguity`** — "fails frontmatter parsing" (step 7, Group A ex. 7) is never
+- [x] **`writing-specs/ambiguity`** — "fails frontmatter parsing" (step 7, Group A ex. 7) is never
       defined, so Task 1's test cannot be written without inventing the contract, and a typo'd
       `phase: plannning` would silently disable a CRITICAL gate. Specify the frontmatter contract:
       required fence, required keys, the three legal `phase:` values, and what an unrecognized
       value does.
-- [ ] **`writing-specs/pinned-versions`** — the toolchain table's `frontmatter` row holds tool
+- [x] **`writing-specs/pinned-versions`** — the toolchain table's `frontmatter` row holds tool
       *names* in the version column. Pin `awk` 20200816 and BSD `sed` with an explicit no-GNU-flags
       / no-bare-`sed -i` constraint — the same dialect trap `bash 3.2.57` is pinned against. Also
       Scenario A4's fallback `python` interpreter appears nowhere else, unpinned: pin it per the
@@ -454,26 +690,26 @@ a fourth; bash 3.2.57 / python3 3.9.6 / git 2.50.1 match this machine; the Group
 
 ### Round-2 revision list — advisory (observability), by value
 
-- [ ] **Accept `review`, not only `implementation`, in the supersession check.** A *finished*
+- [x] **Accept `review`, not only `implementation`, in the supersession check.** A *finished*
       feature whose `main` copy still reads `planning` blocks forever. One word; the judge rates it
       best value-per-character on its list. This is a real design bug, not a doc gap.
-- [ ] **Rollback + lockout.** `settings.json` is on the *guarded* side by this design's own rules,
+- [x] **Rollback + lockout.** `settings.json` is on the *guarded* side by this design's own rules,
       so the hook can block edits to the file that disables it. A recovery path exists (the Bash
       tool is outside the matcher — the same hole compliance cites) but nothing says so. Add a
       rollback paragraph and put the escape route in the deny message; consider exempting
       `settings.json` outright.
-- [ ] **Two of the eight silent exits deserve a line.** A working guard and a dead one are
+- [x] **Two of the eight silent exits deserve a line.** A working guard and a dead one are
       byte-identical today. Six ⊘ exits are correctly silent; *python missing* (guard off
       everywhere, permanently) and *all feature files unparseable* (repo opted in, guard can't
       read it) are different in kind. `pane-dispatch-guard.sh` already sets the house precedent —
       silent on boring fail-opens, prints for its two interesting ones, once per session.
-- [ ] **Group C asserts the wrong thing.** No sibling test counts processes and no mechanism is
+- [x] **Group C asserts the wrong thing.** No sibling test counts processes and no mechanism is
       specified, so the test as written will assert *answers* — which the O(branches)
       implementation also produces. Decide: a counting-`git` PATH shim, or a wall-clock/bytes
       budget. Note subprocess count is not the whole cost — one `cat-file --batch` still streams
       every matching file (~26KB/~26ms with a single branch holding one), and it grows precisely
       as the workflow succeeds.
-- [ ] **Task 8** — amend the existing `Phase gate` stub at `rules/gates.md:5` rather than adding a
+- [x] **Task 8** — amend the existing `Phase gate` stub at `rules/gates.md:5` rather than adding a
       26th bullet; that file is always-on context in every session.
 
 Not cited, considered and dismissed by one or both judges: spec location (the ADR 0010 /
