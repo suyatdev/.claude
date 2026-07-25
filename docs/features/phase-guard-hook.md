@@ -412,6 +412,74 @@ implementation in every pair — the test is the unbiased baseline.
 
 <Appended during review.>
 
+## Judge round 1 — 2026-07-25 (spec blob `d972b9b`)
+
+Both judges dispatched in parallel per `running-the-compliance-judge`. Full verdicts persisted:
+`coding-memory/compliance-judge/2026-07-25-phase-guard-hook.md` and
+`coding-memory/observability-judge/2026-07-25-worktree-phase-guard-hook.md`.
+
+**Compliance: `fail`** (blocking, confidence high). **Observability (advisory, `architecting`):**
+no `fail` — 5 concerns, `risk=medium confidence=high`.
+
+Both independently verified the claims most likely to be wrong, and all held: `doc-guard.sh:149`
+and `git-guard.sh:22` are exact; `settings.json` really has three `PreToolUse` matchers so this is
+a fourth; bash 3.2.57 / python3 3.9.6 / git 2.50.1 match this machine; the Group C
+`cat-file --batch` asymmetry is empirically correct; no task pairs tests with implementation.
+
+### Round-2 revision list — blocking (compliance)
+
+- [ ] **`writing-specs/coverage-gap`** — the matcher is `Edit|Write|NotebookEdit`, so a source
+      write through the **Bash tool** (`sed -i`, `cat >`, `python -c`) is unguarded, and no hook on
+      the existing `Bash` matcher inspects file writes. Add it as a fourth Non-goal, and reconcile
+      it with the deny message's "no bypass exists" line (L267–268), which currently overclaims.
+- [ ] **`core-conduct/explicit-error-handling`** — steps 1–7 each name a ⊘ exit; steps 8–9 name
+      none, so a failing/empty `for-each-ref`, `cat-file --batch`, or `rev-parse --abbrev-ref`
+      falls through to **deny**, inverting Q3's own fail-open-on-infrastructure rule. Specify ⊘ for
+      each, plus the matching Group A example.
+- [ ] **`writing-specs/edge-cases`** — detached HEAD: `rev-parse --abbrev-ref HEAD` returns the
+      literal `HEAD` (verified, git 2.50.1), which no feature file can claim, so every source write
+      during a rebase or bisect is denied and the message advises recording `branch: HEAD`. This
+      file's own Notes record a concurrent mid-rebase session. Add a design-table row and a
+      scenario; decide allow-vs-deny explicitly.
+- [ ] **`writing-specs/ambiguity`** — "fails frontmatter parsing" (step 7, Group A ex. 7) is never
+      defined, so Task 1's test cannot be written without inventing the contract, and a typo'd
+      `phase: plannning` would silently disable a CRITICAL gate. Specify the frontmatter contract:
+      required fence, required keys, the three legal `phase:` values, and what an unrecognized
+      value does.
+- [ ] **`writing-specs/pinned-versions`** — the toolchain table's `frontmatter` row holds tool
+      *names* in the version column. Pin `awk` 20200816 and BSD `sed` with an explicit no-GNU-flags
+      / no-bare-`sed -i` constraint — the same dialect trap `bash 3.2.57` is pinned against. Also
+      Scenario A4's fallback `python` interpreter appears nowhere else, unpinned: pin it per the
+      sibling `command -v python3 || command -v python` convention, or delete it.
+
+### Round-2 revision list — advisory (observability), by value
+
+- [ ] **Accept `review`, not only `implementation`, in the supersession check.** A *finished*
+      feature whose `main` copy still reads `planning` blocks forever. One word; the judge rates it
+      best value-per-character on its list. This is a real design bug, not a doc gap.
+- [ ] **Rollback + lockout.** `settings.json` is on the *guarded* side by this design's own rules,
+      so the hook can block edits to the file that disables it. A recovery path exists (the Bash
+      tool is outside the matcher — the same hole compliance cites) but nothing says so. Add a
+      rollback paragraph and put the escape route in the deny message; consider exempting
+      `settings.json` outright.
+- [ ] **Two of the eight silent exits deserve a line.** A working guard and a dead one are
+      byte-identical today. Six ⊘ exits are correctly silent; *python missing* (guard off
+      everywhere, permanently) and *all feature files unparseable* (repo opted in, guard can't
+      read it) are different in kind. `pane-dispatch-guard.sh` already sets the house precedent —
+      silent on boring fail-opens, prints for its two interesting ones, once per session.
+- [ ] **Group C asserts the wrong thing.** No sibling test counts processes and no mechanism is
+      specified, so the test as written will assert *answers* — which the O(branches)
+      implementation also produces. Decide: a counting-`git` PATH shim, or a wall-clock/bytes
+      budget. Note subprocess count is not the whole cost — one `cat-file --batch` still streams
+      every matching file (~26KB/~26ms with a single branch holding one), and it grows precisely
+      as the workflow succeeds.
+- [ ] **Task 8** — amend the existing `Phase gate` stub at `rules/gates.md:5` rather than adding a
+      26th bullet; that file is always-on context in every session.
+
+Not cited, considered and dismissed by one or both judges: spec location (the ADR 0010 /
+`writing-specs` contradiction is disclosed and resolved), the absent Mermaid diagram, the
+templated `## Verification` placeholder, and the copied path classification.
+
 ## Notes for the next session
 
 - Created in an isolated worktree (`.claude/worktrees/phase-guard-hook`, branch
