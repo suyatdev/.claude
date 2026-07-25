@@ -54,8 +54,9 @@ forward (branch → is it claimed?), never backward (write → which feature?).
 | No `docs/features/` at all | any | **allow**, silently — answers Q5 |
 | All files `review`, or `implementation` on other branches | any | **allow** |
 | A file is `implementation` with `branch: B` | `B` | **allow** |
-| A file is `planning` | branch unclaimed (`main`, worktree, hotfix) | **deny** |
+| A file is `planning` *and un-superseded* | branch unclaimed (`main`, worktree, hotfix) | **deny** |
 | Feature A `implementation` on `bA`; feature B `planning` | `bA` | **allow** — B's planning must not revoke A's permission |
+| File reads `planning` here, but some branch has it at `implementation` | any | **allow** — superseded; its gate already opened (the narrowing) |
 
 **Residual weakness, stated plainly:** the hook enforces permission at *branch* granularity, not
 per-feature attribution. While on a claimed implementation branch `bA`, a session could write source
@@ -80,8 +81,9 @@ way — the deny message must therefore name the offending file(s) so the fix is
 2. **How does the hook identify the active feature file?** → **Resolved: it does not.** See the
    design above. The four candidates previously listed (`branch:` reverse-lookup, machine-local
    pointer, "exactly one non-`review` file", most-recently-modified) all inherit the wrong framing;
-   each tries to name the active feature. Branch-scoped permission sidesteps all four. **Pending
-   user acceptance** — this is a proposal, not a settled decision.
+   each tries to name the active feature. Branch-scoped permission sidesteps all four.
+   → **Accepted by the user (2026-07-25), with one narrowing: the un-superseded check.** See
+   "Narrowing accepted" below. Q2 is now settled; the remaining work is spec form, not design.
 3. **Fail open or fail closed on ambiguity?** → **Resolved: fail closed *within scope*, and the
    scope is delimited by the existence of `docs/features/`.** A repo with no feature files is out of
    scope and allowed silently, which is what makes Q5 answerable at all.
@@ -108,7 +110,14 @@ way — the deny message must therefore name the offending file(s) so the fix is
    `Edit`/`Write` payload has no command-line surface to carry one. The remaining options are a
    session-wide exported `PHASE_EXEMPT` (far blunter — no per-write reason to log), a sentinel file,
    or **no bypass at all**, on the grounds that the honest way to earn write permission is to open
-   the gate. Needs a decision; it is a spec-shaping one, not an implementation detail.
+   the gate. → **Resolved (user, 2026-07-25): no bypass at all — no `PHASE_EXEMPT`, no sentinel
+   file.** The justification is stronger than "be strict": **the escape hatch already exists
+   structurally.** Feature files live under `docs/**`, which this hook does not guard, so a locked
+   repo is *always* unlocked by editing the offending `phase:` frontmatter — precisely the fix the
+   deny message names. A second bypass would add only one capability: letting a session skip the
+   gate the hook exists to hold. A branch-name allowlist was also considered and rejected for the
+   same reason — "name your branch `hotfix/` to write freely" is `PHASE_EXEMPT` through a
+   different door, and shipping a bypass implicitly is worse than shipping one honestly.
 
 ### New question raised by this design
 
@@ -116,7 +125,9 @@ way — the deny message must therefore name the offending file(s) so the fix is
    spec and checklist edits. Enforcing that means denying edits to a feature file's Spec/Tasks
    sections while on a claimed implementation branch — which requires reasoning about *which section*
    of a markdown file an `Edit` touches, from `old_string`/`new_string`. Fragile. Recommend
-   **out of scope**; the forward direction is where the value is.
+   **out of scope**; the forward direction is where the value is. → **Carried as out of scope**
+   (recommendation stated to the user 2026-07-25, not contested). Reopen only if a real
+   implementation-phase spec edit is observed causing harm.
 
 ## Prior art in this repo (read before designing — do not re-derive)
 
@@ -127,11 +138,87 @@ way — the deny message must therefore name the offending file(s) so the fix is
 | `hooks/git-guard.sh` | The inline-regex parser trap documented in both files — regexes live in variables, never inline in `[[ ]]`. |
 | `docs/decisions/0010-*.md` | The deferral being revisited, and its four rejected alternatives. |
 
+## Narrowing accepted — the un-superseded check
+
+Both disclosed second-order costs share one root cause: **the hook treats "a `planning` file exists
+in this checkout" as "this checkout is in planning."** Once the gate opens on branch `B`, `main`'s
+copy of that file is stale *by design* — the frontmatter advanced on `B`, not on `main` — and every
+branch cut from `main` inherits the staleness. So:
+
+> Before denying on a `planning` file `F`, check whether any branch records `F` as
+> `phase: implementation`. If one does, `F`'s gate has already opened and `F` stops denying anywhere.
+
+Still a forward lookup — "has this file's gate opened?" has a definite answer and needs no
+attribution. Unlocks hotfix branches after the gate without a naming convention.
+
+**What it widens:** while on `main`, source for an already-gated feature becomes writable. Accepted
+because `git-guard.sh` independently blocks app-code commits to `main`, so the write cannot land —
+the same layering argument the base design already used for this cost.
+
+**What it does not fix:** the stale-abandoned-`planning`-file case. Nothing branch-based can — that
+file's gate never opened anywhere. The deny message naming the offending file stays the only fix.
+
+## Design detail settled during planning
+
+The Spec formalizes this into Gherkin; it is recorded here so it is not re-derived.
+
+**Registration.** `PreToolUse`, new matcher block `Edit|Write|NotebookEdit` in `settings.json`
+(the existing `PreToolUse` blocks are `Bash`, `Task|Agent`, `*` — this is a fourth, not an edit to
+an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
+
+**Order of operations** (fail-open exits are marked ⊘):
+
+1. Read stdin payload; empty → ⊘.
+2. `git rev-parse --show-toplevel`; not a repo / fails → ⊘.
+3. `stat` `<root>/docs/features`; absent → ⊘. *(Q5's cheap early exit — the common case in every
+   repo that never opted in. Deliberately **after** step 2, not before: a bare `stat ./docs/features`
+   assumes the hook's CWD is the repo root and would silently stop working from a subdirectory.)*
+4. `python3` parse payload → `tool_name`, `tool_input.file_path`; no python / no `file_path` → ⊘.
+5. Relativize `file_path` against the root (payload paths are absolute); outside the root → ⊘.
+6. Classify the path — **reuse `doc-guard.sh:149` verbatim**, plus `.claude/*`:
+   `CODING_MEMORY.md`, `coding-memory/*`, `docs/*`, `.claude/*` → unguarded → ⊘. Else guarded.
+7. Parse `phase:`/`branch:` frontmatter of `docs/features/*.md` in the working tree; a file that
+   fails to parse is skipped (⊘ for that file only). Collect `planning_files`; empty → ⊘.
+8. **Un-superseded filter.** Drop any `F` that reads `implementation` on some branch. Read every
+   branch's copy in **one** subprocess — `git for-each-ref --format='%(refname:short)' refs/heads/`
+   piped into `git cat-file --batch` as `<branch>:<path>` lines — never one `git show` per branch,
+   which is O(branches) processes on a hook that fires on every write. Empty after filtering → ⊘.
+9. `claimed` = any working-tree feature file with `phase: implementation` **and** `branch:` equal to
+   `git rev-parse --abbrev-ref HEAD`. Claimed → ⊘.
+10. Otherwise **deny (exit 2)**.
+
+**Fail-closed only at step 10** — after a `planning` file is positively identified, confirmed
+un-superseded, and the branch confirmed unclaimed. Everything upstream fails open (Q3): this hook
+fires on every write in every repo, so a false block costs the whole session, in repos that never
+opted in. That is the deliberate divergence from `judge-guard.sh`, which fails closed because it
+guards one rare command where a false block costs a single retry.
+
+**Deny message must contain** — the offending file path(s), the current branch, both legitimate
+fixes (open the gate: `gate confirmed` → advance `phase:` and record `branch:`; or, if the file is
+stale, advance or delete it), and an explicit statement that **no bypass env var exists**, so a
+session does not go hunting for one.
+
+**Toolchain.** `bash` + `python3` (JSON payload only — frontmatter is `awk`/`sed`, no second
+parser) + `git`. Regexes in variables, never inline in `[[ ]]` — the trap documented at
+`git-guard.sh:22`. Tests follow the established `hooks/<name>.test.sh` convention (siblings:
+`judge-guard.test.sh`, `pane-dispatch-guard.test.sh`, `context-handoff-watch.test.sh`).
+
+### Process finding — `writing-specs` and ADR 0010 disagree on where specs live
+
+`writing-specs` says "Defer to `docs/superpowers/specs/` … do not open a competing `specs/`
+convention." ADR 0010's one-canonical-file discipline says feature-scale work lives entirely in
+`docs/features/<name>.md`, spec section included. Both are live rules and they now contradict.
+Resolved here in favor of ADR 0010 (project-level, and newer), which is why this Spec is inline.
+**This is exactly the dogfooding friction this file was opened to catch.** It needs a real fix —
+amend `writing-specs` to carve out feature-scale work — but that is its own task, not this feature's.
+
 ## Spec
 
-<Not yet written. Blocked on open questions 1–3, which are user decisions, not derivable from the
-codebase. `writing-specs` governs the form once they are settled; the compliance judge gates it
-before the user review.>
+<Not yet written — this is the next session's first task, and it is now unblocked: Q2 accepted with
+the un-superseded narrowing, Q3–Q6 resolved, Q7 out of scope. Q1 (should this be built at all)
+stays deliberately deferred to the gate decision. Write it from "Design detail settled" above in
+`writing-specs` form — Gherkin scenarios covering each table row plus every ⊘ fail-open exit, the
+payload contract, and the deny-message contract. The compliance judge gates it before user review.>
 
 ## Tasks
 
@@ -151,5 +238,8 @@ before the user review.>
   until the gate opens.
 - Unrelated loose end in the primary checkout: four `coding-memory/compliance-judge/*` files
   (other sessions' shared-store writes) were dropped from the working tree by that session's
-  branch switch. Byte-verified backups are in this session's scratchpad under
-  `other-session-files/`. They belong on `main`, not here.
+  branch switch. Backups were kept in the originating session's scratchpad — **that scratchpad is
+  now empty and the backups are gone** (verified 2026-07-25). `main` and `origin/main` still carry a
+  committed compliance-judge store (6 dated verdicts + `README.md` + `verdicts.jsonl`, last touched
+  2026-07-22, commit `7854ae3`); whether the four were among it can no longer be established. Judge
+  verdicts are regenerable and this is outside the feature's domain — recorded, not chased.

@@ -9,11 +9,22 @@ how this file and its linked files should be written (plain language, major chan
   **first** `docs/features/` file, dogfooding ADR 0010. Isolated worktree, branch
   `worktree-phase-guard-hook` (pushed) — created to escape a concurrent session on the primary
   checkout, **NOT** the implementation branch; `branch:` stays `none` until the gate.
-  **NEXT SESSION STARTS HERE:** two user decisions are open, both recorded in the feature file —
-  (a) accept or reject the proposed **branch-scoped permission** design answering Q2, and
-  (b) pick the Q6 escape hatch. Nothing else proceeds until (a) is answered; the spec is still
-  unwritten and freezes at the gate, which opens only on the literal `gate confirmed`.
-- **Q2 was the crux and now has a candidate answer.** ADR 0010 deferred this hook because
+  **NEXT SESSION STARTS HERE: all design questions are closed; write the Spec.** Read
+  "Design detail settled during planning" in the feature file — the algorithm, fail-open exits,
+  registration, deny-message contract and toolchain are all recorded there, so do not re-derive
+  them. Turn them into `writing-specs` Gherkin *inline in the feature file* (not
+  `docs/superpowers/specs/` — see the process finding), then run the compliance judge, then the
+  user review gate. The checklist freezes at the gate, which opens only on the literal
+  `gate confirmed`. Still `phase: planning`, `branch: none`, `model_tier: high` (reconfirmed).
+- **User decisions, 2026-07-25.** Q2 **accepted** with one narrowing — the *un-superseded check*:
+  a `planning` file stops denying once any branch records it as `implementation`, because its gate
+  has already opened. Fixes the `main`/hotfix write-lock at the root cause (a stale copy on `main`
+  is stale *by design* after the gate) while staying a forward lookup. Q6 **resolved: no bypass at
+  all** — and the reason is that the hatch already exists structurally, since feature files live
+  under unguarded `docs/**`, so editing the frontmatter always unlocks a locked repo. A branch-name
+  allowlist was rejected on the same ground: it is `PHASE_EXEMPT` through a different door.
+  Q7 (reverse direction) stays out of scope. Q1 (build at all?) still deferred to the gate.
+- **Q2 was the crux.** ADR 0010 deferred this hook because
   "which feature file is active" is unresolvable at `branch: none`. That framing is avoidable: the
   hook never attributes a write to a feature, it asks only whether the *current branch* carries
   implementation permission. Deny when any feature file is `phase: planning` AND the branch is not
