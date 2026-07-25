@@ -5,6 +5,10 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- **CURRENT: `feature-update-gate-checks-and-session-memory`** — phase-frontmatter permission
+  system shipped in `22fb409`, pushed. ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`.
+  Phase now `review`; obs judge (implementation stage) next, then PR. Detail lives in
+  `.claude/session-state.md` (machine-local) — do not restate spec content here.
 - session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
   **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
