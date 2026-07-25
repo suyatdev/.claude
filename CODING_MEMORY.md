@@ -186,7 +186,33 @@ how this file and its linked files should be written (plain language, major chan
   liveness probe); T7's NIT 1 lost its mitigation (the rr index still advances on a failed `open_tab`,
   previously "unreachable" only because the first failure ended overflow for the session); **`doc-guard.sh:149`
   classifies `CLAUDE.md` as SOURCE not documentation** — decide whether it belongs in the hook's doc set;
-  dispatcher now **450 lines**. **NEXT: re-run the obs judge at the new HEAD, then PR `--draft` → `gh pr ready`.**
+  dispatcher now **450 lines**.
+  **OBS JUDGE RUN 2 2026-07-24 → `risk=medium confidence=high`** (verdict appended to
+  `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy.md`, `head_sha 2418e5b`;
+  commit `2bd2935`). **It falsified RUN 1's own fix:** the new comment's convergence argument holds
+  only if `open_pane` ALSO fails. Against an adapter that can pane but cannot tab — exactly the case
+  the spec names — every overflow retires a HEALTHY pane, the live count drops back under N, and the
+  next worker opens a NEW pane: **+1 real pane per two overflowing dispatches, unbounded and silent,
+  cooldown never written, `max=N` quietly exceeded.** It also caught that the reclassification was
+  disclosed as task-level when it is spec-level (SKILL.md lines 55-58 still described the old
+  cooldown-only degrade path, ADR 0009 unamended, `<run-dir>/route` documented nowhere).
+  **User chose fix-now → commit `9073b2b`** (suites **316/0**, +8; `shellcheck -x` clean;
+  controller-verified in-checkout): a **consecutive**-`open_tab`-failure streak with
+  `TAB_FAIL_LIMIT=3` — a single stale target still self-heals (exit 3, no cooldown), but at the
+  limit the ADAPTER, not the target, is judged tab-incapable and it becomes a full adapter failure
+  (cooldown + exit 4), which bounds the growth loop. **Only a SUCCESSFUL `open_tab` resets the
+  streak** — an `open_pane` success is not evidence of tab capability, and one lands between every
+  pair of failures in the growth loop, so counting it would make the bound unreachable. Judge items
+  2-4 (SKILL.md degrade paths, ADR 0009 consequence, `<run-dir>/route`) shipped in the same commit.
+  **No spec amendment needed — the streak restores the spec's cooldown outcome for a genuinely
+  tab-incapable adapter, so the spec stays LOCKED at blob `cdc777a`** (compliance verdicts stay
+  valid, no compliance re-run).
+  **ORDERING CONSTRAINT (learned here, applies to every future PR):** `judge-guard.sh` requires
+  strict `head_sha` EQUALITY with current HEAD, so the verdict commit CANNOT precede the PR —
+  sequence is checkpoint-commit → judge at that HEAD → `gh pr create --draft` with the verdict still
+  uncommitted in the working tree → THEN commit + push the verdict onto the open PR (pushing after
+  creation adds to the PR, so nothing strands).
+  **NEXT: obs judge RUN 3 pinned to `9073b2b`, then PR `--draft` → `gh pr ready`. Nothing else.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
