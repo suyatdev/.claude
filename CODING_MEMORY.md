@@ -15,10 +15,10 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Task 1 landed `ebdf133`** (12 cases, red at 127; fixtures separately confirmed sound against a
-  throwaway no-op hook). **NEXT SESSION STARTS AT TASK 2** — `hooks/phase-guard.sh` steps 1–6 with
-  a stub step 7 that always ⊘s, keeping the hook allow-only; green for task 1. The 17-task
-  checklist is **frozen**;
+  **Tasks 1–4 are done (`ebdf133`, `08c52b1`, `2a82691`, `8f06de1`, `01be565`); the hook denies and
+  the suite is 15/15.** **NEXT SESSION STARTS AT TASK 5** — the test for the four-element deny
+  message, red against task 4's bare exit 2. Everything after task 5 may assert on stderr; nothing
+  before it may. The 17-task checklist is **frozen**;
   `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
   mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
   file, which is canonical.
