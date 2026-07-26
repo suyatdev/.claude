@@ -6,7 +6,11 @@
 set -u
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/phase-guard.sh"
-TMP="$(mktemp -d)"
+# Physical path, not the one mktemp hands back. On macOS `mktemp -d` returns the
+# /var symlink form while `git rev-parse --show-toplevel` resolves to /private/var,
+# so payload paths built from the symlink form would never relativize against the
+# root (step 5) — every guarded case would fail open and pass for the wrong reason.
+TMP="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf "$TMP"' EXIT
 
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null

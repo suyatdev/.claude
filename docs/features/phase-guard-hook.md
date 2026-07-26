@@ -810,6 +810,10 @@ assertion depends on behaviour a later task introduces.
         names rather than passing because some later step would have allowed anyway.
       - `PHASE_GUARD_STATE_DIR` is exported to the temp dir from the start, so no run of this
         suite can ever touch the real `$HOME/.claude/hooks/state`.
+      - Fixture gotcha, found at task 2 and fixed test-only first: `mktemp -d` returns the macOS
+        `/var` symlink form while `git rev-parse --show-toplevel` resolves to `/private/var`, so
+        payload paths built from it never relativize against the root — every guarded case would
+        have fail-opened at step 5 and passed for the wrong reason. `TMP` is now `pwd -P`.
 - [ ] 2. `hooks/phase-guard.sh` — steps 1–6 (payload, git root, `docs/features` stat, interpreter
       via `command -v python3 || command -v python`, parse incl. `notebook_path`, relativize, path
       classification reusing `doc-guard.sh:149` plus `.claude/*` and `settings.json`). A stub step 7
