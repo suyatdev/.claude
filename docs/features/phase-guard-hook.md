@@ -814,10 +814,22 @@ assertion depends on behaviour a later task introduces.
         `/var` symlink form while `git rev-parse --show-toplevel` resolves to `/private/var`, so
         payload paths built from it never relativize against the root — every guarded case would
         have fail-opened at step 5 and passed for the wrong reason. `TMP` is now `pwd -P`.
-- [ ] 2. `hooks/phase-guard.sh` — steps 1–6 (payload, git root, `docs/features` stat, interpreter
+- [x] 2. `hooks/phase-guard.sh` — steps 1–6 (payload, git root, `docs/features` stat, interpreter
       via `command -v python3 || command -v python`, parse incl. `notebook_path`, relativize, path
       classification reusing `doc-guard.sh:149` plus `.claude/*` and `settings.json`). A stub step 7
       that always ⊘s keeps the hook allow-only. **Green for task 1.**
+      - Done: 12/12 green. Because the stub makes the hook allow-only, green alone cannot show the
+        steps run, so classification was verified separately against a *copy* whose stub denies:
+        source/nested-source/`notebook_path` reach step 7; all six exempt paths stop at step 6;
+        an outside path stops at step 5. The committed hook was never modified for that probe.
+      - `tool_name` is not extracted. Step 4 lists it, but nothing downstream consumes it and the
+        matcher already restricts the tool set, so binding it would be an unused variable under
+        `set -u`. No scenario observes it — this changes no behaviour.
+      - The no-interpreter exit is silent here. It is one of the two exits that must not stay
+        silent, and its once-per-session line is inseparable from the flag contract, so both land
+        together at task 12 rather than shipping a print-on-every-write half of it now.
+      - The py2 fallback is unexercised: `python` is absent on this machine, so the parser's
+        py2/py3-compatible syntax is reviewed, not tested.
 - [ ] 3. Test: the core deny (Group B row 1) asserting **exit 2 only**, Group A1 example 7 (no
       `planning` file), and the empty-`docs/features/` silent case. Red — nothing denies yet.
       *No stderr assertions here: the message is tasks 5–6.*
