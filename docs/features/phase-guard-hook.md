@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feature/phase-guard-hook
 ---
 
 # phase-guard.sh — computational enforcement of the phase gate

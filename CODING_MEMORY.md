@@ -5,16 +5,21 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- **CURRENT: `phase-guard-hook` — PLANNING.** `docs/features/phase-guard-hook.md` is the repo's
-  **first** `docs/features/` file, dogfooding ADR 0010. Isolated worktree, branch
-  `worktree-phase-guard-hook` (pushed) — created to escape a concurrent session on the primary
-  checkout, **NOT** the implementation branch; `branch:` stays `none` until the gate.
-  **Spec + Tasks are now WRITTEN and committed (`e9055ca`)** — inline in the feature file per
-  ADR 0010. Gherkin covers all 8 fail-open exits, the 4 permission rows, and the parser contract;
-  the 10-task checklist is ordered test-before-implementation and is frozen.
-  **NEXT SESSION STARTS HERE: run the compliance judge** (paned, per the pane-dispatch gate),
-  then the user review gate, then the Q1 build/defer call. Do **not** re-derive the design —
-  everything is in the feature file. Still `phase: planning`, `branch: none`, `model_tier: high`.
+- **CURRENT: `phase-guard-hook` — IMPLEMENTATION. The gate opened 2026-07-26.** The user answered
+  **Q1 = build** with the literal phrase `gate confirmed`, which deliberately overrides ADR 0010's
+  "build only when a skipped gate is observed" deferral — **task 16's ADR 0011 must record that
+  override**, it is the whole reason that task exists. Model-switch checkpoint ran at the gate:
+  **stay on Opus 5**, so `model_tier: high` is unchanged and deliberate — the risk sits in tasks
+  9/10 (the asymmetric `cat-file --batch` parser) and the 8 fail-open exit paths, where a wrong
+  exit code silently locks the repo.
+  Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
+  at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
+  now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
+  **NEXT SESSION STARTS AT TASK 1** — `hooks/phase-guard.test.sh`, Group A1 examples 1–6 plus the
+  unguarded-path scenario, red against a nonexistent hook. The 17-task checklist is **frozen**;
+  `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
+  mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
+  file, which is canonical.
 - **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
   carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
   `file_path` alone, which would have failed open on every notebook write. Corrected, with a
@@ -30,7 +35,9 @@ how this file and its linked files should be written (plain language, major chan
   under unguarded `docs/**`, so editing the frontmatter always unlocks a locked repo. A branch-name
   allowlist was rejected on the same ground: it is `PHASE_EXEMPT` through a different door.
   Q7 (reverse direction) stays out of scope. Q1 (build at all?) still deferred to the gate.
-- **APPROVED, NOT STARTED — doc-system consolidation (do this before more phase-guard work).**
+- **APPROVED, NOT STARTED — doc-system consolidation.** Was "do this before more phase-guard work"
+  (user-approved 2026-07-25); the 2026-07-26 `gate confirmed` started phase-guard implementation
+  first, so that ordering is **superseded, not cancelled** — flagged to the user at the gate.
   User-approved 2026-07-25: trim this file to its own ≤200-line cap, delete the 18
   `coding-memory/branches/*.md`, drop `coding-memory/pr-tracking.md`. **These are ONE coupled
   commit, not three** — this index holds ~17 pointers into the delete targets (branches/: lines
