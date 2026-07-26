@@ -830,9 +830,14 @@ assertion depends on behaviour a later task introduces.
         together at task 12 rather than shipping a print-on-every-write half of it now.
       - The py2 fallback is unexercised: `python` is absent on this machine, so the parser's
         py2/py3-compatible syntax is reviewed, not tested.
-- [ ] 3. Test: the core deny (Group B row 1) asserting **exit 2 only**, Group A1 example 7 (no
+- [x] 3. Test: the core deny (Group B row 1) asserting **exit 2 only**, Group A1 example 7 (no
       `planning` file), and the empty-`docs/features/` silent case. Red — nothing denies yet.
       *No stderr assertions here: the message is tasks 5–6.*
+      - Done: 14 pass, 1 fails — the core deny, the only case the stub cannot satisfy.
+      - The `deny` runner asserts exit 2 **and empty stdout** (the Output contract holds on every
+        path) but says nothing about stderr, so task 4's bare deny can make it green.
+      - The two new allow cases pass trivially against the allow-only stub; they only start
+        carrying weight at task 4, when a deny exists for them to be distinguished from.
 - [ ] 4. Implement minimal steps 7/9/10: find `phase: planning`, read the branch, deny with a bare
       exit 2. **Green for task 3.** First task that can produce exit 2, which is why every
       deny-asserting test lands at or after task 3.

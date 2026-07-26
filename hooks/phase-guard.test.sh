@@ -23,12 +23,17 @@ payload() { # $1 tool_name, $2 path key (file_path|notebook_path), $3 absolute p
   python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{sys.argv[2]:sys.argv[3]}}))' "$@"
 }
 
-# Every case in this file shares one assertion: exit 0, empty stdout, empty stderr.
-allow_silent() { # $1 desc, $2 cwd, $3 payload
-  local desc="$1" dir="$2" pay="$3" got out err
+got=0; out=""; err=""
+_run() { # $1 cwd, $2 payload — leaves the exit code in $got, the streams in $out/$err
   n=$((n+1)); out="$TMP/out.$n"; err="$TMP/err.$n"
-  ( cd "$dir" && printf '%s' "$pay" | bash "$HOOK" ) >"$out" 2>"$err"
+  ( cd "$1" && printf '%s' "$2" | bash "$HOOK" ) >"$out" 2>"$err"
   got=$?
+}
+
+# The fail-open assertion: exit 0, empty stdout, empty stderr.
+allow_silent() { # $1 desc, $2 cwd, $3 payload
+  local desc="$1"
+  _run "$2" "$3"
   if [ "$got" -ne 0 ]; then
     printf 'FAIL — %s (want exit 0, got %s)\n' "$desc" "$got"; fail=$((fail+1)); return
   fi
@@ -41,27 +46,51 @@ allow_silent() { # $1 desc, $2 cwd, $3 payload
   printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
 }
 
+# The deny assertion: exit 2 and empty stdout, which the Output contract requires on
+# every path. Deliberately NO stderr assertion — the deny message is a later task, and
+# asserting it here would leave that task unable to make this one green.
+deny() { # $1 desc, $2 cwd, $3 payload
+  local desc="$1"
+  _run "$2" "$3"
+  if [ "$got" -ne 2 ]; then
+    printf 'FAIL — %s (want exit 2, got %s)\n' "$desc" "$got"; fail=$((fail+1)); return
+  fi
+  if [ -s "$out" ]; then
+    printf 'FAIL — %s (stdout not empty: %s)\n' "$desc" "$(cat "$out")"; fail=$((fail+1)); return
+  fi
+  printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
+}
+
 mkrepo() { # $1 dir — an initialized repo on branch main carrying one commit
   mkdir -p "$1"
   ( cd "$1" && git init -q -b main && git config user.email t@t.t && git config user.name t &&
     git commit -q --allow-empty -m init )
 }
 
-planning_file() { # $1 repo, $2 relative path — a well-formed feature file at phase: planning
-  mkdir -p "$(dirname "$1/$2")"
-  printf -- '---\nphase: planning\nmodel_tier: high\nbranch: none\n---\n\n# fixture\n' > "$1/$2"
+feature_file() { # $1 repo, $2 relative path, $3 phase, $4 branch value ("" omits the key)
+  local dest="$1/$2" br="${4:-}"
+  mkdir -p "$(dirname "$dest")"
+  { printf -- '---\nphase: %s\nmodel_tier: high\n' "$3"
+    [ -n "$br" ] && printf 'branch: %s\n' "$br"
+    printf -- '---\n\n# fixture\n'
+  } > "$dest"
 }
 
 # OPTED — a fully opted-in repo: docs/features/a.md at phase: planning, on branch main,
 # which no feature file claims. A guarded write here is a real deny, so each case below
 # that expects exit 0 isolates the step it names instead of passing by accident.
-OPTED="$TMP/opted"; mkrepo "$OPTED"; planning_file "$OPTED" docs/features/a.md
+OPTED="$TMP/opted"; mkrepo "$OPTED"; feature_file "$OPTED" docs/features/a.md planning none
 # BARE — a git repo that never opted in: no docs/features/.
 BARE="$TMP/bare"; mkrepo "$BARE"
 # NOREPO — a directory outside any git repository.
 NOREPO="$TMP/norepo"; mkdir -p "$NOREPO"
 # OUTSIDE — a directory outside OPTED, for the path-outside-the-root case.
 OUTSIDE="$TMP/outside"; mkdir -p "$OUTSIDE"
+# NOPLANNING — opted in, but nothing sits at phase: planning.
+NOPLANNING="$TMP/noplanning"; mkrepo "$NOPLANNING"
+feature_file "$NOPLANNING" docs/features/a.md implementation
+# EMPTYFEATURES — docs/features/ exists and holds nothing at all.
+EMPTYFEATURES="$TMP/emptyfeatures"; mkrepo "$EMPTYFEATURES"; mkdir -p "$EMPTYFEATURES/docs/features"
 
 # --- Group A1, examples 1-6: silent fail-open ---------------------------------------
 # "Not applicable here" — the common case in every repo that never opted in.
@@ -85,6 +114,22 @@ for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-mem
            .claude/session-state.md settings.json; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
+
+# --- Group B row 1: the core deny ------------------------------------------------------
+# A feature file at phase: planning, on a branch no feature file claims, and a write to
+# source. This is the case the whole hook exists for.
+
+deny "B1 planning file + unclaimed branch -> deny" "$OPTED" "$(payload Write file_path "$OPTED/src/x.sh")"
+
+# --- Step 7's two silent fail-opens -----------------------------------------------------
+# The second is the one worth pinning: zero files makes "every file was skipped" vacuously
+# true, so a repo that created docs/features/ and nothing else must stay SILENT rather than
+# firing the audible cannot-evaluate line.
+
+allow_silent "A1.7 nothing at phase: planning (step 7)" "$NOPLANNING" \
+  "$(payload Write file_path "$NOPLANNING/src/x.sh")"
+allow_silent "docs/features/ exists but is empty (step 7, silent)" "$EMPTYFEATURES" \
+  "$(payload Write file_path "$EMPTYFEATURES/src/x.sh")"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
