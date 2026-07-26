@@ -802,9 +802,14 @@ bare deny exists and before any test that reads stderr. Every test task below is
 the implementation task directly after it, no task writes tests and implementation together, and no
 assertion depends on behaviour a later task introduces.
 
-- [ ] 1. `hooks/phase-guard.test.sh` — Group A1 examples 1–6 (steps 1–5 ⊘, incl. malformed JSON) and
+- [x] 1. `hooks/phase-guard.test.sh` — Group A1 examples 1–6 (steps 1–5 ⊘, incl. malformed JSON) and
       the unguarded-path scenario incl. `settings.json`. All assert exit 0 + empty stderr. Red
       against a nonexistent hook.
+      - Done: 12 cases, red at exit 127. The A1 cases other than 2 and 3 run inside a repo that
+        *is* opted in (planning file present, branch unclaimed), so each isolates the step it
+        names rather than passing because some later step would have allowed anyway.
+      - `PHASE_GUARD_STATE_DIR` is exported to the temp dir from the start, so no run of this
+        suite can ever touch the real `$HOME/.claude/hooks/state`.
 - [ ] 2. `hooks/phase-guard.sh` — steps 1–6 (payload, git root, `docs/features` stat, interpreter
       via `command -v python3 || command -v python`, parse incl. `notebook_path`, relativize, path
       classification reusing `doc-guard.sh:149` plus `.claude/*` and `settings.json`). A stub step 7
