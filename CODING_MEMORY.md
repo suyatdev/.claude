@@ -15,15 +15,21 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–6 are done (`ebdf133`, `08c52b1`, `2a82691`, `8f06de1`, `01be565`, `2118bbe`,
-  `33d5cf2`); the hook denies with the full four-element message and the suite is 25/0**, siblings
-  green, `shellcheck -x` clean. Task 6 also falsified task 5's one vacuous assertion (`err_lacks`
-  could not fail against an empty stderr) — all four forbidden overclaim phrases injected into a
-  *copy* of the hook, one failure each, committed file sha-verified unchanged.
-  **NEXT SESSION STARTS AT TASK 7** — the Group A3 frontmatter-contract tests (six malformed
-  shapes, optional `branch:` with its second planning file, unknown keys), red where task 2's
-  line-level parser is still too permissive; task 8 then implements step 7 to the full contract.
-  From task 6 on, every test may assert on stderr. The 17-task checklist is **frozen**;
+  **Tasks 1–8 are done (through `a755a7c`, `e56c108`); the hook denies with the full four-element
+  message, step 7 enforces the whole frontmatter contract, and the suite is 47/0**, siblings green,
+  `shellcheck -x` clean.
+  **NEXT SESSION STARTS AT TASK 9** — the biggest test task on the list: Group B's remaining four
+  rows, the NotebookEdit regression, A1 examples 8–11, the no-local-branches case, and **Group C**,
+  the counting-`git` shim asserting one `cat-file --batch` / one `for-each-ref` / zero `git show`
+  plus the input-order parser. Task 10 then implements step 8. Nothing before task 9 touches
+  step 8, so a `planning` file whose gate opened elsewhere still denies until task 10 lands.
+  **Two falsification findings from task 8 that the next session should not re-derive** (both
+  written up on the feature file, neither fixable there — the checklist is frozen and tests must
+  not be edited alongside implementation): A3.1 cannot isolate the line-1 clause, and the
+  legal-value clause is invisible to every current test until task 12 makes *malformed* audible.
+  Also recorded, not acted on: **step 9 still reads branch claims with its own grep+sed rather
+  than the new contract parser**, so a malformed file can still claim a branch (fails open).
+  The 17-task checklist is **frozen**;
   `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
   mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
   file, which is canonical.
