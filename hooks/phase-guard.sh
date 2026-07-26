@@ -81,17 +81,41 @@ case "$rel" in
 esac
 
 # --- Step 7: which feature files sit at phase: planning? --------------------------------
-# Minimal for now: a line-level match. The full frontmatter contract — fenced, at most one
-# phase: line, a value from the legal three — is a later task, and until it lands a
-# malformed file is read more permissively than the contract allows.
-PLANNING_RE='^phase:[[:space:]]*planning[[:space:]]*$'
+# The frontmatter contract, one awk pass per file. Well-formed iff line 1 is exactly `---`,
+# a closing `---` follows, and between them sit exactly one `phase:` line carrying one of
+# the three legal values and at most one `branch:` line. Unknown keys between the fences are
+# ignored, so model_tier and future keys stay forward-compatible.
+#
+# Anything else is SKIPPED, never guessed at. That is why the value is matched against the
+# legal three rather than merely tested for "planning": a `phase: plannning` typo must not
+# read as "not planning, therefore allow" and silently switch a CRITICAL gate off.
+#
+# Prints the phase value for a well-formed file, nothing for a malformed one. Awk missing or
+# failing therefore reads as malformed, which fails open — consistent with every other ⊘.
+#
+# A skipped file in an opted-in repo is the "cannot evaluate" case, and the second of the two
+# exits that must not be silent. Like the no-interpreter exit at step 4 it stays silent here:
+# its once-per-session line is inseparable from the flag contract, and both land at task 12.
 IMPL_RE='^phase:[[:space:]]*implementation[[:space:]]*$'
 BRANCH_SED='s/^branch:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p'
+# shellcheck disable=SC2016  # $0 is awk's own, not a shell expansion — it must not expand.
+FRONTMATTER_AWK='
+NR == 1     { if ($0 != "---") exit; next }
+$0 == "---" { closed = 1; exit }
+/^phase:/   { nphase++; phase = $0 }
+/^branch:/  { nbranch++ }
+END {
+  if (!closed || nphase != 1 || nbranch > 1) exit
+  if (phase !~ /^phase:[[:space:]]*(planning|implementation|review)[[:space:]]*$/) exit
+  sub(/^phase:[[:space:]]*/, "", phase)
+  sub(/[[:space:]]*$/, "", phase)
+  print phase
+}'
 
 planning_files=""
 for f in "$root"/docs/features/*.md; do
   [ -f "$f" ] || continue          # no match: the glob stayed literal, so the dir is empty
-  grep -Eq "$PLANNING_RE" "$f" || continue
+  [ "$(awk "$FRONTMATTER_AWK" "$f")" = "planning" ] || continue
   planning_files="$planning_files${f#"$root"/}
 "
 done

@@ -910,7 +910,37 @@ assertion depends on behaviour a later task introduces.
         Without it a skipped `bad.md` leaves nothing to deny on, and all six would pass by exiting
         0 — the round-4 defect that the A3.7 `b.md` note already records, reappearing in a
         different place.
-- [ ] 8. Implement step 7 to the full **Frontmatter contract**. **Green for task 7.**
+- [x] 8. Implement step 7 to the full **Frontmatter contract**. **Green for task 7.**
+      - Done: 47/47 green, siblings green, `shellcheck -x` clean. One awk pass per file, matching
+        the per-file grep step 9 already does; a single pass over all files was rejected because
+        `ENDFILE` is gawk-only and this machine's awk is the one-true-awk.
+      - **Falsification found two clauses the frozen tests cannot see.** Knocking out each contract
+        clause in turn against a *copy* (committed hook sha-verified unchanged): the closing-fence
+        clause turns A3.2 red and the one-`phase:`-line clause turns A3.5 red, so both are
+        load-bearing. The other two are not, and neither gap is fixable here — task 7's tests are
+        committed and the checklist is frozen:
+        - **Clause 1 (line 1 is exactly `---`) is unfalsifiable by A3.1.** Probed directly: the
+          fixture emits nothing with *or* without the clause, because without it line 2's `---`
+          is read as the *closing* fence, leaving zero `phase:` lines — so the file is skipped by
+          clause 3 instead. A3.1 proves the file is skipped, not *why*.
+        - **The legal-value clause is invisible to A3.3/A3.4.** Removing it makes awk emit
+          `plannning` and `garbage`, but step 7's shell-side `= "planning"` comparison rejects
+          those anyway. Its real effect is the distinction between *malformed → cannot evaluate*
+          (must become audible) and *well-formed but not planning* (silently fine) — which no test
+          can observe until the flag contract lands at task 12. Kept deliberately: it is what the
+          contract specifies, and task 12 is where it starts paying.
+      - The "all files skipped" exit stays **silent** here, exactly as step 4's no-interpreter exit
+        does, for the same reason: its once-per-session line is inseparable from the flag contract.
+        No `skipped` variable is tracked yet — under `set -u` it would be assigned-but-unread, which
+        `shellcheck` flags (SC2034). Task 12 introduces it with its reader.
+      - **Recorded, not acted on: step 9 still reads claims with its own `grep IMPL_RE` + `sed`,
+        not this parser.** A malformed file carrying `phase: implementation` and a `branch:` can
+        therefore still claim a branch, which *allows* — consistent with fail-open, and no scenario
+        covers it. Unifying the two readers is a review-phase decision; task 8's scope is step 7.
+      - One `# shellcheck disable=SC2016` was added — awk's `$0` must not expand, and unlike task
+        6's backticks it cannot simply be dropped. The `$2`-with-`FS=":"` alternative would break
+        the contract's legal no-space form `phase:planning`. **This supersedes the closing line of
+        task 6's note** ("No suppression directives in this file"), true when written.
 - [ ] 9. Test: Group B's remaining four rows (claimed branch; one feature planning must not revoke
       another; `implementation`-supersession; `review`-supersession), the NotebookEdit regression,
       Group A1 examples 8–11 (both git failures, empty/failed `rev-parse`, detached `HEAD`), the
