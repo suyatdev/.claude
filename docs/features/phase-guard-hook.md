@@ -851,10 +851,23 @@ assertion depends on behaviour a later task introduces.
         task 10 owns them. Until it lands, a failing `rev-parse` yields an empty branch, no claim
         matches, and the hook denies. That inverts the fail-open principle for two tasks; it is
         the checklist's chosen ordering, and task 9's tests are the red that closes it.
-- [ ] 5. Test: the deny-message contract — all four required elements (offending path(s) + their
+- [x] 5. Test: the deny-message contract — all four required elements (offending path(s) + their
       `phase:`, current branch, both fixes, the no-bypass clause), and that the clause says
       *environment variable* rather than overclaiming that no route exists. Red — task 4's deny is
       bare.
+      - Done: 17 pass, 8 fail — the deny itself is green (exit 2, empty stdout, unchanged from
+        task 4) and every element assertion is red, which is the split this task wanted.
+      - Each of the four elements is asserted separately rather than as one match, so a message
+        that ships three of four fails on the one it dropped and names it.
+      - The fixture carries **two** planning files, because the contract says *every* offending
+        path — a single-file fixture is green against a message that names only the first. Its
+        branch is `wip/unclaimed-xyz`, not the scenario's `main`: "stderr names the current
+        branch" is not falsifiable against a string the message could contain for other reasons.
+      - `err_has`/`err_lacks` read the `$err` file that `deny` already captured, so all eight
+        elements are checked against one and the same deny rather than eight separate runs.
+      - Honest limit: the overclaim check (`err_lacks`) passes **vacuously** against today's
+        empty stderr. It only starts carrying weight at task 6, when there is prose to overclaim
+        in — it is the one assertion here whose red/green today means nothing.
 - [ ] 6. Implement the deny message to contract. **Green for task 5.** Every later test may now
       assert on stderr.
 - [ ] 7. Test: Group A3 — the eight frontmatter-contract scenarios (six malformed shapes, optional

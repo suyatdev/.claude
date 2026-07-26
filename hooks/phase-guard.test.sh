@@ -61,6 +61,26 @@ deny() { # $1 desc, $2 cwd, $3 payload
   printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
 }
 
+# Element assertions for the deny message. `deny` leaves its captured stderr in $err, so
+# these read that file instead of re-running the hook — every element is then checked
+# against one and the same deny, not against separate runs that could disagree.
+err_has() { # $1 desc, $2 extended regex that must match some line of stderr
+  if grep -Eq -- "$2" "$err"; then
+    printf 'ok   — %s\n' "$1"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (no stderr line matches /%s/)\n' "$1" "$2"; fail=$((fail+1))
+  fi
+}
+
+err_lacks() { # $1 desc, $2 extended regex that must match nothing in stderr
+  if grep -Eq -- "$2" "$err"; then
+    printf 'FAIL — %s (stderr matches /%s/: %s)\n' "$1" "$2" "$(grep -Em1 -- "$2" "$err")"
+    fail=$((fail+1))
+  else
+    printf 'ok   — %s\n' "$1"; pass=$((pass+1))
+  fi
+}
+
 mkrepo() { # $1 dir — an initialized repo on branch main carrying one commit
   mkdir -p "$1"
   ( cd "$1" && git init -q -b main && git config user.email t@t.t && git config user.name t &&
@@ -91,6 +111,15 @@ NOPLANNING="$TMP/noplanning"; mkrepo "$NOPLANNING"
 feature_file "$NOPLANNING" docs/features/a.md implementation
 # EMPTYFEATURES — docs/features/ exists and holds nothing at all.
 EMPTYFEATURES="$TMP/emptyfeatures"; mkrepo "$EMPTYFEATURES"; mkdir -p "$EMPTYFEATURES/docs/features"
+# DENYMSG — the deny-message fixture. TWO files at phase: planning, because the contract
+# says "every offending path": a message that named only the first would pass a
+# single-file check. The branch name is deliberately odd rather than the scenario's
+# `main` — "stderr names the current branch" is not falsifiable against a string a deny
+# message could plausibly contain for some other reason.
+DENYMSG="$TMP/denymsg"; mkrepo "$DENYMSG"
+feature_file "$DENYMSG" docs/features/alpha.md planning
+feature_file "$DENYMSG" docs/features/beta.md planning
+( cd "$DENYMSG" && git checkout -q -b wip/unclaimed-xyz )
 
 # --- Group A1, examples 1-6: silent fail-open ---------------------------------------
 # "Not applicable here" — the common case in every repo that never opted in.
@@ -130,6 +159,45 @@ allow_silent "A1.7 nothing at phase: planning (step 7)" "$NOPLANNING" \
   "$(payload Write file_path "$NOPLANNING/src/x.sh")"
 allow_silent "docs/features/ exists but is empty (step 7, silent)" "$EMPTYFEATURES" \
   "$(payload Write file_path "$EMPTYFEATURES/src/x.sh")"
+
+# --- The deny-message contract ------------------------------------------------------------
+# All four required elements, or the block is unactionable — a session that is told "no"
+# without being told which file said no, or how to open the gate, will go looking for a
+# bypass. That is the failure this message exists to prevent, so each element is asserted
+# separately: a message missing one of the four should fail on that one, and name it.
+#
+# This is the first test in the suite that touches stderr at all. Everything above asserts
+# either an empty stderr (the allows) or says nothing about it (the deny), which is what
+# let the bare `exit 2` of the previous task be green.
+
+deny "deny-message: two planning files + unclaimed branch" "$DENYMSG" \
+  "$(payload Write file_path "$DENYMSG/src/x.sh")"
+
+# 1. Every offending feature-file path, each with its own phase:. Same-line, because a
+#    message listing the paths in one place and the word "planning" in another leaves a
+#    reader guessing which file is at which phase once the list runs past one entry.
+err_has "element 1: names docs/features/alpha.md with its phase" 'docs/features/alpha\.md.*phase: planning'
+err_has "element 1: names docs/features/beta.md with its phase"  'docs/features/beta\.md.*phase: planning'
+
+# 2. The current branch. The deny is branch-scoped, so a message that omits the branch
+#    omits the reason.
+err_has "element 2: names the current branch" 'wip/unclaimed-xyz'
+
+# 3. Both legitimate fixes. The first is the literal gate phrase plus both frontmatter
+#    edits it authorizes; the second is the stale-file exit, which is the one a session
+#    blocked by an abandoned feature file actually needs.
+err_has "element 3a: the literal gate phrase"        'gate confirmed'
+err_has "element 3a: advancing phase:"               'phase: implementation'
+err_has "element 3a: recording the branch"           'record.*branch:'
+err_has "element 3b: the stale-file exit"            'stale.*delete|delete.*stale'
+
+# 4. The no-bypass clause, and that it stays narrow. Q6 built no bypass env var, so the
+#    message says so — but the Bash-tool write surface is unguarded (Non-goals), so a
+#    message claiming there is no way around the guard would be false, and a safety
+#    message that overclaims teaches sessions to distrust the true parts too.
+err_has   "element 4: no bypass environment variable" 'no bypass environment variable'
+err_lacks "element 4: does not overclaim a closed surface" \
+  'no way around|cannot be bypassed|impossible to bypass|there is no bypass\.'
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
