@@ -15,8 +15,10 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **NEXT SESSION STARTS AT TASK 1** — `hooks/phase-guard.test.sh`, Group A1 examples 1–6 plus the
-  unguarded-path scenario, red against a nonexistent hook. The 17-task checklist is **frozen**;
+  **Task 1 landed `ebdf133`** (12 cases, red at 127; fixtures separately confirmed sound against a
+  throwaway no-op hook). **NEXT SESSION STARTS AT TASK 2** — `hooks/phase-guard.sh` steps 1–6 with
+  a stub step 7 that always ⊘s, keeping the hook allow-only; green for task 1. The 17-task
+  checklist is **frozen**;
   `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
   mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
   file, which is canonical.
