@@ -199,5 +199,79 @@ err_has   "element 4: no bypass environment variable" 'no bypass environment var
 err_lacks "element 4: does not overclaim a closed surface" \
   'no way around|cannot be bypassed|impossible to bypass|there is no bypass\.'
 
+# --- Group A3: the frontmatter contract ------------------------------------------------------
+# A malformed feature file is SKIPPED, never guessed at — a one-character typo must not silently
+# switch a CRITICAL gate off. Each case pairs the malformed bad.md with a well-formed good.md at
+# phase: planning, so the deny still happens and the assertion isolates one thing: which file the
+# message names. Without good.md a skipped bad.md would leave nothing to deny on, and every case
+# would pass by exiting 0 for the wrong reason.
+
+# Written literally rather than through feature_file(), because every shape here is one that
+# helper cannot produce — being unproducible is exactly what makes them malformed.
+a3_repo() { # $1 example id, $2 literal bad.md content — echoes the repo path
+  local r="$TMP/a3-$1"
+  mkrepo "$r"
+  feature_file "$r" docs/features/good.md planning
+  printf '%s' "$2" > "$r/docs/features/bad.md"
+  printf '%s' "$r"
+}
+
+a3_case() { # $1 example id, $2 defect description, $3 literal bad.md content
+  local r; r=$(a3_repo "$1" "$3")
+  deny      "A3.$1 $2: still denies"   "$r" "$(payload Write file_path "$r/src/x.sh")"
+  err_has   "A3.$1 names good.md"      'docs/features/good\.md'
+  err_lacks "A3.$1 does not name bad.md" 'docs/features/bad\.md'
+}
+
+a3_case 1 'no opening --- on line 1'    '
+---
+phase: planning
+---
+'
+a3_case 2 'opening --- but no closing ---' '---
+phase: planning
+model_tier: high
+'
+a3_case 3 'phase: plannning (typo)'     '---
+phase: plannning
+---
+'
+a3_case 4 'phase: Planning (wrong case)' '---
+phase: Planning
+---
+'
+# Two IDENTICAL phase: lines, not two contradictory ones. The contract counts lines, so a parser
+# that deduplicated values would wrongly accept this — and a contradictory pair would additionally
+# drag step 9 into the scenario, which is a different clause.
+a3_case 5 'two phase: lines'            '---
+phase: planning
+phase: planning
+---
+'
+a3_case 6 'no phase: line at all'       '---
+model_tier: high
+---
+'
+
+# 7. An absent branch: key means UNCLAIMED, not malformed. b.md is load-bearing, not scenery: a
+#    deny needs some planning file, and without it this scenario would assert an exit 2 that step 7
+#    cannot produce. It isolates that a.md's missing branch: leaves feat/a unclaimed, so b.md denies.
+A3MB="$TMP/a3-missing-branch"; mkrepo "$A3MB"
+feature_file "$A3MB" docs/features/a.md implementation
+feature_file "$A3MB" docs/features/b.md planning
+( cd "$A3MB" && git checkout -q -b feat/a )
+deny    "A3.7 absent branch: is unclaimed, not malformed" "$A3MB" \
+  "$(payload Write file_path "$A3MB/src/x.sh")"
+err_has "A3.7 names docs/features/b.md" 'docs/features/b\.md'
+
+# 8. Unknown keys between the fences are ignored, so model_tier and future keys stay compatible.
+A3FC="$TMP/a3-forward-compat"; mkrepo "$A3FC"
+mkdir -p "$A3FC/docs/features"
+printf -- '---\nphase: planning\nmodel_tier: high\nunknown_future_key: whatever\n---\n\n# fixture\n' \
+  > "$A3FC/docs/features/a.md"
+deny    "A3.8 unknown frontmatter keys are forward-compatible" "$A3FC" \
+  "$(payload Write file_path "$A3FC/src/x.sh")"
+err_has "A3.8 names docs/features/a.md" 'docs/features/a\.md'
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

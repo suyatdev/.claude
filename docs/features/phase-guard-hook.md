@@ -888,10 +888,28 @@ assertion depends on behaviour a later task introduces.
       - The message names the blocked path and adds that feature files live under `docs/`, which
         the guard never blocks. Neither is a contract element; both exist so the reader is not
         left wondering whether the fix is itself blocked.
-- [ ] 7. Test: Group A3 — the eight frontmatter-contract scenarios (six malformed shapes, optional
+- [x] 7. Test: Group A3 — the eight frontmatter-contract scenarios (six malformed shapes, optional
       `branch:` **with its second `planning` file**, forward-compatible unknown keys), including the
       `names good.md` / `does not name bad.md` assertions. Red where the minimal parser is too
       permissive.
+      - Done: 44 pass, 3 fail. **The red set was predicted before the run and matched exactly** —
+        examples 1, 2 and 5, the three where the minimal parser matches a `phase:` line without
+        caring about fences or duplicates. Each fails only on `does not name bad.md`; its
+        `still denies` and `names good.md` halves are green, so the failure is isolated to the
+        one behaviour task 8 changes.
+      - **Examples 3, 4 and 6 are already green — but not for the contract's reason, and that
+        distinction matters when reading task 8's diff.** Today they pass because the value simply
+        is not the literal `planning` (`plannning`, `Planning`) or there is no `phase:` line at
+        all, so the minimal grep misses them by luck. After task 8 they pass because the file is
+        *malformed and skipped*. Same observable outcome, different cause: their green is a
+        regression guard, never evidence the contract is implemented.
+      - Example 5 uses two **identical** `phase: planning` lines. The contract counts lines, so a
+        parser that deduplicated values would wrongly accept this; a contradictory pair would also
+        drag step 9's claim lookup into a scenario about step 7.
+      - Every case pairs the malformed `bad.md` with a well-formed `good.md` at `phase: planning`.
+        Without it a skipped `bad.md` leaves nothing to deny on, and all six would pass by exiting
+        0 — the round-4 defect that the A3.7 `b.md` note already records, reappearing in a
+        different place.
 - [ ] 8. Implement step 7 to the full **Frontmatter contract**. **Green for task 7.**
 - [ ] 9. Test: Group B's remaining four rows (claimed branch; one feature planning must not revoke
       another; `implementation`-supersession; `review`-supersession), the NotebookEdit regression,
