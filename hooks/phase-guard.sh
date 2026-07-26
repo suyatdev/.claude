@@ -115,5 +115,28 @@ if [ -n "$branch" ]; then
 fi
 
 # --- Step 10: deny -----------------------------------------------------------------------
-# Bare for now; the message contract is the next task.
+# All four elements of the Deny message contract, because a block that says only "no" sends
+# the session hunting for a bypass — which is the failure this message exists to prevent.
+# The phase is printed as the constant `planning` rather than echoed back from the file:
+# step 7's match IS the definition of offending here, and echoing the raw line would leak
+# its whitespace variants into a message the contract wants uniform.
+# Element 4 stays narrow — "no bypass environment variable", never "no way around this".
+# The Bash-tool write surface is unguarded (Non-goals), so the wider claim would be false,
+# and a safety message that overclaims teaches sessions to distrust its true parts too.
+{
+  printf 'phase-guard: write blocked — %s\n\n' "$rel"
+  printf 'Implementation is not authorized on this branch: a feature file is still at\n'
+  printf 'phase: planning, and no feature file records this branch as its own.\n\n'
+  printf '  current branch: %s\n\n' "${branch:-<unresolved>}"
+  printf 'Still at planning:\n'
+  printf '%s' "$planning_files" | while IFS= read -r offending; do
+    [ -n "$offending" ] || continue
+    printf '  - %s — phase: planning\n' "$offending"
+  done
+  printf '\nTwo legitimate fixes (feature files live under docs/, which this guard never blocks):\n'
+  printf '  1. Open the gate — on the literal user phrase "gate confirmed", advance the file\n'
+  printf '     to phase: implementation and record its branch: %s\n' "${branch:-<this branch>}"
+  printf '  2. If the file is stale or abandoned, advance or delete it.\n\n'
+  printf 'There is no bypass environment variable; this guard ships without one by design.\n'
+} 1>&2
 exit 2

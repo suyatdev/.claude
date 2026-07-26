@@ -868,8 +868,26 @@ assertion depends on behaviour a later task introduces.
       - Honest limit: the overclaim check (`err_lacks`) passes **vacuously** against today's
         empty stderr. It only starts carrying weight at task 6, when there is prose to overclaim
         in — it is the one assertion here whose red/green today means nothing.
-- [ ] 6. Implement the deny message to contract. **Green for task 5.** Every later test may now
+- [x] 6. Implement the deny message to contract. **Green for task 5.** Every later test may now
       assert on stderr.
+      - Done: 25/25 green (was 17/8); the four sibling hook suites still pass and `shellcheck -x`
+        is clean.
+      - **Task 5's one vacuous assertion is now falsified.** `err_lacks` could not fail against an
+        empty stderr, so it was proven here instead: each of its four alternatives (`no way
+        around`, `cannot be bypassed`, `impossible to bypass`, `there is no bypass.`) was injected
+        into the no-bypass line in turn, and each produced exactly **one** failure — that
+        assertion, naming itself. Run against a *copy* of the hook, so the committed file was
+        never modified (sha256 verified identical before and after).
+      - The phase is printed as the constant `planning`, not echoed back from the file: step 7's
+        match is what *makes* a file offending, and echoing its raw line would leak whitespace
+        variants (`phase:   planning`) into a message the contract wants uniform.
+      - `shellcheck` flagged SC2016 on the backticks around the gate phrase — a false positive
+        (they are meant literally). Resolved by dropping the backticks for plain quotes rather
+        than adding a `disable=` directive, which also removed the `'\''` escaping that made the
+        line hard to read. No suppression directives in this file.
+      - The message names the blocked path and adds that feature files live under `docs/`, which
+        the guard never blocks. Neither is a contract element; both exist so the reader is not
+        left wondering whether the fix is itself blocked.
 - [ ] 7. Test: Group A3 — the eight frontmatter-contract scenarios (six malformed shapes, optional
       `branch:` **with its second `planning` file**, forward-compatible unknown keys), including the
       `names good.md` / `does not name bad.md` assertions. Red where the minimal parser is too
