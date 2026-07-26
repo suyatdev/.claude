@@ -80,7 +80,40 @@ case "$rel" in
   CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
 esac
 
-# --- Step 7: the planning files -------------------------------------------------------
-# Stub. Always fails open, keeping this hook allow-only until the frontmatter parse and
-# the permission decision land.
-exit 0
+# --- Step 7: which feature files sit at phase: planning? --------------------------------
+# Minimal for now: a line-level match. The full frontmatter contract — fenced, at most one
+# phase: line, a value from the legal three — is a later task, and until it lands a
+# malformed file is read more permissively than the contract allows.
+PLANNING_RE='^phase:[[:space:]]*planning[[:space:]]*$'
+IMPL_RE='^phase:[[:space:]]*implementation[[:space:]]*$'
+BRANCH_SED='s/^branch:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p'
+
+planning_files=""
+for f in "$root"/docs/features/*.md; do
+  [ -f "$f" ] || continue          # no match: the glob stayed literal, so the dir is empty
+  grep -Eq "$PLANNING_RE" "$f" || continue
+  planning_files="$planning_files${f#"$root"/}
+"
+done
+[ -n "$planning_files" ] || exit 0
+
+# --- Step 8: drop the superseded ---------------------------------------------------------
+# Not yet implemented. Until it is, a planning file whose gate has already opened on some
+# other branch still denies here.
+
+# --- Step 9: is the current branch claimed? ----------------------------------------------
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || branch=""
+if [ -n "$branch" ]; then
+  for f in "$root"/docs/features/*.md; do
+    [ -f "$f" ] || continue
+    grep -Eq "$IMPL_RE" "$f" || continue
+    # Compare the branch as a string, never as an interpolated regex: a branch name is
+    # user input, and one carrying a regex metacharacter would otherwise match wrongly.
+    claim=$(sed -n -E "$BRANCH_SED" "$f" | head -1)
+    [ "$claim" = "$branch" ] && exit 0
+  done
+fi
+
+# --- Step 10: deny -----------------------------------------------------------------------
+# Bare for now; the message contract is the next task.
+exit 2

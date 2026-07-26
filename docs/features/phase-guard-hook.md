@@ -838,9 +838,19 @@ assertion depends on behaviour a later task introduces.
         path) but says nothing about stderr, so task 4's bare deny can make it green.
       - The two new allow cases pass trivially against the allow-only stub; they only start
         carrying weight at task 4, when a deny exists for them to be distinguished from.
-- [ ] 4. Implement minimal steps 7/9/10: find `phase: planning`, read the branch, deny with a bare
+- [x] 4. Implement minimal steps 7/9/10: find `phase: planning`, read the branch, deny with a bare
       exit 2. **Green for task 3.** First task that can produce exit 2, which is why every
       deny-asserting test lands at or after task 3.
+      - Done: 15/15 green. The unguarded-path cases only became meaningful here — a deny now
+        exists for them to be distinguished from.
+      - Step 9 compares the `branch:` value to the current branch **as a string**, via `sed -n -E`
+        extraction, rather than interpolating the branch name into a regex. A branch name is user
+        input; interpolated, one carrying a metacharacter matches wrongly. Probed both ways:
+        `feat/a.b` claimed allows, and `feat/axb` is correctly not matched by it.
+      - Step 9's own fail-opens (nonzero/empty `rev-parse`, detached `HEAD`) are **not** here —
+        task 10 owns them. Until it lands, a failing `rev-parse` yields an empty branch, no claim
+        matches, and the hook denies. That inverts the fail-open principle for two tasks; it is
+        the checklist's chosen ordering, and task 9's tests are the red that closes it.
 - [ ] 5. Test: the deny-message contract — all four required elements (offending path(s) + their
       `phase:`, current branch, both fixes, the no-bypass clause), and that the clause says
       *environment variable* rather than overclaiming that no route exists. Red — task 4's deny is
