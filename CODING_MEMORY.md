@@ -15,12 +15,15 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–5 are done (`ebdf133`, `08c52b1`, `2a82691`, `8f06de1`, `01be565`); the hook denies and
-  the suite is 17 pass / 8 fail — the 8 are task 5's deny-message elements, red by design against
-  task 4's bare exit 2.** **NEXT SESSION STARTS AT TASK 6** — write the deny message to contract
-  and turn those 8 green; change nothing else, and do not touch the test to make it fit. From task
-  6 on, every test may assert on stderr; nothing before task 5 may. The 17-task checklist is
-  **frozen**;
+  **Tasks 1–6 are done (`ebdf133`, `08c52b1`, `2a82691`, `8f06de1`, `01be565`, `2118bbe`,
+  `33d5cf2`); the hook denies with the full four-element message and the suite is 25/0**, siblings
+  green, `shellcheck -x` clean. Task 6 also falsified task 5's one vacuous assertion (`err_lacks`
+  could not fail against an empty stderr) — all four forbidden overclaim phrases injected into a
+  *copy* of the hook, one failure each, committed file sha-verified unchanged.
+  **NEXT SESSION STARTS AT TASK 7** — the Group A3 frontmatter-contract tests (six malformed
+  shapes, optional `branch:` with its second planning file, unknown keys), red where task 2's
+  line-level parser is still too permissive; task 8 then implements step 7 to the full contract.
+  From task 6 on, every test may assert on stderr. The 17-task checklist is **frozen**;
   `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
   mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
   file, which is canonical.
