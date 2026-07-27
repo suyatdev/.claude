@@ -775,15 +775,20 @@ always-cooldown):** count CONSECUTIVE `open_tab` failures per session in
 tab-incapable and it becomes an ordinary adapter failure (cooldown + exit 4). Below the limit,
 unchanged: retire the target, exit 3, no cooldown.
 
-- **No spec amendment needed** (this is why the direction was chosen): the locked spec's Gherkin
-  says an adapter that cannot tab writes the cooldown — it still does, only the timing changes.
-  The spec stays locked at blob `cdc777a`, so the existing compliance verdicts stay valid.
+- **No spec EDIT needed, but it is a declared timing deviation, not compliance** (corrected after
+  RUN 3): the locked spec's Gherkin writes the cooldown as a single-dispatch Then-clause (spec
+  242–246), and the 1st and 2nd overflow do not write it. What is true is that the outcome
+  arrives within three overflows. The spec stays locked at blob `cdc777a`, so the existing
+  compliance verdicts stay valid; the deviation is recorded in ADR 0009 instead.
 - **Threshold = 3, and the reasoning is the asymmetry, not a hunch.** Over-triggering silently
   discards the user's explicit `panes max=N` for the rest of the session — the exact thing this
-  branch exists to honor. Under-triggering leaks at most `TAB_FAIL_LIMIT-1` = 2 surplus panes,
-  which are visible on screen and stop dead when the cooldown lands. 3 also tolerates the benign
-  multi-stale case (a couple of panes closed by hand, a cmux restart) that 2 would misread as a
-  broken adapter.
+  branch exists to honor. Under-triggering leaks surplus panes which are visible on screen —
+  but they do **not** "stop dead when the cooldown lands", which is what this bullet used to
+  claim (RUN 3 F1, reproduced). The dispatcher never reads `adapter-failed-<sid>`; the guard is
+  its sole reader, so the bound is emergent (the guard stops routing work here) and a direct
+  `dispatch` invocation is unbounded. 3 does also tolerate the benign multi-stale case (panes
+  closed by hand, a cmux restart), but only because the round-robin index advances past a stale
+  target — see the RUN 3 section below.
 - **Only a successful `open_tab` clears the streak.** An `open_pane` success proves nothing about
   tab capability — and in the growth loop one succeeds between *every* pair of tab failures, so
   clearing on it would make the limit unreachable and pin the bug in place. This is the subtle
@@ -804,9 +809,92 @@ rationale; one line documenting `<run-dir>/route` under Fallbacks, giving the br
 reader-facing mention.
 
 **Carried forward, unchanged by this fix:** the abnormal-pane-death root cause (nothing writes
-`agent-exit`) is still next-branch; T7 NIT 1 (rr index advances on a failed `open_tab`) is still
-cosmetic and now bounded by the streak; `panes/dispatch-pane-agent.sh` is now **492 lines** (test
-file 594) — past the 400 soft limit by 23%, and the file split stays the first move of the next
-dispatcher change. Deliberately not done here: a 37-commit branch one step from its PR is the wrong
-place for a whole-file reshuffle, and every reviewer sign-off on this branch was given against the
-current layout.
+`agent-exit`) is still next-branch; T7 NIT 1 (rr index advances on a failed `open_tab`) — graded
+cosmetic here, and that grading was wrong in the other direction: RUN 3 remediation below shows the
+advance is load-bearing, not cosmetic and not a bug; `panes/dispatch-pane-agent.sh` is now
+**492 lines** (test file 594) — past the 400 soft limit by 23%, and the file split stays the first
+move of the next dispatcher change. Deliberately not done here: a 37-commit branch one step from its
+PR is the wrong place for a whole-file reshuffle, and every reviewer sign-off on this branch was
+given against the current layout.
+
+## Obs judge RUN 3 remediation — one finding confirmed, two falsified (2026-07-27)
+
+RUN 3 raised three findings. **F1 is confirmed and remediated. F2 and F3 do not reproduce against
+production run-dir names, and the fix RUN 3 proposed for them would have caused the very bug it
+described.** Every claim below was built as a standalone repro against the shipped dispatcher with a
+fake adapter; no claim here is taken on report.
+
+**F1 — CONFIRMED, reproduced byte for byte.** `max=2`, an adapter that opens panes but cannot tab,
+10 direct dispatches:
+
+```
+d1  rc=0 realpanes=1    d6  rc=0 realpanes=4
+d3  rc=3 realpanes=2    d7  rc=4 realpanes=4 cooldown=YES
+d4  rc=0 realpanes=3    d8  rc=0 realpanes=5 cooldown=YES   <-- after the cooldown
+d5  rc=3 realpanes=3    d10 rc=0 realpanes=6 cooldown=YES   <-- still growing
+```
+
+`hooks/pane-dispatch-guard.sh:105` is the sole reader of `adapter-failed-<sid>`; the dispatcher only
+writes it (two sites in `open_surface_or_cooldown`). The bound is the guard's refusal to keep
+routing work here — **emergent, not mechanical** — and a direct `dispatch` invocation has no bound.
+Corrected in place in three records: the `TAB_FAIL_LIMIT` comment, ADR 0009, and the threshold
+bullet above.
+
+**F2/F3 — FALSIFIED. The judge's repro inverts production glob order.** `live_worker_panes` walks
+`$RUNS_DIR/*/` in glob order, and `new_run_dir` names every run `<epoch>-<pid>-<random>` with a
+fixed-width epoch — so glob order **is** creation order, and a pane that goes stale always sorts
+*before* every pane opened after it. RUN 3's fixtures sorted the ghosts *last*, which cannot happen
+in production. Same scenario (cmux restart 5 min ago, 3 ghosts, healthy adapter, `max=3`), both
+orderings, both dispatcher versions:
+
+| ghost run-dir order | HEAD (advance at selection) | RUN 3's proposed fix (advance on success only) |
+|---|---|---|
+| ghosts sort **last** (RUN 3's fixtures; unreachable in production) | cooldown @ d5 — RUN 3's F2 trace, reproduced exactly | no cooldown in 10 dispatches |
+| ghosts sort **first** (what a real restart produces) | **no cooldown in 12 dispatches**, self-heals, 3 real panes | **cooldown @ d5** — F2, *introduced* |
+
+So the proposed fix does not remove F2; it **moves** it from an ordering production cannot produce
+into the one it always produces. The reason is the mechanism F3 called cosmetic-turned-causal: with
+the ghosts at the front of the list, a standing index re-probes the oldest (most-likely-stale) pane
+on every overflow and drains them one per dispatch, hitting `TAB_FAIL_LIMIT` without ever tabbing
+into a healthy pane. The advance is what carries the selector past them to a pane whose success
+clears the streak. **T7 NIT 1 is neither cosmetic nor a bug — it is load-bearing.** Verified against
+the RUN 2 growth case too: tab-incapable adapter at `max=3` behaves identically either way
+(cooldown @ d8, 5 real panes), so the advance costs the true positive nothing.
+
+Decision: **no behavior change.** Changing routing here would reverse RUN 2's user-chosen design on
+evidence that says it is a regression. Instead the coupling is documented at
+`select_worker_surface` + `TAB_FAIL_LIMIT`, recorded as an ADR 0009 consequence, and pinned by test
+so the next "cosmetic cleanup" fails loudly.
+
+**Tests added (RUN 3's structural finding: nothing anywhere counted panes against `max`).**
+`panes/dispatch-pane-agent.test.sh` +10 assertions, three blocks:
+
+1. *The core promise* — healthy adapter, `max=2`, six sequential workers with every run dir live:
+   exactly 2 real `open_pane` calls, 4 overflow tabs, all six exit 0, `count-workers` settles at 2.
+2. *F1's honest boundary* — with `adapter-failed-<sid>` already present, a direct `dispatch` still
+   opens a real pane. The guard's half ("flag present → allow in-process") is already covered by
+   `hooks/pane-dispatch-guard.test.sh` (stdin-sid / env-sid / nosession), so this pins only the
+   dispatcher's half. The two halves must stay legible as two.
+3. *The rr-advance coupling* — 3 stale run dirs named with a past epoch + healthy adapter at
+   `max=3`, 8 dispatches: no cooldown, no exit 4, and at least one tab lands on a post-restart pane
+   (so it cannot pass for the wrong reason).
+
+**Mutation evidence** (each mutant applied to the shipped dispatcher, suite re-run):
+
+| mutant | result |
+|---|---|
+| overflow gate `-ge` → `-gt` | 96/17 — kills 4 of the 5 new pane-count assertions (`6 workers opened 3 panes, max is 2`) |
+| dispatcher honors its own cooldown flag | 108/5 — kills the F1 boundary assertion (`rc=3 panes=0`) |
+| **RUN 3's proposed fix** (advance rr only on `open_tab` success) | **111/2** — kills exactly the two restart assertions (`cooldown written; rcs=30304000`) |
+
+The third mutant is the point: the change RUN 3 asked for is now a test failure with a name that
+explains why.
+
+**Suites 316 → 326 passed, 0 failed** (dispatcher suite 103 → 113); `shellcheck -x` clean; the
+dispatcher suite run 5× consecutively for flake. Locked spec untouched (blob `cdc777a`).
+
+**Residual, unchanged:** the abnormal-pane-death root cause is still open and still the thing that
+dissolves this whole class — and RUN 3's re-pricing of that deferral stands regardless of which way
+F2 fell. `panes/dispatch-pane-agent.sh` is now **517 lines** (test file 735); the +25 is entirely comment
+correcting the falsified claims — no executable line changed — and the file split remains the first
+move of the next dispatcher change.

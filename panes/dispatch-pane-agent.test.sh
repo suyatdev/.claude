@@ -528,6 +528,147 @@ tr_dispatch tr6; rc=$?
 [ "$rc" -eq 3 ] && ok "the failure after a successful tab restarts the streak (exit 3)" || bad "successful tab restarts the streak" "rc=$rc"
 [ ! -f "$PANE_STATE_DIR/adapter-failed-$TRSID" ] && ok "a successful open_tab clears the failure streak" || bad "successful open_tab clears the streak"
 
+# --- Obs-judge RUN 3 --------------------------------------------------------
+# The three blocks below use multi-line adapter stubs, so they are written as
+# quoted heredocs rather than the single-line printf stubs above: the stub bodies
+# are longer than the ones that fit on a line, and a quoted heredoc keeps `$1`
+# and `$2` unexpanded without the SC2016 dance. They read $PANE_STATE_DIR, which
+# the suite exports (line 17) and every adapter therefore inherits.
+
+# RUN 3's structural finding: RUN 2 added eight assertions that all pin the
+# streak MECHANISM, and nothing anywhere counts real panes against max=N — the
+# property RUN 2 actually raised. This is that property, asserted directly.
+# open_pane is the only verb that creates a pane, so counting its invocations
+# counts panes: a healthy adapter, max=2, six sequential worker dispatches whose
+# run dirs all stay live (nothing writes agent-exit, so no slot is ever freed).
+# shellcheck disable=SC2154 # PANE_STATE_DIR is exported by this suite and read inside the stub
+cat > "$PANE_ADAPTERS_DIR/cmux.sh" <<'PCEOF'
+#!/usr/bin/env bash
+# A distinct ref per pane: run_dir_for_surface has to tell them apart.
+case "$1" in
+  open_pane) n=$(( $(cat "$PANE_STATE_DIR/panes" 2>/dev/null || echo 0) + 1 ))
+             printf '%s\n' "$n" > "$PANE_STATE_DIR/panes"
+             printf 'surface:PC%s\n' "$n" ;;
+  open_tab)  printf '%s\n' "$2" >> "$PANE_STATE_DIR/tabs"; printf 'surface:PCT\n' ;;
+  *) exit 64 ;;
+esac
+PCEOF
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+PCSID="pane-count-$$"
+CLAUDE_CODE_SESSION_ID="$PCSID" bash "$DISPATCH" set-policy panes --max 2 >/dev/null 2>&1
+rm -f "$PANE_STATE_DIR/panes" "$PANE_STATE_DIR/tabs"
+pc_rcs=""
+for i in 1 2 3 4 5 6; do
+  CLAUDE_CODE_SESSION_ID="$PCSID" bash "$DISPATCH" dispatch general-purpose \
+    --prompt-file "$PROMPT" --result-file "$TMP/pc$i.md" --cwd "$TMP" >/dev/null 2>&1
+  pc_rcs="$pc_rcs$?"
+done
+pc_panes=$(cat "$PANE_STATE_DIR/panes" 2>/dev/null || echo 0)
+pc_tabs=$(wc -l < "$PANE_STATE_DIR/tabs" 2>/dev/null | tr -d ' '); pc_tabs="${pc_tabs:-0}"
+[ "$pc_panes" -le 2 ] && ok "panes max=2 bounds real panes: 6 workers opened $pc_panes pane(s), never more than 2" \
+  || bad "panes max=2 bounds real panes" "6 workers opened $pc_panes panes, max is 2"
+[ "$pc_panes" -eq 2 ] && ok "panes max=2 is also filled: both slots used before overflowing" \
+  || bad "panes max=2 is filled" "got $pc_panes want 2"
+[ "$pc_tabs" -eq 4 ] && ok "every worker past max=2 overflows to a tab (4 of 6)" || bad "workers past max overflow to tabs" "got $pc_tabs want 4"
+# Spec: an overflow worker may neither block nor go inline, so all six must be 0.
+[ "$pc_rcs" = "000000" ] && ok "no worker is blocked or degraded while max=2 is honored" || bad "no worker blocked or degraded" "rcs=$pc_rcs"
+pc_live=$(CLAUDE_CODE_SESSION_ID="$PCSID" bash "$DISPATCH" count-workers 2>/dev/null)
+[ "$pc_live" = "2" ] && ok "live worker panes settle at max=2, not at the worker count" || bad "live worker panes settle at max" "got $pc_live want 2"
+
+# RUN 3 F1. The durable record claimed the pane leak "stops dead when the
+# cooldown lands". It does not: this dispatcher only ever WRITES
+# adapter-failed-<sid> (two sites in open_surface_or_cooldown) and never reads
+# it. hooks/pane-dispatch-guard.sh is its sole reader, so the bound on pane
+# growth is EMERGENT — the guard stops routing work to this script — and not
+# mechanical. A direct `dispatch` invocation is not bounded at all, and the
+# branch declares that direct invocation happens.
+# The guard's half of that contract ("cooldown flag present -> allow in-process")
+# is already covered by hooks/pane-dispatch-guard.test.sh, three cases: stdin
+# session id, env session id, and the nosession fallback key. Duplicating it here
+# would prove nothing. What nothing covered is the DISPATCHER's half, so that is
+# what this pins — the two halves must stay legible as two, or the next reader
+# re-derives the same false single bound.
+CDSID="cooldown-noop-$$"
+CLAUDE_CODE_SESSION_ID="$CDSID" bash "$DISPATCH" set-policy panes --max 2 >/dev/null 2>&1
+mkdir -p "$PANE_STATE_DIR"
+: > "$PANE_STATE_DIR/adapter-failed-$CDSID"      # this session is already cooled down
+rm -f "$PANE_STATE_DIR/panes"
+CLAUDE_CODE_SESSION_ID="$CDSID" bash "$DISPATCH" dispatch general-purpose \
+  --prompt-file "$PROMPT" --result-file "$TMP/cd1.md" --cwd "$TMP" >/dev/null 2>&1; rc=$?
+cd_panes=$(cat "$PANE_STATE_DIR/panes" 2>/dev/null || echo 0)
+{ [ "$rc" -eq 0 ] && [ "$cd_panes" -eq 1 ]; } \
+  && ok "a cooled-down session still opens a pane on direct dispatch (the bound is the guard's, not the dispatcher's)" \
+  || bad "cooled-down session still opens a pane on direct dispatch" "rc=$rc panes=$cd_panes"
+
+# RUN 3 F2/F3, re-graded by repro — see the branch log for the evidence table.
+# RUN 3 held that the round-robin index advancing on a FAILED open_tab marches
+# the selector through every stale pane and is what lets three stale panes
+# declare a HEALTHY adapter tab-incapable, and proposed advancing only on
+# success. Against production run-dir names the opposite is true. new_run_dir
+# names every run <epoch>-<pid>-<random>; the epoch field is fixed width, so
+# glob order is creation order, so a pane that went stale ALWAYS sorts before
+# every pane opened after it. A standing index therefore re-probes the oldest —
+# most-likely-stale — pane on every overflow and drains the stale ones one per
+# dispatch without ever reaching a healthy one, which is precisely how the streak
+# would reach its limit on a healthy adapter. The advance is what carries the
+# selector past them to a pane whose successful tab clears the streak.
+#
+# That coupling is load-bearing and was one "cosmetic cleanup" away from being
+# removed. This pins it end to end: three worker panes lost to a cmux restart
+# five minutes ago, plus an adapter that tabs fine into anything still alive,
+# must never cool the session down. Fixtures are named with a PAST epoch on
+# purpose — the naming IS the precondition under test, so mk_run_ref's mktemp
+# suffix would not express it.
+mk_stale_run() {   # $1 session-key, $2 surface-ref, $3 age in seconds -> run dir
+  local d
+  mkdir -p "$PANE_STATE_DIR/runs"
+  d="$(mktemp -d "$PANE_STATE_DIR/runs/$(( $(date +%s) - $3 ))-$$-XXXXXX")"
+  printf 'worker\n' > "$d/lane"; printf '%s\n' "$1" > "$d/session"
+  printf 'pane\n' > "$d/kind"; printf '%s\n' "$2" > "$d/surface"
+  printf '%s\n' "$d"
+}
+# shellcheck disable=SC2154 # PANE_STATE_DIR is exported by this suite and read inside the stub
+cat > "$PANE_ADAPTERS_DIR/cmux.sh" <<'RREOF'
+#!/usr/bin/env bash
+# Healthy: it tabs into anything still alive. The GHOST refs belong to panes the
+# restart killed, so only those fail — the adapter itself is fine.
+case "$1" in
+  open_pane) n=$(( $(cat "$PANE_STATE_DIR/panes" 2>/dev/null || echo 0) + 1 ))
+             printf '%s\n' "$n" > "$PANE_STATE_DIR/panes"
+             printf 'surface:RRLIVE%s\n' "$n" ;;
+  open_tab)  printf '%s\n' "$2" >> "$PANE_STATE_DIR/tabtargets"
+             case "$2" in *GHOST*) exit 1 ;; *) printf 'surface:RRTAB\n' ;; esac ;;
+  *) exit 64 ;;
+esac
+RREOF
+chmod 700 "$PANE_ADAPTERS_DIR/cmux.sh"
+RRSID="restart-ghosts-$$"
+CLAUDE_CODE_SESSION_ID="$RRSID" bash "$DISPATCH" set-policy panes --max 3 >/dev/null 2>&1
+mk_stale_run "$RRSID" surface:GHOST1 300 >/dev/null
+mk_stale_run "$RRSID" surface:GHOST2 300 >/dev/null
+mk_stale_run "$RRSID" surface:GHOST3 300 >/dev/null
+rm -f "$PANE_STATE_DIR/panes" "$PANE_STATE_DIR/tabtargets"
+rr_rcs=""
+for i in 1 2 3 4 5 6 7 8; do
+  CLAUDE_CODE_SESSION_ID="$RRSID" bash "$DISPATCH" dispatch general-purpose \
+    --prompt-file "$PROMPT" --result-file "$TMP/rr$i.md" --cwd "$TMP" >/dev/null 2>&1
+  rr_rcs="$rr_rcs$?"
+done
+[ ! -f "$PANE_STATE_DIR/adapter-failed-$RRSID" ] \
+  && ok "three panes lost to a cmux restart never cool down a healthy adapter" \
+  || bad "stale panes must not cool down a healthy adapter" "cooldown written; rcs=$rr_rcs"
+case "$rr_rcs" in *4*) bad "no dispatch is told the adapter is tab-incapable" "rcs=$rr_rcs" ;;
+  *) ok "no dispatch is told the healthy adapter is tab-incapable (no exit 4)" ;; esac
+# The reason there is no cooldown: the selector reached a pane opened AFTER the
+# restart and tabbed into it, which cleared the streak. Without that this would
+# pass for the wrong reason (e.g. if overflow had stopped happening at all).
+grep -qv GHOST "$PANE_STATE_DIR/tabtargets" 2>/dev/null \
+  && ok "the selector reaches a post-restart pane, whose successful tab clears the streak" \
+  || bad "selector never reaches a post-restart pane" "targets=$(tr '\n' ' ' < "$PANE_STATE_DIR/tabtargets" 2>/dev/null)"
+[ "$(cat "$PANE_STATE_DIR/panes" 2>/dev/null || echo 0)" -le 3 ] \
+  && ok "the restart's stale panes are replaced up to max=3, not past it" \
+  || bad "stale panes replaced past max" "panes=$(cat "$PANE_STATE_DIR/panes" 2>/dev/null)"
+
 # --- final-review carry-forwards -------------------------------------------
 
 # Nit-8: `while read -r line` drops a conf's final line when it has no trailing
