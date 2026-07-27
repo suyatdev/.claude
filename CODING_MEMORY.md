@@ -261,6 +261,48 @@ how this file and its linked files should be written (plain language, major chan
   `push --force-with-lease`. **The durable gotcha "commit by pathspec ONLY" means the pathspec must
   be on `git commit` itself — `git add <file>` does not protect you, because `commit` without a
   pathspec commits the WHOLE index.**
+  **RUN 3 REMEDIATION 2026-07-27 (Opus 5 1M; pane implementer `surface:53`, policy `panes max=2`):
+  commits `cbc3c4e` (test) + `5cee1e8` (docs). Controller-verified in-checkout, pathspec-scoped
+  (2 files each), the 6 other-session compliance-judge files byte-identical to session start;
+  suites independently re-run **326/0** (from 316), `shellcheck -x` rc=0, and the dispatcher diff
+  proven **comments-only** (no behavior change).
+  **THE IMPLEMENTER REFUSED DELIVERABLE 1 (the rr-index fix) ON EVIDENCE, AND IS RIGHT — RUN 3's
+  F2/F3 ARE BACKWARDS.** `new_run_dir` names every run `<epoch>-<pid>-<random>` and
+  `live_worker_panes` walks `$RUNS_DIR/*/` in glob order, so glob order IS creation order and a
+  stale pane **always sorts BEFORE** every pane opened after it. RUN 3's fixtures sorted the ghosts
+  LAST, which production cannot produce. Controller confirmed both premises independently (empirical
+  glob-order check + analytic derivation) BEFORE reading the implementer's table, same result.
+  Mechanism: retiring a ghost drops the live count under `max`, so the next dispatch opens a REAL
+  pane that sorts last; an ADVANCING cursor marches into it and its successful tab resets the streak,
+  while a PINNED cursor sits on the oldest ghost and trips the limit. Evidence table (restart 5 min
+  ago, 3 ghosts, healthy adapter, `max=3`): ghosts-last → HEAD cools down @ d5 (RUN 3's trace), fix
+  does not; ghosts-**first** (the only ordering production makes) → **HEAD self-heals, no cooldown in
+  12; the proposed fix cools down @ d5.** The fix MOVES F2 into the real ordering rather than removing
+  it. **The rr advance is load-bearing, not cosmetic** — and was one "cosmetic cleanup" away from
+  removal. Now pinned by test with a PAST-epoch fixture, because the naming is the precondition.
+  **F1 is REAL and fully corrected** (reproduced byte-for-byte: 6 panes at `max=2`, 2 after the
+  cooldown). ADR 0009 now says plainly that the streak does NOT restore `max=N`, that the bound is
+  the GUARD's and therefore **emergent, not mechanical**, that a direct `dispatch` is unbounded, and
+  adds the judge's asked-for sentence that the late cooldown is a **declared timing deviation**, not
+  compliance. Spec untouched, still blob `cdc777a`. **+10 assertions, all mutation-verified**: overflow
+  gate `-ge`→`-gt` → 96/17; "dispatcher honors its own cooldown" → 108/5; the brief's Deliverable 1 →
+  111/2 killing exactly the two restart assertions. Guard suite already covered "flag → allow
+  in-process", so only the uncovered dispatcher half was pinned.
+  **REUSABLE LESSON: a judge finding can be an artifact of its own fixtures.** RUN 3 was right about
+  F1 and wrong about F2/F3 for the same reason this branch keeps getting burned — a fixture that
+  cannot occur in production. Verify a judge's repro against the real naming/ordering before acting.
+  **Process slip (2nd occurrence, new variant): `git commit --amend --no-edit` to add a trailer has
+  NO pathspec and swallowed two other-session staged files.** Implementer caught it on `--stat`,
+  `reset --soft` + re-amended with a pathspec; staged state verifiably restored (controller
+  re-confirmed). **The rule must read: the pathspec goes on `git commit` AND on `git commit --amend`.**
+  **OPEN DECISION for the user:** F2/F3 are answered by EVIDENCE, not a code change, so obs judge
+  RUN 4 must adjudicate the rebuttal (evidence table is in the branch log). The order-dependence is
+  real but emergent from a naming convention two functions away; the robust fix — retry the next
+  candidate WITHIN one dispatch, or probe the newest pane while the streak is warm — removes it
+  entirely but is a design change, deliberately not taken unilaterally. Root cause (no EXIT trap →
+  no `agent-exit` on abnormal pane death) still dissolves the whole class and stays deferred.
+  **`dispatch-pane-agent.sh` is now 517 lines** (+25, all comment) against a 400 soft limit — the
+  split is owed as the FIRST move of the next dispatcher change.
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
