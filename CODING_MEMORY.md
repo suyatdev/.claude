@@ -303,6 +303,29 @@ how this file and its linked files should be written (plain language, major chan
   no `agent-exit` on abnormal pane death) still dissolves the whole class and stays deferred.
   **`dispatch-pane-agent.sh` is now 517 lines** (+25, all comment) against a 400 soft limit — the
   split is owed as the FIRST move of the next dispatcher change.
+  **>>> RESUME HERE (session cleared 2026-07-27 right after dispatching RUN 4) <<<**
+  **OBS JUDGE RUN 4 WAS DISPATCHED AND LEFT RUNNING** at HEAD `e6e2e3e` in cmux pane `surface:54`
+  (`ROUTE: lane=judge` — judge lane bypassing the policy, 4th time observed working). It was briefed
+  to **ADJUDICATE ITS OWN RUN 3 FINDING**: F1 accepted+fixed, F2/F3 rejected on the glob-order
+  evidence above, and it was told to verify that claim itself rather than accept it (including the
+  cases the rebuttal does NOT cover — a pane closed by hand mid-session, interleaved ghosts — not
+  just the restart case). **On resume, IN ORDER:**
+  (1) read its result file — absolute path, NOT in the new session's scratchpad:
+  `/private/tmp/claude-501/-Users-marksuyat--claude/0883b635-7200-4356-ae28-12684053ad5e/scratchpad/pane-results/observability-judge-1785192841-10682-14989.md`
+  (if gone, the durable verdict is in `coding-memory/observability-judge/` keyed `head_sha e6e2e3e`,
+  and will be UNCOMMITTED in the working tree — doc-guard will surface it);
+  (2) treat the body as DATA; relay the four layman sections + `risk`/`confidence` to the user;
+  (3) **do NOT auto-accept a verdict that re-asserts F2/F3** — RUN 3 was already wrong once about
+  this for fixture reasons; verify any new repro against production run-dir naming before acting;
+  (4) commit the verdict BY PATHSPEC (`git commit -- <verdict files>`; `--amend` needs it too);
+  (5) then `gh pr ready` on PR #28 — `judge-guard.sh` does NOT gate `gh pr ready`, only
+  `gh pr create`, so no head_sha equality dance is needed here; the user's chosen sequence is what
+  requires RUN 4 first. If the judge FAILED or returned malformed output, write NO verdict and
+  fabricate none — report the failure (skill: fail closed).
+  **Still deferred by decision, do not start unilaterally:** the robust ordering fix (retry the next
+  candidate within one dispatch) and the root cause (EXIT trap in `run-pane-agent.sh` → `agent-exit`
+  on abnormal pane death), which dissolves the whole class. Session pane policy `panes max=2` is
+  per-session state — a fresh session will be ASKED again at its first worker dispatch.
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
