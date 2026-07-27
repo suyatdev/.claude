@@ -941,12 +941,39 @@ assertion depends on behaviour a later task introduces.
         6's backticks it cannot simply be dropped. The `$2`-with-`FS=":"` alternative would break
         the contract's legal no-space form `phase:planning`. **This supersedes the closing line of
         task 6's note** ("No suppression directives in this file"), true when written.
-- [ ] 9. Test: Group B's remaining four rows (claimed branch; one feature planning must not revoke
+- [x] 9. Test: Group B's remaining four rows (claimed branch; one feature planning must not revoke
       another; `implementation`-supersession; `review`-supersession), the NotebookEdit regression,
       Group A1 examples 8–11 (both git failures, empty/failed `rev-parse`, detached `HEAD`), the
       no-local-branches scenario, and **Group C** — the counting-`git` shim with its stdin tee,
       asserting one `cat-file --batch` / one `for-each-ref` / zero `git show`, plus the input-order
       parser against `blob`, `missing`, **and the trailing `LF`**.
+      - Done: 55 pass, 11 fail. **The red set was predicted before the run and matched exactly** —
+        B4, B5 (both supersession rows), A1.8, A1.9, A1.10a, A1.10b, A1.11 (the five git
+        fail-opens), C0's *does not name alpha*, and C2/C3/C5 (the subprocess counts). Every one
+        needs step 8, which task 10 owns.
+      - **Two greens are vacuous today and must not be read as coverage.** A1.12 (no local branches
+        still denies) passes only because there is no filter at all yet, and C4 (zero `git show`)
+        passes because no git call is made on that path. Both start discriminating at task 10 —
+        A1.12 in particular is there to stop an implementer conflating "no branches" with
+        "git broke", which is a mistake only reachable once the filter exists.
+      - **The shims were verified independently, because nothing in the suite exercises them yet.**
+        The hook never calls `for-each-ref` or `cat-file` today, so a shim that silently failed to
+        intercept would leave A1.8/A1.9 red for the wrong reason and go green at task 10 for
+        another. Probed directly: the fail-shim returns 1 for `for-each-ref` while `rev-parse
+        --show-toplevel` still passes through (0) — without that passthrough the case would exit at
+        step 2 and pass for the wrong reason — and the counting shim logs argv *and* tees stdin.
+      - That probe also re-confirmed the `cat-file --batch` asymmetry empirically, first-hand
+        rather than from the round-3 note: `main:f.txt` in, `<sha> blob 3` + `hi` out, the request
+        never echoed.
+      - C0 asserts **which** file the message names, not merely that a deny happened: alpha is
+        superseded on `feat/a` (blob) and beta does not exist there (missing), so a one-entry
+        attribution slip names alpha instead of beta. `feat/a`'s alpha.md is committed with **no
+        trailing newline**, so a parser reading content line-wise instead of by byte count drifts
+        exactly onto the `missing` entry that follows it.
+      - A1.11 uses a **real** detached HEAD rather than a shim — it is reachable in any rebase or
+        bisect, and the real thing is the stronger fixture.
+      - Two `# shellcheck disable=SC2016` directives, same cause as task 8's: the shim scripts must
+        receive `$@`/`$*`/`$GIT_SHIM_REAL` unexpanded, since the shim resolves them at run time.
 - [ ] 10. Implement step 8: un-superseded filter accepting **`implementation` or `review`**, the
       single-subprocess `for-each-ref | cat-file --batch` pipeline, ⊘ on either git call failing,
       detached-HEAD ⊘. **Green for task 9.**

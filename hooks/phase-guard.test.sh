@@ -273,5 +273,151 @@ deny    "A3.8 unknown frontmatter keys are forward-compatible" "$A3FC" \
   "$(payload Write file_path "$A3FC/src/x.sh")"
 err_has "A3.8 names docs/features/a.md" 'docs/features/a\.md'
 
+# --- git shims ---------------------------------------------------------------------------------
+# Several scenarios below need a specific git subcommand to fail, return nothing, or be counted.
+# Every shim falls through to the REAL git for anything it does not intercept — otherwise step 2's
+# `rev-parse --show-toplevel` would break too and the case would pass by exiting at the wrong step.
+# The real path is captured HERE, before any shim reaches PATH, so a shim can never recurse.
+export GIT_SHIM_REAL; GIT_SHIM_REAL="$(command -v git)"
+
+# shellcheck disable=SC2016  # the shim's own $@/$*/$GIT_SHIM_REAL must reach it unexpanded.
+make_git_shim() { # $1 dir, $2 case body matched against " $* "
+  mkdir -p "$1"
+  { printf '#!/usr/bin/env bash\n'
+    printf 'case " $* " in\n%s\nesac\n' "$2"
+    printf 'exec "$GIT_SHIM_REAL" "$@"\n'
+  } > "$1/git"
+  chmod +x "$1/git"
+}
+
+with_git_shim() { # $1 shim dir, then an assertion function and its arguments
+  local dir="$1" saved="$PATH"; shift
+  PATH="$dir:$PATH"
+  "$@"
+  PATH="$saved"
+}
+
+# --- Group B rows 2-5, and the NotebookEdit regression --------------------------------------
+# B2: the branch is claimed -> allow.
+BCLAIM="$TMP/b-claimed"; mkrepo "$BCLAIM"
+feature_file "$BCLAIM" docs/features/a.md implementation feat/a
+( cd "$BCLAIM" && git checkout -q -b feat/a )
+allow_silent "B2 claimed branch -> allow" "$BCLAIM" "$(payload Write file_path "$BCLAIM/src/x.sh")"
+
+# B3: one feature at planning must not revoke another feature's open gate.
+BBOTH="$TMP/b-both"; mkrepo "$BBOTH"
+feature_file "$BBOTH" docs/features/a.md implementation feat/a
+feature_file "$BBOTH" docs/features/b.md planning
+( cd "$BBOTH" && git checkout -q -b feat/a )
+allow_silent "B3 another feature at planning does not revoke an open gate" "$BBOTH" \
+  "$(payload Write file_path "$BBOTH/src/x.sh")"
+
+# B4/B5: supersession. The working tree still reads planning; some OTHER branch's committed copy
+# has moved on, which means that file's gate already opened and it must stop denying everywhere.
+# Built once per phase because the branch copy is what is under test, not the working tree.
+supersede_repo() { # $1 dir, $2 phase recorded on branch feat/a, $3 branch to end up on
+  mkrepo "$1"
+  feature_file "$1" docs/features/a.md planning
+  ( cd "$1" && git add -A && git commit -q -m planning
+    git checkout -q -b feat/a )
+  feature_file "$1" docs/features/a.md "$2" feat/a
+  ( cd "$1" && git commit -q -am "$2"
+    git checkout -q main && git checkout -q -b "$3" )
+}
+BSUP="$TMP/b-superseded-impl"; supersede_repo "$BSUP" implementation hotfix/x
+allow_silent "B4 a planning file superseded by implementation stops denying" "$BSUP" \
+  "$(payload Write file_path "$BSUP/src/x.sh")"
+
+BREV="$TMP/b-superseded-review"; supersede_repo "$BREV" review review/x
+allow_silent "B5 a planning file superseded by review stops denying too" "$BREV" \
+  "$(payload Write file_path "$BREV/src/x.sh")"
+
+# The regression test for the file_path-only bug: NotebookEdit carries notebook_path and nothing
+# else, so reading file_path alone would silently exempt an entire tool.
+deny "B6 NotebookEdit is guarded like any other write" "$OPTED" \
+  "$(payload NotebookEdit notebook_path "$OPTED/analysis.ipynb")"
+
+# --- Group A1 examples 8-11: the git fail-opens ----------------------------------------------
+# Steps 8 and 9 are the two most likely to fail on a large repo, and the only path onward from
+# them is deny — so without these the hook would flip from fail-open to fail-everything.
+SHIM_FER="$TMP/shim-fer"; make_git_shim "$SHIM_FER" '  *" for-each-ref "*) exit 1 ;;'
+SHIM_CF="$TMP/shim-cf";   make_git_shim "$SHIM_CF"  '  *" cat-file "*) exit 1 ;;'
+SHIM_RPF="$TMP/shim-rpf"; make_git_shim "$SHIM_RPF" '  *" --abbrev-ref "*) exit 1 ;;'
+SHIM_RPE="$TMP/shim-rpe"; make_git_shim "$SHIM_RPE" '  *" --abbrev-ref "*) exit 0 ;;'
+
+PL="$(payload Write file_path "$OPTED/src/x.sh")"
+with_git_shim "$SHIM_FER" allow_silent "A1.8 for-each-ref exits nonzero (step 8)"    "$OPTED" "$PL"
+with_git_shim "$SHIM_CF"  allow_silent "A1.9 cat-file --batch exits nonzero (step 8)" "$OPTED" "$PL"
+with_git_shim "$SHIM_RPF" allow_silent "A1.10a rev-parse --abbrev-ref exits nonzero (step 9)" \
+  "$OPTED" "$PL"
+with_git_shim "$SHIM_RPE" allow_silent "A1.10b rev-parse --abbrev-ref prints nothing (step 9)" \
+  "$OPTED" "$PL"
+
+# 11 uses a real detached HEAD rather than a shim — it is reachable during any rebase or bisect,
+# and the real thing is a stronger fixture than a simulation of it.
+DETACHED="$TMP/detached"; mkrepo "$DETACHED"
+feature_file "$DETACHED" docs/features/a.md planning
+( cd "$DETACHED" && git add -A && git commit -q -m init && git checkout -q --detach )
+allow_silent "A1.11 detached HEAD (step 9)" "$DETACHED" \
+  "$(payload Write file_path "$DETACHED/src/x.sh")"
+
+# An empty for-each-ref is NOT a failure: nothing supersedes, so every candidate survives to step 9
+# and the deny stands. This exists to stop an implementer conflating "no branches" with "git broke".
+SHIM_FEREMPTY="$TMP/shim-fer-empty"; make_git_shim "$SHIM_FEREMPTY" '  *" for-each-ref "*) exit 0 ;;'
+with_git_shim "$SHIM_FEREMPTY" deny "A1.12 no local branches supersedes nothing but still denies" \
+  "$OPTED" "$PL"
+
+# --- The input-order parser -------------------------------------------------------------------
+# `git cat-file --batch` output is ASYMMETRIC: a blob emits `<sha> blob <size>` WITHOUT echoing its
+# request, while a miss echoes the request verbatim plus ` missing`. A parser that matches results
+# to requests by anything other than input order mis-attributes every blob.
+#
+# alpha is superseded on feat/a (blob); beta does not exist there at all (missing). If attribution
+# slips by one, the surviving file is alpha rather than beta and the message names the wrong file —
+# which is why this asserts WHICH file is named, not merely that a deny happened.
+#
+# feat/a's alpha.md is committed with NO trailing newline, so cat-file emits `<size>` bytes and then
+# its own LF. A parser that reads content line-wise instead of by byte count drifts one line here,
+# and the drift lands on the `missing` entry directly after it.
+ORDER="$TMP/input-order"; mkrepo "$ORDER"
+feature_file "$ORDER" docs/features/alpha.md planning
+feature_file "$ORDER" docs/features/beta.md planning
+( cd "$ORDER" && git add -A && git commit -q -m planning && git checkout -q -b feat/a )
+printf -- '---\nphase: implementation\nbranch: feat/a\n---' > "$ORDER/docs/features/alpha.md"
+( cd "$ORDER" && git rm -q docs/features/beta.md && git commit -q -am moved
+  git checkout -q main && git checkout -q -b hotfix/x )
+deny      "C0 input-order: superseded alpha drops, missing-on-branch beta survives" "$ORDER" \
+  "$(payload Write file_path "$ORDER/src/x.sh")"
+err_has   "C0 names docs/features/beta.md"        'docs/features/beta\.md'
+err_lacks "C0 does not name docs/features/alpha.md" 'docs/features/alpha\.md'
+
+# --- Group C: one subprocess, not O(branches) -------------------------------------------------
+# Asserted structurally, not behaviourally: the O(branches) implementation produces the same
+# answers, so a test that checked answers would pass either way and measure nothing.
+export GIT_SHIM_ARGV_LOG="$TMP/git-argv.log" GIT_SHIM_STDIN_LOG="$TMP/git-stdin.log"
+: > "$GIT_SHIM_ARGV_LOG"; : > "$GIT_SHIM_STDIN_LOG"
+SHIM_COUNT="$TMP/shim-count"
+# shellcheck disable=SC2016  # same as make_git_shim: the shim resolves these, not this script.
+make_git_shim "$SHIM_COUNT" '  *" cat-file "*) printf "%s\n" "$*" >> "$GIT_SHIM_ARGV_LOG"; tee -a "$GIT_SHIM_STDIN_LOG" | "$GIT_SHIM_REAL" "$@"; exit $? ;;
+  *) printf "%s\n" "$*" >> "$GIT_SHIM_ARGV_LOG" ;;'
+
+# ORDER has 3 local branches (main, feat/a, hotfix/x) and 2 candidate planning files.
+with_git_shim "$SHIM_COUNT" deny "C1 the counted run still denies" "$ORDER" \
+  "$(payload Write file_path "$ORDER/src/x.sh")"
+
+count_is() { # $1 desc, $2 expected count, $3 log file, $4 extended regex
+  local got; got=$(grep -Ec -- "$4" "$3" 2>/dev/null || true)
+  if [ "${got:-0}" -eq "$2" ]; then
+    printf 'ok   — %s\n' "$1"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (want %s, got %s)\n' "$1" "$2" "${got:-0}"; fail=$((fail+1))
+  fi
+}
+
+count_is "C2 exactly one cat-file --batch invocation" 1 "$GIT_SHIM_ARGV_LOG" 'cat-file --batch'
+count_is "C3 exactly one for-each-ref invocation"     1 "$GIT_SHIM_ARGV_LOG" 'for-each-ref'
+count_is "C4 zero git show invocations"               0 "$GIT_SHIM_ARGV_LOG" '(^| )show( |$)'
+count_is "C5 cat-file is fed 3 branches x 2 files"    6 "$GIT_SHIM_STDIN_LOG" '^[^:]+:docs/features/'
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
