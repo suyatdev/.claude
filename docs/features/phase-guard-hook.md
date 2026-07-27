@@ -1052,7 +1052,46 @@ assertion depends on behaviour a later task introduces.
         already pins it. Two assertions of one property let a later change satisfy one and break
         the other.
       - Suite total 66 → 80. Siblings green (19/17/5/14), `shellcheck -x` clean.
-- [ ] 12. Implement the once-per-session flag to the **Flag contract**. **Green for task 11.**
+- [x] 12. Implement the once-per-session flag to the **Flag contract**. **Green for task 11.**
+      - Done: **80/80** (was 70/10) — all ten of task 11's reds closed. Siblings green
+        (19/17/5/14), `shellcheck -x` clean, hook 249 → 318 lines (under the 400 soft limit).
+        `git diff` for this task touches **`hooks/phase-guard.sh` only**: the test file is the
+        unbiased baseline and was not reopened to meet the implementation.
+      - **Step 7's exit had to be split before it could speak.** The existing
+        `[ -n "$planning_files" ] || exit 0` conflates three states — no files, files that parsed
+        but none at planning, and files none of which could be parsed — and only the third is the
+        audible one. Replaced with two counters (`nfiles`, `nparsed`) so the warning is gated on
+        *files present AND none parsed*, which is the spec's wording made computational.
+      - **The `session_id` rides in the SAME python subprocess as the path**, not a second one:
+        this is the hot path, and a repo in the noparse state hits that branch on every write.
+        Encoded `<session_id>\n<file_path>` — an id can never contain a newline, so the first LF
+        separates unambiguously while a path (which can contain one) keeps everything after it.
+        Verified on bash **3.2.57** for all three shapes: both present, no LF at all (the
+        no-usable-path case, which fails open and needs no id), and an empty id with a path.
+      - **The falsification task 11 owed is discharged.** Eight mutations, each removing one
+        load-bearing property, run against **copies** — the committed hook was byte-verified
+        unchanged after every one:
+        | mutation | caught by |
+        |---|---|
+        | flag check removed (prints per write) | **A2.2, A2.5, A2.9, A2.12** — the four that passed vacuously |
+        | one shared flag instead of one per reason | A2.6, A2.7 |
+        | environment id preferred over the payload's | A2.9, A2.10 |
+        | flag name carries no session id | A2.3, A2.10 (+A2.6/7/8/11) |
+        | bail silently when the store is unwritable | A2.13, A2.14 |
+        | `nfiles > 0` half dropped | the empty-`docs/features/` assertion, alone |
+        | `nparsed == 0` half dropped | A1.7, alone |
+        The first row is the one task 11 named: those four could not fail against a hook that was
+        silent everywhere, and now each fails on its own, naming itself.
+      - **Finding, review-phase, not a defect.** Dropping *both* halves of the tally guard at once
+        shows only A1.7, because A1.7 runs first, warns, and its flag suppresses the
+        empty-`docs/features/` case that would otherwise fail too — the two share a session key
+        (neither payload carries a `session_id`). Coverage is intact, since each half is caught by
+        its own assertion above; but the once-per-session flag makes same-key silent assertions
+        **order-dependent**, so reordering them, or inserting a warning case ahead of them, would
+        move which assertion carries the property. Worth pinning an explicit session id per case
+        when tests may next be edited.
+      - `PHASE_GUARD_STATE_DIR` held for the whole run: `$HOME/.claude/hooks/state` contains zero
+        `phase-guard-*` flags after the suite, confirmed directly rather than assumed.
 - [ ] 13. Add `/hooks/state/` to `.gitignore`, mirroring `:13`'s `/panes/state/` entry and its
       "machine-local, never committed" comment. One line; without it the flag store accumulates
       untracked inside this repo (see *Artifacts*).

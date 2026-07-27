@@ -23,6 +23,41 @@
 
 set -u
 
+LF='
+'
+
+# --- The two exits that must not be silent ---------------------------------------------
+# Six of the eight fail-open exits mean "not applicable here" and are correctly silent.
+# These two mean THIS REPO OPTED IN AND THE GUARD COULD NOT EVALUATE IT — a state in which
+# a working guard and a dead one are otherwise byte-identical, since every ⊘ emits nothing.
+#
+# Both still exit 0. Both print AT MOST ONCE PER SESSION: this hook fires on every write,
+# and a line per write would be noise the reader learns to skip past.
+STATE_DIR="${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}"
+# The environment id is the ONLY key available to the no-interpreter exit — that branch
+# fires because the JSON parser is what failed, so the payload's own session_id is by
+# construction unreadable there.
+sid_env="${CLAUDE_CODE_SESSION_ID:-}"
+
+NOPYTHON_MSG='phase-guard: no python3 or python on PATH — the phase gate is not being enforced in any repo until that is fixed.'
+NOPARSE_MSG='phase-guard: every file in docs/features/ failed the frontmatter contract — this repo opted in, but the gate cannot be evaluated.'
+
+# One flag file per reason, so whichever fires first never suppresses the other: a session
+# told the guard is dead for the wrong reason would go fix the wrong thing.
+warn_once() { # $1 reason (nopython|noparse), $2 session id ("" -> nosession), $3 message
+  local flag="$STATE_DIR/phase-guard-$1-${2:-nosession}"
+  [ -e "$flag" ] && return 0
+  printf '%s\n' "$3" 1>&2
+  # Store failures are swallowed, and the line is printed BEFORE the store is touched at
+  # all. This is the deliberate divergence from context-handoff-watch.sh:42, which bails
+  # silently (`|| exit 0`) when its store is unwritable: that sibling's flag gates a nudge,
+  # while this one gates the warning that the guard is DEAD — and a fix for silent failure
+  # that itself fails silently is the original problem one level up. The cost is that an
+  # unwritable store degrades this to once per write, which is the right way to fail.
+  mkdir -p "$STATE_DIR" 2>/dev/null && : > "$flag" 2>/dev/null
+  return 0
+}
+
 # --- Step 1: the payload -------------------------------------------------------------
 payload=""
 if [ ! -t 0 ]; then
@@ -43,25 +78,42 @@ root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 
 # --- Step 4: the interpreter, then the path out of the payload ------------------------
 py=$(command -v python3 || command -v python) || py=""
-# One of the two exits that must not stay silent: with no interpreter the guard is off
-# in every repo, permanently, until PATH is fixed. The once-per-session line this exit
-# owes arrives with the flag contract (task 12); it is silent until then.
-[ -n "$py" ] || exit 0
+# The first of the two exits that must not stay silent: with no interpreter the guard is
+# off in every repo on this machine, permanently, until PATH is fixed.
+if [ -z "$py" ]; then
+  warn_once nopython "$sid_env" "$NOPYTHON_MSG"
+  exit 0
+fi
 
 # Step 1 catches only *empty* stdin, so a truncated or non-JSON payload reaches this
 # parser. Every failure to produce a usable path takes the same silent fail-open: an
 # unhandled traceback exits nonzero, which a PreToolUse harness may read as deny.
 # NotebookEdit carries no file_path — notebook_path is its only path key, so reading
 # file_path alone would fail open on every notebook write.
-file_path=$(printf '%s' "$payload" | "$py" -c '
+#
+# session_id rides along in the SAME subprocess rather than a second one: this is the hot
+# path, and the noparse exit below needs the payload's id in preference to the
+# environment's. Emitted as `<session_id>\n<file_path>` — the id can never contain a
+# newline, so the first LF is an unambiguous separator, while a path (which can) keeps
+# everything after it.
+parsed=$(printf '%s' "$payload" | "$py" -c '
 import json, sys
 try:
     p = json.load(sys.stdin)
     ti = p.get("tool_input") or {}
-    sys.stdout.write(ti.get("file_path") or ti.get("notebook_path") or "")
+    sys.stdout.write((p.get("session_id") or "") + "\n" +
+                     (ti.get("file_path") or ti.get("notebook_path") or ""))
 except Exception:
     sys.exit(0)
-') || file_path=""
+') || parsed=""
+
+# Command substitution strips trailing newlines, so a payload carrying no usable path
+# collapses to a single line with no LF left in it. That case fails open one line below
+# and needs no session id to do it, which is why losing the id with it costs nothing.
+case "$parsed" in
+  *"$LF"*) sid_payload=${parsed%%"$LF"*}; file_path=${parsed#*"$LF"} ;;
+  *)       sid_payload=""; file_path="" ;;
+esac
 [ -n "$file_path" ] || exit 0
 
 # --- Step 5: relativize against the root ----------------------------------------------
@@ -94,8 +146,7 @@ esac
 # failing therefore reads as malformed, which fails open — consistent with every other ⊘.
 #
 # A skipped file in an opted-in repo is the "cannot evaluate" case, and the second of the two
-# exits that must not be silent. Like the no-interpreter exit at step 4 it stays silent here:
-# its once-per-session line is inseparable from the flag contract, and both land at task 12.
+# exits that must not be silent — see the tally below the loop.
 IMPL_RE='^phase:[[:space:]]*implementation[[:space:]]*$'
 BRANCH_SED='s/^branch:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p'
 # shellcheck disable=SC2016  # $0 is awk's own, not a shell expansion — it must not expand.
@@ -113,13 +164,31 @@ END {
 }'
 
 planning_files=""
+nfiles=0
+nparsed=0
 for f in "$root"/docs/features/*.md; do
   [ -f "$f" ] || continue          # no match: the glob stayed literal, so the dir is empty
-  [ "$(awk "$FRONTMATTER_AWK" "$f")" = "planning" ] || continue
+  nfiles=$((nfiles + 1))
+  file_phase=$(awk "$FRONTMATTER_AWK" "$f")
+  # Empty output IS the skip signal: the parser prints a phase for a well-formed file and
+  # nothing for a malformed one, so this counts what could be read, not what said planning.
+  [ -n "$file_phase" ] && nparsed=$((nparsed + 1))
+  [ "$file_phase" = "planning" ] || continue
   planning_files="$planning_files${f#"$root"/}
 "
 done
-[ -n "$planning_files" ] || exit 0
+
+if [ -z "$planning_files" ]; then
+  # The second exit that must not be silent — but only for "could not read ANY of them".
+  # Reaching here with files that parsed fine simply means nothing sits at planning, which
+  # is the ordinary quiet case. And zero files makes "every file was skipped" vacuously
+  # true, so requiring at least one present is what stops this firing in every repo that
+  # created docs/features/ and nothing else.
+  if [ "$nfiles" -gt 0 ] && [ "$nparsed" -eq 0 ]; then
+    warn_once noparse "${sid_payload:-$sid_env}" "$NOPARSE_MSG"
+  fi
+  exit 0
+fi
 
 # --- Step 8: drop the superseded ---------------------------------------------------------
 # A planning file whose gate has already opened on some branch must stop denying everywhere:
