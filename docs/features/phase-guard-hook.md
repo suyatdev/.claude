@@ -974,9 +974,40 @@ assertion depends on behaviour a later task introduces.
         bisect, and the real thing is the stronger fixture.
       - Two `# shellcheck disable=SC2016` directives, same cause as task 8's: the shim scripts must
         receive `$@`/`$*`/`$GIT_SHIM_REAL` unexpanded, since the shim resolves them at run time.
-- [ ] 10. Implement step 8: un-superseded filter accepting **`implementation` or `review`**, the
+- [x] 10. Implement step 8: un-superseded filter accepting **`implementation` or `review`**, the
       single-subprocess `for-each-ref | cat-file --batch` pipeline, ⊘ on either git call failing,
       detached-HEAD ⊘. **Green for task 9.**
+      - Done: 66/66 green, siblings green, `shellcheck -x` clean. All eleven of task 9's reds
+        closed.
+      - **⚠ ESCALATION — task 9's C0 test is a placebo for the two properties it was written to
+        prove.** Falsification found only *one* of four load-bearing claims is caught by the suite:
+        | mutation | really load-bearing? | caught by the suite? |
+        |---|---|---|
+        | `set -o pipefail` removed | yes | **yes** — A1.9 |
+        | byte-count accounting (`skipnext`) removed | yes | no |
+        | input-order attribution (`R[i]` → `R[1]`) | yes | no |
+        | phase match unbounded from the frontmatter | yes, severely | no |
+        **Root cause: C0's fixture makes the superseded file the FIRST request.** Any attribution
+        drift or collapse still lands on that same file, so the outcome is identical and the test
+        passes either way. Proven, not assumed — a probe fixture with the superseded file placed
+        **second** discriminates every one of them: the real hook names `alpha`, each mutant names
+        `beta`. The implementation is correct; the test cannot see it.
+      - **The frontmatter bound is the sharpest of the three.** Unbounded, a fenced `phase: review`
+        example inside a spec's own prose — committed on any branch — marks that feature superseded
+        and the hook **exits 0**. Measured: bounded denies, unbounded allows. A guard that silently
+        switches itself off because a spec quoted a phase value is the exact failure this feature
+        exists to prevent, and nothing in the suite would catch its removal.
+      - Not fixable here: task 9's tests are committed, the checklist is frozen, and tests must not
+        be edited alongside implementation. **This is a review-phase item and it is the strongest
+        candidate on the list** — a better C0 costs one fixture reorder.
+      - Fail-open is implemented via `set -o pipefail` around the pipeline, restored immediately
+        after. Without it the pipeline reports awk's status, so a broken `cat-file` reads as an
+        empty result set — indistinguishable from "nothing is superseded", which **denies** on a
+        git error and inverts Q3 in the step most likely to fail on a large repo.
+      - `IFS` is set to newline for the request/filter loops: a branch name cannot contain a space
+        but a feature-file path can, and the default `IFS` would split one into two bogus requests.
+      - Empty `for-each-ref` skips the `cat-file` call entirely rather than feeding it nothing, so
+        a repo with no local branches keeps every candidate and still denies (A1.12).
 - [ ] 11. Test: Group A2 — the two audible fail-opens, asserting exactly one stderr line, that a
       second invocation in the same session adds none, that the two reasons flag independently, and
       that an unwritable `$PHASE_GUARD_STATE_DIR` still prints and still exits 0.

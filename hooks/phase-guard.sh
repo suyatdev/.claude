@@ -122,21 +122,104 @@ done
 [ -n "$planning_files" ] || exit 0
 
 # --- Step 8: drop the superseded ---------------------------------------------------------
-# Not yet implemented. Until it is, a planning file whose gate has already opened on some
-# other branch still denies here.
+# A planning file whose gate has already opened on some branch must stop denying everywhere:
+# its stale copy on main is stale BY DESIGN once the gate opened. `review` counts as well as
+# `implementation`, or a finished feature whose main copy still reads planning blocks forever.
+#
+# Every branch's copy is read in ONE subprocess. The naive `git show` per branch is
+# O(branches) processes on a hook that fires on every write, and produces identical answers —
+# which is why Group C asserts the process counts structurally rather than the answers.
+#
+# `git cat-file --batch` output is ASYMMETRIC: a blob emits `<sha> blob <size>` WITHOUT
+# echoing its request, while a miss echoes the request verbatim plus ` missing`. Results are
+# therefore matched to requests by INPUT ORDER — anything else mis-attributes every blob.
+#
+# Content is consumed by BYTE COUNT, not by line: cat-file emits exactly <size> bytes then an
+# LF of its own. When the blob already ends in a newline that LF arrives as a separate empty
+# line and must be skipped; when it does not, the LF merges into the last content line and
+# there is nothing to skip. Reading line-wise instead drifts one line into the next entry.
+#
+# The phase line is only honoured between the fences. Feature files discuss `phase:` values in
+# their own prose, so an unbounded match would let a spec paragraph supersede a real gate.
+# shellcheck disable=SC2016  # $0/$NF are awk's own — they must not expand here.
+BATCH_AWK='
+BEGIN { split(ENVIRON["PHASE_GUARD_REQS"], R, "\n") }
+state == 1 {
+  consumed += length($0) + 1
+  nline++
+  if (nline == 1)                     infm = ($0 == "---")
+  else if (infm && $0 == "---")       infm = 0
+  else if (infm && $0 ~ /^phase:[[:space:]]*(implementation|review)[[:space:]]*$/) mark[path] = 1
+  if (consumed >= size) { if (consumed == size) skipnext = 1; state = 0 }
+  next
+}
+skipnext == 1 { skipnext = 0; next }
+{
+  i++
+  path = R[i]; sub(/^[^:]*:/, "", path)
+  if ($0 ~ / missing$/) next
+  size = $NF; state = 1; consumed = 0; nline = 0
+}
+END { for (p in mark) print p }'
+
+# An empty for-each-ref is NOT a failure — a repo with no local branches supersedes nothing,
+# so every candidate survives to step 9. Only a nonzero exit is a failure.
+branches=$(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null) || exit 0
+
+if [ -n "$branches" ]; then
+  # Split on newlines only. A branch name cannot contain a space, but a feature-file path can,
+  # and the default IFS would split one into two bogus requests.
+  old_ifs=$IFS
+  IFS='
+'
+  reqs=""
+  for b in $branches; do
+    for f in $planning_files; do
+      reqs="$reqs$b:$f
+"
+    done
+  done
+
+  # pipefail is what makes "either git call failing → fail open" true: without it the
+  # pipeline reports awk's status and a broken cat-file would read as an empty result set,
+  # which is indistinguishable from "nothing is superseded" and would deny on a git error.
+  set -o pipefail
+  superseded=$(printf '%s' "$reqs" |
+    git cat-file --batch 2>/dev/null |
+    PHASE_GUARD_REQS="$reqs" awk "$BATCH_AWK") || { IFS=$old_ifs; exit 0; }
+  set +o pipefail
+
+  remaining=""
+  for f in $planning_files; do
+    is_superseded=0
+    for s in $superseded; do
+      [ "$f" = "$s" ] && { is_superseded=1; break; }
+    done
+    [ "$is_superseded" -eq 0 ] && remaining="$remaining$f
+"
+  done
+  IFS=$old_ifs
+  planning_files=$remaining
+  [ -n "$planning_files" ] || exit 0
+fi
 
 # --- Step 9: is the current branch claimed? ----------------------------------------------
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || branch=""
-if [ -n "$branch" ]; then
-  for f in "$root"/docs/features/*.md; do
-    [ -f "$f" ] || continue
-    grep -Eq "$IMPL_RE" "$f" || continue
-    # Compare the branch as a string, never as an interpolated regex: a branch name is
-    # user input, and one carrying a regex metacharacter would otherwise match wrongly.
-    claim=$(sed -n -E "$BRANCH_SED" "$f" | head -1)
-    [ "$claim" = "$branch" ] && exit 0
-  done
-fi
+# Both fail-opens are here rather than upstream: the only path onward from this step is deny,
+# so a transient git failure would otherwise flip the hook from fail-open to fail-everything.
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
+[ -n "$branch" ] || exit 0
+# Detached HEAD — reachable during any rebase or bisect. No branch means no claim can match,
+# so without this the hook would deny every write for the length of a rebase.
+[ "$branch" = "HEAD" ] && exit 0
+
+for f in "$root"/docs/features/*.md; do
+  [ -f "$f" ] || continue
+  grep -Eq "$IMPL_RE" "$f" || continue
+  # Compare the branch as a string, never as an interpolated regex: a branch name is
+  # user input, and one carrying a regex metacharacter would otherwise match wrongly.
+  claim=$(sed -n -E "$BRANCH_SED" "$f" | head -1)
+  [ "$claim" = "$branch" ] && exit 0
+done
 
 # --- Step 10: deny -----------------------------------------------------------------------
 # All four elements of the Deny message contract, because a block that says only "no" sends
