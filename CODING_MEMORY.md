@@ -16,19 +16,26 @@ how this file and its linked files should be written (plain language, major chan
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
   **Tasks 1–8 are done (through `a755a7c`, `e56c108`); the hook denies with the full four-element
-  message, step 7 enforces the whole frontmatter contract, and the suite is 47/0**, siblings green,
+  message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one subprocess, and the suite is 66/0**, siblings green,
   `shellcheck -x` clean.
-  **NEXT SESSION STARTS AT TASK 9** — the biggest test task on the list: Group B's remaining four
-  rows, the NotebookEdit regression, A1 examples 8–11, the no-local-branches case, and **Group C**,
-  the counting-`git` shim asserting one `cat-file --batch` / one `for-each-ref` / zero `git show`
-  plus the input-order parser. Task 10 then implements step 8. Nothing before task 9 touches
-  step 8, so a `planning` file whose gate opened elsewhere still denies until task 10 lands.
-  **Two falsification findings from task 8 that the next session should not re-derive** (both
-  written up on the feature file, neither fixable there — the checklist is frozen and tests must
-  not be edited alongside implementation): A3.1 cannot isolate the line-1 clause, and the
-  legal-value clause is invisible to every current test until task 12 makes *malformed* audible.
-  Also recorded, not acted on: **step 9 still reads branch claims with its own grep+sed rather
-  than the new contract parser**, so a malformed file can still claim a branch (fails open).
+  **NEXT SESSION STARTS AT TASK 11** — the Group A2 tests for the two audible fail-opens (exactly
+  one stderr line, none on a second invocation in the same session, the two reasons flagging
+  independently, an unwritable `$PHASE_GUARD_STATE_DIR` still printing and still exiting 0), then
+  task 12's flag contract. Tasks 13–17 are `.gitignore`, `settings.json` registration, the
+  `rules/gates.md:5` amendment, ADR 0011, and the throwaway-repo dogfood.
+  **⚠ ESCALATION TO RAISE AT REVIEW — task 9's C0 test is a placebo.** Task 10's falsification
+  found that only 1 of its 4 load-bearing claims is caught by the suite (`pipefail`, via A1.9);
+  the byte-count accounting, the input-order attribution, and the frontmatter bound are all real
+  and all invisible to it. Root cause: **C0's fixture makes the superseded file the FIRST
+  request**, so any drift still lands on the right file. Proven with a probe that places it second
+  — the real hook names `alpha`, every mutant names `beta`. The unbounded phase match is the worst
+  of them: a fenced `phase: review` example inside a spec makes the hook **exit 0**, silently
+  switching the guard off. The implementation is correct; the test cannot see it. One fixture
+  reorder fixes it, but not during `implementation` — tests must not be edited alongside code.
+  **Earlier findings, same class, also review-phase:** A3.1 cannot isolate the line-1 clause; the
+  legal-value clause is invisible until task 12 makes *malformed* audible; and **step 9 still
+  reads branch claims with its own grep+sed rather than the contract parser**, so a malformed file
+  can still claim a branch (fails open).
   The 17-task checklist is **frozen**;
   `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
   mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
