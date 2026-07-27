@@ -419,5 +419,159 @@ count_is "C3 exactly one for-each-ref invocation"     1 "$GIT_SHIM_ARGV_LOG" 'fo
 count_is "C4 zero git show invocations"               0 "$GIT_SHIM_ARGV_LOG" '(^| )show( |$)'
 count_is "C5 cat-file is fed 3 branches x 2 files"    6 "$GIT_SHIM_STDIN_LOG" '^[^:]+:docs/features/'
 
+# --- Group A2: fail-open, but audible ----------------------------------------------------------
+# Six of the eight fail-open exits mean "not applicable here" and are correctly silent. These two
+# mean something else: THIS REPO OPTED IN AND THE GUARD COULD NOT EVALUATE IT. Without a line, a
+# working guard and a dead one are byte-identical — every ⊘ emits nothing and Group A1 asserts
+# exactly that, so the suite that proves the silence is also what hides the death.
+#
+# Both still exit 0, and both print AT MOST ONCE PER SESSION: per-write printing is not acceptable
+# on a hook that fires on every write. Line COUNT is therefore asserted, not merely a match — a
+# match-only assertion cannot see the per-write regression the flag exists to prevent.
+
+# What the line must carry: the guard's own name (an unattributed line on a shared stderr is
+# noise), and the reason, distinguishably — A2.6/A2.7 below turn on the two being tellable apart.
+NOPY_RE='^phase-guard: .*[Pp]ython'
+NOPARSE_RE='^phase-guard: .*docs/features'
+
+# The audible fail-open assertion: exit 0, empty stdout, and EXACTLY ONE stderr line matching.
+allow_audible() { # $1 desc, $2 cwd, $3 payload, $4 extended regex the line must match
+  local desc="$1" lines
+  _run "$2" "$3"
+  if [ "$got" -ne 0 ]; then
+    printf 'FAIL — %s (want exit 0, got %s)\n' "$desc" "$got"; fail=$((fail+1)); return
+  fi
+  if [ -s "$out" ]; then
+    printf 'FAIL — %s (stdout not empty: %s)\n' "$desc" "$(cat "$out")"; fail=$((fail+1)); return
+  fi
+  lines=$(grep -c '' "$err" 2>/dev/null || true); [ -n "$lines" ] || lines=0
+  if [ "$lines" -ne 1 ]; then
+    printf 'FAIL — %s (want exactly 1 stderr line, got %s: %s)\n' "$desc" "$lines" "$(cat "$err")"
+    fail=$((fail+1)); return
+  fi
+  if ! grep -Eq -- "$4" "$err"; then
+    printf 'FAIL — %s (line does not match /%s/: %s)\n' "$desc" "$4" "$(cat "$err")"
+    fail=$((fail+1)); return
+  fi
+  printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
+}
+
+# A payload carrying a session_id. The Flag contract keys the noparse exit off THIS in preference
+# to the environment; the plain `payload` helper omits it, which exercises the fallback.
+payload_sid() { # $1 tool_name, $2 path key, $3 absolute path, $4 session_id
+  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{sys.argv[2]:sys.argv[3]},"session_id":sys.argv[4]}))' "$@"
+}
+
+with_path() { # $1 replacement PATH, then an assertion function and its arguments
+  local newpath="$1" saved="$PATH"; shift
+  PATH="$newpath"
+  "$@"
+  PATH="$saved"
+}
+
+with_state_dir() { # $1 PHASE_GUARD_STATE_DIR value, then an assertion function and its arguments
+  local saved="$PHASE_GUARD_STATE_DIR"; export PHASE_GUARD_STATE_DIR="$1"; shift
+  "$@"
+  export PHASE_GUARD_STATE_DIR="$saved"
+}
+
+# NOPYBIN — a PATH carrying every utility the hook and these assertions can reach EXCEPT an
+# interpreter, so "no python" is the ONLY difference between this fixture and a normal run.
+# Built by symlink rather than by filtering the real PATH: a filter has to guess which directories
+# hold a python, and a missed pyenv/conda shim would leave the hook working and the case green for
+# the wrong reason. awk/sed/head are included though step 4 exits before them — their absence would
+# make a later failure read as "no python" when it was "no awk".
+NOPYBIN="$TMP/nopybin"; mkdir -p "$NOPYBIN"
+for b in bash cat git grep mkdir awk sed head; do
+  ln -sf "$(command -v "$b")" "$NOPYBIN/$b"
+done
+
+# NOPARSE — opted in, two feature files, BOTH malformed, by two different defects. A one-file
+# fixture cannot tell "every file was skipped" from "the only file was skipped", and the exit is
+# defined on the former.
+NOPARSE="$TMP/noparse"; mkrepo "$NOPARSE"; mkdir -p "$NOPARSE/docs/features"
+printf 'no frontmatter fence at all\n'                        > "$NOPARSE/docs/features/a.md"
+printf -- '---\nphase: planning\nphase: review\n---\n'        > "$NOPARSE/docs/features/b.md"
+
+PL_OPTED="$(payload Write file_path "$OPTED/src/x.sh")"
+PL_NOPARSE="$(payload Write file_path "$NOPARSE/src/x.sh")"
+
+# Zero files is NOT this case — it makes "every file was skipped" vacuously true and would fire in
+# any repo that created the directory and nothing else. Already pinned silent above (the
+# EMPTYFEATURES case at step 7); not repeated here, because two assertions of one property means a
+# later change can satisfy one and break the other.
+
+# A2.1 — step 4, the no-interpreter exit. The guard is off in EVERY repo until PATH is fixed.
+export CLAUDE_CODE_SESSION_ID=a2-nopython
+with_path "$NOPYBIN" allow_audible "A2.1 no interpreter says so (step 4)" \
+  "$OPTED" "$PL_OPTED" "$NOPY_RE"
+with_path "$NOPYBIN" allow_silent "A2.2 a second write in the same session adds no line" \
+  "$OPTED" "$PL_OPTED"
+
+# A2.3 is what makes the flag a SESSION flag: without it, a write-once-per-machine implementation
+# — or a permanent flag with no session in its key — satisfies A2.2 and measures nothing.
+export CLAUDE_CODE_SESSION_ID=a2-nopython-2
+with_path "$NOPYBIN" allow_audible "A2.3 a different session says so again" \
+  "$OPTED" "$PL_OPTED" "$NOPY_RE"
+
+# A2.4 — step 7, the every-file-skipped exit. This repo opted in and the guard cannot read its
+# own input, which is not the same as having nothing to say.
+export CLAUDE_CODE_SESSION_ID=a2-noparse
+allow_audible "A2.4 every feature file unparseable says so (step 7)" \
+  "$NOPARSE" "$PL_NOPARSE" "$NOPARSE_RE"
+allow_silent "A2.5 a second write in the same session adds no line" "$NOPARSE" "$PL_NOPARSE"
+
+# A2.6/A2.7 — two independent flags, not one "already warned" bit. These deliberately reuse the
+# sessions above, so they run against real accumulated flag state rather than a simulation of it:
+# a shared flag would make whichever reason fired first silence the other permanently, and the
+# session would be told the guard is dead for a reason that is not the live one.
+export CLAUDE_CODE_SESSION_ID=a2-nopython
+allow_audible "A2.6 noparse still speaks in a session where nopython already fired" \
+  "$NOPARSE" "$PL_NOPARSE" "$NOPARSE_RE"
+export CLAUDE_CODE_SESSION_ID=a2-noparse
+with_path "$NOPYBIN" allow_audible "A2.7 nopython still speaks in a session where noparse fired" \
+  "$OPTED" "$PL_OPTED" "$NOPY_RE"
+
+# A2.8-A2.10 — the noparse key is the PAYLOAD's session_id, in preference to the environment.
+# The environment is deliberately changed under A2.9 and held constant under A2.10, so an
+# implementation that read $CLAUDE_CODE_SESSION_ID first fails both: A2.9 would speak again and
+# A2.10 would fall silent. Asserting only "the second one is quiet" cannot separate the two keys.
+export CLAUDE_CODE_SESSION_ID=a2-sid-env
+PL_SID1="$(payload_sid Write file_path "$NOPARSE/src/x.sh" a2-sid-payload)"
+PL_SID2="$(payload_sid Write file_path "$NOPARSE/src/x.sh" a2-sid-payload-2)"
+allow_audible "A2.8 a payload-borne session_id speaks once" "$NOPARSE" "$PL_SID1" "$NOPARSE_RE"
+export CLAUDE_CODE_SESSION_ID=a2-sid-env-changed
+allow_silent "A2.9 same payload session_id, changed environment -> still quiet" \
+  "$NOPARSE" "$PL_SID1"
+export CLAUDE_CODE_SESSION_ID=a2-sid-env
+allow_audible "A2.10 new payload session_id, unchanged environment -> speaks" \
+  "$NOPARSE" "$PL_SID2" "$NOPARSE_RE"
+
+# A2.11/A2.12 — neither key available: the literal `nosession`, as dispatch-pane-agent.sh:70
+# writes and pane-dispatch-guard.sh:55 reads. Degrades to once-per-machine-until-cleaned, which is
+# the accepted floor — never to once-per-write.
+unset CLAUDE_CODE_SESSION_ID
+allow_audible "A2.11 no session id anywhere still speaks once" \
+  "$NOPARSE" "$PL_NOPARSE" "$NOPARSE_RE"
+allow_silent "A2.12 ...and falls back to a shared nosession key rather than re-speaking" \
+  "$NOPARSE" "$PL_NOPARSE"
+
+# A2.13/A2.14 — the deliberate divergence from context-handoff-watch.sh:42, which bails silently
+# (`|| exit 0`) when its store is unwritable. That sibling's flag gates a nudge; this one gates the
+# warning that the guard is DEAD, and a fix for silent failure that itself fails silently is the
+# original problem one level up. The store is blocked by a REGULAR FILE standing where the
+# directory would go — `mkdir -p` cannot succeed against that even for root, which a chmod can.
+export CLAUDE_CODE_SESSION_ID=a2-unwritable
+: > "$TMP/blocked"
+with_state_dir "$TMP/blocked/state" allow_audible \
+  "A2.13 an unwritable state dir still speaks, and still exits 0" \
+  "$NOPARSE" "$PL_NOPARSE" "$NOPARSE_RE"
+# The accepted cost of that choice, asserted so it stays a known trade and not a surprise: with no
+# flag persistable, every write speaks. Silence here would mean the flag landed somewhere the
+# contract never named.
+with_state_dir "$TMP/blocked/state" allow_audible \
+  "A2.14 ...and speaks again, since no flag could be written" \
+  "$NOPARSE" "$PL_NOPARSE" "$NOPARSE_RE"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1008,9 +1008,50 @@ assertion depends on behaviour a later task introduces.
         but a feature-file path can, and the default `IFS` would split one into two bogus requests.
       - Empty `for-each-ref` skips the `cat-file` call entirely rather than feeding it nothing, so
         a repo with no local branches keeps every candidate and still denies (A1.12).
-- [ ] 11. Test: Group A2 — the two audible fail-opens, asserting exactly one stderr line, that a
+- [x] 11. Test: Group A2 — the two audible fail-opens, asserting exactly one stderr line, that a
       second invocation in the same session adds none, that the two reasons flag independently, and
       that an unwritable `$PHASE_GUARD_STATE_DIR` still prints and still exits 0.
+      - Done: 80 total, **70 pass / 10 fail**. The split is exactly the one the task wanted — all
+        ten audible assertions red, all four silence assertions green. *(The pre-run prediction
+        named the right cases but tallied them "9 red / 5 green"; the miscount was arithmetic in
+        the enumeration, not a surprise in behaviour.)*
+      - **The reds were proven red for the right reason, not merely red.** Exit 0 with empty stderr
+        is what *every* ⊘ produces, so a fixture that died at step 2 would look identical to one
+        that reached step 4. Probed on an instrumented **copy** whose eight fail-open exits each
+        name themselves: the no-interpreter fixture lands on `STEP4-NOPYTHON`, the all-malformed
+        fixture on `STEP7-ALLSKIPPED`. A control run of the *same* no-interpreter repo on a normal
+        PATH still reaches the deny (exit 2), which is what shows python is the only difference.
+        `hooks/phase-guard.sh` was sha256-verified identical before and after.
+      - **`NOPYBIN` is built by symlinking the needed utilities, not by filtering the real PATH.**
+        A filter has to guess which directories hold a python, and one missed pyenv/conda shim
+        leaves the hook working while the case goes green. `awk`/`sed`/`head` are symlinked in
+        even though step 4 exits before them, so a later failure can never read as "no python"
+        when it was really "no awk".
+      - **A2.8–A2.10 separate the payload key from the environment key.** Two invocations and
+        "the second is quiet" cannot tell them apart, so A2.9 changes the environment while holding
+        the payload `session_id`, and A2.10 holds the environment while changing the payload's — an
+        implementation reading `$CLAUDE_CODE_SESSION_ID` first fails both, in opposite directions.
+        Written this way deliberately after task 10's escalation: a test that cannot discriminate
+        is a placebo, and that is cheaper to prevent here than to find later.
+      - **A2.3 is what makes the flag a *session* flag.** Without it, a permanent flag with no
+        session in its key satisfies "a second invocation adds none" and measures nothing.
+      - A2.6/A2.7 reuse the sessions A2.1 and A2.4 already flagged, so independence is asserted
+        against real accumulated flag state rather than a simulation of it. A single shared
+        "already warned" bit would let whichever reason fired first silence the other — telling
+        the session the guard is dead for a reason that is not the live one.
+      - A2.13 blocks the store with a **regular file standing where the directory would go**
+        (`mkdir -p` exits 1) rather than with a `chmod` — the chmod version silently passes when
+        the suite runs as root. A2.14 pins the accepted cost of the divergence from
+        `context-handoff-watch.sh:42`: with no flag persistable, every write speaks.
+      - **Honest limit — the four silence assertions (A2.2, A2.5, A2.9, A2.12) pass vacuously**
+        against a hook that is silent everywhere today. Same class as task 3's two trivial allows
+        and task 5's `err_lacks`: they only begin carrying weight at task 12, when there is a line
+        for them to demand the absence of. Task 12 should falsify them the way task 6 falsified
+        task 5's — by injecting a per-write print and confirming each one fails, naming itself.
+      - The empty-`docs/features/` boundary is **not** re-asserted here; step 7's silent case
+        already pins it. Two assertions of one property let a later change satisfy one and break
+        the other.
+      - Suite total 66 → 80. Siblings green (19/17/5/14), `shellcheck -x` clean.
 - [ ] 12. Implement the once-per-session flag to the **Flag contract**. **Green for task 11.**
 - [ ] 13. Add `/hooks/state/` to `.gitignore`, mirroring `:13`'s `/panes/state/` entry and its
       "machine-local, never committed" comment. One line; without it the flag store accumulates
