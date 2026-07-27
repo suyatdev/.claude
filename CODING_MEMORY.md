@@ -15,9 +15,9 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–8 are done (through `a755a7c`, `e56c108`); the hook denies with the full four-element
-  message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one subprocess, and the suite is 66/0**, siblings green,
-  `shellcheck -x` clean.
+  **Tasks 1–10 are done (through `4e1f904`, `8f94318`); the hook denies with the full four-element
+  message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
+  subprocess, and the suite is 66/0**, siblings green, `shellcheck -x` clean.
   **NEXT SESSION STARTS AT TASK 11** — the Group A2 tests for the two audible fail-opens (exactly
   one stderr line, none on a second invocation in the same session, the two reasons flagging
   independently, an unwritable `$PHASE_GUARD_STATE_DIR` still printing and still exiting 0), then
