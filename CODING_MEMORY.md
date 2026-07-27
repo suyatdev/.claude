@@ -15,14 +15,23 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–10 are done (through `4e1f904`, `8f94318`); the hook denies with the full four-element
+  **Tasks 1–11 are done (through `8f94318`, `34cab2a`); the hook denies with the full four-element
   message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
-  subprocess, and the suite is 66/0**, siblings green, `shellcheck -x` clean.
-  **NEXT SESSION STARTS AT TASK 11** — the Group A2 tests for the two audible fail-opens (exactly
-  one stderr line, none on a second invocation in the same session, the two reasons flagging
-  independently, an unwritable `$PHASE_GUARD_STATE_DIR` still printing and still exiting 0), then
-  task 12's flag contract. Tasks 13–17 are `.gitignore`, `settings.json` registration, the
-  `rules/gates.md:5` amendment, ADR 0011, and the throwaway-repo dogfood.
+  subprocess, and Group A2's tests are in.** Suite is **70/10 — the ten reds are task 11's audible
+  assertions and task 12 is what closes them**; siblings green (19/17/5/14), `shellcheck -x` clean.
+  **NEXT SESSION STARTS AT TASK 12** — implement the once-per-session flag to the **Flag contract**
+  and make those ten green. Store `${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}`, path
+  `phase-guard-<reason>-<sid>` with `<reason>` ∈ {`nopython`,`noparse`} as **two independent
+  flags**; `nopython` keys off `$CLAUDE_CODE_SESSION_ID` **only** (the payload is unparseable by
+  construction), `noparse` off the payload's `session_id` first and that env var second, `nosession`
+  when neither exists; an unwritable store **prints anyway and still exits 0** — the deliberate
+  divergence from `context-handoff-watch.sh:42`, which bails silently.
+  **Task 12 also owes a falsification**, the way task 6 discharged task 5's: A2.2/A2.5/A2.9/A2.12
+  pass *vacuously* today against a hook that is silent everywhere, so inject a per-write print and
+  confirm each of the four fails, naming itself. Run it against a **copy** — never the committed
+  hook — and sha256-verify.
+  Tasks 13–17 are `.gitignore`, `settings.json` registration, the `rules/gates.md:5` amendment,
+  ADR 0011, and the throwaway-repo dogfood.
   **⚠ ESCALATION TO RAISE AT REVIEW — task 9's C0 test is a placebo.** Task 10's falsification
   found that only 1 of its 4 load-bearing claims is caught by the suite (`pipefail`, via A1.9);
   the byte-count accounting, the input-order attribution, and the frontmatter bound are all real
