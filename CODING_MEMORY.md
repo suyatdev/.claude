@@ -15,10 +15,10 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–14 are done (through `9024b64`); the hook denies with the full four-element
+  **Tasks 1–15 are done (through `1b67516`); the hook denies with the full four-element
   message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
-  subprocess, both audible fail-opens speak once per session, the flag store is `.gitignore`d, and
-  the `PreToolUse` block is committed.** Suite **80/0** (re-run after 14), siblings
+  subprocess, both audible fail-opens speak once per session, the flag store is `.gitignore`d, the
+  `PreToolUse` block is committed, and the `Phase gate` stub documents it.** Suite **80/0** (re-run after 14), siblings
   green (19/17/5/14), `shellcheck -x` clean, hook 318 lines. Task 12's falsification is **done** —
   8 mutations against copies, every one caught, table in the checklist annotation.
   · **13 done** (`209700d`) — `/hooks/state/` at `.gitignore:17` with its mirrored comment;
@@ -30,8 +30,13 @@ how this file and its linked files should be written (plain language, major chan
   Primary checkout's `settings.json` was clean, so no concurrent session held it.
   **The hook is NOT live** — the harness loads the primary checkout's copy, which is on another
   branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
-  **NEXT SESSION STARTS AT TASK 15.** · **15** — amend the existing `Phase gate` stub at
-  `rules/gates.md:5` in place; do **not** add a 19th bullet (18 today, verified 2026-07-26).
+  · **15 done** (`1b67516`) — two clauses appended to the `Phase gate` stub at `rules/gates.md:5`
+  in place; bullet count re-verified **18**, no 19th added. The stub now states the deny rule, that
+  docs and memory paths are never blocked, that no bypass variable exists, and that the
+  implementation half stays judgment-only (the reverse-enforcement non-goal, made visible where a
+  session would otherwise assume both directions are covered); it carries `merge-guard.sh`'s
+  "momentum guardrail, not a security boundary" idiom for the unguarded Bash write surface.
+  **NEXT SESSION STARTS AT TASK 16.**
   · **16** — ADR 0011, which must record that `gate confirmed` deliberately overrode ADR 0010's
   deferral. · **17** — throwaway-repo dogfood; findings are appended to `## Verification`, never
   acted on, because `implementation` forbids spec and checklist edits.
