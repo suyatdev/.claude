@@ -40,7 +40,13 @@ STATE_DIR="${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}"
 sid_env="${CLAUDE_CODE_SESSION_ID:-}"
 
 NOPYTHON_MSG='phase-guard: no python3 or python on PATH — the phase gate is not being enforced in any repo until that is fixed.'
-NOPARSE_MSG='phase-guard: a file in docs/features/ failed the frontmatter contract and was skipped — this repo opted in, but the gate cannot be fully evaluated.'
+# Phrased conditionally on purpose. The glob takes every *.md in docs/features/, so an ordinary
+# README.md there is "skipped" too — and telling a session the gate cannot be evaluated when the
+# only unreadable file was never a feature card is a false alarm, on the one hook that fires on
+# every write. "if it is one" is true in both cases and still names the real risk in the case
+# that matters. What a non-card file in docs/features/ should MEAN is a contract question, left
+# open deliberately rather than settled by a message.
+NOPARSE_MSG='phase-guard: a file in docs/features/ could not be read as a feature card and was skipped — if it is one, the gate is not seeing it.'
 
 # One flag file per reason, so whichever fires first never suppresses the other: a session
 # told the guard is dead for the wrong reason would go fix the wrong thing.
@@ -205,19 +211,29 @@ for f in "$root"/docs/features/*.md; do
 "
 done
 
-if [ -z "$planning_files" ]; then
-  # The second exit that must not be silent. The test is "was ANY file skipped", not "were
-  # they ALL skipped": one readable file is enough to make an all-skipped tally false, so a
-  # repo holding one good card and one unreadable card allowed the write without a word —
-  # and the unreadable one is precisely the card that might have denied. Reaching here with
-  # every file parsed simply means nothing sits at planning, which is the ordinary quiet
-  # case. Zero files makes the comparison false on its own, so this still cannot fire in a
-  # repo that created docs/features/ and nothing else.
-  if [ "$nfiles" -gt "$nparsed" ]; then
-    warn_once noparse "${sid_payload:-$sid_env}" "$NOPARSE_MSG"
-  fi
-  exit 0
+# The second exit that must not be silent — checked HERE, immediately after the parse loop,
+# rather than at any one exit below. A skipped card is unreadable no matter which path the hook
+# then takes, and every path from here but one ends in an allow. Two conditions, both learned
+# the hard way:
+#
+#   "was ANY card skipped", not "were they ALL". One readable card is enough to make an
+#   all-skipped tally false, so a repo holding one good card and one unreadable card allowed
+#   the write without a word — and the unreadable one is precisely the card that might have
+#   denied.
+#
+#   ...and placed before every exit, not inside one. The first fix for that lived inside the
+#   no-planning-files branch below, which left step 8's supersession exit silent in exactly the
+#   same way one stage further down. Guarding exits one at a time is what produced the same bug
+#   twice; one check upstream of all of them is what stops it recurring. A2.15 and A2.18 pin the
+#   two routes, A2.17 pins that a repo whose cards all parse stays quiet.
+#
+# Zero files makes the comparison false on its own, so this cannot fire in a repo that created
+# docs/features/ and nothing else.
+if [ "$nfiles" -gt "$nparsed" ]; then
+  warn_once noparse "${sid_payload:-$sid_env}" "$NOPARSE_MSG"
 fi
+
+[ -n "$planning_files" ] || exit 0
 
 # --- Step 8: drop the superseded ---------------------------------------------------------
 # A planning file whose gate has already opened on some branch must stop denying everywhere:

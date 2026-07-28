@@ -286,12 +286,27 @@ correctly silent — they mean "not applicable here". Two are different in kind,
 | Exit | Why it is different |
 |---|---|
 | No python interpreter (step 4) | The guard is off in *every* repo, permanently, until PATH is fixed |
-| Every `docs/features/*.md` skipped (step 7) | This repo opted in and the guard cannot read its own input |
+| Any `docs/features/*.md` skipped (step 7) | This repo opted in and the guard cannot read part of its own input |
 
-**An empty `docs/features/` is not this case.** Zero files makes "every file was skipped" vacuously
-true, which would fire the `noparse` line in any repo that created the directory and nothing else.
-The `noparse` exit therefore requires **at least one file present and all present files skipped**;
-zero files takes the silent A1 path (step 3's "not applicable" reasoning, one directory later).
+**Any skipped file, not every skipped file** — revised in review after the shipped code was found
+to warn only when *all* files were unreadable. One readable card made that test false, so a repo
+holding one good card plus one unreadable `planning` card allowed writes in silence. The condition
+is `nfiles > nparsed`.
+
+**The check runs immediately after the parse loop, before any exit**, not inside one. A skipped card
+is unreadable whichever path the hook then takes, and the first fix — placed inside the
+no-planning-files branch — left step 8's supersession exit silent in exactly the same way. Guarding
+exits one at a time produced the same defect twice.
+
+**An empty `docs/features/` is not this case.** Zero files makes `nfiles > nparsed` false on its
+own, so the `noparse` line cannot fire in a repo that created the directory and nothing else; that
+takes the silent A1 path (step 3's "not applicable" reasoning, one directory later).
+
+**Open contract question, deliberately unsettled.** The glob takes every `*.md`, so an ordinary
+`README.md` in `docs/features/` is skipped too and warns once per session forever. The message is
+phrased conditionally ("if it is one") so it states nothing false in that case, but *what a non-card
+file in `docs/features/` should mean* is a contract decision, not a wording one, and is left to the
+user.
 
 Both print one line to stderr and **still exit 0**. Per-write printing is not acceptable on this hot
 path, so each fires at most once per session.
@@ -1297,8 +1312,37 @@ a second one can change the answer, so A3.5b makes the duplicate load-bearing �
 assignment, so without the clause `bad.md` parses, claims the branch, and the deny becomes an
 **allow**. Mutation-checked: deleting the clause fails A3.5b and nothing else.
 
-**All six review-phase escalations are now closed.** Suite **95/0**, `shellcheck -x` clean on hook
-and tests, dogfood **16/16**, and the partial-skip repro re-run end-to-end against the fix.
+**7. The same silence one stage later — the fix for 5 was an instance fix, not a class fix.** Raised
+by the observability judge on RUN 2, against the RUN 1 remediation itself, and again reproduced
+independently before any change. Escalation 5's widened tally was placed *inside* the
+no-planning-files branch. But step 8 can empty that same list one stage further down: a card that
+reads `planning` in the working tree while its own branch has already advanced is dropped as
+superseded, and the exit below that drop was a bare `exit 0`. Measured side by side: superseded card
++ one unreadable card → **exit 0, silent**; the same unreadable card alone → warns correctly. A
+stale card on `main` is precisely what supersession exists for, so this is the ordinary shape.
+
+Reproduced as **A2.18** (red against the escalation-5 fix), then fixed by **moving the check
+upstream of every exit** — immediately after the parse loop — rather than adding a second guarded
+exit. A skipped card is unreadable whichever path the hook then takes; guarding exits one at a time
+is what produced the same defect twice. Consequence, verified deliberately: a deny that also has an
+unreadable card now emits the warning line *and* the full 16-line deny message (exit 2, all four
+required elements intact), which is the correct reading of both facts rather than a regression.
+
+**8. The `noparse` message asserted something false for a non-card file.** The glob takes every
+`*.md`, so an ordinary `README.md` in `docs/features/` is skipped too — and the message told the
+session "the gate cannot be fully evaluated" when the only unreadable file was never a card, on the
+one hook that fires on every write. Reworded to "could not be read as a feature card … **if it is
+one**, the gate is not seeing it", true in both cases. **What a non-card file in `docs/features/`
+should mean is left open** — that is a contract decision, not a wording one.
+
+**9. The spec's normative section still stated the pre-fix rule.** Escalation 5 was written into the
+narrative but the Exits table and the paragraph under it still read "**at least one file present and
+all present files skipped**" — the bug, recorded as the specification, which a maintainer trusting it
+would have restored. Corrected in place.
+
+**All nine review-phase escalations are now closed.** Suite **96/0**, `shellcheck -x` clean on hook
+and tests, dogfood **16/16**, and every partial-skip and supersession repro re-run end-to-end
+against the fix.
 
 **Open, and NOT decided here — the parallel-worktree collision.** Also raised by the judge. Once
 this merges, one agent opening any feature at `phase: planning` denies source writes to every other
