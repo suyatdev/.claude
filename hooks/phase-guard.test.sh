@@ -108,6 +108,9 @@ NOPY_RE='^phase-guard: .*[Pp]ython'
 NOPARSE_RE='^phase-guard: .*could not be read as a feature card'
 NOLIST_RE='^phase-guard: .*cannot be listed'
 NOGIT_RE='^phase-guard: .*git query'
+NOPAYLOAD_RE='^phase-guard: .*payload'
+NOGITBIN_RE='^phase-guard: .*no git on PATH'
+DETACHED_RE='^phase-guard: .*detached HEAD'
 
 # The audible fail-open assertion: exit 0, empty stdout, and EXACTLY ONE stderr line matching.
 # The line count is asserted, not merely a match — a match-only assertion cannot see a per-write
@@ -181,8 +184,19 @@ allow_silent "A1.2 not inside a git repository (step 2)"        "$NOREPO" "$(pay
 allow_silent "A1.3 no docs/features/ (step 3)"                  "$BARE"   "$(payload Write file_path "$BARE/src/x.sh")"
 # A1.4: step 1 catches only *empty* stdin, so a truncated payload reaches the parser. An
 # unhandled traceback would exit nonzero — a code a PreToolUse harness may read as deny.
-allow_silent "A1.4 non-empty stdin that is not JSON (step 4)"   "$OPTED"  '{"hook_event_name":"PreToo'
-allow_silent "A1.5 neither file_path nor notebook_path (step 4)" "$OPTED" '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"old_string":"a","new_string":"b"}}'
+# A1.4/A1.5 CONVERTED from asserted-silent, for the same reason as A1.8-A1.10b below. $OPTED holds
+# an un-superseded planning card on an unclaimed branch: a valid payload here DENIES. Feed the same
+# fixture a truncated payload, a non-JSON one, or one whose path key has been renamed, and it
+# allowed in silence — the guard switched off by a malformed message, at the earliest step of all.
+# The suite asserted that silence a few lines above the four git cases it also asserted, which is
+# how one bug class survived four judge rounds reading this file as evidence of correctness.
+export CLAUDE_CODE_SESSION_ID=a1-nojson
+allow_audible "A1.4 non-empty stdin that is not JSON (step 4) says so" "$OPTED" \
+  '{"hook_event_name":"PreToo' "$NOPAYLOAD_RE"
+export CLAUDE_CODE_SESSION_ID=a1-nopath
+allow_audible "A1.5 neither file_path nor notebook_path (step 4) says so" "$OPTED" \
+  '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"old_string":"a","new_string":"b"}}' \
+  "$NOPAYLOAD_RE"
 allow_silent "A1.6 path outside the repository root (step 5)"   "$OPTED"  "$(payload Write file_path "$OUTSIDE/x.sh")"
 
 # --- The unguarded-path scenario: never blocked, even mid-planning -------------------
@@ -862,6 +876,57 @@ else
 fi
 chmod 755 "$NOLIST/docs/features"
 deny "A4.3 control — restoring 755 denies again" "$NOLIST" "$PL_NOLIST"
+
+# A4.4 — step 5, the symlinked repo path. Raised as a fixture gotcha in round 1, re-raised as a
+# real route by two judge rounds, and never fixed: `git rev-parse --show-toplevel` always reports
+# the PHYSICAL path, while a payload can legitimately reach the same file through a symlinked
+# ancestor (/tmp and /var are symlinks on macOS; so is any repo reached via a symlinked checkout).
+# The prefix match then fails and the write is treated as outside the repository — the guard is off
+# for the WHOLE repo, permanently, and silently. Bracketed by a physical-path control.
+SYMREPO="$TMP/symrepo-real"; mkrepo "$SYMREPO"
+feature_file "$SYMREPO" docs/features/a.md planning
+SYMLINK="$TMP/symrepo-link"; ln -s "$SYMREPO" "$SYMLINK"
+deny "A4.4a control — the physical path denies" "$SYMREPO" \
+  "$(payload Write file_path "$SYMREPO/src/x.sh")"
+deny "A4.4b the same file via a symlinked repo path still denies" "$SYMREPO" \
+  "$(payload Write file_path "$SYMLINK/src/x.sh")"
+
+# A4.5 — git absent from PATH. Machine-wide and permanent exactly like a missing interpreter,
+# which speaks (A2.1); this was silent, for no reason anyone chose. Built by symlink like NOPYBIN
+# so "no git" is the only difference from a normal run.
+NOGITBIN="$TMP/nogitbin"; mkdir -p "$NOGITBIN"
+for b in bash cat grep mkdir awk sed head python3; do
+  [ -n "$(command -v "$b" 2>/dev/null)" ] && ln -sf "$(command -v "$b")" "$NOGITBIN/$b"
+done
+export CLAUDE_CODE_SESSION_ID=a4-nogitbin
+with_path "$NOGITBIN" allow_audible "A4.5 no git on PATH says so, like no interpreter" \
+  "$OPTED" "$PL_OPTED" "$NOGITBIN_RE"
+
+# A4.6 — detached HEAD. Still ALLOWS (denying every write through a rebase is the blast radius the
+# design refuses), but no longer silently. The old justification — "a rebase issues many writes and
+# a line per write would be noise" — is exactly what warn_once already prevents, so it argued for
+# silence using the problem the flag solves. As shipped it was also a one-command bypass
+# (`git checkout --detach`) of a guard whose deny message says there is no bypass variable.
+export CLAUDE_CODE_SESSION_ID=a4-detached
+allow_audible "A4.6 detached HEAD allows, but says the guard is off" "$DETACHED" \
+  "$(payload Write file_path "$DETACHED/src/x.sh")" "$DETACHED_RE"
+
+# A4.7 — HOME unset. STATE_DIR defaults from $HOME, and under `set -u` an unset HOME is an unbound
+# variable: exit 1 on EVERY write, which the spec's own Output contract calls illegitimate.
+# PHASE_GUARD_STATE_DIR must be unset too, or its `:-` default short-circuits $HOME and the case
+# passes without ever reaching the condition. Safe on a DENY: warn_once never runs, so nothing is
+# written anywhere even though the store location is unresolvable.
+A4_HOME_SAVED="${HOME:-}"; A4_SD_SAVED="${PHASE_GUARD_STATE_DIR:-}"
+unset HOME PHASE_GUARD_STATE_DIR
+_run "$OPTED" "$PL_OPTED"
+export PHASE_GUARD_STATE_DIR="$A4_SD_SAVED"
+if [ "$got" -eq 2 ]; then
+  printf 'ok   — A4.7 an unset HOME still denies rather than exiting 1\n'; pass=$((pass+1))
+else
+  printf 'FAIL — A4.7 an unset HOME still denies rather than exiting 1 (got %s)\n' "$got"
+  fail=$((fail+1))
+fi
+export HOME="$A4_HOME_SAVED"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
