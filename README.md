@@ -50,6 +50,18 @@
 - **`core-conduct.md`** — permanent invariants: session defaults, code style, zero-trust rules, parallel-agent safety, context discipline
 - **`gates.md`** — judgment-based checkpoints (model-switch gates, default-branch safety, project setup) as short stubs pointing at the skill with the full procedure
 
+## 🗺️ Roadmap
+
+- [x] Terminal-pane orchestration for dispatching subagents (judges, plan implementers) into real headless sessions (#23–#27)
+- [x] Two dev-time judges gating PRs: compliance (spec vs. rules) and observability (evaluation + observability rubrics) (#13, #16)
+- [x] Local memory RAG index (`memsearch`) over session digests and docs (#14)
+- [x] Status line with model and token-usage segments (#18, #20)
+- [x] Documentation-enforcement backstop — hooks that block undocumented business-logic changes (#10)
+- [x] Phase-frontmatter permission system: a feature file's `phase` survives a session clear and gates what work is allowed on restore
+- [ ] Per-session pane-split policy with three-lane agent routing (#28, open)
+- [ ] A `phase-guard.sh` hook to computationally enforce the phase-frontmatter gate (deliberately deferred — see ADR 0010)
+- [ ] Reconcile the remaining files still describing the retired `coding-memory/branches/<branch>.md` workflow
+
 ## New machine?
 
 See [SETUP.md](SETUP.md) for the full install checklist.

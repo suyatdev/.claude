@@ -368,6 +368,12 @@ how this file and its linked files should be written (plain language, major chan
   worker-pane count AND the worker/judge lane-tag early on REAL run-dir fixtures** (the "judge not
   counted" test rides on both); live cmux tab probe as a hard gate. Optional: a small three-lane
   decision diagram would aid review (costs a re-judge if added now).**
+- **PR #29 MERGED 2026-07-25** (`122b8a5`); branch pruned local+remote; ancestor-check verified.
+  Phase-frontmatter permission system (ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`)
+  now on `main` — every feature-scale change gets a `docs/features/<name>.md` with `phase` in
+  frontmatter, checked on restore. **Mechanism is still undogfooded** — no such file exists yet
+  anywhere; the next feature-scale branch should be its first real user. Detail:
+  `.claude/session-state.md`.
 - session_origin: desktop · session_started_at: 2026-07-22 (Sonnet 5) · last_active_branch: main —
   **Q&A only, no code/architecture changes.** Answered how to manually smoke-test the pane
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
