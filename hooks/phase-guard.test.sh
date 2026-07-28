@@ -759,6 +759,10 @@ allow_audible "A2.18 a skipped card still speaks when supersession empties the l
 # The boundary the fix draws: an entry that EXISTS IN ANY FORM is counted, and only a glob that
 # matched nothing is skipped. `-e` is false for a dangling symlink, so `-L` is needed beside it.
 UNREADABLE="$TMP/unreadable-entries"; mkrepo "$UNREADABLE"
+# mkrepo does not create docs/features/ — only feature_file does, and no card is wanted here.
+# Without this the symlink never lands, the repo reads as never-opted-in, and the case passes
+# at step 3 for entirely the wrong reason.
+mkdir -p "$UNREADABLE/docs/features"
 ln -s /nonexistent/target.md "$UNREADABLE/docs/features/dangling.md"
 export CLAUDE_CODE_SESSION_ID=a2-dangling
 allow_audible "A2.19 a dangling symlink is an unreadable card, not an absent one" \
