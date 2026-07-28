@@ -183,8 +183,8 @@ feature_file "$DENYMSG" docs/features/beta.md planning
 # "Not applicable here" — the common case in every repo that never opted in.
 
 allow_silent "A1.1 empty stdin (step 1)"                        "$OPTED"  ""
-allow_silent "A1.2 not inside a git repository (step 2)"        "$NOREPO" "$(payload Write file_path "$NOREPO/src/x.sh")"
-allow_silent "A1.3 no docs/features/ (step 3)"                  "$BARE"   "$(payload Write file_path "$BARE/src/x.sh")"
+allow_silent "A1.2 not inside a git repository (step 4)"        "$NOREPO" "$(payload Write file_path "$NOREPO/src/x.sh")"
+allow_silent "A1.3 no docs/features/ (step 4)"                  "$BARE"   "$(payload Write file_path "$BARE/src/x.sh")"
 # A1.4: step 1 catches only *empty* stdin, so a truncated payload reaches the parser. An
 # unhandled traceback would exit nonzero — a code a PreToolUse harness may read as deny.
 # A1.4/A1.5 CONVERTED from asserted-silent, for the same reason as A1.8-A1.10b below. $OPTED holds
@@ -194,10 +194,10 @@ allow_silent "A1.3 no docs/features/ (step 3)"                  "$BARE"   "$(pay
 # The suite asserted that silence a few lines above the four git cases it also asserted, which is
 # how one bug class survived four judge rounds reading this file as evidence of correctness.
 export CLAUDE_CODE_SESSION_ID=a1-nojson
-allow_audible "A1.4 non-empty stdin that is not JSON (step 4) says so" "$OPTED" \
+allow_audible "A1.4 non-empty stdin that is not JSON (step 3) says so" "$OPTED" \
   '{"hook_event_name":"PreToo' "$NOPAYLOAD_RE"
 export CLAUDE_CODE_SESSION_ID=a1-nopath
-allow_audible "A1.5 neither file_path nor notebook_path (step 4) says so" "$OPTED" \
+allow_audible "A1.5 neither file_path nor notebook_path (step 3) says so" "$OPTED" \
   '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"old_string":"a","new_string":"b"}}' \
   "$NOPAYLOAD_RE"
 allow_silent "A1.6 path outside the repository root (step 5)"   "$OPTED"  "$(payload Write file_path "$OUTSIDE/x.sh")"
@@ -669,7 +669,7 @@ PL_NOPARSE="$(payload Write file_path "$NOPARSE/src/x.sh")"
 
 # A2.1 — step 4, the no-interpreter exit. The guard is off in EVERY repo until PATH is fixed.
 export CLAUDE_CODE_SESSION_ID=a2-nopython
-with_path "$NOPYBIN" allow_audible "A2.1 no interpreter says so (step 4)" \
+with_path "$NOPYBIN" allow_audible "A2.1 no interpreter says so (step 2)" \
   "$OPTED" "$PL_OPTED" "$NOPY_RE"
 with_path "$NOPYBIN" allow_silent "A2.2 a second write in the same session adds no line" \
   "$OPTED" "$PL_OPTED"
