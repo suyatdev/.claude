@@ -213,7 +213,7 @@ an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
    (`judge-guard.sh:28`, `doc-guard.sh:49`) — and parse the payload → `tool_name`, and the path:
    `tool_input.file_path` (`Edit`/`Write`), falling back to `tool_input.notebook_path`
    (`NotebookEdit`). Neither key → ⊘. **No interpreter → ⊘ *and* print one line, once per session**
-   (see "Two exits that must not be silent").
+   (see "The exits that must not be silent").
    **Malformed-but-non-empty stdin → ⊘, silently** (enumerated round 4). Step 1 catches only *empty*
    stdin; a truncated or non-JSON payload reaches the parser and raises, and an unhandled traceback
    would exit nonzero — which the Output contract calls a defect and a `PreToolUse` harness may read
@@ -280,17 +280,55 @@ A file failing any of the three — including a `phase:` value outside the three
 **skipped**, never guessed at. Skipping fails open, per Q3. But a skipped file in a repo that *has*
 opted in is the "cannot evaluate" case, so it is one of the two exits that print.
 
-### Two exits that must not be silent
+### The exits that must not be silent — the fail-open audit
 
-Added round 2 (observability round 1). A working guard and a dead one are otherwise byte-identical:
-every ⊘ exit emits nothing, and the Group A tests assert exactly that. Six of the eight are
-correctly silent — they mean "not applicable here". Two are different in kind, because they mean
-**this repo opted in and the guard could not evaluate it**:
+Added round 2 (observability round 1) as "two exits"; **replaced in review by an audit of every
+exit**, after four judge rounds each found one more exit that went silent, every one a step earlier
+than the last: the tally, then the supersession exit, then the entry counting, then the directory
+listing. Each fix was locally correct and each was followed by a new instance, because the surface
+was being explored reactively, one judge finding at a time. Enumerating it is what stopped that.
 
-| Exit | Why it is different |
-|---|---|
-| No python interpreter (step 4) | The guard is off in *every* repo, permanently, until PATH is fixed |
-| Any `docs/features/*.md` skipped (step 7) | This repo opted in and the guard cannot read part of its own input |
+**THE RULE.** Once the hook knows the repo is opted in **and** holds an un-superseded `planning`
+card, it was on its way to **deny**. Any later inability to finish the evaluation is the guard being
+switched off in exactly the state where it was about to do its job — and a working guard and a dead
+one are byte-identical, since every ⊘ emits nothing. Those exits **speak**. Everything upstream of
+that knowledge stays **silent**, because there the hook genuinely has nothing to say. The boundary
+is that knowledge and nothing else.
+
+**Justifiably silent** — the hook has nothing to say:
+
+| Exit | Step | Why silence is right |
+|---|---|---|
+| Empty payload | 1 | Not a write this hook can read |
+| Not a git repo / no root | 2 | Out of scope entirely |
+| No `docs/features/` | 3 | This repo never opted in |
+| No usable path in the payload | 4 | Nothing to judge |
+| Path outside the root | 5 | Not ours to judge |
+| Exempt path (`docs/*`, `.claude/*`, `settings.json`, memory) | 6 | Guarded-by-design exclusion |
+| Nothing at `planning` | 7 | The ordinary quiet case |
+| Every `planning` card superseded | 8 | Their gates already opened |
+| Branch is claimed | 9 | A legitimate, positive allow |
+| Detached HEAD | 9 | Deliberate — a rebase issues many writes and a line per write is noise |
+
+**Must be audible** — the guard is off in a state where it would otherwise have denied:
+
+| Exit | Step | Why it must speak | Pinned by |
+|---|---|---|---|
+| No python interpreter | 4 | Guard off in *every* repo, permanently, until PATH is fixed | A2.1 |
+| Any `docs/features/*.md` entry skipped | 7 | Cannot read part of its own input | A2.4, A2.15, A2.18–A2.22 |
+| `docs/features/` cannot be listed | 7 | Opted in, yet *every* card vanishes at once | A4.1, A4.2 |
+| `git for-each-ref` fails | 8 | Supersession unresolvable while a card is active | A1.8 |
+| `git cat-file --batch` pipeline fails | 8 | Same | A1.9 |
+| `git rev-parse --abbrev-ref HEAD` fails or is empty | 9 | Branch unresolvable while a card is active | A1.10a/b |
+
+**The four git exits were previously asserted SILENT by the suite itself** — `A1.8`–`A1.10b` ran
+against a repo holding an un-superseded planning card on an unclaimed branch, so they pinned the
+guard being switched off by a transient git failure at the exact moment it was about to deny. That
+is what the bug class looked like from the inside: not a missing test, an enforcing one. Converted
+in review.
+
+Each still exits 0 and each still speaks **at most once per session**, so a flapping git costs one
+line per session, not one per write.
 
 **Any skipped file, not every skipped file** — revised in review after the shipped code was found
 to warn only when *all* files were unreadable. One readable card made that test false, so a repo
@@ -465,11 +503,11 @@ tool_input:
 under `set -u` an unbound variable exits 1, and a fail-open path that leaks a nonzero code is a
 defect regardless of how the harness classifies it. Every ⊘ path therefore exits 0 **explicitly**.
 
-An allow emits nothing on stdout or stderr, with exactly two exceptions — the no-interpreter and
-any-entry-skipped exits of "Two exits that must not be silent", which print one stderr line at most
-once per session and still exit 0. stdout is empty on every path without exception. A **deny** that
-also has a skipped entry emits both: the warning line, then the full deny message — the skip check
-sits above every exit, so it is not confined to allows.
+An allow emits nothing on stdout or stderr, with exactly the exceptions enumerated in "The exits
+that must not be silent" — six of them, each printing one stderr line at most once per session and
+still exiting 0. stdout is empty on every path without exception. A **deny** that also has a skipped
+entry emits both: the warning line, then the full deny message — the skip check sits above every
+exit, so it is not confined to allows.
 
 **Deny message** — must contain all four, or the block is unactionable:
 
@@ -1385,9 +1423,43 @@ readable file with malformed *content*, and none was an entry the parser could n
 A2.19–A2.22 close that fixture class, which is the durable fix; the two-line `-e`/`-L` change is
 merely what it exposed.
 
-**All twelve review-phase escalations are now closed.** Suite **100/0**, `shellcheck -x` clean on
-hook and tests, dogfood **16/16**, and every repro — partial skip, supersession, dangling symlink,
-directory entry, unopenable card, and the moved-symlink severity case — re-run end-to-end.
+**13. `docs/features/` itself being unlistable — the fourth instance, and the end of patching.**
+RUN 4 found it and it reproduced exactly: with a real `planning` card present, `755` → deny,
+`444` → **exit 0 silent**, `755` → deny, `000` → **exit 0 silent**, `755` → deny. The `444` case is
+the sharper one — the shell still expands the glob to the real filename, so the entry is *known to
+exist*, and `-e`/`-L` both need search permission on the directory, so it is dropped uncounted.
+`nfiles` stays 0, the skip tally has nothing to compare, and the repo reads as opted-in and
+unguarded simultaneously. Worse than escalation 10 when it happens: that dropped one card, this
+drops every card at once.
+
+**This was not patched as a fifth instance.** Four rounds had found four instances, each a step
+earlier than the last, and each fix had been *described* as a class fix. The response was to
+enumerate the whole fail-open surface instead — see "The exits that must not be silent", now an
+audit of all sixteen exits rather than a list of two.
+
+**THE RULE that fell out, and the audit's real finding:** once the hook knows the repo is opted in
+and holds an un-superseded `planning` card, it was on its way to deny; any later inability to finish
+must be audible. Everything upstream of that knowledge stays silent. Applying it uniformly closed
+the directory-listing hole **and four exits nobody had reported** — `git for-each-ref` failing,
+the `cat-file --batch` pipeline failing, and `git rev-parse --abbrev-ref HEAD` failing or returning
+empty. Each turns a deny into an allow while a planning card is active.
+
+**Those four were asserted SILENT by the suite itself** (`A1.8`–`A1.10b`, against `$OPTED` — an
+un-superseded planning card on an unclaimed branch). The suite was not missing the class; it was
+*enforcing* it. That is the most useful single thing the audit surfaced, and no amount of further
+instance-hunting would have found it, because every judge round was reading the same suite as
+evidence of correctness.
+
+Two new audible reasons (`nolist`, `nogit`), both once-per-session like the existing two, so a
+flapping git costs one line per session rather than one per write. Verified in both directions
+end-to-end: the three must-speak cases speak, and all six justifiably-silent exits — exempt paths,
+outside-root, detached HEAD, not-opted-in, claimed branch — stayed silent, so the audit added no
+noise.
+
+**All thirteen review-phase escalations are now closed.** Suite **104/0**, `shellcheck -x` clean on
+hook and tests, dogfood **16/16**, and every repro re-run end-to-end: partial skip, supersession,
+dangling symlink, directory entry, unopenable card, moved-symlink severity case, unlistable
+directory at 444 and 000, and each git-failure exit.
 
 **Open, and NOT decided here — the parallel-worktree collision.** Also raised by the judge. Once
 this merges, one agent opening any feature at `phase: planning` denies source writes to every other

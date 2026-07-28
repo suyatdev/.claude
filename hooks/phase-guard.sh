@@ -26,13 +26,25 @@ set -u
 LF='
 '
 
-# --- The two exits that must not be silent ---------------------------------------------
-# Six of the eight fail-open exits mean "not applicable here" and are correctly silent.
-# These two mean THIS REPO OPTED IN AND THE GUARD COULD NOT EVALUATE IT — a state in which
-# a working guard and a dead one are otherwise byte-identical, since every ⊘ emits nothing.
+# --- The exits that must not be silent -------------------------------------------------
+# THE RULE, and it is the whole design: once this hook knows the repo is opted in AND holds
+# an un-superseded `planning` card, it was on its way to DENY. Any later inability to finish
+# the evaluation is the guard being switched off in exactly the state where it was about to
+# do its job — a state in which a working guard and a dead one are byte-identical, since
+# every ⊘ emits nothing. Those exits speak. Everything UPSTREAM of that knowledge ("not a
+# repo", "not opted in", "this path is not guarded") stays silent, because there the hook
+# genuinely has nothing to say.
 #
-# Both still exit 0. Both print AT MOST ONCE PER SESSION: this hook fires on every write,
-# and a line per write would be noise the reader learns to skip past.
+# This rule replaced instance-patching. Four judge rounds each found one exit that went
+# silent, every one a step earlier than the last — the tally, then the supersession exit,
+# then the entry counting, then the directory listing. Each fix was locally correct and each
+# was followed by a new instance, because the surface was being explored reactively. The
+# audit enumerates it instead; Group A4 in the test suite is that enumeration, and four of
+# the cases below were previously asserted SILENT by the suite itself.
+#
+# Every one still exits 0, and every one prints AT MOST ONCE PER SESSION: this hook fires on
+# every write, and a line per write would be noise the reader learns to skip past. A flapping
+# git therefore costs one line per session, not one per write.
 STATE_DIR="${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}"
 # The environment id is the ONLY key available to the no-interpreter exit — that branch
 # fires because the JSON parser is what failed, so the payload's own session_id is by
@@ -47,6 +59,14 @@ NOPYTHON_MSG='phase-guard: no python3 or python on PATH — the phase gate is no
 # that matters. What a non-card file in docs/features/ should MEAN is a contract question, left
 # open deliberately rather than settled by a message.
 NOPARSE_MSG='phase-guard: a file in docs/features/ could not be read as a feature card and was skipped — if it is one, the gate is not seeing it.'
+# The directory exists (step 3 passed) but cannot be listed, so EVERY card vanishes at once and
+# the skip tally has nothing to compare — the repo looks opted-in and unguarded at the same time.
+# Distinct from NOPARSE because the fix is different: this one is a permission, not a typo.
+NOLIST_MSG='phase-guard: docs/features/ cannot be listed (check its permissions) — this repo opted in, but no card can be read, so the gate is not being enforced here.'
+# A git query the evaluation depends on failed while an un-superseded planning card was active.
+# Transient by nature, which is why it fails OPEN rather than closed — but never silently, or a
+# flaky git is indistinguishable from an approved branch.
+NOGIT_MSG='phase-guard: a git query needed to finish the phase check failed — a planning card is active, so this write was NOT checked against it.'
 
 # One flag file per reason, so whichever fires first never suppresses the other: a session
 # told the guard is dead for the wrong reason would go fix the wrong thing.
@@ -186,6 +206,17 @@ END {
   print phase "\t" branch
 }'
 
+# Step 3 established the directory EXISTS; this establishes it can actually be LISTED. Both bits
+# are needed and they fail independently: at mode 444 the shell still expands the glob to the real
+# filenames, so entries are known to exist, but `-e`/`-L` need SEARCH permission and every one is
+# dropped uncounted — nfiles stays 0, the skip tally has nothing to compare, and the repo reads as
+# opted-in and unguarded at the same time. Checked here rather than at step 3 because the payload's
+# session id is only parsed at step 4, and the once-per-session key should prefer it.
+if [ ! -r "$root/docs/features" ] || [ ! -x "$root/docs/features" ]; then
+  warn_once nolist "${sid_payload:-$sid_env}" "$NOLIST_MSG"
+  exit 0
+fi
+
 planning_files=""
 claimed_branches=""
 nfiles=0
@@ -290,7 +321,9 @@ END { for (p in mark) print p }'
 
 # An empty for-each-ref is NOT a failure — a repo with no local branches supersedes nothing,
 # so every candidate survives to step 9. Only a nonzero exit is a failure.
-branches=$(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null) || exit 0
+# Past this point a planning card is active, so every remaining fail-open speaks (see THE RULE).
+branches=$(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null) ||
+  { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
 
 if [ -n "$branches" ]; then
   # Split on newlines only. A branch name cannot contain a space, but a feature-file path can,
@@ -312,7 +345,8 @@ if [ -n "$branches" ]; then
   set -o pipefail
   superseded=$(printf '%s' "$reqs" |
     git cat-file --batch 2>/dev/null |
-    PHASE_GUARD_REQS="$reqs" awk "$BATCH_AWK") || { IFS=$old_ifs; exit 0; }
+    PHASE_GUARD_REQS="$reqs" awk "$BATCH_AWK") ||
+    { IFS=$old_ifs; warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
   set +o pipefail
 
   remaining=""
@@ -332,8 +366,10 @@ fi
 # --- Step 9: is the current branch claimed? ----------------------------------------------
 # Both fail-opens are here rather than upstream: the only path onward from this step is deny,
 # so a transient git failure would otherwise flip the hook from fail-open to fail-everything.
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
-[ -n "$branch" ] || exit 0
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) ||
+  { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
+[ -n "$branch" ] ||
+  { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
 # Detached HEAD — reachable during any rebase or bisect. No branch means no claim can match,
 # so without this the hook would deny every write for the length of a rebase.
 [ "$branch" = "HEAD" ] && exit 0
