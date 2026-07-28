@@ -27,7 +27,7 @@ LF='
 '
 
 # --- The exits that must not be silent -------------------------------------------------
-# THE RULE, and it is the whole design: once this hook knows THIS REPO OPTED IN (step 3), any
+# THE RULE, and it is the whole design: once this hook knows THIS REPO OPTED IN (step 4), any
 # later inability to COMPLETE the evaluation is the guard being switched off in exactly the
 # state where it was about to do its job — a state in which a working guard and a dead one are
 # byte-identical, since every ⊘ emits nothing. Those exits speak. Everything UPSTREAM of that
@@ -73,7 +73,7 @@ NOPYTHON_MSG='phase-guard: no python3 or python on PATH — the phase gate is no
 # that matters. What a non-card file in docs/features/ should MEAN is a contract question, left
 # open deliberately rather than settled by a message.
 NOPARSE_MSG='phase-guard: a file in docs/features/ could not be read as a feature card and was skipped — if it is one, the gate is not seeing it.'
-# The directory exists (step 3 passed) but cannot be listed, so EVERY card vanishes at once and
+# The directory exists (step 4 passed) but cannot be listed, so EVERY card vanishes at once and
 # the skip tally has nothing to compare — the repo looks opted-in and unguarded at the same time.
 # Distinct from NOPARSE because the fix is different: this one is a permission, not a typo.
 NOLIST_MSG='phase-guard: docs/features/ cannot be listed (check its permissions) — this repo opted in, but no card can be read, so the gate is not being enforced here.'
@@ -81,17 +81,18 @@ NOLIST_MSG='phase-guard: docs/features/ cannot be listed (check its permissions)
 # Transient by nature, which is why it fails OPEN rather than closed — but never silently, or a
 # flaky git is indistinguishable from an approved branch.
 NOGIT_MSG='phase-guard: a git query needed to finish the phase check failed — a planning card is active, so this write was NOT checked against it.'
-# Step 5 could not resolve a path to its physical form, so "inside this repo" is unanswerable.
+# Step 4 could not resolve a path to its physical form, so the repo that owns it is unknowable.
 # Deliberately avoids the word "payload": the reasons have to stay tellable apart, and the
 # unreadable-payload line already owns that word.
-NORESOLVE_MSG='phase-guard: a write target could not be resolved to its physical form, so whether it belongs to this opted-in repo is unknown — it was NOT checked against the gate.'
+NORESOLVE_MSG='phase-guard: a write target could not be resolved to its physical form, so the repo it belongs to is unknown — it was NOT checked against the gate.'
 # Machine-wide and permanent, exactly like a missing interpreter. It was silent purely because
 # step 2 predates the opt-in test; but "no git" is not a statement about THIS repo, it is the same
 # every repo, every write condition NOPYTHON_MSG already speaks for.
 NOGITBIN_MSG='phase-guard: no git on PATH — the phase gate is not being enforced in any repo until that is fixed.'
-# The payload itself could not be read. Reached only after step 3, so the repo is known to have
-# opted in: a malformed message is the guard being switched off at the earliest step there is.
-NOPAYLOAD_MSG='phase-guard: this tool payload could not be read (no usable file path) — this repo opted in, so the write was NOT checked against the gate.'
+# The payload itself could not be read, which is also how the target's repo would have been
+# identified — so this fires WITHOUT knowing whether that repo opted in, and must not claim it did.
+# It is reached at all only because the session's cwd sits in one (warn_if_cwd_opted_in).
+NOPAYLOAD_MSG='phase-guard: this tool payload could not be read (no usable file path), so the write was NOT checked against the gate.'
 # Detached HEAD still ALLOWS — denying every write for the length of a rebase is the blast radius
 # this design refuses — but it no longer does so silently. The old justification ("a rebase issues
 # many writes, so a line per write would be noise") argued for silence using the exact problem the
@@ -115,6 +116,19 @@ warn_once() { # $1 reason (nopython|noparse), $2 session id ("" -> nosession), $
   return 0
 }
 
+# The two exits that fire BEFORE the write target's repo can be identified — an unreadable payload
+# and an unresolvable path. THE RULE keys audibility on "this repo opted in", and neither exit has
+# a repo to ask about yet, so it falls back to the only signal left: the session's cwd. Standing in
+# an opted-in repo, a guard that just went blind is worth a line; standing anywhere else, warning
+# would put one into every repo on this machine that never opted in — on the hook that fires on
+# every write. Costs one `git` call, on paths that fire only when something is already wrong.
+warn_if_cwd_opted_in() { # $1 reason, $2 message
+  local cwd_root
+  cwd_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  [ -n "$cwd_root" ] && [ -d "$cwd_root/docs/features" ] || return 0
+  warn_once "$1" "${sid_payload:-$sid_env}" "$2"
+}
+
 # --- Step 1: the payload -------------------------------------------------------------
 payload=""
 if [ ! -t 0 ]; then
@@ -122,29 +136,19 @@ if [ ! -t 0 ]; then
 fi
 [ -n "$payload" ] || exit 0
 
-# --- Step 2: the repository root ------------------------------------------------------
-# No git binary is machine-wide and permanent, so it speaks for the same reason no interpreter
-# does. It is checked separately from the query below because "git is missing" and "this is not a
-# repository" are different facts and only one of them is worth a line.
+# --- Step 2: the tools this hook cannot run without -----------------------------------
+# Both are machine-wide and permanent, and both speak for the same reason: a missing binary
+# switches the guard off in EVERY repo on this machine, which is not a statement about any one
+# of them. They are separate messages because "git is missing" and "python is missing" have
+# different fixes. Checked before anything is parsed — everything below needs both.
 command -v git >/dev/null 2>&1 || { warn_once nogitbin "$sid_env" "$NOGITBIN_MSG"; exit 0; }
-root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -n "$root" ] || exit 0
-
-# --- Step 3: did this repo opt in? ----------------------------------------------------
-# The hottest path in the design — it runs on every write in every repo — so this is a
-# bash builtin, not a `stat` subprocess. Deliberately AFTER step 2: a bare
-# `./docs/features` test assumes the hook's CWD is the repo root, and would silently
-# stop guarding from any subdirectory.
-[ -d "$root/docs/features" ] || exit 0
-
-# --- Step 4: the interpreter, then the path out of the payload ------------------------
 py=$(command -v python3 || command -v python) || py=""
-# The first of the two exits that must not stay silent: with no interpreter the guard is
-# off in every repo on this machine, permanently, until PATH is fixed.
 if [ -z "$py" ]; then
   warn_once nopython "$sid_env" "$NOPYTHON_MSG"
   exit 0
 fi
+
+# --- Step 3: the path out of the payload ----------------------------------------------
 
 # Step 1 catches only *empty* stdin, so a truncated or non-JSON payload reaches this
 # parser. Every failure to produce a usable path takes the same silent fail-open: an
@@ -175,34 +179,55 @@ case "$parsed" in
   *"$LF"*) sid_payload=${parsed%%"$LF"*}; file_path=${parsed#*"$LF"} ;;
   *)       sid_payload=""; file_path="" ;;
 esac
-# Reached only past step 3, so the repo is known to have opted in — a payload this hook cannot
-# read is the guard being switched off at the earliest step there is, not a "not applicable".
-[ -n "$file_path" ] || { warn_once nopayload "${sid_payload:-$sid_env}" "$NOPAYLOAD_MSG"; exit 0; }
+# This is upstream of knowing which repo the write concerns — the path IS how that is known —
+# so THE RULE has nothing to ask "did you opt in?" about yet, and the session's cwd is the only
+# signal left about whether the guard just went blind somewhere it mattered.
+[ -n "$file_path" ] || { warn_if_cwd_opted_in nopayload "$NOPAYLOAD_MSG"; exit 0; }
+
+# --- Step 4: the repository that owns that path, and whether it opted in ----------------
+# Resolved from the WRITE TARGET, never from the session's cwd. `git rev-parse` run in the hook's
+# own directory answers a different question — "which repo is this session standing in?" — and the
+# two diverge constantly: a session working in a linked worktree (which has its own toplevel), a
+# tool invoked from $HOME, an agent whose cwd was reset under it. Wherever they diverged the gate
+# was off and said nothing, which is this hook's one bug class, one step upstream of every exit the
+# audit enumerated. Six judge rounds read step 2 without seeing it.
+#
+# The file need not exist yet (this is a PreToolUse for a Write), so walk up to the deepest
+# ancestor that does and resolve the repo from there.
+fp_dir=$file_path
+while [ ! -d "$fp_dir" ] && [ "$fp_dir" != "/" ] && [ "$fp_dir" != "." ]; do
+  fp_dir=$(dirname "$fp_dir")
+done
+# Physically, because `git rev-parse --show-toplevel` always reports the physical path while a
+# payload can legitimately reach the same file through a symlinked ancestor — /tmp and /var are
+# symlinks on macOS, and any symlinked checkout is the same shape. Both sides of step 5's prefix
+# match have to be physical or the write reads as outside the repo and the guard is off for the
+# WHOLE repo, permanently and silently.
+fp_phys=$(cd "$fp_dir" 2>/dev/null && pwd -P) || fp_phys=""
+# The deepest existing ancestor cannot even be searched, so the owning repo is unknowable. Same
+# position as the unreadable payload above, and warned the same way. It was written as a bare
+# `|| exit 0` — the silent-fail-open class, inside the fix for that class.
+[ -n "$fp_phys" ] || { warn_if_cwd_opted_in noresolve "$NORESOLVE_MSG"; exit 0; }
+root=$(git -C "$fp_phys" rev-parse --show-toplevel 2>/dev/null) || root=""
+# Not in a repository at all — out of scope entirely, and silent for it.
+[ -n "$root" ] || exit 0
+# The hottest path in the design: it runs on every write in every repo, so it is a bash builtin
+# rather than a `stat` subprocess. It can no longer be the FIRST test — the payload has to be
+# parsed before there is a repo to ask about — and that reordering is what this fix cost. Measured
+# on this machine, 30 writes per case: a repo that never opted in went 11ms -> 38ms per write (the
+# python startup it now pays before finding out it is not guarded), an opted-in one 35ms -> 41ms
+# (the added `pwd -P` subshell). Accepted deliberately: a PreToolUse hook sits inside a tool
+# round-trip measured in hundreds of ms, and the alternative was a gate that goes silently off
+# whenever the session's cwd is not inside the repo being written to.
+[ -d "$root/docs/features" ] || exit 0
 
 # --- Step 5: relativize against the root ----------------------------------------------
-# Payload paths are absolute. A path outside this repository is not ours to judge.
-#
-# The direct prefix match is not sufficient on its own. `git rev-parse --show-toplevel` always
-# reports the PHYSICAL path, while a payload can legitimately reach the same file through a
-# symlinked ancestor — /tmp and /var are symlinks on macOS, and any repo reached via a symlinked
-# checkout is the same shape. The prefix then fails, the write reads as outside the repository,
-# and the guard is off for the WHOLE repo, permanently and silently. So a failed match is retried
-# against the payload's physical form before it is believed.
+# A path outside this repository is not ours to judge. The direct prefix match comes first
+# because the payload's own form is usually already physical; the retry below covers the case
+# where it reached the file through a symlinked ancestor.
 case "$file_path" in
   "$root"/*) rel=${file_path#"$root"/} ;;
   *)
-    # The file itself need not exist yet (this is a PreToolUse for a Write), so walk up to the
-    # deepest ancestor that does, resolve THAT physically, and reattach the remainder.
-    fp_dir=$file_path
-    while [ ! -d "$fp_dir" ] && [ "$fp_dir" != "/" ] && [ "$fp_dir" != "." ]; do
-      fp_dir=$(dirname "$fp_dir")
-    done
-    fp_phys=$(cd "$fp_dir" 2>/dev/null && pwd -P) || fp_phys=""
-    # The deepest existing ancestor cannot be searched, so this path cannot be told apart from
-    # one of our own. Step 3 has already passed, which puts this squarely inside the rule: it
-    # allows, but not in silence. It was written as a bare `|| exit 0` — the class, inside the
-    # fix for the class.
-    [ -n "$fp_phys" ] || { warn_once noresolve "${sid_payload:-$sid_env}" "$NORESOLVE_MSG"; exit 0; }
     # The remainder must carry exactly one separator, and `${file_path#"$fp_dir"}` alone gets that
     # wrong whenever NO ancestor existed — `dirname` bottoms out at ".", which strips nothing from
     # a relative path (`x.sh` glued into `…/repox.sh`) and strips the leading dot from a dotfile.
@@ -217,7 +242,10 @@ case "$file_path" in
     phys_path="${fp_phys%/}$rest"                   # %/ so a root of "/" cannot double the slash
     case "$phys_path" in
       "$root"/*) rel=${phys_path#"$root"/} ;;
-      *) exit 0 ;;   # genuinely outside this repository
+      # Reachable when the target IS the repo root directory, which no Write means. Retained as
+      # the fail-open floor: if step 4's resolution ever changes, this allows rather than
+      # mis-relativizing a path into a repo it does not belong to.
+      *) exit 0 ;;
     esac
     ;;
 esac
@@ -279,12 +307,13 @@ END {
   print phase "\t" branch
 }'
 
-# Step 3 established the directory EXISTS; this establishes it can actually be LISTED. Both bits
+# Step 4 established the directory EXISTS; this establishes it can actually be LISTED. Both bits
 # are needed and they fail independently: at mode 444 the shell still expands the glob to the real
 # filenames, so entries are known to exist, but `-e`/`-L` need SEARCH permission and every one is
 # dropped uncounted — nfiles stays 0, the skip tally has nothing to compare, and the repo reads as
-# opted-in and unguarded at the same time. Checked here rather than at step 3 because the payload's
-# session id is only parsed at step 4, and the once-per-session key should prefer it.
+# opted-in and unguarded at the same time. Checked here rather than beside step 4's `-d` test so it
+# sits past the exempt-path filter: a repo whose docs/features is unreadable should not warn on the
+# writes the gate would never have judged anyway.
 if [ ! -r "$root/docs/features" ] || [ ! -x "$root/docs/features" ]; then
   warn_once nolist "${sid_payload:-$sid_env}" "$NOLIST_MSG"
   exit 0
@@ -395,7 +424,7 @@ END { for (p in mark) print p }'
 # An empty for-each-ref is NOT a failure — a repo with no local branches supersedes nothing,
 # so every candidate survives to step 9. Only a nonzero exit is a failure.
 # Past this point a planning card is active, so every remaining fail-open speaks (see THE RULE).
-branches=$(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null) ||
+branches=$(git -C "$root" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null) ||
   { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
 
 if [ -n "$branches" ]; then
@@ -417,7 +446,7 @@ if [ -n "$branches" ]; then
   # which is indistinguishable from "nothing is superseded" and would deny on a git error.
   set -o pipefail
   superseded=$(printf '%s' "$reqs" |
-    git cat-file --batch 2>/dev/null |
+    git -C "$root" cat-file --batch 2>/dev/null |
     PHASE_GUARD_REQS="$reqs" awk "$BATCH_AWK") ||
     { IFS=$old_ifs; warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
   set +o pipefail
@@ -439,7 +468,7 @@ fi
 # --- Step 9: is the current branch claimed? ----------------------------------------------
 # Both fail-opens are here rather than upstream: the only path onward from this step is deny,
 # so a transient git failure would otherwise flip the hook from fail-open to fail-everything.
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) ||
+branch=$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null) ||
   { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
 [ -n "$branch" ] ||
   { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }

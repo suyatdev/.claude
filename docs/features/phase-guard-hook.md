@@ -362,6 +362,38 @@ exist yet. Pinned by A4.4a/A4.4b.
 **`HOME` unset** made `STATE_DIR` an unbound variable under `set -u`, so the hook exited **1** on
 every write — the one code the Output contract calls illegitimate. Now `${HOME:-}`. Pinned by A4.7.
 
+### The repo is the file's, not the session's — and what that cost
+
+Step 2 resolved the root by running `git rev-parse --show-toplevel` in whatever directory the
+**session** happened to be standing in. The same target file was therefore denied or allowed
+according to the cwd, and the allow was silent — the fail-open class one step upstream of every
+exit the audit enumerated. Six judge rounds read that line without seeing it; it was found by
+asking what step 2 actually resolves, after the audit had closed everything downstream of it.
+
+A linked worktree has its own toplevel, so this was not an edge case: a session in the primary
+checkout writing into its worktree — the parallel-agent workflow `core-conduct.md` prescribes and
+this gate exists to protect — resolved the wrong repo every time. Pinned by A6.3/A6.4.
+
+**The fix reorders the hook**, because the payload must be parsed before there is a repo to ask
+about: steps are now payload → tools (git, python) → path → **repo that owns that path, and its
+opt-in** → relativize, with steps 5–10 unchanged. `for-each-ref`, `cat-file --batch` and
+`rev-parse --abbrev-ref HEAD` all take `-C "$root"` now; run bare, they answered for the session's
+repo while the cards came from the file's.
+
+**The cost is real and was accepted deliberately** (user decision, 2026-07-28). Measured on this
+machine, 30 writes per case: a repo that never opted in goes **11 ms → 38 ms** per write — it now
+pays a python startup before discovering it is not guarded — and an opted-in repo **35 ms → 41 ms**.
+That directly contradicts step 5's own "bash builtin, not a `stat` subprocess" reasoning, which is
+why it was a decision to take rather than an optimization to make. It buys back the only failure
+mode the audit could not reach, and a PreToolUse hook already sits inside a tool round-trip
+measured in hundreds of milliseconds.
+
+**Two warnings changed meaning.** The unreadable-payload and unresolvable-path exits now fire
+*before* the target's repo is known — the payload is how it would have been known — so neither can
+claim "this repo opted in" any more. They fall back to the only signal left, the session's cwd:
+audible when the session is standing in an opted-in repo (A1.4/A1.5), silent otherwise (A6.7), so
+the reorder cannot put a line into every repo on the machine that never opted in.
+
 **Any skipped file, not every skipped file** — revised in review after the shipped code was found
 to warn only when *all* files were unreadable. One readable card made that test false, so a repo
 holding one good card plus one unreadable `planning` card allowed writes in silence. The condition
