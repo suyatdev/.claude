@@ -30,9 +30,31 @@ how this file and its linked files should be written (plain language, major chan
   Primary checkout's `settings.json` was clean, so no concurrent session held it.
   **The hook is NOT live** — the harness loads the primary checkout's copy, which is on another
   branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
-  **⚠ ALL 17 TASKS ARE DONE (through `effae64`, pushed). Implementation is complete; the
-  implementation → review model-switch checkpoint is OWED and unanswered — nothing review-phase
-  may start until it is asked and answered.** Frontmatter still reads `phase: implementation`.
+  **⚠ NOW IN REVIEW (`phase: review`, `d7a2f8f`). All 17 tasks done; checkpoint 3 asked and
+  answered 2026-07-28 — STAY ON OPUS 5, because the review backlog is fail-open/fail-closed
+  judgment, not routine review.** HEAD `45a304e`, pushed. Suite **83/0**, `shellcheck -x` clean,
+  dogfood **16/16** re-run after the step 9 fix.
+  · **Escalation 1 (C0 placebo) FIXED** (`2adff7a`, test-only). Baselined by mutation: pre-fix, all
+  three mutants (byte-count, input-order, phase-bound) escaped **all 80 tests, 0 failures**.
+  **Round 4's "one fixture reorder" prescription was measured and is WRONG** — reversing alpha/beta
+  still let all three escape. A desync only changes an answer if it corrupts the record that
+  *decides* the outcome, so a normal trailing-newline blob must be read **before** the superseded
+  one. C0 is now 3 files (alpha planning+prose `phase:` line / beta superseded, no trailing NL /
+  gamma deleted → `missing` echo). C5 count 6 → 9. Hook was correct throughout.
+  · **Escalation 3 (step 9 fail-open) FIXED** (test `84ed0f5` → fix `ee781d8`). Step 9 re-read files
+  with unbounded `grep`+`sed`, so **prose** mentioning `phase: implementation` + `branch: X` granted
+  permission on X — and feature files are exactly the docs that quote those keys. A file step 7 had
+  skipped as malformed still got a vote. Parser now emits `<phase>TAB<branch>`; step 7's loop
+  collects claims from the same parse; step 9 is string membership and touches no files. Falsified
+  by reverting step 9 → fails exactly B2b/B2c. Also drops a grep+sed per file off the hot path.
+  · **Rollback path 3 WITHDRAWN** (`45a304e`) — `chmod -x` yields **126**, may read as deny, so the
+  "last resort" could lock every repo. Paths 1–2 verified and sufficient. Deliberately NOT verifying
+  whether the harness reads 126 as deny: the experiment means arming a hook that may lock the
+  machine, for a path we do not need.
+  · **STILL OPEN, both low-severity and test-only:** A3.1 cannot isolate the line-1 clause; the
+  once-per-session flag makes same-key *silent* assertions order-dependent (A1.7 warns first and
+  suppresses the empty-`docs/features/` case behind it — coverage intact, but pin an explicit
+  session id per case). **Then: obs judge, then `gh pr create --draft` → `gh pr ready`.**
   · **16 done** (`0f1c029`) — ADR `docs/decisions/0011-branch-scoped-write-permission.md`. 0010 left
   unedited and still Accepted; 0011 carries an `Amends:` header instead. The two grounds are
   recorded as *different kinds* of overturn on purpose: the technical objection was made
