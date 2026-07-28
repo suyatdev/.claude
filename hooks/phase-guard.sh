@@ -147,32 +147,57 @@ esac
 #
 # A skipped file in an opted-in repo is the "cannot evaluate" case, and the second of the two
 # exits that must not be silent — see the tally below the loop.
-IMPL_RE='^phase:[[:space:]]*implementation[[:space:]]*$'
-BRANCH_SED='s/^branch:[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p'
+TAB='	'
+# The parser emits `<phase>TAB<branch>` for a well-formed file and NOTHING for a malformed one,
+# so a single evaluation of the contract feeds both the planning tally and step 9's claim check.
+#
+# It used to emit the phase alone, and step 9 re-derived the claim with its own `grep -Eq` +
+# `sed` over the raw file. That was a fail-open (B2b/B2c): both matchers were unbounded, so any
+# text ANYWHERE in the file that looked like `phase: implementation` plus `branch: <name>`
+# granted permission — and feature files are exactly the documents that quote those keys in
+# prose. Worse, a file this parser had already SKIPPED as malformed still got a vote, because
+# step 9 never consulted the parser's verdict. A file the contract cannot read has no opinion
+# the hook is entitled to act on, least of all the one that unlocks writing.
+#
+# The branch value keeps the old single-token strictness. A malformed value yields an EMPTY
+# branch rather than invalidating the file, which preserves A3.7: an unusable `branch:` leaves
+# the feature unclaimed, and unclaimed is a deny, never a skip.
 # shellcheck disable=SC2016  # $0 is awk's own, not a shell expansion — it must not expand.
 FRONTMATTER_AWK='
 NR == 1     { if ($0 != "---") exit; next }
 $0 == "---" { closed = 1; exit }
 /^phase:/   { nphase++; phase = $0 }
-/^branch:/  { nbranch++ }
+/^branch:/  { nbranch++; branch = $0 }
 END {
   if (!closed || nphase != 1 || nbranch > 1) exit
   if (phase !~ /^phase:[[:space:]]*(planning|implementation|review)[[:space:]]*$/) exit
   sub(/^phase:[[:space:]]*/, "", phase)
   sub(/[[:space:]]*$/, "", phase)
-  print phase
+  if (branch !~ /^branch:[[:space:]]*[^[:space:]]+[[:space:]]*$/) branch = ""
+  else { sub(/^branch:[[:space:]]*/, "", branch); sub(/[[:space:]]*$/, "", branch) }
+  print phase "\t" branch
 }'
 
 planning_files=""
+claimed_branches=""
 nfiles=0
 nparsed=0
 for f in "$root"/docs/features/*.md; do
   [ -f "$f" ] || continue          # no match: the glob stayed literal, so the dir is empty
   nfiles=$((nfiles + 1))
-  file_phase=$(awk "$FRONTMATTER_AWK" "$f")
-  # Empty output IS the skip signal: the parser prints a phase for a well-formed file and
+  parsed_fm=$(awk "$FRONTMATTER_AWK" "$f")
+  # Empty output IS the skip signal: the parser prints a record for a well-formed file and
   # nothing for a malformed one, so this counts what could be read, not what said planning.
-  [ -n "$file_phase" ] && nparsed=$((nparsed + 1))
+  [ -n "$parsed_fm" ] || continue
+  nparsed=$((nparsed + 1))
+  file_phase=${parsed_fm%%"$TAB"*}
+  file_branch=${parsed_fm#*"$TAB"}
+  # Collected in THIS loop, from THIS parse, so a claim can only come from a file the contract
+  # accepted. Step 9 checks membership rather than re-reading anything off disk.
+  if [ "$file_phase" = "implementation" ] && [ -n "$file_branch" ]; then
+    claimed_branches="$claimed_branches$file_branch
+"
+  fi
   [ "$file_phase" = "planning" ] || continue
   planning_files="$planning_files${f#"$root"/}
 "
@@ -281,14 +306,17 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
 # so without this the hook would deny every write for the length of a rebase.
 [ "$branch" = "HEAD" ] && exit 0
 
-for f in "$root"/docs/features/*.md; do
-  [ -f "$f" ] || continue
-  grep -Eq "$IMPL_RE" "$f" || continue
-  # Compare the branch as a string, never as an interpolated regex: a branch name is
-  # user input, and one carrying a regex metacharacter would otherwise match wrongly.
-  claim=$(sed -n -E "$BRANCH_SED" "$f" | head -1)
-  [ "$claim" = "$branch" ] && exit 0
+# Membership test against the claims step 7 collected from the contract parser. Compared as
+# strings, never as interpolated regexes: a branch name is user input, and one carrying a regex
+# metacharacter would otherwise match wrongly. Split on newlines only — a branch name cannot
+# contain whitespace, but the default IFS would still be the wrong tool here.
+old_ifs=$IFS
+IFS='
+'
+for claim in $claimed_branches; do
+  [ "$claim" = "$branch" ] && { IFS=$old_ifs; exit 0; }
 done
+IFS=$old_ifs
 
 # --- Step 10: deny -----------------------------------------------------------------------
 # All four elements of the Deny message contract, because a block that says only "no" sends
