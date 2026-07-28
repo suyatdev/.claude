@@ -1154,7 +1154,7 @@ assertion depends on behaviour a later task introduces.
         whole 7-row verdict table — one idea per diagram. `validate-diagrams.sh`: **PASS**, 1 block.
       - Numbering re-verified at write time: `0009` is still held by `feat/pane-split-policy`
         (PR #28, open) and absent here, so `0011` collides with nothing on either branch.
-- [ ] 17. Dogfood, in a **throwaway repo**, not this one. By task 17 this feature's own gate has
+- [x] 17. Dogfood, in a **throwaway repo**, not this one. By task 17 this feature's own gate has
       opened, so this branch is claimed and the guard correctly allows everything — "confirm it
       denies here" was unsatisfiable as round 2 wrote it. Instead: `git init` a temp repo, add one
       `docs/features/x.md` at `phase: planning`, and assert (a) a source write denies with all four
@@ -1176,7 +1176,47 @@ advances and the gate permits it.
 
 ## Verification
 
-<Appended during review.>
+### Task 17 — throwaway-repo dogfood (2026-07-28)
+
+`git init`'d temp repo, one `docs/features/x.md` at `phase: planning`, `PHASE_GUARD_STATE_DIR`
+pointed at the temp tree. **16 assertions, 16 passed, 0 failed.**
+
+- **(a) Source write denies.** Exit **2**, stdout empty, and all four message elements present:
+  offending file + its phase, `current branch: main`, both legitimate fixes, and the no-bypass
+  clause. Also asserted the *narrowness* of element 4 — the message says "no bypass environment
+  variable" and never "no way around this", which the Bash hole would make false.
+- **(b) Exempt paths allow.** All six of step 6's list pass: `docs/features/x.md`, `docs/notes.md`,
+  `.claude/session-state.md`, `settings.json`, `CODING_MEMORY.md`, `coding-memory/log.md`.
+- **(c) Advancing `phase:` unblocks**, and reverting to `planning` re-denies — the round trip, so a
+  pass cannot come from the guard having simply gone dead after the first write.
+
+**Rollback path 3 is resolved, and it does not work.** Round 1 claimed a non-executable hook is
+"skipped by the harness"; round 2 flagged that as asserted-but-unverified and suspected 126.
+**Round 2 was right.** `chmod -x` then invoking yields exit **126** (`Permission denied`) both as a
+direct path and under `sh -c` — and the registration in `settings.json` is a bare direct path, so
+that is the live shape. 126 is neither 0 nor 2, which this spec's own Output contract calls a defect
+regardless of how the harness classifies it, and a `PreToolUse` harness may well read it as *deny* —
+i.e. the "last resort" rollback may **lock every repo on the machine** instead of disarming the
+guard. Paths 1 and 2 are unaffected and remain the real exits.
+→ **Recorded, not acted on.** Revising the Rollback section is a review-phase edit; `implementation`
+forbids it.
+*Limit of this test:* it establishes the exit code, not the harness's classification of it. Whether
+126 reads as deny is still unverified and needs a live check before path 3 is rewritten.
+
+**Timings — recorded, not a gate** (no threshold exists; round 4 withdrew the budget). 40 iterations
+each, quiet machine. The measured figures include this harness's own per-call subshell, which was
+measured separately at **2.3 ms/call** (`cat` in place of the hook) and is shown subtracted rather
+than assumed:
+
+| Path | Measured | Net of harness | Round-4 baseline |
+|---|---|---|---|
+| Guarded (deny) | 66.4 ms | **~64.1 ms** | withdrawn ≤60 ms budget |
+| Non-opted-in | 14.7 ms | **~12.4 ms** | floor: 2.3 bash + 10.0 `git rev-parse` = 12.3 ms |
+
+The non-opted-in path lands on its structural floor almost exactly — step 3's early exit is working,
+and the round-4 finding that this figure has *no headroom by construction* is confirmed rather than
+merely argued. The guarded path sits above the withdrawn 60 ms budget, which is precisely why round 4
+withdrew it; the ~22 ms `python3` startup remains the only lever worth attacking.
 
 ## Judge history
 
