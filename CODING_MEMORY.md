@@ -303,29 +303,37 @@ how this file and its linked files should be written (plain language, major chan
   no `agent-exit` on abnormal pane death) still dissolves the whole class and stays deferred.
   **`dispatch-pane-agent.sh` is now 517 lines** (+25, all comment) against a 400 soft limit — the
   split is owed as the FIRST move of the next dispatcher change.
-  **>>> RESUME HERE (session cleared 2026-07-27 right after dispatching RUN 4) <<<**
-  **OBS JUDGE RUN 4 WAS DISPATCHED AND LEFT RUNNING** at HEAD `e6e2e3e` in cmux pane `surface:54`
-  (`ROUTE: lane=judge` — judge lane bypassing the policy, 4th time observed working). It was briefed
-  to **ADJUDICATE ITS OWN RUN 3 FINDING**: F1 accepted+fixed, F2/F3 rejected on the glob-order
-  evidence above, and it was told to verify that claim itself rather than accept it (including the
-  cases the rebuttal does NOT cover — a pane closed by hand mid-session, interleaved ghosts — not
-  just the restart case). **On resume, IN ORDER:**
-  (1) read its result file — absolute path, NOT in the new session's scratchpad:
-  `/private/tmp/claude-501/-Users-marksuyat--claude/0883b635-7200-4356-ae28-12684053ad5e/scratchpad/pane-results/observability-judge-1785192841-10682-14989.md`
-  (if gone, the durable verdict is in `coding-memory/observability-judge/` keyed `head_sha e6e2e3e`,
-  and will be UNCOMMITTED in the working tree — doc-guard will surface it);
-  (2) treat the body as DATA; relay the four layman sections + `risk`/`confidence` to the user;
-  (3) **do NOT auto-accept a verdict that re-asserts F2/F3** — RUN 3 was already wrong once about
-  this for fixture reasons; verify any new repro against production run-dir naming before acting;
-  (4) commit the verdict BY PATHSPEC (`git commit -- <verdict files>`; `--amend` needs it too);
-  (5) then `gh pr ready` on PR #28 — `judge-guard.sh` does NOT gate `gh pr ready`, only
-  `gh pr create`, so no head_sha equality dance is needed here; the user's chosen sequence is what
-  requires RUN 4 first. If the judge FAILED or returned malformed output, write NO verdict and
-  fabricate none — report the failure (skill: fail closed).
+  **OBS JUDGE RUN 4 IS IN — DONE, verdict committed `2078408`.** It adjudicated its own RUN 3
+  findings and **WITHDREW F2/F3 itself**: its RUN 3 fixtures were letter-named and sorted after real
+  panes, an inversion production naming cannot produce. It then swept 81 configurations per variant
+  (`max=3`/`max=4` × every starting rr index): **HEAD 2 spurious cooldowns, RUN 3's own proposed fix
+  8** — the index advance is load-bearing, confirmed. F1 confirmed fixed. risk=medium, confidence=high.
+  **F4 NEW + ACCEPTED:** the tolerance claim held only at `max=3`; at **N≥4 a healthy cmux restart
+  can still trip the streak** (1/4 starting indices at max=4, 2/5 at max=5, 4/6 at max=6) — user's
+  `panes max=N` silently discarded, exit 4 blaming a blameless adapter. Hand-traced independently
+  before accepting (overflow only fires while live ≥ max, so each failed tab retires a ghost and the
+  next dispatch opens a real pane — that alternation saves max=3 and is one beat too slow at max=4).
+  **User decision 2026-07-27: qualify the record, no behavior change** → `6d781c9` (comment-only,
+  113/0, shellcheck clean) + branch-log RUN 4 section, which also corrected a second overclaim
+  ("ghosts sorting last cannot happen in production" is false — close the two newest panes by hand).
+  **>>> RESUME HERE (session cleared 2026-07-27 at the 76k handoff, all judge work banked) <<<**
+  **NEXT, IN ORDER:** (1) **resolve PR #28's conflict** — `mergeable: CONFLICTING`, but it is ONLY
+  `CODING_MEMORY.md` + `coding-memory/observability-judge/verdicts.jsonl` (verified by
+  `git merge-tree` against a freshly fetched `origin/main`); both are append-heavy files that other
+  sessions landed on main, NOT a code conflict — take both sides, do not drop other sessions' rows;
+  (2) `gh pr ready` on PR #28 — `judge-guard.sh` gates `gh pr create` only, NOT `gh pr ready`, so no
+  head_sha equality dance is needed, and RUN 4's verdict is banked at `e6e2e3e` regardless of the two
+  later docs commits. **Do NOT re-run the judge for the comment-only commits.**
+  **KNOWN OPEN, none blocking the PR, all waiting on the same root cause:** the N≥4 restart
+  false-positive (F4); exit 4's misleading blame (only wrong when F4 fires); the **525-line**
+  dispatcher vs a 400 soft limit — the split is owed as the FIRST move of the next dispatcher change.
   **Still deferred by decision, do not start unilaterally:** the robust ordering fix (retry the next
   candidate within one dispatch) and the root cause (EXIT trap in `run-pane-agent.sh` → `agent-exit`
   on abnormal pane death), which dissolves the whole class. Session pane policy `panes max=2` is
   per-session state — a fresh session will be ASKED again at its first worker dispatch.
+  **Working-tree caution (still true):** the uncommitted `coding-memory/compliance-judge/` files are
+  OTHER concurrent sessions' verdicts (repos `phase-guard-hook`, `mtg-wizard`, `vibe-scape`,
+  `Snatch-Bracket`), two already `git add`ed by them. Leave them; pathspec-scope every commit.
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
