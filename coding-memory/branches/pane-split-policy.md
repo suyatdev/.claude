@@ -842,14 +842,16 @@ bullet above.
 
 **F2/F3 — FALSIFIED. The judge's repro inverts production glob order.** `live_worker_panes` walks
 `$RUNS_DIR/*/` in glob order, and `new_run_dir` names every run `<epoch>-<pid>-<random>` with a
-fixed-width epoch — so glob order **is** creation order, and a pane that goes stale always sorts
-*before* every pane opened after it. RUN 3's fixtures sorted the ghosts *last*, which cannot happen
-in production. Same scenario (cmux restart 5 min ago, 3 ghosts, healthy adapter, `max=3`), both
-orderings, both dispatcher versions:
+fixed-width epoch — so glob order **is** creation order, and a **newly opened pane can never sort
+before an older ghost**. That is the sufficient claim and the one the restart case needs. The
+stronger form — "ghosts sorting last cannot happen in production" — is false and was corrected after
+obs judge RUN 4: close the two *newest* panes by hand and the ghosts do sort last. What a cmux
+*restart* cannot produce is RUN 3's fixture ordering. Same scenario (cmux restart 5 min ago,
+3 ghosts, healthy adapter, `max=3`), both orderings, both dispatcher versions:
 
 | ghost run-dir order | HEAD (advance at selection) | RUN 3's proposed fix (advance on success only) |
 |---|---|---|
-| ghosts sort **last** (RUN 3's fixtures; unreachable in production) | cooldown @ d5 — RUN 3's F2 trace, reproduced exactly | no cooldown in 10 dispatches |
+| ghosts sort **last** (RUN 3's fixtures; not producible by a restart) | cooldown @ d5 — RUN 3's F2 trace, reproduced exactly | no cooldown in 10 dispatches |
 | ghosts sort **first** (what a real restart produces) | **no cooldown in 12 dispatches**, self-heals, 3 real panes | **cooldown @ d5** — F2, *introduced* |
 
 So the proposed fix does not remove F2; it **moves** it from an ordering production cannot produce
@@ -898,3 +900,42 @@ dissolves this whole class — and RUN 3's re-pricing of that deferral stands re
 F2 fell. `panes/dispatch-pane-agent.sh` is now **517 lines** (test file 735); the +25 is entirely comment
 correcting the falsified claims — no executable line changed — and the file split remains the first
 move of the next dispatcher change.
+
+## Obs judge RUN 4 (2026-07-27, head `e6e2e3e`) — risk medium, confidence high
+
+The judge was briefed to adjudicate its own RUN 3 findings and told to verify the rebuttal rather
+than accept it. It did, and **withdrew F2/F3 itself**: it rebuilt the bench from scratch, found its
+RUN 3 fixtures were *letter-named* so they sorted after real panes, then swept every ghost/healthy
+layout at `max=3` and `max=4` × every starting round-robin index — 81 configurations per variant.
+**HEAD: 2 spurious cooldowns. RUN 3's own proposed fix: 8.** It re-ran the three mutants on its own
+copy and reproduced 96/17, 111/2 and the 326/0 baseline exactly. F1 confirmed correctly fixed in all
+three records. Verdict file: `coding-memory/observability-judge/2026-07-27-feat-pane-split-policy.md`.
+
+**F4 — NEW, ACCEPTED, and the reason this section exists.** The RUN 3 *conclusion* survives at N≥4
+even though its diagnosis and fix were wrong. The corrected `TAB_FAIL_LIMIT` comment claimed,
+unqualified, that a threshold of 3 tolerates a cmux restart. That holds at `max=3` (12 starting
+indices swept, never fails) and **fails above it: 1 of 4 starting indices at `max=4`, 2 of 5 at
+`max=5`, 4 of 6 at `max=6`** — a spurious cooldown on a perfectly healthy cmux, which silently
+discards the user's `panes max=N` for the whole session and exits 4 blaming the adapter. `--max` is
+supported to 16.
+
+Hand-traced independently before accepting, against production naming (`max=4`, four ghosts,
+starting index 3): the count only overflows while live panes ≥ max, so each failed tab retires one
+ghost and the next dispatch opens a *real* pane instead — that alternation is what saves `max=3`.
+At `max=4` it is one beat too slow. d1 picks g4 (streak 1) → d3 picks g1 (streak 2) → d5 picks g3
+(**streak 3, cooldown**); indices 0/1/2 reach a healthy pane first. 1 of 4, matching the judge.
+
+**Decision (user, 2026-07-27): qualify the record, do not change behavior.** The comment at
+`TAB_FAIL_LIMIT` now says "at max=3" and carries the N≥4 numbers. No code change, no new test — the
+honest `max=4` assertion would be a red test on the branch, and the behavioral fixes that would make
+it green are both deferred by decision.
+
+**KNOWN OPEN after RUN 4** (none of these block PR #28; all wait on the same root cause):
+
+1. **N≥4 restart false-positive** — above. Dissolved entirely by the EXIT-trap root cause fix
+   (`run-pane-agent.sh` writing `agent-exit` on abnormal pane death), which remains the right fix
+   and remains deferred; do not start it unilaterally.
+2. **Exit 4 blames a blameless adapter** in exactly this case. Left as-is — the message is only
+   wrong when (1) fires, so fixing (1) fixes it.
+3. **The 517-line dispatcher** (now ~525 with F4's qualification) against a 400 soft limit. The
+   split is still owed as the first move of the next dispatcher change.

@@ -50,9 +50,17 @@ TIMEOUT_RE='^[0-9]+$'
 # max=2 against a tab-incapable adapter, ten direct dispatches open six real
 # panes, two of them after the flag is written.
 #
-# 3 does tolerate the benign multi-stale case (panes closed by hand, a cmux
-# restart), but not on its own — it rides on select_worker_surface's index
-# advancing on selection. Read that comment before touching either.
+# 3 tolerates the benign multi-stale case (panes closed by hand, a cmux
+# restart) AT max=3, and not on its own — it rides on select_worker_surface's
+# index advancing on selection. Read that comment before touching either.
+#
+# That tolerance does NOT generalise (obs judge RUN 4 F4, hand-confirmed): at
+# max>=4 a restart that ghosts every pane can reach the limit before the
+# selector lands on a healthy one — 1 of 4 starting round-robin indices at
+# max=4, 2 of 5 at max=5, 4 of 6 at max=6, on a cmux that is perfectly fine.
+# Cost is the one named above, and exit 4 then blames a blameless adapter.
+# KNOWN OPEN, not fixed here: the EXIT-trap root cause (no agent-exit on
+# abnormal pane death) dissolves this whole class and is the real fix.
 TAB_FAIL_LIMIT=3
 
 die() { printf 'dispatch-pane-agent: %s\n' "$1" >&2; exit "${2:-64}"; }
