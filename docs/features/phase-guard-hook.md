@@ -1102,11 +1102,27 @@ assertion depends on behaviour a later task introduces.
         `.gitignore:17`. The anchoring `/` is load-bearing and deliberate — an unanchored
         `hooks/state/` would also shadow a same-named directory anywhere in the tree, which is the
         trap `:45-46` already documents for `/daemon/`.
-- [ ] 14. Register the `PreToolUse` / `Edit|Write|NotebookEdit` block in `settings.json`. It is a
+- [x] 14. Register the `PreToolUse` / `Edit|Write|NotebookEdit` block in `settings.json`. It is a
       **fourth** matcher block (existing: `Bash`, `Task|Agent`, `*`), not an edit to one — verified
       2026-07-25. Commit it on this branch; making it *live* in the primary checkout is the separate,
       manual half described in **Registration and its revert**. A concurrent session may hold that
       file on another branch — check before writing.
+      - Done: the scouting held. `PreToolUse` had exactly three blocks and now has four; the
+        `Edit|Write|NotebookEdit` string a grep finds elsewhere is the **`PostToolUse`**
+        `handoff/post-edit-hook.sh` block, re-confirmed here and not touched.
+      - Shape mirrors the `Task|Agent` sibling exactly — one `type: command` entry, `$HOME`-relative
+        path, **no `timeout` key**. None of the five house guards carry one; the only timeouts in the
+        file belong to the vendored orca `*` hooks. Placed between `Task|Agent` and `*` so the house
+        guards stay contiguous and the vendor catch-all stays last.
+      - Verified: `settings.json` still parses (`json.load`), the block resolves to
+        `hooks/phase-guard.sh`, which exists and is mode 755 — a non-executable hook is rollback
+        path 3, still open until task 17 measures it.
+      - The concurrent-session check the task asked for: the primary checkout's `settings.json` was
+        clean at session start, so no other session held an edit to it.
+      - **Committed ≠ live**, per *Registration and its revert*: this commit does not arm the hook.
+        The primary checkout sits on another branch and picks the block up when this lands on `main`
+        and it pulls. Arming it sooner means hand-editing that working copy, which this PR's revert
+        does not reach — rollback path 2, deliberately manual.
 - [ ] 15. **Amend the existing `Phase gate` stub at `rules/gates.md:5`** — not a new bullet. That
       file is always-on context in every session, and a **19th** bullet costs every future session
       tokens to say what the existing stub can say in a clause. *(Count verified 2026-07-26: 18
