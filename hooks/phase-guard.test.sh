@@ -102,6 +102,37 @@ err_lacks() { # $1 desc, $2 extended regex that must match nothing in stderr
   fi
 }
 
+# The four audible reasons. Every one names the guard and its own distinguishable cause; A2.6/A2.7
+# depend on two of them being tellable apart, and Group A1's git cases on a third.
+NOPY_RE='^phase-guard: .*[Pp]ython'
+NOPARSE_RE='^phase-guard: .*could not be read as a feature card'
+NOLIST_RE='^phase-guard: .*cannot be listed'
+NOGIT_RE='^phase-guard: .*git query'
+
+# The audible fail-open assertion: exit 0, empty stdout, and EXACTLY ONE stderr line matching.
+# The line count is asserted, not merely a match — a match-only assertion cannot see a per-write
+# regression, which is the whole reason the once-per-session flag exists.
+allow_audible() { # $1 desc, $2 cwd, $3 payload, $4 extended regex the line must match
+  local desc="$1" lines
+  _run "$2" "$3"
+  if [ "$got" -ne 0 ]; then
+    printf 'FAIL — %s (want exit 0, got %s)\n' "$desc" "$got"; fail=$((fail+1)); return
+  fi
+  if [ -s "$out" ]; then
+    printf 'FAIL — %s (stdout not empty: %s)\n' "$desc" "$(cat "$out")"; fail=$((fail+1)); return
+  fi
+  lines=$(grep -c '' "$err" 2>/dev/null || true); [ -n "$lines" ] || lines=0
+  if [ "$lines" -ne 1 ]; then
+    printf 'FAIL — %s (want exactly 1 stderr line, got %s: %s)\n' "$desc" "$lines" "$(cat "$err")"
+    fail=$((fail+1)); return
+  fi
+  if ! grep -Eq -- "$4" "$err"; then
+    printf 'FAIL — %s (line does not match /%s/: %s)\n' "$desc" "$4" "$(cat "$err")"
+    fail=$((fail+1)); return
+  fi
+  printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
+}
+
 mkrepo() { # $1 dir — an initialized repo on branch main carrying one commit
   mkdir -p "$1"
   ( cd "$1" && git init -q -b main && git config user.email t@t.t && git config user.name t &&
@@ -447,12 +478,31 @@ SHIM_RPF="$TMP/shim-rpf"; make_git_shim "$SHIM_RPF" '  *" --abbrev-ref "*) exit 
 SHIM_RPE="$TMP/shim-rpe"; make_git_shim "$SHIM_RPE" '  *" --abbrev-ref "*) exit 0 ;;'
 
 PL="$(payload Write file_path "$OPTED/src/x.sh")"
-with_git_shim "$SHIM_FER" allow_silent "A1.8 for-each-ref exits nonzero (step 8)"    "$OPTED" "$PL"
-with_git_shim "$SHIM_CF"  allow_silent "A1.9 cat-file --batch exits nonzero (step 8)" "$OPTED" "$PL"
-with_git_shim "$SHIM_RPF" allow_silent "A1.10a rev-parse --abbrev-ref exits nonzero (step 9)" \
-  "$OPTED" "$PL"
-with_git_shim "$SHIM_RPE" allow_silent "A1.10b rev-parse --abbrev-ref prints nothing (step 9)" \
-  "$OPTED" "$PL"
+
+# THESE FOUR WERE ASSERTED SILENT, AND THAT WAS THE BUG CLASS ITSELF.
+#
+# $OPTED holds an un-superseded planning card on an unclaimed branch — the hook was on its way to
+# DENY. Steps 8 and 9 then fail, and it allows instead. That is not "not applicable here"; it is
+# the guard being switched off by a transient git failure, in precisely the state where it was
+# about to do its job, and the suite ENFORCED the silence rather than merely missing it.
+#
+# Four judge rounds each found one instance of this class one step earlier than the last. The
+# audit that followed enumerated every exit instead of chasing the next one, and the rule that
+# falls out is: once the hook knows the repo is opted in AND holds an un-superseded planning card,
+# any later inability to finish the evaluation must be AUDIBLE. Everything upstream of that
+# knowledge ("not a repo", "not opted in", "path not guarded") stays silent, because there the
+# hook genuinely has nothing to say.
+#
+# Each still exits 0 and each still speaks at most once per session, so a flapping git costs one
+# line per session, not one per write.
+each_shim_speaks() { # $1 desc, $2 shim dir — a fresh session id per case, or the flag suppresses it
+  export CLAUDE_CODE_SESSION_ID="a1-$3"
+  with_git_shim "$2" allow_audible "$1" "$OPTED" "$PL" "$NOGIT_RE"
+}
+each_shim_speaks "A1.8 for-each-ref exits nonzero (step 8) says so"    "$SHIM_FER" fer
+each_shim_speaks "A1.9 cat-file --batch exits nonzero (step 8) says so" "$SHIM_CF"  cf
+each_shim_speaks "A1.10a rev-parse --abbrev-ref exits nonzero (step 9) says so" "$SHIM_RPF" rpf
+each_shim_speaks "A1.10b rev-parse --abbrev-ref prints nothing (step 9) says so" "$SHIM_RPE" rpe
 
 # 11 uses a real detached HEAD rather than a shim — it is reachable during any rebase or bisect,
 # and the real thing is a stronger fixture than a simulation of it.
@@ -552,32 +602,11 @@ count_is "C5 cat-file is fed 3 branches x 3 files"    9 "$GIT_SHIM_STDIN_LOG" '^
 # on a hook that fires on every write. Line COUNT is therefore asserted, not merely a match — a
 # match-only assertion cannot see the per-write regression the flag exists to prevent.
 
-# What the line must carry: the guard's own name (an unattributed line on a shared stderr is
-# noise), and the reason, distinguishably — A2.6/A2.7 below turn on the two being tellable apart.
-NOPY_RE='^phase-guard: .*[Pp]ython'
-NOPARSE_RE='^phase-guard: .*docs/features'
-
-# The audible fail-open assertion: exit 0, empty stdout, and EXACTLY ONE stderr line matching.
-allow_audible() { # $1 desc, $2 cwd, $3 payload, $4 extended regex the line must match
-  local desc="$1" lines
-  _run "$2" "$3"
-  if [ "$got" -ne 0 ]; then
-    printf 'FAIL — %s (want exit 0, got %s)\n' "$desc" "$got"; fail=$((fail+1)); return
-  fi
-  if [ -s "$out" ]; then
-    printf 'FAIL — %s (stdout not empty: %s)\n' "$desc" "$(cat "$out")"; fail=$((fail+1)); return
-  fi
-  lines=$(grep -c '' "$err" 2>/dev/null || true); [ -n "$lines" ] || lines=0
-  if [ "$lines" -ne 1 ]; then
-    printf 'FAIL — %s (want exactly 1 stderr line, got %s: %s)\n' "$desc" "$lines" "$(cat "$err")"
-    fail=$((fail+1)); return
-  fi
-  if ! grep -Eq -- "$4" "$err"; then
-    printf 'FAIL — %s (line does not match /%s/: %s)\n' "$desc" "$4" "$(cat "$err")"
-    fail=$((fail+1)); return
-  fi
-  printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
-}
+# `allow_audible` and the four reason regexes now live at the top, beside the other assertion
+# helpers — Group A1's git fail-opens assert audibility too, and they run several hundred lines
+# above this point. What each line must carry is unchanged: the guard's own name (an unattributed
+# line on a shared stderr is noise) and the reason, distinguishably — A2.6/A2.7 turn on two of
+# them being tellable apart.
 
 with_path() { # $1 replacement PATH, then an assertion function and its arguments
   local newpath="$1" saved="$PATH"; shift
@@ -793,6 +822,46 @@ else
     "$UNOPENABLE" "$(payload Write file_path "$UNOPENABLE/src/x.sh")"
 fi
 chmod 644 "$UNOPENABLE/docs/features/a.md"
+
+# --- Group A4: the fail-open audit ------------------------------------------------------------
+# Four judge rounds found four instances of one class, each a step earlier than the last. Chasing
+# the fifth was refused; this group is the enumeration that replaced it. Every exit in the hook is
+# classified as JUSTIFIABLY SILENT (the hook genuinely has nothing to say) or MUST BE AUDIBLE (the
+# hook knows the repo is opted in and holds an un-superseded planning card — it was on its way to
+# deny, and something stopped it). The boundary is that knowledge, and nothing else.
+#
+# Justifiably silent, each already covered in Group A1: no payload; not a git repo; no
+# docs/features/; no usable path in the payload; a path outside the root; an exempt path; nothing
+# at planning; every planning card superseded; the branch is claimed; detached HEAD (deliberate —
+# a rebase issues many writes and a line per write would be noise).
+#
+# Must be audible: no interpreter (A2.1); any entry skipped (A2.4, A2.15, A2.18-A2.22); the four
+# git failures (A1.8-A1.10b, converted above from asserted-SILENT, which is what the class looked
+# like when the suite was enforcing it); and A4.1/A4.2 below, the instance RUN 4 found.
+#
+# A4.1/A4.2 — docs/features/ exists, so step 3 says the repo opted in, but the directory itself
+# cannot be listed. Every card vanishes at once and nfiles is 0, so the skip tally has nothing to
+# compare and stays quiet: the repo looks opted-in and unguarded simultaneously. 444 is the sharper
+# of the two — the shell still expands the glob to the real filename, so the entry is KNOWN to
+# exist and is still dropped, because -e and -L both need search permission on the directory.
+# Bracketed by controls at 755 either side, so a pass cannot come from the fixture being broken.
+NOLIST="$TMP/unlistable"; mkrepo "$NOLIST"
+feature_file "$NOLIST" docs/features/a.md planning
+PL_NOLIST="$(payload Write file_path "$NOLIST/src/x.sh")"
+deny "A4.0 control — the same repo at 755 denies" "$NOLIST" "$PL_NOLIST"
+if chmod 444 "$NOLIST/docs/features" && [ ! -x "$NOLIST/docs/features" ]; then
+  export CLAUDE_CODE_SESSION_ID=a4-444
+  allow_audible "A4.1 docs/features/ readable but not searchable says so" \
+    "$NOLIST" "$PL_NOLIST" "$NOLIST_RE"
+  chmod 000 "$NOLIST/docs/features"
+  export CLAUDE_CODE_SESSION_ID=a4-000
+  allow_audible "A4.2 docs/features/ wholly unreadable says so" \
+    "$NOLIST" "$PL_NOLIST" "$NOLIST_RE"
+else
+  printf 'skip — A4.1/A4.2 need a user that cannot search a mode-444 directory\n'
+fi
+chmod 755 "$NOLIST/docs/features"
+deny "A4.3 control — restoring 755 denies again" "$NOLIST" "$PL_NOLIST"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
