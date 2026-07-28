@@ -984,5 +984,48 @@ else
 fi
 chmod 755 "$LOCKED"
 
+# --- Group A6: the repo is the FILE'S, not the session's ---------------------------------------
+# Six judge rounds never looked at step 2, which resolved the root by running `git rev-parse` in
+# whatever directory the SESSION happened to be standing in. The same target file was therefore
+# denied or allowed according to the session's cwd — and the allow was silent, which is the audit's
+# class one step upstream of every exit the audit enumerated.
+#
+# A6.3/A6.4 are the case that made this worth the cost: a linked worktree has its own toplevel, so
+# a session in the primary checkout writing into its worktree (or the reverse) resolved the wrong
+# repo entirely. That is the parallel-agent workflow this gate exists to protect, not an edge case.
+#
+# WTMAIN commits its card, unlike every other fixture here: a linked worktree only checks out what
+# has been committed, so an uncommitted card would leave the worktree looking like it never opted in
+# and the case would pass for the wrong reason.
+WTMAIN="$TMP/wtmain"; mkrepo "$WTMAIN"
+feature_file "$WTMAIN" docs/features/a.md planning
+( cd "$WTMAIN" && git add -A && git commit -q -m card )
+WTLINK="$TMP/wtlink"
+( cd "$WTMAIN" && git worktree add -q -b wip/x "$WTLINK" )
+
+export CLAUDE_CODE_SESSION_ID=a6-elsewhere
+deny "A6.1 cwd in another repo, target in the opted-in one, denies" "$BARE"   "$PL_OPTED"
+deny "A6.2 cwd outside any repo, target in the opted-in one, denies" "$NOREPO" "$PL_OPTED"
+deny "A6.3 cwd in the primary checkout, target in its worktree, denies" "$WTMAIN" \
+  "$(payload Write file_path "$WTLINK/src/x.sh")"
+deny "A6.4 cwd in the worktree, target in the primary checkout, denies" "$WTLINK" \
+  "$(payload Write file_path "$WTMAIN/src/x.sh")"
+
+# A6.5/A6.6 — the same reordering must not start denying, or warning, on the strength of a cwd that
+# is now irrelevant. A6.6 is the hot path itself: every write in every repo that never opted in.
+allow_silent "A6.5 control — a target in a repo that never opted in stays silent" "$OPTED" \
+  "$(payload Write file_path "$BARE/src/x.sh")"
+allow_silent "A6.6 control — the hot path in a repo that never opted in stays silent" "$BARE" \
+  "$(payload Write file_path "$BARE/src/x.sh")"
+
+# A6.7 — the negative half of the payload/resolution warnings. Once the parse runs BEFORE the repo
+# is known, those exits can no longer ask "did this repo opt in?" and the session's cwd is the only
+# signal left. A1.4/A1.5 pin that it still speaks when the cwd IS an opted-in repo; this pins that
+# it does not put a line into every repo on the machine that never opted in.
+export CLAUDE_CODE_SESSION_ID=a6-quietpayload
+allow_silent "A6.7 an unreadable payload outside any opted-in repo stays silent" "$BARE" \
+  '{"hook_event_name":"PreToo'
+no_flag_for a6-quietpayload "A6.7b ...and wrote no flag, so that silence is real"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
