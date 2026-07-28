@@ -1123,10 +1123,19 @@ assertion depends on behaviour a later task introduces.
         The primary checkout sits on another branch and picks the block up when this lands on `main`
         and it pulls. Arming it sooner means hand-editing that working copy, which this PR's revert
         does not reach — rollback path 2, deliberately manual.
-- [ ] 15. **Amend the existing `Phase gate` stub at `rules/gates.md:5`** — not a new bullet. That
+- [x] 15. **Amend the existing `Phase gate` stub at `rules/gates.md:5`** — not a new bullet. That
       file is always-on context in every session, and a **19th** bullet costs every future session
       tokens to say what the existing stub can say in a clause. *(Count verified 2026-07-26: 18
       bullets today. Round 2 and 3 both said "26th"; it was decorative and wrong twice.)*
+      - Done: two clauses appended in place, `1 insertion(+), 1 deletion(-)`; bullet count
+        re-verified **18** after the edit.
+      - The stub says "docs and memory paths are never blocked" rather than enumerating — step 6's
+        real list is `doc-guard.sh:149`'s verbatim plus `.claude/*` and `settings.json`, and
+        spelling all five out in always-on context buys nothing a session acts on differently.
+      - It carries `merge-guard.sh`'s existing "momentum guardrail, not a security boundary"
+        idiom for the Bash hole, so the two honest-limitation stubs read alike, and states the
+        implementation half is judgment-only — the reverse-enforcement non-goal, made visible
+        where a session would otherwise assume the hook covers both directions.
 - [ ] 16. ADR `docs/decisions/0011-*.md` — amends ADR 0010: records that its stated objection was
       dismissed by reframing (branch-scoped permission), that its "build only when the gate is
       observed being skipped" deferral was deliberately overridden at the gate decision (Q1), and
