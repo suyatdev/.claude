@@ -725,5 +725,23 @@ allow_silent "A2.17 every card readable and none at planning stays silent" "$ALL
   "$(payload_sid Write file_path "$ALLPARSE/src/x.sh" sid-allparse)"
 no_flag_for sid-allparse "A2.17 wrote no flag — the skip test tracks unreadable files, not files"
 
+# A2.18 — the SECOND route to "nothing is left at planning", and the reason this check does not
+# live at an exit. A2.15's fix was placed inside the no-planning-files branch, which reads as the
+# whole story until you notice step 8 can empty that same list one stage later: a card that is
+# planning in the working tree but already advanced on its own branch is dropped as superseded,
+# and the exit below that drop was a bare `exit 0`. Same silence, same cause, one stage further
+# down — a stale card on main is exactly what supersession exists for, so this is the ordinary
+# shape, not a contrived one.
+#
+# The lesson the fix encodes: a skipped card is unreadable regardless of which path the hook then
+# takes, so the warning belongs immediately after the parse loop, not at any one exit. Guarding
+# exits one at a time is what produced the same bug twice.
+SUPSKIP="$TMP/superseded-plus-skip"; supersede_repo "$SUPSKIP" review sup/x
+printf -- '---\nphase: planning\nmodel_tier: high\n\n# the card being worked on right now\n' \
+  > "$SUPSKIP/docs/features/wip.md"
+export CLAUDE_CODE_SESSION_ID=a2-supskip
+allow_audible "A2.18 a skipped card still speaks when supersession empties the list" \
+  "$SUPSKIP" "$(payload Write file_path "$SUPSKIP/src/x.sh")" "$NOPARSE_RE"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
