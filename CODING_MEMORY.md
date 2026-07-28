@@ -15,23 +15,26 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–12 are done (through `34cab2a`, `ad6ac21`); the hook denies with the full four-element
+  **Tasks 1–14 are done (through `9024b64`); the hook denies with the full four-element
   message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
-  subprocess, and both audible fail-opens now speak once per session.** Suite **80/0**, siblings
+  subprocess, both audible fail-opens speak once per session, the flag store is `.gitignore`d, and
+  the `PreToolUse` block is committed.** Suite **80/0** (re-run after 14), siblings
   green (19/17/5/14), `shellcheck -x` clean, hook 318 lines. Task 12's falsification is **done** —
   8 mutations against copies, every one caught, table in the checklist annotation.
-  **NEXT SESSION STARTS AT TASK 13**, and 13/14 are both small and already scouted:
-  · **13** — add `/hooks/state/` to `.gitignore`, mirroring `:13`'s `/panes/state/` entry and its
-  comment. Without it the flag store accumulates untracked, because this repo *is* `~/.claude`.
-  · **14** — `settings.json` **is tracked here** (an older durable gotcha called it machine-local;
-  that was wrong, and the note is withdrawn). Register a **fourth PreToolUse matcher block** —
-  verified 2026-07-27: PreToolUse holds exactly `Bash`, `Task|Agent`, `*`. A grep for
-  `Edit|Write|NotebookEdit` **does** hit, but that match is under **PostToolUse**
-  (`handoff/post-edit-hook.sh`) — do not mistake it for an existing block to edit. A concurrent
-  session may hold this file on another branch; check before writing. Making it *live* in the
-  primary checkout is the separate manual half in **Registration and its revert**.
-  · **15–17** — the `rules/gates.md:5` amendment (amend the existing stub, do not add a 19th
-  bullet), ADR 0011, and the throwaway-repo dogfood.
+  · **13 done** (`209700d`) — `/hooks/state/` at `.gitignore:17` with its mirrored comment;
+  `git check-ignore` matched nothing before and reports `:17` after.
+  · **14 done** (`9024b64`) — fourth `PreToolUse` block, matcher `Edit|Write|NotebookEdit` →
+  `hooks/phase-guard.sh`, shaped like the `Task|Agent` sibling (no `timeout`; only the vendored
+  orca `*` hooks carry one), placed before the `*` catch-all. The scouting held: the
+  `Edit|Write|NotebookEdit` a grep finds is the **PostToolUse** `post-edit-hook.sh`, untouched.
+  Primary checkout's `settings.json` was clean, so no concurrent session held it.
+  **The hook is NOT live** — the harness loads the primary checkout's copy, which is on another
+  branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
+  **NEXT SESSION STARTS AT TASK 15.** · **15** — amend the existing `Phase gate` stub at
+  `rules/gates.md:5` in place; do **not** add a 19th bullet (18 today, verified 2026-07-26).
+  · **16** — ADR 0011, which must record that `gate confirmed` deliberately overrode ADR 0010's
+  deferral. · **17** — throwaway-repo dogfood; findings are appended to `## Verification`, never
+  acted on, because `implementation` forbids spec and checklist edits.
   **⚠ ESCALATION TO RAISE AT REVIEW — task 9's C0 test is a placebo.** Task 10's falsification
   found that only 1 of its 4 load-bearing claims is caught by the suite (`pipefail`, via A1.9);
   the byte-count accounting, the input-order attribution, and the frontmatter bound are all real
