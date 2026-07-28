@@ -191,11 +191,23 @@ claimed_branches=""
 nfiles=0
 nparsed=0
 for f in "$root"/docs/features/*.md; do
-  [ -f "$f" ] || continue          # no match: the glob stayed literal, so the dir is empty
+  # EXISTS IN ANY FORM is the test, and the only thing filtered out is a glob that matched
+  # nothing. `-f` was wrong here because it silently did two jobs: detect the unexpanded glob
+  # in an empty directory, and drop every entry that is not a regular file — a dangling
+  # symlink, a directory named *.md. A dropped entry is never counted, so the skip tally below
+  # could not trip on it and the guard went silent one step earlier than any exit. A card
+  # symlinked in here whose target is moved denies one moment and stops denying the next.
+  # `-L` is needed beside `-e`: `-e` follows the link and is FALSE for a dangling one, which is
+  # exactly the entry that must still count.
+  [ -e "$f" ] || [ -L "$f" ] || continue
   nfiles=$((nfiles + 1))
-  parsed_fm=$(awk "$FRONTMATTER_AWK" "$f")
+  # awk's own stderr is discarded: an entry it cannot open (mode 000, a directory) makes it
+  # write a diagnostic per invocation, which reaches the user on EVERY write and escapes the
+  # once-per-session suppression that the warning below is careful to respect. The failure is
+  # not lost — an unopenable entry produces no output, which is already the skip signal.
+  parsed_fm=$(awk "$FRONTMATTER_AWK" "$f" 2>/dev/null)
   # Empty output IS the skip signal: the parser prints a record for a well-formed file and
-  # nothing for a malformed one, so this counts what could be read, not what said planning.
+  # nothing for one it cannot read or cannot parse, so this counts what could be read.
   [ -n "$parsed_fm" ] || continue
   nparsed=$((nparsed + 1))
   file_phase=${parsed_fm%%"$TAB"*}

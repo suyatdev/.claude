@@ -229,8 +229,12 @@ an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
    Else guarded. *(`settings.json` is exempt because it is this hook's own off switch — see
    "Rollback".)*
 7. Parse frontmatter of `docs/features/*.md` in the working tree per the **Frontmatter contract**
-   below; a file that violates it is skipped (⊘ for that file only). Collect `planning_files`;
-   empty → ⊘. If **every** file was skipped, ⊘ *and* print one line, once per session.
+   below. Every glob entry that **exists in any form** is counted, including a dangling symlink or
+   a directory — only a glob that matched nothing is passed over. An entry the parser cannot read,
+   or whose content violates the contract, is skipped (⊘ for that file only). **If ANY entry was
+   skipped, print one line, once per session** — checked immediately here, before any exit below,
+   because a skipped card is unreadable whichever path the hook then takes. Collect
+   `planning_files`; empty → ⊘.
 8. **Un-superseded filter.** Drop any `F` that reads `implementation` **or `review`** on some
    branch — `review` included because a *finished* feature whose `main` copy still reads `planning`
    would otherwise block forever (observability round 1). Read every branch's copy in **one**
@@ -462,8 +466,10 @@ under `set -u` an unbound variable exits 1, and a fail-open path that leaks a no
 defect regardless of how the harness classifies it. Every ⊘ path therefore exits 0 **explicitly**.
 
 An allow emits nothing on stdout or stderr, with exactly two exceptions — the no-interpreter and
-all-files-skipped exits of "Two exits that must not be silent", which print one stderr line at most
-once per session and still exit 0. stdout is empty on every path without exception.
+any-entry-skipped exits of "Two exits that must not be silent", which print one stderr line at most
+once per session and still exit 0. stdout is empty on every path without exception. A **deny** that
+also has a skipped entry emits both: the warning line, then the full deny message — the skip check
+sits above every exit, so it is not confined to allows.
 
 **Deny message** — must contain all four, or the block is unactionable:
 
@@ -546,7 +552,7 @@ Scenario Outline: say so when the repo opted in but the guard cannot evaluate it
 Examples:
   | # | precondition                                            | step |
   | 1 | python3 and python are both absent from PATH            | 4  |
-  | 2 | every docs/features/*.md violates the frontmatter contract | 7 |
+  | 2 | any docs/features/*.md entry cannot be read or violates the contract | 7 |
 ```
 
 **A3 — the frontmatter contract is testable.** One scenario per clause, because "fails parsing" was
@@ -1340,9 +1346,48 @@ narrative but the Exits table and the paragraph under it still read "**at least 
 all present files skipped**" — the bug, recorded as the specification, which a maintainer trusting it
 would have restored. Corrected in place.
 
-**All nine review-phase escalations are now closed.** Suite **96/0**, `shellcheck -x` clean on hook
-and tests, dogfood **16/16**, and every partial-skip and supersession repro re-run end-to-end
-against the fix.
+**10. The counting hole — the same silence one step EARLIER, before any exit.** Raised by the
+observability judge on RUN 3, against the RUN 2 remediation, and reproduced independently. Moving
+the check above every exit was correct and did close all nine exits — but the boundary was drawn at
+*exits*, and the hole was in the *counting*. `[ -f "$f" ] || continue` quietly did two jobs: detect
+the unexpanded glob in an empty directory (its real job) and drop every entry that is not a regular
+file. A dropped entry is never counted, so `nfiles > nparsed` cannot trip on it.
+
+**Severity is not hypothetical.** Measured: a card symlinked into `docs/features/` denies correctly
+while its target is present (**exit 2**, full message) and, once the target is moved or renamed,
+**exit 0 with no output** — a real `planning` card silently leaves the gate. A dangling symlink and
+a directory named `*.md` reproduce the same silence; a mode-000 file was the control, warning
+correctly because it passes `-f`.
+
+Fixed by testing that an entry **exists in any form** — `[ -e "$f" ] || [ -L "$f" ] || continue`.
+`-L` is required beside `-e` because `-e` follows the link and is false for a dangling one, which is
+exactly the entry that must still count. Verified the empty-directory case still passes over the
+unexpanded glob.
+
+**11. `awk`'s own stderr escaped the once-per-session suppression.** An entry awk cannot open made
+it write a diagnostic *per invocation* — three lines on the first write, two on every write after —
+straight past the flag the warning is careful to respect, on the one hook that fires on every write.
+Silenced with `2>/dev/null`; the failure is not lost, because an unopenable entry produces no output
+and that is already the skip signal. **A2.21/A2.22** pin it (`allow_audible` requires *exactly one*
+stderr line, so awk noise fails rather than passing as cosmetic).
+
+**12. The spec still stated the pre-fix rule in three more places.** Escalation 9 corrected the two
+locations RUN 2 named and left the numbered algorithm (step 7), the Output contract, and the Examples
+table untouched — including the first thing a maintainer reads. All three now state the any-entry
+rule and the before-every-exit placement; the Output contract additionally records that a deny with a
+skipped entry emits both lines. Historical narrative quoting the old wording is left as-is, because
+it describes what *was*.
+
+**A note on the pattern, recorded deliberately.** Three judge rounds found three instances of one
+class — the guard going silent. Rounds 1 and 2 were patched at the point of failure; only round 3's
+fix addressed the reason the suite could not see any of them: **every fixture in the suite was a
+readable file with malformed *content*, and none was an entry the parser could not open at all.**
+A2.19–A2.22 close that fixture class, which is the durable fix; the two-line `-e`/`-L` change is
+merely what it exposed.
+
+**All twelve review-phase escalations are now closed.** Suite **100/0**, `shellcheck -x` clean on
+hook and tests, dogfood **16/16**, and every repro — partial skip, supersession, dangling symlink,
+directory entry, unopenable card, and the moved-symlink severity case — re-run end-to-end.
 
 **Open, and NOT decided here — the parallel-worktree collision.** Also raised by the judge. Once
 this merges, one agent opening any feature at `phase: planning` denies source writes to every other
