@@ -30,6 +30,26 @@ how this file and its linked files should be written (plain language, major chan
   Primary checkout's `settings.json` was clean, so no concurrent session held it.
   **The hook is NOT live** — the harness loads the primary checkout's copy, which is on another
   branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
+  **⚠ ALL 17 TASKS ARE DONE (through `effae64`, pushed). Implementation is complete; the
+  implementation → review model-switch checkpoint is OWED and unanswered — nothing review-phase
+  may start until it is asked and answered.** Frontmatter still reads `phase: implementation`.
+  · **16 done** (`0f1c029`) — ADR `docs/decisions/0011-branch-scoped-write-permission.md`. 0010 left
+  unedited and still Accepted; 0011 carries an `Amends:` header instead. The two grounds are
+  recorded as *different kinds* of overturn on purpose: the technical objection was made
+  **inapplicable** by the forward lookup (never refuted on its terms), while the process deferral was
+  **overridden with its trigger condition admittedly unmet**. `validate-diagrams.sh` PASS.
+  · **17 done** (`effae64`) — throwaway-repo dogfood, **16/16**. Deny fires with all four message
+  elements, all six exempt paths allow, phase round-trip unblocks then re-denies.
+  **⚠ ROLLBACK PATH 3 IS BROKEN — the headline finding.** `chmod -x` yields exit **126**, not the
+  round-1 "skipped by the harness" claim; round 2's suspicion was right. `settings.json` registers a
+  bare direct path, so that is the live shape. 126 is neither 0 nor 2 (a defect by the spec's own
+  Output contract) and a `PreToolUse` harness may read it as **deny** — so the "last resort" rollback
+  may lock every repo on the machine instead of disarming the guard. Paths 1–2 unaffected.
+  **Recorded, not acted on** — revising Rollback is review-phase. Still unverified: whether the
+  harness actually classifies 126 as deny; that needs a live check before path 3 is rewritten.
+  Timings recorded, not gated: guarded ~64.1ms net, non-opted-in ~12.4ms net against a 12.3ms
+  structural floor (harness overhead measured at 2.3ms/call and subtracted, not assumed).
+  Suite **80/0**, `shellcheck -x` clean, re-run after 17.
   · **15 done** (`1b67516`) — two clauses appended to the `Phase gate` stub at `rules/gates.md:5`
   in place; bullet count re-verified **18**, no 19th added. The stub now states the deny rule, that
   docs and memory paths are never blocked, that no bypass variable exists, and that the
