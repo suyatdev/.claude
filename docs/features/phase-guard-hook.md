@@ -288,47 +288,68 @@ than the last: the tally, then the supersession exit, then the entry counting, t
 listing. Each fix was locally correct and each was followed by a new instance, because the surface
 was being explored reactively, one judge finding at a time. Enumerating it is what stopped that.
 
-**THE RULE.** Once the hook knows the repo is opted in **and** holds an un-superseded `planning`
-card, it was on its way to **deny**. Any later inability to finish the evaluation is the guard being
-switched off in exactly the state where it was about to do its job — and a working guard and a dead
-one are byte-identical, since every ⊘ emits nothing. Those exits **speak**. Everything upstream of
-that knowledge stays **silent**, because there the hook genuinely has nothing to say. The boundary
-is that knowledge and nothing else.
+**THE RULE.** Once the hook knows **this repo opted in**, any inability to complete the evaluation
+is the guard being switched off while it was on its way to do its job — and a working guard and a
+dead one are byte-identical, since every ⊘ emits nothing. Those exits **speak**. Everything upstream
+of that knowledge stays **silent**, because there the hook genuinely has nothing to say. Two
+exceptions sit outside the rule in each direction: a missing `git` or `python` speaks even though it
+is upstream of the opt-in test, because it is not a statement about *this* repo but about *every*
+repo on the machine; and a detached HEAD speaks while still allowing, because it is a deliberate
+policy exception rather than an evaluation failure, and an unannounced one was a one-command bypass.
+
+> **The rule was first written as "opted in *and* holds an un-superseded planning card"** — which is
+> not what the code does, and the round-5 judge caught the gap. All three non-git warnings fire in a
+> repo with no planning card at all. Under the stated-but-wrong rule one exit stayed misclassified
+> and hid a further instance at the payload parse. The rule above is the one the code follows.
 
 **Justifiably silent** — the hook has nothing to say:
 
 | Exit | Step | Why silence is right |
 |---|---|---|
-| Empty payload | 1 | Not a write this hook can read |
+| Empty payload | 1 | Nothing was sent; not yet known to concern an opted-in repo |
 | Not a git repo / no root | 2 | Out of scope entirely |
 | No `docs/features/` | 3 | This repo never opted in |
-| No usable path in the payload | 4 | Nothing to judge |
-| Path outside the root | 5 | Not ours to judge |
+| Path outside the root, after physical resolution | 5 | Genuinely not ours to judge |
 | Exempt path (`docs/*`, `.claude/*`, `settings.json`, memory) | 6 | Guarded-by-design exclusion |
 | Nothing at `planning` | 7 | The ordinary quiet case |
 | Every `planning` card superseded | 8 | Their gates already opened |
 | Branch is claimed | 9 | A legitimate, positive allow |
-| Detached HEAD | 9 | Deliberate — a rebase issues many writes and a line per write is noise |
 
-**Must be audible** — the guard is off in a state where it would otherwise have denied:
+**Must be audible** — the guard is off where it would otherwise have been enforcing:
 
 | Exit | Step | Why it must speak | Pinned by |
 |---|---|---|---|
-| No python interpreter | 4 | Guard off in *every* repo, permanently, until PATH is fixed | A2.1 |
+| No `git` on PATH | 2 | Guard off in *every* repo until PATH is fixed | A4.5 |
+| No python interpreter | 4 | Same, and the reason this asymmetry was removed | A2.1 |
+| Payload unreadable / no usable path | 4 | Opted-in repo, guard switched off by a malformed message | A1.4, A1.5 |
 | Any `docs/features/*.md` entry skipped | 7 | Cannot read part of its own input | A2.4, A2.15, A2.18–A2.22 |
 | `docs/features/` cannot be listed | 7 | Opted in, yet *every* card vanishes at once | A4.1, A4.2 |
 | `git for-each-ref` fails | 8 | Supersession unresolvable while a card is active | A1.8 |
 | `git cat-file --batch` pipeline fails | 8 | Same | A1.9 |
 | `git rev-parse --abbrev-ref HEAD` fails or is empty | 9 | Branch unresolvable while a card is active | A1.10a/b |
+| Detached HEAD | 9 | Still allows, but the gate is off and that must not be invisible | A4.6 |
 
-**The four git exits were previously asserted SILENT by the suite itself** — `A1.8`–`A1.10b` ran
-against a repo holding an un-superseded planning card on an unclaimed branch, so they pinned the
-guard being switched off by a transient git failure at the exact moment it was about to deny. That
-is what the bug class looked like from the inside: not a missing test, an enforcing one. Converted
-in review.
+**Six of these were asserted SILENT by the suite itself** — the four git exits (`A1.8`–`A1.10b`)
+and the two payload exits (`A1.4`, `A1.5`), all against a repo holding an un-superseded planning
+card on an unclaimed branch. They pinned the guard being switched off at the exact moment it was
+about to deny. That is what the bug class looked like from the inside: **not missing tests, enforcing
+ones** — which is why four consecutive judge rounds read this suite as evidence of correctness.
+Converted in review.
 
 Each still exits 0 and each still speaks **at most once per session**, so a flapping git costs one
 line per session, not one per write.
+
+**Not an exit, but the same class — step 5's symlinked repo path.** `git rev-parse --show-toplevel`
+always reports the *physical* path, while a payload can legitimately reach the same file through a
+symlinked ancestor (`/tmp` and `/var` are symlinks on macOS; so is any symlinked checkout). The
+prefix match then failed, the write read as outside the repository, and the guard was off for the
+**whole repo**, permanently and silently. Raised as a fixture gotcha in round 1 and as a real route
+by two judge rounds before being fixed here: a failed match is now retried against the payload's
+physical form — walking up to the deepest existing ancestor first, since a `Write` target need not
+exist yet. Pinned by A4.4a/A4.4b.
+
+**`HOME` unset** made `STATE_DIR` an unbound variable under `set -u`, so the hook exited **1** on
+every write — the one code the Output contract calls illegitimate. Now `${HOME:-}`. Pinned by A4.7.
 
 **Any skipped file, not every skipped file** — revised in review after the shipped code was found
 to warn only when *all* files were unreadable. One readable card made that test false, so a repo
@@ -1456,10 +1477,39 @@ end-to-end: the three must-speak cases speak, and all six justifiably-silent exi
 outside-root, detached HEAD, not-opted-in, claimed branch — stayed silent, so the audit added no
 noise.
 
-**All thirteen review-phase escalations are now closed.** Suite **104/0**, `shellcheck -x` clean on
+**14. The audit's own rule was misstated, and the misstatement hid a fifth instance.** RUN 5's
+assignment was to audit the audit, and it found the rule printed at the top of the hook — "opted in
+**and** holds an un-superseded planning card" — is not the rule the code follows. All three non-git
+warnings fire in a repo with no planning card at all; the real rule is "opted in **and** could not
+finish", which is weaker and better. Under the misstated version one row stayed misclassified, and
+that row hid the fifth instance: **the payload parse**. Verified — against an opted-in repo with a
+real planning card, a valid payload denies, while a truncated payload, a non-JSON one, or one whose
+path key is renamed all exit 0 in silence. `A1.4`/`A1.5` asserted that silence, a few lines above
+the four git cases the first audit pass had just converted.
+
+**15. The step-5 symlink route — raised three times, fixed here.** Round 1 recorded it as a *test
+fixture* gotcha; two later rounds re-raised it as a live route; the first audit pass enumerated
+"every exit" and skipped it because it is not an exit. Verified: physical path → deny, the same file
+via a symlinked repo path → **silent**, whole repo, permanently. Fixed by retrying a failed prefix
+match against the payload's physical form.
+
+**16. Three more asymmetries closed.** `git` missing from PATH was silent while `python` missing
+speaks, for no reason anyone chose — both are machine-wide and permanent. A **detached HEAD** was
+silent on a justification that argued from the very problem `warn_once` solves ("a rebase issues
+many writes"), and unannounced it was a one-command bypass of a guard whose deny message says there
+is no bypass variable; it still allows, but now says so. **`HOME` unset** made `STATE_DIR` an
+unbound variable under `set -u` — exit **1** on every write, the one code the Output contract calls
+illegitimate.
+
+`A1.11` was **removed** rather than kept beside `A4.6`: the two stated opposite requirements about
+one exit, and a suite asserting both can only ever half-pass.
+
+**All sixteen review-phase escalations are now closed.** Suite **108/0**, `shellcheck -x` clean on
 hook and tests, dogfood **16/16**, and every repro re-run end-to-end: partial skip, supersession,
 dangling symlink, directory entry, unopenable card, moved-symlink severity case, unlistable
-directory at 444 and 000, and each git-failure exit.
+directory at 444 and 000, each git-failure exit, all three payload shapes, the symlinked repo path,
+detached HEAD, and `HOME` unset — with the justifiably-silent exits re-checked in the same pass to
+confirm the audit added no noise.
 
 **Open, and NOT decided here — the parallel-worktree collision.** Also raised by the judge. Once
 this merges, one agent opening any feature at `phase: planning` denies source writes to every other

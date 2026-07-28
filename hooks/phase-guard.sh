@@ -45,7 +45,11 @@ LF='
 # Every one still exits 0, and every one prints AT MOST ONCE PER SESSION: this hook fires on
 # every write, and a line per write would be noise the reader learns to skip past. A flapping
 # git therefore costs one line per session, not one per write.
-STATE_DIR="${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}"
+# `${HOME:-}` and not `$HOME`: under `set -u` an unset HOME is an unbound variable, which exits 1
+# on EVERY write — the one thing the Output contract says is never legitimate. An empty fallback
+# makes the store path unusable rather than fatal, and warn_once already survives an unwritable
+# store by speaking every time instead of once.
+STATE_DIR="${PHASE_GUARD_STATE_DIR:-${HOME:-}/.claude/hooks/state}"
 # The environment id is the ONLY key available to the no-interpreter exit — that branch
 # fires because the JSON parser is what failed, so the payload's own session_id is by
 # construction unreadable there.
@@ -67,6 +71,19 @@ NOLIST_MSG='phase-guard: docs/features/ cannot be listed (check its permissions)
 # Transient by nature, which is why it fails OPEN rather than closed — but never silently, or a
 # flaky git is indistinguishable from an approved branch.
 NOGIT_MSG='phase-guard: a git query needed to finish the phase check failed — a planning card is active, so this write was NOT checked against it.'
+# Machine-wide and permanent, exactly like a missing interpreter. It was silent purely because
+# step 2 predates the opt-in test; but "no git" is not a statement about THIS repo, it is the same
+# every repo, every write condition NOPYTHON_MSG already speaks for.
+NOGITBIN_MSG='phase-guard: no git on PATH — the phase gate is not being enforced in any repo until that is fixed.'
+# The payload itself could not be read. Reached only after step 3, so the repo is known to have
+# opted in: a malformed message is the guard being switched off at the earliest step there is.
+NOPAYLOAD_MSG='phase-guard: this tool payload could not be read (no usable file path) — this repo opted in, so the write was NOT checked against the gate.'
+# Detached HEAD still ALLOWS — denying every write for the length of a rebase is the blast radius
+# this design refuses — but it no longer does so silently. The old justification ("a rebase issues
+# many writes, so a line per write would be noise") argued for silence using the exact problem the
+# once-per-session flag solves. Unannounced, it was also a one-command bypass of a guard whose deny
+# message says there is no bypass variable.
+DETACHED_MSG='phase-guard: detached HEAD — no branch can carry a claim, so the gate is not being enforced for writes until you are back on a branch.'
 
 # One flag file per reason, so whichever fires first never suppresses the other: a session
 # told the guard is dead for the wrong reason would go fix the wrong thing.
@@ -92,6 +109,10 @@ fi
 [ -n "$payload" ] || exit 0
 
 # --- Step 2: the repository root ------------------------------------------------------
+# No git binary is machine-wide and permanent, so it speaks for the same reason no interpreter
+# does. It is checked separately from the query below because "git is missing" and "this is not a
+# repository" are different facts and only one of them is worth a line.
+command -v git >/dev/null 2>&1 || { warn_once nogitbin "$sid_env" "$NOGITBIN_MSG"; exit 0; }
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -n "$root" ] || exit 0
 
@@ -140,13 +161,36 @@ case "$parsed" in
   *"$LF"*) sid_payload=${parsed%%"$LF"*}; file_path=${parsed#*"$LF"} ;;
   *)       sid_payload=""; file_path="" ;;
 esac
-[ -n "$file_path" ] || exit 0
+# Reached only past step 3, so the repo is known to have opted in — a payload this hook cannot
+# read is the guard being switched off at the earliest step there is, not a "not applicable".
+[ -n "$file_path" ] || { warn_once nopayload "${sid_payload:-$sid_env}" "$NOPAYLOAD_MSG"; exit 0; }
 
 # --- Step 5: relativize against the root ----------------------------------------------
 # Payload paths are absolute. A path outside this repository is not ours to judge.
+#
+# The direct prefix match is not sufficient on its own. `git rev-parse --show-toplevel` always
+# reports the PHYSICAL path, while a payload can legitimately reach the same file through a
+# symlinked ancestor — /tmp and /var are symlinks on macOS, and any repo reached via a symlinked
+# checkout is the same shape. The prefix then fails, the write reads as outside the repository,
+# and the guard is off for the WHOLE repo, permanently and silently. So a failed match is retried
+# against the payload's physical form before it is believed.
 case "$file_path" in
   "$root"/*) rel=${file_path#"$root"/} ;;
-  *) exit 0 ;;
+  *)
+    # The file itself need not exist yet (this is a PreToolUse for a Write), so walk up to the
+    # deepest ancestor that does, resolve THAT physically, and reattach the remainder.
+    fp_dir=$file_path
+    while [ ! -d "$fp_dir" ] && [ "$fp_dir" != "/" ] && [ "$fp_dir" != "." ]; do
+      fp_dir=$(dirname "$fp_dir")
+    done
+    fp_phys=$(cd "$fp_dir" 2>/dev/null && pwd -P) || fp_phys=""
+    [ -n "$fp_phys" ] || exit 0
+    phys_path="$fp_phys${file_path#"$fp_dir"}"
+    case "$phys_path" in
+      "$root"/*) rel=${phys_path#"$root"/} ;;
+      *) exit 0 ;;   # genuinely outside this repository
+    esac
+    ;;
 esac
 
 # --- Step 6: is this path guarded at all? ---------------------------------------------
@@ -372,7 +416,8 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) ||
   { warn_once nogit "${sid_payload:-$sid_env}" "$NOGIT_MSG"; exit 0; }
 # Detached HEAD — reachable during any rebase or bisect. No branch means no claim can match,
 # so without this the hook would deny every write for the length of a rebase.
-[ "$branch" = "HEAD" ] && exit 0
+[ "$branch" = "HEAD" ] &&
+  { warn_once detached "${sid_payload:-$sid_env}" "$DETACHED_MSG"; exit 0; }
 
 # Membership test against the claims step 7 collected from the contract parser. Compared as
 # strings, never as interpolated regexes: a branch name is user input, and one carrying a regex
