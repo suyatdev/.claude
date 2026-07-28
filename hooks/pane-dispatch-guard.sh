@@ -2,18 +2,75 @@
 # pane-dispatch-guard.sh — PreToolUse hook, matcher "Task|Agent" (registered
 # under both candidate tool names; only the one the installed CLI emits fires).
 #
-# Denies in-process dispatch of redirect-listed subagent types when a terminal
-# pane can carry them instead, pointing the model at dispatch-pane-agent.sh.
-# This is a momentum redirect, NOT a security boundary: it fails OPEN — any
-# parse failure, missing conf, no terminal, or a prior adapter failure this
-# session (cooldown flag) means "allow", which is exactly today's behavior.
-# Deny only when ALL four spec conditions hold. Exit 0 allow, exit 2 deny.
+# Three-lane routing, NOT a security boundary — it fails OPEN on any parse
+# failure, missing/unreadable conf, no terminal, or a prior adapter failure
+# this session (cooldown flag): those cases exit 0 (allow in-process).
+#   Lane 1 — read-only helpers (inprocess-agents.conf): always in-process.
+#   Lane 2 — judges (redirect-agents.conf): always redirected to a pane.
+#   Lane 3 — everything else (a governed worker): consult the session's
+#     recorded pane-split policy — inline allows, panes redirects, and no
+#     policy (missing or malformed) asks the user once (exit 2) instead of
+#     allowing.
+# "Missing conf" now means "unlisted for THAT lane", not a global allow: the
+# type just falls through to the next lane instead of being denied outright.
+# Exit 0 allow, exit 2 deny.
 set -u
 
-CONF="${PANE_REDIRECT_CONF:-$HOME/.claude/panes/redirect-agents.conf}"
-STATE_DIR="${PANE_STATE_DIR:-$HOME/.claude/panes/state}"
-DETECT="${PANE_TERMINAL_DETECT:-$HOME/.claude/panes/terminal-detect.sh}"
+# Every default hangs off PANE_HOME exactly as dispatch-pane-agent.sh's do:
+# with PANE_HOME set and an individual override absent, a hardcoded
+# $HOME/.claude/panes here would read a DIFFERENT conf and a different state
+# dir than the dispatcher writes — the guard would call a type a worker while
+# the dispatcher calls it a judge, and would never see a policy set-policy just
+# recorded (an unbreakable ask loop).
+PANES_DIR="${PANE_HOME:-$HOME/.claude/panes}"
+CONF="${PANE_REDIRECT_CONF:-$PANES_DIR/redirect-agents.conf}"
+INPROCESS_CONF="${PANE_INPROCESS_CONF:-$PANES_DIR/inprocess-agents.conf}"
+STATE_DIR="${PANE_STATE_DIR:-$PANES_DIR/state}"
+DETECT="${PANE_TERMINAL_DETECT:-$PANES_DIR/terminal-detect.sh}"
 JQ_BIN="/usr/bin/jq"
+MAX_PANES=16                 # must match panes/dispatch-pane-agent.sh's MAX_PANES
+# Digits capped at 2 (MAX_PANES is 16) so this reader and the dispatcher's
+# read_policy stay welded: a hand-corrupted N past 2^64 WRAPS in the $((10#$n))
+# range check below but ERRORS in read_policy's test builtin, so an uncapped
+# regex lets the guard redirect on a policy the dispatcher then ignores.
+POLICY_RE='^panes max=([0-9]{1,2})$'
+# A session key is interpolated into "$STATE_DIR/<prefix>-$key", so it is
+# validated before every such read: a key carrying `/` and `..` would otherwise
+# name a file outside STATE_DIR. Both key sources are Claude-Code-supplied
+# (harness UUIDs) — this is the spec's frozen injection boundary applied
+# consistently, not a response to a live threat. Fail closed: an unusable key
+# simply has no state, never someone else's.
+KEY_RE='^[A-Za-z0-9._-]{1,64}$'
+
+# in_conf <conf-file> <type> -> 0 if the type is a non-comment line in the file.
+# The `|| [ -n "$line" ]` keeps the final line when the file has no trailing
+# newline (a hand-edited conf would otherwise silently lose its last entry).
+# dispatch-pane-agent.sh's is_judge carries the same guard — the two parsers
+# must agree, or a judge is a judge to one of them and a worker to the other.
+in_conf() {
+  local conf="$1" want="$2" line
+  [ -f "$conf" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    line=$(printf '%s' "$line" | tr -d '[:space:]')
+    [ -n "$line" ] && [ "$line" = "$want" ] && return 0
+  done < "$conf"
+  return 1
+}
+
+# valid_key <session-key> -> 0 when it is safe to interpolate into a state path.
+valid_key() { [[ "$1" =~ $KEY_RE ]]; }
+
+# redirect_steps <type> — the three dispatch steps, identical in both redirect
+# messages below; only the headline and the trailer differ between them.
+redirect_steps() {
+  printf '  1. Write the agent prompt to a file in the scratchpad.\n'
+  # $HOME is shown literally in the guidance text, not expanded here (SC2016 deliberate).
+  # shellcheck disable=SC2016
+  printf '  2. "$HOME"/.claude/panes/dispatch-pane-agent.sh dispatch %s --prompt-file <f> [--cwd <repo>]\n' "$1"
+  # shellcheck disable=SC2016
+  printf '  3. "$HOME"/.claude/panes/dispatch-pane-agent.sh wait --result-file <RESULT_FILE printed by dispatch>\n'
+}
 
 # Condition: never fire inside a pane session (recursion guard).
 [ -n "${CLAUDE_PANE_AGENT:-}" ] && exit 0
@@ -26,24 +83,16 @@ if [ ! -t 0 ]; then payload=$(cat); fi
 subagent_type=$(printf '%s' "$payload" | "$JQ_BIN" -er '.tool_input.subagent_type // empty' 2>/dev/null) || exit 0
 [ -n "$subagent_type" ] || exit 0
 
-# Condition 1: requested type is redirect-listed.
-[ -f "$CONF" ] || exit 0
-listed=0
-while IFS= read -r line; do
-  line="${line%%#*}"
-  line=$(printf '%s' "$line" | tr -d '[:space:]')
-  if [ -n "$line" ] && [ "$line" = "$subagent_type" ]; then listed=1; break; fi
-done < "$CONF"
-[ "$listed" = "1" ] || exit 0
+# Lane 1: read-only helpers ALWAYS run in-process (independent of terminal/policy).
+if in_conf "$INPROCESS_CONF" "$subagent_type"; then exit 0; fi
 
-# Condition 2: a supported terminal is available.
+# Fail-open floor: no terminal, or a prior adapter failure this session -> allow.
 term=$("$DETECT" 2>/dev/null) || exit 0
 [ "$term" != "none" ] || exit 0
 
-# Condition 4: no adapter-failure cooldown for this session. The dispatcher
-# (not a hook — no stdin session_id) keys its flag by $CLAUDE_CODE_SESSION_ID;
-# hooks receive session_id on stdin. Check both, and surface any divergence
-# (obs r2 advisory 2) instead of silently missing flags.
+# The dispatcher (not a hook — no stdin session_id) keys its flag by
+# $CLAUDE_CODE_SESSION_ID; hooks receive session_id on stdin. Check both, and
+# surface any divergence (obs r2 advisory 2) instead of silently missing flags.
 sid=$(printf '%s' "$payload" | "$JQ_BIN" -er '.session_id // empty' 2>/dev/null) || sid=""
 env_sid="${CLAUDE_CODE_SESSION_ID:-}"
 if [ -n "$sid" ] && [ -n "$env_sid" ] && [ "$sid" != "$env_sid" ]; then
@@ -53,21 +102,80 @@ fi
 # CLAUDE_CODE_SESSION_ID is empty (obs final-review F2) — honor that flag too, or
 # the env-drift degrade case loops (guard denies while dispatch keeps failing).
 for key in "$sid" "$env_sid" nosession; do
-  if [ -n "$key" ] && [ -f "$STATE_DIR/adapter-failed-$key" ]; then
+  if valid_key "$key" && [ -f "$STATE_DIR/adapter-failed-$key" ]; then
     printf 'pane-dispatch-guard: a pane adapter failed earlier this session — allowing in-process dispatch.\n' >&2
     exit 0
   fi
 done
 
-{
-  printf 'pane-dispatch-guard: "%s" runs in its own terminal pane, not in-process (%s detected).\n' "$subagent_type" "$term"
-  printf 'Instead of this Agent call:\n'
-  printf '  1. Write the agent prompt to a file in the scratchpad.\n'
-  # $HOME is shown literally in the guidance text, not expanded here (SC2016 deliberate).
-  # shellcheck disable=SC2016
-  printf '  2. "$HOME"/.claude/panes/dispatch-pane-agent.sh dispatch %s --prompt-file <f> [--cwd <repo>]\n' "$subagent_type"
-  # shellcheck disable=SC2016
-  printf '  3. "$HOME"/.claude/panes/dispatch-pane-agent.sh wait --result-file <RESULT_FILE printed by dispatch>\n'
-  printf 'Procedure and fallback rules: load the dispatching-pane-agents skill.\n'
-} >&2
-exit 2
+# Lane 2: judges are ALWAYS paned, regardless of policy.
+if in_conf "$CONF" "$subagent_type"; then
+  {
+    printf 'pane-dispatch-guard: "%s" is a judge — it always runs in its own terminal pane (%s), never in-process.\n' "$subagent_type" "$term"
+    printf 'Redirect it to a pane:\n'
+    redirect_steps "$subagent_type"
+    printf 'Procedure and fallback rules: load the dispatching-pane-agents skill.\n'
+  } >&2
+  exit 2
+fi
+
+# Lane 3: governed worker — consult the per-session policy. Break on the
+# FIRST EXISTING key's file, valid or not: a malformed file at the real
+# session key must never fall through to a stale/foreign policy (that would
+# both defeat "malformed -> re-ask" and leak another session's choice).
+# "nosession" is consulted only when env_sid is empty — the exact condition
+# under which set-policy falls back to writing that key
+# (key="${CLAUDE_CODE_SESSION_ID:-nosession}") — so it can never override a
+# real session's own (possibly malformed) policy file.
+#
+# env_sid FIRST is deliberate here, where the cooldown loop above is stdin-sid
+# first: set-policy writes its file keyed by $CLAUDE_CODE_SESSION_ID, so the env
+# id is the one that OWNS a policy, while a cooldown flag can be written under
+# either. Do not "fix" this to match the other loop's order.
+#
+# Built with `set --` rather than a space-joined string: an unquoted expansion of
+# that string word-splits and glob-expands the ids (a "*" id would expand to the
+# CWD listing and read a foreign policy file).
+set --
+[ -n "$env_sid" ] && set -- "$@" "$env_sid"
+[ -n "$sid" ] && set -- "$@" "$sid"
+[ -z "$env_sid" ] && set -- "$@" nosession
+
+policy=""
+for key in "$@"; do
+  valid_key "$key" || continue
+  pf="$STATE_DIR/pane-policy-$key"
+  [ -f "$pf" ] || continue
+  line="$(head -n 1 "$pf" 2>/dev/null)"
+  if [ "$line" = "inline" ]; then
+    policy="inline"
+  elif [[ "$line" =~ $POLICY_RE ]]; then
+    n="${BASH_REMATCH[1]}"
+    n10=$((10#$n))
+    if [ "$n10" -ge 1 ] && [ "$n10" -le "$MAX_PANES" ]; then policy="panes"; fi
+  fi
+  break
+done
+
+case "$policy" in
+  inline) exit 0 ;;   # worker fan-out runs in-process this session
+  panes)
+    {
+      printf 'pane-dispatch-guard: session policy is "panes" — "%s" runs in a pane/tab, not in-process (%s).\n' "$subagent_type" "$term"
+      redirect_steps "$subagent_type"
+      printf 'The dispatcher owns pane-vs-tab and the max-N overflow. Load the dispatching-pane-agents skill.\n'
+    } >&2
+    exit 2 ;;
+  *)  # no policy recorded (or malformed) -> ask once, then retry
+    {
+      printf 'pane-dispatch-guard: no pane-split policy set for this session — ask the user once.\n'
+      printf '  1. Call AskUserQuestion: "inline" (workers in-process) or "panes" with a max N (suggest 3).\n'
+      # shellcheck disable=SC2016
+      printf '  2. Record it: "$HOME"/.claude/panes/dispatch-pane-agent.sh set-policy inline\n'
+      # shellcheck disable=SC2016
+      printf '     or:        "$HOME"/.claude/panes/dispatch-pane-agent.sh set-policy panes --max <N>\n'
+      printf '  3. Retry this same dispatch; the guard now routes by the recorded policy.\n'
+      printf 'Rationale and the three lanes: load the dispatching-pane-agents skill.\n'
+    } >&2
+    exit 2 ;;
+esac
