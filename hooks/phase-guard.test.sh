@@ -372,24 +372,46 @@ with_git_shim "$SHIM_FEREMPTY" deny "A1.12 no local branches supersedes nothing 
 # request, while a miss echoes the request verbatim plus ` missing`. A parser that matches results
 # to requests by anything other than input order mis-attributes every blob.
 #
-# alpha is superseded on feat/a (blob); beta does not exist there at all (missing). If attribution
-# slips by one, the surviving file is alpha rather than beta and the message names the wrong file —
-# which is why this asserts WHICH file is named, not merely that a deny happened.
+# THREE files, and the ordering of all three is load-bearing. `docs/features/*.md` globs
+# alphabetically and branches come from for-each-ref sorted, so feat/a's requests are 1=alpha,
+# 2=beta, 3=gamma:
 #
-# feat/a's alpha.md is committed with NO trailing newline, so cat-file emits `<size>` bytes and then
-# its own LF. A parser that reads content line-wise instead of by byte count drifts one line here,
-# and the drift lands on the `missing` entry directly after it.
+#   alpha — planning, WITH a trailing newline, and carrying a literal `phase: implementation`
+#           line in its PROSE, below the closing fence. Must survive.
+#   beta  — superseded on feat/a (implementation), committed with NO trailing newline. Must drop.
+#   gamma — deleted on feat/a, so its record is the asymmetric `missing` echo. Must survive.
+#
+# ROUNDS 1-4 HAD THIS AS A PLACEBO and the round-4 "one fixture reorder" diagnosis was ALSO wrong —
+# reversing alpha/beta was measured and all three mutants still escaped. The actual requirement is
+# that a NORMAL trailing-newline blob be READ BEFORE the superseded one, because that is the only
+# arrangement in which a desync can still corrupt the record that decides the outcome. With the
+# superseded file at request 1 or 2 its mark is already set before any drift begins, so the drift
+# lands only on planning files whose mis-parse changes no answer.
+#
+# Each of the three claims now has a mutant that this case, and only this case, catches:
+#   drop the trailing-LF skip  -> alpha's extra LF is read as a record header, beta desyncs and is
+#                                 never marked -> beta survives -> `err_lacks beta` fires.
+#   collapse input-order attribution -> beta's implementation mark lands on alpha -> alpha drops.
+#   unbound the phase match    -> alpha's PROSE line marks it superseded -> alpha drops.
 ORDER="$TMP/input-order"; mkrepo "$ORDER"
-feature_file "$ORDER" docs/features/alpha.md planning
-feature_file "$ORDER" docs/features/beta.md planning
+# mkdir -p is not decorative: feature_file() does its own, but this file is written literally
+# (it needs prose feature_file cannot produce) and a missing dir would silently drop alpha.
+mkdir -p "$ORDER/docs/features"
+{ printf -- '---\nphase: planning\nmodel_tier: high\n---\n\n# fixture\n\n'
+  printf -- 'Prose that discusses the contract, which must NOT supersede anything:\n'
+  printf -- 'phase: implementation\n'
+} > "$ORDER/docs/features/alpha.md"
+feature_file "$ORDER" docs/features/beta.md  planning
+feature_file "$ORDER" docs/features/gamma.md planning
 ( cd "$ORDER" && git add -A && git commit -q -m planning && git checkout -q -b feat/a )
-printf -- '---\nphase: implementation\nbranch: feat/a\n---' > "$ORDER/docs/features/alpha.md"
-( cd "$ORDER" && git rm -q docs/features/beta.md && git commit -q -am moved
+printf -- '---\nphase: implementation\nbranch: feat/a\n---' > "$ORDER/docs/features/beta.md"
+( cd "$ORDER" && git rm -q docs/features/gamma.md && git commit -q -am moved
   git checkout -q main && git checkout -q -b hotfix/x )
-deny      "C0 input-order: superseded alpha drops, missing-on-branch beta survives" "$ORDER" \
+deny      "C0 input-order: superseded beta drops, alpha and gamma survive" "$ORDER" \
   "$(payload Write file_path "$ORDER/src/x.sh")"
-err_has   "C0 names docs/features/beta.md"        'docs/features/beta\.md'
-err_lacks "C0 does not name docs/features/alpha.md" 'docs/features/alpha\.md'
+err_has   "C0 names docs/features/alpha.md — prose phase: is not a gate" 'docs/features/alpha\.md'
+err_has   "C0 names docs/features/gamma.md — the missing-record echo"    'docs/features/gamma\.md'
+err_lacks "C0 does not name docs/features/beta.md"                       'docs/features/beta\.md'
 
 # --- Group C: one subprocess, not O(branches) -------------------------------------------------
 # Asserted structurally, not behaviourally: the O(branches) implementation produces the same
@@ -417,7 +439,7 @@ count_is() { # $1 desc, $2 expected count, $3 log file, $4 extended regex
 count_is "C2 exactly one cat-file --batch invocation" 1 "$GIT_SHIM_ARGV_LOG" 'cat-file --batch'
 count_is "C3 exactly one for-each-ref invocation"     1 "$GIT_SHIM_ARGV_LOG" 'for-each-ref'
 count_is "C4 zero git show invocations"               0 "$GIT_SHIM_ARGV_LOG" '(^| )show( |$)'
-count_is "C5 cat-file is fed 3 branches x 2 files"    6 "$GIT_SHIM_STDIN_LOG" '^[^:]+:docs/features/'
+count_is "C5 cat-file is fed 3 branches x 3 files"    9 "$GIT_SHIM_STDIN_LOG" '^[^:]+:docs/features/'
 
 # --- Group A2: fail-open, but audible ----------------------------------------------------------
 # Six of the eight fail-open exits mean "not applicable here" and are correctly silent. These two
