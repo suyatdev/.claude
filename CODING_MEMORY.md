@@ -5,7 +5,7 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- **CURRENT: `phase-guard-hook` — IMPLEMENTATION. The gate opened 2026-07-26.** The user answered
+- **CURRENT: `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28.** The user answered
   **Q1 = build** with the literal phrase `gate confirmed`, which deliberately overrides ADR 0010's
   "build only when a skipped gate is observed" deferral — **task 16's ADR 0011 must record that
   override**, it is the whole reason that task exists. Model-switch checkpoint ran at the gate:
@@ -15,7 +15,7 @@ how this file and its linked files should be written (plain language, major chan
   Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
   at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
   now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
-  **Tasks 1–15 are done (through `1b67516`); the hook denies with the full four-element
+  **All 17 tasks are done (through `effae64`); the hook denies with the full four-element
   message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
   subprocess, both audible fail-opens speak once per session, the flag store is `.gitignore`d, the
   `PreToolUse` block is committed, and the `Phase gate` stub documents it.** Suite **80/0** (re-run after 14), siblings
@@ -85,27 +85,8 @@ how this file and its linked files should be written (plain language, major chan
   implementation half stays judgment-only (the reverse-enforcement non-goal, made visible where a
   session would otherwise assume both directions are covered); it carries `merge-guard.sh`'s
   "momentum guardrail, not a security boundary" idiom for the unguarded Bash write surface.
-  **NEXT SESSION STARTS AT TASK 16.**
-  · **16** — ADR 0011, which must record that `gate confirmed` deliberately overrode ADR 0010's
-  deferral. · **17** — throwaway-repo dogfood; findings are appended to `## Verification`, never
-  acted on, because `implementation` forbids spec and checklist edits.
-  **⚠ ESCALATION TO RAISE AT REVIEW — task 9's C0 test is a placebo.** Task 10's falsification
-  found that only 1 of its 4 load-bearing claims is caught by the suite (`pipefail`, via A1.9);
-  the byte-count accounting, the input-order attribution, and the frontmatter bound are all real
-  and all invisible to it. Root cause: **C0's fixture makes the superseded file the FIRST
-  request**, so any drift still lands on the right file. Proven with a probe that places it second
-  — the real hook names `alpha`, every mutant names `beta`. The unbounded phase match is the worst
-  of them: a fenced `phase: review` example inside a spec makes the hook **exit 0**, silently
-  switching the guard off. The implementation is correct; the test cannot see it. One fixture
-  reorder fixes it, but not during `implementation` — tests must not be edited alongside code.
-  **Earlier findings, same class, also review-phase:** A3.1 cannot isolate the line-1 clause; the
-  legal-value clause is invisible until task 12 makes *malformed* audible; and **step 9 still
-  reads branch claims with its own grep+sed rather than the contract parser**, so a malformed file
-  can still claim a branch (fails open).
-  The 17-task checklist is **frozen**;
-  `phase: implementation` forbids editing the Spec or the checklist, so a spec problem found
-  mid-build is escalated, not patched. Do **not** re-derive the design — it is all in the feature
-  file, which is canonical.
+  The four escalations these tasks raised are all **closed** — see the review block above.
+  Do **not** re-derive the design; it is all in the feature file, which is canonical.
 - **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
   carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
   `file_path` alone, which would have failed open on every notebook write. Corrected, with a
