@@ -743,5 +743,52 @@ export CLAUDE_CODE_SESSION_ID=a2-supskip
 allow_audible "A2.18 a skipped card still speaks when supersession empties the list" \
   "$SUPSKIP" "$(payload Write file_path "$SUPSKIP/src/x.sh")" "$NOPARSE_RE"
 
+# A2.19-A2.21 — UNREADABLE entries, as opposed to malformed ones. Every fixture above this point
+# is a real, readable file whose CONTENT breaks the contract; nothing anywhere in the suite is an
+# entry the parser cannot open at all. That is a structural blind spot, not a missing case: the
+# skip counter sat behind `[ -f "$f" ]`, which quietly does two jobs — detect the unexpanded glob
+# in an empty directory (its real job) and, invisibly, drop every entry that is not a regular
+# file. A dropped entry is never counted, so "was anything skipped?" cannot trip on it, and the
+# guard goes silent one step EARLIER than the exits rounds 1 and 2 were about.
+#
+# The severity is not hypothetical. A card symlinked into docs/features/ whose target is moved or
+# renamed denies one moment and, the next, silently stops denying — measured directly: target
+# present -> exit 2 with the full message; target moved -> exit 0, no output. A real planning
+# card vanishing from the gate without a word is the exact failure this whole group exists for.
+#
+# The boundary the fix draws: an entry that EXISTS IN ANY FORM is counted, and only a glob that
+# matched nothing is skipped. `-e` is false for a dangling symlink, so `-L` is needed beside it.
+UNREADABLE="$TMP/unreadable-entries"; mkrepo "$UNREADABLE"
+ln -s /nonexistent/target.md "$UNREADABLE/docs/features/dangling.md"
+export CLAUDE_CODE_SESSION_ID=a2-dangling
+allow_audible "A2.19 a dangling symlink is an unreadable card, not an absent one" \
+  "$UNREADABLE" "$(payload Write file_path "$UNREADABLE/src/x.sh")" "$NOPARSE_RE"
+
+# A directory named *.md matches the glob too, and awk cannot read it either.
+DIRENTRY="$TMP/dir-entry"; mkrepo "$DIRENTRY"; mkdir -p "$DIRENTRY/docs/features/weird.md"
+export CLAUDE_CODE_SESSION_ID=a2-direntry
+allow_audible "A2.20 a directory matching *.md is counted, not dropped" \
+  "$DIRENTRY" "$(payload Write file_path "$DIRENTRY/src/x.sh")" "$NOPARSE_RE"
+
+# A2.21 — a card that exists and is a regular file but cannot be OPENED. This one was always
+# counted (it passes `-f`), so it warned correctly even before the fix; what it pins is the
+# stderr that awk itself writes when the open fails. `allow_audible` requires EXACTLY ONE stderr
+# line, so awk's own error escaping to the user is a failure here rather than cosmetic — and it
+# escapes the once-per-session suppression, which is why the second write is asserted too.
+# Skipped when running as a user that can read a 000 file (root), where the premise cannot hold.
+UNOPENABLE="$TMP/unopenable"; mkrepo "$UNOPENABLE"
+feature_file "$UNOPENABLE" docs/features/a.md planning
+chmod 000 "$UNOPENABLE/docs/features/a.md"
+if [ -r "$UNOPENABLE/docs/features/a.md" ]; then
+  printf 'skip — A2.21 needs a user that cannot read a mode-000 file\n'
+else
+  export CLAUDE_CODE_SESSION_ID=a2-unopenable
+  allow_audible "A2.21 an unopenable card warns once, and awk stays quiet" \
+    "$UNOPENABLE" "$(payload Write file_path "$UNOPENABLE/src/x.sh")" "$NOPARSE_RE"
+  allow_silent "A2.22 ...and the second write in that session is fully silent" \
+    "$UNOPENABLE" "$(payload Write file_path "$UNOPENABLE/src/x.sh")"
+fi
+chmod 644 "$UNOPENABLE/docs/features/a.md"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
