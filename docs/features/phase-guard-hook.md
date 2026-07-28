@@ -1264,8 +1264,48 @@ broken assertion. *The round-3 note's stated mechanism was wrong*: it claimed "A
 suppresses the empty case behind it", but A1.7 parses its file fine and never warns at all. The
 exposure was real; the explanation was not.
 
-**All four review-phase escalations are now closed.** Suite **88/0**, `shellcheck -x` clean on hook
-and tests, dogfood **16/16** re-run end-to-end.
+**5. The audible fail-open was only audible when EVERY card was unreadable — fixed.** Raised by
+the implementation-stage observability judge and independently reproduced before any change. The
+tally below step 7's loop asked `nfiles > 0 && nparsed == 0`, so **one** readable card was enough to
+make it false. A repo holding one well-formed card at a non-planning phase plus one unreadable card
+— which was the repo's only `planning` card — therefore skipped the unreadable one, found nothing at
+planning, and **allowed the write with no output at all**. That is exactly the death Group A2 exists
+to prevent, reached by the likeliest route in practice: a one-character frontmatter slip in the card
+being actively worked on, while the finished cards beside it stay valid. It also got *more* likely as
+a repo accumulated features, so the guarantee weakened precisely as there was more to guard.
+
+Why the suite could not see it: every Group A2 fixture makes **all** files malformed, and every
+Group A3 fixture pairs the malformed file with a well-formed **planning** file that denies
+regardless. Neither shape can produce a partial skip that ends in an allow.
+
+Reproduced first as **A2.15** (fails against the pre-fix hook), then fixed by widening the tally to
+`nfiles > nparsed` — "was any file skipped", not "were they all". Zero files still makes the
+comparison false on its own, so the empty-`docs/features/` case stays silent without a second guard.
+`NOPARSE_MSG` was reworded from "every file … failed" to "a file … failed … and was skipped", which
+was false for the partial case. **A2.17** pins the opposite direction so the widened test cannot be
+mutated to an unconditional warn. Mutation-checked both ways: narrowing back to the all-skipped form
+fails A2.15 alone; widening to `nfiles > 0` fails A2.17, A1.7 and B2.
+
+The comment above the parser also over-claimed — it said a typo'd phase "must not silently switch a
+CRITICAL gate off", which is what the code did. Reworded to state the honest guarantee: a skip costs
+the gate that file's opinion, and what the design promises is that it cannot cost it *silently*.
+
+**6. `nbranch > 1` was untested — closed by A3.5b.** Found by the same judge via mutation: deleting
+the duplicate-`branch:` clause left all 88 assertions green. Counting `branch:` lines only matters if
+a second one can change the answer, so A3.5b makes the duplicate load-bearing — `bad.md` claims
+`implementation` and lists two branches, the last being the branch under test. awk keeps the last
+assignment, so without the clause `bad.md` parses, claims the branch, and the deny becomes an
+**allow**. Mutation-checked: deleting the clause fails A3.5b and nothing else.
+
+**All six review-phase escalations are now closed.** Suite **95/0**, `shellcheck -x` clean on hook
+and tests, dogfood **16/16**, and the partial-skip repro re-run end-to-end against the fix.
+
+**Open, and NOT decided here — the parallel-worktree collision.** Also raised by the judge. Once
+this merges, one agent opening any feature at `phase: planning` denies source writes to every other
+concurrent agent on an unclaimed branch — and `rules/core-conduct.md`'s parallel-agent invariant
+("never touch files outside your assigned feature domain") forbids that second agent from applying
+the fix the deny message names. The two rules contradict each other in exactly this case. This is a
+governance trade-off, not an implementation defect, so it is recorded rather than resolved.
 
 **Timings — recorded, not a gate** (no threshold exists; round 4 withdrew the budget). 40 iterations
 each, quiet machine. The measured figures include this harness's own per-call subshell, which was

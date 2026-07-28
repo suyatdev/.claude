@@ -40,7 +40,7 @@ STATE_DIR="${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}"
 sid_env="${CLAUDE_CODE_SESSION_ID:-}"
 
 NOPYTHON_MSG='phase-guard: no python3 or python on PATH — the phase gate is not being enforced in any repo until that is fixed.'
-NOPARSE_MSG='phase-guard: every file in docs/features/ failed the frontmatter contract — this repo opted in, but the gate cannot be evaluated.'
+NOPARSE_MSG='phase-guard: a file in docs/features/ failed the frontmatter contract and was skipped — this repo opted in, but the gate cannot be fully evaluated.'
 
 # One flag file per reason, so whichever fires first never suppresses the other: a session
 # told the guard is dead for the wrong reason would go fix the wrong thing.
@@ -140,7 +140,9 @@ esac
 #
 # Anything else is SKIPPED, never guessed at. That is why the value is matched against the
 # legal three rather than merely tested for "planning": a `phase: plannning` typo must not
-# read as "not planning, therefore allow" and silently switch a CRITICAL gate off.
+# read as "not planning, therefore allow". A skip still costs the gate that file's opinion —
+# the guarantee is that it cannot cost it SILENTLY, which the tally below the loop is what
+# actually delivers.
 #
 # Prints the phase value for a well-formed file, nothing for a malformed one. Awk missing or
 # failing therefore reads as malformed, which fails open — consistent with every other ⊘.
@@ -204,12 +206,14 @@ for f in "$root"/docs/features/*.md; do
 done
 
 if [ -z "$planning_files" ]; then
-  # The second exit that must not be silent — but only for "could not read ANY of them".
-  # Reaching here with files that parsed fine simply means nothing sits at planning, which
-  # is the ordinary quiet case. And zero files makes "every file was skipped" vacuously
-  # true, so requiring at least one present is what stops this firing in every repo that
-  # created docs/features/ and nothing else.
-  if [ "$nfiles" -gt 0 ] && [ "$nparsed" -eq 0 ]; then
+  # The second exit that must not be silent. The test is "was ANY file skipped", not "were
+  # they ALL skipped": one readable file is enough to make an all-skipped tally false, so a
+  # repo holding one good card and one unreadable card allowed the write without a word —
+  # and the unreadable one is precisely the card that might have denied. Reaching here with
+  # every file parsed simply means nothing sits at planning, which is the ordinary quiet
+  # case. Zero files makes the comparison false on its own, so this still cannot fire in a
+  # repo that created docs/features/ and nothing else.
+  if [ "$nfiles" -gt "$nparsed" ]; then
     warn_once noparse "${sid_payload:-$sid_env}" "$NOPARSE_MSG"
   fi
   exit 0
