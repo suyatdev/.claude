@@ -111,6 +111,9 @@ NOGIT_RE='^phase-guard: .*git query'
 NOPAYLOAD_RE='^phase-guard: .*payload'
 NOGITBIN_RE='^phase-guard: .*no git on PATH'
 DETACHED_RE='^phase-guard: .*detached HEAD'
+# Deliberately does not contain the word "payload": NOPAYLOAD_RE would otherwise match this
+# message too, and A2.6/A2.7's requirement that every reason be tellable apart is the point.
+NORESOLVE_RE='^phase-guard: .*could not be resolved'
 
 # The audible fail-open assertion: exit 0, empty stdout, and EXACTLY ONE stderr line matching.
 # The line count is asserted, not merely a match — a match-only assertion cannot see a per-write
@@ -928,6 +931,49 @@ else
   fail=$((fail+1))
 fi
 export HOME="$A4_HOME_SAVED"
+
+# --- Group A5: the two defects the audit commit introduced at step 5 ---------------------------
+# Both live inside 9996c0b's own fix for the fail-open class, and neither was pinned. Reachability
+# is low — payload paths are absolute by contract — but step 5 decides whether a path is ours to
+# judge at all, so anything it gets wrong fails OPEN and nothing downstream can catch it.
+#
+# A5.1-A5.3 — the walk-up reattaches the remainder with no separator whenever NO ancestor of the
+# path exists, which is every relative path: `dirname` bottoms out at ".", `${file_path#"."}`
+# strips nothing, and `$fp_phys` + `x.sh` glues into `…/optedx.sh`. That matches no root, so the
+# write escapes the gate in silence. Asserted as DENY rather than as a silent allow, because
+# `cd "$fp_dir"` already resolves "." to the session cwd: anchoring a relative target there is what
+# the surrounding code means, and a target resolving into an opted-in repo with an active planning
+# card on an unclaimed branch is precisely a guarded write.
+export CLAUDE_CODE_SESSION_ID=a5-rel
+deny "A5.1 a relative target with no directory part denies" "$OPTED" \
+  "$(payload Write file_path "x.sh")"
+deny "A5.2 a relative target with directories denies" "$OPTED" \
+  "$(payload Write file_path "src/x.sh")"
+# A5.3 is the sharper form: `${file_path#"."}` eats the leading dot, so `.hidden.sh` glued into
+# `…/optedhidden.sh` — a different file, not merely an unmatched one.
+deny "A5.3 a relative dotfile target denies without losing its dot" "$OPTED" \
+  "$(payload Write file_path ".hidden.sh")"
+# A5.4/A5.5 — controls in both directions. `./src/x.sh` already worked (its remainder keeps the
+# slash) and must not regress; an exempt path must stay exempt, so the glue fix cannot convert a
+# silent fail-open into a false deny, which is the one outcome this hook may never produce.
+deny "A5.4 control — a ./-prefixed relative target still denies" "$OPTED" \
+  "$(payload Write file_path "./src/x.sh")"
+allow_silent "A5.5 control — a relative target under docs/ is still exempt" "$OPTED" \
+  "$(payload Write file_path "docs/x.md")"
+
+# A5.6 — the other one: `[ -n "$fp_phys" ] || exit 0`, a silent fail-open written inside the fix
+# for silent fail-opens. `cd` fails when the deepest EXISTING ancestor cannot be searched, and the
+# hook then cannot tell a path of its own from one outside; step 3 has already passed, so the rule
+# says it speaks. `-d` on the locked directory still works — that reads its parent, which is 755.
+LOCKED="$TMP/locked/sub"; mkdir -p "$LOCKED"
+export CLAUDE_CODE_SESSION_ID=a5-noresolve
+if chmod 000 "$LOCKED" && [ ! -x "$LOCKED" ]; then
+  allow_audible "A5.6 a write target that cannot be resolved says so" "$OPTED" \
+    "$(payload Write file_path "$LOCKED/x.sh")" "$NORESOLVE_RE"
+else
+  printf 'skip — A5.6 needs a user that cannot search a mode-000 directory\n'
+fi
+chmod 755 "$LOCKED"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
