@@ -1092,9 +1092,16 @@ assertion depends on behaviour a later task introduces.
         when tests may next be edited.
       - `PHASE_GUARD_STATE_DIR` held for the whole run: `$HOME/.claude/hooks/state` contains zero
         `phase-guard-*` flags after the suite, confirmed directly rather than assumed.
-- [ ] 13. Add `/hooks/state/` to `.gitignore`, mirroring `:13`'s `/panes/state/` entry and its
+- [x] 13. Add `/hooks/state/` to `.gitignore`, mirroring `:13`'s `/panes/state/` entry and its
       "machine-local, never committed" comment. One line; without it the flag store accumulates
       untracked inside this repo (see *Artifacts*).
+      - Done: entry at `.gitignore:17`, with the two-line comment the task asked be mirrored, placed
+        directly under the `/panes/state/` block so the two runtime stores read as one group.
+      - Verified the way *Artifacts* framed the gap, by running the same probe: before,
+        `git check-ignore -v hooks/state/phase-guard-x` matched nothing; after, it reports
+        `.gitignore:17`. The anchoring `/` is load-bearing and deliberate — an unanchored
+        `hooks/state/` would also shadow a same-named directory anywhere in the tree, which is the
+        trap `:45-46` already documents for `/daemon/`.
 - [ ] 14. Register the `PreToolUse` / `Edit|Write|NotebookEdit` block in `settings.json`. It is a
       **fourth** matcher block (existing: `Bash`, `Task|Agent`, `*`), not an edit to one — verified
       2026-07-25. Commit it on this branch; making it *live* in the primary checkout is the separate,
