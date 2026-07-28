@@ -111,6 +111,43 @@ how this file and its linked files should be written (plain language, major chan
   supersession, dangling symlink, directory entry, unopenable card, moved-symlink severity case.
   **Next: obs judge RUN 4 at `8967723`, then `gh pr create --draft` → `gh pr ready`.**
   judge-guard blocks `gh pr create` without a fresh implementation-stage verdict matching HEAD.
+  · **RUNS 4-6.** RUN 4 (`b25efdf`-1, risk=HIGH, `success_masking`+`traceability` FAIL) found the
+  4th instance: `docs/features/` itself unlistable — at 444 the glob still yields real filenames but
+  `-e`/`-L` need SEARCH permission, so every entry is dropped uncounted. **User chose the systematic
+  fail-open audit over a 5th patch.** RUN 5 (med, 0 fails) audited the audit: THE RULE as written
+  ("opted in AND holds a planning card") is NOT what the code does ("opted in AND could not
+  finish"), and that misstatement hid the 5th instance — **the payload parse**. RUN 6 (`9996c0b`,
+  med) confirmed all six RUN-5 fixes but says **the class is still not closed**.
+  · **THE AUDIT'S REAL FINDING: six exits were asserted SILENT by the suite itself** — the four git
+  exits (`A1.8`-`A1.10b`) and the two payload exits (`A1.4`/`A1.5`), all against `$OPTED`, which
+  holds an un-superseded planning card on an unclaimed branch. Not missing tests — **enforcing**
+  ones. That is why four consecutive judge rounds read the suite as evidence of correctness.
+  Everything is enumerated in the spec under "The exits that must not be silent": 9 audible, 8
+  silent. Also fixed: step-5 symlinked repo path (raised 3 rounds, never fixed until now), detached
+  HEAD now speaks, `git` missing from PATH now speaks, `HOME` unset no longer exits 1.
+  · **⚠ OPEN AND UNFIXED — RUN 6's biggest finding, verified: the hook resolves the repo from the
+  SESSION'S CWD, not from the file being written.** `git rev-parse --show-toplevel` runs in the
+  hook's cwd, so a write into an opted-in repo from a session sitting elsewhere exits 0, silently
+  unguarded. Measured: same target file, cwd inside repoA → **exit 2**; cwd in repoB → **exit 0**.
+  Pre-existing since step 2 was written; **six judge rounds never looked at it**. Biggest blast
+  radius of anything found, possibly a one-line fix — but **settle it by running the hook LIVE**,
+  which has never been done in six rounds. This is the next action.
+  · **⚠ TWO DEFECTS I INTRODUCED IN `9996c0b`, both verified:** (1) step 5's new physical-resolution
+  failure (`[ -n "$fp_phys" ] || exit 0`) is a SILENT fail-open — the same class, inside the fix for
+  the class; (2) the walk-up glues a path with no directory component without a slash — relative
+  `x.js` from repoA yields `…/repoAx.js`. Low reachability (payload paths are absolute by contract)
+  but real, and the suite has no test for that shape.
+  · **⚠ THE RULE IS WRITTEN IN THREE PLACES AND ONLY THE SPEC WAS FIXED.** `hooks/phase-guard.sh`'s
+  own header still carries the sentence RUN 5 falsified, and the test file's Group A4 comment still
+  lists two exits as silent that its own tests now prove audible. Three copies of a rule wrong six
+  rounds running is the mechanism, not the symptom.
+  · **MY ERROR, recorded:** I cited commit SHAs `ff8a02c`/`2b81ce1` in the RUN 6 prompt; neither
+  exists. The real test commits are `07c1698` and `9eef24a`. The judge caught it. **Never write a
+  SHA into a dispatch prompt without `git cat-file -t` first.**
+  · Calibration that keeps this at medium, not high: **every survivor fails OPEN.** Worst case is
+  the phase gate enforced by judgment alone — today's status quo. Nothing causes a false block.
+  · Suite **108/0**, shellcheck clean, HEAD `9996c0b`, pushed.
+
   · **Repro trap that cost a false alarm:** a throwaway repo with **no commits** makes step 9's
   `git rev-parse --abbrev-ref HEAD` fail, so the hook fail-opens at exit 0 and EVERY scenario looks
   silent. `git commit --allow-empty` in the fixture before drawing any conclusion.
