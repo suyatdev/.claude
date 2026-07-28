@@ -23,6 +23,27 @@ payload() { # $1 tool_name, $2 path key (file_path|notebook_path), $3 absolute p
   python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{sys.argv[2]:sys.argv[3]}}))' "$@"
 }
 
+# A payload carrying a session_id. The Flag contract keys the noparse exit off THIS in preference
+# to the environment; the plain `payload` helper omits it, which exercises the fallback.
+#
+# Defined up here, beside `payload`, rather than beside the Group A2 cases that first needed it:
+# the step-7 silent assertions below also need it, and they run several hundred lines earlier.
+payload_sid() { # $1 tool_name, $2 path key, $3 absolute path, $4 session_id
+  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{sys.argv[2]:sys.argv[3]},"session_id":sys.argv[4]}))' "$@"
+}
+
+# Asserts NO once-per-session flag was written for $1. The audible fail-opens are suppressed after
+# their first firing, so "stderr was empty" alone cannot distinguish "correctly silent" from
+# "already warned under this key". Every silent assertion that could plausibly warn therefore
+# pins its own session id and checks the store directly.
+no_flag_for() { # $1 session id, $2 description
+  local hits; hits=$(find "$PHASE_GUARD_STATE_DIR" -name "*-$1" 2>/dev/null)
+  if [ -n "$hits" ]; then
+    printf 'FAIL — %s (flag written: %s)\n' "$2" "$hits"; fail=$((fail+1)); return
+  fi
+  printf 'ok   — %s\n' "$2"; pass=$((pass+1))
+}
+
 got=0; out=""; err=""
 _run() { # $1 cwd, $2 payload — leaves the exit code in $got, the streams in $out/$err
   n=$((n+1)); out="$TMP/out.$n"; err="$TMP/err.$n"
@@ -155,10 +176,24 @@ deny "B1 planning file + unclaimed branch -> deny" "$OPTED" "$(payload Write fil
 # true, so a repo that created docs/features/ and nothing else must stay SILENT rather than
 # firing the audible cannot-evaluate line.
 
+#
+# Both pin their OWN session id, and both then assert the flag store is untouched. Without that
+# the pair is order-dependent: `allow_silent` only checks that stderr was empty, and the noparse
+# line is suppressed after its first firing under a given key. Every case here shares the
+# `nosession` fallback key, so ANY earlier case that warned would make these two pass for the
+# wrong reason — silent because already-warned, not silent because correct.
+#
+# Measured before pinning: no earlier case writes that flag today, and mutating away the
+# `nfiles > 0` guard is still caught. So this is not a repair of a broken assertion — it is
+# removing a dependency on test order that nothing was enforcing. (The round-3 note claimed
+# "A1.7 warns first and suppresses the empty case behind it"; A1.7 parses its file fine and
+# never warns at all, so that specific mechanism was wrong even though the exposure is real.)
 allow_silent "A1.7 nothing at phase: planning (step 7)" "$NOPLANNING" \
-  "$(payload Write file_path "$NOPLANNING/src/x.sh")"
+  "$(payload_sid Write file_path "$NOPLANNING/src/x.sh" sid-a17)"
+no_flag_for sid-a17 "A1.7 is silent because nothing is at planning, not because it already warned"
 allow_silent "docs/features/ exists but is empty (step 7, silent)" "$EMPTYFEATURES" \
-  "$(payload Write file_path "$EMPTYFEATURES/src/x.sh")"
+  "$(payload_sid Write file_path "$EMPTYFEATURES/src/x.sh" sid-emptyfeatures)"
+no_flag_for sid-emptyfeatures "empty docs/features/ writes no flag — the nfiles > 0 guard held"
 
 # --- The deny-message contract ------------------------------------------------------------
 # All four required elements, or the block is unactionable — a session that is told "no"
@@ -225,6 +260,26 @@ a3_case() { # $1 example id, $2 defect description, $3 literal bad.md content
 
 a3_case 1 'no opening --- on line 1'    '
 ---
+phase: planning
+---
+'
+# A3.1 above CANNOT isolate the `NR == 1` clause. That clause does two jobs — reject a file whose
+# line 1 is not `---`, and `next` past line 1 so an opening fence never trips the closing-fence
+# rule. A3.1's shape is still skipped when the REJECTION is removed: its first `---` lands on
+# line 2, trips the closing rule with nphase still 0, and the file fails the contract by a
+# different route. The verdict never moves, so the assertion cannot see the clause it names.
+#
+# A3.1b is the shape that discriminates. Line 1 is junk, and `phase:` sits between it and the
+# first fence — so with the rejection removed the parser skips line 1, reads phase=planning,
+# closes cleanly on line 3 with nphase == 1, and PRINTS `planning`. bad.md becomes a second
+# planning file and the deny names it; `err_lacks` is the assertion that moves.
+#
+# Mutation-checked against BOTH faithful mutants, because the first one tried was too blunt to
+# mean anything: deleting the whole rule makes every well-formed file fail (line 1's own `---`
+# closes the frontmatter immediately), which fails 41 assertions and isolates nothing. The
+# honest mutant is `NR == 1 { next }` — rejection gone, line 1 still consumed. A3.1b catches
+# that one and A3.1 does not, which is exactly the gap this case was added to close.
+a3_case 1b 'junk line 1, phase: above the fence — isolates the line-1 clause' 'not a fence
 phase: planning
 ---
 '
@@ -509,12 +564,6 @@ allow_audible() { # $1 desc, $2 cwd, $3 payload, $4 extended regex the line must
     fail=$((fail+1)); return
   fi
   printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
-}
-
-# A payload carrying a session_id. The Flag contract keys the noparse exit off THIS in preference
-# to the environment; the plain `payload` helper omits it, which exercises the fallback.
-payload_sid() { # $1 tool_name, $2 path key, $3 absolute path, $4 session_id
-  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{sys.argv[2]:sys.argv[3]},"session_id":sys.argv[4]}))' "$@"
 }
 
 with_path() { # $1 replacement PATH, then an assertion function and its arguments
