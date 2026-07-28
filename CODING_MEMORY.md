@@ -80,10 +80,40 @@ how this file and its linked files should be written (plain language, major chan
   could be deleted with all 88 green. A3.5b makes the duplicate load-bearing — two `branch:` lines,
   the last claiming the branch under test, and awk keeps the last — so without the clause the deny
   becomes an allow. Catches that mutant and nothing else.
-  · **ALL SIX REVIEW ESCALATIONS CLOSED.** HEAD `f22bb10`, pushed. Suite **95/0**, shellcheck clean
-  (hook + tests), dogfood **16/16**, partial-skip repro re-run end-to-end against the fix.
-  **Next: obs judge RUN 2 at `f22bb10`, then `gh pr create --draft` → `gh pr ready`.**
+  · **RUN 2 (`f963b76`, risk=medium) found the SAME silence one stage later — in RUN 1's own fix.**
+  Escalation 5 widened the tally but placed it *inside* the no-planning-files branch, and step 8's
+  supersession drop can empty that list one stage further down, below a bare `exit 0`. Reproduced
+  independently: superseded card + one unreadable card → silent; the unreadable card alone → warns.
+  **Escalation 7** fixed it as a CLASS fix — the check moved *above every exit*, straight after the
+  parse loop. Verified consequence: a deny with a skipped card now emits the warning **and** the
+  full 16-line deny message (exit 2, all four elements intact). Also **8** (message asserted
+  something false for a plain `README.md` in `docs/features/` — now conditional) and **9** (the spec
+  still stated the pre-fix rule).
+  · **RUN 3 (`4a60aa0`, risk=HIGH, 2 dimensions FAIL) found it one step EARLIER — in the counting.**
+  Moving above every exit did close all nine exits; the boundary was drawn at *exits* and the hole
+  was in `[ -f "$f" ] || continue`, which quietly both detected the unexpanded glob AND dropped
+  every non-regular entry. A dropped entry is never counted, so `nfiles > nparsed` cannot trip.
+  **Severity measured, not hypothetical:** a card symlinked into `docs/features/` denies while its
+  target is present (exit 2, full message) and **exits 0 silently once the target is moved** — a
+  real planning card leaving the gate without a word. **Escalation 10** fixed it with
+  `[ -e "$f" ] || [ -L "$f" ]` (`-L` is required: `-e` follows the link and is false for a dangling
+  one). **11** discarded awk's own stderr, which escaped the once-per-session flag entirely — 3
+  lines on write 1, 2 on every write after. **12** corrected three MORE stale spec locations
+  (step 7, the Output contract, the Examples table).
+  · **⚠ THE PATTERN IS THE FINDING.** Three rounds, three instances of one class. Rounds 1 and 2
+  were patched at the point of failure; only round 3 addressed *why the suite could not see any of
+  them* — **every fixture was a readable file with malformed CONTENT, and none was an entry the
+  parser could not open at all.** A2.19–A2.22 close that fixture class; the two-line `-e`/`-L`
+  change is merely what it exposed. If a RUN 4 finds a fourth instance, the response is to rethink
+  the fail-open surface, not to patch again.
+  · **ALL TWELVE REVIEW ESCALATIONS CLOSED.** HEAD `8967723`, pushed. Suite **100/0**, shellcheck
+  clean (hook + tests), dogfood **16/16**. Every repro re-run end-to-end: partial skip,
+  supersession, dangling symlink, directory entry, unopenable card, moved-symlink severity case.
+  **Next: obs judge RUN 4 at `8967723`, then `gh pr create --draft` → `gh pr ready`.**
   judge-guard blocks `gh pr create` without a fresh implementation-stage verdict matching HEAD.
+  · **Repro trap that cost a false alarm:** a throwaway repo with **no commits** makes step 9's
+  `git rev-parse --abbrev-ref HEAD` fail, so the hook fail-opens at exit 0 and EVERY scenario looks
+  silent. `git commit --allow-empty` in the fixture before drawing any conclusion.
   · **OPEN, deliberately not decided — the parallel-worktree collision.** Once this merges, one
   agent opening any feature at `planning` denies source writes to every other concurrent agent on
   an unclaimed branch, and `core-conduct.md`'s parallel-agent invariant forbids that second agent
