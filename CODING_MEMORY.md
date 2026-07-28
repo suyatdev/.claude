@@ -51,10 +51,17 @@ how this file and its linked files should be written (plain language, major chan
   "last resort" could lock every repo. Paths 1–2 verified and sufficient. Deliberately NOT verifying
   whether the harness reads 126 as deny: the experiment means arming a hook that may lock the
   machine, for a path we do not need.
-  · **STILL OPEN, both low-severity and test-only:** A3.1 cannot isolate the line-1 clause; the
-  once-per-session flag makes same-key *silent* assertions order-dependent (A1.7 warns first and
-  suppresses the empty-`docs/features/` case behind it — coverage intact, but pin an explicit
-  session id per case). **Then: obs judge, then `gh pr create --draft` → `gh pr ready`.**
+  · **Escalations 2 and 4 CLOSED** (`8de2fba`, test-only). **A3.1b** isolates the line-1 clause that
+  A3.1 could only name: junk on line 1, `phase:` above the fence. Mutation-checked against BOTH
+  faithful mutants — deleting the whole rule is too blunt (41 failures), while `NR == 1 { next }`
+  is caught by **A3.1b alone and A3.1 not at all**. **Flag ordering:** the two step-7 silent cases
+  now pin their own session id and assert the store is untouched (`no_flag_for`); `payload_sid`
+  moved up beside `payload`. Measured first — nothing writes that flag today and the `nfiles > 0`
+  mutant was already caught, so this removed an unenforced order dependency, not a broken test.
+  **The round-3 note's mechanism was WRONG**: A1.7 parses fine and never warns.
+  · **ALL FOUR REVIEW ESCALATIONS CLOSED.** Suite **88/0**, shellcheck clean (hook + tests),
+  dogfood **16/16**. **Next: obs judge, then `gh pr create --draft` → `gh pr ready`.**
+  judge-guard blocks `gh pr create` without a fresh implementation-stage verdict matching HEAD.
   · **16 done** (`0f1c029`) — ADR `docs/decisions/0011-branch-scoped-write-permission.md`. 0010 left
   unedited and still Accepted; 0011 carries an `Amends:` header instead. The two grounds are
   recorded as *different kinds* of overturn on purpose: the technical objection was made

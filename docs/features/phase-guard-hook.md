@@ -1242,12 +1242,30 @@ string-membership test that touches no files. Falsified by reverting step 9 to i
 exactly B2b and B2c and nothing else. Incidentally drops one `grep` and one `sed` per feature file
 off the guarded path.
 
-**Still open, both low-severity and test-only:** A3.1 cannot isolate the line-1 clause; and the
-once-per-session flag makes same-key *silent* assertions order-dependent (A1.7 warns first and
-suppresses the empty-`docs/features/` case behind it — coverage is intact, since each half of the
-tally guard is caught by its own assertion, but an explicit session id per case would be sturdier).
+**2. A3.1 could not isolate the line-1 clause — closed by A3.1b.** The clause does two jobs: reject
+a file whose line 1 is not `---`, and `next` past line 1 so an opening fence never trips the
+closing-fence rule. A3.1's shape (leading blank line) survives removal of the *rejection*, because
+its first `---` then lands on line 2 and trips the closing rule with `nphase` still 0 — the file
+fails the contract by a different route and the verdict never moves. A3.1b puts junk on line 1 with
+`phase:` between it and the fence, so removing the rejection makes the parser print `planning` and
+the deny name `bad.md`. Both are kept; A3.1 is a real-world shape, A3.1b is the discriminating one.
+Checked against both faithful mutants — deleting the whole rule is too blunt to mean anything
+(41 failures, since line 1's own `---` then closes the frontmatter immediately), while
+`NR == 1 { next }` is caught by **A3.1b alone and by A3.1 not at all**.
 
-Suite **83/0**, `shellcheck -x` clean, dogfood **16/16** re-run end-to-end after the step 9 fix.
+**4. Same-key silent assertions were order-dependent — closed.** `allow_silent` only checks that
+stderr was empty, and the audible fail-opens are suppressed after their first firing under a given
+key. Every case shared the `nosession` fallback, so any earlier case that warned would make the two
+step-7 silent assertions pass for the wrong reason. Both now pin their own session id and assert
+the flag store is untouched (new `no_flag_for` helper). Measured before changing anything: no
+earlier case writes that flag today, and mutating away the `nfiles > 0` guard was already caught —
+so this removed a dependency on test order that nothing was enforcing, rather than repairing a
+broken assertion. *The round-3 note's stated mechanism was wrong*: it claimed "A1.7 warns first and
+suppresses the empty case behind it", but A1.7 parses its file fine and never warns at all. The
+exposure was real; the explanation was not.
+
+**All four review-phase escalations are now closed.** Suite **88/0**, `shellcheck -x` clean on hook
+and tests, dogfood **16/16** re-run end-to-end.
 
 **Timings — recorded, not a gate** (no threshold exists; round 4 withdrew the budget). 40 iterations
 each, quiet machine. The measured figures include this harness's own per-call subshell, which was
