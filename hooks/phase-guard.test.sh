@@ -304,6 +304,39 @@ feature_file "$BCLAIM" docs/features/a.md implementation feat/a
 ( cd "$BCLAIM" && git checkout -q -b feat/a )
 allow_silent "B2 claimed branch -> allow" "$BCLAIM" "$(payload Write file_path "$BCLAIM/src/x.sh")"
 
+# --- Group B rows 2b/2c: a claim must come from the FRONTMATTER CONTRACT, not from raw text ---
+# Escalation 3 from the implementation phase. Step 9 re-reads each file with its own grep+sed
+# instead of the parser step 7 already ran, so anything that merely LOOKS like a claim anywhere
+# in the file grants implementation permission on that branch. Both shapes below are fail-opens:
+# the guard goes silent on a branch nothing legitimately claims. This is the direction that
+# matters — the design accepts "easy to disarm", but only by editing frontmatter, which is a
+# deliberate act; being disarmed by PROSE is not a decision anyone made.
+#
+# B2b: a planning file that merely DISCUSSES the contract in its body. Feature files are exactly
+# the documents that quote `phase: implementation` and `branch: <name>` in prose — this very
+# feature's own spec does, at length — so this is the common case, not a contrived one.
+BPROSE="$TMP/b-prose"; mkrepo "$BPROSE"; mkdir -p "$BPROSE/docs/features"
+{ printf -- '---\nphase: planning\nmodel_tier: high\n---\n\n# spec\n\n'
+  printf -- 'When the gate opens the file advances to:\n'
+  printf -- 'phase: implementation\n'
+  printf -- 'and records its own branch as:\n'
+  printf -- 'branch: feat/a\n'
+} > "$BPROSE/docs/features/a.md"
+( cd "$BPROSE" && git add -A && git commit -q -m init && git checkout -q -b feat/a )
+deny "B2b prose describing a claim does not grant one" "$BPROSE" \
+  "$(payload Write file_path "$BPROSE/src/x.sh")"
+
+# B2c: a file step 7 SKIPPED as malformed (two phase: keys violates the frontmatter contract)
+# must not be readable as a claim by a later step. A file the contract could not parse has no
+# opinion the hook is entitled to act on — least of all the opinion that unlocks writing.
+BMAL="$TMP/b-malformed-claim"; mkrepo "$BMAL"; mkdir -p "$BMAL/docs/features"
+feature_file "$BMAL" docs/features/good.md planning
+printf -- '---\nphase: implementation\nphase: implementation\nbranch: feat/a\n---\n' \
+  > "$BMAL/docs/features/bad.md"
+( cd "$BMAL" && git add -A && git commit -q -m init && git checkout -q -b feat/a )
+deny "B2c a malformed file cannot claim a branch" "$BMAL" \
+  "$(payload Write file_path "$BMAL/src/x.sh")"
+
 # B3: one feature at planning must not revoke another feature's open gate.
 BBOTH="$TMP/b-both"; mkrepo "$BBOTH"
 feature_file "$BBOTH" docs/features/a.md implementation feat/a
