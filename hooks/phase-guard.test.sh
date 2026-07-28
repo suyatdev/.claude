@@ -307,6 +307,19 @@ a3_case 6 'no phase: line at all'       '---
 model_tier: high
 ---
 '
+# 5b. The `nbranch > 1` clause, which nothing else reaches: the suite stayed 88/0 with it deleted.
+# Counting `branch:` lines only matters if a second one could CHANGE the answer, so the shape has
+# to make the duplicate load-bearing rather than decorative. bad.md claims implementation and lists
+# two branches, the last of which is the branch under test — awk keeps the last assignment, so with
+# the clause removed bad.md parses, claims main, and the deny becomes an ALLOW. With the clause
+# intact bad.md is skipped, nothing claims main, and good.md denies as usual. `deny` is the
+# assertion that moves, and it moves all the way to exit 0 rather than to a different message.
+a3_case 5b 'two branch: lines, the last one claiming this branch' '---
+phase: implementation
+branch: somewhere-else
+branch: main
+---
+'
 
 # 7. An absent branch: key means UNCLAIMED, not malformed. b.md is load-bearing, not scenery: a
 #    deny needs some planning file, and without it this scenario would assert an exit 2 that step 7
@@ -676,6 +689,41 @@ with_state_dir "$TMP/blocked/state" allow_audible \
 with_state_dir "$TMP/blocked/state" allow_audible \
   "A2.14 ...and speaks again, since no flag could be written" \
   "$NOPARSE" "$PL_NOPARSE" "$NOPARSE_RE"
+
+# A2.15-A2.17 — the PARTIAL skip, the gap the rest of Group A2 could not see. Every fixture above
+# makes EVERY file malformed, and every Group A3 fixture pairs a malformed file with a well-formed
+# PLANNING one that denies regardless. Neither shape can reach the case that matters: one file the
+# contract reads fine and sits at a non-planning phase, plus one it cannot read AT ALL that was the
+# repo's only planning card. Nothing is then left at planning, so the hook allows — and the old
+# `nparsed -eq 0` tally is false, because one file did parse, so it allowed in COMPLETE SILENCE.
+#
+# That is the death this whole group exists to make audible, reached by the likeliest route in
+# practice: a one-character frontmatter slip in the card you are actively working on, while the
+# finished cards beside it stay valid. The count grows as a repo accumulates features, so the
+# guarantee got weaker exactly as the repo got more to guard.
+PARTIAL="$TMP/partial-skip"; mkrepo "$PARTIAL"; mkdir -p "$PARTIAL/docs/features"
+feature_file "$PARTIAL" docs/features/done.md review
+# The planning card, with its closing fence forgotten. Written literally rather than via
+# feature_file for the same reason as the NOPARSE fixture: the helper cannot produce a file the
+# contract rejects, and being unproducible is what makes it malformed.
+printf -- '---\nphase: planning\nmodel_tier: high\n\n# the card being worked on right now\n' \
+  > "$PARTIAL/docs/features/wip.md"
+PL_PARTIAL="$(payload Write file_path "$PARTIAL/src/x.sh")"
+
+export CLAUDE_CODE_SESSION_ID=a2-partial
+allow_audible "A2.15 one unreadable card among readable ones still says so" \
+  "$PARTIAL" "$PL_PARTIAL" "$NOPARSE_RE"
+allow_silent "A2.16 a second write in the same session adds no line" "$PARTIAL" "$PL_PARTIAL"
+
+# The other half of the tally, kept honest: a repo whose files ALL parse must stay silent. Without
+# this, widening the skip test to `nfiles > nparsed` could be mutated to an unconditional warn and
+# nothing would catch it. Pins its own session id and checks the store, per the no_flag_for note.
+ALLPARSE="$TMP/all-parse"; mkrepo "$ALLPARSE"
+feature_file "$ALLPARSE" docs/features/done.md review
+feature_file "$ALLPARSE" docs/features/other.md implementation feat/other
+allow_silent "A2.17 every card readable and none at planning stays silent" "$ALLPARSE" \
+  "$(payload_sid Write file_path "$ALLPARSE/src/x.sh" sid-allparse)"
+no_flag_for sid-allparse "A2.17 wrote no flag — the skip test tracks unreadable files, not files"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
