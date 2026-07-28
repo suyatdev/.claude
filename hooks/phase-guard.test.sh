@@ -519,12 +519,13 @@ each_shim_speaks "A1.10a rev-parse --abbrev-ref exits nonzero (step 9) says so" 
 each_shim_speaks "A1.10b rev-parse --abbrev-ref prints nothing (step 9) says so" "$SHIM_RPE" rpe
 
 # 11 uses a real detached HEAD rather than a shim — it is reachable during any rebase or bisect,
-# and the real thing is a stronger fixture than a simulation of it.
+# and the real thing is a stronger fixture than a simulation of it. The fixture stays here; the
+# ASSERTION moved to A4.6, which requires the same allow but no longer accepts silence. A1.11's
+# `allow_silent` was removed rather than kept alongside it, because the two state opposite
+# requirements about one exit and a suite that asserts both can only ever half-pass.
 DETACHED="$TMP/detached"; mkrepo "$DETACHED"
 feature_file "$DETACHED" docs/features/a.md planning
 ( cd "$DETACHED" && git add -A && git commit -q -m init && git checkout -q --detach )
-allow_silent "A1.11 detached HEAD (step 9)" "$DETACHED" \
-  "$(payload Write file_path "$DETACHED/src/x.sh")"
 
 # An empty for-each-ref is NOT a failure: nothing supersedes, so every candidate survives to step 9
 # and the deny stands. This exists to stop an implementer conflating "no branches" with "git broke".
