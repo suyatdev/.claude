@@ -1136,11 +1136,24 @@ assertion depends on behaviour a later task introduces.
         idiom for the Bash hole, so the two honest-limitation stubs read alike, and states the
         implementation half is judgment-only — the reverse-enforcement non-goal, made visible
         where a session would otherwise assume the hook covers both directions.
-- [ ] 16. ADR `docs/decisions/0011-*.md` — amends ADR 0010: records that its stated objection was
+- [x] 16. ADR `docs/decisions/0011-*.md` — amends ADR 0010: records that its stated objection was
       dismissed by reframing (branch-scoped permission), that its "build only when the gate is
       observed being skipped" deferral was deliberately overridden at the gate decision (Q1), and
       that the Bash-tool write surface and sticky supersession are disclosed non-goals rather than
       oversights.
+      - Done: `docs/decisions/0011-branch-scoped-write-permission.md`. All four required elements
+        present. ADR 0010 left **unedited** and still Accepted — 0011 carries an `Amends:` header
+        instead, since an ADR is immutable and the amendment record is the newer file's job.
+      - The two grounds are recorded as **different kinds** of overturn, deliberately: the technical
+        objection was never refuted on its own terms, it was made *inapplicable* by the forward
+        lookup; the process deferral was met head-on and overridden with the trigger condition
+        admittedly **unmet**. Conflating them would let the process override read as a technical
+        finding, which is exactly the reading this ADR exists to prevent — the `spec-guard`
+        deferral it borrowed from is still live.
+      - Diagram is one `flowchart TD` on the reframing alone (the two lookup directions), not the
+        whole 7-row verdict table — one idea per diagram. `validate-diagrams.sh`: **PASS**, 1 block.
+      - Numbering re-verified at write time: `0009` is still held by `feat/pane-split-policy`
+        (PR #28, open) and absent here, so `0011` collides with nothing on either branch.
 - [ ] 17. Dogfood, in a **throwaway repo**, not this one. By task 17 this feature's own gate has
       opened, so this branch is claimed and the guard correctly allows everything — "confirm it
       denies here" was unsatisfiable as round 2 wrote it. Instead: `git init` a temp repo, add one
