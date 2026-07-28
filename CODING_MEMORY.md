@@ -59,9 +59,36 @@ how this file and its linked files should be written (plain language, major chan
   moved up beside `payload`. Measured first — nothing writes that flag today and the `nfiles > 0`
   mutant was already caught, so this removed an unenforced order dependency, not a broken test.
   **The round-3 note's mechanism was WRONG**: A1.7 parses fine and never warns.
-  · **ALL FOUR REVIEW ESCALATIONS CLOSED.** Suite **88/0**, shellcheck clean (hook + tests),
-  dogfood **16/16**. **Next: obs judge, then `gh pr create --draft` → `gh pr ready`.**
+  · **OBS JUDGE RUN 1 (`01f011e`, 2026-07-28): risk=medium, confidence=high, no dimension failed**;
+  `execution`/`regression`/`success_masking` concern. It confirmed the central reframing holds —
+  it independently checked that `rules/gates.md` really does forbid branch creation during planning,
+  so the unclaimed-branch premise is sound rather than lucky. It also **retracted its own first
+  finding**: initial numbers suggested the hook slows as cards accumulate; controlled re-measurement
+  gave a flat ~35–40 ms from 2 to 101 cards and it called its first reading a machine-load artifact.
+  · **Escalation 5 (partial-skip silent fail-open) FIXED** — test `2fd0a04`-style baseline then fix.
+  **Reproduced independently before touching anything**, in a throwaway repo: malformed `planning`
+  card alone → allow + audible warning (promise holds); malformed `planning` card **+ one
+  well-formed `review` card** → **exit 0, completely silent**. Root cause: the tally asked
+  `nfiles > 0 && nparsed == 0`, and one readable card makes that false. Widened to
+  `nfiles > nparsed`; `NOPARSE_MSG` reworded ("every file … failed" was false for a partial skip);
+  the parser comment's "must not silently switch a CRITICAL gate off" claim reworded to the
+  guarantee the code actually delivers. **The suite structurally could not see this** — every A2
+  fixture makes *all* files malformed, every A3 fixture pairs the bad file with a well-formed
+  *planning* file that denies regardless. Mutation-checked both directions: narrowing back fails
+  A2.15 alone, widening to `nfiles > 0` fails A2.17/A1.7/B2.
+  · **Escalation 6 (`nbranch > 1` untested) CLOSED by A3.5b.** The judge's mutation found the clause
+  could be deleted with all 88 green. A3.5b makes the duplicate load-bearing — two `branch:` lines,
+  the last claiming the branch under test, and awk keeps the last — so without the clause the deny
+  becomes an allow. Catches that mutant and nothing else.
+  · **ALL SIX REVIEW ESCALATIONS CLOSED.** HEAD `f22bb10`, pushed. Suite **95/0**, shellcheck clean
+  (hook + tests), dogfood **16/16**, partial-skip repro re-run end-to-end against the fix.
+  **Next: obs judge RUN 2 at `f22bb10`, then `gh pr create --draft` → `gh pr ready`.**
   judge-guard blocks `gh pr create` without a fresh implementation-stage verdict matching HEAD.
+  · **OPEN, deliberately not decided — the parallel-worktree collision.** Once this merges, one
+  agent opening any feature at `planning` denies source writes to every other concurrent agent on
+  an unclaimed branch, and `core-conduct.md`'s parallel-agent invariant forbids that second agent
+  from applying the fix the deny message names. The two rules contradict in exactly this case.
+  Governance trade-off, user-owned — recorded in the feature file, not resolved.
   · **16 done** (`0f1c029`) — ADR `docs/decisions/0011-branch-scoped-write-permission.md`. 0010 left
   unedited and still Accepted; 0011 carries an `Amends:` header instead. The two grounds are
   recorded as *different kinds* of overturn on purpose: the technical objection was made
