@@ -338,13 +338,20 @@ build affects every repo on the machine. Three exits, cheapest first:
    (step 6) precisely so it can never block edits to its own off switch. Without that exemption a
    misfiring guard would be reachable only through the Bash-tool hole, which the deny message would
    have to advertise — telling every session where the bypass is.
-3. **Last resort, `chmod -x hooks/phase-guard.sh`.** Round-2 review flagged the round-1 claim
-   ("skipped by the harness") as asserted-but-unverified: hooks register as direct paths, so a
-   non-executable file more likely yields exit 126 — which this spec's own Output contract calls a
-   defect, and which a `PreToolUse` harness may treat as *deny*. **Treat path 3 as unverified until
-   Task 17 tests it**, and prefer paths 1–2. If it does yield 126, that finding is **recorded under
-   `## Verification`** and this path is revised in the review phase — not deleted mid-implementation,
-   which the phase gate forbids.
+3. ~~**Last resort, `chmod -x hooks/phase-guard.sh`.**~~ **WITHDRAWN — this is not a rollback.**
+   Round 1 claimed a non-executable hook is "skipped by the harness"; round 2 flagged that as
+   asserted-but-unverified and predicted 126. **Task 17 measured it: exit 126, both as a direct
+   path and under `sh -c`**, and `settings.json` registers a bare direct path, so that is the live
+   shape. 126 is neither 0 nor 2 — a defect by this spec's own Output contract — and a `PreToolUse`
+   harness may classify it as *deny*. The "last resort" would then **lock every repo on the machine
+   against `Edit`/`Write`/`NotebookEdit`**, which is the opposite of a rollback and strictly worse
+   than the misbehaviour it was meant to escape. Revised in the review phase, per the task-17 rule
+   that findings are recorded during implementation and acted on only after the phase advances.
+   → **Use paths 1–2.** Both are verified and sufficient: path 1 is an ordinary file edit under
+   `docs/**`, path 2 deletes the `settings.json` block the guard deliberately exempts.
+   → **Still unverified, and deliberately left so:** whether the harness *does* read 126 as deny.
+   Establishing it means arming a hook that may lock the machine, so the honest move is to keep
+   the path withdrawn rather than to run that experiment for a path we have no need of.
 
 **Deny message must contain** — the offending file path(s) and their `phase:`, the current branch,
 both legitimate fixes (open the gate: `gate confirmed` → advance `phase:` and record `branch:`; or,
@@ -1202,6 +1209,45 @@ guard. Paths 1 and 2 are unaffected and remain the real exits.
 forbids it.
 *Limit of this test:* it establishes the exit code, not the harness's classification of it. Whether
 126 reads as deny is still unverified and needs a live check before path 3 is rewritten.
+
+### Review-phase escalations — resolved
+
+**1. Task 9's C0 test was a placebo — fixed, and the round-4 diagnosis was wrong.** Baselined by
+mutation against the pre-fix suite: all three mutants below escaped **all 80 tests, 0 failures**.
+
+| Mutant | Claim it breaks |
+|---|---|
+| drop the trailing-LF skip | byte-count accounting |
+| collapse input-order attribution (`i++` → `i=1`) | input-order matching |
+| unbind the phase match from the fences | frontmatter bound |
+
+Round 4 prescribed "one fixture reorder" — put the superseded file second. **That was tried first
+and measured: all three still escaped.** The reorder cannot work, because a desync only changes an
+answer if it corrupts the record that *decides* the outcome, and with the superseded file at
+request 1 or 2 its mark is already set before any drift begins. The requirement is that a normal
+trailing-newline blob be read **before** the superseded one. C0 is now three files — `alpha`
+(planning, trailing newline, carrying a literal `phase: implementation` line in prose below the
+fence), `beta` (superseded, no trailing newline), `gamma` (deleted on the branch, so its record is
+the asymmetric `missing` echo). Each mutant now flips a different assertion; all three are caught.
+C5's request count moved 6 → 9. The hook was correct throughout — this was test-only.
+
+**3. Step 9's raw-text branch claim was a fail-open — fixed.** Step 9 re-read every feature file
+with an unbounded `grep -Eq` + `sed`, so any text anywhere in a file resembling
+`phase: implementation` plus `branch: <name>` granted permission on that branch — and feature files
+are precisely the documents that quote those keys in prose. A file step 7 had already skipped as
+malformed still got a vote. Reproduced first as failing tests **B2b** (prose describing a claim) and
+**B2c** (a malformed file claiming), then fixed: the parser now emits `<phase>TAB<branch>`, step 7's
+existing loop collects claims from the same parse that decides planning membership, and step 9 is a
+string-membership test that touches no files. Falsified by reverting step 9 to its old form — fails
+exactly B2b and B2c and nothing else. Incidentally drops one `grep` and one `sed` per feature file
+off the guarded path.
+
+**Still open, both low-severity and test-only:** A3.1 cannot isolate the line-1 clause; and the
+once-per-session flag makes same-key *silent* assertions order-dependent (A1.7 warns first and
+suppresses the empty-`docs/features/` case behind it — coverage is intact, since each half of the
+tally guard is caught by its own assertion, but an explicit session id per case would be sturdier).
+
+Suite **83/0**, `shellcheck -x` clean, dogfood **16/16** re-run end-to-end after the step 9 fix.
 
 **Timings — recorded, not a gate** (no threshold exists; round 4 withdrew the budget). 40 iterations
 each, quiet machine. The measured figures include this harness's own per-call subshell, which was
