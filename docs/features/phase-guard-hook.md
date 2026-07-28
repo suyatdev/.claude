@@ -1571,10 +1571,50 @@ than assumed:
 | Guarded (deny) | 66.4 ms | **~64.1 ms** | withdrawn ≤60 ms budget |
 | Non-opted-in | 14.7 ms | **~12.4 ms** | floor: 2.3 bash + 10.0 `git rev-parse` = 12.3 ms |
 
-The non-opted-in path lands on its structural floor almost exactly — step 3's early exit is working,
-and the round-4 finding that this figure has *no headroom by construction* is confirmed rather than
-merely argued. The guarded path sits above the withdrawn 60 ms budget, which is precisely why round 4
-withdrew it; the ~22 ms `python3` startup remains the only lever worth attacking.
+⚠️ **The non-opted-in row above is superseded — it predates the cwd fix (`508c55b`).** It is kept
+because the reasoning built on it is cited elsewhere and a deleted number cannot be audited. See
+*Live run* below for the current figures. The paragraph that stood here claimed the non-opted-in
+path "lands on its structural floor almost exactly — step 3's early exit is working". That claim is
+now **false**: resolving the repo from the write target moved the parse and the `git` resolution
+*upstream* of the opt-in test, so a repo that never opted in now pays for both. The guarded path is
+unaffected, and the ~22 ms `python3` startup remains the only lever worth attacking.
+
+### Live run — 2026-07-28, first execution against real repos
+
+Every figure and behaviour above, in seven judge rounds, came from throwaway fixtures. This is the
+first run of the hook at its real path, with real `PreToolUse` payloads, against real repos on this
+machine. Probe artifacts were untracked and removed; the primary checkout's `git status` was
+verified byte-identical afterwards.
+
+Harness overhead was measured separately at **1.0 ms/call** and is subtracted below. 30 iterations,
+payload built once and piped (building it per call adds a `python3` startup and inflates every
+figure by ~15 ms — the first pass made that mistake and is not reported here):
+
+| Path | Repo | Measured | Net |
+|---|---|---|---|
+| Non-opted-in, silent allow | `Other Docs/mtg-wizard` (real project) | 42.8 ms | **~41.8 ms** |
+| Opted-in, deny | `.claude` on an unclaimed branch | 68.2 ms | **~67.2 ms** |
+
+The deny path reproduces the fixture figure (~64 ms) within noise. **The non-opted-in path is
+~3.4× the superseded 12.4 ms** — the cost of the cwd fix, and consistent with the 11→38 ms measured
+when that fix landed. It is the number to quote: it is what every repo on this machine pays on
+every write, forever, and only this branch's repo has opted in.
+
+Behaviour observed live, all of it as designed:
+
+- Never-opted repos (`mtg-wizard`, `.claude` as it stands today) — **exit 0, stdout empty, silent.**
+- Opted-in worktree with its card at `phase: review` — allow, silent. Doc writes and writes to the
+  feature card itself — allow, silent, even while the repo is enforcing.
+- Opted-in repo on a branch no card claims — **exit 2** with the full deny message, stdout empty.
+- **The cwd divergence, live:** with the session standing in the worktree (card at `review`) and the
+  write targeting the guarded primary checkout, the hook denied — it judged the *target's* repo, not
+  the session's. Under the pre-`508c55b` behaviour this exact shape allowed, silently. This is the
+  bug class the fix was for, and it is now confirmed outside the fixtures that found it.
+
+**What the live run did not cover:** the harness's own classification of exit 126 (rollback path 3,
+deliberately not verified — the experiment risks the machine), and enforcement under a real
+`/clear`-and-restore cycle. The hook remains registered but not armed; the harness reads the primary
+checkout's working copy, which sits on another branch.
 
 ## Judge history
 
