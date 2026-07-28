@@ -845,17 +845,24 @@ chmod 644 "$UNOPENABLE/docs/features/a.md"
 # Four judge rounds found four instances of one class, each a step earlier than the last. Chasing
 # the fifth was refused; this group is the enumeration that replaced it. Every exit in the hook is
 # classified as JUSTIFIABLY SILENT (the hook genuinely has nothing to say) or MUST BE AUDIBLE (the
-# hook knows the repo is opted in and holds an un-superseded planning card — it was on its way to
-# deny, and something stopped it). The boundary is that knowledge, and nothing else.
+# hook knows THIS REPO OPTED IN and then could not COMPLETE the evaluation — it was on its way to
+# judge the write, and something stopped it). The boundary is that knowledge, and nothing else.
+#
+# This comment first bolted "and holds an un-superseded planning card" onto the opt-in test. Round
+# 5 falsified that — all three non-git warnings fire in a repo holding no planning card at all —
+# and the wrong version left one exit misclassified. Corrected in review, against the spec.
 #
 # Justifiably silent, each already covered in Group A1: no payload; not a git repo; no
-# docs/features/; no usable path in the payload; a path outside the root; an exempt path; nothing
-# at planning; every planning card superseded; the branch is claimed; detached HEAD (deliberate —
-# a rebase issues many writes and a line per write would be noise).
+# docs/features/; a path outside the root; an exempt path; nothing at planning; every planning
+# card superseded; the branch is claimed. Every one of those is an evaluation that never started
+# or one that RAN and came back "not applicable".
 #
-# Must be audible: no interpreter (A2.1); any entry skipped (A2.4, A2.15, A2.18-A2.22); the four
-# git failures (A1.8-A1.10b, converted above from asserted-SILENT, which is what the class looked
-# like when the suite was enforcing it); and A4.1/A4.2 below, the instance RUN 4 found.
+# Must be audible: no interpreter (A2.1); no git on PATH (A4.5); an unreadable payload (A1.4,
+# A1.5); an unresolvable write target (A5.6); any entry skipped (A2.4, A2.15, A2.18-A2.22); the
+# four git failures (A1.8-A1.10b); docs/features/ unlistable (A4.1/A4.2 below, the instance RUN 4
+# found); and detached HEAD (A4.6), which allows but no longer in silence. SIX of these —
+# A1.4/A1.5 and A1.8-A1.10b — were asserted SILENT by this suite until the audit converted them,
+# which is what the class looked like from the inside: not missing tests, enforcing ones.
 #
 # A4.1/A4.2 — docs/features/ exists, so step 3 says the repo opted in, but the directory itself
 # cannot be listed. Every card vanishes at once and nfiles is 0, so the skip tally has nothing to
