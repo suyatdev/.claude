@@ -505,10 +505,12 @@ PL="$(payload Write file_path "$OPTED/src/x.sh")"
 #
 # Four judge rounds each found one instance of this class one step earlier than the last. The
 # audit that followed enumerated every exit instead of chasing the next one, and the rule that
-# falls out is: once the hook knows the repo is opted in AND holds an un-superseded planning card,
-# any later inability to finish the evaluation must be AUDIBLE. Everything upstream of that
-# knowledge ("not a repo", "not opted in", "path not guarded") stays silent, because there the
-# hook genuinely has nothing to say.
+# falls out is: once the hook knows THIS REPO OPTED IN, any later inability to COMPLETE the
+# evaluation must be AUDIBLE — these four qualify twice over, since a planning card is active here
+# too. Everything upstream of that knowledge ("no payload", "not a repo", "never opted in") stays
+# silent, and so does an evaluation that RAN and returned "not applicable", because there the hook
+# genuinely has nothing to say. (The planning card was stated as a second precondition here until
+# round 5 falsified it; the boundary is the opt-in test alone. See Group A4.)
 #
 # Each still exits 0 and each still speaks at most once per session, so a flapping git costs one
 # line per session, not one per write.
