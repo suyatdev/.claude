@@ -316,14 +316,30 @@ how this file and its linked files should be written (plain language, major chan
   **User decision 2026-07-27: qualify the record, no behavior change** → `6d781c9` (comment-only,
   113/0, shellcheck clean) + branch-log RUN 4 section, which also corrected a second overclaim
   ("ghosts sorting last cannot happen in production" is false — close the two newest panes by hand).
-  **>>> RESUME HERE (session cleared 2026-07-27 at the 76k handoff, all judge work banked) <<<**
-  **NEXT, IN ORDER:** (1) **resolve PR #28's conflict** — `mergeable: CONFLICTING`, but it is ONLY
-  `CODING_MEMORY.md` + `coding-memory/observability-judge/verdicts.jsonl` (verified by
-  `git merge-tree` against a freshly fetched `origin/main`); both are append-heavy files that other
-  sessions landed on main, NOT a code conflict — take both sides, do not drop other sessions' rows;
-  (2) `gh pr ready` on PR #28 — `judge-guard.sh` gates `gh pr create` only, NOT `gh pr ready`, so no
-  head_sha equality dance is needed, and RUN 4's verdict is banked at `e6e2e3e` regardless of the two
-  later docs commits. **Do NOT re-run the judge for the comment-only commits.**
+  **BOTH RESUME STEPS DONE 2026-07-27 (Opus 5 1M) — PR #28 IS READY FOR REVIEW.**
+  **(1) Conflict resolved** → merge commit `2cdff2a` (`git merge origin/main`, NOT a rebase — 49
+  commits with judge verdicts pinned to exact SHAs). It was exactly the two predicted append-heavy
+  memory files; main's PR #29 touched no file this branch changed, and `CLAUDE.md` + `rules/gates.md`
+  auto-merged. `verdicts.jsonl`: both sides proven to be `base(34) + append` (7 mine, 2 main's), so
+  the union was re-ordered by `ts` — **43 rows, every one validated as parseable JSON, zero dropped.**
+  `CODING_MEMORY.md`: both sides inserted at the same anchor; took both (mine on top, most-recent-wins;
+  main's PR #29 entry follows as history), **verified zero lines lost from either side** by set-diff.
+  Post-merge checks: **11 suites, 417 assertions, 0 failures** (dispatcher 113/0 matches the last
+  recorded figure exactly), `shellcheck -x` rc=0, and `git diff 7b3b05c 2cdff2a -- panes/ hooks/` is
+  **EMPTY** — the merge is provably code-neutral, so RUN 4's verdict stays materially valid.
+  **(2) `gh pr ready` done** — PR #28 now `isDraft:false`, `MERGEABLE`/`CLEAN` at `2cdff2a`.
+  All four OWED items confirmed landed before marking ready: ADR/branch-log corrections (`5cee1e8`,
+  `6d781c9`); the rr-index fix **correctly WITHDRAWN on evidence**, not skipped (RUN 4's 81-config
+  sweep: HEAD 2 spurious cooldowns vs the proposed fix's 8); the pane-counting property test at
+  `panes/dispatch-pane-agent.test.sh:568`; obs judge RUN 4 banked at `e6e2e3e` (`2078408`).
+  **NEXT: PR #28 review/merge in the GitHub UI** (`gh pr merge` is hook-blocked by design).
+  **NEW GOTCHA (cost one failed merge attempt):** `git merge` aborts with "local changes would be
+  overwritten" on files that are **staged adds present in NO tree** — the other-session
+  compliance-judge files. `ort` protects an index-only entry the merge would drop. And a **merge
+  commit cannot be pathspec-scoped**, so the standing pathspec rule does not cover it. Procedure that
+  worked: capture `git hash-object` of each staged add → `git restore --staged` them → merge → resolve
+  → commit → `git add` them back → **prove the index hashes match the capture** (they did:
+  `16b37c33`, `68a5b555`; working tree byte-identical to session start).
   **KNOWN OPEN, none blocking the PR, all waiting on the same root cause:** the N≥4 restart
   false-positive (F4); exit 4's misleading blame (only wrong when F4 fires); the **525-line**
   dispatcher vs a 400 soft limit — the split is owed as the FIRST move of the next dispatcher change.
@@ -334,6 +350,16 @@ how this file and its linked files should be written (plain language, major chan
   **Working-tree caution (still true):** the uncommitted `coding-memory/compliance-judge/` files are
   OTHER concurrent sessions' verdicts (repos `phase-guard-hook`, `mtg-wizard`, `vibe-scape`,
   `Snatch-Bracket`), two already `git add`ed by them. Leave them; pathspec-scope every commit.
+  There is also a live `.claude/worktrees/phase-guard-hook/` worktree (another session's branch,
+  carrying a `hooks/phase-guard.test.sh` that does not exist here) — do not touch it.
+  **NEW MEMORY MODEL ARRIVED ON MAIN (PR #29, now merged into this branch):** feature-scale work gets
+  a `docs/features/<name>.md` with `phase` in frontmatter, checked on restore; `managing-session-memory`
+  and `preparing-pull-requests` were both rewritten around it. **Still undogfooded — no `docs/features/*.md`
+  exists anywhere.** Deliberately NOT retrofitted onto this branch (it is finishing, not starting);
+  the next feature-scale branch should be its first real user, which is what main's own entry says.
+  **This index is 778 lines against its own 200-line ceiling** — flagged by the obs judge on four
+  separate rounds and still growing. Trimming it into `coding-memory/` is its own task, not a
+  drive-by; it is the single most overdue piece of housekeeping in this repo.
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
   Session pane-split policy: at the first pane-eligible dispatch the model asks once —
