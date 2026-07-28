@@ -322,6 +322,7 @@ policy exception rather than an evaluation failure, and an unannounced one was a
 | No `git` on PATH | 2 | Guard off in *every* repo until PATH is fixed | A4.5 |
 | No python interpreter | 4 | Same, and the reason this asymmetry was removed | A2.1 |
 | Payload unreadable / no usable path | 4 | Opted-in repo, guard switched off by a malformed message | A1.4, A1.5 |
+| Write target unresolvable to a physical path | 5 | Opted in, and "is this path ours?" is unanswerable | A5.6 |
 | Any `docs/features/*.md` entry skipped | 7 | Cannot read part of its own input | A2.4, A2.15, A2.18–A2.22 |
 | `docs/features/` cannot be listed | 7 | Opted in, yet *every* card vanishes at once | A4.1, A4.2 |
 | `git for-each-ref` fails | 8 | Supersession unresolvable while a card is active | A1.8 |
@@ -347,6 +348,16 @@ prefix match then failed, the write read as outside the repository, and the guar
 by two judge rounds before being fixed here: a failed match is now retried against the payload's
 physical form — walking up to the deepest existing ancestor first, since a `Write` target need not
 exist yet. Pinned by A4.4a/A4.4b.
+
+> **That fix shipped with two defects of its own, found reviewing it and fixed in review.** The
+> `cd`-failure branch was written as a bare `|| exit 0` — the silent-fail-open class, inside the fix
+> for the class; it now warns (the `A5.6` row above). And the walk-up reattached the remainder with
+> no separator whenever *no* ancestor existed, which is every relative path: `dirname` bottoms out
+> at `.`, so `x.sh` glued into `…/repox.sh` and a dotfile lost its leading dot, both escaping the
+> gate in silence. A relative target now anchors at the cwd that `cd "$fp_dir"` already resolved —
+> which is what that branch means — so it is judged rather than skipped. Reachability was low
+> (payload paths are absolute by contract) and neither was reachable as a *false deny*; pinned by
+> A5.1–A5.5, controls in both directions.
 
 **`HOME` unset** made `STATE_DIR` an unbound variable under `set -u`, so the hook exited **1** on
 every write — the one code the Output contract calls illegitimate. Now `${HOME:-}`. Pinned by A4.7.

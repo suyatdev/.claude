@@ -27,19 +27,29 @@ LF='
 '
 
 # --- The exits that must not be silent -------------------------------------------------
-# THE RULE, and it is the whole design: once this hook knows the repo is opted in AND holds
-# an un-superseded `planning` card, it was on its way to DENY. Any later inability to finish
-# the evaluation is the guard being switched off in exactly the state where it was about to
-# do its job — a state in which a working guard and a dead one are byte-identical, since
-# every ⊘ emits nothing. Those exits speak. Everything UPSTREAM of that knowledge ("not a
-# repo", "not opted in", "this path is not guarded") stays silent, because there the hook
-# genuinely has nothing to say.
+# THE RULE, and it is the whole design: once this hook knows THIS REPO OPTED IN (step 3), any
+# later inability to COMPLETE the evaluation is the guard being switched off in exactly the
+# state where it was about to do its job — a state in which a working guard and a dead one are
+# byte-identical, since every ⊘ emits nothing. Those exits speak. Everything UPSTREAM of that
+# knowledge ("no payload", "not a repo", "never opted in") stays silent, and so does an
+# evaluation that RAN and returned "not applicable" (path outside the root, exempt path,
+# nothing at planning, every card superseded, branch claimed) — there the hook genuinely has
+# nothing to say. Two exceptions sit outside the rule, one in each direction: a missing `git`
+# or `python` speaks though it is upstream of the opt-in test, because it states something
+# about EVERY repo on this machine rather than about this one; and a detached HEAD speaks
+# while still allowing, because it is a deliberate policy exception, not a failure to evaluate.
+#
+# The rule was first written here as "opted in AND holds an un-superseded planning card" —
+# which is not what the code does: all three non-git warnings fire in a repo holding no
+# planning card at all. Under that stated-but-wrong version one exit stayed misclassified and
+# hid a further instance at the payload parse, which the round-5 judge caught. The wording
+# above is the one the code follows.
 #
 # This rule replaced instance-patching. Four judge rounds each found one exit that went
 # silent, every one a step earlier than the last — the tally, then the supersession exit,
 # then the entry counting, then the directory listing. Each fix was locally correct and each
 # was followed by a new instance, because the surface was being explored reactively. The
-# audit enumerates it instead; Group A4 in the test suite is that enumeration, and four of
+# audit enumerates it instead; Group A4 in the test suite is that enumeration, and six of
 # the cases below were previously asserted SILENT by the suite itself.
 #
 # Every one still exits 0, and every one prints AT MOST ONCE PER SESSION: this hook fires on
@@ -71,6 +81,10 @@ NOLIST_MSG='phase-guard: docs/features/ cannot be listed (check its permissions)
 # Transient by nature, which is why it fails OPEN rather than closed — but never silently, or a
 # flaky git is indistinguishable from an approved branch.
 NOGIT_MSG='phase-guard: a git query needed to finish the phase check failed — a planning card is active, so this write was NOT checked against it.'
+# Step 5 could not resolve a path to its physical form, so "inside this repo" is unanswerable.
+# Deliberately avoids the word "payload": the reasons have to stay tellable apart, and the
+# unreadable-payload line already owns that word.
+NORESOLVE_MSG='phase-guard: a write target could not be resolved to its physical form, so whether it belongs to this opted-in repo is unknown — it was NOT checked against the gate.'
 # Machine-wide and permanent, exactly like a missing interpreter. It was silent purely because
 # step 2 predates the opt-in test; but "no git" is not a statement about THIS repo, it is the same
 # every repo, every write condition NOPYTHON_MSG already speaks for.
@@ -184,8 +198,23 @@ case "$file_path" in
       fp_dir=$(dirname "$fp_dir")
     done
     fp_phys=$(cd "$fp_dir" 2>/dev/null && pwd -P) || fp_phys=""
-    [ -n "$fp_phys" ] || exit 0
-    phys_path="$fp_phys${file_path#"$fp_dir"}"
+    # The deepest existing ancestor cannot be searched, so this path cannot be told apart from
+    # one of our own. Step 3 has already passed, which puts this squarely inside the rule: it
+    # allows, but not in silence. It was written as a bare `|| exit 0` — the class, inside the
+    # fix for the class.
+    [ -n "$fp_phys" ] || { warn_once noresolve "${sid_payload:-$sid_env}" "$NORESOLVE_MSG"; exit 0; }
+    # The remainder must carry exactly one separator, and `${file_path#"$fp_dir"}` alone gets that
+    # wrong whenever NO ancestor existed — `dirname` bottoms out at ".", which strips nothing from
+    # a relative path (`x.sh` glued into `…/repox.sh`) and strips the leading dot from a dotfile.
+    # `cd "$fp_dir"` has already resolved "." to the session cwd, so anchoring the remainder there
+    # is what this branch means.
+    case "$file_path" in
+      "$fp_dir")   rest="" ;;                       # the path IS the ancestor: no remainder
+      "$fp_dir"/*) rest=${file_path#"$fp_dir"} ;;   # a real ancestor: the remainder keeps its /
+      /*)          rest=$file_path ;;               # fp_dir is "/", so the path is the remainder
+      *)           rest=/$file_path ;;              # relative, anchored at the cwd cd resolved
+    esac
+    phys_path="${fp_phys%/}$rest"                   # %/ so a root of "/" cannot double the slash
     case "$phys_path" in
       "$root"/*) rel=${phys_path#"$root"/} ;;
       *) exit 0 ;;   # genuinely outside this repository
