@@ -211,8 +211,14 @@ how this file and its linked files should be written (plain language, major chan
   Verdict `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round9.md`.
   **No behavioural defect at this HEAD** — the judge re-ran the suite twice (126/0) and probed deny /
   doc-exempt / card-exempt / claimed-branch / never-opted-in by direct invocation. Every finding is a
-  record defect. ⚠ **The judge did NOT complete its contract:** it wrote the markdown verdict but
-  never appended to `verdicts.jsonl` and never wrote its pane result file, so no ledger row exists.
+  record defect. **Both verdict artifacts are complete** — markdown **and** the `verdicts.jsonl` row,
+  both pinned at `33bc6ae`. Only the *pane result file* is missing: the run outlived the 540s judge
+  wait, so `dispatch-pane-agent.sh wait` reported a timeout. **`95fffa1`'s commit message claims the
+  judge never appended the row — that claim is false.** The row landed between my check of the file's
+  mtime and my reading of it; I trusted a stale `ls` instead of re-reading the file. Corrected here
+  rather than by rewriting the pushed commit: on a branch being judged on its audit trail, the wrong
+  claim and its correction both belong in the record. A timed-out judge wait means *check for the
+  artifacts*, not *assume they are absent*.
   · **Owed before the PR (RUN 9's list):** (1) three normative contract counts undercount the audible
   surface — `:611` says "six" audible exceptions vs nine `warn_once` reasons and eleven audit rows,
   `:297` still says "two exits that print", `:484` names 2 of 9 flag reasons and quotes `$HOME` where
