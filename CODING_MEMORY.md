@@ -237,7 +237,19 @@ how this file and its linked files should be written (plain language, major chan
   · **Undisclosed boundary RUN 9 found (owed to the PR body):** supersession reads `refs/heads/` only,
   so a gate opened on a **remote-only** branch does not supersede and the repo resumes denying
   (probe-verified). Also uncosted: one `dirname` fork per path level for writes landing outside any repo.
-  **Next: the four record fixes above → obs judge RUN 10 (mandatory, HEAD will have moved) → decide the
+  · **RUN 9's four items LANDED 2026-07-29 (`1b79e2a` test → `8390a52` record), suite 130/0,
+  shellcheck clean, pushed.** Group D added: four grep tripwires that make the suite read the doc —
+  step count/order vs code headers (D1), keyword per step per side (D2), Flag-contract reason set
+  derived from call sites (D3), Output-contract counts computed not asserted (D4). **Red-first on
+  exactly RUN 9's two contract findings** (D3: 7 of 9 reasons missing; D4: no derived-count
+  sentence), then green; **all four mutation-verified** — stale count / renumbered item / reworded
+  step / dropped reason each fail exactly their own test (m1, m4 at 129/1 against the fixed doc).
+  `:976`-class reasoning answered on its own axis in A5.6's comment; old sentence kept, marked
+  pre-`508c55b`. Verification section records the round.
+  · **Gotcha that cost a redo:** mutation-verifying with `git checkout --` reverts BEFORE committing
+  the fixes discarded them silently — m2-m4 ran against the stale doc and m4's signal was void
+  (nogitbin was already missing). Commit first, then mutate; or the mutation baseline is a lie.
+  **Next: obs judge RUN 10 at `8390a52`+ (mandatory) → decide the
   `judge-guard` route → `gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
   with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
   plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
