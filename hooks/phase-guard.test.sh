@@ -1073,5 +1073,95 @@ else
 fi
 chmod 755 "$UNREADABLE/.git" 2>/dev/null
 
+# --- Group D: the record — doc↔code drift tripwires ---------------------------------------------
+# RUNS 6-9 each found the explanatory record contradicting the code while every behavioural test
+# stayed green: the suite could not see the document, so a clean run certified nothing about the
+# claims a reader actually navigates by. These are grep tripwires, not semantic checks — they pin
+# exactly the surfaces that have demonstrably rotted (step numbering, the audible-exit counts, the
+# flag-reason set) and nothing else. If the feature card ever moves, update DOC here with it.
+DOC="$(cd "$(dirname "$0")" && pwd)/../docs/features/phase-guard-hook.md"
+
+# The first line of each numbered item in the doc's canonical Order-of-operations list.
+doc_steps_body() {
+  awk '/^\*\*Order of operations\*\*/{f=1; next} f && /^### /{exit} f' "$DOC" | grep -E '^[0-9]+\. '
+}
+
+# D1 — the doc's list and the code's `# --- Step N ---` headers agree on count and order, 1..N
+# with no gaps. Step numbers mean the code's headers; this is the cheapest check that the prose
+# still has headers to mean.
+code_n=$(grep -c '^# --- Step ' "$HOOK")
+doc_n=$(doc_steps_body | grep -c .)
+code_seq=$(grep '^# --- Step ' "$HOOK" | sed 's/^# --- Step \([0-9][0-9]*\):.*/\1/' | tr '\n' ' ')
+doc_seq=$(doc_steps_body | sed 's/^\([0-9][0-9]*\)\. .*/\1/' | tr '\n' ' ')
+want_seq=""; i=1
+while [ "$i" -le "$code_n" ]; do want_seq="$want_seq$i "; i=$((i+1)); done
+if [ "$doc_n" -eq "$code_n" ] && [ "$code_seq" = "$want_seq" ] && [ "$doc_seq" = "$want_seq" ]; then
+  printf 'ok   — D1 the doc step list and the code step headers agree (count and order)\n'; pass=$((pass+1))
+else
+  printf 'FAIL — D1 step lists disagree (code: %s/ doc: %s/ want: %s)\n' "$code_seq" "$doc_seq" "$want_seq"; fail=$((fail+1))
+fi
+
+# D2 — step number N names the same operation on both sides. One keyword per side per step: not
+# semantics, just enough that a renumber on either side cannot read as the neighbouring step. A
+# step with no keyword row below is a FAIL by design — growing the hook means growing this table.
+mismatch=""; i=1
+while [ "$i" -le "$code_n" ]; do
+  dk=""; ck=""
+  case "$i" in
+    1)  dk="stdin payload";           ck="the payload";;
+    2)  dk="tools";                   ck="tools";;
+    3)  dk="path out of the payload"; ck="path out of the payload";;
+    4)  dk="opted in";                ck="opted in";;
+    5)  dk="elativize";               ck="elativize";;
+    6)  dk="Classify";                ck="guarded";;
+    7)  dk="frontmatter";             ck="planning";;
+    8)  dk="superseded";              ck="superseded";;
+    9)  dk="current branch";          ck="branch";;
+    10) dk="deny";                    ck="deny";;
+  esac
+  if [ -z "$dk" ]; then
+    mismatch="$mismatch nokeyword:$i"
+  else
+    doc_steps_body | sed -n "${i}p" | grep -qF "$dk" || mismatch="$mismatch doc:$i"
+    grep "^# --- Step $i:" "$HOOK" | grep -qF "$ck" || mismatch="$mismatch code:$i"
+  fi
+  i=$((i+1))
+done
+if [ -z "$mismatch" ]; then
+  printf 'ok   — D2 each step number names the same operation in doc and code\n'; pass=$((pass+1))
+else
+  printf 'FAIL — D2 step keyword mismatch at:%s\n' "$mismatch"; fail=$((fail+1))
+fi
+
+# D3 — the Flag contract's Path row names every reason the code can actually write. Derived from
+# the call sites, not from memory: the row was authored when there were two reasons and lagged the
+# audit as it grew (RUN 9). Comment lines are excluded so prose mentioning the helpers cannot vote.
+reasons=$(grep -vE '^[[:space:]]*#' "$HOOK" \
+  | grep -oE '(warn_once|warn_if_cwd_opted_in) [a-z][a-z]*' | awk '{print $2}' | sort -u)
+path_row=$(grep -F '| Path |' "$DOC")
+missing=""
+for r in $reasons; do
+  case "$path_row" in *\`"$r"\`*) ;; *) missing="$missing $r";; esac
+done
+if [ -n "$reasons" ] && [ -z "$missing" ]; then
+  printf 'ok   — D3 the Flag contract names every reason the code can write\n'; pass=$((pass+1))
+else
+  printf 'FAIL — D3 Flag contract Path row is missing:%s\n' "${missing:- (reason extraction broke)}"; fail=$((fail+1))
+fi
+
+# D4 — the Output contract's audible counts are the derived truth, stated exactly once. The doc
+# must carry the sentence "<rows> audible rows across <reasons> once-per-session" where both
+# numbers are computed here, not asserted here — so the contract cannot silently undercount again.
+rows_n=$(awk '/Why it must speak/{f=1} f && /^$/{exit} f' "$DOC" | grep -c '^|')
+rows_n=$((rows_n - 2)) # header row + separator row
+reasons_n=$(printf '%s\n' "$reasons" | grep -c .)
+phrase_hits=$(grep -c 'audible rows across' "$DOC")
+want_phrase="$rows_n audible rows across $reasons_n once-per-session"
+if [ "$phrase_hits" -eq 1 ] && grep -qF "$want_phrase" "$DOC"; then
+  printf 'ok   — D4 the Output contract counts are derived truth, stated once\n'; pass=$((pass+1))
+else
+  printf 'FAIL — D4 want exactly one "%s" (phrase hits: %s)\n' "$want_phrase" "$phrase_hits"; fail=$((fail+1))
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
