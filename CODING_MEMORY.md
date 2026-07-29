@@ -188,8 +188,11 @@ how this file and its linked files should be written (plain language, major chan
   once per write even when the repo was never opted in.
   · **RUNS 7-8 (2026-07-29). RUN 7's four findings landed (`2c39eb8` test → `97a2008` fix →
   `7f2fc9e` docs), then RUN 8 (`5cb0985`, risk=medium, no failing dimension) found the fix itself was
-  the new defect.** All six RUN 8 items verified by hand and landed: `21a0411` test (A7.4) →
-  `325f70c` record corrections. Suite **126/0**, shellcheck clean, HEAD `325f70c`, pushed.
+  the new defect.** `21a0411` test (A7.4) → `325f70c` record corrections. Suite **126/0**, shellcheck
+  clean. **Five of RUN 8's six items landed, not six** — corrected by RUN 9: `:976` was closed as
+  "already correct under the code's numbering", but RUN 8's point was the wrong *reasoning*, not a
+  wrong number. Reinterpreted, not answered. (The first version of this entry claimed all six — the
+  same overstatement `7f2fc9e` made, one round later.)
   · **Root cause, upstream of all six sites:** the doc's Order-of-operations list and the code's
   `# --- Step N ---` headers described *different* sequences while the list claimed they resolved
   against each other. Now single-sourced, with the rule stated once — **step numbers mean the code's
@@ -203,8 +206,33 @@ how this file and its linked files should be written (plain language, major chan
   touched the file the finding named, before calling anything closed.**
   · A7.4 mutation-verified: swapping the walk-up for `warn_if_cwd_opted_in` leaves A7.1 green and
   fails A7.4 with 0 stderr lines. A7.1 alone never pinned that rationale.
-  **Next: obs judge RUN 9 at `325f70c` (mandatory — three commits past RUN 8), then
-  `gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
+  · **RUN 9 DONE 2026-07-29 @ `33bc6ae` — risk=medium, confidence=high, NO failing dimension, but
+  five `concern`s** (`intent`, `trajectory`, `traceability`, `success_masking`, `audit_trail`).
+  Verdict `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round9.md`.
+  **No behavioural defect at this HEAD** — the judge re-ran the suite twice (126/0) and probed deny /
+  doc-exempt / card-exempt / claimed-branch / never-opted-in by direct invocation. Every finding is a
+  record defect. ⚠ **The judge did NOT complete its contract:** it wrote the markdown verdict but
+  never appended to `verdicts.jsonl` and never wrote its pane result file, so no ledger row exists.
+  · **Owed before the PR (RUN 9's list):** (1) three normative contract counts undercount the audible
+  surface — `:611` says "six" audible exceptions vs nine `warn_once` reasons and eleven audit rows,
+  `:297` still says "two exits that print", `:484` names 2 of 9 flag reasons and quotes `$HOME` where
+  the code ships `${HOME:-}`; (2) three unmarked stale step refs survived the "fix every site" pass —
+  `:426` (5→4, authored by the reorder commit itself), `:449` (3→4), `:1015` (Step 4→3); (3) answer
+  `:976` on its own axis — it speaks via `warn_if_cwd_opted_in`'s cwd fallback, not because an opt-in
+  test passed; (4) **consider one structural test** greping the doc's step list against
+  `grep '# --- Step' hooks/phase-guard.sh` — four rounds say care alone cannot keep the record correct.
+  · **⚠ VERIFIED ADJACENT BLOCKER — `gh pr create` will fail closed from this worktree.**
+  `hooks/judge-guard.sh:22` reads `$HOME/.claude/coding-memory/observability-judge/verdicts.jsonl`
+  (the PRIMARY checkout's — 43 lines, **zero** for this branch) while resolving identity from the
+  session's cwd. **Same identity-from-cwd class this branch just fixed in `phase-guard.sh`**, and it
+  is exactly what the parked `fix/judge-guard-verdict-lookup` worktree exists to fix. Decide
+  deliberately — `JUDGE_VERDICTS_FILE=$PWD/...`, or a logged `JUDGE_EXEMPT=<reason>`. **Re-running the
+  judge does not help.** Out of scope for this diff.
+  · **Undisclosed boundary RUN 9 found (owed to the PR body):** supersession reads `refs/heads/` only,
+  so a gate opened on a **remote-only** branch does not supersede and the repo resumes denying
+  (probe-verified). Also uncosted: one `dirname` fork per path level for writes landing outside any repo.
+  **Next: the four record fixes above → obs judge RUN 10 (mandatory, HEAD will have moved) → decide the
+  `judge-guard` route → `gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
   with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
   plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
   while the branch is in review.)
