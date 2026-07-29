@@ -106,7 +106,7 @@ DETACHED_MSG='phase-guard: detached HEAD — no branch can carry a claim, so the
 
 # One flag file per reason, so whichever fires first never suppresses the other: a session
 # told the guard is dead for the wrong reason would go fix the wrong thing.
-warn_once() { # $1 reason (nopython|noparse), $2 session id ("" -> nosession), $3 message
+warn_once() { # $1 reason (one per audible exit — the set lives at the call sites; an enumeration here lagged the audit once already), $2 session id ("" -> nosession), $3 message
   local flag="$STATE_DIR/phase-guard-$1-${2:-nosession}"
   [ -e "$flag" ] && return 0
   printf '%s\n' "$3" 1>&2

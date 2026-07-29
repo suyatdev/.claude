@@ -220,12 +220,17 @@ an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
    one — see the correction in* Cost.
 3. **The path out of the payload.** Parse → `tool_name`, and the path: `tool_input.file_path`
    (`Edit`/`Write`), falling back to `tool_input.notebook_path` (`NotebookEdit`). Neither key → ⊘.
-   **Malformed-but-non-empty stdin → ⊘, silently** (enumerated round 4). Step 1 catches only *empty*
-   stdin; a truncated or non-JSON payload reaches the parser and raises, and an unhandled traceback
-   would exit nonzero — which the Output contract calls a defect and a `PreToolUse` harness may read
-   as deny. The parse is wrapped, and any failure to produce a usable path takes the same ⊘ as
-   "neither key". It stays **silent**, unlike step 2's exits: a malformed payload is a harness-level
-   anomaly, not evidence this repo opted in and the guard went blind.
+   **Malformed-but-non-empty stdin → ⊘, and it speaks — once per session, only when the session's
+   cwd is an opted-in repo** (`NOPAYLOAD_MSG` via `warn_if_cwd_opted_in`; the `nopayload` row of the
+   fail-open audit below, pinned A1.4/A1.5). Step 1 catches only *empty* stdin; a truncated or
+   non-JSON payload reaches the parser and raises, and an unhandled traceback would exit nonzero —
+   which the Output contract calls a defect and a `PreToolUse` harness may read as deny. The parse
+   is wrapped, and any failure to produce a usable path takes the same ⊘ as "neither key". No
+   usable path means no target repo to key audibility on, so this exit falls back to the one signal
+   left — the session's cwd — and stays silent everywhere else rather than warning every repo on
+   the machine. *(Round 4 enumerated this exit as silent; round 9 fixed the same class at the
+   `noparse` row but missed this sentence; round 10 caught it — the audit table and A1.4/A1.5
+   already had it speaking.)*
    *(Corrected 2026-07-25 against the live tool schema: `NotebookEdit` has **no** `file_path` — its
    only path key is `notebook_path`. Reading `file_path` alone, as this step originally said, would
    have failed open on every notebook write.)*
