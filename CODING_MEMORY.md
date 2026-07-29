@@ -264,9 +264,14 @@ how this file and its linked files should be written (plain language, major chan
   Step 3's canonical item now says the malformed-payload exit speaks from an opted-in cwd (matching
   the `nopayload` audit row and A1.4/A1.5); `warn_once`'s comment enumerates nothing — the reason
   set lives at the call sites, where D3 derives it.
-  **Next: obs judge RUN 11 at `a00fd3e`+ (mandatory — every path to the PR needs a verdict at final
-  HEAD) → `JUDGE_VERDICTS_FILE=<worktree>/coding-memory/observability-judge/verdicts.jsonl
-  gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
+  · **RUN 11 DONE 2026-07-29 @ `218118b` — risk=low, confidence=high, no failing dimension; both
+  RUN 10 leftovers confirmed closed.** `success_masking` held at `concern`: grep tripwires cannot
+  catch a wrong *sentence* — disclosed, structural. **DRAFT PR #30 OPENED at that HEAD**
+  (https://github.com/suyatdev/.claude/pull/30), judge-guard cleared via `JUDGE_VERDICTS_FILE` at
+  the worktree ledger — passed honestly, no exemption; created BEFORE committing the audit trail
+  (PR #23 lesson), trail + Roadmap tick + pr-tracking entry committed immediately after.
+  **Next: user reviews → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
+  arm-on-pull check, outcome backfill.** Judge prompts live in the **session** scratchpad and die
   with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
   plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
   while the branch is in review.)

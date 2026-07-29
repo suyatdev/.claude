@@ -348,3 +348,19 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - Nothing was lost in any of the three occurrences, but only because each was caught by checking
   reachability after the merge. **Always verify `git merge-base --is-ancestor <tip> origin/main`
   after a PR merges — never assume the merge captured the branch tip.**
+
+### PR #30 — feature/phase-guard-hook
+- repo: suyatdev/.claude · branch: feature/phase-guard-hook · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/30 · status: DRAFT, opened 2026-07-29
+- opened_by session_origin: desktop · last push: desktop
+- scope: hooks/phase-guard.sh (318 ln) + 130-case suite incl. Group D doc↔code tripwires,
+  ADR 0011 (records the user's `gate confirmed` override of ADR 0010's deferral), feature doc,
+  `Phase gate` stub update in rules/gates.md, settings.json PreToolUse block. Hook NOT armed by
+  the branch — primary checkout loads its own copy; arms when this merges and that checkout pulls.
+- judge (impl @ 218118b): RUN 11 risk=low conf=high, outcome=null — rounds 1–11 all persisted in
+  the worktree's coding-memory/observability-judge/. PR created BEFORE committing the audit trail
+  (strict freshness — the PR #23 lesson); judge-guard cleared via JUDGE_VERDICTS_FILE pointed at
+  the worktree ledger (primary ledger has zero rows for this branch — the parked
+  fix/judge-guard-verdict-lookup class, disclosed in the PR body).
+- next: user review → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
+  arm-on-pull check, outcome backfill.

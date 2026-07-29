@@ -1714,6 +1714,19 @@ contradicts the audit table, A1.4/A1.5, and `warn_if_cwd_opted_in`; and `phase-g
 Both left un-fixed at this HEAD so the verdict stays pinned; they are the next commit's scope.
 Verdict: `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round10.md`.
 
+### Review round 11 — the PR verdict (2026-07-29)
+
+RUN 11 at `218118b`: **risk=low, confidence=high, no failing dimension.** The delta since RUN 10
+was docs plus one comment line, so RUN 10's behavioural evidence (red-first, four mutations)
+carries; the judge re-ran the suite (130/0) and shellcheck itself and confirmed both RUN 10
+leftovers closed. One dimension held at `concern` — `success_masking`: the tripwires are
+grep-scoped, so a wrong *sentence* (three consecutive rounds' drift class) still passes green.
+Disclosed and structural, not fixed by more tests of the same kind. Draft **PR #30** was opened at
+this HEAD with `JUDGE_VERDICTS_FILE` pointed at the worktree ledger (create before committing the
+audit trail — strict freshness, the PR #23 lesson), and the round-11 artifacts committed
+immediately after.
+Verdict: `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round11.md`.
+
 ## Judge history
 
 Four rounds, all `fail` on compliance, all resolved. **No violation id ever recurred** — each round
