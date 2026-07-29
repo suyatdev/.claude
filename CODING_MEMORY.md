@@ -32,8 +32,9 @@ how this file and its linked files should be written (plain language, major chan
   branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
   **⚠ NOW IN REVIEW (`phase: review`, `d7a2f8f`). All 17 tasks done; checkpoint 3 asked and
   answered 2026-07-28 — STAY ON OPUS 5, because the review backlog is fail-open/fail-closed
-  judgment, not routine review.** HEAD `45a304e`, pushed. Suite **83/0**, `shellcheck -x` clean,
-  dogfood **16/16** re-run after the step 9 fix.
+  judgment, not routine review.** At entry to review: HEAD `45a304e`, Suite **83/0**, `shellcheck -x`
+  clean, dogfood **16/16** re-run after the step 9 fix. **Current HEAD/suite are at the end of this
+  block** — every `HEAD`/`Suite` figure between here and there is the record of a round, not now.
   · **Escalation 1 (C0 placebo) FIXED** (`2adff7a`, test-only). Baselined by mutation: pre-fix, all
   three mutants (byte-count, input-order, phase-bound) escaped **all 80 tests, 0 failures**.
   **Round 4's "one fixture reorder" prescription was measured and is WRONG** — reversing alpha/beta
@@ -181,6 +182,32 @@ how this file and its linked files should be written (plain language, major chan
   "momentum guardrail, not a security boundary" idiom for the unguarded Bash write surface.
   The four escalations these tasks raised are all **closed** — see the review block above.
   Do **not** re-derive the design; it is all in the feature file, which is canonical.
+  · **RUN 6's cwd finding CLOSED** — the hook now resolves the repo from the **file being written**
+  (user decision 2026-07-28), pinned by Group A6. Cost: never-opted 11→38ms, opted-in 35→41ms; live
+  ~41.8ms non-opted / ~67ms deny. The old ~12.4ms "structural floor" is superseded — python starts
+  once per write even when the repo was never opted in.
+  · **RUNS 7-8 (2026-07-29). RUN 7's four findings landed (`2c39eb8` test → `97a2008` fix →
+  `7f2fc9e` docs), then RUN 8 (`5cb0985`, risk=medium, no failing dimension) found the fix itself was
+  the new defect.** All six RUN 8 items verified by hand and landed: `21a0411` test (A7.4) →
+  `325f70c` record corrections. Suite **126/0**, shellcheck clean, HEAD `325f70c`, pushed.
+  · **Root cause, upstream of all six sites:** the doc's Order-of-operations list and the code's
+  `# --- Step N ---` headers described *different* sequences while the list claimed they resolved
+  against each other. Now single-sourced, with the rule stated once — **step numbers mean the code's
+  headers; the code wins; never renumber code to match prose.** Canonical: 1 payload · 2 tools ·
+  3 path/parse · 4 repo+opt-in · 5-10 unchanged. Four sites quoting retired prose are **marked**
+  pre-`508c55b` rather than rewritten, so their quotes still match what they cite.
+  · **F2 was reported closed and was not.** `7f2fc9e` claimed "all four findings" and touched **one
+  file**. Enumerating beat patching again: beyond RUN 8's six sites it found two more wrong audit rows
+  and **three** copies of the false-credit claim — the suite's `:989` and `phase-guard.sh:197` both
+  still said six rounds missed the cwd bug. **`git show --stat` the closing commit and confirm it
+  touched the file the finding named, before calling anything closed.**
+  · A7.4 mutation-verified: swapping the walk-up for `warn_if_cwd_opted_in` leaves A7.1 green and
+  fails A7.4 with 0 stderr lines. A7.1 alone never pinned that rationale.
+  **Next: obs judge RUN 9 at `325f70c` (mandatory — three commits past RUN 8), then
+  `gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
+  with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
+  plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
+  while the branch is in review.)
 - **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
   carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
   `file_path` alone, which would have failed open on every notebook write. Corrected, with a
