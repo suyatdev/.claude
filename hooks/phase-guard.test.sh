@@ -1056,6 +1056,16 @@ if chmod 000 "$UNREADABLE/.git" && [ ! -r "$UNREADABLE/.git" ]; then
   allow_silent "A7.2 control — a target under no repo at all stays silent" "$OPTED" \
     "$(payload Write file_path "$TMP/nonrepo-a7/src/x.sh")"
   no_flag_for a7-norepo "A7.3 ...and wrote no flag, so that silence is real"
+
+  # A7.4 pins the RATIONALE, which A7.1 does not. A7.1 runs with cwd in $OPTED — a readable repo —
+  # so a `warn_if_cwd_opted_in` implementation would resolve a root, find the opt-in, and speak;
+  # A7.1 stays green under the very substitution the comment above rules out. The case the walk-up
+  # exists for is cwd INSIDE the unreadable repo, where that helper fails for the same reason the
+  # target's rev-parse did and the warning is lost. Reachable because only .git is mode 000: the
+  # work tree is still enterable. RUN 8 found this gap — the fix was sound and unpinned.
+  export CLAUDE_CODE_SESSION_ID=a7-cwd-unreadable
+  allow_audible "A7.4 ...and still says so when the session's own cwd is that repo" "$UNREADABLE" \
+    "$(payload Write file_path "$UNREADABLE/src/x.sh")" "$NOREPOREAD_RE"
 else
   printf 'skip — A7 needs a user that cannot read a mode-000 .git\n'
 fi
