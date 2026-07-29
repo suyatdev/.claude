@@ -973,8 +973,12 @@ allow_silent "A5.5 control — a relative target under docs/ is still exempt" "$
 
 # A5.6 — the other one: `[ -n "$fp_phys" ] || exit 0`, a silent fail-open written inside the fix
 # for silent fail-opens. `cd` fails when the deepest EXISTING ancestor cannot be searched, and the
-# hook then cannot tell a path of its own from one outside; step 3 has already passed, so the rule
-# says it speaks. `-d` on the locked directory still works — that reads its parent, which is 755.
+# hook then cannot tell a path of its own from one outside. No repo has been identified at this
+# exit — THE RULE's opted-in condition never ran — so it speaks only via warn_if_cwd_opted_in's
+# cwd fallback, which is why this fixture runs from $OPTED. (An earlier version of this comment
+# said "step 3 has already passed, so the rule says it speaks": correct under the pre-508c55b
+# numbering, wrong reasoning under the code's — RUN 9.) `-d` on the locked directory still
+# works — that reads its parent, which is 755.
 LOCKED="$TMP/locked/sub"; mkdir -p "$LOCKED"
 export CLAUDE_CODE_SESSION_ID=a5-noresolve
 if chmod 000 "$LOCKED" && [ ! -x "$LOCKED" ]; then

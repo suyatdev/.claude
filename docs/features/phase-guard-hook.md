@@ -294,7 +294,8 @@ are forward-compatible.
 
 A file failing any of the three — including a `phase:` value outside the three legal ones — is
 **skipped**, never guessed at. Skipping fails open, per Q3. But a skipped file in a repo that *has*
-opted in is the "cannot evaluate" case, so it is one of the two exits that print.
+opted in is the "cannot evaluate" case, so it is one of the exits that must speak — the `noparse`
+row of the fail-open audit below.
 
 ### The exits that must not be silent — the fail-open audit
 
@@ -423,7 +424,7 @@ repo while the cards came from the file's.
 **The cost is real and was accepted deliberately** (user decision, 2026-07-28). Measured on this
 machine, 30 writes per case: a repo that never opted in goes **11 ms → 38 ms** per write — it now
 pays a python startup before discovering it is not guarded — and an opted-in repo **35 ms → 41 ms**.
-That directly contradicts step 5's own "bash builtin, not a `stat` subprocess" reasoning, which is
+That directly contradicts step 4's own "bash builtin, not a `stat` subprocess" reasoning, which is
 why it was a decision to take rather than an optimization to make. It buys back the only failure
 mode the audit could not reach, and a PreToolUse hook already sits inside a tool round-trip
 measured in hundreds of milliseconds.
@@ -446,7 +447,7 @@ exits one at a time produced the same defect twice.
 
 **An empty `docs/features/` is not this case.** Zero files makes `nfiles > nparsed` false on its
 own, so the `noparse` line cannot fire in a repo that created the directory and nothing else; that
-takes the silent A1 path (step 3's "not applicable" reasoning, one directory later).
+takes the silent A1 path (step 4's "not applicable" reasoning, one directory later).
 
 **Open contract question, deliberately unsettled.** The glob takes every `*.md`, so an ordinary
 `README.md` in `docs/features/` is skipped too and warns once per session forever. The message is
@@ -480,10 +481,10 @@ Judge output is data, not fact; this document's own rule, applied to itself one 
 
 | Aspect | Contract |
 |---|---|
-| Store | `STATE_DIR="${PHASE_GUARD_STATE_DIR:-$HOME/.claude/hooks/state}"`, mirroring `context-handoff-watch.sh:14`'s `${PANE_STATE_DIR:-...}` shape. The env var **is** the test-time override. |
-| Path | `$STATE_DIR/phase-guard-<reason>-<sid>`, `<reason>` ∈ {`nopython`, `noparse`} — two independent flags, so one firing never suppresses the other |
-| Key, `noparse` exit | payload `session_id`, falling back to `$CLAUDE_CODE_SESSION_ID` |
-| Key, `nopython` exit | `$CLAUDE_CODE_SESSION_ID` **only** — the payload cannot be parsed by construction |
+| Store | `STATE_DIR="${PHASE_GUARD_STATE_DIR:-${HOME:-}/.claude/hooks/state}"`, mirroring `context-handoff-watch.sh:14`'s `${PANE_STATE_DIR:-...}` shape (`${HOME:-}` not `$HOME`: under `set -u` an unset `HOME` must fail open, not exit 1). The env var **is** the test-time override. |
+| Path | `$STATE_DIR/phase-guard-<reason>-<sid>`, one flag per reason — `<reason>` ∈ {`nogitbin`, `nopython`, `nopayload`, `noresolve`, `noreporead`, `nolist`, `noparse`, `nogit`, `detached`}, every audible exit in the audit — independent flags, so one reason firing never suppresses another. (Authored for `nopython`/`noparse` alone; the audit grew and this row lagged it until round 9. Group D now derives the set from the call sites.) |
+| Key, pre-parse exits (`nogitbin`, `nopython`) | `$CLAUDE_CODE_SESSION_ID` **only** — at step 2 no interpreter has parsed the payload, by construction |
+| Key, every exit from step 3 on | payload `session_id`, falling back to `$CLAUDE_CODE_SESSION_ID` |
 | Both empty | the literal `nosession` — written by `panes/dispatch-pane-agent.sh:70`, read by `pane-dispatch-guard.sh:55`. Degrades to once-per-machine-until-cleaned, not once-per-write |
 | Store unwritable | **print the line and continue** — `mkdir -p`/`touch` failures are swallowed, and the exit still returns 0. This is the deliberate divergence from `context-handoff-watch.sh:42` above |
 | Cleanup | none. Flags are empty files keyed by session id; they accumulate in the low tens of bytes and are safe to delete at any time. **`/hooks/state/` is `.gitignore`d** (task 13) — this repo *is* `~/.claude`, so the store lands beside the tracked hook scripts |
@@ -608,8 +609,10 @@ under `set -u` an unbound variable exits 1, and a fail-open path that leaks a no
 defect regardless of how the harness classifies it. Every ⊘ path therefore exits 0 **explicitly**.
 
 An allow emits nothing on stdout or stderr, with exactly the exceptions enumerated in "The exits
-that must not be silent" — six of them, each printing one stderr line at most once per session and
-still exiting 0. stdout is empty on every path without exception. A **deny** that also has a skipped
+that must not be silent" — 11 audible rows across 9 once-per-session flag reasons, each reason
+printing one stderr line at most once per session and still exiting 0. (Both counts are derived by
+Group D, which fails the suite if either drifts — this sentence undercounted the surface by nearly
+half for three rounds.) stdout is empty on every path without exception. A **deny** that also has a skipped
 entry emits both: the warning line, then the full deny message — the skip check sits above every
 exit, so it is not confined to allows.
 
@@ -1012,7 +1015,7 @@ assertion depends on behaviour a later task introduces.
         steps run, so classification was verified separately against a *copy* whose stub denies:
         source/nested-source/`notebook_path` reach step 7; all six exempt paths stop at step 6;
         an outside path stops at step 5. The committed hook was never modified for that probe.
-      - `tool_name` is not extracted. Step 4 lists it, but nothing downstream consumes it and the
+      - `tool_name` is not extracted. Step 3 lists it, but nothing downstream consumes it and the
         matcher already restricts the tool set, so binding it would be an unused variable under
         `set -u`. No scenario observes it — this changes no behaviour.
       - The no-interpreter exit is silent here. It is one of the two exits that must not stay
@@ -1679,6 +1682,19 @@ Behaviour observed live, all of it as designed:
 deliberately not verified — the experiment risks the machine), and enforcement under a real
 `/clear`-and-restore cycle. The hook remains registered but not armed; the harness reads the primary
 checkout's working copy, which sits on another branch.
+
+### Review round 9 — the record pinned to the code (2026-07-29)
+
+RUN 9 found no behavioural defect (suite run twice by the judge, plus direct-invocation probes);
+every finding was a record defect, and it was the fourth consecutive round in which green tests
+coexisted with a stale record. Response: **Group D**, four grep tripwires that make the suite read
+this document — step-list count/order vs the code's headers, a keyword per step per side, the Flag
+contract's reason set derived from the call sites, and the Output contract's counts computed rather
+than asserted. Red-first on exactly RUN 9's two contract findings; all four mutation-verified.
+The three stale step references, the three undercounting contract statements, and A5.6's
+pre-`508c55b` rationale were corrected in the same round. Still open and undisclosed until now:
+supersession reads `refs/heads/` only, so a gate opened on a remote-only branch does not supersede
+(owed to the PR body, with the per-level `dirname` cost on out-of-repo writes).
 
 ## Judge history
 
