@@ -260,10 +260,13 @@ how this file and its linked files should be written (plain language, major chan
   exhaustive — 2 of 9 reasons. Judge-guard route decided on the merits: **`JUDGE_VERDICTS_FILE`
   pointed at the worktree ledger, not `JUDGE_EXEMPT`** — the fresh row exists, so the gate can pass
   honestly; exempting would skip a check that would succeed.
-  **Next: USER DECISION — fix the two RUN 10 leftovers (moves HEAD → RUN 11 mandatory before
-  `gh pr create`) or open the draft PR at `31ebca7` with both disclosed in the body. Then:
-  `JUDGE_VERDICTS_FILE=<worktree>/coding-memory/observability-judge/verdicts.jsonl gh pr create
-  --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
+  · **RUN 10's two leftovers FIXED (`a00fd3e`, docs+comment only), suite 130/0, shellcheck clean.**
+  Step 3's canonical item now says the malformed-payload exit speaks from an opted-in cwd (matching
+  the `nopayload` audit row and A1.4/A1.5); `warn_once`'s comment enumerates nothing — the reason
+  set lives at the call sites, where D3 derives it.
+  **Next: obs judge RUN 11 at `a00fd3e`+ (mandatory — every path to the PR needs a verdict at final
+  HEAD) → `JUDGE_VERDICTS_FILE=<worktree>/coding-memory/observability-judge/verdicts.jsonl
+  gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
   with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
   plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
   while the branch is in review.)
