@@ -199,21 +199,29 @@ The Spec formalizes this into Gherkin; it is recorded here so it is not re-deriv
 (the existing `PreToolUse` blocks are `Bash`, `Task|Agent`, `*` — this is a fourth, not an edit to
 an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
 
-**Order of operations** (fail-open exits are marked ⊘):
+**Order of operations** (fail-open exits are marked ⊘). **This list describes the shipped order as
+of `508c55b`.** The sequence below replaced an earlier one in which `git rev-parse` ran second and
+the `docs/features` early exit ran third; that ordering resolved the repo from the session's cwd and
+is the bug `508c55b` fixed. Steps 5–10 keep their original numbers so the round 1–6 verdicts, the
+suite's step labels, and the audit table below all still resolve against them.
 
 1. Read stdin payload; empty → ⊘.
-2. `git rev-parse --show-toplevel`; not a repo / fails → ⊘.
-3. `[ -d "<root>/docs/features" ]`; absent → ⊘. *(Q5's cheap early exit — the common case in every
-   repo that never opted in. Deliberately **after** step 2, not before: a bare `./docs/features`
-   test assumes the hook's CWD is the repo root and would silently stop working from a
-   subdirectory.)* **A bash builtin, not `stat`** (round 4): this is the hottest path in the design
-   — it runs on every write in every repo on the machine — and `[ -d ]` answers the same question
-   without a subprocess. Rounds 1–3 wrote `stat` and it was never load-bearing.
-4. Resolve the interpreter as the siblings do — `py=$(command -v python3 || command -v python)`
+2. Resolve the interpreter as the siblings do — `py=$(command -v python3 || command -v python)`
    (`judge-guard.sh:28`, `doc-guard.sh:49`) — and parse the payload → `tool_name`, and the path:
    `tool_input.file_path` (`Edit`/`Write`), falling back to `tool_input.notebook_path`
    (`NotebookEdit`). Neither key → ⊘. **No interpreter → ⊘ *and* print one line, once per session**
-   (see "The exits that must not be silent").
+   (see "The exits that must not be silent"). *This is what makes `python3` a cost of the common
+   case rather than of the guarded one — see the correction in* Cost.
+3. Walk up from the write target to its deepest existing ancestor and take its physical form
+   (`cd … && pwd -P`); unsearchable → ⊘ **and speak** (`NORESOLVE_MSG`).
+4. `git -C "<target's dir>" rev-parse --show-toplevel` — **the target's repo, never the session's.**
+   Non-zero splits two ways: no `.git` found walking up → ⊘ silently, genuinely out of scope; a
+   `.git` that exists but cannot be read → ⊘ **and speak** (`NOREPOREAD_MSG`, Group A7). Then
+   `[ -d "<root>/docs/features" ]`; absent → ⊘, the opt-in test and the common-case exit.
+   **A bash builtin, not `stat`** (round 4): `[ -d ]` answers the same question without a
+   subprocess. Rounds 1–3 wrote `stat` and it was never load-bearing. It can no longer be the
+   *first* test — there is no repo to ask about until the payload has been parsed — and that
+   reordering is what the cwd fix cost.
    **Malformed-but-non-empty stdin → ⊘, silently** (enumerated round 4). Step 1 catches only *empty*
    stdin; a truncated or non-JSON payload reaches the parser and raises, and an unhandled traceback
    would exit nonzero — which the Output contract calls a defect and a `PreToolUse` harness may read
@@ -307,8 +315,8 @@ policy exception rather than an evaluation failure, and an unannounced one was a
 | Exit | Step | Why silence is right |
 |---|---|---|
 | Empty payload | 1 | Nothing was sent; not yet known to concern an opted-in repo |
-| Not a git repo / no root | 2 | Out of scope entirely |
-| No `docs/features/` | 3 | This repo never opted in |
+| No `.git` found walking up from the target | 4 | Out of scope entirely |
+| No `docs/features/` | 4 | This repo never opted in |
 | Path outside the root, after physical resolution | 5 | Genuinely not ours to judge |
 | Exempt path (`docs/*`, `.claude/*`, `settings.json`, memory) | 6 | Guarded-by-design exclusion |
 | Nothing at `planning` | 7 | The ordinary quiet case |
@@ -319,10 +327,11 @@ policy exception rather than an evaluation failure, and an unannounced one was a
 
 | Exit | Step | Why it must speak | Pinned by |
 |---|---|---|---|
-| No `git` on PATH | 2 | Guard off in *every* repo until PATH is fixed | A4.5 |
-| No python interpreter | 4 | Same, and the reason this asymmetry was removed | A2.1 |
-| Payload unreadable / no usable path | 4 | Opted-in repo, guard switched off by a malformed message | A1.4, A1.5 |
-| Write target unresolvable to a physical path | 5 | Opted in, and "is this path ours?" is unanswerable | A5.6 |
+| No `git` on PATH | 4 | Guard off in *every* repo until PATH is fixed | A4.5 |
+| No python interpreter | 2 | Same, and the reason this asymmetry was removed | A2.1 |
+| Payload unreadable / no usable path | 2 | Opted-in repo, guard switched off by a malformed message | A1.4, A1.5 |
+| Write target unresolvable to a physical path | 3 | Opted in, and "is this path ours?" is unanswerable | A5.6 |
+| **`.git` exists but cannot be read** | 4 | A repo that may have opted in, and the gate cannot be evaluated there at all | **A7.1** |
 | Any `docs/features/*.md` entry skipped | 7 | Cannot read part of its own input | A2.4, A2.15, A2.18–A2.22 |
 | `docs/features/` cannot be listed | 7 | Opted in, yet *every* card vanishes at once | A4.1, A4.2 |
 | `git for-each-ref` fails | 8 | Supersession unresolvable while a card is active | A1.8 |
@@ -335,6 +344,15 @@ and the two payload exits (`A1.4`, `A1.5`), all against a repo holding an un-sup
 card on an unclaimed branch. They pinned the guard being switched off at the exact moment it was
 about to deny. That is what the bug class looked like from the inside: **not missing tests, enforcing
 ones** — which is why four consecutive judge rounds read this suite as evidence of correctness.
+
+**And the enumeration itself then hid a seventh** (`A7.1`, added in review). The *Justifiably
+silent* table's second row used to read "Not a git repo / no root", which is two conditions wearing
+one name: `rev-parse` fails both when there is no repo and when there is one it cannot read, and
+only the first is out of scope. Rounds 5 and 6 each reported the unreadable case; it survived both,
+because anyone checking the audit against the code found a row that appeared to cover it. The row is
+now split — the silent half above, the audible half in the table below. The lesson is narrower than
+"enumerate the surface": **an enumeration entry naming a `git` failure mode is one row per
+*condition*, not one per *exit*,** because a single non-zero status is not a single cause.
 Converted in review.
 
 Each still exits 0 and each still speaks **at most once per session**, so a flapping git costs one
@@ -364,11 +382,24 @@ every write — the one code the Output contract calls illegitimate. Now `${HOME
 
 ### The repo is the file's, not the session's — and what that cost
 
-Step 2 resolved the root by running `git rev-parse --show-toplevel` in whatever directory the
-**session** happened to be standing in. The same target file was therefore denied or allowed
+Step 2 *as it then was* — the repo step, before the reorder renumbered it to 4 — resolved the root
+by running `git rev-parse --show-toplevel` in whatever directory the **session** happened to be
+standing in. The same target file was therefore denied or allowed
 according to the cwd, and the allow was silent — the fail-open class one step upstream of every
-exit the audit enumerated. Six judge rounds read that line without seeing it; it was found by
-asking what step 2 actually resolves, after the audit had closed everything downstream of it.
+exit the audit enumerated.
+
+**Credit, corrected in review.** This paragraph read "Six judge rounds read that line without seeing
+it; it was found by asking what step 2 actually resolves." That is false, and it was repeated into
+the session's own state file and then handed to the round-7 judge as fact — where the judge checked
+it and rejected it. **The round-6 verdict found this bug and prescribed the fix.** It states the
+defect ("the repo root is derived from the hook's CWD, not from the payload"), reports the probe
+("with CWD outside the target repo … **exit 0, silent**, while the same write with CWD inside
+denies"), gives the one-line remedy — `git -C "$(dirname "$file_path")" rev-parse …`, which is what
+shipped — and flags it as "the item I would most want confirmed before merge"
+(`coding-memory/observability-judge/2026-07-28-feature-phase-guard-hook-round6.md`, line 108). Five
+rounds missed it; the sixth caught it, and the record credited self-review instead. Worth keeping
+visible, because a record that quietly reassigns credit away from the review process is a reason to
+trust that process less than the evidence says you should.
 
 A linked worktree has its own toplevel, so this was not an edge case: a session in the primary
 checkout writing into its worktree — the parallel-agent workflow `core-conduct.md` prescribes and
@@ -707,7 +738,8 @@ A deny needs *some* planning file; `b.md` supplies it, so the assertion isolates
 scenario is actually about — that `a.md`'s absent `branch:` reads as **unclaimed** rather than as
 malformed, leaving `feat/a` unclaimed and `b.md` free to deny.
 
-Scenario 3 must be reached **only after** the repo root is resolved (step 2). A bare
+Scenario 3 must be reached **only after** the repo root is resolved (step 4 as shipped; step 2 in
+the pre-`508c55b` ordering this sentence was written against). A bare
 `stat ./docs/features` assumes the hook's CWD is the repo root and silently stops guarding from any
 subdirectory — the failure mode is invisible, which is what makes it worth pinning here.
 
@@ -727,7 +759,7 @@ can block edits to its own off switch is a footgun — see "Rollback".
 
 **`.claude/*` does not swallow this repo's worktrees** (narrowed round 4). Round 2 warned that the
 unguarded `.claude/*` entry exempts everything under `.claude/worktrees/`, which is where this very
-feature is being planned. It largely does not: step 2 resolves the root with `git rev-parse
+feature is being planned. It largely does not: the repo step (4 as shipped, 2 when this was written) resolves the root with `git rev-parse
 --show-toplevel`, which returns the **worktree's** root from inside a worktree — confirmed from this
 checkout — so a session working there relativizes its files to `hooks/x.sh` and is **guarded**
 normally. The hole opens only for a path reaching *into* a worktree from the primary checkout, which
@@ -820,8 +852,12 @@ Scenario: every branch's copy is read in exactly one subprocess
 **Revised round 4. The previous `≤60ms guarded / ≤15ms non-opted-in` budget is withdrawn**, for two
 reasons that compound.
 
-**It was below its own floor.** The non-opted-in figure has no headroom by construction: two
-operations are mandatory *before* step 3's early exit can fire. Measured twice, independently:
+⚠️ **Superseded by `508c55b` — retained as the round-4 record, not as current fact.** The
+floor described here was the *pre-reorder* one, when only a bash spawn and `git rev-parse` preceded
+the early exit. As shipped the interpreter runs first, so `python3` startup is part of the floor
+too and the non-opted-in path is ~41.8 ms, not ~12 ms — see *Live run*. Original text: **it was
+below its own floor**; the non-opted-in figure had no headroom by construction, two operations being
+mandatory before the early exit could fire. Measured twice, independently:
 
 | Measurement | bash spawn | `+ git rev-parse --show-toplevel` | `python3` startup + `json` import |
 |---|---|---|---|
@@ -861,9 +897,21 @@ single largest cost on the guarded path and larger than the entire non-opted-in 
 thing: parsing two keys out of the JSON payload. If the guarded path ever needs to get faster, that
 is what to attack — not `--batch-check`.
 
-It does **not** burden the common case: step 4 runs after step 3's early exit, so a repo that never
+⚠️ **The paragraph that stood here was false, and it is the reason this correction exists.** It read:
+*"It does not burden the common case: step 4 runs after step 3's early exit, so a repo that never
 opted in never starts python. That is the early-exit design working as intended, and it is the one
-performance claim here that rests on structure rather than on a stopwatch.
+performance claim here that rests on structure rather than on a stopwatch."*
+
+That was true of the pre-`508c55b` ordering and is **the exact opposite of what ships**. Resolving
+the repo from the write target requires the path, the path comes out of the payload, and parsing the
+payload is what starts `python3` — so the interpreter now runs **before** the opt-in test, and a repo
+that never opted in starts `python3` once on **every write**. The claim was stated as structural,
+which is worse than a stale stopwatch figure: a number goes out of date on its own, but this asserted
+a property of the design that the design no longer has. Falsified with a counting shim by the round-7
+judge, and consistent with the ~41.8 ms measured live (see *Live run*).
+
+The `python3` startup is therefore no longer a cost paid only by guarded repos. It is the floor for
+every write in every repo on this machine, and it remains the single largest lever on both paths.
 
 Parser contract, verified against git 2.50.1 — the two output forms are **not** symmetric:
 
