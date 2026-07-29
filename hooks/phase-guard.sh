@@ -194,7 +194,7 @@ esac
 # two diverge constantly: a session working in a linked worktree (which has its own toplevel), a
 # tool invoked from $HOME, an agent whose cwd was reset under it. Wherever they diverged the gate
 # was off and said nothing, which is this hook's one bug class, one step upstream of every exit the
-# audit enumerated. Six judge rounds read step 2 without seeing it.
+# audit enumerated. Found by the round-6 verdict, which named it and prescribed this one-line fix.
 #
 # The file need not exist yet (this is a PreToolUse for a Write), so walk up to the deepest
 # ancestor that does and resolve the repo from there.

@@ -392,7 +392,7 @@ err_has "A3.8 names docs/features/a.md" 'docs/features/a\.md'
 
 # --- git shims ---------------------------------------------------------------------------------
 # Several scenarios below need a specific git subcommand to fail, return nothing, or be counted.
-# Every shim falls through to the REAL git for anything it does not intercept — otherwise step 2's
+# Every shim falls through to the REAL git for anything it does not intercept — otherwise step 4's
 # `rev-parse --show-toplevel` would break too and the case would pass by exiting at the wrong step.
 # The real path is captured HERE, before any shim reaches PATH, so a shim can never recurse.
 export GIT_SHIM_REAL; GIT_SHIM_REAL="$(command -v git)"
@@ -646,7 +646,7 @@ with_state_dir() { # $1 PHASE_GUARD_STATE_DIR value, then an assertion function 
 # interpreter, so "no python" is the ONLY difference between this fixture and a normal run.
 # Built by symlink rather than by filtering the real PATH: a filter has to guess which directories
 # hold a python, and a missed pyenv/conda shim would leave the hook working and the case green for
-# the wrong reason. awk/sed/head are included though step 4 exits before them — their absence would
+# the wrong reason. awk/sed/head are included though step 2 exits before them — their absence would
 # make a later failure read as "no python" when it was "no awk".
 NOPYBIN="$TMP/nopybin"; mkdir -p "$NOPYBIN"
 for b in bash cat git grep mkdir awk sed head; do
@@ -668,7 +668,7 @@ PL_NOPARSE="$(payload Write file_path "$NOPARSE/src/x.sh")"
 # EMPTYFEATURES case at step 7); not repeated here, because two assertions of one property means a
 # later change can satisfy one and break the other.
 
-# A2.1 — step 4, the no-interpreter exit. The guard is off in EVERY repo until PATH is fixed.
+# A2.1 — step 2, the no-interpreter exit. The guard is off in EVERY repo until PATH is fixed.
 export CLAUDE_CODE_SESSION_ID=a2-nopython
 with_path "$NOPYBIN" allow_audible "A2.1 no interpreter says so (step 2)" \
   "$OPTED" "$PL_OPTED" "$NOPY_RE"
@@ -811,7 +811,7 @@ allow_audible "A2.18 a skipped card still speaks when supersession empties the l
 UNREADABLE="$TMP/unreadable-entries"; mkrepo "$UNREADABLE"
 # mkrepo does not create docs/features/ — only feature_file does, and no card is wanted here.
 # Without this the symlink never lands, the repo reads as never-opted-in, and the case passes
-# at step 3 for entirely the wrong reason.
+# at step 4 for entirely the wrong reason.
 mkdir -p "$UNREADABLE/docs/features"
 ln -s /nonexistent/target.md "$UNREADABLE/docs/features/dangling.md"
 export CLAUDE_CODE_SESSION_ID=a2-dangling
@@ -867,7 +867,7 @@ chmod 644 "$UNOPENABLE/docs/features/a.md"
 # A1.4/A1.5 and A1.8-A1.10b — were asserted SILENT by this suite until the audit converted them,
 # which is what the class looked like from the inside: not missing tests, enforcing ones.
 #
-# A4.1/A4.2 — docs/features/ exists, so step 3 says the repo opted in, but the directory itself
+# A4.1/A4.2 — docs/features/ exists, so step 4 says the repo opted in, but the directory itself
 # cannot be listed. Every card vanishes at once and nfiles is 0, so the skip tally has nothing to
 # compare and stays quiet: the repo looks opted-in and unguarded simultaneously. 444 is the sharper
 # of the two — the shell still expands the glob to the real filename, so the entry is KNOWN to
@@ -986,10 +986,12 @@ fi
 chmod 755 "$LOCKED"
 
 # --- Group A6: the repo is the FILE'S, not the session's ---------------------------------------
-# Six judge rounds never looked at step 2, which resolved the root by running `git rev-parse` in
-# whatever directory the SESSION happened to be standing in. The same target file was therefore
-# denied or allowed according to the session's cwd — and the allow was silent, which is the audit's
-# class one step upstream of every exit the audit enumerated.
+# The root was resolved by running `git rev-parse` in whatever directory the SESSION happened to
+# be standing in (step 4). The same target file was therefore denied or allowed according to the
+# session's cwd — and the allow was silent, which is the audit's class one step upstream of every
+# exit the audit enumerated. Found by the ROUND 6 verdict, which named the defect, reported the
+# probe and prescribed the one-line remedy that shipped; an earlier version of this comment claimed
+# six rounds had missed it, which was false and is corrected here as it was in the feature card.
 #
 # A6.3/A6.4 are the case that made this worth the cost: a linked worktree has its own toplevel, so
 # a session in the primary checkout writing into its worktree (or the reverse) resolved the wrong

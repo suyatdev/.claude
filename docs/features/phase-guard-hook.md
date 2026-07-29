@@ -199,38 +199,46 @@ The Spec formalizes this into Gherkin; it is recorded here so it is not re-deriv
 (the existing `PreToolUse` blocks are `Bash`, `Task|Agent`, `*` — this is a fourth, not an edit to
 an existing one). Exit 0 = allow silently; exit 2 = deny with reason on stderr.
 
-**Order of operations** (fail-open exits are marked ⊘). **This list describes the shipped order as
-of `508c55b`.** The sequence below replaced an earlier one in which `git rev-parse` ran second and
-the `docs/features` early exit ran third; that ordering resolved the repo from the session's cwd and
-is the bug `508c55b` fixed. Steps 5–10 keep their original numbers so the round 1–6 verdicts, the
-suite's step labels, and the audit table below all still resolve against them.
+**Order of operations** (fail-open exits are marked ⊘).
+
+> **Step numbers mean the `# --- Step N: … ---` section headers in `hooks/phase-guard.sh`, and
+> nothing else.** The code is the single source of truth; this list, the audit table's Step column,
+> and the suite's step labels all resolve against it. Written down because they once did not: the
+> pre-`508c55b` order ran `git rev-parse` second, the `docs/features` early exit third and the
+> interpreter fourth, and the fix that reordered them left the doc describing the old sequence while
+> the code described the new one. **Rounds 1–6 of the observability verdicts predate the reorder and
+> use the old numbering; rounds 7 onward use this one.** When the two disagree, the code wins — do
+> not renumber the code to match prose.
 
 1. Read stdin payload; empty → ⊘.
-2. Resolve the interpreter as the siblings do — `py=$(command -v python3 || command -v python)`
-   (`judge-guard.sh:28`, `doc-guard.sh:49`) — and parse the payload → `tool_name`, and the path:
-   `tool_input.file_path` (`Edit`/`Write`), falling back to `tool_input.notebook_path`
-   (`NotebookEdit`). Neither key → ⊘. **No interpreter → ⊘ *and* print one line, once per session**
-   (see "The exits that must not be silent"). *This is what makes `python3` a cost of the common
-   case rather than of the guarded one — see the correction in* Cost.
-3. Walk up from the write target to its deepest existing ancestor and take its physical form
-   (`cd … && pwd -P`); unsearchable → ⊘ **and speak** (`NORESOLVE_MSG`).
-4. `git -C "<target's dir>" rev-parse --show-toplevel` — **the target's repo, never the session's.**
-   Non-zero splits two ways: no `.git` found walking up → ⊘ silently, genuinely out of scope; a
-   `.git` that exists but cannot be read → ⊘ **and speak** (`NOREPOREAD_MSG`, Group A7). Then
-   `[ -d "<root>/docs/features" ]`; absent → ⊘, the opt-in test and the common-case exit.
-   **A bash builtin, not `stat`** (round 4): `[ -d ]` answers the same question without a
-   subprocess. Rounds 1–3 wrote `stat` and it was never load-bearing. It can no longer be the
-   *first* test — there is no repo to ask about until the payload has been parsed — and that
-   reordering is what the cwd fix cost.
+2. **The tools this hook cannot run without.** `command -v git` → **⊘ *and* print one line, once
+   per session** (`NOGITBIN_MSG`); then the interpreter, resolved as the siblings do —
+   `py=$(command -v python3 || command -v python)` (`judge-guard.sh:28`, `doc-guard.sh:49`) — →
+   **⊘ *and* print one line, once per session** (`NOPYTHON_MSG`). Both messages are machine-wide
+   and unconditional: neither is a statement about *this* repo, so neither needs to know whether it
+   opted in. *This step is what makes `python3` a cost of the common case rather than of the guarded
+   one — see the correction in* Cost.
+3. **The path out of the payload.** Parse → `tool_name`, and the path: `tool_input.file_path`
+   (`Edit`/`Write`), falling back to `tool_input.notebook_path` (`NotebookEdit`). Neither key → ⊘.
    **Malformed-but-non-empty stdin → ⊘, silently** (enumerated round 4). Step 1 catches only *empty*
    stdin; a truncated or non-JSON payload reaches the parser and raises, and an unhandled traceback
    would exit nonzero — which the Output contract calls a defect and a `PreToolUse` harness may read
    as deny. The parse is wrapped, and any failure to produce a usable path takes the same ⊘ as
-   "neither key". It stays **silent**, unlike the two audible exits: a malformed payload is a
-   harness-level anomaly, not evidence this repo opted in and the guard went blind.
+   "neither key". It stays **silent**, unlike step 2's exits: a malformed payload is a harness-level
+   anomaly, not evidence this repo opted in and the guard went blind.
    *(Corrected 2026-07-25 against the live tool schema: `NotebookEdit` has **no** `file_path` — its
    only path key is `notebook_path`. Reading `file_path` alone, as this step originally said, would
    have failed open on every notebook write.)*
+4. **The repository that owns that path, and whether it opted in.** Walk up from the write target to
+   its deepest existing ancestor and take its physical form (`cd … && pwd -P`); unsearchable → ⊘
+   **and speak** (`NORESOLVE_MSG`). Then `git -C "<target's dir>" rev-parse --show-toplevel` —
+   **the target's repo, never the session's.** Non-zero splits two ways: no `.git` found walking up
+   → ⊘ silently, genuinely out of scope; a `.git` that exists but cannot be read → ⊘ **and speak**
+   (`NOREPOREAD_MSG`, Group A7). Then `[ -d "<root>/docs/features" ]`; absent → ⊘, the opt-in test
+   and the common-case exit. **A bash builtin, not `stat`** (round 4): `[ -d ]` answers the same
+   question without a subprocess. Rounds 1–3 wrote `stat` and it was never load-bearing. It can no
+   longer be the *first* test — there is no repo to ask about until the payload has been parsed —
+   and that reordering is what the cwd fix cost.
 5. Relativize `file_path` against the root (payload paths are absolute); outside the root → ⊘.
 6. Classify the path — **reuse `doc-guard.sh:149` verbatim**, plus `.claude/*` and `settings.json`:
    `CODING_MEMORY.md`, `coding-memory/*`, `docs/*`, `.claude/*`, `settings.json` → unguarded → ⊘.
@@ -327,10 +335,10 @@ policy exception rather than an evaluation failure, and an unannounced one was a
 
 | Exit | Step | Why it must speak | Pinned by |
 |---|---|---|---|
-| No `git` on PATH | 4 | Guard off in *every* repo until PATH is fixed | A4.5 |
+| No `git` on PATH | 2 | Guard off in *every* repo until PATH is fixed | A4.5 |
 | No python interpreter | 2 | Same, and the reason this asymmetry was removed | A2.1 |
-| Payload unreadable / no usable path | 2 | Opted-in repo, guard switched off by a malformed message | A1.4, A1.5 |
-| Write target unresolvable to a physical path | 3 | Opted in, and "is this path ours?" is unanswerable | A5.6 |
+| Payload unreadable / no usable path | 3 | Opted-in repo, guard switched off by a malformed message | A1.4, A1.5 |
+| Write target unresolvable to a physical path | 4 | Opted in, and "is this path ours?" is unanswerable | A5.6 |
 | **`.git` exists but cannot be read** | 4 | A repo that may have opted in, and the gate cannot be evaluated there at all | **A7.1** |
 | Any `docs/features/*.md` entry skipped | 7 | Cannot read part of its own input | A2.4, A2.15, A2.18–A2.22 |
 | `docs/features/` cannot be listed | 7 | Opted in, yet *every* card vanishes at once | A4.1, A4.2 |
@@ -389,7 +397,8 @@ according to the cwd, and the allow was silent — the fail-open class one step 
 exit the audit enumerated.
 
 **Credit, corrected in review.** This paragraph read "Six judge rounds read that line without seeing
-it; it was found by asking what step 2 actually resolves." That is false, and it was repeated into
+it; it was found by asking what step 2 actually resolves." (That "step 2" is the pre-`508c55b`
+numbering's `rev-parse`, step 4 as shipped.) That is false, and it was repeated into
 the session's own state file and then handed to the round-7 judge as fact — where the judge checked
 it and rejected it. **The round-6 verdict found this bug and prescribed the fix.** It states the
 defect ("the repo root is derived from the hook's CWD, not from the payload"), reports the probe
@@ -900,7 +909,10 @@ is what to attack — not `--batch-check`.
 ⚠️ **The paragraph that stood here was false, and it is the reason this correction exists.** It read:
 *"It does not burden the common case: step 4 runs after step 3's early exit, so a repo that never
 opted in never starts python. That is the early-exit design working as intended, and it is the one
-performance claim here that rests on structure rather than on a stopwatch."*
+performance claim here that rests on structure rather than on a stopwatch."* — quoted verbatim; its
+"step 4"/"step 3" are the **pre-`508c55b` numbering**, where 4 was the interpreter and 3 the
+`docs/features` early exit. Under the shipped numbering that sentence reads "step 2 runs after step
+4's early exit", which is precisely the ordering the reorder inverted.
 
 That was true of the pre-`508c55b` ordering and is **the exact opposite of what ships**. Resolving
 the repo from the write target requires the path, the path comes out of the payload, and parsing the
@@ -1107,7 +1119,7 @@ assertion depends on behaviour a later task introduces.
           (must become audible) and *well-formed but not planning* (silently fine) — which no test
           can observe until the flag contract lands at task 12. Kept deliberately: it is what the
           contract specifies, and task 12 is where it starts paying.
-      - The "all files skipped" exit stays **silent** here, exactly as step 4's no-interpreter exit
+      - The "all files skipped" exit stays **silent** here, exactly as step 2's no-interpreter exit
         does, for the same reason: its once-per-session line is inseparable from the flag contract.
         No `skipped` variable is tracked yet — under `set -u` it would be assigned-but-unread, which
         `shellcheck` flags (SC2034). Task 12 introduces it with its reader.
@@ -1139,7 +1151,7 @@ assertion depends on behaviour a later task introduces.
         intercept would leave A1.8/A1.9 red for the wrong reason and go green at task 10 for
         another. Probed directly: the fail-shim returns 1 for `for-each-ref` while `rev-parse
         --show-toplevel` still passes through (0) — without that passthrough the case would exit at
-        step 2 and pass for the wrong reason — and the counting shim logs argv *and* tees stdin.
+        step 4 and pass for the wrong reason — and the counting shim logs argv *and* tees stdin.
       - That probe also re-confirmed the `cat-file --batch` asymmetry empirically, first-hand
         rather than from the round-3 note: `main:f.txt` in, `<sha> blob 3` + `hi` out, the request
         never echoed.
@@ -1194,16 +1206,19 @@ assertion depends on behaviour a later task introduces.
         named the right cases but tallied them "9 red / 5 green"; the miscount was arithmetic in
         the enumeration, not a surprise in behaviour.)*
       - **The reds were proven red for the right reason, not merely red.** Exit 0 with empty stderr
-        is what *every* ⊘ produces, so a fixture that died at step 2 would look identical to one
-        that reached step 4. Probed on an instrumented **copy** whose eight fail-open exits each
-        name themselves: the no-interpreter fixture lands on `STEP4-NOPYTHON`, the all-malformed
+        is what *every* ⊘ produces, so a fixture that died early would look identical to one that
+        reached the interpreter. Probed on an instrumented **copy** whose eight fail-open exits each
+        name themselves — its labels carry the **pre-`508c55b` numbering** the probe ran under, so
+        `STEP4-NOPYTHON` is what the shipped code reaches at step 2; kept verbatim because a
+        renamed label cannot be matched against the probe log it came from. The no-interpreter
+        fixture lands on `STEP4-NOPYTHON`, the all-malformed
         fixture on `STEP7-ALLSKIPPED`. A control run of the *same* no-interpreter repo on a normal
         PATH still reaches the deny (exit 2), which is what shows python is the only difference.
         `hooks/phase-guard.sh` was sha256-verified identical before and after.
       - **`NOPYBIN` is built by symlinking the needed utilities, not by filtering the real PATH.**
         A filter has to guess which directories hold a python, and one missed pyenv/conda shim
         leaves the hook working while the case goes green. `awk`/`sed`/`head` are symlinked in
-        even though step 4 exits before them, so a later failure can never read as "no python"
+        even though step 2 exits before them, so a later failure can never read as "no python"
         when it was really "no awk".
       - **A2.8–A2.10 separate the payload key from the environment key.** Two invocations and
         "the second is quiet" cannot tell them apart, so A2.9 changes the environment while holding
@@ -1622,7 +1637,8 @@ than assumed:
 ⚠️ **The non-opted-in row above is superseded — it predates the cwd fix (`508c55b`).** It is kept
 because the reasoning built on it is cited elsewhere and a deleted number cannot be audited. See
 *Live run* below for the current figures. The paragraph that stood here claimed the non-opted-in
-path "lands on its structural floor almost exactly — step 3's early exit is working". That claim is
+path "lands on its structural floor almost exactly — step 3's early exit is working" (the
+pre-`508c55b` step 3, the `docs/features` early exit). That claim is
 now **false**: resolving the repo from the write target moved the parse and the `git` resolution
 *upstream* of the opt-in test, so a repo that never opted in now pays for both. The guarded path is
 unaffected, and the ~22 ms `python3` startup remains the only lever worth attacking.
