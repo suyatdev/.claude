@@ -249,8 +249,21 @@ how this file and its linked files should be written (plain language, major chan
   · **Gotcha that cost a redo:** mutation-verifying with `git checkout --` reverts BEFORE committing
   the fixes discarded them silently — m2-m4 ran against the stale doc and m4's signal was void
   (nogitbin was already missing). Commit first, then mutate; or the mutation baseline is a lie.
-  **Next: obs judge RUN 10 at `8390a52`+ (mandatory) → decide the
-  `judge-guard` route → `gh pr create --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
+  · **RUN 10 DONE 2026-07-29 @ `31ebca7` — risk=low, confidence=high, NO failing dimension; the
+  loop's first low-risk verdict.** Both artifacts verified in the worktree ledger, jsonl `head_sha`
+  re-read from the file (not the mtime) = full `31ebca7…` sha. Judge reproduced 130/0 + shellcheck,
+  red-first 128/2 at `1b79e2a`, and all four mutations itself. **Two leftovers of the class Group D
+  cannot see (wrong sentences, not wrong counts):** (1) the feature doc's canonical step-3 item
+  says a malformed payload exits "silently" — the audit table, A1.4/A1.5, and
+  `warn_if_cwd_opted_in` all say it speaks from an opted-in cwd (same class RUN 9 fixed for
+  `noparse`); (2) `phase-guard.sh:109`'s `warn_once` comment lists `(nopython|noparse)` as if
+  exhaustive — 2 of 9 reasons. Judge-guard route decided on the merits: **`JUDGE_VERDICTS_FILE`
+  pointed at the worktree ledger, not `JUDGE_EXEMPT`** — the fresh row exists, so the gate can pass
+  honestly; exempting would skip a check that would succeed.
+  **Next: USER DECISION — fix the two RUN 10 leftovers (moves HEAD → RUN 11 mandatory before
+  `gh pr create`) or open the draft PR at `31ebca7` with both disclosed in the body. Then:
+  `JUDGE_VERDICTS_FILE=<worktree>/coding-memory/observability-judge/verdicts.jsonl gh pr create
+  --draft` → `gh pr ready`.** Judge prompts live in the **session** scratchpad and die
   with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
   plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
   while the branch is in review.)

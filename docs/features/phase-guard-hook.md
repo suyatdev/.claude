@@ -1696,6 +1696,19 @@ pre-`508c55b` rationale were corrected in the same round. Still open and undiscl
 supersession reads `refs/heads/` only, so a gate opened on a remote-only branch does not supersede
 (owed to the PR body, with the per-level `dirname` cost on out-of-repo writes).
 
+### Review round 10 — first low-risk verdict (2026-07-29)
+
+RUN 10 at `31ebca7`: **risk=low, confidence=high, no failing dimension** — the loop's first
+low-risk verdict. The judge reproduced this round's claims independently rather than trusting the
+record: suite 130/0 and `shellcheck -x` clean at HEAD, red-first reproduced at `1b79e2a` (128/2,
+exactly D3+D4), and all four Group D mutations re-run (each 129/1, failing only its own test). Two
+residual record defects of the class a grep tripwire cannot see — a wrong *sentence*, not a wrong
+count: the canonical step-3 entry (this doc, the "silently" claim in the malformed-payload item)
+contradicts the audit table, A1.4/A1.5, and `warn_if_cwd_opted_in`; and `phase-guard.sh`'s
+`warn_once` signature comment enumerates `(nopython|noparse)` as if exhaustive (2 of 9 reasons).
+Both left un-fixed at this HEAD so the verdict stays pinned; they are the next commit's scope.
+Verdict: `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round10.md`.
+
 ## Judge history
 
 Four rounds, all `fail` on compliance, all resolved. **No violation id ever recurred** — each round
