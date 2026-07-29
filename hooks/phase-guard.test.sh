@@ -114,6 +114,7 @@ DETACHED_RE='^phase-guard: .*detached HEAD'
 # Deliberately does not contain the word "payload": NOPAYLOAD_RE would otherwise match this
 # message too, and A2.6/A2.7's requirement that every reason be tellable apart is the point.
 NORESOLVE_RE='^phase-guard: .*could not be resolved'
+NOREPOREAD_RE='^phase-guard: .*cannot be read'
 
 # The audible fail-open assertion: exit 0, empty stdout, and EXACTLY ONE stderr line matching.
 # The line count is asserted, not merely a match — a match-only assertion cannot see a per-write
@@ -1026,6 +1027,39 @@ export CLAUDE_CODE_SESSION_ID=a6-quietpayload
 allow_silent "A6.7 an unreadable payload outside any opted-in repo stays silent" "$BARE" \
   '{"hook_event_name":"PreToo'
 no_flag_for a6-quietpayload "A6.7b ...and wrote no flag, so that silence is real"
+
+# --- Group A7: an unreadable .git is a repo we cannot read, not "no repo" -----------------------
+# The eighth instance of the branch's one class, and the third report of THIS instance — rounds 5
+# and 6 both carried it as "an unreadable .git in an opted-in repo → silent", and neither the code
+# nor the record moved. The audit's own "Justifiably silent" list is where it hid: the row reads
+# "not a git repo", and `git rev-parse --show-toplevel` exits non-zero for BOTH "there is no repo
+# here" and "there is one and I cannot read it". One row, two conditions, only one of them
+# justifiable — the same shape as the six exits the first audit pass had to convert.
+#
+# The discriminator cannot be `warn_if_cwd_opted_in`: that helper resolves the root from the
+# SESSION's cwd, which fails for the same reason the target's did whenever the two are the same
+# repo — the exact case here. So the hook walks up from the target for an EXISTING .git entry
+# instead. That answers "is this a repo?" without needing to read it, and needs no cwd at all.
+#
+# It cannot know whether that repo opted in — reading docs/features/ needs the root it just failed
+# to get — so the message is conditional in the NOPARSE_MSG style rather than asserting the gate
+# was dropped. One line per session via warn_once, like every other audible exit.
+UNREADABLE="$TMP/unreadable"; mkrepo "$UNREADABLE"
+feature_file "$UNREADABLE" "docs/features/f.md" planning ""
+export CLAUDE_CODE_SESSION_ID=a7-unreadable
+if chmod 000 "$UNREADABLE/.git" && [ ! -r "$UNREADABLE/.git" ]; then
+  allow_audible "A7.1 a repo whose .git cannot be read says so" "$OPTED" \
+    "$(payload Write file_path "$UNREADABLE/src/x.sh")" "$NOREPOREAD_RE"
+  # The control that makes A7.1 mean something: the justifiable half of the row it splits. A
+  # directory under no repo at all must stay silent, or the fix has simply moved the noise.
+  export CLAUDE_CODE_SESSION_ID=a7-norepo
+  allow_silent "A7.2 control — a target under no repo at all stays silent" "$OPTED" \
+    "$(payload Write file_path "$TMP/nonrepo-a7/src/x.sh")"
+  no_flag_for a7-norepo "A7.3 ...and wrote no flag, so that silence is real"
+else
+  printf 'skip — A7 needs a user that cannot read a mode-000 .git\n'
+fi
+chmod 755 "$UNREADABLE/.git" 2>/dev/null
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
