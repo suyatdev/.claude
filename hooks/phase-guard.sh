@@ -85,6 +85,10 @@ NOGIT_MSG='phase-guard: a git query needed to finish the phase check failed — 
 # Deliberately avoids the word "payload": the reasons have to stay tellable apart, and the
 # unreadable-payload line already owns that word.
 NORESOLVE_MSG='phase-guard: a write target could not be resolved to its physical form, so the repo it belongs to is unknown — it was NOT checked against the gate.'
+# Conditional, like NOPARSE_MSG: the root could not be read, so whether this repo opted in is
+# precisely the thing that cannot be determined here. Asserting the gate was dropped would be a
+# false alarm in every unreadable repo that never opted in.
+NOREPOREAD_MSG='phase-guard: the write target is inside a git repository that cannot be read — if that repo opted in, the gate is not being enforced there.'
 # Machine-wide and permanent, exactly like a missing interpreter. It was silent purely because
 # step 2 predates the opt-in test; but "no git" is not a statement about THIS repo, it is the same
 # every repo, every write condition NOPYTHON_MSG already speaks for.
@@ -209,8 +213,30 @@ fp_phys=$(cd "$fp_dir" 2>/dev/null && pwd -P) || fp_phys=""
 # `|| exit 0` — the silent-fail-open class, inside the fix for that class.
 [ -n "$fp_phys" ] || { warn_if_cwd_opted_in noresolve "$NORESOLVE_MSG"; exit 0; }
 root=$(git -C "$fp_phys" rev-parse --show-toplevel 2>/dev/null) || root=""
-# Not in a repository at all — out of scope entirely, and silent for it.
-[ -n "$root" ] || exit 0
+# `rev-parse` exits non-zero for TWO different things: "there is no repo here", which is out of
+# scope and silent for it, and "there is one and I cannot read it", which is the guard going dead
+# in a repo that may well have opted in. Rounds 5 and 6 both reported the second and it stayed
+# silent through both, because this one test absorbed both conditions — the same one-row-two-
+# conditions shape the audit had to unpick six times already.
+#
+# Discriminated by walking up for an .git entry that EXISTS: that answers "is this a repo?"
+# without reading it. It deliberately does NOT use warn_if_cwd_opted_in — that helper resolves
+# from the SESSION's cwd, which fails for exactly the same reason the target's did whenever both
+# are the same repo, which is the common shape of this case.
+if [ -z "$root" ]; then
+  probe=$fp_phys
+  while [ "$probe" != "/" ] && [ -n "$probe" ]; do
+    if [ -e "$probe/.git" ]; then
+      # A repo, and unreadable. Whether it opted in is unknowable here — that needs docs/features/
+      # under the root this just failed to produce — so the message is conditional in the
+      # NOPARSE_MSG style rather than asserting a gate was dropped.
+      warn_once noreporead "${sid_payload:-$sid_env}" "$NOREPOREAD_MSG"
+      exit 0
+    fi
+    probe=$(dirname "$probe")
+  done
+  exit 0
+fi
 # The hottest path in the design: it runs on every write in every repo, so it is a bash builtin
 # rather than a `stat` subprocess. It can no longer be the FIRST test — the payload has to be
 # parsed before there is a repo to ask about — and that reordering is what this fix cost. Measured
