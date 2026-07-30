@@ -99,25 +99,27 @@ segment's command position — including a commit message whose quoted body span
   syntax error. This was hit while writing the newline fix; `shellcheck -x` catches it (SC1011)
   where the test suite alone would only show a wall of unrelated failures. A note now sits in the
   block.
-- **Segment matching has a long tail, and this gate is a momentum guardrail — not a boundary.**
-  Round 1 of review found the plain-newline shape; round 2 found four more. All measured against
-  this ADR's HEAD, not assumed:
+- **Four further bypass shapes were found by measurement and closed.** Round 1 of review found the
+  plain-newline shape; round 2 surfaced four more, and re-measuring the hook directly corrected two
+  of round 2's claims (`{ …; }` already blocked; `time`/`eval` were missed). All now block, and the
+  fixes were chosen to *remove* special cases rather than add matchers:
 
-  | shape | gate |
-  |---|---|
-  | `git push && \`⏎`gh pr create` | **passes — bypass** (the `\`+newline survives the newline→`;` rewrite as `;gh`) |
-  | `gh -R owner/repo pr create` | **passes — bypass** (a valid, documented `gh` form; `pr` is no longer token 1) |
-  | `` `gh pr create` `` | **passes — bypass** (legacy substitution; `$(...)` blocks) |
-  | `time gh pr create`, `eval gh pr create` | **passes — bypass** (keyword/builtin prefix) |
-  | `$(gh pr create)`, `{ git push; gh pr create; }` | blocks |
+  | shape | before | how it is handled |
+  |---|---|---|
+  | `git push && \`⏎`gh pr create` | bypass | the `\`+newline pair is deleted **before** the newline→`;` rewrite — it is a line *continuation*, so joining the lines routes it into the existing `&&` path |
+  | `gh -R owner/repo pr create`, `--repo` | bypass | `gh` must hold the command position, but `pr create` is matched as an **adjacent pair** anywhere after it, so global flags are legal |
+  | `` `gh pr create` `` | bypass | backticks translate to `;` like newlines — legacy substitution really runs, exactly as `$(…)` does |
+  | `time`/`eval`/`command`/`builtin`/`exec`/`nohup` prefix | bypass | added to the wrapper list already stripping `rtk`, in a loop so they stack |
+  | `$(gh pr create)`, `{ git push; gh pr create; }` | blocked | unchanged |
 
-  Each round finding another shape is evidence about the *approach*, not about any one patch:
-  matching shell command shapes by token position cannot be made exhaustive without reimplementing
-  bash's grammar. These are recorded rather than patched so nobody mistakes the gate for a security
-  boundary — a determined bypass is always one keystroke away, and `JUDGE_EXEMPT=<reason>` is the
-  honest, logged escape hatch. Closing the `\`+newline shape is the most defensible follow-up: it is
-  a line *continuation*, so semantically it should join the lines and hit the already-handled `&&`
-  path.
+  **This does not make the gate exhaustive, and it must not be read that way.** Matching shell
+  command shapes by token position cannot be made complete without reimplementing bash's grammar.
+  Two known limits remain by design: `eval "gh pr create"` keeps the whole command as one quoted
+  token and cannot reach a command position, and any command reaching `gh` through a shell function
+  or alias is invisible here. **This gate stays a momentum guardrail, not a security boundary** — a
+  determined bypass is always one keystroke away, and `JUDGE_EXEMPT=<reason>` is the honest, logged
+  escape hatch. The lesson worth carrying: each shape was found by *running* the hook against real
+  command forms, never by reading the diff.
 - **`JUDGE_VERDICTS_FILE` cannot clear the gate for a real `gh pr create`, only for tests.** The hook
   runs as its own process and is handed the command *string*; a `VAR=x gh pr create` prefix is part
   of that string and never reaches the hook's own environment. `JUDGE_EXEMPT` works because the hook

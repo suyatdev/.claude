@@ -73,7 +73,19 @@ try:
     # commit message still cannot reach the command position of a segment. Splitting the raw input
     # per line instead would raise on any quote spanning lines and fail open -- strictly worse.
     # NOTE: no apostrophes in this block -- it lives inside a single-quoted shell string.
-    lex = shlex.shlex(sys.stdin.read().replace("\n", ";"), posix=True, punctuation_chars=True)
+    #
+    # A backslash-newline is a line CONTINUATION: bash joins the two lines into one command. So
+    # this pair is deleted BEFORE the newline translation below, which routes the result into the
+    # existing chained-operator path instead of adding a matcher. Order matters -- translate first
+    # and the continuation becomes a spurious command separator, which is how it slipped through.
+    #
+    # Backticks are legacy command substitution and really run, exactly like $(...), so they open a
+    # new command context: translating them to ";" puts the wrapped command at a segment position.
+    # Both substitutions follow the newline rule -- inside a quoted string shlex keeps the
+    # substituted char as part of that token, so a commit message can still never reach a command
+    # position.
+    src = sys.stdin.read().replace("\\\n", "").replace("`", ";")
+    lex = shlex.shlex(src.replace("\n", ";"), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     toks = list(lex)
 except ValueError:
@@ -95,8 +107,14 @@ for t in toks:
         segments[-1].append(t)
 
 assign = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Words that occupy the command position while the real command follows them. `rtk` is the
+# token-proxy wrapper used in this repo; the rest are shell keywords/builtins that take a command
+# as argument. Stripped in a loop so they stack (`time rtk gh pr create`). `eval` covers only the
+# unquoted form -- `eval "gh pr create"` keeps the whole command as one quoted token, which
+# by design can never reach a command position. That limit is inherent to lexing, not an oversight.
+WRAPPERS = ("rtk", "time", "eval", "command", "builtin", "exec", "nohup")
 for seg in segments:
-    if seg and seg[0] == "rtk":
+    while seg and seg[0] in WRAPPERS:
         seg = seg[1:]
     exempt = ""
     i = 0
@@ -105,8 +123,15 @@ for seg in segments:
         if name == "JUDGE_EXEMPT":
             exempt = val.replace("\n", " ")
         i += 1
-    if seg[i:i+3] == ["gh", "pr", "create"]:
-        print("PR"); print(exempt); sys.exit(0)
+    # `gh` must hold the command position, but `pr create` need not be tokens 1-2: global flags
+    # are legal before the subcommand (`gh -R owner/repo pr create`). Requiring the two words
+    # ADJACENT keeps the false-positive surface narrow -- quoted text is a single token, so a
+    # commit message mentioning the phrase still cannot produce an adjacent bare pair.
+    rest = seg[i:]
+    if rest and rest[0] == "gh":
+        for j in range(1, len(rest) - 1):
+            if rest[j] == "pr" and rest[j+1] == "create":
+                print("PR"); print(exempt); sys.exit(0)
 print("NO"); print("")
 ' 2>/dev/null)
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
