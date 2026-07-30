@@ -21,9 +21,30 @@ how this file and its linked files should be written (plain language, major chan
   to `3e78cac`/`aaa2abb`, **ancestors of the fork point** — pre-existing, deliberately NOT fixed here
   (drive-by cleanup is its own task). SC2016 is a false positive: the single quotes protect python
   source. The repo's convention would be a `# shellcheck disable=` line with a reason.
-  · **Next:** obs judge in a pane pinning post-merge HEAD → `gh pr create --draft` with
+  · **Obs judge RUN 1 done** (`risk=medium confidence=high`, pinned `97752e6`, verdict
+  `coding-memory/observability-judge/2026-07-30-fix-judge-guard-verdict-lookup.md`). It found a
+  **real defect I reproduced independently: a NEWLINE bypassed the gate.** `git push` ⏎
+  `gh pr create` in one Bash call exited 0 — no verdict required — because bash ends a command at a
+  newline but `shlex` counts it as whitespace, so both lines lexed into one segment. Same defect
+  class the branch exists to close, and multi-line commands are routine, so the gate was still off
+  in a common case. **Fixed TDD:** `8037f89` (3 red) → `028510a` (green, **suite 32/0**). Newlines
+  translate to `;` *before* lexing — a per-line split would raise on quotes spanning lines and fail
+  OPEN. ADR 0012 carries the decision.
+  · **TRAP, cost 15 spurious failures:** the classifier's python lives inside a **single-quoted
+  shell string**, so one apostrophe in a comment terminates it and breaks the whole hook.
+  `shellcheck -x` names it (SC1011); the suite only shows unrelated carnage. Note added in-block.
+  · **⚠ RUN 1's verdict is now STALE — HEAD moved to `028510a`.** Judge MUST re-run before the PR.
+  Judge artifacts are deliberately left uncommitted (commit them only *after* `gh pr create`).
+  · **RUN 1 open points not yet acted on:** classifier crash fails open *silently* (only
+  `ValueError` caught, the rest swallowed by `2>/dev/null`) and this change adds a Python ≥3.6
+  requirement to that path while still falling back to plain `python`; `JUDGE_VERDICTS_FILE` is an
+  **unlogged** bypass, unlike `JUDGE_EXEMPT`; the gate reads the *working-tree* file, so a verdict
+  need never be committed to open a PR; sibling `git-guard.sh`/`merge-guard.sh` tracking task unopened.
+  · **Next:** obs judge RUN 2 pinning `028510a` → `gh pr create --draft` with
   `JUDGE_VERDICTS_FILE=<this worktree>/coding-memory/observability-judge/verdicts.jsonl` **before**
   committing judge artifacts (strict freshness — the PR #30 lesson) → pr-tracking entry + push.
+  PR body must carry ADR 0012's first consequence: this gate starts genuinely blocking in every
+  repo for the first time, and people will meet it as a surprise.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
