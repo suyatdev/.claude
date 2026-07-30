@@ -88,6 +88,21 @@ how this file and its linked files should be written (plain language, major chan
   block that carries the no-apostrophes warning*. RUN 3's recommendation: extract the classifier to
   `hooks/lib/classify-pr-command.py`, which also makes it unit-testable and would let the suite find
   bypasses instead of ad-hoc probing. **Not done — decide next session.**
+  · **BOTH OPEN DECISIONS ANSWERED BY USER 2026-07-30 (session 3).** (1) The quoted-substitution
+  gap — `PR_URL="$(gh pr create)"` — is **accepted and documented, not closed**. Inside double
+  quotes the whole substitution lexes as ONE token, and that is the *same* property that stops a
+  commit message tripping the gate: **the false-positive protection and the false-negative are one
+  mechanism**, so closing it trades the protection away. Decisive evidence: this branch already
+  shipped that exact class of false positive once (backtick→`;` made heredoc bodies fail CLOSED
+  where `JUDGE_EXEMPT` cannot reach), and this repo's own docs contain the literal string. Stays
+  open by design alongside backticks, `eval "gh pr create"`, function/alias indirection, and the
+  wrapper **denylist** (no `env`/`timeout`/loop keywords). (2) **Extract the classifier to
+  `hooks/lib/classify-pr-command.py` NOW, in PR #32** — not a follow-up. Behaviour-preserving
+  refactor: the 52/0 suite is the unbiased baseline and must stay green *before* any classifier
+  unit tests are added (separate step — never edit tests and implementation together).
+  · **Baseline re-verified at session-3 start, HEAD `8b86a98`:** suite **52/0**, shellcheck at only
+  the two pre-existing findings (SC2016 line 66, SC2181 line 197 — line numbers drifted from the
+  65/161 recorded above as the file grew; same two findings, same pre-fork blame).
   · **NOT exhaustive, and the count is NOT closed.** Open shapes, each measured:
   `PR_URL="$(gh pr create)"` (inside double quotes the substitution is ONE token — the same property
   that stops a commit message tripping the gate, so **quoting is both the FP protection and the FN
