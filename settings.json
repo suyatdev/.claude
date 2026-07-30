@@ -40,6 +40,15 @@
         ]
       },
       {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/phase-guard.sh"
+          }
+        ]
+      },
+      {
         "matcher": "*",
         "hooks": [
           {

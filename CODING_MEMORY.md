@@ -5,6 +5,328 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- **CURRENT: `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28.** The user answered
+  **Q1 = build** with the literal phrase `gate confirmed`, which deliberately overrides ADR 0010's
+  "build only when a skipped gate is observed" deferral — **task 16's ADR 0011 must record that
+  override**, it is the whole reason that task exists. Model-switch checkpoint ran at the gate:
+  **stay on Opus 5**, so `model_tier: high` is unchanged and deliberate — the risk sits in tasks
+  9/10 (the asymmetric `cat-file --batch` parser) and the 8 fail-open exit paths, where a wrong
+  exit code silently locks the repo.
+  Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
+  at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
+  now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
+  **All 17 tasks are done (through `effae64`); the hook denies with the full four-element
+  message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
+  subprocess, both audible fail-opens speak once per session, the flag store is `.gitignore`d, the
+  `PreToolUse` block is committed, and the `Phase gate` stub documents it.** Suite **80/0** (re-run after 14), siblings
+  green (19/17/5/14), `shellcheck -x` clean, hook 318 lines. Task 12's falsification is **done** —
+  8 mutations against copies, every one caught, table in the checklist annotation.
+  · **13 done** (`209700d`) — `/hooks/state/` at `.gitignore:17` with its mirrored comment;
+  `git check-ignore` matched nothing before and reports `:17` after.
+  · **14 done** (`9024b64`) — fourth `PreToolUse` block, matcher `Edit|Write|NotebookEdit` →
+  `hooks/phase-guard.sh`, shaped like the `Task|Agent` sibling (no `timeout`; only the vendored
+  orca `*` hooks carry one), placed before the `*` catch-all. The scouting held: the
+  `Edit|Write|NotebookEdit` a grep finds is the **PostToolUse** `post-edit-hook.sh`, untouched.
+  Primary checkout's `settings.json` was clean, so no concurrent session held it.
+  **The hook is NOT live** — the harness loads the primary checkout's copy, which is on another
+  branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
+  **⚠ NOW IN REVIEW (`phase: review`, `d7a2f8f`). All 17 tasks done; checkpoint 3 asked and
+  answered 2026-07-28 — STAY ON OPUS 5, because the review backlog is fail-open/fail-closed
+  judgment, not routine review.** At entry to review: HEAD `45a304e`, Suite **83/0**, `shellcheck -x`
+  clean, dogfood **16/16** re-run after the step 9 fix. **Current HEAD/suite are at the end of this
+  block** — every `HEAD`/`Suite` figure between here and there is the record of a round, not now.
+  · **Escalation 1 (C0 placebo) FIXED** (`2adff7a`, test-only). Baselined by mutation: pre-fix, all
+  three mutants (byte-count, input-order, phase-bound) escaped **all 80 tests, 0 failures**.
+  **Round 4's "one fixture reorder" prescription was measured and is WRONG** — reversing alpha/beta
+  still let all three escape. A desync only changes an answer if it corrupts the record that
+  *decides* the outcome, so a normal trailing-newline blob must be read **before** the superseded
+  one. C0 is now 3 files (alpha planning+prose `phase:` line / beta superseded, no trailing NL /
+  gamma deleted → `missing` echo). C5 count 6 → 9. Hook was correct throughout.
+  · **Escalation 3 (step 9 fail-open) FIXED** (test `84ed0f5` → fix `ee781d8`). Step 9 re-read files
+  with unbounded `grep`+`sed`, so **prose** mentioning `phase: implementation` + `branch: X` granted
+  permission on X — and feature files are exactly the docs that quote those keys. A file step 7 had
+  skipped as malformed still got a vote. Parser now emits `<phase>TAB<branch>`; step 7's loop
+  collects claims from the same parse; step 9 is string membership and touches no files. Falsified
+  by reverting step 9 → fails exactly B2b/B2c. Also drops a grep+sed per file off the hot path.
+  · **Rollback path 3 WITHDRAWN** (`45a304e`) — `chmod -x` yields **126**, may read as deny, so the
+  "last resort" could lock every repo. Paths 1–2 verified and sufficient. Deliberately NOT verifying
+  whether the harness reads 126 as deny: the experiment means arming a hook that may lock the
+  machine, for a path we do not need.
+  · **Escalations 2 and 4 CLOSED** (`8de2fba`, test-only). **A3.1b** isolates the line-1 clause that
+  A3.1 could only name: junk on line 1, `phase:` above the fence. Mutation-checked against BOTH
+  faithful mutants — deleting the whole rule is too blunt (41 failures), while `NR == 1 { next }`
+  is caught by **A3.1b alone and A3.1 not at all**. **Flag ordering:** the two step-7 silent cases
+  now pin their own session id and assert the store is untouched (`no_flag_for`); `payload_sid`
+  moved up beside `payload`. Measured first — nothing writes that flag today and the `nfiles > 0`
+  mutant was already caught, so this removed an unenforced order dependency, not a broken test.
+  **The round-3 note's mechanism was WRONG**: A1.7 parses fine and never warns.
+  · **OBS JUDGE RUN 1 (`01f011e`, 2026-07-28): risk=medium, confidence=high, no dimension failed**;
+  `execution`/`regression`/`success_masking` concern. It confirmed the central reframing holds —
+  it independently checked that `rules/gates.md` really does forbid branch creation during planning,
+  so the unclaimed-branch premise is sound rather than lucky. It also **retracted its own first
+  finding**: initial numbers suggested the hook slows as cards accumulate; controlled re-measurement
+  gave a flat ~35–40 ms from 2 to 101 cards and it called its first reading a machine-load artifact.
+  · **Escalation 5 (partial-skip silent fail-open) FIXED** — test `2fd0a04`-style baseline then fix.
+  **Reproduced independently before touching anything**, in a throwaway repo: malformed `planning`
+  card alone → allow + audible warning (promise holds); malformed `planning` card **+ one
+  well-formed `review` card** → **exit 0, completely silent**. Root cause: the tally asked
+  `nfiles > 0 && nparsed == 0`, and one readable card makes that false. Widened to
+  `nfiles > nparsed`; `NOPARSE_MSG` reworded ("every file … failed" was false for a partial skip);
+  the parser comment's "must not silently switch a CRITICAL gate off" claim reworded to the
+  guarantee the code actually delivers. **The suite structurally could not see this** — every A2
+  fixture makes *all* files malformed, every A3 fixture pairs the bad file with a well-formed
+  *planning* file that denies regardless. Mutation-checked both directions: narrowing back fails
+  A2.15 alone, widening to `nfiles > 0` fails A2.17/A1.7/B2.
+  · **Escalation 6 (`nbranch > 1` untested) CLOSED by A3.5b.** The judge's mutation found the clause
+  could be deleted with all 88 green. A3.5b makes the duplicate load-bearing — two `branch:` lines,
+  the last claiming the branch under test, and awk keeps the last — so without the clause the deny
+  becomes an allow. Catches that mutant and nothing else.
+  · **RUN 2 (`f963b76`, risk=medium) found the SAME silence one stage later — in RUN 1's own fix.**
+  Escalation 5 widened the tally but placed it *inside* the no-planning-files branch, and step 8's
+  supersession drop can empty that list one stage further down, below a bare `exit 0`. Reproduced
+  independently: superseded card + one unreadable card → silent; the unreadable card alone → warns.
+  **Escalation 7** fixed it as a CLASS fix — the check moved *above every exit*, straight after the
+  parse loop. Verified consequence: a deny with a skipped card now emits the warning **and** the
+  full 16-line deny message (exit 2, all four elements intact). Also **8** (message asserted
+  something false for a plain `README.md` in `docs/features/` — now conditional) and **9** (the spec
+  still stated the pre-fix rule).
+  · **RUN 3 (`4a60aa0`, risk=HIGH, 2 dimensions FAIL) found it one step EARLIER — in the counting.**
+  Moving above every exit did close all nine exits; the boundary was drawn at *exits* and the hole
+  was in `[ -f "$f" ] || continue`, which quietly both detected the unexpanded glob AND dropped
+  every non-regular entry. A dropped entry is never counted, so `nfiles > nparsed` cannot trip.
+  **Severity measured, not hypothetical:** a card symlinked into `docs/features/` denies while its
+  target is present (exit 2, full message) and **exits 0 silently once the target is moved** — a
+  real planning card leaving the gate without a word. **Escalation 10** fixed it with
+  `[ -e "$f" ] || [ -L "$f" ]` (`-L` is required: `-e` follows the link and is false for a dangling
+  one). **11** discarded awk's own stderr, which escaped the once-per-session flag entirely — 3
+  lines on write 1, 2 on every write after. **12** corrected three MORE stale spec locations
+  (step 7, the Output contract, the Examples table).
+  · **⚠ THE PATTERN IS THE FINDING.** Three rounds, three instances of one class. Rounds 1 and 2
+  were patched at the point of failure; only round 3 addressed *why the suite could not see any of
+  them* — **every fixture was a readable file with malformed CONTENT, and none was an entry the
+  parser could not open at all.** A2.19–A2.22 close that fixture class; the two-line `-e`/`-L`
+  change is merely what it exposed. If a RUN 4 finds a fourth instance, the response is to rethink
+  the fail-open surface, not to patch again.
+  · **ALL TWELVE REVIEW ESCALATIONS CLOSED.** HEAD `8967723`, pushed. Suite **100/0**, shellcheck
+  clean (hook + tests), dogfood **16/16**. Every repro re-run end-to-end: partial skip,
+  supersession, dangling symlink, directory entry, unopenable card, moved-symlink severity case.
+  **Next: obs judge RUN 4 at `8967723`, then `gh pr create --draft` → `gh pr ready`.**
+  judge-guard blocks `gh pr create` without a fresh implementation-stage verdict matching HEAD.
+  · **RUNS 4-6.** RUN 4 (`b25efdf`-1, risk=HIGH, `success_masking`+`traceability` FAIL) found the
+  4th instance: `docs/features/` itself unlistable — at 444 the glob still yields real filenames but
+  `-e`/`-L` need SEARCH permission, so every entry is dropped uncounted. **User chose the systematic
+  fail-open audit over a 5th patch.** RUN 5 (med, 0 fails) audited the audit: THE RULE as written
+  ("opted in AND holds a planning card") is NOT what the code does ("opted in AND could not
+  finish"), and that misstatement hid the 5th instance — **the payload parse**. RUN 6 (`9996c0b`,
+  med) confirmed all six RUN-5 fixes but says **the class is still not closed**.
+  · **THE AUDIT'S REAL FINDING: six exits were asserted SILENT by the suite itself** — the four git
+  exits (`A1.8`-`A1.10b`) and the two payload exits (`A1.4`/`A1.5`), all against `$OPTED`, which
+  holds an un-superseded planning card on an unclaimed branch. Not missing tests — **enforcing**
+  ones. That is why four consecutive judge rounds read the suite as evidence of correctness.
+  Everything is enumerated in the spec under "The exits that must not be silent": 9 audible, 8
+  silent. Also fixed: step-5 symlinked repo path (raised 3 rounds, never fixed until now), detached
+  HEAD now speaks, `git` missing from PATH now speaks, `HOME` unset no longer exits 1.
+  · **⚠ OPEN AND UNFIXED — RUN 6's biggest finding, verified: the hook resolves the repo from the
+  SESSION'S CWD, not from the file being written.** `git rev-parse --show-toplevel` runs in the
+  hook's cwd, so a write into an opted-in repo from a session sitting elsewhere exits 0, silently
+  unguarded. Measured: same target file, cwd inside repoA → **exit 2**; cwd in repoB → **exit 0**.
+  Pre-existing since step 2 was written; **six judge rounds never looked at it**. Biggest blast
+  radius of anything found, possibly a one-line fix — but **settle it by running the hook LIVE**,
+  which has never been done in six rounds. This is the next action.
+  · **⚠ TWO DEFECTS I INTRODUCED IN `9996c0b`, both verified:** (1) step 5's new physical-resolution
+  failure (`[ -n "$fp_phys" ] || exit 0`) is a SILENT fail-open — the same class, inside the fix for
+  the class; (2) the walk-up glues a path with no directory component without a slash — relative
+  `x.js` from repoA yields `…/repoAx.js`. Low reachability (payload paths are absolute by contract)
+  but real, and the suite has no test for that shape.
+  · **⚠ THE RULE IS WRITTEN IN THREE PLACES AND ONLY THE SPEC WAS FIXED.** `hooks/phase-guard.sh`'s
+  own header still carries the sentence RUN 5 falsified, and the test file's Group A4 comment still
+  lists two exits as silent that its own tests now prove audible. Three copies of a rule wrong six
+  rounds running is the mechanism, not the symptom.
+  · **MY ERROR, recorded:** I cited commit SHAs `ff8a02c`/`2b81ce1` in the RUN 6 prompt; neither
+  exists. The real test commits are `07c1698` and `9eef24a`. The judge caught it. **Never write a
+  SHA into a dispatch prompt without `git cat-file -t` first.**
+  · Calibration that keeps this at medium, not high: **every survivor fails OPEN.** Worst case is
+  the phase gate enforced by judgment alone — today's status quo. Nothing causes a false block.
+  · Suite **108/0**, shellcheck clean, HEAD `9996c0b`, pushed.
+
+  · **Repro trap that cost a false alarm:** a throwaway repo with **no commits** makes step 9's
+  `git rev-parse --abbrev-ref HEAD` fail, so the hook fail-opens at exit 0 and EVERY scenario looks
+  silent. `git commit --allow-empty` in the fixture before drawing any conclusion.
+  · **OPEN, deliberately not decided — the parallel-worktree collision.** Once this merges, one
+  agent opening any feature at `planning` denies source writes to every other concurrent agent on
+  an unclaimed branch, and `core-conduct.md`'s parallel-agent invariant forbids that second agent
+  from applying the fix the deny message names. The two rules contradict in exactly this case.
+  Governance trade-off, user-owned — recorded in the feature file, not resolved.
+  · **16 done** (`0f1c029`) — ADR `docs/decisions/0011-branch-scoped-write-permission.md`. 0010 left
+  unedited and still Accepted; 0011 carries an `Amends:` header instead. The two grounds are
+  recorded as *different kinds* of overturn on purpose: the technical objection was made
+  **inapplicable** by the forward lookup (never refuted on its terms), while the process deferral was
+  **overridden with its trigger condition admittedly unmet**. `validate-diagrams.sh` PASS.
+  · **17 done** (`effae64`) — throwaway-repo dogfood, **16/16**. Deny fires with all four message
+  elements, all six exempt paths allow, phase round-trip unblocks then re-denies.
+  **⚠ ROLLBACK PATH 3 IS BROKEN — the headline finding.** `chmod -x` yields exit **126**, not the
+  round-1 "skipped by the harness" claim; round 2's suspicion was right. `settings.json` registers a
+  bare direct path, so that is the live shape. 126 is neither 0 nor 2 (a defect by the spec's own
+  Output contract) and a `PreToolUse` harness may read it as **deny** — so the "last resort" rollback
+  may lock every repo on the machine instead of disarming the guard. Paths 1–2 unaffected.
+  **Recorded, not acted on** — revising Rollback is review-phase. Still unverified: whether the
+  harness actually classifies 126 as deny; that needs a live check before path 3 is rewritten.
+  Timings recorded, not gated: guarded ~64.1ms net, non-opted-in ~12.4ms net against a 12.3ms
+  structural floor (harness overhead measured at 2.3ms/call and subtracted, not assumed).
+  Suite **80/0**, `shellcheck -x` clean, re-run after 17.
+  · **15 done** (`1b67516`) — two clauses appended to the `Phase gate` stub at `rules/gates.md:5`
+  in place; bullet count re-verified **18**, no 19th added. The stub now states the deny rule, that
+  docs and memory paths are never blocked, that no bypass variable exists, and that the
+  implementation half stays judgment-only (the reverse-enforcement non-goal, made visible where a
+  session would otherwise assume both directions are covered); it carries `merge-guard.sh`'s
+  "momentum guardrail, not a security boundary" idiom for the unguarded Bash write surface.
+  The four escalations these tasks raised are all **closed** — see the review block above.
+  Do **not** re-derive the design; it is all in the feature file, which is canonical.
+  · **RUN 6's cwd finding CLOSED** — the hook now resolves the repo from the **file being written**
+  (user decision 2026-07-28), pinned by Group A6. Cost: never-opted 11→38ms, opted-in 35→41ms; live
+  ~41.8ms non-opted / ~67ms deny. The old ~12.4ms "structural floor" is superseded — python starts
+  once per write even when the repo was never opted in.
+  · **RUNS 7-8 (2026-07-29). RUN 7's four findings landed (`2c39eb8` test → `97a2008` fix →
+  `7f2fc9e` docs), then RUN 8 (`5cb0985`, risk=medium, no failing dimension) found the fix itself was
+  the new defect.** `21a0411` test (A7.4) → `325f70c` record corrections. Suite **126/0**, shellcheck
+  clean. **Five of RUN 8's six items landed, not six** — corrected by RUN 9: `:976` was closed as
+  "already correct under the code's numbering", but RUN 8's point was the wrong *reasoning*, not a
+  wrong number. Reinterpreted, not answered. (The first version of this entry claimed all six — the
+  same overstatement `7f2fc9e` made, one round later.)
+  · **Root cause, upstream of all six sites:** the doc's Order-of-operations list and the code's
+  `# --- Step N ---` headers described *different* sequences while the list claimed they resolved
+  against each other. Now single-sourced, with the rule stated once — **step numbers mean the code's
+  headers; the code wins; never renumber code to match prose.** Canonical: 1 payload · 2 tools ·
+  3 path/parse · 4 repo+opt-in · 5-10 unchanged. Four sites quoting retired prose are **marked**
+  pre-`508c55b` rather than rewritten, so their quotes still match what they cite.
+  · **F2 was reported closed and was not.** `7f2fc9e` claimed "all four findings" and touched **one
+  file**. Enumerating beat patching again: beyond RUN 8's six sites it found two more wrong audit rows
+  and **three** copies of the false-credit claim — the suite's `:989` and `phase-guard.sh:197` both
+  still said six rounds missed the cwd bug. **`git show --stat` the closing commit and confirm it
+  touched the file the finding named, before calling anything closed.**
+  · A7.4 mutation-verified: swapping the walk-up for `warn_if_cwd_opted_in` leaves A7.1 green and
+  fails A7.4 with 0 stderr lines. A7.1 alone never pinned that rationale.
+  · **RUN 9 DONE 2026-07-29 @ `33bc6ae` — risk=medium, confidence=high, NO failing dimension, but
+  five `concern`s** (`intent`, `trajectory`, `traceability`, `success_masking`, `audit_trail`).
+  Verdict `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round9.md`.
+  **No behavioural defect at this HEAD** — the judge re-ran the suite twice (126/0) and probed deny /
+  doc-exempt / card-exempt / claimed-branch / never-opted-in by direct invocation. Every finding is a
+  record defect. **Both verdict artifacts are complete** — markdown **and** the `verdicts.jsonl` row,
+  both pinned at `33bc6ae`. Only the *pane result file* is missing: the run outlived the 540s judge
+  wait, so `dispatch-pane-agent.sh wait` reported a timeout. **`95fffa1`'s commit message claims the
+  judge never appended the row — that claim is false.** The row landed between my check of the file's
+  mtime and my reading of it; I trusted a stale `ls` instead of re-reading the file. Corrected here
+  rather than by rewriting the pushed commit: on a branch being judged on its audit trail, the wrong
+  claim and its correction both belong in the record. A timed-out judge wait means *check for the
+  artifacts*, not *assume they are absent*.
+  · **Owed before the PR (RUN 9's list):** (1) three normative contract counts undercount the audible
+  surface — `:611` says "six" audible exceptions vs nine `warn_once` reasons and eleven audit rows,
+  `:297` still says "two exits that print", `:484` names 2 of 9 flag reasons and quotes `$HOME` where
+  the code ships `${HOME:-}`; (2) three unmarked stale step refs survived the "fix every site" pass —
+  `:426` (5→4, authored by the reorder commit itself), `:449` (3→4), `:1015` (Step 4→3); (3) answer
+  `:976` on its own axis — it speaks via `warn_if_cwd_opted_in`'s cwd fallback, not because an opt-in
+  test passed; (4) **consider one structural test** greping the doc's step list against
+  `grep '# --- Step' hooks/phase-guard.sh` — four rounds say care alone cannot keep the record correct.
+  · **⚠ VERIFIED ADJACENT BLOCKER — `gh pr create` will fail closed from this worktree.**
+  `hooks/judge-guard.sh:22` reads `$HOME/.claude/coding-memory/observability-judge/verdicts.jsonl`
+  (the PRIMARY checkout's — 43 lines, **zero** for this branch) while resolving identity from the
+  session's cwd. **Same identity-from-cwd class this branch just fixed in `phase-guard.sh`**, and it
+  is exactly what the parked `fix/judge-guard-verdict-lookup` worktree exists to fix. Decide
+  deliberately — `JUDGE_VERDICTS_FILE=$PWD/...`, or a logged `JUDGE_EXEMPT=<reason>`. **Re-running the
+  judge does not help.** Out of scope for this diff.
+  · **Undisclosed boundary RUN 9 found (owed to the PR body):** supersession reads `refs/heads/` only,
+  so a gate opened on a **remote-only** branch does not supersede and the repo resumes denying
+  (probe-verified). Also uncosted: one `dirname` fork per path level for writes landing outside any repo.
+  · **RUN 9's four items LANDED 2026-07-29 (`1b79e2a` test → `8390a52` record), suite 130/0,
+  shellcheck clean, pushed.** Group D added: four grep tripwires that make the suite read the doc —
+  step count/order vs code headers (D1), keyword per step per side (D2), Flag-contract reason set
+  derived from call sites (D3), Output-contract counts computed not asserted (D4). **Red-first on
+  exactly RUN 9's two contract findings** (D3: 7 of 9 reasons missing; D4: no derived-count
+  sentence), then green; **all four mutation-verified** — stale count / renumbered item / reworded
+  step / dropped reason each fail exactly their own test (m1, m4 at 129/1 against the fixed doc).
+  `:976`-class reasoning answered on its own axis in A5.6's comment; old sentence kept, marked
+  pre-`508c55b`. Verification section records the round.
+  · **Gotcha that cost a redo:** mutation-verifying with `git checkout --` reverts BEFORE committing
+  the fixes discarded them silently — m2-m4 ran against the stale doc and m4's signal was void
+  (nogitbin was already missing). Commit first, then mutate; or the mutation baseline is a lie.
+  · **RUN 10 DONE 2026-07-29 @ `31ebca7` — risk=low, confidence=high, NO failing dimension; the
+  loop's first low-risk verdict.** Both artifacts verified in the worktree ledger, jsonl `head_sha`
+  re-read from the file (not the mtime) = full `31ebca7…` sha. Judge reproduced 130/0 + shellcheck,
+  red-first 128/2 at `1b79e2a`, and all four mutations itself. **Two leftovers of the class Group D
+  cannot see (wrong sentences, not wrong counts):** (1) the feature doc's canonical step-3 item
+  says a malformed payload exits "silently" — the audit table, A1.4/A1.5, and
+  `warn_if_cwd_opted_in` all say it speaks from an opted-in cwd (same class RUN 9 fixed for
+  `noparse`); (2) `phase-guard.sh:109`'s `warn_once` comment lists `(nopython|noparse)` as if
+  exhaustive — 2 of 9 reasons. Judge-guard route decided on the merits: **`JUDGE_VERDICTS_FILE`
+  pointed at the worktree ledger, not `JUDGE_EXEMPT`** — the fresh row exists, so the gate can pass
+  honestly; exempting would skip a check that would succeed.
+  · **RUN 10's two leftovers FIXED (`a00fd3e`, docs+comment only), suite 130/0, shellcheck clean.**
+  Step 3's canonical item now says the malformed-payload exit speaks from an opted-in cwd (matching
+  the `nopayload` audit row and A1.4/A1.5); `warn_once`'s comment enumerates nothing — the reason
+  set lives at the call sites, where D3 derives it.
+  · **RUN 11 DONE 2026-07-29 @ `218118b` — risk=low, confidence=high, no failing dimension; both
+  RUN 10 leftovers confirmed closed.** `success_masking` held at `concern`: grep tripwires cannot
+  catch a wrong *sentence* — disclosed, structural. **DRAFT PR #30 OPENED at that HEAD**
+  (https://github.com/suyatdev/.claude/pull/30), judge-guard cleared via `JUDGE_VERDICTS_FILE` at
+  the worktree ledger — passed honestly, no exemption; created BEFORE committing the audit trail
+  (PR #23 lesson), trail + Roadmap tick + pr-tracking entry committed immediately after.
+  **Next: user reviews → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
+  arm-on-pull check, outcome backfill.** Judge prompts live in the **session** scratchpad and die
+  with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
+  plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
+  while the branch is in review.)
+- **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
+  carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
+  `file_path` alone, which would have failed open on every notebook write. Corrected, with a
+  regression scenario. (2) System `bash` is **3.2.57**, so the hook may not use associative arrays,
+  `mapfile`, or `${var,,}`. (3) `git cat-file --batch` output is **asymmetric** — a blob emits
+  `<sha> blob <size>` *without* echoing its request, a miss echoes the request verbatim + ` missing`
+  — so the un-superseded filter must consume results in input order or it mis-attributes every blob.
+- **User decisions, 2026-07-25.** Q2 **accepted** with one narrowing — the *un-superseded check*:
+  a `planning` file stops denying once any branch records it as `implementation`, because its gate
+  has already opened. Fixes the `main`/hotfix write-lock at the root cause (a stale copy on `main`
+  is stale *by design* after the gate) while staying a forward lookup. Q6 **resolved: no bypass at
+  all** — and the reason is that the hatch already exists structurally, since feature files live
+  under unguarded `docs/**`, so editing the frontmatter always unlocks a locked repo. A branch-name
+  allowlist was rejected on the same ground: it is `PHASE_EXEMPT` through a different door.
+  Q7 (reverse direction) stays out of scope. Q1 (build at all?) still deferred to the gate.
+- **APPROVED, NOT STARTED — doc-system consolidation.** Was "do this before more phase-guard work"
+  (user-approved 2026-07-25); the 2026-07-26 `gate confirmed` started phase-guard implementation
+  first, so that ordering is **superseded, not cancelled** — flagged to the user at the gate.
+  User-approved 2026-07-25: trim this file to its own ≤200-line cap, delete the 18
+  `coding-memory/branches/*.md`, drop `coding-memory/pr-tracking.md`. **These are ONE coupled
+  commit, not three** — this index holds ~17 pointers into the delete targets (branches/: lines
+  68,77,102,132,138,150,168,179,189,201,263 · pr-tracking: 57,69,75,201,263,266,415), so deleting
+  without trimming leaves dangling pointers, and trimming removes most of them anyway. Order:
+  (1) rewrite §Active Session (7–170) and §Exact Next Steps (272–432) — 325 of 432 lines, both
+  accumulated history, keep current session + repo/PR pointers + next steps only; (2) `git rm` the
+  19 files (all tracked → recoverable); (3) fix `skills/preparing-pull-requests/SKILL.md:43`, which
+  mandates `pr-tracking.md` as a maintained running doc — PR descriptions get generated at PR time
+  from the checklist + diff; (4) tick `README.md:63`, which already tracks this reconciliation.
+  Inert trap: `docs/superpowers/plans/2026-07-18-compliance-judge.md:563,570` would recreate both
+  deleted artifacts if ever re-executed.
+- **Deferred to its own feature file `doc-system-consolidation` (amends ADR 0010 → earns an ADR).**
+  (a) **Judge-output shrink:** `coding-memory/observability-judge/` is 32 files / 5,007 lines and
+  compliance adds 757 — and *nothing reads them*, since `judge-guard.sh:22` consumes
+  `verdicts.jsonl`, not the `.md`. Shrink to pass/fail per area + open issues on the feature file.
+  (b) **Invert the canonical feature-file section order** to frontmatter → Tasks → Verification →
+  Spec → rationale. Today `## Tasks` sits at line 223 of 245, so "where are we" costs a full-file
+  read; reordered, a restore gets it from the first ~40 lines. The one-file design currently fights
+  selective loading instead of enabling it.
+- **Q2 was the crux.** ADR 0010 deferred this hook because
+  "which feature file is active" is unresolvable at `branch: none`. That framing is avoidable: the
+  hook never attributes a write to a feature, it asks only whether the *current branch* carries
+  implementation permission. Deny when any feature file is `phase: planning` AND the branch is not
+  claimed by an `implementation` file. It holds during planning precisely *because* planning forbids
+  branch creation — an unclaimed branch is the signal, not ambiguity. Known holes are written down,
+  not hidden: branch-granularity (not per-feature), `main` stays write-locked after the gate opens,
+  and a stale `planning` file locks the repo. Q3/Q4/Q5 resolved; **Q6 found a real defect in the
+  house pattern** — `JUDGE_EXEMPT`-style bypasses need a Bash command line, which `Edit`/`Write`
+  payloads do not have, so `PHASE_EXEMPT` cannot work the way the other guards do.
+- **Deliberate fail-mode split from `judge-guard.sh`, decided this session:** that hook fires on one
+  rare command and fails closed on infrastructure errors; this one fires on *every write in every
+  repo*, so it fails closed only once a `planning` file is positively identified, and fails **open**
+  on missing python / unresolvable git root / unparseable frontmatter. Blast radius, not sloppiness.
 - session_origin: desktop · session_started_at: 2026-07-23 (Opus 4.8) · last_active_branch:
   **`feat/pane-split-policy`** — **RESUME after clear. Restored clean: HEAD `6888e16` in sync w/ origin;
   spec blob VERIFIED still `cdc777a` (lock intact, compliance verdicts valid).** doc-guard's two flagged

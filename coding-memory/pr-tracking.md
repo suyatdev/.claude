@@ -359,7 +359,7 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - **Still owed:** prune the remote branch (`origin/fix/pr26-stranded-commits` still exists) and
   backfill its verdict `outcome`.
 
-### PR #28 — feat/pane-split-policy (OPEN, DRAFT)
+### PR #28 — feat/pane-split-policy (MERGED 2026-07-29, merge commit `c562594` — heading corrected during PR #30's merge-of-main; that branch's post-merge owed items stay its own)
 
 - repo `suyatdev/.claude` · branch `feat/pane-split-policy` · remote `origin` ·
   https://github.com/suyatdev/.claude/pull/28 · base `main` · 40 commits ·
@@ -382,3 +382,19 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - **Rule that could not be satisfied, flagged not skipped:** `preparing-pull-requests` requires a
   feature PR to update the README Roadmap. `README.md` has no Roadmap section at all (known open
   item 0c(d)); standardizing it via `writing-project-readmes` remains its own task.
+
+### PR #30 — feature/phase-guard-hook
+- repo: suyatdev/.claude · branch: feature/phase-guard-hook · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/30 · status: DRAFT, opened 2026-07-29
+- opened_by session_origin: desktop · last push: desktop
+- scope: hooks/phase-guard.sh (318 ln) + 130-case suite incl. Group D doc↔code tripwires,
+  ADR 0011 (records the user's `gate confirmed` override of ADR 0010's deferral), feature doc,
+  `Phase gate` stub update in rules/gates.md, settings.json PreToolUse block. Hook NOT armed by
+  the branch — primary checkout loads its own copy; arms when this merges and that checkout pulls.
+- judge (impl @ 218118b): RUN 11 risk=low conf=high, outcome=null — rounds 1–11 all persisted in
+  the worktree's coding-memory/observability-judge/. PR created BEFORE committing the audit trail
+  (strict freshness — the PR #23 lesson); judge-guard cleared via JUDGE_VERDICTS_FILE pointed at
+  the worktree ledger (primary ledger has zero rows for this branch — the parked
+  fix/judge-guard-verdict-lookup class, disclosed in the PR body).
+- next: user review → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
+  arm-on-pull check, outcome backfill.
