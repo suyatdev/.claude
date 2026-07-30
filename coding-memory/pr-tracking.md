@@ -410,3 +410,26 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - judge: logged `JUDGE_EXEMPT` — records-only, no source change to score. Branch forked from
   origin/main `321dc9f`, reuses the phase-guard-hook worktree (dir name ≠ branch).
 - next: user review → `gh pr ready` → merge via GitHub UI → prune branch local+remote.
+
+### PR #32 — fix/judge-guard-verdict-lookup
+- repo: suyatdev/.claude · branch: fix/judge-guard-verdict-lookup · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/32 · status: DRAFT, opened 2026-07-30
+- opened_by session_origin: desktop · last push: desktop
+- scope: hooks/judge-guard.sh + suite (26→32 cases), ADR 0012. Two defects: the guard read
+  `$HOME/.claude`'s verdict store regardless of repo (gate unsatisfiable everywhere else —
+  vibe-scape had 13 verdicts in its own store, 0 in the consulted one), and `gh pr create` was
+  matched at position 0 only, so `git push && gh pr create` needed no verdict. Judge RUN 1 found a
+  third: a plain newline between the two also bypassed. Fixed TDD (`8037f89` red → `028510a` green).
+- judge (impl @ 88ccb59): RUN 2 risk=medium conf=high, outcome=null; rounds 1–2 persisted in the
+  worktree's coding-memory/observability-judge/. **None of its six carried concerns blocking.**
+- **Opened under a logged `JUDGE_EXEMPT` — bootstrap, not a shortcut.** The installed hook is the
+  primary checkout's copy, predating this fix, so it reads only `$HOME`'s store and cannot see the
+  worktree verdict. **`JUDGE_VERDICTS_FILE` does NOT work for a real `gh pr create`** — the hook is
+  a separate process handed the command *string*, so a `VAR=x` prefix never reaches its env
+  (`JUDGE_EXEMPT` works only because the hook parses it out of the command line). PR #30's entry
+  above claims that recipe cleared its gate; that claim is wrong — do not reuse it.
+- known-open, verified against HEAD and documented in ADR 0012 Consequences + the PR body:
+  5 bypass shapes remain (`&& \`⏎, `gh -R … pr create`, backticks, `time`/`eval` prefixes).
+  Long tail inherent to token-position matching; gate is a momentum guardrail, not a boundary.
+- next: user decision on whether to close the remaining shapes in this PR (would need a judge
+  RUN 3 — any commit invalidates the verdict) or defer → `gh pr ready` → merge via GitHub UI.

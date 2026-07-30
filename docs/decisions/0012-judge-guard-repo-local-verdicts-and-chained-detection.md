@@ -99,6 +99,36 @@ segment's command position — including a commit message whose quoted body span
   syntax error. This was hit while writing the newline fix; `shellcheck -x` catches it (SC1011)
   where the test suite alone would only show a wall of unrelated failures. A note now sits in the
   block.
+- **Segment matching has a long tail, and this gate is a momentum guardrail — not a boundary.**
+  Round 1 of review found the plain-newline shape; round 2 found four more. All measured against
+  this ADR's HEAD, not assumed:
+
+  | shape | gate |
+  |---|---|
+  | `git push && \`⏎`gh pr create` | **passes — bypass** (the `\`+newline survives the newline→`;` rewrite as `;gh`) |
+  | `gh -R owner/repo pr create` | **passes — bypass** (a valid, documented `gh` form; `pr` is no longer token 1) |
+  | `` `gh pr create` `` | **passes — bypass** (legacy substitution; `$(...)` blocks) |
+  | `time gh pr create`, `eval gh pr create` | **passes — bypass** (keyword/builtin prefix) |
+  | `$(gh pr create)`, `{ git push; gh pr create; }` | blocks |
+
+  Each round finding another shape is evidence about the *approach*, not about any one patch:
+  matching shell command shapes by token position cannot be made exhaustive without reimplementing
+  bash's grammar. These are recorded rather than patched so nobody mistakes the gate for a security
+  boundary — a determined bypass is always one keystroke away, and `JUDGE_EXEMPT=<reason>` is the
+  honest, logged escape hatch. Closing the `\`+newline shape is the most defensible follow-up: it is
+  a line *continuation*, so semantically it should join the lines and hit the already-handled `&&`
+  path.
+- **`JUDGE_VERDICTS_FILE` cannot clear the gate for a real `gh pr create`, only for tests.** The hook
+  runs as its own process and is handed the command *string*; a `VAR=x gh pr create` prefix is part
+  of that string and never reaches the hook's own environment. `JUDGE_EXEMPT` works because the hook
+  parses it *out of the command line*; `JUDGE_VERDICTS_FILE` is read from `$HOME`-inherited env and
+  so is only settable by the test harness. Prior PR notes claiming a worktree PR was "cleared via
+  `JUDGE_VERDICTS_FILE`" are inaccurate — verify before reusing that recipe.
+- **This fix could not satisfy the gate it fixes.** The installed hook is the *primary* checkout's
+  copy, which predates this change and reads only `$HOME/.claude`'s store, so the round-2 verdict
+  sitting in this worktree's ledger was invisible to it. PR #32 was therefore opened under a logged
+  `JUDGE_EXEMPT` naming exactly that bootstrap. The general rule this exposes: **a hook fix cannot
+  be gated by the hook it fixes until the primary checkout pulls it.**
 - **The same chained-command gap remains open in `git-guard.sh` and `merge-guard.sh`**, which make
   the identical tradeoff. Deliberately left as a separate task rather than a drive-by fix —
   `merge-guard.sh` in particular gates `gh pr merge`, so changing it needs its own reproduction and

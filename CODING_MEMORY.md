@@ -40,11 +40,28 @@ how this file and its linked files should be written (plain language, major chan
   requirement to that path while still falling back to plain `python`; `JUDGE_VERDICTS_FILE` is an
   **unlogged** bypass, unlike `JUDGE_EXEMPT`; the gate reads the *working-tree* file, so a verdict
   need never be committed to open a PR; sibling `git-guard.sh`/`merge-guard.sh` tracking task unopened.
-  · **Next:** obs judge RUN 2 pinning `028510a` → `gh pr create --draft` with
-  `JUDGE_VERDICTS_FILE=<this worktree>/coding-memory/observability-judge/verdicts.jsonl` **before**
-  committing judge artifacts (strict freshness — the PR #30 lesson) → pr-tracking entry + push.
-  PR body must carry ADR 0012's first consequence: this gate starts genuinely blocking in every
-  repo for the first time, and people will meet it as a surprise.
+  · **DRAFT PR #32 OPEN 2026-07-30** — https://github.com/suyatdev/.claude/pull/32. Detail:
+  `coding-memory/pr-tracking.md` §PR #32. Obs judge **RUN 2** done, pinned `88ccb59`
+  (`…-round2.md`), `risk=medium confidence=high`, **all six carried concerns ruled non-blocking**.
+  · **`JUDGE_VERDICTS_FILE` DOES NOT clear the gate for a real `gh pr create` — correct the note
+  above and PR #30's entry, which both claim it does.** The hook is a separate process handed the
+  command *string*; a `VAR=x gh pr create` prefix is part of that string and never reaches the
+  hook's environment. `JUDGE_EXEMPT` works only because the hook parses it *out of the command
+  line*. Proved by direct measurement, not inference: the override was rejected, then the same
+  command with `JUDGE_EXEMPT` passed. **PR #32 was opened under a logged `JUDGE_EXEMPT` naming the
+  bootstrap** — the installed hook is the primary checkout's pre-fix copy, so it cannot see a
+  worktree verdict. General rule: **a hook fix cannot be gated by the hook it fixes until the
+  primary checkout pulls it.**
+  · **RUN 2 verified 5 remaining bypass shapes** (measured, not assumed): `git push && \`⏎
+  `gh pr create`; `gh -R owner/repo pr create`; backticks; `time`/`eval` prefixes. `$(…)` and
+  `{ …; }` correctly block — RUN 2 claimed `{ …; }` bypasses and it does not, and it missed
+  `time`/`eval`; **judge findings get re-measured before they are acted on.** Recorded in ADR 0012
+  Consequences + the PR body rather than patched: each round finds another shape, which is a long
+  tail inherent to token-position matching. The gate is a momentum guardrail, not a boundary.
+  · **Next:** user decision — close the remaining shapes in this PR (needs judge RUN 3; any commit
+  invalidates the verdict) or defer to a follow-up → `gh pr ready` → merge via GitHub UI. The
+  `\`+newline shape is the most defensible one to close: it is a line *continuation*, so joining
+  the lines routes it into the already-handled `&&` path.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
