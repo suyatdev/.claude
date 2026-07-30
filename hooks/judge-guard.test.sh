@@ -142,8 +142,15 @@ run_case "backslash-newline, plain -> block"        2 $'git push \\\n&& gh pr cr
 # 2. `gh -R owner/repo pr create` is a valid, documented gh form; `pr` simply is not token 1.
 run_case "gh with global -R flag -> block"          2 "gh -R owner/repo pr create --fill"
 run_case "gh with --repo flag -> block"             2 "gh --repo owner/repo pr create --fill"
-# 3. Backticks are legacy command substitution and really run; `$(...)` was already caught.
-run_case "backtick substitution -> block"           2 'echo `gh pr create --fill`'
+# 3. Backticks are legacy command substitution and really run. Translating them to `;` DID catch
+#    them, and was reverted: shlex cannot see heredocs, so the same translation made any heredoc
+#    body containing a backticked `gh pr create` fail CLOSED — and writing exactly that text is
+#    routine in this repo (`git commit -m "$(cat <<'MSG'` with an ADR table in the body). A rare
+#    false negative was traded for a common false positive that blocks legitimate work, so the
+#    backtick form stays a documented open shape. Asserted here so the choice is deliberate and
+#    visible, not an accident.
+run_case "backtick substitution -> ignore (known)"  0 'echo `gh pr create --fill`'
+run_case "heredoc w/ backticked phrase -> ignore"   0 $'cat <<EOF\nsee `gh pr create` docs\nEOF'
 # 4. Keyword/builtin prefixes sit at the command position and displace `gh`, exactly as the
 #    already-stripped `rtk` wrapper does.
 run_case "time prefix -> block"                     2 "time gh pr create --fill"
@@ -162,6 +169,17 @@ run_case "quoted continuation in msg -> ignore"     0 $'git commit -m "see \\\ng
 run_case "quoted backtick phrase -> ignore"         0 'git commit -m "run `gh pr create` first"'
 run_case "gh pr list is not create -> ignore"       0 "gh -R owner/repo pr list"
 run_case "pr create without gh -> ignore"           0 "mytool pr create --fill"
+
+# Regression: a brace group opens a command context, but `{` is not one of shlex's punctuation
+# chars, so it lexes as an ordinary token and sits at the segment command position, displacing
+# `gh`. Round 2 of review reported this and a later re-measurement WRONGLY overturned it by
+# testing `{ git push; gh pr create; }` -- a different string, which blocks because `git` takes
+# the command slot and the `;` then opens a fresh segment. Both are pinned here so the distinction
+# cannot be lost again.
+rm -f "$VFILE"
+run_case "brace group alone -> block"               2 "{ gh pr create --fill; }"
+run_case "brace group after a command -> block"     2 "{ git push; gh pr create --fill; }"
+run_case "subshell paren group -> block"            2 "( gh pr create --fill )"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
