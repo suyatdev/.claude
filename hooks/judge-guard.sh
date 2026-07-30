@@ -53,8 +53,9 @@ if isinstance(ti, dict):
 [ -n "$command_line" ] || exit 0
 
 # Classify the command with python — shlex handles the shell quoting a flat bash regex
-# cannot. The command line is split into shell segments on control operators, and EACH segment
-# is tested: a chained `git push && gh pr create` is guarded exactly like a bare invocation.
+# cannot. The command line is split into shell segments on control operators (and on newlines,
+# which end a command just as `;` does), and EACH segment is tested: a chained or multi-line
+# `git push && gh pr create` is guarded exactly like a bare invocation.
 # (That chained form used to be an accepted gap; it is what let a PR ship unjudged, so it is now
 # caught. A `$(...)`-substituted `gh pr create` is likewise caught, since it too really runs.)
 # Within a segment, an optional leading `rtk` wrapper and any leading NAME=VALUE env-assignments
@@ -65,7 +66,14 @@ if isinstance(ti, dict):
 classify=$(printf '%s' "$command_line" | "$py" -c '
 import re, shlex, sys
 try:
-    lex = shlex.shlex(sys.stdin.read(), posix=True, punctuation_chars=True)
+    # bash ends a command at a newline exactly as it does at `;`, but shlex counts newline as
+    # ordinary whitespace, so two lines of one Bash call used to lex into a single segment with no
+    # command at position 0. Translating BEFORE lexing is deliberate: the shlex quoting rules then
+    # keep the substituted char inside a quoted string as part of that token, so a multi-line
+    # commit message still cannot reach the command position of a segment. Splitting the raw input
+    # per line instead would raise on any quote spanning lines and fail open -- strictly worse.
+    # NOTE: no apostrophes in this block -- it lives inside a single-quoted shell string.
+    lex = shlex.shlex(sys.stdin.read().replace("\n", ";"), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     toks = list(lex)
 except ValueError:

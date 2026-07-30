@@ -68,9 +68,19 @@ unspaced operators visible — `push&&gh` lexes as `push`, `&&`, `gh`, which a w
 cannot see. `JUDGE_EXEMPT` is captured from the *matching* segment, mirroring bash, where such a
 prefix binds only to its own command.
 
+A **newline is also a command separator** in bash, exactly as `;` is, but `shlex` counts it as
+ordinary whitespace — so `git push` and `gh pr create` on two lines of a single Bash call lexed into
+one segment and no command ever reached a segment's position 0. This was missed by the first pass at
+this ADR and caught by the observability judge; it is the *same* defect class as the `&&` gap, and a
+multi-line command string is a routine shape rather than an exotic one, so the gate was still off in
+a common case. Newlines are therefore translated to `;` **before** lexing. Translating first, rather
+than splitting the raw input per line, is the deliberate choice: `shlex`'s quoting rules then keep the
+substituted character inside a quoted string as part of that token, whereas a per-line split would
+raise on any quote spanning lines and **fail open** — strictly worse than the bug it fixed.
+
 The false-positive protection is unchanged and still verified: quoted text survives as a single
 token, so `gh pr create` inside a commit message or an `echo` argument can never occupy a
-segment's command position.
+segment's command position — including a commit message whose quoted body spans several lines.
 
 ## Consequences
 
@@ -84,6 +94,11 @@ segment's command position.
 - **`$HOME/.claude`'s 40 accumulated verdicts remain valid for the `.claude` repo only**, since for
   that repo the repo-local path and the old hardcoded path are the same file. The single
   `Snatch-Bracket` entry there becomes unreachable; it was already stale.
+- **Comments inside the classifier must not contain apostrophes.** The python program is embedded in
+  a single-quoted shell string, so one apostrophe terminates it and turns the whole hook into a
+  syntax error. This was hit while writing the newline fix; `shellcheck -x` catches it (SC1011)
+  where the test suite alone would only show a wall of unrelated failures. A note now sits in the
+  block.
 - **The same chained-command gap remains open in `git-guard.sh` and `merge-guard.sh`**, which make
   the identical tradeoff. Deliberately left as a separate task rather than a drive-by fix —
   `merge-guard.sh` in particular gates `gh pr merge`, so changing it needs its own reproduction and
