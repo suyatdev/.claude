@@ -71,10 +71,29 @@ how this file and its linked files should be written (plain language, major chan
   · **The apostrophe trap fired again, exactly as documented** — "repo's" in a new comment inside
   the single-quoted python block produced 22 unrelated failures. `shellcheck -x` named it (SC1011)
   in one line where the suite showed only carnage. **Run shellcheck first when the suite goes wide.**
-  · **NOT exhaustive, and the ADR says so.** Two limits remain by design: `eval "gh pr create"` is
-  one quoted token and cannot reach a command position; a shell function or alias reaching `gh` is
-  invisible. Gate stays a momentum guardrail, not a security boundary. **Closing five did not prove
-  there is no sixth** — every one of these was found by *running* the hook, never by reading it.
+  · **RUN 3 was right and I was wrong — the correction above is itself corrected.** I claimed round
+  2 was wrong about `{ …; }`; it was not. I measured `{ git push; gh pr create; }` (blocks — `git`
+  takes the command slot, `;` then opens a fresh segment) instead of round 2's `{ gh pr create; }`
+  (bypassed — `{` is not a shlex punctuation char, so it took the command slot). **A wrong
+  correction in an audit trail is worse than the original wrong claim, because it reads as
+  settled.** Both strings are now pinned in the suite. Fixed by adding `{`/`}` to the punctuation
+  set. Lesson: my 3 false-positive probes all exercised *quoting* — that is one sample, not three.
+  · **I also introduced a false positive and RUN 3 caught it.** The backtick→`;` translation worked,
+  but shlex cannot see heredocs, so any heredoc body containing a backticked `gh pr create` failed
+  **CLOSED** — routine text here (`git commit -m "$(cat <<'MSG'` with an ADR table), and
+  `JUDGE_EXEMPT` cannot reach that segment. **Reverted**: a rare false negative beats a common false
+  positive that blocks real work. Backticks are now a documented open shape.
+  · **Apostrophe trap fired a THIRD time** ("shlex's"), again 24 unrelated failures. shellcheck -x
+  named it in one line. **This is now a disproven control** — the trap keeps firing *inside the very
+  block that carries the no-apostrophes warning*. RUN 3's recommendation: extract the classifier to
+  `hooks/lib/classify-pr-command.py`, which also makes it unit-testable and would let the suite find
+  bypasses instead of ad-hoc probing. **Not done — decide next session.**
+  · **NOT exhaustive, and the count is NOT closed.** Open shapes, each measured:
+  `PR_URL="$(gh pr create)"` (inside double quotes the substitution is ONE token — the same property
+  that stops a commit message tripping the gate, so **quoting is both the FP protection and the FN
+  mechanism**; closing it is an architecture tradeoff, user-owned); backticks; `eval "gh pr create"`;
+  function/alias indirection; the wrapper list is a denylist missing `env`/`timeout`/loop keywords.
+  Gate stays a momentum guardrail, not a security boundary.
   · **Next:** obs judge **RUN 3** pinning the final HEAD → push → `gh pr ready` → merge via GitHub
   UI → prune branch local+remote → post-merge tip-reachability check + outcome backfill.
   (PR #32 is already open, so judge-guard no longer gates anything here — RUN 3 is for the audit

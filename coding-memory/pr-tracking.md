@@ -428,11 +428,21 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   a separate process handed the command *string*, so a `VAR=x` prefix never reaches its env
   (`JUDGE_EXEMPT` works only because the hook parses it out of the command line). PR #30's entry
   above claims that recipe cleared its gate; that claim is wrong — do not reuse it.
-- **all 5 bypass shapes CLOSED** (user: cost alone is not a reason to defer). TDD in one batch,
-  `f461f1f` 8 red → `e79749a` green; suite 32→48/0. Each fix removes a special case rather than
-  adding a matcher; re-measured against 16 real command forms afterwards. ADR 0012 Consequences
-  rewritten to match. NOT exhaustive by design — `eval "gh pr create"` (one quoted token) and
-  function/alias indirection remain open; the gate stays a momentum guardrail, not a boundary.
-- next: obs judge RUN 3 pinning the final HEAD (audit trail only — the PR is already open, so
+- bypass shapes closed across two TDD rounds (user: cost alone is not a reason to defer).
+  `f461f1f` 8 red → `e79749a` green (32→48), then RUN 3 → `ea2ee95` 3 red → `c9a3850` green
+  (48→**52/0**). Now blocked: `&& \`⏎, `gh -R … pr create`, `time`/`eval`/`command`/`builtin`/
+  `exec`/`nohup` prefixes, `{ gh pr create; }`.
+- **RUN 3 overturned one of my own corrections, correctly.** I had claimed round 2 was wrong about
+  `{ …; }` — it was not; I measured a different string. A wrong correction in an audit trail is
+  worse than the original claim because it reads as settled. Both strings are now pinned.
+- **RUN 3 also caught a false positive I introduced:** backtick→`;` made heredoc bodies containing
+  a backticked `gh pr create` fail CLOSED (routine text here). Reverted; backticks are a documented
+  open shape.
+- **NOT exhaustive and the count is not closed.** `PR_URL="$(gh pr create)"` still passes — inside
+  double quotes the substitution is one token, the same property that protects commit messages.
+  Quoting is both the FP protection and the FN mechanism; closing it is an **architecture tradeoff,
+  user-owned**. Also open: backticks, `eval "gh pr create"`, function/alias indirection, and the
+  wrapper denylist (`env`/`timeout`/loop keywords missing).
+- next: obs judge RUN 4 pinning the final HEAD (audit trail only — the PR is already open, so
   judge-guard gates nothing further here) → push → `gh pr ready` → merge via GitHub UI → prune
   branch local+remote → post-merge tip-reachability check + outcome backfill.
