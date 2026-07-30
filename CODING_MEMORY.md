@@ -5,6 +5,738 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
+- **CURRENT: `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28.** The user answered
+  **Q1 = build** with the literal phrase `gate confirmed`, which deliberately overrides ADR 0010's
+  "build only when a skipped gate is observed" deferral — **task 16's ADR 0011 must record that
+  override**, it is the whole reason that task exists. Model-switch checkpoint ran at the gate:
+  **stay on Opus 5**, so `model_tier: high` is unchanged and deliberate — the risk sits in tasks
+  9/10 (the asymmetric `cat-file --batch` parser) and the 8 fail-open exit paths, where a wrong
+  exit code silently locks the repo.
+  Implementation branch is **`feature/phase-guard-hook`**, forked from `worktree-phase-guard-hook`
+  at `7936d80` so it carries every spec commit. The old branch was worktree isolation only and is
+  now inert; do not add commits to it. Same worktree, `.claude/worktrees/phase-guard-hook`.
+  **All 17 tasks are done (through `effae64`); the hook denies with the full four-element
+  message, step 7 enforces the whole frontmatter contract, step 8 filters superseded files in one
+  subprocess, both audible fail-opens speak once per session, the flag store is `.gitignore`d, the
+  `PreToolUse` block is committed, and the `Phase gate` stub documents it.** Suite **80/0** (re-run after 14), siblings
+  green (19/17/5/14), `shellcheck -x` clean, hook 318 lines. Task 12's falsification is **done** —
+  8 mutations against copies, every one caught, table in the checklist annotation.
+  · **13 done** (`209700d`) — `/hooks/state/` at `.gitignore:17` with its mirrored comment;
+  `git check-ignore` matched nothing before and reports `:17` after.
+  · **14 done** (`9024b64`) — fourth `PreToolUse` block, matcher `Edit|Write|NotebookEdit` →
+  `hooks/phase-guard.sh`, shaped like the `Task|Agent` sibling (no `timeout`; only the vendored
+  orca `*` hooks carry one), placed before the `*` catch-all. The scouting held: the
+  `Edit|Write|NotebookEdit` a grep finds is the **PostToolUse** `post-edit-hook.sh`, untouched.
+  Primary checkout's `settings.json` was clean, so no concurrent session held it.
+  **The hook is NOT live** — the harness loads the primary checkout's copy, which is on another
+  branch and arms only when this lands on `main` and that checkout pulls (rollback path 2).
+  **⚠ NOW IN REVIEW (`phase: review`, `d7a2f8f`). All 17 tasks done; checkpoint 3 asked and
+  answered 2026-07-28 — STAY ON OPUS 5, because the review backlog is fail-open/fail-closed
+  judgment, not routine review.** At entry to review: HEAD `45a304e`, Suite **83/0**, `shellcheck -x`
+  clean, dogfood **16/16** re-run after the step 9 fix. **Current HEAD/suite are at the end of this
+  block** — every `HEAD`/`Suite` figure between here and there is the record of a round, not now.
+  · **Escalation 1 (C0 placebo) FIXED** (`2adff7a`, test-only). Baselined by mutation: pre-fix, all
+  three mutants (byte-count, input-order, phase-bound) escaped **all 80 tests, 0 failures**.
+  **Round 4's "one fixture reorder" prescription was measured and is WRONG** — reversing alpha/beta
+  still let all three escape. A desync only changes an answer if it corrupts the record that
+  *decides* the outcome, so a normal trailing-newline blob must be read **before** the superseded
+  one. C0 is now 3 files (alpha planning+prose `phase:` line / beta superseded, no trailing NL /
+  gamma deleted → `missing` echo). C5 count 6 → 9. Hook was correct throughout.
+  · **Escalation 3 (step 9 fail-open) FIXED** (test `84ed0f5` → fix `ee781d8`). Step 9 re-read files
+  with unbounded `grep`+`sed`, so **prose** mentioning `phase: implementation` + `branch: X` granted
+  permission on X — and feature files are exactly the docs that quote those keys. A file step 7 had
+  skipped as malformed still got a vote. Parser now emits `<phase>TAB<branch>`; step 7's loop
+  collects claims from the same parse; step 9 is string membership and touches no files. Falsified
+  by reverting step 9 → fails exactly B2b/B2c. Also drops a grep+sed per file off the hot path.
+  · **Rollback path 3 WITHDRAWN** (`45a304e`) — `chmod -x` yields **126**, may read as deny, so the
+  "last resort" could lock every repo. Paths 1–2 verified and sufficient. Deliberately NOT verifying
+  whether the harness reads 126 as deny: the experiment means arming a hook that may lock the
+  machine, for a path we do not need.
+  · **Escalations 2 and 4 CLOSED** (`8de2fba`, test-only). **A3.1b** isolates the line-1 clause that
+  A3.1 could only name: junk on line 1, `phase:` above the fence. Mutation-checked against BOTH
+  faithful mutants — deleting the whole rule is too blunt (41 failures), while `NR == 1 { next }`
+  is caught by **A3.1b alone and A3.1 not at all**. **Flag ordering:** the two step-7 silent cases
+  now pin their own session id and assert the store is untouched (`no_flag_for`); `payload_sid`
+  moved up beside `payload`. Measured first — nothing writes that flag today and the `nfiles > 0`
+  mutant was already caught, so this removed an unenforced order dependency, not a broken test.
+  **The round-3 note's mechanism was WRONG**: A1.7 parses fine and never warns.
+  · **OBS JUDGE RUN 1 (`01f011e`, 2026-07-28): risk=medium, confidence=high, no dimension failed**;
+  `execution`/`regression`/`success_masking` concern. It confirmed the central reframing holds —
+  it independently checked that `rules/gates.md` really does forbid branch creation during planning,
+  so the unclaimed-branch premise is sound rather than lucky. It also **retracted its own first
+  finding**: initial numbers suggested the hook slows as cards accumulate; controlled re-measurement
+  gave a flat ~35–40 ms from 2 to 101 cards and it called its first reading a machine-load artifact.
+  · **Escalation 5 (partial-skip silent fail-open) FIXED** — test `2fd0a04`-style baseline then fix.
+  **Reproduced independently before touching anything**, in a throwaway repo: malformed `planning`
+  card alone → allow + audible warning (promise holds); malformed `planning` card **+ one
+  well-formed `review` card** → **exit 0, completely silent**. Root cause: the tally asked
+  `nfiles > 0 && nparsed == 0`, and one readable card makes that false. Widened to
+  `nfiles > nparsed`; `NOPARSE_MSG` reworded ("every file … failed" was false for a partial skip);
+  the parser comment's "must not silently switch a CRITICAL gate off" claim reworded to the
+  guarantee the code actually delivers. **The suite structurally could not see this** — every A2
+  fixture makes *all* files malformed, every A3 fixture pairs the bad file with a well-formed
+  *planning* file that denies regardless. Mutation-checked both directions: narrowing back fails
+  A2.15 alone, widening to `nfiles > 0` fails A2.17/A1.7/B2.
+  · **Escalation 6 (`nbranch > 1` untested) CLOSED by A3.5b.** The judge's mutation found the clause
+  could be deleted with all 88 green. A3.5b makes the duplicate load-bearing — two `branch:` lines,
+  the last claiming the branch under test, and awk keeps the last — so without the clause the deny
+  becomes an allow. Catches that mutant and nothing else.
+  · **RUN 2 (`f963b76`, risk=medium) found the SAME silence one stage later — in RUN 1's own fix.**
+  Escalation 5 widened the tally but placed it *inside* the no-planning-files branch, and step 8's
+  supersession drop can empty that list one stage further down, below a bare `exit 0`. Reproduced
+  independently: superseded card + one unreadable card → silent; the unreadable card alone → warns.
+  **Escalation 7** fixed it as a CLASS fix — the check moved *above every exit*, straight after the
+  parse loop. Verified consequence: a deny with a skipped card now emits the warning **and** the
+  full 16-line deny message (exit 2, all four elements intact). Also **8** (message asserted
+  something false for a plain `README.md` in `docs/features/` — now conditional) and **9** (the spec
+  still stated the pre-fix rule).
+  · **RUN 3 (`4a60aa0`, risk=HIGH, 2 dimensions FAIL) found it one step EARLIER — in the counting.**
+  Moving above every exit did close all nine exits; the boundary was drawn at *exits* and the hole
+  was in `[ -f "$f" ] || continue`, which quietly both detected the unexpanded glob AND dropped
+  every non-regular entry. A dropped entry is never counted, so `nfiles > nparsed` cannot trip.
+  **Severity measured, not hypothetical:** a card symlinked into `docs/features/` denies while its
+  target is present (exit 2, full message) and **exits 0 silently once the target is moved** — a
+  real planning card leaving the gate without a word. **Escalation 10** fixed it with
+  `[ -e "$f" ] || [ -L "$f" ]` (`-L` is required: `-e` follows the link and is false for a dangling
+  one). **11** discarded awk's own stderr, which escaped the once-per-session flag entirely — 3
+  lines on write 1, 2 on every write after. **12** corrected three MORE stale spec locations
+  (step 7, the Output contract, the Examples table).
+  · **⚠ THE PATTERN IS THE FINDING.** Three rounds, three instances of one class. Rounds 1 and 2
+  were patched at the point of failure; only round 3 addressed *why the suite could not see any of
+  them* — **every fixture was a readable file with malformed CONTENT, and none was an entry the
+  parser could not open at all.** A2.19–A2.22 close that fixture class; the two-line `-e`/`-L`
+  change is merely what it exposed. If a RUN 4 finds a fourth instance, the response is to rethink
+  the fail-open surface, not to patch again.
+  · **ALL TWELVE REVIEW ESCALATIONS CLOSED.** HEAD `8967723`, pushed. Suite **100/0**, shellcheck
+  clean (hook + tests), dogfood **16/16**. Every repro re-run end-to-end: partial skip,
+  supersession, dangling symlink, directory entry, unopenable card, moved-symlink severity case.
+  **Next: obs judge RUN 4 at `8967723`, then `gh pr create --draft` → `gh pr ready`.**
+  judge-guard blocks `gh pr create` without a fresh implementation-stage verdict matching HEAD.
+  · **RUNS 4-6.** RUN 4 (`b25efdf`-1, risk=HIGH, `success_masking`+`traceability` FAIL) found the
+  4th instance: `docs/features/` itself unlistable — at 444 the glob still yields real filenames but
+  `-e`/`-L` need SEARCH permission, so every entry is dropped uncounted. **User chose the systematic
+  fail-open audit over a 5th patch.** RUN 5 (med, 0 fails) audited the audit: THE RULE as written
+  ("opted in AND holds a planning card") is NOT what the code does ("opted in AND could not
+  finish"), and that misstatement hid the 5th instance — **the payload parse**. RUN 6 (`9996c0b`,
+  med) confirmed all six RUN-5 fixes but says **the class is still not closed**.
+  · **THE AUDIT'S REAL FINDING: six exits were asserted SILENT by the suite itself** — the four git
+  exits (`A1.8`-`A1.10b`) and the two payload exits (`A1.4`/`A1.5`), all against `$OPTED`, which
+  holds an un-superseded planning card on an unclaimed branch. Not missing tests — **enforcing**
+  ones. That is why four consecutive judge rounds read the suite as evidence of correctness.
+  Everything is enumerated in the spec under "The exits that must not be silent": 9 audible, 8
+  silent. Also fixed: step-5 symlinked repo path (raised 3 rounds, never fixed until now), detached
+  HEAD now speaks, `git` missing from PATH now speaks, `HOME` unset no longer exits 1.
+  · **⚠ OPEN AND UNFIXED — RUN 6's biggest finding, verified: the hook resolves the repo from the
+  SESSION'S CWD, not from the file being written.** `git rev-parse --show-toplevel` runs in the
+  hook's cwd, so a write into an opted-in repo from a session sitting elsewhere exits 0, silently
+  unguarded. Measured: same target file, cwd inside repoA → **exit 2**; cwd in repoB → **exit 0**.
+  Pre-existing since step 2 was written; **six judge rounds never looked at it**. Biggest blast
+  radius of anything found, possibly a one-line fix — but **settle it by running the hook LIVE**,
+  which has never been done in six rounds. This is the next action.
+  · **⚠ TWO DEFECTS I INTRODUCED IN `9996c0b`, both verified:** (1) step 5's new physical-resolution
+  failure (`[ -n "$fp_phys" ] || exit 0`) is a SILENT fail-open — the same class, inside the fix for
+  the class; (2) the walk-up glues a path with no directory component without a slash — relative
+  `x.js` from repoA yields `…/repoAx.js`. Low reachability (payload paths are absolute by contract)
+  but real, and the suite has no test for that shape.
+  · **⚠ THE RULE IS WRITTEN IN THREE PLACES AND ONLY THE SPEC WAS FIXED.** `hooks/phase-guard.sh`'s
+  own header still carries the sentence RUN 5 falsified, and the test file's Group A4 comment still
+  lists two exits as silent that its own tests now prove audible. Three copies of a rule wrong six
+  rounds running is the mechanism, not the symptom.
+  · **MY ERROR, recorded:** I cited commit SHAs `ff8a02c`/`2b81ce1` in the RUN 6 prompt; neither
+  exists. The real test commits are `07c1698` and `9eef24a`. The judge caught it. **Never write a
+  SHA into a dispatch prompt without `git cat-file -t` first.**
+  · Calibration that keeps this at medium, not high: **every survivor fails OPEN.** Worst case is
+  the phase gate enforced by judgment alone — today's status quo. Nothing causes a false block.
+  · Suite **108/0**, shellcheck clean, HEAD `9996c0b`, pushed.
+
+  · **Repro trap that cost a false alarm:** a throwaway repo with **no commits** makes step 9's
+  `git rev-parse --abbrev-ref HEAD` fail, so the hook fail-opens at exit 0 and EVERY scenario looks
+  silent. `git commit --allow-empty` in the fixture before drawing any conclusion.
+  · **OPEN, deliberately not decided — the parallel-worktree collision.** Once this merges, one
+  agent opening any feature at `planning` denies source writes to every other concurrent agent on
+  an unclaimed branch, and `core-conduct.md`'s parallel-agent invariant forbids that second agent
+  from applying the fix the deny message names. The two rules contradict in exactly this case.
+  Governance trade-off, user-owned — recorded in the feature file, not resolved.
+  · **16 done** (`0f1c029`) — ADR `docs/decisions/0011-branch-scoped-write-permission.md`. 0010 left
+  unedited and still Accepted; 0011 carries an `Amends:` header instead. The two grounds are
+  recorded as *different kinds* of overturn on purpose: the technical objection was made
+  **inapplicable** by the forward lookup (never refuted on its terms), while the process deferral was
+  **overridden with its trigger condition admittedly unmet**. `validate-diagrams.sh` PASS.
+  · **17 done** (`effae64`) — throwaway-repo dogfood, **16/16**. Deny fires with all four message
+  elements, all six exempt paths allow, phase round-trip unblocks then re-denies.
+  **⚠ ROLLBACK PATH 3 IS BROKEN — the headline finding.** `chmod -x` yields exit **126**, not the
+  round-1 "skipped by the harness" claim; round 2's suspicion was right. `settings.json` registers a
+  bare direct path, so that is the live shape. 126 is neither 0 nor 2 (a defect by the spec's own
+  Output contract) and a `PreToolUse` harness may read it as **deny** — so the "last resort" rollback
+  may lock every repo on the machine instead of disarming the guard. Paths 1–2 unaffected.
+  **Recorded, not acted on** — revising Rollback is review-phase. Still unverified: whether the
+  harness actually classifies 126 as deny; that needs a live check before path 3 is rewritten.
+  Timings recorded, not gated: guarded ~64.1ms net, non-opted-in ~12.4ms net against a 12.3ms
+  structural floor (harness overhead measured at 2.3ms/call and subtracted, not assumed).
+  Suite **80/0**, `shellcheck -x` clean, re-run after 17.
+  · **15 done** (`1b67516`) — two clauses appended to the `Phase gate` stub at `rules/gates.md:5`
+  in place; bullet count re-verified **18**, no 19th added. The stub now states the deny rule, that
+  docs and memory paths are never blocked, that no bypass variable exists, and that the
+  implementation half stays judgment-only (the reverse-enforcement non-goal, made visible where a
+  session would otherwise assume both directions are covered); it carries `merge-guard.sh`'s
+  "momentum guardrail, not a security boundary" idiom for the unguarded Bash write surface.
+  The four escalations these tasks raised are all **closed** — see the review block above.
+  Do **not** re-derive the design; it is all in the feature file, which is canonical.
+  · **RUN 6's cwd finding CLOSED** — the hook now resolves the repo from the **file being written**
+  (user decision 2026-07-28), pinned by Group A6. Cost: never-opted 11→38ms, opted-in 35→41ms; live
+  ~41.8ms non-opted / ~67ms deny. The old ~12.4ms "structural floor" is superseded — python starts
+  once per write even when the repo was never opted in.
+  · **RUNS 7-8 (2026-07-29). RUN 7's four findings landed (`2c39eb8` test → `97a2008` fix →
+  `7f2fc9e` docs), then RUN 8 (`5cb0985`, risk=medium, no failing dimension) found the fix itself was
+  the new defect.** `21a0411` test (A7.4) → `325f70c` record corrections. Suite **126/0**, shellcheck
+  clean. **Five of RUN 8's six items landed, not six** — corrected by RUN 9: `:976` was closed as
+  "already correct under the code's numbering", but RUN 8's point was the wrong *reasoning*, not a
+  wrong number. Reinterpreted, not answered. (The first version of this entry claimed all six — the
+  same overstatement `7f2fc9e` made, one round later.)
+  · **Root cause, upstream of all six sites:** the doc's Order-of-operations list and the code's
+  `# --- Step N ---` headers described *different* sequences while the list claimed they resolved
+  against each other. Now single-sourced, with the rule stated once — **step numbers mean the code's
+  headers; the code wins; never renumber code to match prose.** Canonical: 1 payload · 2 tools ·
+  3 path/parse · 4 repo+opt-in · 5-10 unchanged. Four sites quoting retired prose are **marked**
+  pre-`508c55b` rather than rewritten, so their quotes still match what they cite.
+  · **F2 was reported closed and was not.** `7f2fc9e` claimed "all four findings" and touched **one
+  file**. Enumerating beat patching again: beyond RUN 8's six sites it found two more wrong audit rows
+  and **three** copies of the false-credit claim — the suite's `:989` and `phase-guard.sh:197` both
+  still said six rounds missed the cwd bug. **`git show --stat` the closing commit and confirm it
+  touched the file the finding named, before calling anything closed.**
+  · A7.4 mutation-verified: swapping the walk-up for `warn_if_cwd_opted_in` leaves A7.1 green and
+  fails A7.4 with 0 stderr lines. A7.1 alone never pinned that rationale.
+  · **RUN 9 DONE 2026-07-29 @ `33bc6ae` — risk=medium, confidence=high, NO failing dimension, but
+  five `concern`s** (`intent`, `trajectory`, `traceability`, `success_masking`, `audit_trail`).
+  Verdict `coding-memory/observability-judge/2026-07-29-feature-phase-guard-hook-round9.md`.
+  **No behavioural defect at this HEAD** — the judge re-ran the suite twice (126/0) and probed deny /
+  doc-exempt / card-exempt / claimed-branch / never-opted-in by direct invocation. Every finding is a
+  record defect. **Both verdict artifacts are complete** — markdown **and** the `verdicts.jsonl` row,
+  both pinned at `33bc6ae`. Only the *pane result file* is missing: the run outlived the 540s judge
+  wait, so `dispatch-pane-agent.sh wait` reported a timeout. **`95fffa1`'s commit message claims the
+  judge never appended the row — that claim is false.** The row landed between my check of the file's
+  mtime and my reading of it; I trusted a stale `ls` instead of re-reading the file. Corrected here
+  rather than by rewriting the pushed commit: on a branch being judged on its audit trail, the wrong
+  claim and its correction both belong in the record. A timed-out judge wait means *check for the
+  artifacts*, not *assume they are absent*.
+  · **Owed before the PR (RUN 9's list):** (1) three normative contract counts undercount the audible
+  surface — `:611` says "six" audible exceptions vs nine `warn_once` reasons and eleven audit rows,
+  `:297` still says "two exits that print", `:484` names 2 of 9 flag reasons and quotes `$HOME` where
+  the code ships `${HOME:-}`; (2) three unmarked stale step refs survived the "fix every site" pass —
+  `:426` (5→4, authored by the reorder commit itself), `:449` (3→4), `:1015` (Step 4→3); (3) answer
+  `:976` on its own axis — it speaks via `warn_if_cwd_opted_in`'s cwd fallback, not because an opt-in
+  test passed; (4) **consider one structural test** greping the doc's step list against
+  `grep '# --- Step' hooks/phase-guard.sh` — four rounds say care alone cannot keep the record correct.
+  · **⚠ VERIFIED ADJACENT BLOCKER — `gh pr create` will fail closed from this worktree.**
+  `hooks/judge-guard.sh:22` reads `$HOME/.claude/coding-memory/observability-judge/verdicts.jsonl`
+  (the PRIMARY checkout's — 43 lines, **zero** for this branch) while resolving identity from the
+  session's cwd. **Same identity-from-cwd class this branch just fixed in `phase-guard.sh`**, and it
+  is exactly what the parked `fix/judge-guard-verdict-lookup` worktree exists to fix. Decide
+  deliberately — `JUDGE_VERDICTS_FILE=$PWD/...`, or a logged `JUDGE_EXEMPT=<reason>`. **Re-running the
+  judge does not help.** Out of scope for this diff.
+  · **Undisclosed boundary RUN 9 found (owed to the PR body):** supersession reads `refs/heads/` only,
+  so a gate opened on a **remote-only** branch does not supersede and the repo resumes denying
+  (probe-verified). Also uncosted: one `dirname` fork per path level for writes landing outside any repo.
+  · **RUN 9's four items LANDED 2026-07-29 (`1b79e2a` test → `8390a52` record), suite 130/0,
+  shellcheck clean, pushed.** Group D added: four grep tripwires that make the suite read the doc —
+  step count/order vs code headers (D1), keyword per step per side (D2), Flag-contract reason set
+  derived from call sites (D3), Output-contract counts computed not asserted (D4). **Red-first on
+  exactly RUN 9's two contract findings** (D3: 7 of 9 reasons missing; D4: no derived-count
+  sentence), then green; **all four mutation-verified** — stale count / renumbered item / reworded
+  step / dropped reason each fail exactly their own test (m1, m4 at 129/1 against the fixed doc).
+  `:976`-class reasoning answered on its own axis in A5.6's comment; old sentence kept, marked
+  pre-`508c55b`. Verification section records the round.
+  · **Gotcha that cost a redo:** mutation-verifying with `git checkout --` reverts BEFORE committing
+  the fixes discarded them silently — m2-m4 ran against the stale doc and m4's signal was void
+  (nogitbin was already missing). Commit first, then mutate; or the mutation baseline is a lie.
+  · **RUN 10 DONE 2026-07-29 @ `31ebca7` — risk=low, confidence=high, NO failing dimension; the
+  loop's first low-risk verdict.** Both artifacts verified in the worktree ledger, jsonl `head_sha`
+  re-read from the file (not the mtime) = full `31ebca7…` sha. Judge reproduced 130/0 + shellcheck,
+  red-first 128/2 at `1b79e2a`, and all four mutations itself. **Two leftovers of the class Group D
+  cannot see (wrong sentences, not wrong counts):** (1) the feature doc's canonical step-3 item
+  says a malformed payload exits "silently" — the audit table, A1.4/A1.5, and
+  `warn_if_cwd_opted_in` all say it speaks from an opted-in cwd (same class RUN 9 fixed for
+  `noparse`); (2) `phase-guard.sh:109`'s `warn_once` comment lists `(nopython|noparse)` as if
+  exhaustive — 2 of 9 reasons. Judge-guard route decided on the merits: **`JUDGE_VERDICTS_FILE`
+  pointed at the worktree ledger, not `JUDGE_EXEMPT`** — the fresh row exists, so the gate can pass
+  honestly; exempting would skip a check that would succeed.
+  · **RUN 10's two leftovers FIXED (`a00fd3e`, docs+comment only), suite 130/0, shellcheck clean.**
+  Step 3's canonical item now says the malformed-payload exit speaks from an opted-in cwd (matching
+  the `nopayload` audit row and A1.4/A1.5); `warn_once`'s comment enumerates nothing — the reason
+  set lives at the call sites, where D3 derives it.
+  · **RUN 11 DONE 2026-07-29 @ `218118b` — risk=low, confidence=high, no failing dimension; both
+  RUN 10 leftovers confirmed closed.** `success_masking` held at `concern`: grep tripwires cannot
+  catch a wrong *sentence* — disclosed, structural. **DRAFT PR #30 OPENED at that HEAD**
+  (https://github.com/suyatdev/.claude/pull/30), judge-guard cleared via `JUDGE_VERDICTS_FILE` at
+  the worktree ledger — passed honestly, no exemption; created BEFORE committing the audit trail
+  (PR #23 lesson), trail + Roadmap tick + pr-tracking entry committed immediately after.
+  **Next: user reviews → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
+  arm-on-pull check, outcome backfill.** Judge prompts live in the **session** scratchpad and die
+  with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
+  plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
+  while the branch is in review.)
+  · **PR #30 MERGED 2026-07-30T02:52Z (`321dc9f`); tip-reachability verified — `d339ea8` is an
+  ancestor of origin/main.** Pre-merge, origin/main had been merged into the branch (`d339ea8`,
+  record-ledgers-only, three union conflicts, suite 130/0 + shellcheck at that HEAD).
+  **Arm-on-pull checked, NOT yet armed — correctly:** the registration is in origin/main's
+  `settings.json`, but hooks execute from the PRIMARY checkout, which sits on the other session's
+  `feat/pane-split-policy`, whose tree predates the merge (`hooks/phase-guard.sh` absent). It arms
+  when that branch merges main or the primary returns to main. **Do not force it** — no
+  fast-forward of local `main` (the other session's diff base), no touching that branch.
+  **User approved 2026-07-30: verdict outcome backfill (now #27/#28/#30, absorbing the parked
+  item) + worktree/branch cleanup.** Cleanup done: worktree switched to
+  `docs/verdict-outcome-backfill` (fresh off origin/main `321dc9f`, reusing the phase-guard-hook
+  worktree path — the directory name no longer matches the branch), `feature/phase-guard-hook`
+  pruned local+remote. **NEXT (fresh session): model-switch ask, then backfill `outcome` on the
+  #27/#28/#30 rows of `coding-memory/observability-judge/verdicts.jsonl` (convention
+  `clean|rework|null`; check #27's merge state first), then a small docs PR via
+  `preparing-pull-requests`.** Detail: `.claude/session-state.md`.
+  · **Backfill DONE — DRAFT PR #31 opened 2026-07-30** (branch `docs/verdict-outcome-backfill`,
+  backfill commit `9ea5450`): 22 rows null→clean (#27 ×1, #28 ×7, #30 ×11 + 3 on
+  `worktree-phase-guard-hook`). Model checkpoint answered: stay on Fable 5. judge-guard cleared
+  via logged `JUDGE_EXEMPT` (records-only, nothing to score). Detail: pr-tracking §PR #31.
+  Next: user review → `gh pr ready` → merge via GitHub UI → prune branch local+remote.
+- **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
+  carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
+  `file_path` alone, which would have failed open on every notebook write. Corrected, with a
+  regression scenario. (2) System `bash` is **3.2.57**, so the hook may not use associative arrays,
+  `mapfile`, or `${var,,}`. (3) `git cat-file --batch` output is **asymmetric** — a blob emits
+  `<sha> blob <size>` *without* echoing its request, a miss echoes the request verbatim + ` missing`
+  — so the un-superseded filter must consume results in input order or it mis-attributes every blob.
+- **User decisions, 2026-07-25.** Q2 **accepted** with one narrowing — the *un-superseded check*:
+  a `planning` file stops denying once any branch records it as `implementation`, because its gate
+  has already opened. Fixes the `main`/hotfix write-lock at the root cause (a stale copy on `main`
+  is stale *by design* after the gate) while staying a forward lookup. Q6 **resolved: no bypass at
+  all** — and the reason is that the hatch already exists structurally, since feature files live
+  under unguarded `docs/**`, so editing the frontmatter always unlocks a locked repo. A branch-name
+  allowlist was rejected on the same ground: it is `PHASE_EXEMPT` through a different door.
+  Q7 (reverse direction) stays out of scope. Q1 (build at all?) still deferred to the gate.
+- **APPROVED, NOT STARTED — doc-system consolidation.** Was "do this before more phase-guard work"
+  (user-approved 2026-07-25); the 2026-07-26 `gate confirmed` started phase-guard implementation
+  first, so that ordering is **superseded, not cancelled** — flagged to the user at the gate.
+  User-approved 2026-07-25: trim this file to its own ≤200-line cap, delete the 18
+  `coding-memory/branches/*.md`, drop `coding-memory/pr-tracking.md`. **These are ONE coupled
+  commit, not three** — this index holds ~17 pointers into the delete targets (branches/: lines
+  68,77,102,132,138,150,168,179,189,201,263 · pr-tracking: 57,69,75,201,263,266,415), so deleting
+  without trimming leaves dangling pointers, and trimming removes most of them anyway. Order:
+  (1) rewrite §Active Session (7–170) and §Exact Next Steps (272–432) — 325 of 432 lines, both
+  accumulated history, keep current session + repo/PR pointers + next steps only; (2) `git rm` the
+  19 files (all tracked → recoverable); (3) fix `skills/preparing-pull-requests/SKILL.md:43`, which
+  mandates `pr-tracking.md` as a maintained running doc — PR descriptions get generated at PR time
+  from the checklist + diff; (4) tick `README.md:63`, which already tracks this reconciliation.
+  Inert trap: `docs/superpowers/plans/2026-07-18-compliance-judge.md:563,570` would recreate both
+  deleted artifacts if ever re-executed.
+- **Deferred to its own feature file `doc-system-consolidation` (amends ADR 0010 → earns an ADR).**
+  (a) **Judge-output shrink:** `coding-memory/observability-judge/` is 32 files / 5,007 lines and
+  compliance adds 757 — and *nothing reads them*, since `judge-guard.sh:22` consumes
+  `verdicts.jsonl`, not the `.md`. Shrink to pass/fail per area + open issues on the feature file.
+  (b) **Invert the canonical feature-file section order** to frontmatter → Tasks → Verification →
+  Spec → rationale. Today `## Tasks` sits at line 223 of 245, so "where are we" costs a full-file
+  read; reordered, a restore gets it from the first ~40 lines. The one-file design currently fights
+  selective loading instead of enabling it.
+- **Q2 was the crux.** ADR 0010 deferred this hook because
+  "which feature file is active" is unresolvable at `branch: none`. That framing is avoidable: the
+  hook never attributes a write to a feature, it asks only whether the *current branch* carries
+  implementation permission. Deny when any feature file is `phase: planning` AND the branch is not
+  claimed by an `implementation` file. It holds during planning precisely *because* planning forbids
+  branch creation — an unclaimed branch is the signal, not ambiguity. Known holes are written down,
+  not hidden: branch-granularity (not per-feature), `main` stays write-locked after the gate opens,
+  and a stale `planning` file locks the repo. Q3/Q4/Q5 resolved; **Q6 found a real defect in the
+  house pattern** — `JUDGE_EXEMPT`-style bypasses need a Bash command line, which `Edit`/`Write`
+  payloads do not have, so `PHASE_EXEMPT` cannot work the way the other guards do.
+- **Deliberate fail-mode split from `judge-guard.sh`, decided this session:** that hook fires on one
+  rare command and fails closed on infrastructure errors; this one fires on *every write in every
+  repo*, so it fails closed only once a `planning` file is positively identified, and fails **open**
+  on missing python / unresolvable git root / unparseable frontmatter. Blast radius, not sloppiness.
+- session_origin: desktop · session_started_at: 2026-07-23 (Opus 4.8) · last_active_branch:
+  **`feat/pane-split-policy`** — **RESUME after clear. Restored clean: HEAD `6888e16` in sync w/ origin;
+  spec blob VERIFIED still `cdc777a` (lock intact, compliance verdicts valid).** doc-guard's two flagged
+  files (`verdicts.jsonl` +3 vibe-scape lines, `css-visual-pass.md`) confirmed the vibe-scape session's —
+  NOT mine, left as-is. **HARD MODEL GATE ANSWERED THIS SESSION: Opus 4.8 for `superpowers:writing-plans`;
+  IMPLEMENTATION tier still deferred — re-ask before any coding.** **writing-plans IN PROGRESS:** read the
+  spec + all target infra (`hooks/pane-dispatch-guard.sh`, `panes/dispatch-pane-agent.sh`,
+  `panes/redirect-agents.conf`, adapters). **PLAN WRITTEN + self-reviewed →
+  `docs/superpowers/plans/2026-07-23-pane-split-policy.md` (committed).** 8 TDD tasks: T1 live cmux
+  tab-primitive probe (HARD GATE, operator-run on real cmux — gates T5); T2 `pane-policy-<key>` state +
+  `set-policy` subcommand + `read_policy` (bounded N 1..16); T3 guard 3-lane routing + new
+  `inprocess-agents.conf` (Explore/Plan) + narrowed `redirect-agents.conf` (judges); T4 `open_tab`
+  adapter verb + `validate_open_tab_args` (surface-ref allowlist `[A-Za-z0-9:%_.-]`≤64) for
+  tmux/iterm/terminal; T5 cmux `open_tab` (probe-verified `new-surface --pane`); T6 dispatcher
+  lane/session/surface markers + `count_live_workers` (proven on REAL run-dir fixtures) + judge bypass;
+  T7 overflow → `open_tab` round-robin (`pane-rr-<key>`); T8 skill + gate-stub correction + ADR 0009 +
+  Mermaid. Config decision RESOLVED (two flat include-lists). All 7 Gherkin scenarios + 4 flagged
+  assumptions mapped to tasks. **HARD MODEL GATE ANSWERED 2026-07-23 (impl tier): Opus 4.8 (1M) for the
+  whole 8-task implementation; execution = SUBAGENT-DRIVEN (pane-routed implementers). `settings.json` is
+  `opus[1m]` so pane implementers inherit Opus — no Fable 5 surprise. Do NOT re-ask either gate for this
+  branch's execution.** **T1 DONE + pushed (`fe7f30a`) 2026-07-23 — live cmux 0.64.20 probe PASS:
+  `new-surface --pane <pane-ref>` IS the open_tab primitive (in-pane tab; confirmed structurally in the
+  tree AND visually Q1 one-workspace/Q2 two-tabs/Q3 TAB_SEND_OK; agent launches via
+  `send --surface <new-ref>`). So "spawns beyond N open as tabs inside existing panes" is achievable.
+  Findings + exact verb/flags + the surface→pane resolution note that feeds T4/T5 in
+  `coding-memory/branches/pane-split-policy.md`; probe `panes/cmux-tab-probe.sh`, fixture
+  `panes/adapters/fixtures/tab-live.json`.** **T2 DONE 2026-07-23 (subagent-driven: pane Opus implementer + pane task-reviewer):** commit
+  `8fb4534`, commit-verified in-checkout; policy state file — `set-policy` writer + `read_policy`
+  reader (bounded N 1..16, dual-validated at write+read, fail-open), `read_policy` defined-but-uncalled
+  (consumed by T3/6/7). 44/44 tests, shellcheck -x clean, review Spec ✅/Approved/0 Crit-Imp. Detail +
+  T3 carry-forwards: `coding-memory/branches/pane-split-policy.md` §Task 2. **T3 DONE 2026-07-23
+  (subagent-driven: pane Opus implementer + pane reviewer, both cmux surface:83):** commit `6bead2d7`,
+  **verified in-checkout** (4 domain files only), guard test **23/0 re-run by controller**, shellcheck
+  clean, Task 2 suite still 44/0. Guard now three-lane (read-only `inprocess-agents.conf` → judges
+  `redirect-agents.conf` → per-session policy). **Reviewer = CHANGES-REQUESTED (narrow; arch stands,
+  T4 unblocked).** Fail-open missing-conf ruled ACCEPTABLE. **2 Important defects reproduced end-to-end
+  (must fix before branch PR): (1) zero-padded N ask-loop — `set-policy --max 03` writes `panes max=03`
+  but guard regex rejects it → ASK forever; (2) stale `pane-policy-nosession` overrides a MALFORMED
+  primary policy → wrongly allows.** + Important-3 stale guard header + Minors 4-7 + Nits. Full repro +
+  fixes: `coding-memory/branches/pane-split-policy.md` §Task 3. **T3a DONE + reviewer APPROVED 2026-07-23
+  (subagent-driven: pane Opus implementer + pane reviewer, both cmux surface:83):** commit `c74e285`,
+  **verified in-checkout** (4 domain files only, 146+/17-, no store files), controller re-ran guard **28/0**
+  + dispatcher **51/0**, shellcheck clean. Fixed Important-1 (base-10 normalize N + unified guard regex),
+  Important-2 (break on first existing policy, nosession only when env_sid empty), Important-3 (three-lane
+  header), Minors-4/5 + T2 carry-forward A/B; TDD Important repros RED against parent (26/2, 49/2). **TWO NEW
+  Minors from the 3a review → final-review carry-forward (fold into Minor-7): NEW-A guard 64-bit `10#` wrap
+  vs read_policy (cap POLICY_RE digits `{1,2}`); NEW-B — PRIORITIZE — `c74e285` introduced an UNQUOTED
+  `for key in $keys` at guard:104 (quote via `set --`).** Detail: branch log §Task 3a. **T4 DONE + reviewer APPROVED 2026-07-23
+  (subagent-driven: pane `general-purpose` implementer + pane reviewer, both cmux `surface:83`):** commit
+  `86d796b` (parent `57b3eb0`), **verified in-checkout** (5 adapter files only, +114/−32, `Doc-Exempt`),
+  controller re-ran adapters suite **36/0** + shellcheck clean. `open_tab` verb on tmux(`new-window`)/
+  iterm(`create tab`)/terminal(shared path) + `validate_open_tab_args` (anchored allowlist
+  `^[A-Za-z0-9:%_.-]{1,64}$`); ref not yet interpolated anywhere (defense-in-depth for T7); reviewer
+  adversarially probed the boundary, all rejected 65; open_pane byte-identical vs parent. **T4
+  carry-forward → final review:** T4-Minor `adapters.test.sh:55` (open_tab dryrun cases don't pin
+  `new-window`/`create tab` — a revert would pass; **FIXED in T5's cmux case**) + T4-Nit (inline unknown-verb
+  test). Detail: branch log §Task 4. **T5 DONE + reviewer APPROVED 2026-07-23 (subagent-driven: pane
+  `general-purpose` implementer + pane reviewer, both cmux `surface:83`):** commit `a443b82` (parent
+  `3f7b575`), **verified in-checkout** (2 domain files only — `cmux.sh` +38/−4, `adapters.test.sh` +33/−2;
+  vibe-scape's 3 uncommitted compliance-judge files untouched), controller re-ran adapters **43/0** +
+  shellcheck clean. cmux verb guard → `case`; new `cmux_open_tab` resolves surface-ref → its `pane_ref` via
+  `fetch_tree`+`layout_normalize_tree`+awk, then `new-surface --pane <pane_ref>` (Task 1 primitive) + send;
+  every failure → return 1 (degrade). Implementer caught + fixed the plan's call-before-define (split
+  validation-at-top / execution-after-`split_capture`). Reviewer probed live: 10 injection attempts → zero
+  reached a cmux line, 7 degrade paths all rc 1, open_pane byte-identical vs `a443b82~1`. **T5 carry-forwards
+  → final review:** T5-Minor (live fake's `new-surface` arm doesn't pin `--pane` → wrong-column mutation
+  `print $1`→`print $2` stays green; fix: match `--pane pane:36` + else-arm `exit 1`) + T5-Nit
+  (`check_cmux_version` unreachable on open_tab path) + T5-Nit (open_pane-only role/run_id derivations run
+  harmlessly on tab path). Detail: branch log §Task 5. **T6 DONE + reviewer CHANGES-REQUESTED → Task 6a
+  2026-07-23 (subagent-driven: pane `general-purpose` implementer + pane reviewer, both cmux `surface:83`):**
+  commit `e6ef22c` (parent `6cb8687`), **verified in-checkout** (2 domain files only — `dispatch-pane-agent.sh`
+  +55/−2, `.test.sh` +42; no store files), controller re-ran dispatcher **58/0** + shellcheck clean, `Doc-Exempt`.
+  Landed: `is_judge`, `count_live_workers` (runs/* with `lane=worker`+`session=key`+no `agent-exit`), lane/session/
+  surface markers, `count-workers` subcommand, worker gate (`count>=N`→interim exit 3 no-cooldown). **Reviewer
+  verified by running (RED baseline 53/5, 6/7 mutants killed, parsers compared, live repros). VERDICT:
+  CHANGES-REQUESTED — C1 CRITICAL: dispatch counts ITSELF (markers written BEFORE the gate) → off-by-one,
+  `max=1` never opens a worker pane, capacity is N−1, BREAKS Task 7.** Plan Step 4 had the ordering bug; shipped
+  green only because there's NO "worker under max opens a pane" positive test. **Task 6a fix (reviewer-verified in
+  scratch): move the 2 marker-writes to after the gate + add that positive test; also M1 (add commented/padded
+  fixture-conf lines so `is_judge` comment-strip is asserted).** I1 (phantom workers) CONFIRMED — C1 reorder kills
+  the dominant gated-exit-3 source; residual (no-terminal exit 3, adapter-fail exit 4) bounded, carry to Task 7 as
+  a dead-marking requirement. Security boundary CLEAN. Detail + full findings: branch log §Task 6.
+  **T6a DONE + reviewer APPROVED 2026-07-24 (subagent-driven: pane Opus implementer + pane reviewer, both cmux
+  `surface:83`):** commit `8ef4868` (parent `d76ca82`), **verified in-checkout** (2 domain files only —
+  `dispatch-pane-agent.sh` +6/−2, `.test.sh` +27/−1; NO store files; the STAGED other-session compliance-judge
+  files left untouched via pathspec commit). Controller re-ran suite **61/0** + shellcheck clean + read the diff.
+  Fixed C1: moved the 2 marker WRITES to after the worker gate (kept `key=`/`lane=` before it) → capacity N not
+  N−1; `max=1`/0-live now opens exactly one pane (reviewer-reproduced). I1 dominant source killed for free
+  (gated `die 3` before tagging → no phantom). M1: judge-conf fixture now asserts both `is_judge` strips
+  (mutations RED 57/4 + 55/6). New positive test "worker under max opens a pane" RED-against-parent confirmed by
+  both agents. Reviewer ran all checks in an isolated worktree; APPROVED, 0 Crit/Imp. **NEW T6a-Minor** (new
+  test asserts only `rc 0`, not adapter-invoked — non-blocking, fold into final review). Detail: branch log
+  §Task 6a. **NEXT: Task 7** (overflow → `open_tab` round-robin `pane-rr-<key>`; C1 fix is its hard prereq),
+  then Task 8 (skill + gate-stub correction + ADR 0009 + Mermaid). Per-task loop: pane implementer → verify
+  commit in-checkout (`verifying-subagent-commits`) → pane reviewer → checkpoint. Final-review carry-forward:
+  Minor-7 + NEW-A + NEW-B + Nits-8/9 + T4-Minor(fixed)/Nit + T5-Minor/Nits + M2 (PANE_HOME conf split-brain) +
+  T6 Nits + **T6a-Minor**; run full pane suites + implementation obs judge before `gh pr create`.
+  **Freshness: 2026-07-24 resume paid the branch's recurring restore tax (~75k) before output; user chose
+  proceed. T6a impl+review done in panes (light on controller ctx), saved+pushed at this checkpoint; clear
+  offered before Task 7.**
+  **T7 DONE + reviewer APPROVED 2026-07-24 (subagent-driven: pane implementer + pane reviewer, both cmux
+  `surface:83`):** commit `7cb43b0` — worker overflow to `open_tab` with round-robin pane selection
+  (`state/pane-rr-<key>`), replacing T6's interim exit-3. Controller-verified in-checkout (exactly 2 `panes/`
+  files, `Doc-Exempt` trailer, single worktree, other-session compliance files still staged/untouched) and
+  independently re-ran all 7 suites (**287/0**, dispatcher 82/0 from 61/0) + `shellcheck -x` clean + read the
+  full `.sh` diff. **The controller caught, BEFORE dispatch, that the plan's Task 7 contradicts the LOCKED
+  spec** and briefed two corrections, each TDD'd and independently mutation-killed: **(A) a tab-run is not a
+  pane** — the plan leaves the `lane`/`session` writes unconditional, so an overflow would count toward N
+  (spec caps worker *panes*) and become a round-robin target (spec selects a *pane*), breaking the
+  "freed pane is reclaimed" Gherkin (reproduced literally as `worker max 3 reached (4 live)`) and nesting a
+  tab in a tab; fixed with a `kind` marker (missing = `pane`) behind ONE shared predicate `live_worker_panes`
+  so the count and the selection can never disagree. **(B) the I1 residual pinned by T6a** — `dead_mark`
+  writes `agent-exit` on the no-terminal + adapter-fail paths, and resolving the round-robin target BEFORE
+  the marker writes kills the third phantom path by construction. Reviewer: 0 Crit/0 Imp, all 6 checks + 8
+  adversarial angles RUN; **bash 3.2.57 is the only bash on PATH** (the empty-array-under-`set -u` trap is
+  real but unreachable here) and the Task-4 injection boundary held against 8 hostile `surface` payloads
+  through the REAL cmux adapter. **NEW Minor 1 = an OPEN USER DECISION** (spec-level, no clean fix): during a
+  real `open_pane` a run is counted live but not yet selectable, so a concurrent fan-out worker can still
+  degrade to in-process, which spec line 63-64 + the line-217 Gherkin forbid — not a regression, but decide
+  document-as-trade-off (T8) vs spec amendment. Plus Minor 2 (write `kind` first / `lane` last — free
+  atomicity, fold into T8) and 3 Nits. Detail: branch log §Task 7. **NEXT: Task 8** (skill + gate-stub
+  correction + ADR 0009 + Mermaid), then final branch review + obs judge + PR. Carry-forward now also
+  includes **T7: `dispatch-pane-agent.sh` at 387 lines (400 soft limit, no headroom), `.test.sh` at 424, and
+  `mk_run`'s latent `$RANDOM`-in-subshell fixture-collision hazard (already produced one false RED).**
+  **MINOR 1 RESOLVED by the user 2026-07-24 → document as an accepted trade-off** (spec stays locked, no
+  compliance re-run, no code change; rejected a transient N+1 pane and a spec amendment). **T8 DONE
+  2026-07-24 (pane implementer; review folded into the FINAL branch review — 134 lines of docs, all read
+  by the controller):** commit `d801573`, verified in-checkout (exactly 3 doc files, sanity suites still
+  28/0 + 82/0). `rules/gates.md:21` corrected IN PLACE — the controller caught pre-dispatch that the
+  PLAN's own replacement prose silently drops "fails open, with a per-session cooldown after an adapter
+  failure", still true and load-bearing, so the brief required keeping it. `SKILL.md` gained the
+  three-lane policy section + the accepted trade-off in reader's terms, and the implementer correctly
+  also fixed that file's own stale "plan implementers are your judgment call" bullet rather than ship a
+  self-contradictory file. **ADR 0009** records the include→exclude reshaping, the two user review-gate
+  choices that decided three lanes (`inline` must not silence the judges; judge panes uncounted), and the
+  `open_tab` allowlist as THE security boundary for the overflow path. Mermaid verified with the repo's
+  `validate-diagrams.sh` (PASS); the implementer **refused to claim a browser render** it could not do
+  (no `mmdc`; rendering meant an unpinned dep add) and its hand-audit caught a real defect the linter
+  passes — labels containing `--` are ambiguous with edge syntax unless quoted. **ALL 8 TASKS DONE.
+  NEXT: pre-PR cleanup pass** (NEW-B unquoted `for key in $keys` at guard:104 first — a real
+  word-splitting bug; then NEW-A, Minor 2's marker reorder, `mk_run`, the skill-description call, and the
+  remaining T3–T6a minors/nits) → full pane suites → implementation obs judge → PR.
+  **CLEANUP PASS DONE 2026-07-24 (pane implementer; all 16 carry-forwards cleared):** commits `4d9e713`
+  (fix — guard key handling + marker ordering), `f6d83ac` (test — the four escaping-mutant gaps),
+  `3c2ad2c` (docs — the three judgment calls). Controller-verified in-checkout + independently re-ran all
+  seven suites: **302 passed, 0 failed** (287 baseline), shellcheck clean on six shell files, guard diff
+  read in full. NEW-B reproduced literally (a `"*"` session id + a decoy file made the guard exit 0 off a
+  FOREIGN policy file) and fixed with `set --`. **Minor-7's anchors were stale — the brief said verify,
+  not trust, and that caught it**; its RED (`d/../../outside-policy` resolving above `STATE_DIR`) has NO
+  glob char, proving the key-validation and the quoting fixes are independent. **M2 came back WIDER than
+  filed and correctly so:** the guard also read `STATE_DIR` from a hardcoded `$HOME`, so under `PANE_HOME`
+  it would never see the policy `set-policy` had just written — an unbreakable ask loop, worse than the
+  conf split; all four defaults now match the dispatcher. Nit-9's refactor was proven safe by
+  byte-comparing both stderr messages against the pre-change guard. Group 3's tightening is the sharpest
+  evidence in the branch: the three adapter mutants ALL escaped the old suite (43/0) and are caught by the
+  new one (42/3). **Two things deliberately NOT fixed:** `CLAUDE.md`'s skills-catalog line still says
+  "(judge, plan implementer)" (pre-three-lane, the other trigger surface — user's global file, out of
+  scope), and **`panes/dispatch-pane-agent.sh` is now 410 lines, over the 400 soft limit** — split the
+  run-dir/marker helpers out as the FIRST move of the next dispatcher change, not at the tail of this
+  branch. **NEXT: implementation obs judge (must match final HEAD), then PR `--draft` → `gh pr ready`.**
+  **OBS JUDGE RUN 2026-07-24 → `risk=medium confidence=high`** (verdict
+  `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy.md`, `head_sha b38aa24`; judge
+  took its OWN pane `surface:107` while workers sat on `surface:83` — the judge lane bypassing the
+  policy, observed working). **It found what eight task-reviewers missed:** a worker run is marked
+  finished only on NORMAL completion (no exit trap; `wait` skips the marker on timeout), so a
+  hand-closed pane stays "live" WITH its surface ref → the next overflow tabs into a dead surface →
+  `open_tab` fails → the dispatcher called it an ADAPTER failure → session cooldown → everything
+  in-process for the rest of the session, blaming cmux. It also rejected the controller's framing of the
+  observability question: exit 3 covering three causes is NOT the problem (nothing branches on `$?`); the
+  real gap was that the decisive computation ("counted 3 live, max 3, tabbed into surface:X") was
+  recorded NOWHERE. **User chose fix-now → commit `8c2b07f`** (suites **308/0**, +6; controller-verified):
+  `open_tab` failure reclassified to exit 3 + no cooldown + dead-mark the stale target so the next
+  selection picks a different pane (`open_pane` failure keeps cooldown/exit 4, now explicitly asserted);
+  a one-line `ROUTE: lane=… live=… max=… kind=… target=…` decision record to BOTH stderr and
+  `<run-dir>/route`, written before the adapter call so it survives a failed open; `CLAUDE.md`'s catalog
+  line corrected to the three lanes. Two Task-7 tests REPLACED not repaired — they pinned T7's stated
+  intent, and that intent is what the judge found wrong. **Still open (next branch):** the ROOT CAUSE —
+  nothing writes `agent-exit` when a pane dies abnormally (needs an exit trap in `run-pane-agent.sh` or a
+  liveness probe); T7's NIT 1 lost its mitigation (the rr index still advances on a failed `open_tab`,
+  previously "unreachable" only because the first failure ended overflow for the session); **`doc-guard.sh:149`
+  classifies `CLAUDE.md` as SOURCE not documentation** — decide whether it belongs in the hook's doc set;
+  dispatcher now **450 lines**.
+  **OBS JUDGE RUN 2 2026-07-24 → `risk=medium confidence=high`** (verdict appended to
+  `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy.md`, `head_sha 2418e5b`;
+  commit `2bd2935`). **It falsified RUN 1's own fix:** the new comment's convergence argument holds
+  only if `open_pane` ALSO fails. Against an adapter that can pane but cannot tab — exactly the case
+  the spec names — every overflow retires a HEALTHY pane, the live count drops back under N, and the
+  next worker opens a NEW pane: **+1 real pane per two overflowing dispatches, unbounded and silent,
+  cooldown never written, `max=N` quietly exceeded.** It also caught that the reclassification was
+  disclosed as task-level when it is spec-level (SKILL.md lines 55-58 still described the old
+  cooldown-only degrade path, ADR 0009 unamended, `<run-dir>/route` documented nowhere).
+  **User chose fix-now → commit `9073b2b`** (suites **316/0**, +8; `shellcheck -x` clean;
+  controller-verified in-checkout): a **consecutive**-`open_tab`-failure streak with
+  `TAB_FAIL_LIMIT=3` — a single stale target still self-heals (exit 3, no cooldown), but at the
+  limit the ADAPTER, not the target, is judged tab-incapable and it becomes a full adapter failure
+  (cooldown + exit 4), which bounds the growth loop. **Only a SUCCESSFUL `open_tab` resets the
+  streak** — an `open_pane` success is not evidence of tab capability, and one lands between every
+  pair of failures in the growth loop, so counting it would make the bound unreachable. Judge items
+  2-4 (SKILL.md degrade paths, ADR 0009 consequence, `<run-dir>/route`) shipped in the same commit.
+  **No spec amendment needed — the streak restores the spec's cooldown outcome for a genuinely
+  tab-incapable adapter, so the spec stays LOCKED at blob `cdc777a`** (compliance verdicts stay
+  valid, no compliance re-run).
+  **ORDERING CONSTRAINT (learned here, applies to every future PR):** `judge-guard.sh` requires
+  strict `head_sha` EQUALITY with current HEAD, so the verdict commit CANNOT precede the PR —
+  sequence is checkpoint-commit → judge at that HEAD → `gh pr create --draft` with the verdict still
+  uncommitted in the working tree → THEN commit + push the verdict onto the open PR (pushing after
+  creation adds to the PR, so nothing strands).
+  **OBS JUDGE RUN 3 DONE 2026-07-24 @ `2454d1d` → `risk=medium confidence=high`** (verdict
+  `coding-memory/observability-judge/2026-07-24-feat-pane-split-policy-round3.md`, commit `6c717d0`;
+  judge pane `surface:109`, `ROUTE: lane=judge` — the judge lane bypassing the policy, observed
+  working a third time). Controller independently confirmed **316/0** and `shellcheck -x` clean at
+  that HEAD before dispatching. **RUN 3 broke TWO CLAIMS THIS BRANCH HAD WRITTEN INTO ITS OWN
+  DURABLE RECORD** (ADR 0009 + branch log), each with a ~10-line repro:
+  **(F1) the pane-growth bound belongs to the GUARD, not the streak** — `dispatch-pane-agent.sh`
+  never reads its own cooldown flag, only `pane-dispatch-guard.sh` does; at `max=2`, 10 DIRECT
+  dispatches opened **6 real panes, two of them after the cooldown was written**. Normal operation is
+  bounded because the guard is the gatekeeper; a direct dispatch is not.
+  **(F2) "3 tolerates a cmux restart" is FALSE at N≥3** — a restart leaves exactly N ghosts, so with
+  N≥3 the limit trips and a HEALTHY adapter is declared tab-incapable, silently discarding
+  `panes max=N` for the session with a message blaming cmux (RUN 1's finding, back in bounded form).
+  **(F3, the sharpest) RUN 2's "cosmetic" rr-index nit is the CAUSE of F2** — advancing the index on a
+  failed tab marches the selector through every ghost in turn, skipping exactly the healthy panes
+  whose success would reset the streak. Judge pinned the index as a counterfactual: **the scenario
+  then self-heals completely, zero cooldowns.** The nit was graded cosmetic BEFORE the streak existed
+  and was never re-graded after the change that altered its consequence — **the reusable lesson: a
+  nit's grade expires when the code around it changes.**
+  Also: the 8 new assertions test the MECHANISM (streak fires at 3), never the PROPERTY RUN 2 raised
+  (pane count stays under `max`) — **nothing anywhere counts panes against `max`**, which is why F1
+  sailed through 316 green tests. All three share the one deferred root cause (no EXIT trap → no
+  `agent-exit` on abnormal pane death), and RUN 2 priced that deferral too cheaply: "self-healing" is
+  false at N≥3. Judge credited the mutation discipline (RED 101/2 with only the discriminating
+  assertions failing; 3 mutants each killing two assertions).
+  **PR #28 OPENED as a DRAFT 2026-07-25 — https://github.com/suyatdev/.claude/pull/28** (base `main`,
+  40 commits). Sequence used, and the reason for it: the fresh RUN 3 verdict matched HEAD exactly, so
+  `gh pr create` ran FIRST while it was valid, and the verdict was committed onto the already-open PR
+  afterwards (`6c717d0`) — the PR #26 anti-stranding flow. F1+F2+F3 are declared in the PR
+  description as KNOWN-NOT-FIXED, which was the judge's explicit ship condition.
+  **OWED BEFORE `gh pr ready` (user chose "draft PR now, then fix on it", 2026-07-25):** (1) correct
+  the two overstated sentences in ADR 0009 + the branch log — a decision record asserting a safety
+  guarantee that does not exist is the worst of the three findings; (2) the ONE-LINE rr-index fix
+  (do not advance on a failed `open_tab`) which dissolves F2/F3 per the judge's own counterfactual;
+  (3) a PROPERTY test that counts panes against `max`; (4) **obs judge RUN 4** at the new HEAD
+  (judge-guard does not gate `gh pr ready`, but the user's chosen sequence does); then `gh pr ready`.
+  Root cause (EXIT trap in `run-pane-agent.sh`) stays deferred to the follow-up branch.
+  **Two corrections to this file's own state, found 2026-07-25:** **PR #27 is MERGED** (2026-07-22
+  23:39Z, `0a1f80e`), not open as recorded — reachability re-verified, **no 4th stranding**, but its
+  remote branch still exists so the prune and the verdict backfill are still owed. And the
+  `preparing-pull-requests` rule "feature PRs update the README Roadmap" **could not be satisfied:
+  README.md still has no Roadmap section at all** (the known open item 0c(d)) — flagged, not silently
+  skipped; standardizing it remains its own task.
+  **Process slip worth keeping: a bare `git commit -m` swept the 4 OTHER-SESSION compliance-judge
+  files that sit permanently STAGED in this shared checkout into a checkpoint commit.** Caught
+  immediately, undone with `reset --soft` (which restores the index exactly) + a pathspec commit +
+  `push --force-with-lease`. **The durable gotcha "commit by pathspec ONLY" means the pathspec must
+  be on `git commit` itself — `git add <file>` does not protect you, because `commit` without a
+  pathspec commits the WHOLE index.**
+  **RUN 3 REMEDIATION 2026-07-27 (Opus 5 1M; pane implementer `surface:53`, policy `panes max=2`):
+  commits `cbc3c4e` (test) + `5cee1e8` (docs). Controller-verified in-checkout, pathspec-scoped
+  (2 files each), the 6 other-session compliance-judge files byte-identical to session start;
+  suites independently re-run **326/0** (from 316), `shellcheck -x` rc=0, and the dispatcher diff
+  proven **comments-only** (no behavior change).
+  **THE IMPLEMENTER REFUSED DELIVERABLE 1 (the rr-index fix) ON EVIDENCE, AND IS RIGHT — RUN 3's
+  F2/F3 ARE BACKWARDS.** `new_run_dir` names every run `<epoch>-<pid>-<random>` and
+  `live_worker_panes` walks `$RUNS_DIR/*/` in glob order, so glob order IS creation order and a
+  stale pane **always sorts BEFORE** every pane opened after it. RUN 3's fixtures sorted the ghosts
+  LAST, which production cannot produce. Controller confirmed both premises independently (empirical
+  glob-order check + analytic derivation) BEFORE reading the implementer's table, same result.
+  Mechanism: retiring a ghost drops the live count under `max`, so the next dispatch opens a REAL
+  pane that sorts last; an ADVANCING cursor marches into it and its successful tab resets the streak,
+  while a PINNED cursor sits on the oldest ghost and trips the limit. Evidence table (restart 5 min
+  ago, 3 ghosts, healthy adapter, `max=3`): ghosts-last → HEAD cools down @ d5 (RUN 3's trace), fix
+  does not; ghosts-**first** (the only ordering production makes) → **HEAD self-heals, no cooldown in
+  12; the proposed fix cools down @ d5.** The fix MOVES F2 into the real ordering rather than removing
+  it. **The rr advance is load-bearing, not cosmetic** — and was one "cosmetic cleanup" away from
+  removal. Now pinned by test with a PAST-epoch fixture, because the naming is the precondition.
+  **F1 is REAL and fully corrected** (reproduced byte-for-byte: 6 panes at `max=2`, 2 after the
+  cooldown). ADR 0009 now says plainly that the streak does NOT restore `max=N`, that the bound is
+  the GUARD's and therefore **emergent, not mechanical**, that a direct `dispatch` is unbounded, and
+  adds the judge's asked-for sentence that the late cooldown is a **declared timing deviation**, not
+  compliance. Spec untouched, still blob `cdc777a`. **+10 assertions, all mutation-verified**: overflow
+  gate `-ge`→`-gt` → 96/17; "dispatcher honors its own cooldown" → 108/5; the brief's Deliverable 1 →
+  111/2 killing exactly the two restart assertions. Guard suite already covered "flag → allow
+  in-process", so only the uncovered dispatcher half was pinned.
+  **REUSABLE LESSON: a judge finding can be an artifact of its own fixtures.** RUN 3 was right about
+  F1 and wrong about F2/F3 for the same reason this branch keeps getting burned — a fixture that
+  cannot occur in production. Verify a judge's repro against the real naming/ordering before acting.
+  **Process slip (2nd occurrence, new variant): `git commit --amend --no-edit` to add a trailer has
+  NO pathspec and swallowed two other-session staged files.** Implementer caught it on `--stat`,
+  `reset --soft` + re-amended with a pathspec; staged state verifiably restored (controller
+  re-confirmed). **The rule must read: the pathspec goes on `git commit` AND on `git commit --amend`.**
+  **OPEN DECISION for the user:** F2/F3 are answered by EVIDENCE, not a code change, so obs judge
+  RUN 4 must adjudicate the rebuttal (evidence table is in the branch log). The order-dependence is
+  real but emergent from a naming convention two functions away; the robust fix — retry the next
+  candidate WITHIN one dispatch, or probe the newest pane while the streak is warm — removes it
+  entirely but is a design change, deliberately not taken unilaterally. Root cause (no EXIT trap →
+  no `agent-exit` on abnormal pane death) still dissolves the whole class and stays deferred.
+  **`dispatch-pane-agent.sh` is now 517 lines** (+25, all comment) against a 400 soft limit — the
+  split is owed as the FIRST move of the next dispatcher change.
+  **OBS JUDGE RUN 4 IS IN — DONE, verdict committed `2078408`.** It adjudicated its own RUN 3
+  findings and **WITHDREW F2/F3 itself**: its RUN 3 fixtures were letter-named and sorted after real
+  panes, an inversion production naming cannot produce. It then swept 81 configurations per variant
+  (`max=3`/`max=4` × every starting rr index): **HEAD 2 spurious cooldowns, RUN 3's own proposed fix
+  8** — the index advance is load-bearing, confirmed. F1 confirmed fixed. risk=medium, confidence=high.
+  **F4 NEW + ACCEPTED:** the tolerance claim held only at `max=3`; at **N≥4 a healthy cmux restart
+  can still trip the streak** (1/4 starting indices at max=4, 2/5 at max=5, 4/6 at max=6) — user's
+  `panes max=N` silently discarded, exit 4 blaming a blameless adapter. Hand-traced independently
+  before accepting (overflow only fires while live ≥ max, so each failed tab retires a ghost and the
+  next dispatch opens a real pane — that alternation saves max=3 and is one beat too slow at max=4).
+  **User decision 2026-07-27: qualify the record, no behavior change** → `6d781c9` (comment-only,
+  113/0, shellcheck clean) + branch-log RUN 4 section, which also corrected a second overclaim
+  ("ghosts sorting last cannot happen in production" is false — close the two newest panes by hand).
+  **BOTH RESUME STEPS DONE 2026-07-27 (Opus 5 1M) — PR #28 IS READY FOR REVIEW.**
+  **(1) Conflict resolved** → merge commit `2cdff2a` (`git merge origin/main`, NOT a rebase — 49
+  commits with judge verdicts pinned to exact SHAs). It was exactly the two predicted append-heavy
+  memory files; main's PR #29 touched no file this branch changed, and `CLAUDE.md` + `rules/gates.md`
+  auto-merged. `verdicts.jsonl`: both sides proven to be `base(34) + append` (7 mine, 2 main's), so
+  the union was re-ordered by `ts` — **43 rows, every one validated as parseable JSON, zero dropped.**
+  `CODING_MEMORY.md`: both sides inserted at the same anchor; took both (mine on top, most-recent-wins;
+  main's PR #29 entry follows as history), **verified zero lines lost from either side** by set-diff.
+  Post-merge checks: **11 suites, 417 assertions, 0 failures** (dispatcher 113/0 matches the last
+  recorded figure exactly), `shellcheck -x` rc=0, and `git diff 7b3b05c 2cdff2a -- panes/ hooks/` is
+  **EMPTY** — the merge is provably code-neutral, so RUN 4's verdict stays materially valid.
+  **(2) `gh pr ready` done** — PR #28 now `isDraft:false`, `MERGEABLE`/`CLEAN` at `2cdff2a`.
+  All four OWED items confirmed landed before marking ready: ADR/branch-log corrections (`5cee1e8`,
+  `6d781c9`); the rr-index fix **correctly WITHDRAWN on evidence**, not skipped (RUN 4's 81-config
+  sweep: HEAD 2 spurious cooldowns vs the proposed fix's 8); the pane-counting property test at
+  `panes/dispatch-pane-agent.test.sh:568`; obs judge RUN 4 banked at `e6e2e3e` (`2078408`).
+  **NEXT: PR #28 review/merge in the GitHub UI** (`gh pr merge` is hook-blocked by design).
+  **NEW GOTCHA (cost one failed merge attempt):** `git merge` aborts with "local changes would be
+  overwritten" on files that are **staged adds present in NO tree** — the other-session
+  compliance-judge files. `ort` protects an index-only entry the merge would drop. And a **merge
+  commit cannot be pathspec-scoped**, so the standing pathspec rule does not cover it. Procedure that
+  worked: capture `git hash-object` of each staged add → `git restore --staged` them → merge → resolve
+  → commit → `git add` them back → **prove the index hashes match the capture** (they did:
+  `16b37c33`, `68a5b555`; working tree byte-identical to session start).
+  **KNOWN OPEN, none blocking the PR, all waiting on the same root cause:** the N≥4 restart
+  false-positive (F4); exit 4's misleading blame (only wrong when F4 fires); the **525-line**
+  dispatcher vs a 400 soft limit — the split is owed as the FIRST move of the next dispatcher change.
+  **Still deferred by decision, do not start unilaterally:** the robust ordering fix (retry the next
+  candidate within one dispatch) and the root cause (EXIT trap in `run-pane-agent.sh` → `agent-exit`
+  on abnormal pane death), which dissolves the whole class. Session pane policy `panes max=2` is
+  per-session state — a fresh session will be ASKED again at its first worker dispatch.
+  **Working-tree caution (still true):** the uncommitted `coding-memory/compliance-judge/` files are
+  OTHER concurrent sessions' verdicts (repos `phase-guard-hook`, `mtg-wizard`, `vibe-scape`,
+  `Snatch-Bracket`), two already `git add`ed by them. Leave them; pathspec-scope every commit.
+  There is also a live `.claude/worktrees/phase-guard-hook/` worktree (another session's branch,
+  carrying a `hooks/phase-guard.test.sh` that does not exist here) — do not touch it.
+  **NEW MEMORY MODEL ARRIVED ON MAIN (PR #29, now merged into this branch):** feature-scale work gets
+  a `docs/features/<name>.md` with `phase` in frontmatter, checked on restore; `managing-session-memory`
+  and `preparing-pull-requests` were both rewritten around it. **Still undogfooded — no `docs/features/*.md`
+  exists anywhere.** Deliberately NOT retrofitted onto this branch (it is finishing, not starting);
+  the next feature-scale branch should be its first real user, which is what main's own entry says.
+  **This index is 778 lines against its own 200-line ceiling** — flagged by the obs judge on four
+  separate rounds and still growing. Trimming it into `coding-memory/` is its own task, not a
+  drive-by; it is the single most overdue piece of housekeeping in this repo.
+- session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch:
+  **`feat/pane-split-policy`** — **NEW FEATURE SPEC'D + committed, then session cleared.**
+  Session pane-split policy: at the first pane-eligible dispatch the model asks once —
+  `inline` (all in-process this session) or `panes max=N` (N concurrent panes; spawns beyond N open
+  as **tabs inside existing panes**, round-robin, never inline/blocked). Read-only `Explore`/`Plan`
+  never governed (exclude-list, flipping today's `redirect-agents.conf` include-list). cmux primary
+  (user's terminal); others degrade. Spec:
+  `docs/superpowers/specs/2026-07-22-pane-split-policy-design.md`; provenance + Q&A + gate answers:
+  `coding-memory/brainstorms/2026-07-22-pane-split-policy.md`. Prior-session Snatch-Bracket verdicts
+  committed to main (`7854ae3`) before branching. **GATES ANSWERED (do not re-ask this design):
+  Hard Model Gate = Opus 4.8 for the spec, implementation tier deferred; freshness = write-then-clear.**
+  **NEXT (fresh session, IN ORDER): (1) compliance judge on the spec — BLOCKING, deliberately deferred
+  to preserve checkpoint budget, run via `running-the-compliance-judge` alongside the obs architecting
+  read; (2) user review gate on the spec; (3) re-ask model gate before implementation;
+  (4) `superpowers:writing-plans`. cmux tab primitive must be live-probed FIRST in the plan.**
+  **JUDGES RAN TWICE (2026-07-22, Opus 4.8, all pane-dispatched to cmux).** Round A: obs low/high;
+  compliance R1 FAIL (arrow-prose scenarios) → Gherkin reformat `9bd9966` → compliance R2 PASS.
+  **User review gate → 2 design decisions:** (1) `inline` must NOT silence the two judges; (2) `max=N`
+  caps the worker fan-out only, judge panes uncounted. → Spec reshaped into a **THREE-lane model**
+  (read-only in-process / judges always-paned OUTSIDE policy / worker fan-out policy-governed),
+  commit `2815bba` (blob `cdc777a`). Round B (re-entry on the revised spec): **compliance PASS, high
+  conf; obs low/high — obs judged the revision MORE correct** (inline would have "cut power to the
+  judges' PR-gate enforcement"). Verdicts in `coding-memory/{compliance,observability}-judge/`.
+  **USER REVIEW GATE CLEARED 2026-07-22 — spec APPROVED as-is, LOCKED at blob `cdc777a`
+  (commit `2815bba`); do NOT re-edit or the verdicts invalidate.** NEXT (fresh session): re-ask the
+  Hard Model Gate, then `superpowers:writing-plans` (probe the cmux tab primitive FIRST). User
+  declined the optional three-lane diagram for now (would re-run the loop). Plan-time carry-forward
+  (do NOT lose, all non-spec): **ADR for the three-lane governance model** (ADR 0007 precedent);
+  CORRECT (not append) the stale `rules/gates.md` "plan implementers are skill-routed" line (the
+  "judges are hook-enforced" line stays true); `open_tab` verb inherits the orchestration spec's
+  no-interpolation + title-allowlist boundary; validate `N` as a bounded positive int; **prove the
+  worker-pane count AND the worker/judge lane-tag early on REAL run-dir fixtures** (the "judge not
+  counted" test rides on both); live cmux tab probe as a hard gate. Optional: a small three-lane
+  decision diagram would aid review (costs a re-judge if added now).**
 - **PR #29 MERGED 2026-07-25** (`122b8a5`); branch pruned local+remote; ancestor-check verified.
   Phase-frontmatter permission system (ADR `docs/decisions/0010-phase-frontmatter-as-permission-source.md`)
   now on `main` — every feature-scale change gets a `docs/features/<name>.md` with `phase` in
@@ -16,8 +748,8 @@ how this file and its linked files should be written (plain language, major chan
   dispatcher: single `pane-echo` dispatch, and a 5-pane test (4 `--role implementer` filling the
   quadrant + 1 default `aux`) was being scoped when the 75k handoff fired. **Pre-existing
   uncommitted `coding-memory/compliance-judge/verdicts.jsonl` (2-line diff) + new
-  `2026-07-22-0007-tea-room.md` predate this session and are unrelated to it — still awaiting a
-  user decision on whether to commit them.**
+  `2026-07-22-0007-tea-room.md` predate this session and are unrelated to it — committed to main
+  as `7854ae3` by the later Opus 4.8 session above.**
 - session_origin: desktop · session_started_at: 2026-07-22 (Opus 4.8) · last_active_branch: feature/cmux-version-gate
 - **PR #25 MERGED 2026-07-22 (`3491464`); branch pruned local + remote; verdict outcomes
   backfilled.** pane-layout-v2 shipped: 9 tasks, probe P8, ADR 0008, implementation judge PASSED

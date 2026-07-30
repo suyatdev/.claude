@@ -348,3 +348,65 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - Nothing was lost in any of the three occurrences, but only because each was caught by checking
   reachability after the merge. **Always verify `git merge-base --is-ancestor <tip> origin/main`
   after a PR merges — never assume the merge captured the branch tip.**
+
+### PR #27 — fix/pr26-stranded-commits (MERGED 2026-07-22 23:39Z)
+
+- repo `suyatdev/.claude` · remote `origin` · merge commit `0a1f80e` · session memory had recorded
+  this as **OPEN**, which was stale — corrected 2026-07-25.
+- **Reachability VERIFIED 2026-07-25:** `git merge-base --is-ancestor origin/fix/pr26-stranded-commits
+  origin/main` → reachable. **No 4th stranding.** This is the branch that recovered the 3rd one, and
+  it is also the first branch to have used the `--draft` mitigation above.
+- **Still owed:** prune the remote branch (`origin/fix/pr26-stranded-commits` still exists) and
+  backfill its verdict `outcome`.
+
+### PR #28 — feat/pane-split-policy (MERGED 2026-07-29, merge commit `c562594` — heading corrected during PR #30's merge-of-main; that branch's post-merge owed items stay its own)
+
+- repo `suyatdev/.claude` · branch `feat/pane-split-policy` · remote `origin` ·
+  https://github.com/suyatdev/.claude/pull/28 · base `main` · 40 commits ·
+  `session_origin` desktop (created 2026-07-25); most recent push: same session.
+- **Opened `--draft` per the mitigation above, and the ordering was forced by the gate:**
+  `hooks/judge-guard.sh` requires strict `head_sha` EQUALITY with current HEAD, so the obs-judge
+  RUN 3 verdict could not be committed before `gh pr create` without invalidating itself. Sequence
+  run: checkpoint commit → judge at that HEAD (`2454d1d`) → `gh pr create --draft` with the verdict
+  still uncommitted in the working tree → commit the verdict onto the now-open PR (`6c717d0`).
+  Pushing after creation adds to the PR, so nothing strands. **This is the concrete answer to the
+  "candidate follow-up" ADR question above: `--draft` and the freshness gate compose cleanly, but
+  only in that order.**
+- **Three obs-judge rounds, each finding something the eight task reviewers missed.** RUN 3
+  (`risk=medium confidence=high`) broke two claims the branch had written into ADR 0009 and its own
+  branch log. Its ship condition — declare findings 1 and 2 in the PR description as known rather
+  than fixed — was met.
+- **Owed before `gh pr ready`:** correct the two overstated ADR 0009 / branch-log sentences; the
+  one-line round-robin-index fix; a property test that counts panes against `max`; then obs judge
+  RUN 4. The root cause (missing EXIT trap in `run-pane-agent.sh`) stays deferred to a follow-up.
+- **Rule that could not be satisfied, flagged not skipped:** `preparing-pull-requests` requires a
+  feature PR to update the README Roadmap. `README.md` has no Roadmap section at all (known open
+  item 0c(d)); standardizing it via `writing-project-readmes` remains its own task.
+
+### PR #30 — feature/phase-guard-hook
+- repo: suyatdev/.claude · branch: feature/phase-guard-hook · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/30 · status: DRAFT, opened 2026-07-29
+- opened_by session_origin: desktop · last push: desktop
+- scope: hooks/phase-guard.sh (318 ln) + 130-case suite incl. Group D doc↔code tripwires,
+  ADR 0011 (records the user's `gate confirmed` override of ADR 0010's deferral), feature doc,
+  `Phase gate` stub update in rules/gates.md, settings.json PreToolUse block. Hook NOT armed by
+  the branch — primary checkout loads its own copy; arms when this merges and that checkout pulls.
+- judge (impl @ 218118b): RUN 11 risk=low conf=high, outcome=null — rounds 1–11 all persisted in
+  the worktree's coding-memory/observability-judge/. PR created BEFORE committing the audit trail
+  (strict freshness — the PR #23 lesson); judge-guard cleared via JUDGE_VERDICTS_FILE pointed at
+  the worktree ledger (primary ledger has zero rows for this branch — the parked
+  fix/judge-guard-verdict-lookup class, disclosed in the PR body).
+- next: user review → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
+  arm-on-pull check, outcome backfill.
+
+### PR #31 — docs/verdict-outcome-backfill
+- repo: suyatdev/.claude · branch: docs/verdict-outcome-backfill · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/31 · status: DRAFT, opened 2026-07-30
+- opened_by session_origin: desktop · last push: desktop
+- scope: records-only — 22 rows of coding-memory/observability-judge/verdicts.jsonl backfilled
+  null → clean (#27 ×1, #28 ×7, #30 ×11 + worktree-phase-guard-hook ×3, its spec-stage branch).
+  Caveat: #30's hook has zero runtime exposure until the primary checkout pulls main — revise
+  those rows if live use finds defects.
+- judge: logged `JUDGE_EXEMPT` — records-only, no source change to score. Branch forked from
+  origin/main `321dc9f`, reuses the phase-guard-hook worktree (dir name ≠ branch).
+- next: user review → `gh pr ready` → merge via GitHub UI → prune branch local+remote.

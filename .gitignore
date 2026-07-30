@@ -12,6 +12,10 @@
 # contain copied prompts — machine-local, never committed)
 /panes/state/
 
+# Phase-guard runtime state (once-per-session fail-open flags — machine-local,
+# never committed)
+/hooks/state/
+
 # Backup files
 settings.json.bak
 backups/
