@@ -103,6 +103,29 @@ how this file and its linked files should be written (plain language, major chan
   · **Baseline re-verified at session-3 start, HEAD `8b86a98`:** suite **52/0**, shellcheck at only
   the two pre-existing findings (SC2016 line 66, SC2181 line 197 — line numbers drifted from the
   65/161 recorded above as the file grew; same two findings, same pre-fork blame).
+  · **CLASSIFIER EXTRACTED to `hooks/lib/classify-pr-command.py`** (decision 2 above). Hook 210 →
+  141 lines. Moved **verbatim** — shell single-quotes are literal, so no escape sequence changed —
+  then wrapped as a pure `classify(src) -> (kind, exempt)` with a thin `main()`. Evidence it is
+  behaviour-preserving, beyond the suite: **52 command shapes fed through the old inline classifier
+  and the new module produced byte-identical output, 0 mismatches**, including empty input, an
+  unbalanced quote, and bare `gh`. Suite still **52/0** with the tests untouched.
+  · **`shellcheck -x` is now down to ONE finding — SC2016 is gone**, because the single-quoted
+  python string it flagged no longer exists. Only pre-existing SC2181 (now line 128) remains. The
+  apostrophe trap is dead *by construction*, not by warning comment.
+  · **Confirmed importable**, which was the point: `classify()` can be called directly, so bypass
+  shapes get unit tests instead of ad-hoc probing. Pinned by direct call — accepted-open shapes all
+  return `NO` (`PR_URL="$(gh pr create)"`, `eval "gh pr create"`, backticks, `env`, `timeout`,
+  **`for … do gh pr create; done`** — `do` is not in the wrapper denylist), guarded shapes all
+  return `PR` (bare, `$(…)`, `{ …; }`, `&&`, `gh -R`, `time`, `rtk`), and exempt extraction from a
+  chained segment yields `("PR", "docs only")`.
+  · **NOT DONE — new failure mode deliberately left open for the next TDD step:** a *missing* lib
+  file yields empty output → `kind=""` → the hook exits 0, i.e. fails **open silently**, identical
+  to how a classifier crash behaves today. That equivalence is why this commit is a pure refactor.
+  It should fail **closed** with the named path, matching the missing-python branch above it and
+  this file's own single-source-of-truth stance. Write the red test FIRST.
+  · **STILL OWED: ADR 0012 Consequences + the PR body are STALE** — they list 5 verified bypasses,
+  but 4 of those were closed in `e79749a`. The accurate open set is now: quoted `"$(…)"`, backticks,
+  `eval "…"`, variable/alias indirection, and the wrapper denylist (`env`, `timeout`, loop keywords).
   · **NOT exhaustive, and the count is NOT closed.** Open shapes, each measured:
   `PR_URL="$(gh pr create)"` (inside double quotes the substitution is ONE token — the same property
   that stops a commit message tripping the gate, so **quoting is both the FP protection and the FN

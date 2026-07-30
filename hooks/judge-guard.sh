@@ -52,91 +52,22 @@ if isinstance(ti, dict):
 ' 2>/dev/null)
 [ -n "$command_line" ] || exit 0
 
-# Classify the command with python — shlex handles the shell quoting a flat bash regex
-# cannot. The command line is split into shell segments on control operators (and on newlines,
-# which end a command just as `;` does), and EACH segment is tested: a chained or multi-line
+# Classify the command with python — shlex handles the shell quoting a flat bash regex cannot.
+# The command line is split into shell segments on control operators (and on newlines, which end a
+# command just as `;` does), and EACH segment is tested: a chained or multi-line
 # `git push && gh pr create` is guarded exactly like a bare invocation.
 # (That chained form used to be an accepted gap; it is what let a PR ship unjudged, so it is now
 # caught. A `$(...)`-substituted `gh pr create` is likewise caught, since it too really runs.)
-# Within a segment, an optional leading `rtk` wrapper and any leading NAME=VALUE env-assignments
-# are stripped before matching, and JUDGE_EXEMPT's value (quoted or not) is captured from the
-# matching segment — mirroring bash, where such a prefix binds only to its own command.
 # Quoted text survives as a single token, so `gh pr create` inside a commit message or an echo
 # argument can never sit at a segment's command position and is still ignored.
-classify=$(printf '%s' "$command_line" | "$py" -c '
-import re, shlex, sys
-try:
-    # bash ends a command at a newline exactly as it does at `;`, but shlex counts newline as
-    # ordinary whitespace, so two lines of one Bash call used to lex into a single segment with no
-    # command at position 0. Translating BEFORE lexing is deliberate: the shlex quoting rules then
-    # keep the substituted char inside a quoted string as part of that token, so a multi-line
-    # commit message still cannot reach the command position of a segment. Splitting the raw input
-    # per line instead would raise on any quote spanning lines and fail open -- strictly worse.
-    # NOTE: no apostrophes in this block -- it lives inside a single-quoted shell string.
-    #
-    # A backslash-newline is a line CONTINUATION: bash joins the two lines into one command. So
-    # this pair is deleted BEFORE the newline translation below, which routes the result into the
-    # existing chained-operator path instead of adding a matcher. Order matters -- translate first
-    # and the continuation becomes a spurious command separator, which is how it slipped through.
-    #
-    # Backticks are deliberately NOT translated, though doing so does catch `gh pr create` in a
-    # legacy substitution. shlex cannot see heredocs, so the same translation makes any heredoc
-    # body containing a backticked `gh pr create` fail CLOSED, and writing that text is routine
-    # here. Trading a rare false negative for a common false positive that blocks legitimate work
-    # is the wrong direction for a momentum guardrail. Recorded in ADR 0012 as an open shape.
-    src = sys.stdin.read().replace("\\\n", "")
-    lex = shlex.shlex(src.replace("\n", ";"), posix=True, punctuation_chars=True)
-    lex.whitespace_split = True
-    toks = list(lex)
-except ValueError:
-    # Deliberate fail-OPEN, not a bug: a command that is valid bash but not
-    # shlex-parseable (some exotic shell quoting forms) is treated as "not a gh
-    # pr create". Failing closed here would block unrelated commands that merely
-    # contain such quoting, which is wrong for a momentum guardrail -- the
-    # repo/branch/HEAD checks below still fail closed for the cases that matter.
-    print("NO"); print(""); sys.exit(0)
-
-# punctuation_chars=True makes shlex emit control operators as standalone tokens even when
-# unspaced (`push&&gh` -> `push`, `&&`, `gh`), which a plain whitespace split cannot see.
-# Braces are added to the punctuation set here: a brace group opens a command context exactly
-# as a subshell does, but `{` is not a punctuation char, so it lexed as an ordinary token and took
-# the segment command position -- `{ gh pr create; }` walked past while `( gh pr create )` did not.
-OPS = "(){};<>|&"
-segments = [[]]
-for t in toks:
-    if t and all(ch in OPS for ch in t):
-        segments.append([])
-    else:
-        segments[-1].append(t)
-
-assign = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-# Words that occupy the command position while the real command follows them. `rtk` is the
-# token-proxy wrapper used in this repo; the rest are shell keywords/builtins that take a command
-# as argument. Stripped in a loop so they stack (`time rtk gh pr create`). `eval` covers only the
-# unquoted form -- `eval "gh pr create"` keeps the whole command as one quoted token, which
-# by design can never reach a command position. That limit is inherent to lexing, not an oversight.
-WRAPPERS = ("rtk", "time", "eval", "command", "builtin", "exec", "nohup")
-for seg in segments:
-    while seg and seg[0] in WRAPPERS:
-        seg = seg[1:]
-    exempt = ""
-    i = 0
-    while i < len(seg) and assign.match(seg[i]):
-        name, _, val = seg[i].partition("=")
-        if name == "JUDGE_EXEMPT":
-            exempt = val.replace("\n", " ")
-        i += 1
-    # `gh` must hold the command position, but `pr create` need not be tokens 1-2: global flags
-    # are legal before the subcommand (`gh -R owner/repo pr create`). Requiring the two words
-    # ADJACENT keeps the false-positive surface narrow -- quoted text is a single token, so a
-    # commit message mentioning the phrase still cannot produce an adjacent bare pair.
-    rest = seg[i:]
-    if rest and rest[0] == "gh":
-        for j in range(1, len(rest) - 1):
-            if rest[j] == "pr" and rest[j+1] == "create":
-                print("PR"); print(exempt); sys.exit(0)
-print("NO"); print("")
-' 2>/dev/null)
+#
+# The classifier lives in its own file rather than an inline `python -c` string: quoted in shell,
+# a single apostrophe anywhere in it — even in a comment — terminated the quote and broke the whole
+# hook, three times. It is also now importable, so bypass shapes get unit tests instead of ad-hoc
+# probing. Rationale and the accepted-open shapes: hooks/lib/classify-pr-command.py and ADR 0012.
+# Resolved from this script's own directory so the hook works from any $PWD, as the tests do.
+CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
+classify=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null)
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 
