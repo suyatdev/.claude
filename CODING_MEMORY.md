@@ -291,6 +291,11 @@ how this file and its linked files should be written (plain language, major chan
   #27/#28/#30 rows of `coding-memory/observability-judge/verdicts.jsonl` (convention
   `clean|rework|null`; check #27's merge state first), then a small docs PR via
   `preparing-pull-requests`.** Detail: `.claude/session-state.md`.
+  · **Backfill DONE — DRAFT PR #31 opened 2026-07-30** (branch `docs/verdict-outcome-backfill`,
+  backfill commit `9ea5450`): 22 rows null→clean (#27 ×1, #28 ×7, #30 ×11 + 3 on
+  `worktree-phase-guard-hook`). Model checkpoint answered: stay on Fable 5. judge-guard cleared
+  via logged `JUDGE_EXEMPT` (records-only, nothing to score). Detail: pr-tracking §PR #31.
+  Next: user review → `gh pr ready` → merge via GitHub UI → prune branch local+remote.
 - **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
   carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
   `file_path` alone, which would have failed open on every notebook write. Corrected, with a

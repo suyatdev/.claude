@@ -398,3 +398,15 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   fix/judge-guard-verdict-lookup class, disclosed in the PR body).
 - next: user review → `gh pr ready` → merge via GitHub UI → post-merge: tip-reachability check,
   arm-on-pull check, outcome backfill.
+
+### PR #31 — docs/verdict-outcome-backfill
+- repo: suyatdev/.claude · branch: docs/verdict-outcome-backfill · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/31 · status: DRAFT, opened 2026-07-30
+- opened_by session_origin: desktop · last push: desktop
+- scope: records-only — 22 rows of coding-memory/observability-judge/verdicts.jsonl backfilled
+  null → clean (#27 ×1, #28 ×7, #30 ×11 + worktree-phase-guard-hook ×3, its spec-stage branch).
+  Caveat: #30's hook has zero runtime exposure until the primary checkout pulls main — revise
+  those rows if live use finds defects.
+- judge: logged `JUDGE_EXEMPT` — records-only, no source change to score. Branch forked from
+  origin/main `321dc9f`, reuses the phase-guard-hook worktree (dir name ≠ branch).
+- next: user review → `gh pr ready` → merge via GitHub UI → prune branch local+remote.
