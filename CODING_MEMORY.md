@@ -58,10 +58,27 @@ how this file and its linked files should be written (plain language, major chan
   `time`/`eval`; **judge findings get re-measured before they are acted on.** Recorded in ADR 0012
   Consequences + the PR body rather than patched: each round finds another shape, which is a long
   tail inherent to token-position matching. The gate is a momentum guardrail, not a boundary.
-  · **Next:** user decision — close the remaining shapes in this PR (needs judge RUN 3; any commit
-  invalidates the verdict) or defer to a follow-up → `gh pr ready` → merge via GitHub UI. The
-  `\`+newline shape is the most defensible one to close: it is a line *continuation*, so joining
-  the lines routes it into the already-handled `&&` path.
+  · **USER DECISION: fix them — cost alone is not a sufficient reason to defer.** All four closed
+  TDD in one batch (`f461f1f` 8 red → `e79749a` green, **suite 32→48/0**, shellcheck back to only
+  the two pre-existing findings). Batched deliberately: splitting would have cost RUN 3 *and* RUN 4.
+  Each fix **removes a special case** rather than adding a matcher — `\`+newline deleted *before*
+  the newline→`;` rewrite (a continuation joins the lines into the existing `&&` path; translating
+  first is what created the spurious separator); backticks translate to `;` like newlines; `gh`
+  holds the command position while `pr create` matches as an **adjacent pair** anywhere after it,
+  so documented global flags work; `time`/`eval`/`command`/`builtin`/`exec`/`nohup` join `rtk` in
+  the looped wrapper strip. Re-measured against 16 real command forms afterwards: all 13 guarded
+  shapes block, all 3 false-positive shapes still pass.
+  · **The apostrophe trap fired again, exactly as documented** — "repo's" in a new comment inside
+  the single-quoted python block produced 22 unrelated failures. `shellcheck -x` named it (SC1011)
+  in one line where the suite showed only carnage. **Run shellcheck first when the suite goes wide.**
+  · **NOT exhaustive, and the ADR says so.** Two limits remain by design: `eval "gh pr create"` is
+  one quoted token and cannot reach a command position; a shell function or alias reaching `gh` is
+  invisible. Gate stays a momentum guardrail, not a security boundary. **Closing five did not prove
+  there is no sixth** — every one of these was found by *running* the hook, never by reading it.
+  · **Next:** obs judge **RUN 3** pinning the final HEAD → push → `gh pr ready` → merge via GitHub
+  UI → prune branch local+remote → post-merge tip-reachability check + outcome backfill.
+  (PR #32 is already open, so judge-guard no longer gates anything here — RUN 3 is for the audit
+  trail and to score the enlarged change.)
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.

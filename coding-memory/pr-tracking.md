@@ -428,8 +428,11 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   a separate process handed the command *string*, so a `VAR=x` prefix never reaches its env
   (`JUDGE_EXEMPT` works only because the hook parses it out of the command line). PR #30's entry
   above claims that recipe cleared its gate; that claim is wrong — do not reuse it.
-- known-open, verified against HEAD and documented in ADR 0012 Consequences + the PR body:
-  5 bypass shapes remain (`&& \`⏎, `gh -R … pr create`, backticks, `time`/`eval` prefixes).
-  Long tail inherent to token-position matching; gate is a momentum guardrail, not a boundary.
-- next: user decision on whether to close the remaining shapes in this PR (would need a judge
-  RUN 3 — any commit invalidates the verdict) or defer → `gh pr ready` → merge via GitHub UI.
+- **all 5 bypass shapes CLOSED** (user: cost alone is not a reason to defer). TDD in one batch,
+  `f461f1f` 8 red → `e79749a` green; suite 32→48/0. Each fix removes a special case rather than
+  adding a matcher; re-measured against 16 real command forms afterwards. ADR 0012 Consequences
+  rewritten to match. NOT exhaustive by design — `eval "gh pr create"` (one quoted token) and
+  function/alias indirection remain open; the gate stays a momentum guardrail, not a boundary.
+- next: obs judge RUN 3 pinning the final HEAD (audit trail only — the PR is already open, so
+  judge-guard gates nothing further here) → push → `gh pr ready` → merge via GitHub UI → prune
+  branch local+remote → post-merge tip-reachability check + outcome backfill.
