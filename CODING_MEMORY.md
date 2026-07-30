@@ -5,7 +5,31 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- **CURRENT: `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28.** The user answered
+- **CURRENT: `fix/judge-guard-verdict-lookup` — implementation, `model_tier: high` (Opus 5 1M;
+  checkpoint 2 answered 2026-07-30, do not re-ask for this branch).** Worktree
+  `.claude/worktrees/judge-guard-fix`. Fixes the bug recorded at line 231 below: `judge-guard.sh`
+  read `$HOME`'s verdict ledger instead of the judged repo's, so a verdict written from a worktree
+  never satisfied the gate. Branch-only commits: `23f662b` (red tests) → `f77d222` (fix) →
+  `7f8d5d5` (ADR renumber). `origin/main` merged in clean at `bc76aeb` (150 commits; **zero**
+  main-side drift on `hooks/judge-guard.sh`/`.test.sh`). Post-merge suite **26/0**.
+  · **ADR renumbered 0011 → 0012** (`7f8d5d5`): main shipped `0011-branch-scoped-write-permission.md`
+  while this branch was forked, so the merge left two ADRs numbered 0011 and **git did not flag it**
+  — the filenames differ. main's 0011 keeps the number (referenced from this index, README, the
+  phase-guard feature file, and ten judge verdicts); ours moved. **Check ADR numbers after every
+  long-lived-branch merge — a duplicate number is a silent semantic conflict.**
+  · `shellcheck -x hooks/judge-guard.sh` reports SC2016 (line 65) and SC2181 (line 161). Both trace
+  to `3e78cac`/`aaa2abb`, **ancestors of the fork point** — pre-existing, deliberately NOT fixed here
+  (drive-by cleanup is its own task). SC2016 is a false positive: the single quotes protect python
+  source. The repo's convention would be a `# shellcheck disable=` line with a reason.
+  · **Next:** obs judge in a pane pinning post-merge HEAD → `gh pr create --draft` with
+  `JUDGE_VERDICTS_FILE=<this worktree>/coding-memory/observability-judge/verdicts.jsonl` **before**
+  committing judge artifacts (strict freshness — the PR #30 lesson) → pr-tracking entry + push.
+- **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
+  Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
+  worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
+- **HISTORICAL from here — `phase-guard-hook` SHIPPED via PR #30 (`321dc9f`), merged 2026-07-30.**
+  The block below is the record of that feature's rounds, not current state.
+- `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28. The user answered
   **Q1 = build** with the literal phrase `gate confirmed`, which deliberately overrides ADR 0010's
   "build only when a skipped gate is observed" deferral — **task 16's ADR 0011 must record that
   override**, it is the whole reason that task exists. Model-switch checkpoint ran at the gate:
