@@ -79,12 +79,12 @@ try:
     # existing chained-operator path instead of adding a matcher. Order matters -- translate first
     # and the continuation becomes a spurious command separator, which is how it slipped through.
     #
-    # Backticks are legacy command substitution and really run, exactly like $(...), so they open a
-    # new command context: translating them to ";" puts the wrapped command at a segment position.
-    # Both substitutions follow the newline rule -- inside a quoted string shlex keeps the
-    # substituted char as part of that token, so a commit message can still never reach a command
-    # position.
-    src = sys.stdin.read().replace("\\\n", "").replace("`", ";")
+    # Backticks are deliberately NOT translated, though doing so does catch `gh pr create` in a
+    # legacy substitution. shlex cannot see heredocs, so the same translation makes any heredoc
+    # body containing a backticked `gh pr create` fail CLOSED, and writing that text is routine
+    # here. Trading a rare false negative for a common false positive that blocks legitimate work
+    # is the wrong direction for a momentum guardrail. Recorded in ADR 0012 as an open shape.
+    src = sys.stdin.read().replace("\\\n", "")
     lex = shlex.shlex(src.replace("\n", ";"), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     toks = list(lex)
@@ -98,7 +98,10 @@ except ValueError:
 
 # punctuation_chars=True makes shlex emit control operators as standalone tokens even when
 # unspaced (`push&&gh` -> `push`, `&&`, `gh`), which a plain whitespace split cannot see.
-OPS = "();<>|&"
+# Braces are added to the punctuation set here: a brace group opens a command context exactly
+# as a subshell does, but `{` is not a punctuation char, so it lexed as an ordinary token and took
+# the segment command position -- `{ gh pr create; }` walked past while `( gh pr create )` did not.
+OPS = "(){};<>|&"
 segments = [[]]
 for t in toks:
     if t and all(ch in OPS for ch in t):

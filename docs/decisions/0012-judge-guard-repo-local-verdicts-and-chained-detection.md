@@ -108,18 +108,44 @@ segment's command position — including a commit message whose quoted body span
   |---|---|---|
   | `git push && \`⏎`gh pr create` | bypass | the `\`+newline pair is deleted **before** the newline→`;` rewrite — it is a line *continuation*, so joining the lines routes it into the existing `&&` path |
   | `gh -R owner/repo pr create`, `--repo` | bypass | `gh` must hold the command position, but `pr create` is matched as an **adjacent pair** anywhere after it, so global flags are legal |
-  | `` `gh pr create` `` | bypass | backticks translate to `;` like newlines — legacy substitution really runs, exactly as `$(…)` does |
   | `time`/`eval`/`command`/`builtin`/`exec`/`nohup` prefix | bypass | added to the wrapper list already stripping `rtk`, in a loop so they stack |
-  | `$(gh pr create)`, `{ git push; gh pr create; }` | blocked | unchanged |
+  | `{ gh pr create; }` | bypass | `{`/`}` added to the punctuation set — a brace group opens a command context as a subshell does, but `{` lexed as an ordinary token and took the command slot |
+  | `$(gh pr create)`, `( gh pr create )` | blocked | unchanged |
 
-  **This does not make the gate exhaustive, and it must not be read that way.** Matching shell
-  command shapes by token position cannot be made complete without reimplementing bash's grammar.
-  Two known limits remain by design: `eval "gh pr create"` keeps the whole command as one quoted
-  token and cannot reach a command position, and any command reaching `gh` through a shell function
-  or alias is invisible here. **This gate stays a momentum guardrail, not a security boundary** — a
-  determined bypass is always one keystroke away, and `JUDGE_EXEMPT=<reason>` is the honest, logged
-  escape hatch. The lesson worth carrying: each shape was found by *running* the hook against real
-  command forms, never by reading the diff.
+- **Backticks are deliberately left open, after being closed and reverted.** Translating `` ` `` to
+  `;` did catch `` `gh pr create` ``. But `shlex` cannot see heredocs, so the same translation made
+  any heredoc body containing a backticked `gh pr create` fail **closed** — and writing exactly that
+  text is routine here (`git commit -m "$(cat <<'MSG'` with an ADR table in the body). That trades a
+  rare false negative for a common false positive which blocks legitimate work, and `JUDGE_EXEMPT`
+  cannot reach the offending segment. Wrong direction for a momentum guardrail, so it was reverted
+  and the shape is documented instead.
+
+- **The gate is NOT exhaustive, and the count of known gaps is not closed.** Matching shell command
+  shapes by token position cannot be made complete without reimplementing bash's grammar. Known open
+  shapes, each measured:
+  - `PR_URL="$(gh pr create)"` — **inside double quotes the whole substitution is one token.** This
+    is the same property that stops a commit message from tripping the gate: quoting is
+    simultaneously the false-positive *protection* and the false-negative *mechanism*. Closing it
+    means reading inside quoted tokens, which trades away that protection — an architecture-level
+    tradeoff, not a patch.
+  - `` `gh pr create` `` — see the backtick entry above.
+  - `eval "gh pr create"` — one quoted token, so it cannot reach a command position.
+  - a shell function or alias that reaches `gh` — invisible here.
+  - the wrapper list is a **denylist** (`time`, `eval`, `command`, `builtin`, `exec`, `nohup`,
+    `rtk`) and therefore incomplete by construction; `env`, `timeout`, and loop keywords are not in
+    it.
+
+  **This gate stays a momentum guardrail, not a security boundary** — a determined bypass is always
+  one keystroke away, and `JUDGE_EXEMPT=<reason>` is the honest, logged escape hatch.
+
+- **Every shape here was found by *running* the hook, never by reading it — including the ones that
+  corrected a reviewer.** Review round 2 reported `{ gh pr create; }` as a bypass; a later
+  re-measurement wrongly overturned it by testing `{ git push; gh pr create; }`, a different string
+  that blocks for an unrelated reason (`git` takes the command slot, then `;` opens a fresh
+  segment). Round 3 caught the bad overturn. **A wrong correction in an audit trail is worse than
+  the original wrong claim, because it reads as settled** — both strings are now pinned in the suite
+  so the distinction cannot be lost again. The deeper lesson: three false-positive probes that all
+  exercise *quoting* are one sample, not three.
 - **`JUDGE_VERDICTS_FILE` cannot clear the gate for a real `gh pr create`, only for tests.** The hook
   runs as its own process and is handed the command *string*; a `VAR=x gh pr create` prefix is part
   of that string and never reaches the hook's own environment. `JUDGE_EXEMPT` works because the hook
