@@ -275,6 +275,27 @@ how this file and its linked files should be written (plain language, major chan
   with the session — RUN 8's was lost that way. Don't point at one; reconstruct it from this block
   plus the RUN 8 verdict file. (`scratchpad/` is not `.gitignore`d here, so nothing durable goes there
   while the branch is in review.)
+  · **PR #30 MERGED 2026-07-30T02:52Z (`321dc9f`); tip-reachability verified — `d339ea8` is an
+  ancestor of origin/main.** Pre-merge, origin/main had been merged into the branch (`d339ea8`,
+  record-ledgers-only, three union conflicts, suite 130/0 + shellcheck at that HEAD).
+  **Arm-on-pull checked, NOT yet armed — correctly:** the registration is in origin/main's
+  `settings.json`, but hooks execute from the PRIMARY checkout, which sits on the other session's
+  `feat/pane-split-policy`, whose tree predates the merge (`hooks/phase-guard.sh` absent). It arms
+  when that branch merges main or the primary returns to main. **Do not force it** — no
+  fast-forward of local `main` (the other session's diff base), no touching that branch.
+  **User approved 2026-07-30: verdict outcome backfill (now #27/#28/#30, absorbing the parked
+  item) + worktree/branch cleanup.** Cleanup done: worktree switched to
+  `docs/verdict-outcome-backfill` (fresh off origin/main `321dc9f`, reusing the phase-guard-hook
+  worktree path — the directory name no longer matches the branch), `feature/phase-guard-hook`
+  pruned local+remote. **NEXT (fresh session): model-switch ask, then backfill `outcome` on the
+  #27/#28/#30 rows of `coding-memory/observability-judge/verdicts.jsonl` (convention
+  `clean|rework|null`; check #27's merge state first), then a small docs PR via
+  `preparing-pull-requests`.** Detail: `.claude/session-state.md`.
+  · **Backfill DONE — DRAFT PR #31 opened 2026-07-30** (branch `docs/verdict-outcome-backfill`,
+  backfill commit `9ea5450`): 22 rows null→clean (#27 ×1, #28 ×7, #30 ×11 + 3 on
+  `worktree-phase-guard-hook`). Model checkpoint answered: stay on Fable 5. judge-guard cleared
+  via logged `JUDGE_EXEMPT` (records-only, nothing to score). Detail: pr-tracking §PR #31.
+  Next: user review → `gh pr ready` → merge via GitHub UI → prune branch local+remote.
 - **Three findings from grounding the Spec against live prior art (2026-07-25).** (1) `NotebookEdit`
   carries **no** `file_path` — its only path key is `notebook_path`; the settled step 4 said
   `file_path` alone, which would have failed open on every notebook write. Corrected, with a
