@@ -1,4 +1,4 @@
-# ADR 0011 — judge-guard reads the judged repo's verdict store, and guards chained invocations
+# ADR 0012 — judge-guard reads the judged repo's verdict store, and guards chained invocations
 
 **Status:** Accepted (2026-07-25)
 
