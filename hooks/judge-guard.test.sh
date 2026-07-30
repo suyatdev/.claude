@@ -128,5 +128,40 @@ run_case "newline, JUDGE_EXEMPT on gh line -> pass" 0 $'git push\nJUDGE_EXEMPT="
 # message stays a single token, so its embedded phrase never occupies a segment's command slot.
 run_case "multi-line quoted commit msg -> ignore" 0 $'git commit -m "feat: guard\n\ngh pr create must block"'
 
+# Regression: four more shapes that reached `gh pr create` without a verdict. Found by measuring
+# the hook against real command forms rather than by reasoning about it — the plain-newline fix
+# above closed one shape and left its nearest neighbour (`\` + newline) open, which is exactly the
+# kind of gap that survives a review that only reads the diff.
+#
+# 1. A backslash-newline is a line CONTINUATION: bash joins the two lines into one command, so
+#    this is the already-guarded `&&` chain wearing a different coat. Deleting the pair before the
+#    newline translation routes it back into that path rather than adding a new matcher.
+rm -f "$VFILE"
+run_case "backslash-newline continuation -> block"  2 $'git push -u origin br && \\\ngh pr create --fill'
+run_case "backslash-newline, plain -> block"        2 $'git push \\\n&& gh pr create --fill'
+# 2. `gh -R owner/repo pr create` is a valid, documented gh form; `pr` simply is not token 1.
+run_case "gh with global -R flag -> block"          2 "gh -R owner/repo pr create --fill"
+run_case "gh with --repo flag -> block"             2 "gh --repo owner/repo pr create --fill"
+# 3. Backticks are legacy command substitution and really run; `$(...)` was already caught.
+run_case "backtick substitution -> block"           2 'echo `gh pr create --fill`'
+# 4. Keyword/builtin prefixes sit at the command position and displace `gh`, exactly as the
+#    already-stripped `rtk` wrapper does.
+run_case "time prefix -> block"                     2 "time gh pr create --fill"
+run_case "eval prefix -> block"                     2 "eval gh pr create --fill"
+run_case "command prefix -> block"                  2 "command gh pr create --fill"
+run_case "stacked prefixes -> block"                2 "time rtk gh pr create --fill"
+# The fresh-verdict and exemption paths must still work through each new shape.
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_case "continuation, fresh verdict -> pass"      0 $'git push && \\\ngh pr create --fill'
+run_case "gh -R, fresh verdict -> pass"             0 "gh -R owner/repo pr create --fill"
+rm -f "$VFILE"
+run_case "time prefix, JUDGE_EXEMPT -> pass"        0 'time JUDGE_EXEMPT="docs only" gh pr create --fill'
+# False-positive protection must survive all four: quoted text is one token and can never occupy a
+# segment command slot, and a bare `pr create` with no `gh` at the command position is not a match.
+run_case "quoted continuation in msg -> ignore"     0 $'git commit -m "see \\\ngh pr create"'
+run_case "quoted backtick phrase -> ignore"         0 'git commit -m "run `gh pr create` first"'
+run_case "gh pr list is not create -> ignore"       0 "gh -R owner/repo pr list"
+run_case "pr create without gh -> ignore"           0 "mytool pr create --fill"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
