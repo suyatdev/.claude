@@ -112,5 +112,21 @@ run_case "chained && with fresh verdict -> pass" 0 "git push && gh pr create --f
 rm -f "$VFILE"
 run_case "chained && with JUDGE_EXEMPT on gh segment -> pass" 0 'git push && JUDGE_EXEMPT="docs only" gh pr create --fill'
 
+# Regression: bash treats a NEWLINE as a command separator exactly like `;`, but shlex counts it
+# as ordinary whitespace, so `git push` and `gh pr create` on two lines of a single Bash call
+# lexed into ONE segment and no command ever sat at a segment's position 0. Same defect class the
+# chained cases above close, and multi-line command strings are a routine shape, not an exotic one.
+rm -f "$VFILE"
+run_case "newline-separated -> block"           2 $'git push -u origin br\ngh pr create --fill'
+run_case "newline, blank line between -> block" 2 $'git push\n\ngh pr create --fill'
+run_case "newline after a && chain -> block"    2 $'cd /tmp && git push\ngh pr create --fill'
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_case "newline-separated, fresh verdict -> pass" 0 $'git push\ngh pr create --fill'
+rm -f "$VFILE"
+run_case "newline, JUDGE_EXEMPT on gh line -> pass" 0 $'git push\nJUDGE_EXEMPT="docs only" gh pr create --fill'
+# The false-positive protection must survive the newline split: a multi-line quoted commit
+# message stays a single token, so its embedded phrase never occupies a segment's command slot.
+run_case "multi-line quoted commit msg -> ignore" 0 $'git commit -m "feat: guard\n\ngh pr create must block"'
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
