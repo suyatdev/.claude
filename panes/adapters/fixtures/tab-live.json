@@ -1,0 +1,89 @@
+{
+  "active" : {
+    "is_browser_surface" : false,
+    "pane_ref" : "pane:20",
+    "surface_ref" : "surface:76",
+    "surface_type" : "terminal",
+    "tab_ref" : "tab:76",
+    "window_ref" : "window:1",
+    "workspace_ref" : "workspace:6"
+  },
+  "caller" : {
+    "is_browser_surface" : false,
+    "pane_ref" : "pane:20",
+    "surface_ref" : "surface:76",
+    "surface_type" : "terminal",
+    "tab_ref" : "tab:76",
+    "window_ref" : "window:1",
+    "workspace_ref" : "workspace:6"
+  },
+  "windows" : [
+    {
+      "active" : true,
+      "current" : true,
+      "index" : 0,
+      "key" : true,
+      "ref" : "window:1",
+      "selected_workspace_ref" : "workspace:6",
+      "visible" : true,
+      "workspace_count" : 1,
+      "workspaces" : [
+        {
+          "active" : false,
+          "description" : null,
+          "index" : 1,
+          "panes" : [
+            {
+              "active" : false,
+              "focused" : true,
+              "index" : 0,
+              "ref" : "pane:36",
+              "selected_surface_ref" : "surface:77",
+              "surface_count" : 2,
+              "surface_refs" : [
+                "surface:77",
+                "surface:78"
+              ],
+              "surfaces" : [
+                {
+                  "active" : false,
+                  "focused" : true,
+                  "here" : false,
+                  "index" : 0,
+                  "index_in_pane" : 0,
+                  "pane_ref" : "pane:36",
+                  "ref" : "surface:77",
+                  "selected" : true,
+                  "selected_in_pane" : true,
+                  "title" : "Terminal",
+                  "tty" : null,
+                  "type" : "terminal",
+                  "url" : null
+                },
+                {
+                  "active" : false,
+                  "focused" : false,
+                  "here" : false,
+                  "index" : 1,
+                  "index_in_pane" : 1,
+                  "pane_ref" : "pane:36",
+                  "ref" : "surface:78",
+                  "selected" : false,
+                  "selected_in_pane" : false,
+                  "title" : "Terminal",
+                  "tty" : null,
+                  "type" : "terminal",
+                  "url" : null
+                }
+              ]
+            }
+          ],
+          "pinned" : false,
+          "ref" : "workspace:14",
+          "selected" : false,
+          "title" : "tab-probe-scratch"
+        }
+      ]
+    }
+  ]
+}

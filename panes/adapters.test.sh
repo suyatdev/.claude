@@ -25,6 +25,19 @@ run_case() { # $1 desc, $2 want-exit, $3 adapter, $4 title, $5 launcher, $6 grep
   printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
 }
 
+tab_case() { # $1 desc, $2 want-exit, $3 adapter, $4 surface-ref, $5 title, $6 launcher, $7 grep-pattern-or-empty, [$8 verb=open_tab]
+  local desc="$1" want="$2" adapter="$3" ref="$4" title="$5" launcher="$6" pat="$7" verb="${8:-open_tab}" out got
+  out=$(PANE_DRYRUN=1 bash "$ADAPTERS/$adapter.sh" "$verb" "$ref" "$title" "$launcher" 2>&1)
+  got=$?
+  if [ "$got" -ne "$want" ]; then
+    printf 'FAIL — %s (want exit %s, got %s: %s)\n' "$desc" "$want" "$got" "$out"; fail=$((fail+1)); return
+  fi
+  if [ -n "$pat" ] && ! printf '%s' "$out" | grep -qF "$pat"; then
+    printf 'FAIL — %s (missing %s in: %s)\n' "$desc" "$pat" "$out"; fail=$((fail+1)); return
+  fi
+  printf 'ok   — %s\n' "$desc"; pass=$((pass+1))
+}
+
 for a in cmux tmux iterm terminal; do
   run_case "$a dryrun emits commands"      0  "$a" "pane: judge" "$LAUNCHER" "DRYRUN:"
   run_case "$a dryrun names launcher"      0  "$a" "pane: judge" "$LAUNCHER" "$LAUNCHER"
@@ -36,5 +49,60 @@ run_case "cmux dryrun shows new-split"     0  cmux "t" "$LAUNCHER" "new-split do
 run_case "tmux dryrun shows split-window"  0  tmux "t" "$LAUNCHER" "split-window"
 run_case "iterm dryrun shows osascript"    0  iterm "t" "$LAUNCHER" "osascript"
 run_case "terminal dryrun shows do script" 0  terminal "t" "$LAUNCHER" "do script"
+
+# --- open_tab: surface-ref validation + per-adapter dryrun
+for a in cmux tmux iterm terminal; do
+  tab_case "$a open_tab dryrun ok"               0  "$a" "surface:42" "worker.1" "$LAUNCHER" "$LAUNCHER"
+  tab_case "$a open_tab rejects bad surface ref" 65 "$a" 'surface 42; rm' "worker.1" "$LAUNCHER" ""
+  tab_case "$a open_tab rejects bad title"       65 "$a" "surface:42" 'bad"title' "$LAUNCHER" ""
+  # T4-Nit: the unknown-verb check goes through the same helper as its siblings
+  # (want=64, verb overridden) instead of an inline block.
+  tab_case "$a rejects unknown verb"             64 "$a" "surface:42" "worker.1" "$LAUNCHER" "" bogus
+done
+# T4-Minor: pin the adapter-SPECIFIC tab command. Greping only the launcher path
+# leaves the verb unverified — reverting tmux's open_tab to `split-window` or
+# iTerm's to `split horizontally` would still pass, while the sibling open_pane
+# block above has pinned its commands since Task 4. (T5 already closed the cmux
+# half of this finding with the new-surface pin below.) Terminal.app is
+# deliberately absent: it has no splits, so both verbs share one `do script`
+# path by design and no command could discriminate them there.
+tab_case "cmux open_tab dryrun names new-surface" 0 cmux  "surface:42" "worker.1" "$LAUNCHER" "new-surface"
+tab_case "tmux open_tab dryrun shows new-window"  0 tmux  "surface:42" "worker.1" "$LAUNCHER" "new-window"
+tab_case "iterm open_tab dryrun shows create tab" 0 iterm "surface:42" "worker.1" "$LAUNCHER" "create tab"
+
+# --- cmux open_tab live path: surface->pane resolution against the Task 1 probe
+# fixture, driven by a fake cmux (precedent: PANE_CMUX_BIN). Opens no real panes.
+FAKE_CMUX="$TMP/fake-cmux.sh"
+cat > "$FAKE_CMUX" <<FCE
+#!/usr/bin/env bash
+case "\$*" in
+  *"--json tree"*) cat "$ADAPTERS/fixtures/tab-live.json" ;;
+  # T5-Minor: pin the RESOLVED PANE ref, not just the subcommand. In the probe
+  # fixture surface:77 lives in pane:36, so the awk wrong-column mutant
+  # (cmux.sh 'print \$1' -> 'print \$2', which hands new-surface the surface ref
+  # instead of its pane ref) no longer satisfies this arm...
+  *"new-surface --pane pane:36"*) echo '{"surface_ref":"surface:777"}' ;;
+  *"new-surface"*) exit 1 ;;   # ...it falls here, and the adapter degrades rc 1.
+  *) : ;;
+esac
+FCE
+chmod 700 "$FAKE_CMUX"
+
+out=$(PANE_CMUX_BIN="$FAKE_CMUX" bash "$ADAPTERS/cmux.sh" open_tab "surface:77" "worker.1" "$LAUNCHER" 2>/dev/null)
+got=$?
+if [ "$got" -eq 0 ] && [ "$out" = "surface:777" ]; then
+  printf 'ok   — cmux open_tab live resolves surface to pane\n'; pass=$((pass+1))
+else
+  printf 'FAIL — cmux open_tab live resolves surface to pane (got %s: %s)\n' "$got" "$out"; fail=$((fail+1))
+fi
+
+PANE_CMUX_BIN="$FAKE_CMUX" bash "$ADAPTERS/cmux.sh" open_tab "surface:9999" "worker.1" "$LAUNCHER" >/dev/null 2>&1
+got=$?
+if [ "$got" -eq 1 ]; then
+  printf 'ok   — cmux open_tab degrades on unknown surface\n'; pass=$((pass+1))
+else
+  printf 'FAIL — cmux open_tab degrades on unknown surface (got %s)\n' "$got"; fail=$((fail+1))
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
