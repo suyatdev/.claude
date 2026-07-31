@@ -115,18 +115,43 @@ segment's command position — including a commit message whose quoted body span
   whereas the classifier was edited in nearly every round. Moving it too would be a drive-by change,
   which is its own task. Anyone editing that block still needs `shellcheck -x` first.
 
-- **A missing classifier file fails CLOSED, and that blocks every Bash command.** Extraction created
-  a failure mode that could not exist for an inline string: the file can be absent, via a partial
+- **An UNUSABLE classifier fails CLOSED, and that blocks every Bash command.** Extraction created a
+  failure mode that could not exist for an inline string: the file can be absent, via a partial
   checkout or a hook copied on its own — which has happened in this repo. Measured, not assumed: an
   absent classifier produced empty output, leaving `kind` empty, and the hook exited 0. The gate
   looked armed and silently passed every `gh pr create`, which is precisely the defect this ADR
   exists to remove. It now blocks and names the path, matching the missing-python branch beside it
   and the same single-source-of-truth stance taken for the verdict store.
-  The cost is deliberate: with no classifier, nothing can distinguish a PR command from any other,
-  so *all* Bash commands block until the install is repaired. That is the correct trade here — a
-  loud, self-describing halt is recoverable in seconds, whereas a silently dead gate ships unjudged
-  code indefinitely and is invisible by definition. It also mirrors the precedent already set one
-  branch above it, where a missing `python3` blocks everything for the same reason.
+
+  **Corrected after review, and worth recording as a correction rather than a clean result:** the
+  first fix checked `[ -f "$CLASSIFIER" ]` — the file's *existence*, not whether it worked. Four
+  present-but-unusable installs still exited 0 in silence, each re-measured before being believed:
+  an empty file, a syntax error, a truncated file, and an unreadable one (`chmod 000`). So the
+  branch whose whole subject is failing closed shipped a check that failed open on four of six
+  shapes. The truncated case is the sharpest, because a partial checkout — the story cited two
+  paragraphs above as the motivation — produces a truncated file at least as readily as a missing
+  one. `2>/dev/null` on the classifier call swallows every interpreter error, so all four routes
+  converge on the same empty `kind` the missing-file branch was added to catch.
+  The hook now validates the classifier's **output** instead: `kind` is only ever `PR` or `NO`, so
+  anything else means it did not run, whatever the reason. That covers all six shapes including the
+  missing file, and it is *smaller* than the existence check it replaced — the complete fix removed
+  a special case rather than adding one, which is the same principle applied to the bypass shapes
+  below.
+
+  The cost is deliberate: with no usable classifier, nothing can distinguish a PR command from any
+  other, so *all* Bash commands block until the install is repaired. That is the correct trade here
+  — a loud, self-describing halt is recoverable in seconds, whereas a silently dead gate ships
+  unjudged code indefinitely and is invisible by definition. It also mirrors the precedent already
+  set one branch above it, where a missing `python3` blocks everything for the same reason.
+  **The blast radius is machine-wide**, since the hook is registered globally: one unusable file
+  freezes every Bash call in every repo, for every concurrent agent. That makes the error message
+  load-bearing rather than cosmetic — the operator cannot run `git checkout` or any other shell
+  command to recover, so the message names the two routes that survive the block: repair via the
+  Write tool, or unregister the hook in `settings.json`. A `JUDGE_GUARD_REPAIR`-style env escape was
+  considered and rejected: it adds a bypass to a gate whose value is being un-bypassable, and the
+  hook receives the command as a *string* in a separate process, so a `VAR=x` prefix would not
+  reach its environment anyway — the same reason `JUDGE_VERDICTS_FILE` cannot clear the gate for a
+  real `gh pr create`.
 - **Four further bypass shapes were found by measurement and closed.** Round 1 of review found the
   plain-newline shape; round 2 surfaced four more, and re-measuring the hook directly corrected two
   of round 2's claims (`{ …; }` already blocked; `time`/`eval` were missed). All now block, and the

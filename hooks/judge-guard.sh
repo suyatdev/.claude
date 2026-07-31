@@ -67,20 +67,32 @@ if isinstance(ti, dict):
 # probing. Rationale and the accepted-open shapes: hooks/lib/classify-pr-command.py and ADR 0012.
 # Resolved from this script's own directory so the hook works from any $PWD, as the tests do.
 CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
-# A missing classifier is an inability to verify, so it blocks — same rule as the missing-python
-# branch above, and the same single-source-of-truth stance as the verdict store: a broken install
-# surfaces as a named-path error rather than being papered over. Without this, an absent file
-# yields empty output, `kind` is empty, and the hook exits 0 — a gate that looks armed and passes
-# every `gh pr create` silently, which is the exact defect this hook exists to prevent.
-# The cost is deliberate and accepted: with no classifier, nothing can distinguish a PR command
-# from any other, so ALL Bash commands block until the install is repaired (ADR 0012).
-if [ ! -f "$CLASSIFIER" ]; then
-  printf 'judge-guard: classifier missing at %s -- failing closed. Restore it (hooks/lib/) or unregister the hook.\n' "$CLASSIFIER" >&2
-  exit 2
-fi
 classify=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null)
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
+
+# An inability to verify blocks — same rule as the missing-python branch above, and the same
+# single-source-of-truth stance as the verdict store: a broken install surfaces as a named-path
+# error rather than being papered over.
+# This validates the classifier's OUTPUT rather than the file's existence, because `[ -f ]` only
+# catches an absent file. A present-but-unusable one — empty, truncated by a partial checkout
+# (the case ADR 0012 cites as motivation), syntactically broken, or unreadable — produces no
+# output past the `2>/dev/null`, leaving `kind` empty. Under a file-existence check that fell
+# through to `exit 0` and silently passed every `gh pr create`: a gate that looks armed and does
+# nothing, which is the exact defect this hook exists to prevent. `kind` is only ever PR or NO,
+# so anything else means the classifier did not run, whatever the reason.
+# The cost is deliberate and accepted: with no usable classifier, nothing can distinguish a PR
+# command from any other, so ALL Bash commands block until the install is repaired (ADR 0012).
+# That is also why the message must name a repair route that survives the block — git and every
+# other shell command is denied while this holds, so pointing at one would be a dead end.
+case "$kind" in
+  PR|NO) ;;
+  *)
+    printf 'judge-guard: classifier at %s produced no usable output -- failing closed (it is missing, empty, truncated, or broken).\n' "$CLASSIFIER" >&2
+    printf 'judge-guard: ALL Bash commands are blocked until it is repaired, so repair it with the Write tool, or unregister the hook in settings.json.\n' >&2
+    exit 2
+    ;;
+esac
 
 [ "$kind" = "PR" ] || exit 0
 
