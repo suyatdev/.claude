@@ -108,6 +108,12 @@ segment's command position — including a commit message whose quoted body span
   old inline classifier and the new module produced byte-identical output, 0 mismatches. A
   side-benefit was the actual goal — `classify()` is importable, so bypass shapes get unit tests
   instead of ad-hoc probing through the hook.
+  **Scope caveat, so this is not read as more than it is:** the hazard is gone from the *classifier*,
+  not from the hook. `judge-guard.sh` still embeds one inline single-quoted python program — the
+  ~11-line JSON payload parser — which carries the identical apostrophe trap. It was left alone
+  deliberately: it is short, stable, and has never been the thing under edit when the trap fired,
+  whereas the classifier was edited in nearly every round. Moving it too would be a drive-by change,
+  which is its own task. Anyone editing that block still needs `shellcheck -x` first.
 
 - **A missing classifier file fails CLOSED, and that blocks every Bash command.** Extraction created
   a failure mode that could not exist for an inline string: the file can be absent, via a partial
