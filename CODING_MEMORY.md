@@ -214,6 +214,28 @@ how this file and its linked files should be written (plain language, major chan
   commit moves HEAD and the gate pins a verdict to an exact SHA — so "document only" buys nothing
   over fixing, and would ship a measurably false header promise on the branch whose entire subject
   is this gate failing open.
+  · **DONE 2026-07-31, TDD: `77bfbed` (6 red) → `2acad5e` (green). Suite 64/0 → 75/0**, classifier
+  unit 51/0, three neighbouring hook suites unaffected, `shellcheck -x` clean apart from the
+  pre-existing SC2181 (now line **201**, was 158 — it moves with every edit, stop quoting the number
+  as if it were stable). Red run measured **four** shapes, one more than RUN 4 reported: truncated
+  JSON, non-JSON text, valid JSON of the wrong *top-level shape* (`.get` on a list raises), and an
+  interpreter on `PATH` that fails — the last stubbed via a fake `python3`, so the real hook runs end
+  to end rather than a mutant of it.
+  **The fix is a sentinel, and the four control cases are the load-bearing part:** the parser prints
+  `OK` on line 1 once it has decided, command from line 2, guarded by
+  `case "$parse_rc:$parse_ok" in 0:OK)`. Status *and* shape — the **third** time on this branch a
+  check had to stop accepting the appearance of a working component. The controls pin the shapes that
+  must still PASS (no `tool_input`, no `command`, empty command, non-string command), because the
+  obvious fix — block on empty output — would have closed the hole and denied every Edit and Read in
+  the session with it.
+  **Header narrowed, ADR 0012 updated.** *"Any inability to verify blocks"* was a coverage guarantee
+  the hook has never made; it now scopes the promise to the machinery (missing python, unreadable
+  payload, unusable classifier, unreadable verdict store) and names the accepted exceptions. The ADR
+  also **withdraws the word "stable"** from its own justification for leaving the parser inline — the
+  parser had zero tests, and *untested* is not *stable*. Reasoning from "we never edit it" to "it is
+  correct" is how the one component nobody was looking at became the one that was broken.
+  **Next: obs judge RUN 5 at `2acad5e`, then the PR** — and the PR *will* block for a PATH reason,
+  not a freshness one; see the append-to-primary-store decision at line 137's branch block.
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
