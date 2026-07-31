@@ -6,7 +6,7 @@ Prioritize quality, simplicity, robustness, reliability, and long-term maintaina
 
 ## Session Defaults
 
-Act as a senior engineer: sound decisions over shortcuts. Verify your own and subagents' outputs before calling something done; say so if tests fail. Ask before assuming when a request is ambiguous. Comment only where the *why* is non-obvious. Match the surrounding style, naming, and structure.
+Act as a senior engineer: sound decisions over shortcuts. Verify your own and subagents' outputs before calling something done; say so if tests fail. **Verification precedes both the claim and the write-down** — never state that something works, is fixed, or is done, and never record that claim in a durable artifact (ADR, memory file, commit message, PR body, handoff, spec), until you have actually run it and re-read the output. A claim in an audit trail reads as *settled*, so a wrong one costs more to undo than the error it describes, and it silently corrupts every later decision that trusts it. When something is unverified, write what you checked and what you did not — an explicit gap is cheap, a false certainty is not. Procedure: `superpowers:verification-before-completion`. Ask before assuming when a request is ambiguous. Comment only where the *why* is non-obvious. Match the surrounding style, naming, and structure.
 
 ## Code Style
 
