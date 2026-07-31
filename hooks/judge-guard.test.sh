@@ -61,7 +61,7 @@ run_case "quoted multi-word JUDGE_EXEMPT -> exempt pass" 0 'JUDGE_EXEMPT="skip, 
 # Exit code alone can't distinguish a silent bypass from a real exemption (both exit 0),
 # so assert the quoted JUDGE_EXEMPT path actually LOGS its exemption.
 rm -f "$VFILE"
-exempt_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"JUDGE_EXEMPT=\"skip, docs only\" gh pr create --fill"}}))')
+exempt_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"JUDGE_EXEMPT=\"skip, docs only\" gh pr create --fill"}}))')
 exempt_out=$(printf '%s' "$exempt_payload" | bash "$HOOK" 2>&1)
 if printf '%s' "$exempt_out" | grep -q 'exempted (JUDGE_EXEMPT=skip, docs only)'; then
   printf 'ok   — quoted JUDGE_EXEMPT logs exemption\n'; pass=$((pass+1))
@@ -83,7 +83,7 @@ run_case "rtk-wrapped invocation, fresh verdict -> pass" 0 "rtk gh pr create --f
 # was permanently unsatisfiable — no verdict could ever be found, however many were recorded.
 run_case_default() { # $1 desc, $2 want-exit, $3 command — runs with JUDGE_VERDICTS_FILE unset
   local desc="$1" want="$2" cmd="$3" payload got
-  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")
   ( unset JUDGE_VERDICTS_FILE; printf '%s' "$payload" | bash "$HOOK" >/dev/null 2>&1 )
   got=$?
   if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
@@ -193,7 +193,7 @@ run_case "subshell paren group -> block"            2 "( gh pr create --fill )"
 # so it must fail CLOSED naming the path, as the missing-python branch already does.
 run_case_at() { # $1 hook path, $2 desc, $3 want-exit, $4 command
   local hook="$1" desc="$2" want="$3" cmd="$4" payload got
-  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")
   printf '%s' "$payload" | bash "$hook" >/dev/null 2>&1
   got=$?
   if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
@@ -209,7 +209,7 @@ run_case_at "$BROKEN/judge-guard.sh" "missing classifier, gh pr create -> block"
 # mirrors the missing-python branch, which already blocks everything for the same reason.
 run_case_at "$BROKEN/judge-guard.sh" "missing classifier, unrelated cmd -> block" 2 "git status"
 # A fail-closed that does not name the path is unfixable in practice, so assert the message too.
-broken_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"gh pr create"}}))')
+broken_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create"}}))')
 broken_out=$(printf '%s' "$broken_payload" | bash "$BROKEN/judge-guard.sh" 2>&1)
 if printf '%s' "$broken_out" | grep -q 'classify-pr-command.py'; then
   printf 'ok   — missing classifier names the path\n'; pass=$((pass+1))
@@ -343,7 +343,7 @@ mkdir -p "$STUBBIN"
 printf '#!/bin/sh\nexit 1\n' > "$STUBBIN/python3"
 cp "$STUBBIN/python3" "$STUBBIN/python"   # `command -v python` is the documented fallback
 chmod 755 "$STUBBIN/python3" "$STUBBIN/python"
-good_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"gh pr create --fill"}}))')
+good_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --fill"}}))')
 ( PATH="$STUBBIN:$PATH"; printf '%s' "$good_payload" | bash "$HOOK" >/dev/null 2>&1 )
 stub_rc=$?
 if [ "$stub_rc" -eq 2 ]; then
