@@ -164,10 +164,27 @@ how this file and its linked files should be written (plain language, major chan
   mechanism**; closing it is an architecture tradeoff, user-owned); backticks; `eval "gh pr create"`;
   function/alias indirection; the wrapper list is a denylist missing `env`/`timeout`/loop keywords.
   Gate stays a momentum guardrail, not a security boundary.
-  · **Next:** obs judge **RUN 3** pinning the final HEAD → push → `gh pr ready` → merge via GitHub
-  UI → prune branch local+remote → post-merge tip-reachability check + outcome backfill.
-  (PR #32 is already open, so judge-guard no longer gates anything here — RUN 3 is for the audit
-  trail and to score the enlarged change.)
+  · `51765fb`: scoped ADR 0012's apostrophe-hazard claim to the classifier only (the genuinely stale
+  bullet identified above).
+  · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
+  → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
+  backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
+- **SIBLING BRANCH `docs/verify-before-claiming`** (`1721a3c`, off `2b8564b`, pushed) — one line in
+  `rules/core-conduct.md`: **verification precedes both the claim and the write-down**, not just the
+  claim. Closes the gap the four corrections above all shared — each was a claim that entered a
+  durable artifact before it was checked. Triaged via `triaging-new-instructions` → **static rule,
+  not a hook**: keying on claim words fires on every Conventional-Commits `fix:` prefix, a
+  false-positive class this repo has already paid for. Committed `Doc-Exempt` to avoid a guaranteed
+  CODING_MEMORY conflict with this branch; **this bullet is that deferred entry.**
+- **PARKED — verification-marker gate (user ruled 2026-07-31: build it, after these two PRs).** The
+  prose rule above is deliberately the *weak* control, and this repo established this week that a
+  warning sitting where the mistake keeps being made is a **disproven** control. The strong version:
+  a test run writes a marker keyed to HEAD, and a hook requires a fresh one before commits that claim
+  a fix — **the judge-guard shape applied to tests** (mirror `hooks/judge-guard.sh`,
+  `judge-guard.test.sh`, and the extracted `hooks/lib/` classifier module). Its own branch, not
+  bundled. Undecided and load-bearing: what counts as a marker, what "fresh" means when a commit
+  moves HEAD, and how to avoid re-importing the `fix:`-prefix false positive that killed the
+  hook option for the prose rule.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
