@@ -19,7 +19,14 @@
 
 set -u
 
-VERDICTS="${JUDGE_VERDICTS_FILE:-$HOME/.claude/coding-memory/observability-judge/verdicts.jsonl}"
+# The verdict store is resolved per-repo, below, once the repo root is known: the judge
+# writes verdicts repo-relative (agents/observability-judge.md: "Write ONLY under
+# coding-memory/observability-judge/"), so the guard must read the JUDGED repo's store.
+# It previously hardcoded $HOME/.claude's copy, which coincides with the repo store only
+# for the ~/.claude repo itself — leaving the gate unsatisfiable everywhere else.
+# Single source of truth on purpose: no fallback to a second location, so a judge that
+# writes to the wrong place surfaces as a named-path error instead of being papered over.
+VERDICTS_REL="coding-memory/observability-judge/verdicts.jsonl"
 
 payload=""
 if [ ! -t 0 ]; then payload=$(cat); fi
@@ -45,36 +52,22 @@ if isinstance(ti, dict):
 ' 2>/dev/null)
 [ -n "$command_line" ] || exit 0
 
-# Classify the command with python — shlex handles the shell quoting a flat bash regex
-# cannot. A command is guarded only when, after an optional leading `rtk` wrapper and any
-# leading NAME=VALUE env-assignments, the actual command is `gh pr create`; the phrase inside
-# a commit message, an echo, or a quoted string is therefore ignored. JUDGE_EXEMPT's value
-# (quoted or not) is captured here. Accepted limitation: a chained `foo && gh pr create` is not
-# caught — a momentum guardrail, not a security boundary, the same tradeoff git-guard makes.
-classify=$(printf '%s' "$command_line" | "$py" -c '
-import re, shlex, sys
-try:
-    toks = shlex.split(sys.stdin.read())
-except ValueError:
-    # Deliberate fail-OPEN, not a bug: a command that is valid bash but not
-    # shlex-parseable (some exotic shell quoting forms) is treated as "not a gh
-    # pr create". Failing closed here would block unrelated commands that merely
-    # contain such quoting, which is wrong for a momentum guardrail -- the
-    # repo/branch/HEAD checks below still fail closed for the cases that matter.
-    print("NO"); print(""); sys.exit(0)
-if toks and toks[0] == "rtk":
-    toks = toks[1:]
-assign = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-exempt = ""
-i = 0
-while i < len(toks) and assign.match(toks[i]):
-    name, _, val = toks[i].partition("=")
-    if name == "JUDGE_EXEMPT":
-        exempt = val.replace("\n", " ")
-    i += 1
-print("PR" if toks[i:i+3] == ["gh", "pr", "create"] else "NO")
-print(exempt)
-' 2>/dev/null)
+# Classify the command with python — shlex handles the shell quoting a flat bash regex cannot.
+# The command line is split into shell segments on control operators (and on newlines, which end a
+# command just as `;` does), and EACH segment is tested: a chained or multi-line
+# `git push && gh pr create` is guarded exactly like a bare invocation.
+# (That chained form used to be an accepted gap; it is what let a PR ship unjudged, so it is now
+# caught. A `$(...)`-substituted `gh pr create` is likewise caught, since it too really runs.)
+# Quoted text survives as a single token, so `gh pr create` inside a commit message or an echo
+# argument can never sit at a segment's command position and is still ignored.
+#
+# The classifier lives in its own file rather than an inline `python -c` string: quoted in shell,
+# a single apostrophe anywhere in it — even in a comment — terminated the quote and broke the whole
+# hook, three times. It is also now importable, so bypass shapes get unit tests instead of ad-hoc
+# probing. Rationale and the accepted-open shapes: hooks/lib/classify-pr-command.py and ADR 0012.
+# Resolved from this script's own directory so the hook works from any $PWD, as the tests do.
+CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
+classify=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null)
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 
@@ -92,16 +85,20 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 2
 fi
 
-repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+repo=$(basename "$repo_root" 2>/dev/null)
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 head_sha=$(git rev-parse HEAD 2>/dev/null)
-if [ -z "$repo" ] || [ -z "$branch" ] || [ -z "$head_sha" ]; then
+if [ -z "$repo_root" ] || [ -z "$repo" ] || [ -z "$branch" ] || [ -z "$head_sha" ]; then
   printf 'judge-guard: could not determine repo/branch/HEAD -- failing closed.\n' >&2
   exit 2
 fi
 
+# Resolved from the repo root (not $PWD) so the gate behaves the same from any subdirectory.
+VERDICTS="${JUDGE_VERDICTS_FILE:-$repo_root/$VERDICTS_REL}"
+
 if [ ! -f "$VERDICTS" ]; then
-  printf 'judge-guard: no verdict store yet (%s). Run the observability judge before opening a PR.\n' "$VERDICTS" >&2
+  printf 'judge-guard: no verdict store at %s. Run the observability judge before opening a PR.\n' "$VERDICTS" >&2
   exit 2
 fi
 

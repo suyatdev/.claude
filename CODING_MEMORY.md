@@ -5,7 +5,143 @@ pointers below for detail instead of reading everything here. See `managing-sess
 how this file and its linked files should be written (plain language, major changes only).
 
 ## Active Session
-- **CURRENT: `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28.** The user answered
+- **CURRENT: `fix/judge-guard-verdict-lookup` — implementation, `model_tier: high` (Opus 5 1M;
+  checkpoint 2 answered 2026-07-30, do not re-ask for this branch).** Worktree
+  `.claude/worktrees/judge-guard-fix`. Fixes the bug recorded at line 231 below: `judge-guard.sh`
+  read `$HOME`'s verdict ledger instead of the judged repo's, so a verdict written from a worktree
+  never satisfied the gate. Branch-only commits: `23f662b` (red tests) → `f77d222` (fix) →
+  `7f8d5d5` (ADR renumber). `origin/main` merged in clean at `bc76aeb` (150 commits; **zero**
+  main-side drift on `hooks/judge-guard.sh`/`.test.sh`). Post-merge suite **26/0**.
+  · **ADR renumbered 0011 → 0012** (`7f8d5d5`): main shipped `0011-branch-scoped-write-permission.md`
+  while this branch was forked, so the merge left two ADRs numbered 0011 and **git did not flag it**
+  — the filenames differ. main's 0011 keeps the number (referenced from this index, README, the
+  phase-guard feature file, and ten judge verdicts); ours moved. **Check ADR numbers after every
+  long-lived-branch merge — a duplicate number is a silent semantic conflict.**
+  · `shellcheck -x hooks/judge-guard.sh` reports SC2016 (line 65) and SC2181 (line 161). Both trace
+  to `3e78cac`/`aaa2abb`, **ancestors of the fork point** — pre-existing, deliberately NOT fixed here
+  (drive-by cleanup is its own task). SC2016 is a false positive: the single quotes protect python
+  source. The repo's convention would be a `# shellcheck disable=` line with a reason.
+  · **Obs judge RUN 1 done** (`risk=medium confidence=high`, pinned `97752e6`, verdict
+  `coding-memory/observability-judge/2026-07-30-fix-judge-guard-verdict-lookup.md`). It found a
+  **real defect I reproduced independently: a NEWLINE bypassed the gate.** `git push` ⏎
+  `gh pr create` in one Bash call exited 0 — no verdict required — because bash ends a command at a
+  newline but `shlex` counts it as whitespace, so both lines lexed into one segment. Same defect
+  class the branch exists to close, and multi-line commands are routine, so the gate was still off
+  in a common case. **Fixed TDD:** `8037f89` (3 red) → `028510a` (green, **suite 32/0**). Newlines
+  translate to `;` *before* lexing — a per-line split would raise on quotes spanning lines and fail
+  OPEN. ADR 0012 carries the decision.
+  · **TRAP, cost 15 spurious failures:** the classifier's python lives inside a **single-quoted
+  shell string**, so one apostrophe in a comment terminates it and breaks the whole hook.
+  `shellcheck -x` names it (SC1011); the suite only shows unrelated carnage. Note added in-block.
+  · **⚠ RUN 1's verdict is now STALE — HEAD moved to `028510a`.** Judge MUST re-run before the PR.
+  Judge artifacts are deliberately left uncommitted (commit them only *after* `gh pr create`).
+  · **RUN 1 open points not yet acted on:** classifier crash fails open *silently* (only
+  `ValueError` caught, the rest swallowed by `2>/dev/null`) and this change adds a Python ≥3.6
+  requirement to that path while still falling back to plain `python`; `JUDGE_VERDICTS_FILE` is an
+  **unlogged** bypass, unlike `JUDGE_EXEMPT`; the gate reads the *working-tree* file, so a verdict
+  need never be committed to open a PR; sibling `git-guard.sh`/`merge-guard.sh` tracking task unopened.
+  · **DRAFT PR #32 OPEN 2026-07-30** — https://github.com/suyatdev/.claude/pull/32. Detail:
+  `coding-memory/pr-tracking.md` §PR #32. Obs judge **RUN 2** done, pinned `88ccb59`
+  (`…-round2.md`), `risk=medium confidence=high`, **all six carried concerns ruled non-blocking**.
+  · **`JUDGE_VERDICTS_FILE` DOES NOT clear the gate for a real `gh pr create` — correct the note
+  above and PR #30's entry, which both claim it does.** The hook is a separate process handed the
+  command *string*; a `VAR=x gh pr create` prefix is part of that string and never reaches the
+  hook's environment. `JUDGE_EXEMPT` works only because the hook parses it *out of the command
+  line*. Proved by direct measurement, not inference: the override was rejected, then the same
+  command with `JUDGE_EXEMPT` passed. **PR #32 was opened under a logged `JUDGE_EXEMPT` naming the
+  bootstrap** — the installed hook is the primary checkout's pre-fix copy, so it cannot see a
+  worktree verdict. General rule: **a hook fix cannot be gated by the hook it fixes until the
+  primary checkout pulls it.**
+  · **RUN 2 verified 5 remaining bypass shapes** (measured, not assumed): `git push && \`⏎
+  `gh pr create`; `gh -R owner/repo pr create`; backticks; `time`/`eval` prefixes. `$(…)` and
+  `{ …; }` correctly block — RUN 2 claimed `{ …; }` bypasses and it does not, and it missed
+  `time`/`eval`; **judge findings get re-measured before they are acted on.** Recorded in ADR 0012
+  Consequences + the PR body rather than patched: each round finds another shape, which is a long
+  tail inherent to token-position matching. The gate is a momentum guardrail, not a boundary.
+  · **USER DECISION: fix them — cost alone is not a sufficient reason to defer.** All four closed
+  TDD in one batch (`f461f1f` 8 red → `e79749a` green, **suite 32→48/0**, shellcheck back to only
+  the two pre-existing findings). Batched deliberately: splitting would have cost RUN 3 *and* RUN 4.
+  Each fix **removes a special case** rather than adding a matcher — `\`+newline deleted *before*
+  the newline→`;` rewrite (a continuation joins the lines into the existing `&&` path; translating
+  first is what created the spurious separator); backticks translate to `;` like newlines; `gh`
+  holds the command position while `pr create` matches as an **adjacent pair** anywhere after it,
+  so documented global flags work; `time`/`eval`/`command`/`builtin`/`exec`/`nohup` join `rtk` in
+  the looped wrapper strip. Re-measured against 16 real command forms afterwards: all 13 guarded
+  shapes block, all 3 false-positive shapes still pass.
+  · **The apostrophe trap fired again, exactly as documented** — "repo's" in a new comment inside
+  the single-quoted python block produced 22 unrelated failures. `shellcheck -x` named it (SC1011)
+  in one line where the suite showed only carnage. **Run shellcheck first when the suite goes wide.**
+  · **RUN 3 was right and I was wrong — the correction above is itself corrected.** I claimed round
+  2 was wrong about `{ …; }`; it was not. I measured `{ git push; gh pr create; }` (blocks — `git`
+  takes the command slot, `;` then opens a fresh segment) instead of round 2's `{ gh pr create; }`
+  (bypassed — `{` is not a shlex punctuation char, so it took the command slot). **A wrong
+  correction in an audit trail is worse than the original wrong claim, because it reads as
+  settled.** Both strings are now pinned in the suite. Fixed by adding `{`/`}` to the punctuation
+  set. Lesson: my 3 false-positive probes all exercised *quoting* — that is one sample, not three.
+  · **I also introduced a false positive and RUN 3 caught it.** The backtick→`;` translation worked,
+  but shlex cannot see heredocs, so any heredoc body containing a backticked `gh pr create` failed
+  **CLOSED** — routine text here (`git commit -m "$(cat <<'MSG'` with an ADR table), and
+  `JUDGE_EXEMPT` cannot reach that segment. **Reverted**: a rare false negative beats a common false
+  positive that blocks real work. Backticks are now a documented open shape.
+  · **Apostrophe trap fired a THIRD time** ("shlex's"), again 24 unrelated failures. shellcheck -x
+  named it in one line. **This is now a disproven control** — the trap keeps firing *inside the very
+  block that carries the no-apostrophes warning*. RUN 3's recommendation: extract the classifier to
+  `hooks/lib/classify-pr-command.py`, which also makes it unit-testable and would let the suite find
+  bypasses instead of ad-hoc probing. **Not done — decide next session.**
+  · **BOTH OPEN DECISIONS ANSWERED BY USER 2026-07-30 (session 3).** (1) The quoted-substitution
+  gap — `PR_URL="$(gh pr create)"` — is **accepted and documented, not closed**. Inside double
+  quotes the whole substitution lexes as ONE token, and that is the *same* property that stops a
+  commit message tripping the gate: **the false-positive protection and the false-negative are one
+  mechanism**, so closing it trades the protection away. Decisive evidence: this branch already
+  shipped that exact class of false positive once (backtick→`;` made heredoc bodies fail CLOSED
+  where `JUDGE_EXEMPT` cannot reach), and this repo's own docs contain the literal string. Stays
+  open by design alongside backticks, `eval "gh pr create"`, function/alias indirection, and the
+  wrapper **denylist** (no `env`/`timeout`/loop keywords). (2) **Extract the classifier to
+  `hooks/lib/classify-pr-command.py` NOW, in PR #32** — not a follow-up. Behaviour-preserving
+  refactor: the 52/0 suite is the unbiased baseline and must stay green *before* any classifier
+  unit tests are added (separate step — never edit tests and implementation together).
+  · **Baseline re-verified at session-3 start, HEAD `8b86a98`:** suite **52/0**, shellcheck at only
+  the two pre-existing findings (SC2016 line 66, SC2181 line 197 — line numbers drifted from the
+  65/161 recorded above as the file grew; same two findings, same pre-fork blame).
+  · **CLASSIFIER EXTRACTED to `hooks/lib/classify-pr-command.py`** (decision 2 above). Hook 210 →
+  141 lines. Moved **verbatim** — shell single-quotes are literal, so no escape sequence changed —
+  then wrapped as a pure `classify(src) -> (kind, exempt)` with a thin `main()`. Evidence it is
+  behaviour-preserving, beyond the suite: **52 command shapes fed through the old inline classifier
+  and the new module produced byte-identical output, 0 mismatches**, including empty input, an
+  unbalanced quote, and bare `gh`. Suite still **52/0** with the tests untouched.
+  · **`shellcheck -x` is now down to ONE finding — SC2016 is gone**, because the single-quoted
+  python string it flagged no longer exists. Only pre-existing SC2181 (now line 128) remains. The
+  apostrophe trap is dead *by construction*, not by warning comment.
+  · **Confirmed importable**, which was the point: `classify()` can be called directly, so bypass
+  shapes get unit tests instead of ad-hoc probing. Pinned by direct call — accepted-open shapes all
+  return `NO` (`PR_URL="$(gh pr create)"`, `eval "gh pr create"`, backticks, `env`, `timeout`,
+  **`for … do gh pr create; done`** — `do` is not in the wrapper denylist), guarded shapes all
+  return `PR` (bare, `$(…)`, `{ …; }`, `&&`, `gh -R`, `time`, `rtk`), and exempt extraction from a
+  chained segment yields `("PR", "docs only")`.
+  · **NOT DONE — new failure mode deliberately left open for the next TDD step:** a *missing* lib
+  file yields empty output → `kind=""` → the hook exits 0, i.e. fails **open silently**, identical
+  to how a classifier crash behaves today. That equivalence is why this commit is a pure refactor.
+  It should fail **closed** with the named path, matching the missing-python branch above it and
+  this file's own single-source-of-truth stance. Write the red test FIRST.
+  · **STILL OWED: ADR 0012 Consequences + the PR body are STALE** — they list 5 verified bypasses,
+  but 4 of those were closed in `e79749a`. The accurate open set is now: quoted `"$(…)"`, backticks,
+  `eval "…"`, variable/alias indirection, and the wrapper denylist (`env`, `timeout`, loop keywords).
+  · **NOT exhaustive, and the count is NOT closed.** Open shapes, each measured:
+  `PR_URL="$(gh pr create)"` (inside double quotes the substitution is ONE token — the same property
+  that stops a commit message tripping the gate, so **quoting is both the FP protection and the FN
+  mechanism**; closing it is an architecture tradeoff, user-owned); backticks; `eval "gh pr create"`;
+  function/alias indirection; the wrapper list is a denylist missing `env`/`timeout`/loop keywords.
+  Gate stays a momentum guardrail, not a security boundary.
+  · **Next:** obs judge **RUN 3** pinning the final HEAD → push → `gh pr ready` → merge via GitHub
+  UI → prune branch local+remote → post-merge tip-reachability check + outcome backfill.
+  (PR #32 is already open, so judge-guard no longer gates anything here — RUN 3 is for the audit
+  trail and to score the enlarged change.)
+- **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
+  Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
+  worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
+- **HISTORICAL from here — `phase-guard-hook` SHIPPED via PR #30 (`321dc9f`), merged 2026-07-30.**
+  The block below is the record of that feature's rounds, not current state.
+- `phase-guard-hook` — REVIEW. Gate opened 2026-07-26; all 17 tasks done 2026-07-28. The user answered
   **Q1 = build** with the literal phrase `gate confirmed`, which deliberately overrides ADR 0010's
   "build only when a skipped gate is observed" deferral — **task 16's ADR 0011 must record that
   override**, it is the whole reason that task exists. Model-switch checkpoint ran at the gate:
