@@ -259,6 +259,31 @@ how this file and its linked files should be written (plain language, major chan
   its absence is therefore safe. **Test-harness fidelity gap found:** `judge-guard.test.sh`'s
   `run_case()` builds payloads WITHOUT `tool_name`, so ~70 existing tests would block under the new
   rule — the harness, not the rule, is what is wrong; it must emit a realistic Bash payload.
+  · **DONE 2026-07-31, suite 81/0 + classifier 51/0, 3 neighbouring suites unaffected, no net-new
+  shellcheck.** Four commits: `99807d6` red (6 fails) → `686917a` harness fidelity → `685f2af` green
+  → `5e84a5d` docs. **Five** builders lacked `tool_name`, not one — `run_case`, `run_case_default`,
+  `run_case_at`, the JUDGE_EXEMPT probe, the stubbed-interpreter probe. Split from the green commit
+  and **measured** behaviour-neutral: against the unmodified hook the fully-updated harness fails
+  exactly the six red cases and nothing else. That harness gap is *why* the false premise survived
+  five rounds — no test could tell a Bash call from an editor call, so the tests agreed with the
+  premise by construction.
+  · **`[ -n "$command_line" ] || exit 0` was left unreachable by the fix and INVERTED, not deleted** —
+  a fail-closed assertion now. Deleting was the KISS answer; on a branch that has found four silent
+  allows, a broken invariant should surface as a block.
+  · **Two ADR items VERIFIED, not carried on trust.** (a) open shapes measured via stdin (the way the
+  hook feeds the classifier — my first probe used argv and got `NO` for *everything*, including bare
+  `gh pr create`; the interface is stdin): `sudo`/`xargs`/`env`/`timeout`/`/usr/bin/gh` → `NO`,
+  `rtk`/`command` → `PR`. (b) residual **9** confirmed by reading the `PYEOF` matcher: it compares
+  only stage/repo/branch/head_sha, so `risk=high`+`execution=fail` opens the gate exactly as a clean
+  verdict does. Residual **8** (`JUDGE_VERDICTS_FILE`) was already in the ADR — no change needed.
+  · **Machine-wide trigger now pinned:** a `python3` that WORKS but prints to stdout displaces the
+  line-1 sentinel → parse refused → every Bash command blocks, from a cause outside this repo, with
+  a message pointing at the payload where nothing is wrong.
+  · **Live hook is UNAFFECTED** — `~/.claude/hooks/judge-guard.sh` is the primary checkout's copy
+  (`381bd79`, zero `tool_name` references), so none of this is armed on the machine yet. Checked
+  before committing, because the fix blocks Bash and I run on Bash.
+  · **NEXT: obs judge RUN 6 at `5e84a5d`**, then the PR (which blocks for the PATH reason — append
+  the genuine verdict to the primary store, see line 137's branch block).
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
