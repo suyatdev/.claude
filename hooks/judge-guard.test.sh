@@ -24,8 +24,12 @@ export JUDGE_VERDICTS_FILE="$VFILE"
 
 pass=0; fail=0
 run_case() { # $1 desc, $2 want-exit, $3 command
+  # `tool_name` is a REQUIRED PreToolUse field — it is what the matcher itself filters on — so a
+  # payload without one is not a shape production can ever deliver. This harness omitted it for the
+  # first five review rounds, which is why "a Bash call with no readable command" could be mistaken
+  # for ordinary non-Bash traffic: nothing here ever asserted the difference.
   local desc="$1" want="$2" cmd="$3" payload got
-  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")
   printf '%s' "$payload" | bash "$HOOK" >/dev/null 2>&1
   got=$?
   if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
@@ -275,11 +279,21 @@ fi
 # Everything above enters through a well-formed payload, so the parser that produces `command_line`
 # was itself untested. Its `except ValueError: sys.exit(0)` — plus `2>/dev/null` on the call —
 # collapsed four outcomes into one silent exit 0: malformed JSON, a non-JSON payload, a payload
-# whose shape crashes the parser, and an interpreter that fails outright. Exactly ONE of the four is
-# legitimate: valid JSON carrying no `command` string is not a Bash call and must pass. Because
-# nothing downstream can tell the four apart, a garbled payload disarmed the gate the same way an
-# absent classifier did — the defect this whole line of work exists to remove, reached by a third
-# route. So the parser must SAY it ran, not merely fail to say anything.
+# whose shape crashes the parser, and an interpreter that fails outright. Because nothing downstream
+# could tell them apart, a garbled payload disarmed the gate the same way an absent classifier did —
+# the defect this whole line of work exists to remove, reached by a third route. So the parser must
+# SAY it ran, not merely fail to say anything.
+#
+# WHICH of those outcomes is legitimate is decided by `tool_name`, NOT by the hook's registration.
+# The earlier answer here — "valid JSON with no `command` is an Edit or a Read, so it must pass" —
+# was false: the hook is registered on matcher `Bash` alone, so editor traffic never arrives, and
+# those cases were pinning `pass` for callers that do not exist. A Bash call with nothing readable
+# in it is a Bash call this hook could not verify, and by its own fail-closed doctrine it blocks.
+# Reading `tool_name` rather than trusting the matcher is deliberate: the matcher lives in
+# settings.json, a different file with no test covering it, and that hidden dependency is exactly
+# what produced the wrong behaviour. These tests therefore assert the rule under BOTH registrations
+# — the `Bash` one in force today, and the `*` one that would deliver the editor traffic the old
+# comment imagined.
 # $VFILE deliberately holds a FRESH verdict here, so a working hook exits 0 on a real `gh pr create`
 # (asserted as the control below): an exit of 2 can only have come from the fail-closed parse path.
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
@@ -296,13 +310,28 @@ run_payload "non-JSON payload -> block"     2 'not json at all'
 # empty stdout — indistinguishable, under the old check, from a deliberate "nothing to guard".
 run_payload "JSON array payload -> block"   2 '[1, 2, 3]'
 run_payload "JSON scalar payload -> block"  2 '"just a string"'
-# The three shapes that must still PASS. These are the whole reason the fix cannot simply block on
-# empty output: every non-Bash tool call in the session reaches this hook, and blocking them would
-# take the editor down with the gate.
-run_payload "no tool_input -> pass"                 0 '{"hook_event_name":"PreToolUse"}'
-run_payload "tool_input without a command -> pass"  0 '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/tmp/x"}}'
-run_payload "empty command string -> pass"          0 '{"hook_event_name":"PreToolUse","tool_input":{"command":""}}'
-run_payload "non-string command -> pass"            0 '{"hook_event_name":"PreToolUse","tool_input":{"command":42}}'
+# A payload that SAYS it is Bash but carries nothing runnable. Under the live `Bash` matcher these
+# are the only way the four shapes below can arrive at all, and none of them is a call this hook can
+# verify — so each blocks. (The gate is only ever crossed by commands this session itself issues;
+# a Bash call with no command in it has no legitimate sender.)
+run_payload "Bash, no tool_input -> block"            2 '{"hook_event_name":"PreToolUse","tool_name":"Bash"}'
+run_payload "Bash, no command key -> block"           2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"file_path":"/tmp/x"}}'
+run_payload "Bash, empty command string -> block"     2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":""}}'
+run_payload "Bash, non-string command -> block"       2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}'
+
+# A payload whose tool cannot be identified is not a call this hook may reason about — same fail-
+# closed reading as an unusable classifier. `tool_name` is a required PreToolUse field, so its
+# absence means the payload is malformed, not that the tool is uninteresting.
+run_payload "tool_name absent -> block"               2 '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/tmp/x"}}'
+run_payload "tool_name non-string -> block"           2 '{"hook_event_name":"PreToolUse","tool_name":42,"tool_input":{}}'
+
+# Named NON-Bash tools pass, and this is the part that must not regress: it is what keeps the fix
+# from taking the editor down if the hook is ever registered on `*`. These shapes cannot reach the
+# hook under today's matcher — that is the point. They pin the behaviour the old comment merely
+# assumed, so that a matcher change becomes a settings edit rather than a machine-wide outage.
+run_payload "Edit passes (no command to guard)"       0 '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"/tmp/x","old_string":"a","new_string":"b"}}'
+run_payload "Read passes (no command to guard)"       0 '{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/tmp/x"}}'
+run_payload "Write passes (no command to guard)"      0 '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/x","content":"hi"}}'
 # Control: the same fresh verdict, through a well-formed payload, still allows the PR.
 run_case "control: fresh verdict still passes" 0 "gh pr create --fill"
 
