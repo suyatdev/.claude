@@ -236,6 +236,29 @@ how this file and its linked files should be written (plain language, major chan
   correct" is how the one component nobody was looking at became the one that was broken.
   **Next: obs judge RUN 5 at `2acad5e`, then the PR** — and the PR *will* block for a PATH reason,
   not a freshness one; see the append-to-primary-store decision at line 137's branch block.
+  · **RUN 5 (`0169fa1`, risk=medium confidence=high, judged at `e4a6c10`): the fix HOLDS, its stated
+  REASON does not.** Judge re-measured pre-fix disarmed / post-fix blocking, 75/0 + 51/0, red replayed
+  as genuinely red, four-vs-three expansion ruled justified. But F1/F2 — **verified myself 2026-07-31,
+  it is real** — three sites I wrote (`hooks/judge-guard.sh` parser comment, `judge-guard.test.sh`
+  Group comment, ADR 0012) claim *"every Edit, Read and Write in the session reaches this hook."*
+  They do not. Enumerated **every** settings file: exactly ONE registration, `~/.claude/settings.json`,
+  PreToolUse, matcher **`Bash`**. Editor calls go to phase-guard. Not cosmetic — **the false premise
+  chose the behaviour**: the four control tests pin "pass" on the strength of traffic that never
+  arrives. Same overclaim class RUN 4 caught in the header, now inside the fix's own commentary.
+  · **USER DECISION 2026-07-31 — a Bash payload with no readable `command` must BLOCK.** Reasoning
+  given: "you would be the only one who makes these bash calls, so you should have a reason to create
+  a bash call, and not just empty ones." Implemented as the **`tool_name`-gated** form: block when
+  `tool_name == "Bash"` and no readable command; pass any other named tool. Chosen over an
+  unconditional four-way block because it makes the hook correct under *any* matcher — the hidden
+  cross-file dependency on `settings.json` is precisely what produced this defect, so the hook now
+  reads the payload instead of trusting its registration.
+  · **`tool_name` presence VERIFIED before relying on it, not assumed** — this is the same shape of
+  premise that just failed, so it got evidence: no hook on this machine reads `tool_name` (all key off
+  `tool_input.*`), so there was zero local ground truth. Official docs (code.claude.com/docs/en/hooks)
+  document it as a **required** PreToolUse field and the one matcher filtering itself uses. Blocking on
+  its absence is therefore safe. **Test-harness fidelity gap found:** `judge-guard.test.sh`'s
+  `run_case()` builds payloads WITHOUT `tool_name`, so ~70 existing tests would block under the new
+  rule — the harness, not the rule, is what is wrong; it must emit a realistic Bash payload.
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
