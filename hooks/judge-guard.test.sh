@@ -215,6 +215,52 @@ fi
 # The intact hook must be unaffected — this is the control for the three cases above.
 run_case_at "$HOOK" "intact classifier still classifies -> pass" 0 "gh pr create --fill"
 
+# --- A classifier that is PRESENT but UNUSABLE ---------------------------------------------------
+# The cases above only cover an ABSENT file, because `[ ! -f ]` is all the hook checks. But the
+# partial-checkout story that motivates ADR 0012 produces a TRUNCATED file at least as readily as a
+# missing one, and `2>/dev/null` on the classifier call swallows every interpreter error. So each
+# shape below yields empty output, `kind` is empty, and the hook exits 0 — the same silently-dead
+# gate the missing-file branch was added to remove, just reached by a different route.
+# $VFILE deliberately still holds a FRESH verdict, so a working classifier would exit 0 here: an
+# exit of 2 can therefore only have come from the fail-closed path, never from a stale verdict.
+UNUSABLE="$TMP/unusablehook"
+mkdir -p "$UNUSABLE/lib"
+cp "$HOOK" "$UNUSABLE/judge-guard.sh"
+install_broken() { # $1 shape
+  chmod 644 "$UNUSABLE/lib/classify-pr-command.py" 2>/dev/null
+  case "$1" in
+    empty)      : > "$UNUSABLE/lib/classify-pr-command.py" ;;
+    syntax)     printf 'def (\n' > "$UNUSABLE/lib/classify-pr-command.py" ;;
+    truncated)  head -c 400 "$(dirname "$HOOK")/lib/classify-pr-command.py" \
+                  > "$UNUSABLE/lib/classify-pr-command.py" ;;
+    unreadable) cp "$(dirname "$HOOK")/lib/classify-pr-command.py" "$UNUSABLE/lib/"
+                chmod 000 "$UNUSABLE/lib/classify-pr-command.py" ;;
+  esac
+}
+for shape in empty syntax truncated; do
+  install_broken "$shape"
+  run_case_at "$UNUSABLE/judge-guard.sh" "$shape classifier, gh pr create -> block" 2 "gh pr create --fill"
+done
+# Root can read a chmod 000 file, so this shape proves nothing when the suite runs as root.
+if [ "$(id -u)" -ne 0 ]; then
+  install_broken unreadable
+  run_case_at "$UNUSABLE/judge-guard.sh" "unreadable classifier, gh pr create -> block" 2 "gh pr create --fill"
+  chmod 644 "$UNUSABLE/lib/classify-pr-command.py" 2>/dev/null
+else
+  printf 'skip — unreadable classifier (running as root)\n'
+fi
+# Blocking every Bash command is what makes the repair route load-bearing: the operator cannot run
+# git or any shell command to restore the file, so a message pointing at one is a dead end. Assert
+# the message names a route that still works under the block rather than merely naming the path.
+install_broken truncated
+unusable_out=$(printf '%s' "$broken_payload" | bash "$UNUSABLE/judge-guard.sh" 2>&1)
+if printf '%s' "$unusable_out" | grep -qi 'write tool\|unregister'; then
+  printf 'ok   — unusable classifier names a repair route that survives the block\n'; pass=$((pass+1))
+else
+  printf 'FAIL — unusable classifier message gives no usable repair route (got: %s)\n' "$unusable_out"
+  fail=$((fail+1))
+fi
+
 # The classifier's own unit suite runs here too, so one command covers both layers and the python
 # cases cannot rot unnoticed. Detail on failure comes from running that file directly.
 if python3 "$(dirname "$HOOK")/lib/classify-pr-command.test.py" >/dev/null 2>&1; then
