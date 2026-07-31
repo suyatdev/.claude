@@ -271,6 +271,67 @@ else
   fail=$((fail+1))
 fi
 
+# --- PAYLOAD PARSER: a parse failure must not read as "no command" -------------------------------
+# Everything above enters through a well-formed payload, so the parser that produces `command_line`
+# was itself untested. Its `except ValueError: sys.exit(0)` — plus `2>/dev/null` on the call —
+# collapsed four outcomes into one silent exit 0: malformed JSON, a non-JSON payload, a payload
+# whose shape crashes the parser, and an interpreter that fails outright. Exactly ONE of the four is
+# legitimate: valid JSON carrying no `command` string is not a Bash call and must pass. Because
+# nothing downstream can tell the four apart, a garbled payload disarmed the gate the same way an
+# absent classifier did — the defect this whole line of work exists to remove, reached by a third
+# route. So the parser must SAY it ran, not merely fail to say anything.
+# $VFILE deliberately holds a FRESH verdict here, so a working hook exits 0 on a real `gh pr create`
+# (asserted as the control below): an exit of 2 can only have come from the fail-closed parse path.
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_payload() { # $1 desc, $2 want-exit, $3 raw payload written to stdin verbatim
+  local desc="$1" want="$2" raw="$3" got
+  printf '%s' "$raw" | bash "$HOOK" >/dev/null 2>&1
+  got=$?
+  if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); fi
+}
+run_payload "truncated JSON -> block"       2 '{"hook_event_name":"PreToolUse","tool_input":{"command":'
+run_payload "non-JSON payload -> block"     2 'not json at all'
+# Valid JSON of the wrong SHAPE: `.get` on a list raises AttributeError, so the parser dies with an
+# empty stdout — indistinguishable, under the old check, from a deliberate "nothing to guard".
+run_payload "JSON array payload -> block"   2 '[1, 2, 3]'
+run_payload "JSON scalar payload -> block"  2 '"just a string"'
+# The three shapes that must still PASS. These are the whole reason the fix cannot simply block on
+# empty output: every non-Bash tool call in the session reaches this hook, and blocking them would
+# take the editor down with the gate.
+run_payload "no tool_input -> pass"                 0 '{"hook_event_name":"PreToolUse"}'
+run_payload "tool_input without a command -> pass"  0 '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/tmp/x"}}'
+run_payload "empty command string -> pass"          0 '{"hook_event_name":"PreToolUse","tool_input":{"command":""}}'
+run_payload "non-string command -> pass"            0 '{"hook_event_name":"PreToolUse","tool_input":{"command":42}}'
+# Control: the same fresh verdict, through a well-formed payload, still allows the PR.
+run_case "control: fresh verdict still passes" 0 "gh pr create --fill"
+
+# An interpreter that is FOUND but fails is the parser-side twin of the unusable classifier: the
+# existing `command -v python3` check only proves a file is on PATH, and `2>/dev/null` hides
+# whatever it does next. Stubbed rather than mutated, so this exercises the real hook end to end.
+STUBBIN="$TMP/stubbin"
+mkdir -p "$STUBBIN"
+printf '#!/bin/sh\nexit 1\n' > "$STUBBIN/python3"
+cp "$STUBBIN/python3" "$STUBBIN/python"   # `command -v python` is the documented fallback
+chmod 755 "$STUBBIN/python3" "$STUBBIN/python"
+good_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"gh pr create --fill"}}))')
+( PATH="$STUBBIN:$PATH"; printf '%s' "$good_payload" | bash "$HOOK" >/dev/null 2>&1 )
+stub_rc=$?
+if [ "$stub_rc" -eq 2 ]; then
+  printf 'ok   — failing python interpreter -> block (exit 2)\n'; pass=$((pass+1))
+else
+  printf 'FAIL — failing python interpreter (want 2, got %s)\n' "$stub_rc"; fail=$((fail+1))
+fi
+
+# A fail-closed that does not say WHICH stage refused is indistinguishable from the classifier's,
+# and the two have different repairs — so the message must name the payload.
+parse_out=$(printf '%s' 'not json at all' | bash "$HOOK" 2>&1)
+if printf '%s' "$parse_out" | grep -qi 'payload'; then
+  printf 'ok   — parse failure names the payload as the cause\n'; pass=$((pass+1))
+else
+  printf 'FAIL — parse failure gave no usable cause (got: %s)\n' "$parse_out"; fail=$((fail+1))
+fi
+
 # The classifier's own unit suite runs here too, so one command covers both layers and the python
 # cases cannot rot unnoticed. Detail on failure comes from running that file directly.
 if python3 "$(dirname "$HOOK")/lib/classify-pr-command.test.py" >/dev/null 2>&1; then
