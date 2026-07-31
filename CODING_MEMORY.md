@@ -166,6 +166,22 @@ how this file and its linked files should be written (plain language, major chan
   Gate stays a momentum guardrail, not a security boundary.
   · `51765fb`: scoped ADR 0012's apostrophe-hazard claim to the classifier only (the genuinely stale
   bullet identified above).
+  · **`df1918e` red → `ec1fa1c` green — the fail-closed fix ITSELF failed open, and this is the
+  correction.** Obs judge RUN 1 (`bd2621c`) found it; **independently reproduced before being
+  believed or written down.** `[ -f "$CLASSIFIER" ]` checks existence, not usability, so four
+  present-but-unusable installs still exited **0 in silence** on `gh pr create`: empty, syntax error,
+  truncated, unreadable (`chmod 000`). Control with an intact classifier blocked (exit 2), so this
+  was the fail-open path and not a test artifact. **The truncated shape is the sharp one** — the
+  partial-checkout story ADR 0012 cites as the *motivation* for the missing-file branch produces a
+  truncated file at least as readily as a missing one. Fix validates the classifier's **output**
+  (`kind` is only ever `PR`/`NO`), covering all six shapes, and is **smaller than what it replaced**.
+  Suite **62/0** (was 57/0 + 5 red), classifier unit **50/0** (+2 adjacency cases — mutation testing
+  showed the adjacency property, which is what separates the classifier from a substring match, was
+  pinned by nothing). **Recovery decision (user, 2026-07-31): no new bypass variable** — the block is
+  machine-wide, so the message names the only two routes that survive it (Write tool, or unregister
+  in `settings.json`). A `JUDGE_GUARD_REPAIR` escape was rejected: it bypasses a gate whose value is
+  being un-bypassable, and a `VAR=x` prefix cannot reach a hook handed the command as a *string*
+  anyway — same reason `JUDGE_VERDICTS_FILE` never cleared the gate.
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
