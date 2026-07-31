@@ -215,5 +215,14 @@ fi
 # The intact hook must be unaffected — this is the control for the three cases above.
 run_case_at "$HOOK" "intact classifier still classifies -> pass" 0 "gh pr create --fill"
 
+# The classifier's own unit suite runs here too, so one command covers both layers and the python
+# cases cannot rot unnoticed. Detail on failure comes from running that file directly.
+if python3 "$(dirname "$HOOK")/lib/classify-pr-command.test.py" >/dev/null 2>&1; then
+  printf 'ok   — classifier unit suite\n'; pass=$((pass+1))
+else
+  printf 'FAIL — classifier unit suite (run hooks/lib/classify-pr-command.test.py for detail)\n'
+  fail=$((fail+1))
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
