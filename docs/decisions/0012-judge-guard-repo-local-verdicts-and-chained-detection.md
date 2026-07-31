@@ -94,11 +94,33 @@ segment's command position — including a commit message whose quoted body span
 - **`$HOME/.claude`'s 40 accumulated verdicts remain valid for the `.claude` repo only**, since for
   that repo the repo-local path and the old hardcoded path are the same file. The single
   `Snatch-Bracket` entry there becomes unreachable; it was already stale.
-- **Comments inside the classifier must not contain apostrophes.** The python program is embedded in
-  a single-quoted shell string, so one apostrophe terminates it and turns the whole hook into a
-  syntax error. This was hit while writing the newline fix; `shellcheck -x` catches it (SC1011)
-  where the test suite alone would only show a wall of unrelated failures. A note now sits in the
-  block.
+- **The classifier now lives in `hooks/lib/classify-pr-command.py`, and the apostrophe hazard is
+  gone by construction.** While the python was embedded in a single-quoted shell string, one
+  apostrophe anywhere in it — including in a comment — terminated the quote and turned the whole
+  hook into a syntax error. That fired **three times**, twice inside the very comment block warning
+  against it, costing roughly 24 spurious test failures each time. The warning comment was a
+  *disproven control*: it sat exactly where the mistake kept being made and did not prevent it.
+  Extraction removes the failure mode rather than documenting it. The related operational lesson
+  stands regardless: **run `shellcheck -x` first whenever the suite goes wide**, since it names the
+  cause in one line (SC1011) where the suite shows only a wall of unrelated failures.
+  The move was behaviour-preserving and verified as such: the python transferred verbatim (shell
+  single-quotes are literal, so no escape sequence changed), and 52 command shapes fed through the
+  old inline classifier and the new module produced byte-identical output, 0 mismatches. A
+  side-benefit was the actual goal — `classify()` is importable, so bypass shapes get unit tests
+  instead of ad-hoc probing through the hook.
+
+- **A missing classifier file fails CLOSED, and that blocks every Bash command.** Extraction created
+  a failure mode that could not exist for an inline string: the file can be absent, via a partial
+  checkout or a hook copied on its own — which has happened in this repo. Measured, not assumed: an
+  absent classifier produced empty output, leaving `kind` empty, and the hook exited 0. The gate
+  looked armed and silently passed every `gh pr create`, which is precisely the defect this ADR
+  exists to remove. It now blocks and names the path, matching the missing-python branch beside it
+  and the same single-source-of-truth stance taken for the verdict store.
+  The cost is deliberate: with no classifier, nothing can distinguish a PR command from any other,
+  so *all* Bash commands block until the install is repaired. That is the correct trade here — a
+  loud, self-describing halt is recoverable in seconds, whereas a silently dead gate ships unjudged
+  code indefinitely and is invisible by definition. It also mirrors the precedent already set one
+  branch above it, where a missing `python3` blocks everything for the same reason.
 - **Four further bypass shapes were found by measurement and closed.** Round 1 of review found the
   plain-newline shape; round 2 surfaced four more, and re-measuring the hook directly corrected two
   of round 2's claims (`{ …; }` already blocked; `time`/`eval` were missed). All now block, and the
