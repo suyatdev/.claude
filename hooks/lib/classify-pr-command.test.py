@@ -56,6 +56,11 @@ CASES = [
     # load-bearing property no case pinned: a mutation dropping the requirement that `create`
     # immediately follow `pr` left the suite fully green while this command started blocking.
     ("gh pr list --search create", "NO", "", "create as a flag value, not adjacent to pr"),
+    # The exemption name is matched exactly, never by suffix. A suffix match would hand every
+    # *_EXEMPT variable in the repo the power to wave a PR past the gate -- MERGE_EXEMPT is a real
+    # one, belonging to merge-guard.sh, and would silently become a judge bypass. Mutating the
+    # equality check to endswith("EXEMPT") escaped every other case in this file.
+    ("MERGE_EXEMPT=x gh pr create", "PR", "", "another guard's exemption is not this guard's"),
     ("gh pr view 12 --json title --jq .title create", "NO", "", "create trailing as an argument"),
     ("mytool pr create", "NO", "", "pr create without gh at the command position"),
     ("echo gh pr create", "NO", "", "argument, not a command"),

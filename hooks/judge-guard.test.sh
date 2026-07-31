@@ -235,9 +235,19 @@ install_broken() { # $1 shape
                   > "$UNUSABLE/lib/classify-pr-command.py" ;;
     unreadable) cp "$(dirname "$HOOK")/lib/classify-pr-command.py" "$UNUSABLE/lib/"
                 chmod 000 "$UNUSABLE/lib/classify-pr-command.py" ;;
+    # A classifier can answer and *still* have failed. Validating only the shape of the answer
+    # accepts these: both print a well-formed NO, so `kind` is a legal value and the hook exits 0
+    # with the gate silently disarmed. They are unreachable against today's real classifier only
+    # because it happens to print its answer last — that is the classifier's shape protecting the
+    # hook, not the hook protecting itself, and it is the kind of incidental invariant that stops
+    # holding the moment the classifier is refactored.
+    answer_then_fail)  printf 'print("NO")\nprint("")\nraise SystemExit(1)\n' \
+                         > "$UNUSABLE/lib/classify-pr-command.py" ;;
+    answer_then_crash) printf 'print("NO")\nprint("")\nraise RuntimeError("boom")\n' \
+                         > "$UNUSABLE/lib/classify-pr-command.py" ;;
   esac
 }
-for shape in empty syntax truncated; do
+for shape in empty syntax truncated answer_then_fail answer_then_crash; do
   install_broken "$shape"
   run_case_at "$UNUSABLE/judge-guard.sh" "$shape classifier, gh pr create -> block" 2 "gh pr create --fill"
 done
