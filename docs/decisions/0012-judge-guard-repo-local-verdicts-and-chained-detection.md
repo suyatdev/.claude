@@ -147,7 +147,13 @@ segment's command position — including a commit message whose quoted body span
   `case "$classify_rc:$kind" in 0:PR|0:NO)`. Recorded because it is the second time in this branch
   that a check accepted the *appearance* of a working classifier.
 
-  **Two failure modes are knowingly deferred, not closed:**
+  **Three failure modes are knowingly deferred, not closed:**
+  - **A classifier that always answers `NO` and exits 0** — a stub, or a subtly wrong rewrite — is
+    indistinguishable from a healthy one at this interface, and silently allows every
+    `gh pr create`. No check on the *call* can catch it: the hook would need a canary, classifying
+    a known-`PR` string and refusing to proceed if the answer came back `NO`. Enumerated here
+    because it was briefly dropped from this list while its two siblings were closed, and an
+    enumeration that quietly sheds its hardest member is worse than no enumeration.
   - **A classifier that hangs** blocks every Bash command indefinitely and silently. This ADR
     promises a "loud, self-describing halt"; that promise does not hold for this one shape. Closing
     it needs a timeout around the call, which is a larger change than the branch's remaining scope.
