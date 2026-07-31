@@ -110,10 +110,42 @@ segment's command position — including a commit message whose quoted body span
   instead of ad-hoc probing through the hook.
   **Scope caveat, so this is not read as more than it is:** the hazard is gone from the *classifier*,
   not from the hook. `judge-guard.sh` still embeds one inline single-quoted python program — the
-  ~11-line JSON payload parser — which carries the identical apostrophe trap. It was left alone
-  deliberately: it is short, stable, and has never been the thing under edit when the trap fired,
-  whereas the classifier was edited in nearly every round. Moving it too would be a drive-by change,
-  which is its own task. Anyone editing that block still needs `shellcheck -x` first.
+  JSON payload parser — which carries the identical apostrophe trap. It stays inline: it is short
+  and has never been the thing under edit when the trap fired, whereas the classifier was edited in
+  nearly every round. Moving it too would be a drive-by change, which is its own task. Anyone
+  editing that block still needs `shellcheck -x` first.
+  **"Stable" was withdrawn from that justification.** An earlier revision of this paragraph called
+  the parser *short, stable, and* untouched, and the middle word was doing work it had not earned:
+  the parser had never been tested at all, and the next review round found it fail-open (below).
+  Untested is not stable, and reasoning from "we never edit it" to "it is correct" is how the one
+  component nobody was looking at became the one that was broken.
+
+- **The payload parser failed OPEN, and that is the FOURTH fail-open found on a branch about
+  failing closed.** Every test entered through a well-formed payload, so the parser producing
+  `command_line` was itself unexercised — zero coverage, which is why three review rounds passed
+  over it. Its `except ValueError: sys.exit(0)`, with `2>/dev/null` on the call, collapsed four
+  distinct outcomes into one silent allow, all measured against a store holding a *fresh* verdict so
+  a working hook would have exited 0: truncated JSON → 0, non-JSON text → 0, valid JSON of the wrong
+  top-level shape (`.get` on a list raises) → 0, and an interpreter on `PATH` that fails → 0.
+
+  **The fix hinges on a distinction the obvious fix would have destroyed.** One exit 0 on this path
+  is *correct*: valid JSON carrying no `command` string is a non-Bash tool call, and every Edit,
+  Read and Write in the session arrives that way. Blocking on empty output would have closed the
+  hole and taken the editor down with it. The defect was never the exit 0 — it was that a parse
+  failure and a legitimate non-Bash call were **indistinguishable**. So the parser now emits a
+  sentinel: `OK` on line 1 once it has decided, command from line 2, guarded by
+  `case "$parse_rc:$parse_ok" in 0:OK)`. Status *and* shape, the same pair the classifier check
+  settled on one round earlier — the third time in this branch that a check had to stop accepting
+  the appearance of a working component. A top-level array or scalar is refused as malformed input
+  rather than treated as a call with nothing to guard.
+
+- **The header's fail-closed claim was an overclaim and has been narrowed.** It read *"any inability
+  to verify blocks"*, which states a coverage guarantee this hook has never made: the backtick and
+  heredoc shapes are deliberately undetected, an empty payload passes, and a hanging classifier has
+  no timeout. It now scopes the promise to the machinery — missing python, unreadable payload,
+  unusable classifier, unreadable verdict store — and points here for the accepted exceptions. The
+  claim was accurate about *intent* and false about *fact*, which is the more dangerous kind of
+  documentation error: a reader audits the gate against the comment and stops looking.
 
 - **An UNUSABLE classifier fails CLOSED, and that blocks every Bash command.** Extraction created a
   failure mode that could not exist for an inline string: the file can be absent, via a partial

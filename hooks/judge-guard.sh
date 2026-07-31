@@ -7,9 +7,19 @@
 # full head_sha must equal current HEAD, so any commit added after judging forces
 # a re-run and the gate always reflects exactly what will ship.
 #
-# This is a safety gate (it prevents shipping un-judged code), so it fails CLOSED:
-# any inability to verify blocks. Contrast doc-guard.sh, a momentum guardrail that
-# fails open. Escape hatch: `JUDGE_EXEMPT=<reason> gh pr create ...` (logged).
+# This is a safety gate (it prevents shipping un-judged code), so its machinery
+# fails CLOSED: a missing python, an unreadable payload, an unusable classifier and
+# an unreadable verdict store each block rather than allow. Contrast doc-guard.sh,
+# a momentum guardrail that fails open.
+#
+# It is NOT a security boundary, and "fails closed" is a claim about the machinery,
+# not about coverage: some command SHAPES are deliberately not detected (a backticked
+# `gh pr create`, a heredoc body), an empty payload passes, and a classifier that hangs
+# rather than fails has no timeout. Those are named and accepted in ADR 0012 —
+# an earlier version of this header claimed "any inability to verify blocks", which
+# read as a coverage guarantee the hook has never made.
+#
+# Escape hatch: `JUDGE_EXEMPT=<reason> gh pr create ...` (logged).
 #
 # Regexes live in variables, never inline in `[[ ]]` — a bare `(` or `;` in an
 # inline regex kills bash's parser and a dead script exits non-zero. Same trap and
@@ -38,18 +48,51 @@ if [ -z "$py" ]; then
   exit 2
 fi
 
-command_line=$(printf '%s' "$payload" | "$py" -c '
+# Parse the PreToolUse payload. The parser must SAY it ran, because silence here is ambiguous in a
+# way silence nowhere else in this hook is: an empty `command_line` is the CORRECT outcome for every
+# non-Bash tool call in the session (valid JSON carrying no `command` string — an Edit, a Read, a
+# Write), and it was also what a truncated payload, a non-JSON payload, a wrong-shaped payload and a
+# failing interpreter each produced. `except ValueError: sys.exit(0)` plus `2>/dev/null` collapsed
+# all five into one silent allow, so a garbled payload disarmed the gate exactly as an absent
+# classifier did. Hence a sentinel: the parser prints OK on line 1 only after it has decided, and
+# the command (which may legitimately be empty, and may span lines) follows from line 2.
+# Blocking on empty output instead would have been the obvious fix and the wrong one — it would
+# deny every Edit and Read in the session along with the PRs.
+# The top-level value must be an object: an array or scalar is not a PreToolUse payload at all, so
+# it is malformed input rather than a call with nothing to guard, and is refused as such.
+parsed=$(printf '%s' "$payload" | "$py" -c '
 import json, sys
 try:
     p = json.load(sys.stdin)
 except ValueError:
-    sys.exit(0)
+    raise SystemExit(3)
+if not isinstance(p, dict):
+    raise SystemExit(3)
+v = ""
 ti = p.get("tool_input")
 if isinstance(ti, dict):
-    v = ti.get("command")
-    if isinstance(v, str):
-        sys.stdout.write(v)
+    c = ti.get("command")
+    if isinstance(c, str):
+        v = c
+sys.stdout.write("OK\n")
+sys.stdout.write(v)
 ' 2>/dev/null)
+# The parser is the last command in the pipeline and there is no `pipefail`, so this is its own
+# status, not the printf's — same reading as classify_rc below. Status is checked as well as the
+# sentinel because a parser can print its answer and still die afterwards.
+parse_rc=$?
+parse_ok=$(printf '%s\n' "$parsed" | sed -n '1p')
+command_line=$(printf '%s\n' "$parsed" | sed -n '2,$p')
+case "$parse_rc:$parse_ok" in
+  0:OK) ;;
+  *)
+    printf 'judge-guard: could not read the PreToolUse payload (malformed JSON, or python failed) -- failing closed.\n' >&2
+    printf 'judge-guard: if this persists, every Bash command stays blocked; unregister the hook in settings.json to recover.\n' >&2
+    exit 2
+    ;;
+esac
+
+# From here an empty command really does mean "no Bash command to guard", and passes.
 [ -n "$command_line" ] || exit 0
 
 # Classify the command with python — shlex handles the shell quoting a flat bash regex cannot.
