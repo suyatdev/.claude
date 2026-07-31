@@ -123,9 +123,41 @@ how this file and its linked files should be written (plain language, major chan
   to how a classifier crash behaves today. That equivalence is why this commit is a pure refactor.
   It should fail **closed** with the named path, matching the missing-python branch above it and
   this file's own single-source-of-truth stance. Write the red test FIRST.
-  · **STILL OWED: ADR 0012 Consequences + the PR body are STALE** — they list 5 verified bypasses,
-  but 4 of those were closed in `e79749a`. The accurate open set is now: quoted `"$(…)"`, backticks,
-  `eval "…"`, variable/alias indirection, and the wrapper denylist (`env`, `timeout`, loop keywords).
+  · ~~**STILL OWED: ADR 0012 Consequences are STALE**~~ — **THAT CLAIM WAS WRONG, corrected
+  2026-07-31.** ADR 0012 already recorded those four shapes as *closed* (with a before/after table),
+  and its "known open shapes" list was already accurate. The stale 5-bypass list lived only in my
+  session notes. Flagged rather than quietly dropped, because **a wrong claim left in an audit trail
+  reads as settled** — the same failure mode this branch already paid for once on `{ …; }`.
+  What *was* genuinely stale: the ADR's apostrophe bullet described the single-quoted shell string
+  the classifier no longer lives in. Fixed on the follow-up branch.
+
+- **PR #32 MERGED 2026-07-31** (`2b8564b`, 03:17Z). Merged main verified green in a throwaway
+  worktree — suite 52/0, hook + lib present, one shellcheck finding, **no ADR number collision**
+  (0007–0012 unique; the recorded post-merge check, run and clean). Branch + worktrees pruned.
+- **FOLLOW-UP BRANCH `fix/judge-guard-fail-closed-classifier`** (off `2b8564b`), all four carried
+  items done, **suite 57/0 + 48 classifier assertions**:
+  · `8df7d7a` **red** → `c4e14cf` **green**: a missing `hooks/lib/classify-pr-command.py` now fails
+  **CLOSED** naming the path. Measured before fixing: an absent classifier exited **0 with no
+  output** — the gate looked armed and silently passed every `gh pr create`, the exact defect this
+  work exists to remove. **Accepted cost, recorded in ADR 0012:** with no classifier nothing can
+  distinguish a PR command from any other, so *all* Bash commands block until the install is
+  repaired. Mirrors the missing-python branch beside it. A loud halt is recoverable in seconds; a
+  silently dead gate ships unjudged code indefinitely and is invisible by definition.
+  · `4ed68a6`: **48 classifier unit tests** — the payoff of extraction (`classify()` is importable,
+  so shapes are asserted directly instead of probed through the hook). Pins guarded shapes, the
+  load-bearing *ignored* shapes, and the **accepted-open** shapes, so closing one becomes a
+  conscious decision with a failing test rather than drift. `{ gh pr create; }` and
+  `{ git push; gh pr create; }` sit side by side, since conflating them caused the bad correction.
+  **The unit suite immediately caught a wrong assumption of mine** — I asserted
+  `JUDGE_EXEMPT=a⏎b gh pr create` was `PR`; the newline is a real separator so the second segment's
+  command is `b`, not `gh`. bash agrees: the classifier was right, the test was wrong.
+  · **Verdict `outcome` backfill — and a POLICY EDGE CASE worth your call.** All three rounds on
+  `fix/judge-guard-verdict-lookup` (`97752e6`, `88ccb59`, `772affe0`) set to **`rework`**: each
+  round's findings changed code. **No round ever judged the shipped HEAD** (`d6c38de`) — code landed
+  after RUN 3 and no RUN 4 ran before merge. So this branch yields **no `clean` row at all**, which
+  the recorded policy ("the final round that shipped is `clean`") does not anticipate. Recorded
+  honestly rather than force-fitting a `clean`; it is also true calibration signal — the judge
+  prompted rework every round and the merged state went unjudged.
   · **NOT exhaustive, and the count is NOT closed.** Open shapes, each measured:
   `PR_URL="$(gh pr create)"` (inside double quotes the substitution is ONE token — the same property
   that stops a commit message tripping the gate, so **quoting is both the FP protection and the FN
