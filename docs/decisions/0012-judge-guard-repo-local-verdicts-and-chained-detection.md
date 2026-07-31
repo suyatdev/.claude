@@ -138,6 +138,24 @@ segment's command position — including a commit message whose quoted body span
   a special case rather than adding one, which is the same principle applied to the bypass shapes
   below.
 
+  **Status is checked alongside shape**, after a second review round: a classifier can answer and
+  *still* have failed. One that prints a well-formed `NO` and then exits non-zero or raises leaves
+  `kind` holding a legal value, and a shape-only check passes it — gate silently disarmed again.
+  Against today's classifier that is unreachable, but only because it happens to print its answer
+  last: the classifier's shape protecting the hook rather than the hook protecting itself, which
+  stops holding the moment the classifier is refactored. The guard is therefore
+  `case "$classify_rc:$kind" in 0:PR|0:NO)`. Recorded because it is the second time in this branch
+  that a check accepted the *appearance* of a working classifier.
+
+  **Two failure modes are knowingly deferred, not closed:**
+  - **A classifier that hangs** blocks every Bash command indefinitely and silently. This ADR
+    promises a "loud, self-describing halt"; that promise does not hold for this one shape. Closing
+    it needs a timeout around the call, which is a larger change than the branch's remaining scope.
+  - **First arming is untested under the real harness.** The installed hook at `~/.claude/hooks/`
+    predates the extraction and has no `lib/` alongside it. Mitigating but not conclusive: `main`
+    already carries the classifier, git swaps files atomically, and only the agent's Bash tool is
+    gated — an operator's own terminal is unaffected.
+
   The cost is deliberate: with no usable classifier, nothing can distinguish a PR command from any
   other, so *all* Bash commands block until the install is repaired. That is the correct trade here
   — a loud, self-describing halt is recoverable in seconds, whereas a silently dead gate ships

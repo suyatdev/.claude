@@ -182,6 +182,22 @@ how this file and its linked files should be written (plain language, major chan
   in `settings.json`). A `JUDGE_GUARD_REPAIR` escape was rejected: it bypasses a gate whose value is
   being un-bypassable, and a `VAR=x` prefix cannot reach a hook handed the command as a *string*
   anyway — same reason `JUDGE_VERDICTS_FILE` never cleared the gate.
+  · **`b095c0a` red → green — RUN 2's severity-1 item, same defect class a THIRD time.** Shape-only
+  validation still accepted a classifier that *answers and then dies*: prints a well-formed `NO`,
+  exits 1 or raises, `kind` holds a legal value, hook exits 0, gate silently disarmed. Unreachable
+  against today's classifier **only because it happens to print its answer last** — the classifier's
+  shape protecting the hook, not the hook protecting itself. Guard is now
+  `case "$classify_rc:$kind" in 0:PR|0:NO)`. Suite **64/0**, classifier unit **51/0**.
+  · **RUN 2's `endswith("EXEMPT")` item was a COVERAGE claim, not a live bypass — measured before
+  acting.** Source uses exact equality (`classify-pr-command.py:95`) and `MERGE_EXEMPT=x gh pr create`
+  classifies `PR` with an empty reason, i.e. blocked. Pinned by a new case anyway: a suffix match
+  would hand every `*_EXEMPT` var in the repo a judge bypass, and `MERGE_EXEMPT` is a real one.
+  · **KNOWINGLY DEFERRED on this branch, recorded in ADR 0012:** a **hanging** classifier blocks every
+  Bash command indefinitely and *silently* (needs a timeout — larger than remaining scope, and the
+  ADR's "loud, self-describing halt" promise does not cover it); and **first arming is untested** —
+  the installed hook at `~/.claude/hooks/` predates the extraction and has no `lib/`. Do one arming
+  check after merge: pipe a fake `gh pr create` payload into the installed hook, expect exit **2 with
+  a readable message** — not a silent 0, not a hang.
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
@@ -192,6 +208,14 @@ how this file and its linked files should be written (plain language, major chan
   not a hook**: keying on claim words fires on every Conventional-Commits `fix:` prefix, a
   false-positive class this repo has already paid for. Committed `Doc-Exempt` to avoid a guaranteed
   CODING_MEMORY conflict with this branch; **this bullet is that deferred entry.**
+- **PARKED — CODING_MEMORY consolidation, its own branch, AFTER the verification-marker gate (user
+  ruled 2026-07-31).** This file is **~1350 lines against the 200-line cap stated on its own line 3**,
+  and **six consecutive obs-judge verdicts have now flagged it**. Line 3's self-measurement ("778")
+  is itself **stale by ~550** — deliberately left uncorrected, because the user's call was to keep
+  the flag loud rather than cosmetically patch the number and make the file *look* maintained. Read
+  line 3 as known-wrong until that branch lands. The decision that branch owes: whether the cap is a
+  real policy this file can hold to, or the wrong shape for what the index has become — a limit
+  violated 6.7× across six verdicts is not functioning as a limit either way.
 - **PARKED — verification-marker gate (user ruled 2026-07-31: build it, after these two PRs).** The
   prose rule above is deliberately the *weak* control, and this repo established this week that a
   warning sitting where the mistake keeps being made is a **disproven** control. The strong version:

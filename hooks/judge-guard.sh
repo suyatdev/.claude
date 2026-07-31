@@ -68,6 +68,8 @@ if isinstance(ti, dict):
 # Resolved from this script's own directory so the hook works from any $PWD, as the tests do.
 CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
 classify=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null)
+# No `set -e` and no `pipefail` here, so this is the classifier's own status, not the printf's.
+classify_rc=$?
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 
@@ -85,8 +87,13 @@ exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 # command from any other, so ALL Bash commands block until the install is repaired (ADR 0012).
 # That is also why the message must name a repair route that survives the block — git and every
 # other shell command is denied while this holds, so pointing at one would be a dead end.
-case "$kind" in
-  PR|NO) ;;
+# Status is checked as well as shape, because a classifier can answer and still have failed: one
+# that prints a well-formed NO and then dies leaves `kind` holding a legal value, and shape alone
+# would pass it. That is only unreachable against today's classifier because it happens to print
+# its answer last — the classifier's shape protecting the hook rather than the hook protecting
+# itself, which stops holding the moment the classifier is refactored.
+case "$classify_rc:$kind" in
+  0:PR|0:NO) ;;
   *)
     printf 'judge-guard: classifier at %s produced no usable output -- failing closed (it is missing, empty, truncated, or broken).\n' "$CLASSIFIER" >&2
     printf 'judge-guard: ALL Bash commands are blocked until it is repaired, so repair it with the Write tool, or unregister the hook in settings.json.\n' >&2
