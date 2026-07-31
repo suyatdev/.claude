@@ -344,12 +344,35 @@ printf '#!/bin/sh\nexit 1\n' > "$STUBBIN/python3"
 cp "$STUBBIN/python3" "$STUBBIN/python"   # `command -v python` is the documented fallback
 chmod 755 "$STUBBIN/python3" "$STUBBIN/python"
 good_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --fill"}}))')
+# shellcheck disable=SC2030  # confining the stub to this subshell is deliberate, as below
 ( PATH="$STUBBIN:$PATH"; printf '%s' "$good_payload" | bash "$HOOK" >/dev/null 2>&1 )
 stub_rc=$?
 if [ "$stub_rc" -eq 2 ]; then
   printf 'ok   — failing python interpreter -> block (exit 2)\n'; pass=$((pass+1))
 else
   printf 'FAIL — failing python interpreter (want 2, got %s)\n' "$stub_rc"; fail=$((fail+1))
+fi
+
+# An interpreter that WORKS but pollutes stdout is a third case, distinct from both a missing and a
+# failing one, and it is the cost of reading the sentinel positionally: the verdict is line 1, so a
+# banner from sitecustomize, PYTHONSTARTUP, or a warning routed to stdout displaces it and the parse
+# is refused. Refusing is the correct reading — a parser whose output cannot be trusted is one the
+# hook must not act on — but the blast radius is every Bash command on the machine, from a cause
+# nowhere near this repo. So it is pinned here and named in ADR 0012 rather than left to be
+# rediscovered at the moment it fires. Characterization, not a regression: this already blocked.
+REAL_PY="$(command -v python3)"
+printf '#!/bin/sh\necho "noise on stdout"\nexec %s "$@"\n' "$REAL_PY" > "$STUBBIN/python3"
+cp "$STUBBIN/python3" "$STUBBIN/python"
+chmod 755 "$STUBBIN/python3" "$STUBBIN/python"
+# SC2030/SC2031: the PATH override being confined to this subshell is the point — the stub must not
+# leak into the suite's own python3, which every later case still needs.
+# shellcheck disable=SC2030,SC2031
+noisy_out=$( PATH="$STUBBIN:$PATH"; printf '%s' "$good_payload" | bash "$HOOK" 2>&1 )
+noisy_rc=$?
+if [ "$noisy_rc" -eq 2 ] && printf '%s' "$noisy_out" | grep -qi 'payload'; then
+  printf 'ok   — python that pollutes stdout -> block, naming the payload (exit 2)\n'; pass=$((pass+1))
+else
+  printf 'FAIL — noisy python (want 2 + payload named, got %s: %s)\n' "$noisy_rc" "$noisy_out"; fail=$((fail+1))
 fi
 
 # A fail-closed that does not say WHICH stage refused is indistinguishable from the classifier's,

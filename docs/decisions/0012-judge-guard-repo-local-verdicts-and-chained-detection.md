@@ -275,8 +275,15 @@ segment's command position — including a commit message whose quoted body span
   - `eval "gh pr create"` — one quoted token, so it cannot reach a command position.
   - a shell function or alias that reaches `gh` — invisible here.
   - the wrapper list is a **denylist** (`time`, `eval`, `command`, `builtin`, `exec`, `nohup`,
-    `rtk`) and therefore incomplete by construction; `env`, `timeout`, and loop keywords are not in
-    it.
+    `rtk`) and therefore incomplete by construction. Measured 2026-07-31, all reaching the
+    classifier on stdin as the hook feeds it: `sudo gh pr create` → `NO`, `xargs gh pr create` →
+    `NO`, `env gh pr create` → `NO`, `timeout 60 gh pr create` → `NO`. `rtk` and `command` are on
+    the list and correctly → `PR`.
+  - **a path-qualified `gh`** — `/usr/bin/gh pr create` → `NO` (measured, same date). The command
+    position holds `/usr/bin/gh`, not the bare token `gh`. This one is not a wrapper gap but a
+    naming gap, and it is the cheapest of these to close (compare the path's basename) — left open
+    only because closing one naming gap while `sudo`, `env` and `timeout` stay open buys no real
+    coverage, and each closure widens the false-positive surface that quoting currently protects.
 
   **This gate stays a momentum guardrail, not a security boundary** — a determined bypass is always
   one keystroke away, and `JUDGE_EXEMPT=<reason>` is the honest, logged escape hatch.
@@ -295,6 +302,24 @@ segment's command position — including a commit message whose quoted body span
   parses it *out of the command line*; `JUDGE_VERDICTS_FILE` is read from `$HOME`-inherited env and
   so is only settable by the test harness. Prior PR notes claiming a worktree PR was "cleared via
   `JUDGE_VERDICTS_FILE`" are inaccurate — verify before reusing that recipe.
+- **The gate checks that a verdict EXISTS, not what it SAYS.** Verified by reading the matcher (the
+  `PYEOF` block in `judge-guard.sh`): it compares `stage == "implementation"`, `repo`, `branch` and
+  `head_sha`, and reads no other field. A verdict recording `risk=high` with `execution=fail`
+  therefore opens the gate exactly as a clean one does. Combined with the store being
+  **agent-writable** — the judge writes it, and so can any session — this bounds what the hook can
+  honestly claim: it enforces *that the judge ran at this exact HEAD*, and nothing about the
+  judgment. Deliberate rather than an oversight: gating on verdict content would put a
+  machine-blocking decision behind a rubric score an agent produces and can rewrite, and a
+  wrongly-blocking gate is a worse failure than a guardrail that merely insists the judge ran. It is
+  recorded because the *name* "judge-guard" implies the stronger property and nothing disclaims it.
+- **A `python3` that pollutes stdout blocks every Bash command on the machine.** The parser's
+  verdict is read positionally — line 1 — so a banner from `sitecustomize`, `PYTHONSTARTUP`, or a
+  warning routed to stdout rather than stderr displaces the sentinel and the parse is refused.
+  Refusing is correct (output that cannot be trusted must not be acted on), and the trigger is now
+  pinned in the suite as `python that pollutes stdout -> block`. Named here because the cause sits
+  entirely outside this repo while the effect is machine-wide, and because the message points at the
+  payload — which is where a reader would look, and where nothing is wrong. Recovery is the route
+  the other machine-wide blocks already name: unregister the hook in `settings.json`.
 - **This fix could not satisfy the gate it fixes.** The installed hook is the *primary* checkout's
   copy, which predates this change and reads only `$HOME/.claude`'s store, so the round-2 verdict
   sitting in this worktree's ledger was invisible to it. PR #32 was therefore opened under a logged
