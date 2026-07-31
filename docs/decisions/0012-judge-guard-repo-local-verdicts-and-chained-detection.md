@@ -128,16 +128,50 @@ segment's command position — including a commit message whose quoted body span
   a working hook would have exited 0: truncated JSON → 0, non-JSON text → 0, valid JSON of the wrong
   top-level shape (`.get` on a list raises) → 0, and an interpreter on `PATH` that fails → 0.
 
-  **The fix hinges on a distinction the obvious fix would have destroyed.** One exit 0 on this path
-  is *correct*: valid JSON carrying no `command` string is a non-Bash tool call, and every Edit,
-  Read and Write in the session arrives that way. Blocking on empty output would have closed the
-  hole and taken the editor down with it. The defect was never the exit 0 — it was that a parse
-  failure and a legitimate non-Bash call were **indistinguishable**. So the parser now emits a
-  sentinel: `OK` on line 1 once it has decided, command from line 2, guarded by
-  `case "$parse_rc:$parse_ok" in 0:OK)`. Status *and* shape, the same pair the classifier check
+  **The defect was that a parse failure and a call with nothing to guard were indistinguishable.**
+  So the parser now emits a sentinel: a verdict on line 1 once it has decided, command from line 2,
+  guarded by `case "$parse_rc:$parse_ok"`. Status *and* shape, the same pair the classifier check
   settled on one round earlier — the third time in this branch that a check had to stop accepting
   the appearance of a working component. A top-level array or scalar is refused as malformed input
   rather than treated as a call with nothing to guard.
+
+  **Superseded 2026-07-31 — the first version of this bullet justified itself with a false premise,
+  and the premise had chosen the behaviour.** It read: *"valid JSON carrying no `command` string is
+  a non-Bash tool call, and every Edit, Read and Write in the session arrives that way."* They do
+  not. Enumerating every settings file on the machine found **one** registration —
+  `~/.claude/settings.json`, `PreToolUse`, matcher **`Bash`** — so editor traffic goes to
+  `phase-guard.sh` and never reaches this hook at all. Four tests were pinning `pass` for callers
+  that do not exist, and they were pinning it *against* this branch's own fail-closed doctrine: if
+  only Bash payloads arrive, then "valid JSON, no `command`" means "a Bash call I could not read."
+  This is the same overclaim class the header carried one round earlier, this time inside the
+  commentary of the fix for it — which is the argument for `docs/verify-before-claiming`
+  (verification precedes the write-down, not just the claim), not merely for a correction here.
+
+  **Decision (user, 2026-07-31): a Bash payload with no runnable command BLOCKS.** Reasoning given:
+  this session is the only sender, so it always has a reason to issue a command and never a reason
+  to issue an empty one. Implemented **keyed on `tool_name`, deliberately not on the registration**:
+
+  | payload | outcome |
+  |---|---|
+  | `tool_name` = `Bash`, runnable command | classify it |
+  | `tool_name` = `Bash`, nothing runnable (absent / empty / all-space / non-string) | **block** (exit 4 → 2) |
+  | any other named tool | pass — no shell command to guard |
+  | bad top-level type, or missing/non-string `tool_name` | **block** (exit 3 → 2) |
+
+  Keying on `tool_name` is the point of the fix, not an implementation detail. The alternative —
+  blocking all four shapes unconditionally — yields identical behaviour under today's matcher and
+  leaves the same latent trap: correctness resting on a setting in a different file that no test
+  covers. `tool_name` is a required `PreToolUse` field and the one the matcher itself filters on
+  (verified against the hook documentation before being relied on, rather than assumed — assuming
+  is what produced this bullet's first version). So the non-Bash rows are tested even though they
+  cannot arrive today: a future matcher change becomes a settings edit, not a machine-wide outage.
+
+  Two smaller consequences. The post-parse `[ -n "$command_line" ] || exit 0` is now unreachable and
+  has been **inverted into a fail-closed assertion** — if an edit upstream ever breaks the
+  invariant, the result should be a block, not the fifth silent allow. And the test harness itself
+  was wrong: five payload builders omitted `tool_name` entirely, so for five review rounds no test
+  could tell a Bash call from an editor call. That gap is why the false premise survived so long —
+  the tests agreed with it by construction.
 
 - **The header's fail-closed claim was an overclaim and has been narrowed.** It read *"any inability
   to verify blocks"*, which states a coverage guarantee this hook has never made: the backtick and

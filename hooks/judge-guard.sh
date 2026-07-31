@@ -49,17 +49,28 @@ if [ -z "$py" ]; then
 fi
 
 # Parse the PreToolUse payload. The parser must SAY it ran, because silence here is ambiguous in a
-# way silence nowhere else in this hook is: an empty `command_line` is the CORRECT outcome for every
-# non-Bash tool call in the session (valid JSON carrying no `command` string — an Edit, a Read, a
-# Write), and it was also what a truncated payload, a non-JSON payload, a wrong-shaped payload and a
-# failing interpreter each produced. `except ValueError: sys.exit(0)` plus `2>/dev/null` collapsed
-# all five into one silent allow, so a garbled payload disarmed the gate exactly as an absent
-# classifier did. Hence a sentinel: the parser prints OK on line 1 only after it has decided, and
-# the command (which may legitimately be empty, and may span lines) follows from line 2.
-# Blocking on empty output instead would have been the obvious fix and the wrong one — it would
-# deny every Edit and Read in the session along with the PRs.
-# The top-level value must be an object: an array or scalar is not a PreToolUse payload at all, so
-# it is malformed input rather than a call with nothing to guard, and is refused as such.
+# way silence nowhere else in this hook is: a truncated payload, a non-JSON payload, a wrong-shaped
+# payload and a failing interpreter all produced exactly what a call with nothing to guard produced.
+# `except ValueError: sys.exit(0)` plus `2>/dev/null` collapsed them into one silent allow, so a
+# garbled payload disarmed the gate exactly as an absent classifier did. Hence a sentinel: the parser
+# prints its verdict on line 1 only after it has decided, and the command follows from line 2.
+#
+# WHICH tool called is decided by `tool_name`, a required PreToolUse field and the one the matcher
+# itself filters on — deliberately not by the hook's own registration. An earlier revision reasoned
+# from "every Edit, Read and Write reaches this hook" to "an absent command must pass"; that premise
+# was false (the sole registration matches `Bash`), and it had quietly chosen the behaviour. Reading
+# the payload keeps this file correct under any matcher, instead of correct only while a setting in
+# a different file — one no test covers — happens to hold.
+#
+#   Bash + a runnable command  -> OK, classify it
+#   Bash + nothing runnable    -> exit 4, BLOCK: a Bash call this hook could not verify, and the
+#                                 only sender is the session itself, which has no reason to issue
+#                                 an empty one. Fail closed, as everywhere else on this branch.
+#   any other named tool       -> SKIP, pass: nothing here is a shell command to guard
+#   anything else              -> exit 3, BLOCK: not a payload this hook can reason about. That
+#                                 covers a bad top-level type (an array or scalar is not a
+#                                 PreToolUse payload at all) and a missing or non-string
+#                                 `tool_name`, which means malformed input, not a boring tool.
 parsed=$(printf '%s' "$payload" | "$py" -c '
 import json, sys
 try:
@@ -68,14 +79,22 @@ except ValueError:
     raise SystemExit(3)
 if not isinstance(p, dict):
     raise SystemExit(3)
-v = ""
+tn = p.get("tool_name")
+if not isinstance(tn, str) or not tn:
+    raise SystemExit(3)
+if tn != "Bash":
+    sys.stdout.write("SKIP\n")
+    raise SystemExit(0)
 ti = p.get("tool_input")
-if isinstance(ti, dict):
-    c = ti.get("command")
-    if isinstance(c, str):
-        v = c
+c = ti.get("command") if isinstance(ti, dict) else None
+# Whitespace is not a command: an all-space string is as unrunnable as an empty one, and blocking
+# both states the rule in terms of what the payload can DO, not which falsy shape it arrived in.
+# (No backticks or apostrophes in here: this block is single-quoted shell, and a stray one of
+# either ends the quote and breaks the whole hook. That is why the classifier lives in its own file.)
+if not isinstance(c, str) or not c.strip():
+    raise SystemExit(4)
 sys.stdout.write("OK\n")
-sys.stdout.write(v)
+sys.stdout.write(c)
 ' 2>/dev/null)
 # The parser is the last command in the pipeline and there is no `pipefail`, so this is its own
 # status, not the printf's — same reading as classify_rc below. Status is checked as well as the
@@ -83,17 +102,32 @@ sys.stdout.write(v)
 parse_rc=$?
 parse_ok=$(printf '%s\n' "$parsed" | sed -n '1p')
 command_line=$(printf '%s\n' "$parsed" | sed -n '2,$p')
+# Status AND sentinel, as a pair, on every arm: a parser can print its answer and still die
+# afterwards, and an interpreter that fails on its own can exit 4 without ever having decided
+# anything. `4:` matches only when stdout was empty, which is the shape the block below emits.
 case "$parse_rc:$parse_ok" in
-  0:OK) ;;
+  0:OK)   ;;
+  0:SKIP) exit 0 ;;
+  4:)
+    printf 'judge-guard: a Bash call arrived with no runnable command -- failing closed.\n' >&2
+    printf 'judge-guard: this hook cannot verify a command it cannot read; re-issue the command, or unregister the hook in settings.json to recover.\n' >&2
+    exit 2
+    ;;
   *)
-    printf 'judge-guard: could not read the PreToolUse payload (malformed JSON, or python failed) -- failing closed.\n' >&2
+    printf 'judge-guard: could not read the PreToolUse payload (malformed JSON, missing tool_name, or python failed) -- failing closed.\n' >&2
     printf 'judge-guard: if this persists, every Bash command stays blocked; unregister the hook in settings.json to recover.\n' >&2
     exit 2
     ;;
 esac
 
-# From here an empty command really does mean "no Bash command to guard", and passes.
-[ -n "$command_line" ] || exit 0
+# Unreachable by construction: `0:OK` is emitted only after the parser has found a command with a
+# non-space character in it. Kept as an assertion rather than deleted, and inverted from the exit 0
+# it used to be — if that invariant is ever broken by an edit up there, the failure it produces
+# should be a block, not the silent allow that this branch has now found four times.
+[ -n "$command_line" ] || {
+  printf 'judge-guard: internal error -- parser reported OK with no command -- failing closed.\n' >&2
+  exit 2
+}
 
 # Classify the command with python — shlex handles the shell quoting a flat bash regex cannot.
 # The command line is split into shell segments on control operators (and on newlines, which end a
