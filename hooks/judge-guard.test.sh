@@ -181,5 +181,39 @@ run_case "brace group alone -> block"               2 "{ gh pr create --fill; }"
 run_case "brace group after a command -> block"     2 "{ git push; gh pr create --fill; }"
 run_case "subshell paren group -> block"            2 "( gh pr create --fill )"
 
+# Regression: extracting the classifier to hooks/lib/ introduced a failure mode that could not
+# exist while it was an inline string — the file can be ABSENT (a partial checkout, or a hook
+# copied on its own, which has happened in this repo). An absent classifier produces no output, so
+# `kind` is empty and the hook exits 0: the gate then silently passes every `gh pr create`. That is
+# exactly the "gate that looks armed and does nothing" defect this line of work exists to remove,
+# so it must fail CLOSED naming the path, as the missing-python branch already does.
+run_case_at() { # $1 hook path, $2 desc, $3 want-exit, $4 command
+  local hook="$1" desc="$2" want="$3" cmd="$4" payload got
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  printf '%s' "$payload" | bash "$hook" >/dev/null 2>&1
+  got=$?
+  if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); fi
+}
+BROKEN="$TMP/brokenhook"
+mkdir -p "$BROKEN"
+cp "$HOOK" "$BROKEN/judge-guard.sh"   # deliberately WITHOUT a lib/ alongside it
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_case_at "$BROKEN/judge-guard.sh" "missing classifier, gh pr create -> block" 2 "gh pr create --fill"
+# Indiscriminate by design: with no classifier there is no way to tell a PR command from any other,
+# so unrelated commands block too. A loud, self-describing halt beats a silently dead gate — and it
+# mirrors the missing-python branch, which already blocks everything for the same reason.
+run_case_at "$BROKEN/judge-guard.sh" "missing classifier, unrelated cmd -> block" 2 "git status"
+# A fail-closed that does not name the path is unfixable in practice, so assert the message too.
+broken_payload=$(python3 -c 'import json; print(json.dumps({"hook_event_name":"PreToolUse","tool_input":{"command":"gh pr create"}}))')
+broken_out=$(printf '%s' "$broken_payload" | bash "$BROKEN/judge-guard.sh" 2>&1)
+if printf '%s' "$broken_out" | grep -q 'classify-pr-command.py'; then
+  printf 'ok   — missing classifier names the path\n'; pass=$((pass+1))
+else
+  printf 'FAIL — missing classifier did not name the path (got: %s)\n' "$broken_out"; fail=$((fail+1))
+fi
+# The intact hook must be unaffected — this is the control for the three cases above.
+run_case_at "$HOOK" "intact classifier still classifies -> pass" 0 "gh pr create --fill"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
