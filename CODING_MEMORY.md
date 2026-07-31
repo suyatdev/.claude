@@ -198,6 +198,22 @@ how this file and its linked files should be written (plain language, major chan
   the installed hook at `~/.claude/hooks/` predates the extraction and has no `lib/`. Do one arming
   check after merge: pipe a fake `gh pr create` payload into the installed hook, expect exit **2 with
   a readable message** — not a silent 0, not a hang.
+  · **RUN 4 (`822f60f`, clean/converging) found a FOURTH fail-open — the PAYLOAD PARSER, a different
+  component from the classifier. MEASURED, not accepted on report.** Control (valid payload, no
+  verdict) blocks exit 2; **malformed JSON → 0, non-JSON → 0, broken parser (import error) → 0**, all
+  silent, gate disarmed. **Zero tests touch that path**, so 64 green ticks say nothing about it.
+  **The nuance the judge did not separate, and the fix hinges on it:** there IS a legitimate exit 0
+  in that block — valid JSON with no `command` field is not a Bash command and *should* pass. The
+  defect is that a genuine **parse failure is indistinguishable** from that legitimate case. Fix must
+  distinguish the two (sentinel + status check), not just block on empty output, or it will wrongly
+  block every non-Bash tool call. `judge-guard.sh:40-52`; note `except ValueError: sys.exit(0)` and
+  the `2>/dev/null`. The file header's promise — *"any inability to verify blocks"* — is currently
+  **false**, and RUN 4 flagged the overclaim as being in the header rather than in the ADR bullet.
+  · **User decision 2026-07-31: FIX IT on this branch** (red/green + RUN 5), not defer. Reasoning
+  recorded because it is not obvious: *documenting instead costs the SAME judge round*, since any
+  commit moves HEAD and the gate pins a verdict to an exact SHA — so "document only" buys nothing
+  over fixing, and would ship a measurably false header promise on the branch whose entire subject
+  is this gate failing open.
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
