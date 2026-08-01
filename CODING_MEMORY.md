@@ -1542,11 +1542,23 @@ how this file and its linked files should be written (plain language, major chan
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
    bar full at 95k, no MB rollover). Detail + lessons: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
-2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
-   the store is global but writeup filenames carry no repo component (final-review
-   recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
-   compliance-judge verdicts' own `outcome` fields once those specs implement (calibration
-   ledger, see running-the-compliance-judge SKILL.md).
+2. **compliance-judge — the predicted collision HAPPENED (2026-08-01, branch
+   `docs/reconcile-judge-verdict-stores`).** "Revisit if cross-repo spec slugs ever collide" is
+   now overtaken by events: the global store **forked in both directions**. 24 verdicts from
+   `mtg-wizard`/`vibe-scape`/`Snatch-Bracket`/`.claude` (07-23→07-28) lived only in the working
+   tree, uncommitted across two session clears; `main` held 2 the tree lacked. Neither side was a
+   superset, so any checkout would have silently dropped one. Union-merged to 39 lines, verified
+   no-loss by set difference. **The store is append-only and global — never resolve it by picking
+   a side; always union.** Filenames still carry no repo component (root cause, unfixed).
+   Still open: backfill the compliance-judge verdicts' own `outcome` fields once those specs
+   implement (calibration ledger, see running-the-compliance-judge SKILL.md).
+2b. **Obs-judge calibration: verdict-commit recursion ruled (2026-08-01).** The 07-22 policy read
+   literally demotes *every* final round to `rework`, because the last commits before any merge
+   are the verdict-landing commits themselves. **Ruled: the verdict-landing commit, and the
+   pointer fixes it catches, do not demote the final round.** Applied to PR #33 — nine `rework`,
+   RUN 9 `0f54622` `clean`. Nulls **32 → 22** (CODING_MEMORY's older "17 nulls" was stale).
+   The 22 remaining need per-branch history reads; **architecting-stage entries still have no
+   sub-policy** — no merge event means "shipped clean" has no meaning for them yet.
 3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
