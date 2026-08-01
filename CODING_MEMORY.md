@@ -307,13 +307,18 @@ how this file and its linked files should be written (plain language, major chan
   Check for a command first; consult `tool_name` only when there is none. That keeps the editor
   pass-through *and* restores coverage. ~2 lines. Red test first: a non-`Bash` name + a real
   `gh pr create` must block.
-  · **F2 — a NEW machine-wide block from outside the repo.** `python3 -c` puts the CWD on
-  `sys.path`, so a stray `json.py` in whatever directory you happen to be in shadows the parser and
-  blocks **every** Bash command, blaming the payload. `python3 -I -c` fixes it (judge measured both).
-  Same token also kills the `PYTHONIOENCODING` trigger. Apply `-I` to the parser and `-I`/`-E` to
-  the classifier.
-  · **F3 — cosmetic:** `judge-guard.sh:123` says "unreachable by construction"; a lone-NUL command
-  reaches it (right direction, rc=2). Fix or drop the comment.
+  · **F2 — a NEW machine-wide block from outside the repo. FIXED @ `abb9562`.** `python3 -c` *and*
+  `python3 -` both put the CWD on `sys.path`, so a stray `json.py` in whatever directory you happen
+  to be in shadows the parser and blocks **every** Bash command, blaming the payload. **I reproduced
+  it before believing it:** from such a directory a bare `git status` exited 2. All three call sites
+  now take `-I` — parser, verdict matcher (the heredoc arm has the same exposure via `-`), and the
+  classifier — which drops the CWD and ignores `PYTHON*` in one token, so the `PYTHONIOENCODING`
+  trigger is retired by the same change. `-I` is **probed once and dropped** on pre-3.4 interpreters
+  rather than assumed: the shadowing is a bad day, a hook that will not run at all is worse.
+  The **stdout-noise trigger is NOT retired by this** — it needs no `sys.path` entry, still live.
+  · **F3 — cosmetic, FIXED @ `cd208a7`:** "unreachable by construction" was false and I measured it —
+  a lone-NUL command gets `0:OK` (NUL survives `.strip()`) then arrives empty because command
+  substitution drops NUL. Exit 2, right direction; the assertion is load-bearing, comment says so.
   · **NEXT: fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (which blocks for the PATH
   reason — append the genuine verdict to the primary store, see line 137's branch block).
   · **Endgame ordering, settled by measurement:** `judge-guard.sh` compares `head_sha` by **strict

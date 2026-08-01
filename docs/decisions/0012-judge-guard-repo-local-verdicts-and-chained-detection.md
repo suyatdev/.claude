@@ -329,6 +329,17 @@ segment's command position — including a commit message whose quoted body span
   entirely outside this repo while the effect is machine-wide, and because the message points at the
   payload — which is where a reader would look, and where nothing is wrong. Recovery is the route
   the other machine-wide blocks already name: unregister the hook in `settings.json`.
+- **RETIRED 2026-07-31 — the CWD was on `sys.path`, so a file lying on the floor blocked the
+  machine.** `python3 -c` and `python3 -` both prepend the caller's directory, so an ordinary
+  `json.py` — a python project, a scratch dir, anywhere you happen to be standing — shadowed the
+  stdlib module the parser imports and failed this hook closed on *every* Bash command, with a
+  message blaming the payload. Found by observability-judge RUN 6 and reproduced before being
+  believed: from such a directory, a bare `git status` exited 2. All three call sites now run under
+  `-I` (parser, verdict matcher, classifier), which drops that directory and ignores `PYTHON*` in
+  one token — so the `PYTHONIOENCODING=ascii` trigger recorded alongside it is retired by the same
+  change. `-I` is probed once and dropped on interpreters older than 3.4 rather than assumed: the
+  shadowing is a bad day, a hook that refuses to run at all is a worse one. The stdout-noise trigger
+  above is **not** retired by this — it needs no `sys.path` entry and remains live.
 - **This fix could not satisfy the gate it fixes.** The installed hook is the *primary* checkout's
   copy, which predates this change and reads only `$HOME/.claude`'s store, so the round-2 verdict
   sitting in this worktree's ledger was invisible to it. PR #32 was therefore opened under a logged
