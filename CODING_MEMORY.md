@@ -484,8 +484,41 @@ how this file and its linked files should be written (plain language, major chan
     are exempt automatically. Sibling-test coverage today: 5 of 12 `hooks/*.sh` are tested, plus
     `panes/*.test.sh`, `statusline-command.test.sh`, `hooks/lib/classify-pr-command.test.py`;
     `memsearch/tests/` uses a `tests/test_*.py` layout, **not** the sibling convention.
-  - **Still open:** what physically counts as a marker (where it lives, what proves the run *passed*,
-    how a multi-file suite is represented), and whether `memsearch/`'s non-sibling layout is in scope.
+  - **DECIDED (user, 2026-08-01) — the marker is written by the TEST SUITE ITSELF.** Each `*.test.sh`
+    gains one line: on `fail -eq 0`, call a shared `hooks/lib/write-test-marker.sh` that records
+    `git hash-object` of its subject file. **Proof of PASS is the suite's own tally** — the same number
+    a human reads off the run — so the gate depends on no harness semantics at all, and behaves
+    identically under a pane agent, a subagent, or a direct run. Costs a one-time mechanical edit of
+    ~8 test files. **A future test file that forgets the line fails CLOSED and loudly** (its subject can
+    never be committed until the line is added), which is the ADR 0012 stance already adopted here:
+    a loud halt is recoverable in seconds, a silently dead gate is invisible by definition.
+  - **The two rejected options, with the reason, so they are not re-proposed:**
+    · **PostToolUse observer hook** — zero workflow change and no test file touched, but it rests on
+      **unmeasured harness semantics**: if a failing `bash` exit does not in fact route to
+      `PostToolUseFailure`, the gate would certify **failing** tests. That is the silent-fail-open class
+      this repo has now hit four separate times, and it would be introduced deliberately at the design
+      stage. Also needs a second registration on a machine that already has one unregistered hook.
+    · **Wrapper runner (`bin/run-tests`)** — sound (it observes the exit status itself) but changes the
+      habit: a direct `bash hooks/foo.test.sh` would silently produce no marker, and it invalidates the
+      invocation this repo documents at `hooks/README.md:34,140`.
+  - **MEASURED this session** (grep/read, not reasoned): every shell suite ends
+    `printf '%s passed, %s failed'` then `[ "$fail" -eq 0 ]`, so pass is already exit-0 and the marker
+    hook-in is genuinely one line. `hooks/state/` is gitignored at `.gitignore:17` — the existing
+    machine-local runtime-state precedent set by phase-guard, so the marker store needs no new plumbing.
+  - **REPORTED, NOT MEASURED — do not act on these without checking first.** Official docs confirm
+    `PostToolUse` fires *after a tool call succeeds* with `PostToolUseFailure` as a separate event; the
+    claim that a Bash `tool_response` carries **no exit-code field** (only `stdout`/`stderr`/
+    `interrupted`) comes from the vendored plugin's own comment at
+    `plugins/.../security-guidance/hooks/security_reminder_hook.py:1028`, and
+    `code.claude.com/docs/en/hooks-reference` **404s**, so it could not be confirmed upstream. Labelled
+    rather than absorbed, because the rejected option above turns on exactly this fact.
+  - **PROPOSED AND UNCHALLENGED, still to be ratified at the spec review gate** — stated to the user in
+    the same message as the decision above, but not themselves the question that was answered, so they
+    are not yet user rulings: marker store lives in `hooks/state/`; **strict 1:1 sibling** coverage
+    (`X.test.sh` certifies `X.sh` and nothing else — no declared coverage map, because a coverage map is
+    a second source of truth that can rot); `memsearch/tests/test_*.py`'s non-sibling layout is **out of
+    scope for v1** and documented as such (under the sibling rule it simply never fires, which is
+    under-coverage and never a false block).
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
