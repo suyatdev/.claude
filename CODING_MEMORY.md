@@ -1542,11 +1542,102 @@ how this file and its linked files should be written (plain language, major chan
    unabsorbed: R1's `STATUSLINE_DEBUG` logging splitting "field absent" from "field present but
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
    bar full at 95k, no MB rollover). Detail + lessons: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
-2. **compliance-judge (post-merge reconcile DONE 2026-07-18):** remaining loose end only —
-   the store is global but writeup filenames carry no repo component (final-review
-   recommendation); revisit if cross-repo spec slugs ever collide. Also: backfill the
-   compliance-judge verdicts' own `outcome` fields once those specs implement (calibration
-   ledger, see running-the-compliance-judge SKILL.md).
+2. **compliance-judge — the predicted collision HAPPENED (2026-08-01, branch
+   `docs/reconcile-judge-verdict-stores`).** **PR #34 OPEN** — https://github.com/suyatdev/.claude/pull/34,
+   4 judge rounds, opened at `0ff95fe` with **no `JUDGE_EXEMPT`**. Detail: `pr-tracking.md` §PR #34. "Revisit if cross-repo spec slugs ever collide" is
+   now overtaken by events: the global store **forked in both directions**. **26 verdict lines
+   across 24 distinct `head_sha`** — measured: 23 SHAs carry one round each and **one SHA
+   (`6d8c675`) carries three**. (An earlier note here said "two SHAs carry a second round". That
+   was narrated, not measured, and was wrong in both numbers.) From
+   `mtg-wizard`/`vibe-scape`/`Snatch-Bracket`/`.claude` (07-23→07-28) lived only in the working
+   tree, uncommitted across two session clears; `main` held 2 the tree lacked. Neither side was a
+   superset, so any checkout would have silently dropped one. Union-merged **13 → 39 lines**
+   (13 base + 26 added), verified no-loss by set difference, 0 malformed.
+   *Count both ways or neither — an earlier note said "24 verdicts" against a 26-line diff.* **The store is append-only and global — never resolve it by picking
+   a side; always union.** Filenames still carry no repo component (root cause, unfixed).
+   Still open: backfill the compliance-judge verdicts' own `outcome` fields once those specs
+   implement (calibration ledger, see running-the-compliance-judge SKILL.md).
+   Two debts recorded 2026-08-01, both deliberately NOT fixed on this branch:
+   - **No re-fork guard.** Nothing checks parse/ordering/no-loss on the store, and "always union"
+     lives in this index rather than in `coding-memory/compliance-judge/README.md`.
+     *Correction (RUN 3): an earlier version of this bullet said that README "does not exist". It
+     does — both judge READMEs have been tracked since `72b868f`. One `git ls-files` settles it;
+     the claim was narrated, not checked. The debt is unchanged — neither README carries the union
+     rule — but the reason given for it was false.* Writing it is its own task, not a rider here.
+   - **Absolute `/Users/marksuyat` paths**, against core-conduct's no-absolute-paths rule.
+     **18 ride in on the rescued compliance records** — that is the stable number and the one the
+     argument is about. Left as-is on purpose: they are historical audit records where the path was
+     the judge's real cwd, and rewriting them would falsify the record to satisfy a rule aimed at
+     code and config. Largely pre-existing — `origin/main` already carries 49, incl. 5 in this same
+     store. **But "not introduced here" understates it:** the branch's own machinery adds a few
+     more, mostly the judge writing its own cwd, and *this very bullet is one of them* — which is
+     why no total is pinned here. A count that its own sentence changes is a count that will be
+     wrong by the next commit. Root cause: the judge writes absolute cwd into the verdict. Fix it
+     there, going forward — not by editing history, and **not yet owned by anyone.**
+2b. **Obs-judge calibration: verdict-commit recursion ruled (DECIDED 2026-08-01, user).** The 07-22
+   policy read literally demotes *every* final round to `rework`, because the last commits before
+   any merge are the verdict-landing commits themselves — which makes `clean` a value the policy
+   can never produce. **Ruled (narrow): only the mechanical act of landing the verdict — the
+   writeup file and the `verdicts.jsonl` append — is exempt. Substantive changes a round's findings
+   caused still demote it, even when they ride in the same commit as the verdict.**
+   An earlier draft of this item exempted "the pointer fixes it catches" too; that was written by
+   the agent, unattributed, against a user-owned policy, and it laundered exactly the signal the
+   07-22 decision exists to preserve (see the rationale at item 6: a ledger showing the judge never
+   prompting rework is "false and useless for tuning it"). Narrowed on the obs judge's own finding.
+   Applied to PR #33 — **all ten `rework`, zero `clean`.** RUN 9 `0f54622` is `rework` because
+   `7e0b9b1` fixed a broken cross-reference, a garbled sentence, and added RUN 9's third latency
+   measurement to ADR 0012 — real corrections, pre-merge, caused by that round.
+   Nulls **32 → 22** (the older "17 nulls" was stale; corrected in place at item 6).
+   The 22 remaining need per-branch history reads; **architecting-stage entries still have no
+   sub-policy** — no merge event means "shipped clean" has no meaning for them yet.
+   **Two limits on this ruling, both open:**
+   - **The ~34 pre-narrowing `clean` values were NOT re-audited.** They were set under the wide
+     reading and now sit unmarked beside post-narrowing `rework`s, so the aggregate reads more
+     calibrated than it is. Anyone computing a clean/rework ratio across the whole store is mixing
+     two policies.
+   - **Pointer-only tie-break: DECIDED 2026-08-01 (user) — default to `rework`.** "Mechanical
+     landing" vs "substantive fix" is crisp at the extremes, but a round catching only a stale
+     cross-reference or a typo is arguable either way. Ruled `rework`, matching the 07-22
+     rationale: a ledger that under-reports the judge prompting changes is "false and useless for
+     tuning it", and erring toward the judge looking *worse* is the safe direction for a metric the
+     judge scores itself on. **Changes no existing data** — the default can only push toward
+     `rework`, and all ten PR #33 entries already sit there. Bites on the next round that lands a
+     pointer-only fix.
+   **🔴 BOTH RULINGS ARE FILED WHERE THE JUDGE CANNOT READ THEM (RUN 3, raised all three rounds).**
+   They live only in this index. `skills/running-the-observability-judge/SKILL.md` §Calibration and
+   `coding-memory/observability-judge/README.md:32-35` both still state the older, looser rule —
+   and **the judge agent reads the SKILL, not this file.** Until that is fixed the narrowed policy
+   and the `rework` default are documentation, not behaviour. Twice already the fix went into the
+   index instead. **Own branch, own gates — editing the judge's own instructions changes how every
+   future round scores itself and must not ride on a docs branch.**
+   Two consequences to carry into that branch:
+   - **`clean` now means two different things in one column.** All 34 `clean` values are
+     pre-narrowing ("the PR merged"); zero have been assigned under the new rule ("the judge had
+     nothing to say"). Nothing in the store marks which is which — a ledger half in dollars and
+     half in euros with no currency column. Consider a marker before aggregating anything.
+   - **The column's consumer was never updated.** Both READMEs define calibration as `risk` vs
+     `outcome` — an *outcome* signal. The narrowing makes `outcome` a *process* signal. Feeding one
+     into the other mis-tunes the gate that blocks `gh pr create`. Decide whether `outcome` still
+     serves the calibration the README describes, or whether the two need separate columns.
+2c. **Record hygiene on this branch — four instances of one habit, annotated forward (2026-08-01).**
+   Across three judge rounds the split was exact: **every number mechanically re-derived from git
+   was correct; every sentence narrating *why* was invented and wrong.**
+   1. "two SHAs carry a second round" → one SHA (`6d8c675`) carries three. Fixed `565071d`.
+   2. "19 absolute paths" → 18 on the rescued records, 23 net-new at `d4aecf0`; no metric yields
+      19, and a prior round's "21" was also wrong and had been replaced silently. Fixed `565071d`.
+   3. **`565071d`'s own commit message says "Store-wide context checked, not assumed: 34 clean / 14
+      rework / 23 null".** Those figures were copied from the RUN 2 report and verified only
+      *afterwards* — the process claim was false when written, though the numbers proved correct at
+      `d4aecf0`. **Annotated here rather than force-pushed:** the branch is shared, and rewriting an
+      audit trail to fix a phrase that has since become true is the worse of two wrongs. But
+      "don't rewrite" is not "don't annotate" — leaving the correction only in a machine-local file
+      while the false claim sits in the pushed record is the convenient half of the rule.
+   4. "`compliance-judge/README.md` does not exist" → it does, since `72b868f`. Corrected at item 2.
+   **Each fix landed on the instance, not the habit** — instances 3 and 4 were introduced *by* the
+   commits fixing 1 and 2, and RUN 2 repeated 4 rather than catching it. The generalisable rules:
+   **anchor counts to a SHA, never a date** (a dated count is stale in the commit that writes it);
+   **any "X does not exist" is a command to run, not a sentence to write**; and beware
+   **self-referential counts** — writing "19 absolute paths" added an absolute path.
 3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
@@ -1573,12 +1664,18 @@ how this file and its linked files should be written (plain language, major chan
    merged PR is clean" precisely because that would make the calibration history show the judge
    never prompting rework, which is false and useless for tuning it. Applied to pane-layout-v2:
    e12dc06 → `rework`, ec03621 → `clean`.
-   **17 nulls remain**, now resolvable under that policy but NOT bulk-applied — each needs its
-   per-branch history read to identify which round was final: statusline ×6, token-bar ×4,
-   handoff ×2, pane-orch architecting ×2, verifying-subagent-commits @ 8701ca8,
-   compliance-judge @ cf4efc7, and pane-layout-v2 architecting @ bb4050b. **Architecting-stage
-   entries are the genuinely unclear case** — there is no merge event for a design, so "did it
-   ship clean" has no direct meaning; decide that sub-policy before touching them.
+   **22 nulls remain** — re-measured from the store **at `8143f29`** (70 lines, 22 null, 0
+   malformed). *Anchored to a SHA, not a date: the store grows, so a dated count is stale on
+   arrival — it was already stale in the commit that wrote it.*
+   the figure here previously read "17" and its enumeration was two branches out of date. Still
+   resolvable under that policy but NOT bulk-applied — each needs its per-branch history read to
+   identify which round was final: statusline-command ×6, statusline-token-bar ×4,
+   cmux-version-gate ×3, gate-checks-and-session-memory ×2, add-claude-code-handoff ×2,
+   pane-orchestration architecting ×2, compliance-judge ×1, verifying-subagent-commits ×1,
+   pane-layout-v2 architecting ×1. **19 implementation, 3 architecting.**
+   **Architecting-stage entries are the genuinely unclear case** — there is no merge event for a
+   design, so "did it ship clean" has no direct meaning; decide that sub-policy before touching
+   them. (The 07-22 policy itself was narrowed 2026-08-01 — see item 2b.)
 
 **Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
