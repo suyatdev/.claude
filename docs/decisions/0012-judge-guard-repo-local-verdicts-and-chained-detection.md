@@ -363,3 +363,18 @@ segment's command position — including a commit message whose quoted body span
   project and global hook arrays were wired correctly; the symptom was entirely these two defects.
   vibe-scape's `CODING_MEMORY.md` carried this as an ESCALATED unresolved infra finding and is
   updated to record the real root cause.
+- **Isolation costs ~2.8× on every Bash call: 52 ms → 147 ms.** Written down because it is a *global*
+  cost paid by every command on the machine, not just by `gh pr create`, and a cost that is only
+  visible with a stopwatch is one nobody will attribute to this hook six months from now. Found by
+  observability-judge RUN 8 and re-measured independently before being recorded (judge: 51 → 145;
+  re-measure: 52 → 147; 20–30 calls per arm). Two causes, measured separately rather than inferred:
+  the `-I` probe at line 66 is an **extra Python process on every call** (`python3 -I -c ''`, ~30 ms),
+  and `-I` roughly **doubles interpreter startup** here (`python3 -c pass` 15.4 ms → 29.8 ms; the
+  classifier 21.0 ms → 48.6 ms). At roughly 300 Bash calls in a session that is about +30 seconds.
+  **Accepted, not dismissed.** The alternative is giving up `-I`, and `-I` is what retired the
+  `sys.path`-shadowing defect two bullets up — a defect that blocked *every* Bash command machine-wide.
+  A slower hook is a worse day than a hook that wedges the machine is a worse day still; correctness
+  wins. The obvious relief is deferred rather than taken here: the probe asks "does this interpreter
+  accept `-I`", whose answer is **machine-static**, so it can be cached and the extra process dropped.
+  Not done in this change because it introduces a cache-invalidation question (interpreter upgrades)
+  that deserves its own decision, and this branch was already closing a fail-open.
