@@ -108,10 +108,10 @@ c = ti.get("command") if isinstance(ti, dict) else None
 # Runnable means at least one character that could actually form a command: not whitespace, and not
 # a control character. An all-space string is as unrunnable as an empty one, and so is a lone NUL —
 # blocking all of them states the rule in terms of what the payload can DO, not which falsy shape it
-# arrived in. `.strip()` alone was not enough: it removes whitespace and nothing else, so NBSP and
+# arrived in. A bare strip() was not enough: it removes whitespace and nothing else, so NBSP and
 # VT counted as blank while NUL, SOH and DEL did not, and a command of pure control characters read
 # as runnable and was ALLOWED — the same fail-open this rule exists to close, through the back door.
-# `isprintable()` is false for exactly the control characters and true for ordinary text in any
+# isprintable() is false for exactly the control characters and true for ordinary text in any
 # script, so an em-dash or CJK command stays runnable; narrowing this to ASCII would blind the guard
 # to commands it must classify.
 # (No backticks or apostrophes in here: this block is single-quoted shell, and a stray one of
