@@ -403,12 +403,25 @@ how this file and its linked files should be written (plain language, major chan
   `timeout` stay open buys no real coverage, and this is a momentum guardrail, not a security
   boundary. **Second time this has been asked and answered — it is settled, do not re-litigate.**
   The quoted-substitution gap likewise stays open per the 2026-07-30 decision at line 91.
-  · **C3 — a committed verdict file is BINARY.** `...round6.md` carries a raw NUL at **offset 6360**
-  (verified): a judge typed a literal NUL while *describing* the NUL finding. Git marks the file
-  binary, so it will not render as a diff in the PR. Third instance of the raw-control-byte mistake
-  on this branch — mine in the test draft, mine in a probe script, and this one.
-  · **NEXT: C3, then RUN 8, then the PR** (C1 and C2 landed, see above). RUN 7's verdict is committed below, which moves
-  HEAD and staleens it — unavoidable, since C1–C3 move HEAD anyway. RUN 8 is required regardless.
+  · **C3 landed @ `07c2451` + `411416d` — docs only, no behaviour change.** `...round6.md` carried a
+  raw NUL at **offset 6360**: a judge typed a literal NUL while *describing* the NUL finding, so git
+  classified the whole verdict binary. Measured as an addition, which is how the PR diff `main..HEAD`
+  sees it — before `Bin 0 -> 11313 bytes`, after **147 insertions**. Escaped to `\x00`, the convention
+  the sibling independent verdict already used.
+  · **Because this was the THIRD instance, I enumerated instead of patching a fourth** — every tracked
+  file scanned for control bytes outside tab/LF/CR. Found **two more**, both in this branch's own RUN 7
+  verdict, both invisible to git because they sit **past the 8000-byte binary-sniff window**: the file
+  rendered fine and carried the bytes anyway. `:185` was the judge's instruction *to escape the RUN 6
+  NUL*, written with a literal NUL. `:100` was a table row labelled **"(committed, escaped)"** holding
+  a raw `0x01` — the label said escaped and the byte was not, so the row contradicted itself.
+  Both fixed @ `411416d`. Each fix diffed byte-for-byte against a copy with the same substitution
+  applied: **no claim changed, encoding only.**
+  · **Lesson, and it is the general one:** git's binary flag is a *sniff*, not an audit — it reads the
+  first 8000 bytes. "The diff renders" is not evidence a file is clean. Enumerate the surface.
+  · **One instance deliberately NOT fixed:** `...statusline-command-round3.md:22` carries a raw ESC
+  (`0x1b`). **Verified present in `origin/main` unchanged** — pre-existing, another feature's file,
+  not this branch's work. Own task; do not widen this PR for it.
+  · **NEXT: obs judge RUN 8 at the final HEAD, then the PR.** C1, C2 and C3 have all landed.
   · **superseded pointer — fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (blocks for
   reason — append the genuine verdict to the primary store, see line 137's branch block).
   · **Endgame ordering, settled by measurement:** `judge-guard.sh` compares `head_sha` by **strict
