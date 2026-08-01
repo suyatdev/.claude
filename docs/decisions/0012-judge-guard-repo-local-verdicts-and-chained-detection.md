@@ -154,7 +154,7 @@ segment's command position — including a commit message whose quoted body span
   | payload | outcome |
   |---|---|
   | any runnable command, **whatever `tool_name` says** | classify it |
-  | `tool_name` = `Bash`, nothing runnable (absent / empty / all-space / non-string) | **block** (exit 4 → 2) |
+  | `tool_name` = `Bash`, nothing runnable (absent / empty / all-space / **all-control** / non-string) | **block** (exit 4 → 2) |
   | any other named tool, nothing runnable | pass — no shell command to guard |
   | bad top-level type, or missing/non-string `tool_name` | **block** (exit 3 → 2) |
 
@@ -329,6 +329,16 @@ segment's command position — including a commit message whose quoted body span
   entirely outside this repo while the effect is machine-wide, and because the message points at the
   payload — which is where a reader would look, and where nothing is wrong. Recovery is the route
   the other machine-wide blocks already name: unregister the hook in `settings.json`.
+- **"Nothing runnable" meant whitespace only, so control characters were a fail-open.** The rule was
+  implemented as `.strip()`, which removes whitespace and nothing else — NBSP and VT count, NUL, SOH
+  and DEL do not. So a `Bash` payload whose command was pure control characters read as *runnable*,
+  was classified, matched nothing, and was **allowed**: the same fail-open the row above exists to
+  close, reached through the back door. The asymmetry was absurd once seen — a lone NUL blocked
+  (it reached the parser-OK assertion, having been dropped by command substitution) while a NUL
+  followed by two spaces passed. Found by the **second** RUN 6 judge, reproduced against HEAD before
+  being accepted, and fixed by defining runnable as *at least one character that is neither
+  whitespace nor a control character*. `isprintable()` draws exactly that line and keeps em-dash and
+  CJK commands runnable; narrowing to ASCII would blind the guard to commands it must classify.
 - **RETIRED 2026-07-31 — the CWD was on `sys.path`, so a file lying on the floor blocked the
   machine.** `python3 -c` and `python3 -` both prepend the caller's directory, so an ordinary
   `json.py` — a python project, a scratch dir, anywhere you happen to be standing — shadowed the

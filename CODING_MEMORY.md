@@ -316,6 +316,26 @@ how this file and its linked files should be written (plain language, major chan
   trigger is retired by the same change. `-I` is **probed once and dropped** on pre-3.4 interpreters
   rather than assumed: the shadowing is a bad day, a hook that will not run at all is worse.
   The **stdout-noise trigger is NOT retired by this** — it needs no `sys.path` entry, still live.
+  · **⚠ F4 — found by the SECOND RUN 6 judge, FIXED @ `22a3323`. The pane that appeared to die had
+  actually run**, finishing at 02:35Z against the same `d51a431`; its verdict is kept as its own file
+  (`...-round6-independent.md`, committed `21f8930`) rather than overwriting the first. It confirmed
+  F1/F2/F3 independently **and** caught what neither the first judge nor I did: `.strip()` removes
+  whitespace and nothing else, so a `Bash` command of pure control characters read as runnable and
+  was **ALLOWED**. Reproduced against HEAD before accepting: `\x00␣␣␣`, `\x01`, `\x01␣␣`, `\x7f` all
+  rc=0. Fixed by defining runnable as *at least one non-whitespace, non-control character*
+  (`isprintable()`), which keeps em-dash/CJK/tab commands readable.
+  · **Two self-inflicted errors on this fix, both caught and recorded, neither shipped:** (1) the
+  first draft wrote **raw control bytes** into the test payloads — invalid inside a JSON string, so
+  those tests would have passed on a *parse error* rather than on the rule (green for the wrong
+  reason); rewritten as `\uXXXX` escapes. (2) `22a3323`'s message claimed "One shellcheck finding,
+  pre-existing" **without checking** — it had introduced SC2016 via backticks in a comment three
+  lines above that block's own "No backticks or apostrophes in here" warning. Bisected, fixed, and
+  corrected in `6c5acd6` rather than amended, because the claim is the class this branch exists to
+  stop making.
+  · **The F4 fix invalidated my own F3 comment** (lone NUL now blocks earlier, so it no longer
+  reaches the assertion). Rewritten in the same commit — but deliberately **not** back to
+  "unreachable by construction": that claim was already false once, and an assertion earns its keep
+  by catching the route nobody predicted.
   · **F3 — cosmetic, FIXED @ `cd208a7`:** "unreachable by construction" was false and I measured it —
   a lone-NUL command gets `0:OK` (NUL survives `.strip()`) then arrives empty because command
   substitution drops NUL. Exit 2, right direction; the assertion is load-bearing, comment says so.
