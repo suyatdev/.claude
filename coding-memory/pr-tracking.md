@@ -447,7 +447,7 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   judge-guard gates nothing further here) → push → `gh pr ready` → merge via GitHub UI → prune
   branch local+remote → post-merge tip-reachability check + outcome backfill.
 
-### PR #33 — fix/judge-guard-fail-closed-classifier (OPEN, ready, opened 2026-08-01)
+### PR #33 — fix/judge-guard-fail-closed-classifier (MERGED 2026-08-01T05:17Z, merge commit `525d95b`)
 - repo: suyatdev/.claude · branch: fix/judge-guard-fail-closed-classifier · remote: origin
 - PR: https://github.com/suyatdev/.claude/pull/33 · status: OPEN, ready for review
 - opened_by session_origin: desktop · last push: desktop · 45 commits, 15 files, +2800/-61
@@ -483,3 +483,40 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   answer is machine-static and cacheable — own decision, cache invalidation on interpreter upgrades.
 - next: merge via GitHub UI → run the arming check above → prune branch + worktree local+remote →
   tip-reachability check + outcome backfill for #33.
+
+### PR #34 — docs/reconcile-judge-verdict-stores (OPEN, opened 2026-08-01)
+- repo: suyatdev/.claude · branch: docs/reconcile-judge-verdict-stores · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/34 · status: OPEN, ready for review
+- opened_by session_origin: desktop · last push: desktop · 7 commits, 7 files, +2484/-15 at open
+- **primary checkout** (not a worktree) — unlike #33.
+- scope: the compliance-judge store **forked in both directions** and neither side was a superset.
+  26 lines / 24 distinct SHAs from `mtg-wizard`, `vibe-scape`, `Snatch-Bracket`, `.claude`
+  (07-23→07-28) lived only in the working tree across two clears; `main` held 2 the tree lacked.
+  Union-merged 13 → 39, 0 dropped, 0 malformed. Merge direction per file was decided by **verified
+  exact-prefix containment**, not line count — and the one file where the worktree copy was
+  *shorter* is the one correctly discarded.
+- **Two user rulings are the substance, and they change what a column means:**
+  (1) **narrowed the calibration carve-out** — only the mechanical act of landing a verdict is
+  exempt; substantive changes a round's findings caused still demote it. A prior draft exempted
+  more, written by the agent against a user-owned policy and flattering to the judge; escalated and
+  narrowed. (2) **pointer-only tie-break → `rework`.** PR #33 consequently reads **10 rework, 0 clean**.
+- judge: **four rounds** — RUN 1 `8143f29` low, RUN 2 `d4aecf0` low, RUN 3 `12ee640` **medium**,
+  RUN 4 `0ff95fe` **medium** (the one the PR was opened against). Opened with **NO `JUDGE_EXEMPT`**.
+- **`judge-guard.sh` gates on FRESHNESS ONLY** — verified at `hooks/judge-guard.sh:270` it matches
+  `stage`/`repo`/`branch`/`head_sha` and never reads `risk` or `outcome`. A `medium` verdict opens a
+  PR; no backfill can affect the gate.
+- 🔴 **The branch's real finding: it could not converge by iteration.** Across four rounds every
+  number mechanically re-derived from git was exact; **every sentence narrating *why* was wrong** —
+  five instances, each introduced by the commit fixing the previous one, the fifth inside the
+  catalogue of the first four. Item 2c documents the habit; **a catalogue is not a control** and
+  nothing structural prevents a sixth. The control is the parked verification-marker gate.
+- known debt, deliberately deferred: policy propagation to
+  `skills/running-the-observability-judge/SKILL.md` + `coding-memory/observability-judge/README.md`
+  + a new ADR (`docs/decisions/0001-observability-judge.md:23` currently **contradicts** the new
+  policy) — **own branch, own gates**, since editing the judge's instructions changes how every
+  future round scores itself; the 34 pre-narrowing `clean` values meaning something different from
+  post-narrowing ones with no marker; no re-fork guard; 18 absolute paths in rescued records (left
+  on purpose — rewriting audit history to satisfy a code-aimed rule is worse); index at ~1696 lines
+  vs its own 200 cap.
+- next: merge via GitHub UI → prune branch local+remote → post-merge tip-reachability check →
+  backfill #34's own `outcome` → open the policy-propagation branch (ADR first).

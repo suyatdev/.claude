@@ -1543,7 +1543,8 @@ how this file and its linked files should be written (plain language, major chan
    unparseable" (would have caught the epoch-seconds bug on render one); cosmetics (duration floors,
    bar full at 95k, no MB rollover). Detail + lessons: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
 2. **compliance-judge — the predicted collision HAPPENED (2026-08-01, branch
-   `docs/reconcile-judge-verdict-stores`).** "Revisit if cross-repo spec slugs ever collide" is
+   `docs/reconcile-judge-verdict-stores`).** **PR #34 OPEN** — https://github.com/suyatdev/.claude/pull/34,
+   4 judge rounds, opened at `0ff95fe` with **no `JUDGE_EXEMPT`**. Detail: `pr-tracking.md` §PR #34. "Revisit if cross-repo spec slugs ever collide" is
    now overtaken by events: the global store **forked in both directions**. **26 verdict lines
    across 24 distinct `head_sha`** — measured: 23 SHAs carry one round each and **one SHA
    (`6d8c675`) carries three**. (An earlier note here said "two SHAs carry a second round". That
