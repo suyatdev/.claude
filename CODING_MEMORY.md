@@ -282,7 +282,7 @@ how this file and its linked files should be written (plain language, major chan
   · **Live hook is UNAFFECTED** — `~/.claude/hooks/judge-guard.sh` is the primary checkout's copy
   (`381bd79`, zero `tool_name` references), so none of this is armed on the machine yet. Checked
   before committing, because the fix blocks Bash and I run on Bash.
-  · **NEXT: obs judge RUN 6 at `5e84a5d`**, then the PR (which blocks for the PATH reason — append
+  · **NEXT: obs judge RUN 6 at `13d40e3`**, then the PR (which blocks for the PATH reason — append
   the genuine verdict to the primary store, see line 137's branch block).
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
