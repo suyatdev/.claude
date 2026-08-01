@@ -1558,8 +1558,11 @@ how this file and its linked files should be written (plain language, major chan
    implement (calibration ledger, see running-the-compliance-judge SKILL.md).
    Two debts recorded 2026-08-01, both deliberately NOT fixed on this branch:
    - **No re-fork guard.** Nothing checks parse/ordering/no-loss on the store, and "always union"
-     lives in this index rather than in `coding-memory/compliance-judge/README.md` (which does not
-     exist). Obs judge raised it; writing it is its own task, not a rider here.
+     lives in this index rather than in `coding-memory/compliance-judge/README.md`.
+     *Correction (RUN 3): an earlier version of this bullet said that README "does not exist". It
+     does — both judge READMEs have been tracked since `72b868f`. One `git ls-files` settles it;
+     the claim was narrated, not checked. The debt is unchanged — neither README carries the union
+     rule — but the reason given for it was false.* Writing it is its own task, not a rider here.
    - **Absolute `/Users/marksuyat` paths**, against core-conduct's no-absolute-paths rule.
      **18 ride in on the rescued compliance records** — that is the stable number and the one the
      argument is about. Left as-is on purpose: they are historical audit records where the path was
@@ -1599,6 +1602,41 @@ how this file and its linked files should be written (plain language, major chan
      judge scores itself on. **Changes no existing data** — the default can only push toward
      `rework`, and all ten PR #33 entries already sit there. Bites on the next round that lands a
      pointer-only fix.
+   **🔴 BOTH RULINGS ARE FILED WHERE THE JUDGE CANNOT READ THEM (RUN 3, raised all three rounds).**
+   They live only in this index. `skills/running-the-observability-judge/SKILL.md` §Calibration and
+   `coding-memory/observability-judge/README.md:32-35` both still state the older, looser rule —
+   and **the judge agent reads the SKILL, not this file.** Until that is fixed the narrowed policy
+   and the `rework` default are documentation, not behaviour. Twice already the fix went into the
+   index instead. **Own branch, own gates — editing the judge's own instructions changes how every
+   future round scores itself and must not ride on a docs branch.**
+   Two consequences to carry into that branch:
+   - **`clean` now means two different things in one column.** All 34 `clean` values are
+     pre-narrowing ("the PR merged"); zero have been assigned under the new rule ("the judge had
+     nothing to say"). Nothing in the store marks which is which — a ledger half in dollars and
+     half in euros with no currency column. Consider a marker before aggregating anything.
+   - **The column's consumer was never updated.** Both READMEs define calibration as `risk` vs
+     `outcome` — an *outcome* signal. The narrowing makes `outcome` a *process* signal. Feeding one
+     into the other mis-tunes the gate that blocks `gh pr create`. Decide whether `outcome` still
+     serves the calibration the README describes, or whether the two need separate columns.
+2c. **Record hygiene on this branch — four instances of one habit, annotated forward (2026-08-01).**
+   Across three judge rounds the split was exact: **every number mechanically re-derived from git
+   was correct; every sentence narrating *why* was invented and wrong.**
+   1. "two SHAs carry a second round" → one SHA (`6d8c675`) carries three. Fixed `565071d`.
+   2. "19 absolute paths" → 18 on the rescued records, 23 net-new at `d4aecf0`; no metric yields
+      19, and a prior round's "21" was also wrong and had been replaced silently. Fixed `565071d`.
+   3. **`565071d`'s own commit message says "Store-wide context checked, not assumed: 34 clean / 14
+      rework / 23 null".** Those figures were copied from the RUN 2 report and verified only
+      *afterwards* — the process claim was false when written, though the numbers proved correct at
+      `d4aecf0`. **Annotated here rather than force-pushed:** the branch is shared, and rewriting an
+      audit trail to fix a phrase that has since become true is the worse of two wrongs. But
+      "don't rewrite" is not "don't annotate" — leaving the correction only in a machine-local file
+      while the false claim sits in the pushed record is the convenient half of the rule.
+   4. "`compliance-judge/README.md` does not exist" → it does, since `72b868f`. Corrected at item 2.
+   **Each fix landed on the instance, not the habit** — instances 3 and 4 were introduced *by* the
+   commits fixing 1 and 2, and RUN 2 repeated 4 rather than catching it. The generalisable rules:
+   **anchor counts to a SHA, never a date** (a dated count is stale in the commit that writes it);
+   **any "X does not exist" is a command to run, not a sentence to write**; and beware
+   **self-referential counts** — writing "19 absolute paths" added an absolute path.
 3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
