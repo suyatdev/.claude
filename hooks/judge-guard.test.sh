@@ -407,6 +407,44 @@ else
   printf 'FAIL — parse failure gave no usable cause (got: %s)\n' "$parse_out"; fail=$((fail+1))
 fi
 
+# A hook that runs `python3 -c` inherits the CALLER's directory on sys.path, and `python3 -` (the
+# heredoc arm) does the same. So an ordinary file named `json.py` — in a python project, a scratch
+# dir, anywhere you happen to be standing — shadows the stdlib module the parser imports, the parse
+# dies, and this hook fails closed on EVERY Bash command on the machine. The cause is outside the
+# repo entirely and the message blames the payload, where nothing is wrong. Same class as the
+# stdout-noise trigger above: a machine-wide outage sourced from something the user never touched.
+#
+# The repair is isolated mode (`-I`), which drops the caller's directory from sys.path and ignores
+# PYTHON* environment variables in the same token — so the PYTHONIOENCODING trigger dies with it.
+# Asserted from a poisoned directory INSIDE the test repo, so git still resolves normally and the
+# only variable is the shadowing file.
+poison="$TMP/poisoned"
+mkdir -p "$poison"
+printf 'raise SystemExit("shadowed json")\n' > "$poison/json.py"
+printf 'raise SystemExit("shadowed re")\n'   > "$poison/re.py"
+printf 'raise SystemExit("shadowed shlex")\n' > "$poison/shlex.py"
+run_in_poisoned() { # $1 desc, $2 want-exit, $3 command, $4.. env assignments
+  local desc="$1" want="$2" cmd="$3"; shift 3
+  local payload got
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  got=$( cd "$poison" && printf '%s' "$payload" | env "$@" bash "$HOOK" >/dev/null 2>&1; printf '%s' "$?" )
+  if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); fi
+}
+# The control that matters: an unrelated command must not be blocked by a file lying on the floor.
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_in_poisoned "stray json.py: ordinary command unaffected"  0 "git status"
+# ...and the gate itself must still work from there, in both directions — a hook that survives the
+# shadowing by failing OPEN would pass the line above and be worse than the outage.
+run_in_poisoned "stray json.py: fresh verdict still passes"    0 "gh pr create --fill"
+rm -f "$VFILE"
+run_in_poisoned "stray json.py: missing verdict still blocks"  2 "gh pr create --fill"
+# The classifier is invoked as a script file, so its own directory heads sys.path rather than the
+# caller's — but PYTHON* still reaches it, so it is pinned from here too.
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_in_poisoned "PYTHONIOENCODING=ascii: em-dash command passes" 0 "git commit -m 'a — b'" PYTHONIOENCODING=ascii
+run_in_poisoned "PYTHONPATH poisoned: ordinary command passes"   0 "git status" PYTHONPATH="$poison"
+
 # The classifier's own unit suite runs here too, so one command covers both layers and the python
 # cases cannot rot unnoticed. Detail on failure comes from running that file directly.
 if python3 "$(dirname "$HOOK")/lib/classify-pr-command.test.py" >/dev/null 2>&1; then
