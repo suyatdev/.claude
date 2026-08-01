@@ -332,7 +332,30 @@ run_payload "tool_name non-string -> block"           2 '{"hook_event_name":"Pre
 run_payload "Edit passes (no command to guard)"       0 '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"/tmp/x","old_string":"a","new_string":"b"}}'
 run_payload "Read passes (no command to guard)"       0 '{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/tmp/x"}}'
 run_payload "Write passes (no command to guard)"      0 '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/x","content":"hi"}}'
+
+# The pass-through above is keyed on the tool's NAME, and every one of those three payloads carries
+# no `command` at all — so none of them can catch the case where a name this hook does not know
+# arrives WITH a live command. That gap is real: keying the SKIP on the name returns before the
+# command is ever read, so `gh pr create` under any name but `Bash` sails through unexamined. The
+# hook this branch started from read the command regardless of name, which makes that a REGRESSION,
+# and it lands in exactly the wider-matcher future the name-keyed reading was justified by.
+#
+# The rule these pin: a runnable command is classified on its own merits, whatever the tool is
+# called; `tool_name` decides only what to do when there is NOTHING runnable to classify.
+rm -f "$VFILE"
+run_payload "Shell + gh pr create, no verdict -> block"      2 '{"hook_event_name":"PreToolUse","tool_name":"Shell","tool_input":{"command":"gh pr create --fill"}}'
+run_payload "lowercase bash + gh pr create -> block"         2 '{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"gh pr create --fill"}}'
+run_payload "BashOutput + gh pr create -> block"             2 '{"hook_event_name":"PreToolUse","tool_name":"BashOutput","tool_input":{"command":"gh pr create --fill"}}'
+run_payload "mcp shell tool + gh pr create -> block"         2 '{"hook_event_name":"PreToolUse","tool_name":"mcp__shell__exec","tool_input":{"command":"gh pr create --fill"}}'
+# ...and the correction must not overshoot in either direction. A non-Bash tool carrying a command
+# that is not a PR creation is still none of this hook's business, and an editor payload with no
+# command must keep passing even with no verdict on file — otherwise the fix takes the editor down
+# under a `*` matcher, which is the outage the name-keyed reading existed to prevent.
+run_payload "Shell + ordinary command still passes"          0 '{"hook_event_name":"PreToolUse","tool_name":"Shell","tool_input":{"command":"git status"}}'
+run_payload "Edit still passes with no verdict on file"      0 '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"/tmp/x","old_string":"a","new_string":"b"}}'
+
 # Control: the same fresh verdict, through a well-formed payload, still allows the PR.
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_case "control: fresh verdict still passes" 0 "gh pr create --fill"
 
 # An interpreter that is FOUND but fails is the parser-side twin of the unusable classifier: the
