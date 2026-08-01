@@ -47,6 +47,19 @@ if [ -z "$py" ]; then
   printf 'judge-guard: python3 not on PATH; cannot verify a verdict -- failing closed.\n' >&2
   exit 2
 fi
+# Every python call below runs ISOLATED, and this is load-bearing rather than hygiene. `-c` and `-`
+# both put the CALLER's directory on sys.path, so an ordinary file named json.py — in a python
+# project, a scratch dir, anywhere you happen to be standing — shadowed the stdlib module the parser
+# imports and failed this hook closed on EVERY Bash command on the machine, blaming a payload where
+# nothing was wrong. `-I` drops that directory and ignores PYTHON* in one token, which retires the
+# PYTHONIOENCODING trigger at the same time. The classifier takes it too: it is a script file, so
+# its own directory heads sys.path rather than the caller's, but PYTHON* still reaches it, and it
+# imports nothing local for `-I` to hide.
+PY_ISOLATED="-I"
+# `-I` arrived in Python 3.4. Older interpreters would reject the flag and fail this hook closed
+# machine-wide, so it is dropped rather than assumed — the shadowing is a bad day, refusing to run
+# at all is a worse one.
+"$py" "$PY_ISOLATED" -c '' 2>/dev/null || PY_ISOLATED=""
 
 # Parse the PreToolUse payload. The parser must SAY it ran, because silence here is ambiguous in a
 # way silence nowhere else in this hook is: a truncated payload, a non-JSON payload, a wrong-shaped
@@ -79,7 +92,7 @@ fi
 #                                 covers a bad top-level type (an array or scalar is not a
 #                                 PreToolUse payload at all) and a missing or non-string
 #                                 `tool_name`, which means malformed input, not a boring tool.
-parsed=$(printf '%s' "$payload" | "$py" -c '
+parsed=$(printf '%s' "$payload" | "$py" ${PY_ISOLATED:+"$PY_ISOLATED"} -c '
 import json, sys
 try:
     p = json.load(sys.stdin)
@@ -158,7 +171,7 @@ esac
 # probing. Rationale and the accepted-open shapes: hooks/lib/classify-pr-command.py and ADR 0012.
 # Resolved from this script's own directory so the hook works from any $PWD, as the tests do.
 CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
-classify=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null)
+classify=$(printf '%s' "$command_line" | "$py" ${PY_ISOLATED:+"$PY_ISOLATED"} "$CLASSIFIER" 2>/dev/null)
 # No `set -e` and no `pipefail` here, so this is the classifier's own status, not the printf's.
 classify_rc=$?
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
@@ -223,7 +236,7 @@ if [ ! -f "$VERDICTS" ]; then
   exit 2
 fi
 
-match=$("$py" - "$VERDICTS" "$repo" "$branch" "$head_sha" <<'PYEOF'
+match=$("$py" ${PY_ISOLATED:+"$PY_ISOLATED"} - "$VERDICTS" "$repo" "$branch" "$head_sha" <<'PYEOF'
 import json, sys
 path, repo, branch, head = sys.argv[1:5]
 found = False
