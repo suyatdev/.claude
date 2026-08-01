@@ -153,18 +153,27 @@ segment's command position — including a commit message whose quoted body span
 
   | payload | outcome |
   |---|---|
-  | `tool_name` = `Bash`, runnable command | classify it |
+  | any runnable command, **whatever `tool_name` says** | classify it |
   | `tool_name` = `Bash`, nothing runnable (absent / empty / all-space / non-string) | **block** (exit 4 → 2) |
-  | any other named tool | pass — no shell command to guard |
+  | any other named tool, nothing runnable | pass — no shell command to guard |
   | bad top-level type, or missing/non-string `tool_name` | **block** (exit 3 → 2) |
 
-  Keying on `tool_name` is the point of the fix, not an implementation detail. The alternative —
-  blocking all four shapes unconditionally — yields identical behaviour under today's matcher and
-  leaves the same latent trap: correctness resting on a setting in a different file that no test
-  covers. `tool_name` is a required `PreToolUse` field and the one the matcher itself filters on
-  (verified against the hook documentation before being relied on, rather than assumed — assuming
-  is what produced this bullet's first version). So the non-Bash rows are tested even though they
-  cannot arrive today: a future matcher change becomes a settings edit, not a machine-wide outage.
+  **Corrected 2026-07-31 after observability-judge RUN 6, which measured the first version of this
+  table as a regression.** That version keyed the SKIP on `tool_name`, and the code returned on it
+  *before reading the command* — so a live `gh pr create` under any name but `Bash` passed
+  unexamined (measured: `Shell`, lowercase `bash`, `BashOutput`, `mcp__shell__exec` all exit 0 with
+  no verdict on file, where the pre-change hook exited 2). It was therefore **weaker than the
+  version it replaced**, and weaker in exactly the wider-matcher future that keying on the payload
+  was introduced to survive. The three pass-through tests could not catch it because all three
+  carried no `command` field at all.
+
+  The rule is now: **the command decides; `tool_name` only settles what an absent command means.**
+  That keeps the property this decision wanted — correctness resting on the payload rather than on
+  a setting in a different file that no test covers — without the coverage loss. `tool_name` is a
+  required `PreToolUse` field and the one the matcher itself filters on (verified against the hook
+  documentation before being relied on, rather than assumed — assuming is what produced this
+  bullet's first version). The non-Bash rows are tested even though they cannot arrive today, so a
+  future matcher change becomes a settings edit, not a machine-wide outage.
 
   Two smaller consequences. The post-parse `[ -n "$command_line" ] || exit 0` is now unreachable and
   has been **inverted into a fail-closed assertion** — if an edit upstream ever breaks the

@@ -131,10 +131,13 @@ case "$parse_rc:$parse_ok" in
     ;;
 esac
 
-# Unreachable by construction: `0:OK` is emitted only after the parser has found a command with a
-# non-space character in it. Kept as an assertion rather than deleted, and inverted from the exit 0
-# it used to be — if that invariant is ever broken by an edit up there, the failure it produces
-# should be a block, not the silent allow that this branch has now found four times.
+# Reachable, and measured: a command consisting solely of a NUL byte gets `0:OK` from the parser
+# (NUL is not whitespace, so it survives `.strip()`) and then arrives here empty, because command
+# substitution drops NUL bytes. Exit 2, which is the right direction. An earlier revision called
+# this "unreachable by construction" — it is not, and the assertion is load-bearing rather than
+# decorative. Inverted from the exit 0 it used to be: if the parser ever reports OK with nothing to
+# show for it, the failure should be a block, not the silent allow this branch has now found four
+# times.
 [ -n "$command_line" ] || {
   printf 'judge-guard: internal error -- parser reported OK with no command -- failing closed.\n' >&2
   exit 2

@@ -247,11 +247,17 @@ how this file and its linked files should be written (plain language, major chan
   arrives. Same overclaim class RUN 4 caught in the header, now inside the fix's own commentary.
   · **USER DECISION 2026-07-31 — a Bash payload with no readable `command` must BLOCK.** Reasoning
   given: "you would be the only one who makes these bash calls, so you should have a reason to create
-  a bash call, and not just empty ones." Implemented as the **`tool_name`-gated** form: block when
-  `tool_name == "Bash"` and no readable command; pass any other named tool. Chosen over an
-  unconditional four-way block because it makes the hook correct under *any* matcher — the hidden
-  cross-file dependency on `settings.json` is precisely what produced this defect, so the hook now
-  reads the payload instead of trusting its registration.
+  a bash call, and not just empty ones." Chosen over an unconditional four-way block because it makes
+  the hook correct under *any* matcher — the hidden cross-file dependency on `settings.json` is
+  precisely what produced this defect, so the hook now reads the payload instead of trusting its
+  registration.
+  · **⚠ The FIRST implementation of that decision was a regression, caught by RUN 6 and fixed at
+  `f92e44a`.** It keyed the SKIP on `tool_name` and returned *before reading the command*, so a live
+  `gh pr create` under any name but `Bash` passed unexamined. **Corrected form: the command decides,
+  `tool_name` only settles what an ABSENT command means** — runnable command → classify it whatever
+  the tool is called; nothing runnable + `Bash` → block; nothing runnable + any other tool → pass.
+  The claim "correct under any matcher" only became true at `f92e44a`; before it, the hook was
+  *weaker* under a wider matcher than the version it replaced.
   · **`tool_name` presence VERIFIED before relying on it, not assumed** — this is the same shape of
   premise that just failed, so it got evidence: no hook on this machine reads `tool_name` (all key off
   `tool_input.*`), so there was zero local ground truth. Official docs (code.claude.com/docs/en/hooks)
