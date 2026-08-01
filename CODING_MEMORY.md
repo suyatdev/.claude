@@ -396,6 +396,13 @@ how this file and its linked files should be written (plain language, major chan
   unit tests (`classify-pr-command.test.py:39,81`) already stated both shapes correctly; only the one
   hook comment was wrong. Comments-only change: suite **101/0**, classifier 51/0, shellcheck codes
   identical before and after (3 SC2016 + 2 SC2181, all pre-existing).
+  · **The path-qualified `gh` naming gap was re-raised and REAFFIRMED OPEN by the user 2026-08-01**
+  — `/usr/bin/gh pr create` → `NO`, ADR `0012:291-295`. It is the one accepted-open shape that is a
+  patch rather than an architecture change (compare the path's basename), which is why it keeps
+  coming back up. Reason it stays open is unchanged: closing one naming gap while `sudo`, `env` and
+  `timeout` stay open buys no real coverage, and this is a momentum guardrail, not a security
+  boundary. **Second time this has been asked and answered — it is settled, do not re-litigate.**
+  The quoted-substitution gap likewise stays open per the 2026-07-30 decision at line 91.
   · **C3 — a committed verdict file is BINARY.** `...round6.md` carries a raw NUL at **offset 6360**
   (verified): a judge typed a literal NUL while *describing* the NUL finding. Git marks the file
   binary, so it will not render as a diff in the PR. Third instance of the raw-control-byte mistake
@@ -1404,6 +1411,20 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
+0-NEW (parked 2026-08-01, own branch, do NOT widen PR #32). **Three Tier 1 hooks are registered in
+   `settings.json` and have NO test suite at all: `git-guard.sh` (default-branch + force-push),
+   `merge-guard.sh` (remote-merge), `doc-guard.sh` (documentation checkpoint).** Verified — no
+   `*.test.sh` for any of them, and no file matching `*test*` references them. These are the hooks
+   that block commits, pushes and merges, and `rules/gates.md` cites all three as enforcement.
+   Four more have neither a suite nor a `settings.json` registration — `scan-secrets`,
+   `scan-invisible-unicode`, `checkpoint-before-modify`, `require-project-standards` — dormant or
+   registered elsewhere, **unverified which; verify before designing anything.**
+   Suites that DO exist: judge-guard (101), phase-guard, pane-dispatch-guard, context-handoff-watch,
+   memsearch-nudge. **Unmeasured, do not assert:** whether phase-guard's or pane-dispatch-guard's
+   *deny* assertions carry C1's "exit code alone does not say which door" defect — they already do
+   some message checking. Found while scoping "should the C1 fix go broader"; the honest answer was
+   that assertion strength on a 101-test suite is the smaller risk. **User decision 2026-08-01:
+   park it, finish PR #32 first.** Owes `triaging-new-instructions` → brainstorming → spec before code.
 0-ACTIVE. **pane-layout-v2 — EXECUTING. Task 1 (live probe) DONE + pushed (ffe22d2)
    2026-07-21. Gates answered, do not re-ask: model = Opus 4.8 (user ran `/model`
    this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.
