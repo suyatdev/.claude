@@ -1544,19 +1544,40 @@ how this file and its linked files should be written (plain language, major chan
    bar full at 95k, no MB rollover). Detail + lessons: `coding-memory/branches/statusline-token-bar.md`, ADR 0005.
 2. **compliance-judge — the predicted collision HAPPENED (2026-08-01, branch
    `docs/reconcile-judge-verdict-stores`).** "Revisit if cross-repo spec slugs ever collide" is
-   now overtaken by events: the global store **forked in both directions**. 24 verdicts from
+   now overtaken by events: the global store **forked in both directions**. **26 verdict lines
+   across 24 distinct `head_sha`** (two SHAs carry a second round) from
    `mtg-wizard`/`vibe-scape`/`Snatch-Bracket`/`.claude` (07-23→07-28) lived only in the working
    tree, uncommitted across two session clears; `main` held 2 the tree lacked. Neither side was a
-   superset, so any checkout would have silently dropped one. Union-merged to 39 lines, verified
-   no-loss by set difference. **The store is append-only and global — never resolve it by picking
+   superset, so any checkout would have silently dropped one. Union-merged **13 → 39 lines**
+   (13 base + 26 added), verified no-loss by set difference, 0 malformed.
+   *Count both ways or neither — an earlier note said "24 verdicts" against a 26-line diff.* **The store is append-only and global — never resolve it by picking
    a side; always union.** Filenames still carry no repo component (root cause, unfixed).
    Still open: backfill the compliance-judge verdicts' own `outcome` fields once those specs
    implement (calibration ledger, see running-the-compliance-judge SKILL.md).
-2b. **Obs-judge calibration: verdict-commit recursion ruled (2026-08-01).** The 07-22 policy read
-   literally demotes *every* final round to `rework`, because the last commits before any merge
-   are the verdict-landing commits themselves. **Ruled: the verdict-landing commit, and the
-   pointer fixes it catches, do not demote the final round.** Applied to PR #33 — nine `rework`,
-   RUN 9 `0f54622` `clean`. Nulls **32 → 22** (CODING_MEMORY's older "17 nulls" was stale).
+   Two debts recorded 2026-08-01, both deliberately NOT fixed on this branch:
+   - **No re-fork guard.** Nothing checks parse/ordering/no-loss on the store, and "always union"
+     lives in this index rather than in `coding-memory/compliance-judge/README.md` (which does not
+     exist). Obs judge raised it; writing it is its own task, not a rider here.
+   - **19 absolute `/Users/marksuyat` paths** ride in on the rescued verdicts, against
+     core-conduct's no-absolute-paths rule. **Pre-existing pattern, not introduced here** —
+     `origin/main` already carries 49, incl. 5 in this same store. Left as-is on purpose: these are
+     historical audit records where the path was the judge's real cwd, and rewriting them would
+     falsify the record to satisfy a rule aimed at code and config. Root cause is the judge writing
+     absolute cwd into the verdict; fix it there, going forward, not by editing history.
+2b. **Obs-judge calibration: verdict-commit recursion ruled (DECIDED 2026-08-01, user).** The 07-22
+   policy read literally demotes *every* final round to `rework`, because the last commits before
+   any merge are the verdict-landing commits themselves — which makes `clean` a value the policy
+   can never produce. **Ruled (narrow): only the mechanical act of landing the verdict — the
+   writeup file and the `verdicts.jsonl` append — is exempt. Substantive changes a round's findings
+   caused still demote it, even when they ride in the same commit as the verdict.**
+   An earlier draft of this item exempted "the pointer fixes it catches" too; that was written by
+   the agent, unattributed, against a user-owned policy, and it laundered exactly the signal the
+   07-22 decision exists to preserve (see the rationale at item 6: a ledger showing the judge never
+   prompting rework is "false and useless for tuning it"). Narrowed on the obs judge's own finding.
+   Applied to PR #33 — **all ten `rework`, zero `clean`.** RUN 9 `0f54622` is `rework` because
+   `7e0b9b1` fixed a broken cross-reference, a garbled sentence, and added RUN 9's third latency
+   measurement to ADR 0012 — real corrections, pre-merge, caused by that round.
+   Nulls **32 → 22** (the older "17 nulls" was stale; corrected in place at item 6).
    The 22 remaining need per-branch history reads; **architecting-stage entries still have no
    sub-policy** — no merge event means "shipped clean" has no meaning for them yet.
 3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
@@ -1585,12 +1606,16 @@ how this file and its linked files should be written (plain language, major chan
    merged PR is clean" precisely because that would make the calibration history show the judge
    never prompting rework, which is false and useless for tuning it. Applied to pane-layout-v2:
    e12dc06 → `rework`, ec03621 → `clean`.
-   **17 nulls remain**, now resolvable under that policy but NOT bulk-applied — each needs its
-   per-branch history read to identify which round was final: statusline ×6, token-bar ×4,
-   handoff ×2, pane-orch architecting ×2, verifying-subagent-commits @ 8701ca8,
-   compliance-judge @ cf4efc7, and pane-layout-v2 architecting @ bb4050b. **Architecting-stage
-   entries are the genuinely unclear case** — there is no merge event for a design, so "did it
-   ship clean" has no direct meaning; decide that sub-policy before touching them.
+   **22 nulls remain** — re-measured from the store 2026-08-01 (70 lines, 22 null, 0 malformed);
+   the figure here previously read "17" and its enumeration was two branches out of date. Still
+   resolvable under that policy but NOT bulk-applied — each needs its per-branch history read to
+   identify which round was final: statusline-command ×6, statusline-token-bar ×4,
+   cmux-version-gate ×3, gate-checks-and-session-memory ×2, add-claude-code-handoff ×2,
+   pane-orchestration architecting ×2, compliance-judge ×1, verifying-subagent-commits ×1,
+   pane-layout-v2 architecting ×1. **19 implementation, 3 architecting.**
+   **Architecting-stage entries are the genuinely unclear case** — there is no merge event for a
+   design, so "did it ship clean" has no direct meaning; decide that sub-policy before touching
+   them. (The 07-22 policy itself was narrowed 2026-08-01 — see item 2b.)
 
 **Merged** (full detail: `coding-memory/pr-tracking.md`): `.claude` PRs #10–#16 (07-16→18) —
 documentation-enforcement, PORTS.md reconcile, diagramming skill, observability judge (+ judge-guard
