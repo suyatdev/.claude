@@ -105,11 +105,18 @@ if not isinstance(tn, str) or not tn:
     raise SystemExit(3)
 ti = p.get("tool_input")
 c = ti.get("command") if isinstance(ti, dict) else None
-# Whitespace is not a command: an all-space string is as unrunnable as an empty one, and blocking
-# both states the rule in terms of what the payload can DO, not which falsy shape it arrived in.
+# Runnable means at least one character that could actually form a command: not whitespace, and not
+# a control character. An all-space string is as unrunnable as an empty one, and so is a lone NUL —
+# blocking all of them states the rule in terms of what the payload can DO, not which falsy shape it
+# arrived in. `.strip()` alone was not enough: it removes whitespace and nothing else, so NBSP and
+# VT counted as blank while NUL, SOH and DEL did not, and a command of pure control characters read
+# as runnable and was ALLOWED — the same fail-open this rule exists to close, through the back door.
+# `isprintable()` is false for exactly the control characters and true for ordinary text in any
+# script, so an em-dash or CJK command stays runnable; narrowing this to ASCII would blind the guard
+# to commands it must classify.
 # (No backticks or apostrophes in here: this block is single-quoted shell, and a stray one of
 # either ends the quote and breaks the whole hook. That is why the classifier lives in its own file.)
-if isinstance(c, str) and c.strip():
+if isinstance(c, str) and any((not ch.isspace()) and ch.isprintable() for ch in c):
     sys.stdout.write("OK\n")
     sys.stdout.write(c)
     raise SystemExit(0)
@@ -144,13 +151,14 @@ case "$parse_rc:$parse_ok" in
     ;;
 esac
 
-# Reachable, and measured: a command consisting solely of a NUL byte gets `0:OK` from the parser
-# (NUL is not whitespace, so it survives `.strip()`) and then arrives here empty, because command
-# substitution drops NUL bytes. Exit 2, which is the right direction. An earlier revision called
-# this "unreachable by construction" — it is not, and the assertion is load-bearing rather than
-# decorative. Inverted from the exit 0 it used to be: if the parser ever reports OK with nothing to
-# show for it, the failure should be a block, not the silent allow this branch has now found four
-# times.
+# A defensive assertion, and deliberately not described as unreachable. It HAS been reached: while
+# "runnable" was `.strip()`, a lone NUL got `0:OK` from the parser and arrived here empty, because
+# command substitution drops NUL bytes. Measured, exit 2, right direction. The printable check above
+# now blocks that input earlier, so the one known route in is closed — but "no route exists" is a
+# claim this file has already made falsely once, and the whole point of an assertion is to catch the
+# route nobody predicted. Inverted from the exit 0 it used to be: if the parser ever reports OK with
+# nothing to show for it, the failure should be a block, not the silent allow this branch has now
+# found four times.
 [ -n "$command_line" ] || {
   printf 'judge-guard: internal error -- parser reported OK with no command -- failing closed.\n' >&2
   exit 2
