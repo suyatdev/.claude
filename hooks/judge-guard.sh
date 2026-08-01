@@ -55,18 +55,26 @@ fi
 # garbled payload disarmed the gate exactly as an absent classifier did. Hence a sentinel: the parser
 # prints its verdict on line 1 only after it has decided, and the command follows from line 2.
 #
-# WHICH tool called is decided by `tool_name`, a required PreToolUse field and the one the matcher
-# itself filters on — deliberately not by the hook's own registration. An earlier revision reasoned
-# from "every Edit, Read and Write reaches this hook" to "an absent command must pass"; that premise
-# was false (the sole registration matches `Bash`), and it had quietly chosen the behaviour. Reading
-# the payload keeps this file correct under any matcher, instead of correct only while a setting in
-# a different file — one no test covers — happens to hold.
+# The COMMAND decides, not the tool's name. A runnable command is classified on its own merits
+# whatever the caller is called; `tool_name` — a required PreToolUse field, and the one the matcher
+# itself filters on — is consulted only to settle what an ABSENT command means.
 #
-#   Bash + a runnable command  -> OK, classify it
+# Two earlier revisions got this wrong in opposite directions. The first reasoned from "every Edit,
+# Read and Write reaches this hook" to "an absent command must pass"; that premise was false (the
+# sole registration matches `Bash`) and it had quietly chosen the behaviour. The second corrected
+# the premise but keyed the SKIP on the name, which returned before the command was ever read — so
+# `gh pr create` under any name but `Bash` passed unexamined, weaker than the version it replaced,
+# in precisely the wider-matcher future that keying on the payload was meant to survive.
+#
+#   a runnable command         -> OK, classify it, whatever `tool_name` says. A `gh pr create` is a
+#                                 `gh pr create` whether it arrives as Bash, as some future Shell,
+#                                 or under a name this hook has never heard of.
 #   Bash + nothing runnable    -> exit 4, BLOCK: a Bash call this hook could not verify, and the
 #                                 only sender is the session itself, which has no reason to issue
 #                                 an empty one. Fail closed, as everywhere else on this branch.
-#   any other named tool       -> SKIP, pass: nothing here is a shell command to guard
+#   other tool, nothing to run -> SKIP, pass: an editor payload carries no command by design, so
+#                                 there is nothing here to guard. This arm is what keeps a `*`
+#                                 matcher from taking the editor down.
 #   anything else              -> exit 3, BLOCK: not a payload this hook can reason about. That
 #                                 covers a bad top-level type (an array or scalar is not a
 #                                 PreToolUse payload at all) and a missing or non-string
@@ -82,19 +90,22 @@ if not isinstance(p, dict):
 tn = p.get("tool_name")
 if not isinstance(tn, str) or not tn:
     raise SystemExit(3)
-if tn != "Bash":
-    sys.stdout.write("SKIP\n")
-    raise SystemExit(0)
 ti = p.get("tool_input")
 c = ti.get("command") if isinstance(ti, dict) else None
 # Whitespace is not a command: an all-space string is as unrunnable as an empty one, and blocking
 # both states the rule in terms of what the payload can DO, not which falsy shape it arrived in.
 # (No backticks or apostrophes in here: this block is single-quoted shell, and a stray one of
 # either ends the quote and breaks the whole hook. That is why the classifier lives in its own file.)
-if not isinstance(c, str) or not c.strip():
+if isinstance(c, str) and c.strip():
+    sys.stdout.write("OK\n")
+    sys.stdout.write(c)
+    raise SystemExit(0)
+# Nothing runnable. ONLY here does the tool name decide anything, and only between two flavours of
+# "there is no command": a Bash call that should have carried one, and a tool for which carrying
+# one was never expected.
+if tn == "Bash":
     raise SystemExit(4)
-sys.stdout.write("OK\n")
-sys.stdout.write(c)
+sys.stdout.write("SKIP\n")
 ' 2>/dev/null)
 # The parser is the last command in the pipeline and there is no `pipefail`, so this is its own
 # status, not the printf's — same reading as classify_rc below. Status is checked as well as the
