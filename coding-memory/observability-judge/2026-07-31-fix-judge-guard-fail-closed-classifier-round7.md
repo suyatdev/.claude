@@ -97,7 +97,7 @@ This is not hypothetical — it is exactly the near-miss recorded in the invocat
 
 | payload as written | vs FIXED hook | vs BUGGY (`.strip()`) hook |
 |---|---|---|
-| `{"...","command":"  "}` (committed, escaped) | exit 2 | **exit 0 — catches the bug** |
+| `{"...","command":"\x01  "}` (committed, escaped) | exit 2 | **exit 0 — catches the bug** |
 | `{"...","command":"<raw 0x01>  "}` (the rejected draft) | exit 2 | **exit 2 — misses the bug** |
 
 The rejected raw-byte draft would have been a **vacuous** regression test: green against the very
@@ -182,7 +182,7 @@ confirmed the live installed hook at `~/.claude/hooks/judge-guard.sh` is the pri
    "exit 2". `run_payload` already has the shape for it; three other checks in the file do exactly
    this. Without it, the class of mistake the author caught by hand stays uncatchable by CI.
 2. Fix the two sentences in C2 — one of them appears twice (hook and test file).
-3. Replace the single raw NUL in the RUN 6 verdict file with the text ` ` (or `NUL`) so the
+3. Replace the single raw NUL in the RUN 6 verdict file with the text `\x00` (or `NUL`) so the
    audit trail is diffable in the PR.
 4. Confirm the endgame ordering still holds: leave the verdict commit pending, run `gh pr create` at
    `249beee` (which this verdict matches), then commit. This file plus the JSONL line are
