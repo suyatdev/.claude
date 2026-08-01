@@ -446,15 +446,46 @@ how this file and its linked files should be written (plain language, major chan
   line 3 as known-wrong until that branch lands. The decision that branch owes: whether the cap is a
   real policy this file can hold to, or the wrong shape for what the index has become — a limit
   violated 6.7× across six verdicts is not functioning as a limit either way.
-- **PARKED — verification-marker gate (user ruled 2026-07-31: build it, after these two PRs).** The
-  prose rule above is deliberately the *weak* control, and this repo established this week that a
+- **ACTIVE — verification-marker gate (user ruled 2026-07-31: build it; reordered to FIRST 2026-08-01).**
+  The prose rule above is deliberately the *weak* control, and this repo established this week that a
   warning sitting where the mistake keeps being made is a **disproven** control. The strong version:
-  a test run writes a marker keyed to HEAD, and a hook requires a fresh one before commits that claim
-  a fix — **the judge-guard shape applied to tests** (mirror `hooks/judge-guard.sh`,
-  `judge-guard.test.sh`, and the extracted `hooks/lib/` classifier module). Its own branch, not
-  bundled. Undecided and load-bearing: what counts as a marker, what "fresh" means when a commit
-  moves HEAD, and how to avoid re-importing the `fix:`-prefix false positive that killed the
-  hook option for the prose rule.
+  a test run writes a marker, and a hook requires a fresh one before commits touching tested code —
+  **the judge-guard shape applied to tests** (mirror `hooks/judge-guard.sh`, `judge-guard.test.sh`,
+  and the extracted `hooks/lib/` classifier module). Its own branch, not bundled.
+  **Scope caveat accepted by the user 2026-08-01:** this gate would **not** have caught this session's
+  narration error, so it does not close the defect that prompted the reorder. A narration control is a
+  separate, later design. Do not widen this branch to cover it.
+  - **MEASURED 2026-08-01** (probe: `tree-key-probe.sh`, throwaway repos — run, not reasoned):
+    - **"Fresh marker keyed to HEAD" was the wrong frame, and the blocker is dissolved.** A *tree* key
+      survives the commit: on the normal path (test → `git add -A` → `git commit`) the worktree tree,
+      the pre-commit index tree, and the committed tree are **one identical SHA**. HEAD moves; the tree
+      does not.
+    - **The tree key is content-only** — commit message, author, and timestamp do not affect it
+      (verified by soft-reset: same key before and after). This is *why* the `fix:`-prefix false
+      positive cannot re-enter: the gate never reads the message at all. Structural, not disciplinary.
+    - **A whole-tree key is still wrong**, for two measured reasons: **partial staging** (test the
+      worktree, stage one file → trees differ → false block) and **untracked scratch files** (a scratch
+      file written after the test run moves the worktree key; gitignoring it does not help, because
+      `.gitignore` is then itself a new file).
+    - → **Design consequence: key on per-file blob hashes, not one whole-tree hash.** Record what each
+      tested file hashed to; at commit time check each *staged* file against that record. Untracked
+      scratch is irrelevant (never staged) and partial staging works (staged ⊆ tested).
+    - `git commit -a` commits the **worktree** tree, but a PreToolUse hook reading the index sees a
+      **stale** value — `-a` needs its own handling.
+    - `git write-tree` is side-effect-free (leaves `git status` unchanged), so it is safe from a hook.
+    - ⚠️ **Probe-methodology gotcha:** v1 of the probe put its temp `GIT_INDEX_FILE` *inside* the
+      worktree, so `git add -A` hashed the index file itself and **every case falsely read as DIFFER**.
+      A temp index must live outside the repo. The first run's "CASE 1 fails" was a probe bug, not a
+      finding — caught only by disbelieving a surprising result and re-checking the instrument.
+  - **DECIDED (user, 2026-08-01) — trigger scope: a staged file with a sibling test file**
+    (`hooks/foo.sh` → `hooks/foo.test.sh`). Decidable from staged paths alone, so no message parsing.
+    Never demands a test run for a file that has no test. **Backtested over the last 30 commits: 6 fire
+    (all of them `hooks/judge-guard.sh`), 24 exempt** — docs/memory commits, which dominate this repo,
+    are exempt automatically. Sibling-test coverage today: 5 of 12 `hooks/*.sh` are tested, plus
+    `panes/*.test.sh`, `statusline-command.test.sh`, `hooks/lib/classify-pr-command.test.py`;
+    `memsearch/tests/` uses a `tests/test_*.py` layout, **not** the sibling convention.
+  - **Still open:** what physically counts as a marker (where it lives, what proves the run *passed*,
+    how a multi-file suite is represented), and whether `memsearch/`'s non-sibling layout is in scope.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
