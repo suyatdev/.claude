@@ -282,8 +282,38 @@ how this file and its linked files should be written (plain language, major chan
   · **Live hook is UNAFFECTED** — `~/.claude/hooks/judge-guard.sh` is the primary checkout's copy
   (`381bd79`, zero `tool_name` references), so none of this is armed on the machine yet. Checked
   before committing, because the fix blocks Bash and I run on Bash.
-  · **NEXT: obs judge RUN 6 at `13d40e3`**, then the PR (which blocks for the PATH reason — append
-  the genuine verdict to the primary store, see line 137's branch block).
+  · **RUN 6 IS IN** (`d51a431`, risk=medium/confidence=high, verdict committed). It did **not** clear
+  the branch. Three findings, the first one real and blocking:
+  · **⚠ F1 — the `tool_name` gate made the hook LESS covering, in exactly the direction it was
+  justified by.** The SKIP is keyed on the tool's **name**, and returns *before* the command is ever
+  read. So any `tool_name` that is not literally `Bash` passes **with a real `gh pr create` inside**.
+  **I measured this myself** against an empty store rather than trusting the verdict: `Bash` +
+  `gh pr create --fill` → exit 2 (correct); `Shell`, `bash`, `BashOutput`, `mcp__shell__exec` with
+  the same command → **exit 0**, command never examined. Pre-change the hook read the command
+  regardless of name, so this is a **regression**, not merely an uncovered case. Not live today
+  (only `Bash` can arrive under the current matcher) — but "correct under any matcher" was the whole
+  stated reason for keying on the payload, and under a wider matcher this is weaker than what it
+  replaced. **Third round running for this same overclaim class**, so the doc sites are as much the
+  defect as the code: `judge-guard.sh:62` and `:69`, ADR `0012:158`, `CODING_MEMORY.md:252`.
+  · **The green never covered it** — all three pass-through tests use payloads with **no `command`
+  field at all**, so none of them can catch a non-`Bash` name carrying a live command.
+  · **FIX (decided, not yet written): gate the SKIP on "no runnable command", not on the name.**
+  Check for a command first; consult `tool_name` only when there is none. That keeps the editor
+  pass-through *and* restores coverage. ~2 lines. Red test first: a non-`Bash` name + a real
+  `gh pr create` must block.
+  · **F2 — a NEW machine-wide block from outside the repo.** `python3 -c` puts the CWD on
+  `sys.path`, so a stray `json.py` in whatever directory you happen to be in shadows the parser and
+  blocks **every** Bash command, blaming the payload. `python3 -I -c` fixes it (judge measured both).
+  Same token also kills the `PYTHONIOENCODING` trigger. Apply `-I` to the parser and `-I`/`-E` to
+  the classifier.
+  · **F3 — cosmetic:** `judge-guard.sh:123` says "unreachable by construction"; a lone-NUL command
+  reaches it (right direction, rc=2). Fix or drop the comment.
+  · **NEXT: fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (which blocks for the PATH
+  reason — append the genuine verdict to the primary store, see line 137's branch block).
+  · **Endgame ordering, settled by measurement:** `judge-guard.sh` compares `head_sha` by **strict
+  equality**, so committing the verdict moves HEAD and staleens it. Do **not** re-key a verdict to a
+  later SHA — that is fabrication. Instead: leave the final verdict commit **pending**, append the
+  genuine line to the primary store, `gh pr create` at the matching HEAD, then commit and push.
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
