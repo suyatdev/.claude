@@ -339,7 +339,32 @@ how this file and its linked files should be written (plain language, major chan
   · **F3 — cosmetic, FIXED @ `cd208a7`:** "unreachable by construction" was false and I measured it —
   a lone-NUL command gets `0:OK` (NUL survives `.strip()`) then arrives empty because command
   substitution drops NUL. Exit 2, right direction; the assertion is load-bearing, comment says so.
-  · **NEXT: fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (which blocks for the PATH
+  · **RUN 7 IS IN @ `249beee` — `risk=low`, `confidence=high`, and it found NO new fail-open.** First
+  low-risk verdict on this branch. It rebuilt the three test-first commits and confirmed each was
+  genuinely red (83/4, 88/4, 97/4), reverted each fix individually and saw the suite catch every one,
+  then put a fake `gh` on `PATH` and compared across 26 shapes what the hook allows against what bash
+  actually runs: **no new fail-open, only the four leaks already in ADR 0012**. 21 exotic payloads
+  (NBSP, zero-width space, surrogates, BOM, 1 MB commands) all behaved. F1's fix is strictly *more*
+  blocking, not less. Three quality items remain, none behavioural:
+  · **C1 (the important one — a test that cannot fail).** The five control-character tests assert
+  only `exit 2`, but **two different doors exit 2**, so they cannot tell "blocked for the right
+  reason" from "blocked by a parse error". Measured by the judge: **my rejected raw-byte draft is
+  GREEN against the buggy hook** — it would have tested nothing. Two other mutations (removing the
+  parser's status check; reverting the fail-closed assertion) also leave the suite at a happy 101/0.
+  **Fix: assert the MESSAGE, not just the code** — this file already does that three times elsewhere.
+  · **C2 — two live comments overstate the code, both mine, both from this session.**
+  `judge-guard.sh:55-57` (copied into the suite at `:462-463`) explains `sys.path` in a way that
+  measures **false under `-I`**: isolated mode *drops* the script's directory rather than putting it
+  first, so the comment would tell the next editor a sibling import is safe. It is not.
+  And `:171-172` claims `$(...)` substitution "is caught" — true unquoted, **false** for the quoted
+  `PR="$(gh pr create)"` that ADR 0012 itself lists as accepted-open. **Fourth round of this class.**
+  · **C3 — a committed verdict file is BINARY.** `...round6.md` carries a raw NUL at **offset 6360**
+  (verified): a judge typed a literal NUL while *describing* the NUL finding. Git marks the file
+  binary, so it will not render as a diff in the PR. Third instance of the raw-control-byte mistake
+  on this branch — mine in the test draft, mine in a probe script, and this one.
+  · **NEXT: C1 → C2 → C3, then RUN 8, then the PR.** RUN 7's verdict is committed below, which moves
+  HEAD and staleens it — unavoidable, since C1–C3 move HEAD anyway. RUN 8 is required regardless.
+  · **superseded pointer — fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (blocks for
   reason — append the genuine verdict to the primary store, see line 137's branch block).
   · **Endgame ordering, settled by measurement:** `judge-guard.sh` compares `head_sha` by **strict
   equality**, so committing the verdict moves HEAD and staleens it. Do **not** re-key a verdict to a
