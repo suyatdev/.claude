@@ -318,6 +318,26 @@ run_payload "Bash, no tool_input -> block"            2 '{"hook_event_name":"Pre
 run_payload "Bash, no command key -> block"           2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"file_path":"/tmp/x"}}'
 run_payload "Bash, empty command string -> block"     2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":""}}'
 run_payload "Bash, non-string command -> block"       2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}'
+# "Nothing runnable" was implemented as `.strip()`, which removes whitespace and NOTHING else — so a
+# command made only of CONTROL characters survived it, read as runnable, and was allowed. That is
+# the very fail-open the rule above exists to close, arriving through the back door: NBSP and VT
+# count as whitespace to python, but NUL, SOH and DEL do not. The asymmetry was invisible and
+# absurd — a lone NUL blocked, a NUL followed by two spaces passed.
+run_payload "Bash, NUL + spaces -> block"             2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000   "}}'
+run_payload "Bash, lone NUL -> block"                 2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000"}}'
+run_payload "Bash, SOH -> block"                      2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0001"}}'
+run_payload "Bash, SOH + spaces -> block"             2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0001  "}}'
+run_payload "Bash, DEL -> block"                      2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u007f"}}'
+# ...and "runnable" must not narrow to ASCII in the process. A control character mixed WITH real
+# content is still a command — it has to stay readable, or the guard stops seeing commands it is
+# meant to classify. Non-ASCII text is ordinary, not suspicious: an em-dash commit message is the
+# shape that already triggered a machine-wide block once on this branch.
+rm -f "$VFILE"
+run_payload "NUL before a real gh pr create -> block"  2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000gh pr create --fill"}}'
+line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
+run_payload "em-dash command still runnable"           0 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git commit -m \"a — b\""}}'
+run_payload "CJK command still runnable"               0 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo 你好"}}'
+run_payload "tab-separated command still runnable"     0 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git\tstatus"}}'
 
 # A payload whose tool cannot be identified is not a call this hook may reason about — same fail-
 # closed reading as an unusable classifier. `tool_name` is a required PreToolUse field, so its
