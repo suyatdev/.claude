@@ -146,3 +146,146 @@ not introduced here (worth an ADR line someday, not a blocker).
 - First arming: installed `~/.claude/hooks/` has no `lib/`, so the guard is only correct once the primary checkout pulls both files; a partial checkout blocks all Bash machine-wide.
 - This PR cannot satisfy its own gate: the installed hook still reads `$HOME/.claude`'s verdict store, so `gh pr create` from this worktree needs `JUDGE_EXEMPT` (as ADR 0012 predicts).
 - Python-2-only machines (no `python3`) now block every Bash call: the pre-3.4 `-I` fallback does not save the parser, since py2 `json` returns `unicode` and fails the `isinstance(..., str)` check. Untested — no Python 2 available.
+
+---
+
+# Observability judge — RUN 9 (implementation, delta review)
+
+- **head_sha:** `0f546221e5c02763197ae92fba6dcf5560d0b4cf`
+- **prior:** RUN 8 above, at `4495bf8` (`risk=low confidence=high`) — findings carried forward, not re-litigated
+- **delta:** exactly one commit, `0f54622` "docs(hooks): record the ~2.8x per-call cost that isolation buys"
+- **judged:** 2026-08-01T05:00:05Z
+
+RUN 8 is appended to rather than overwritten: it is a committed audit record, and this file is the
+per-branch ledger. Destroying one verdict to write the next would defeat the point of both.
+
+## Evidence I gathered myself
+
+- **Delta is docs-only — proved three ways, not assumed.** `git diff --stat 4495bf8..HEAD` excluding
+  `docs/` and `coding-memory/` is **empty**; and decisively, the blob hashes of both code files are
+  **byte-identical** across the delta (`judge-guard.sh` `040e02e`, `judge-guard.test.sh` `0eae93b`).
+  No behaviour rode along.
+- `bash hooks/judge-guard.test.sh` at this HEAD → **101 passed, 0 failed** (run by me, not carried
+  over). Combined with blob-identity, RUN 8's mutation evidence still applies to this exact code.
+- **The ADR's numbers reproduce — third independent measurement.** 20 calls per arm:
+
+  | measurement | RUN 8 | author's re-measure | RUN 9 (me) |
+  |---|---|---|---|
+  | hook per Bash call, base → HEAD | 51 → 145 | 52 → 147 | **52.6 → 138.0** |
+  | `python3 -c pass` → `-I` | "roughly doubles" | 15.4 → 29.8 | **14.7 → 27.4** |
+  | probe `python3 -I -c ''` | ~28 | ~30 | **29.3** |
+
+  Every figure lands within ordinary machine noise. The base arm matches to 0.6 ms.
+- JSONL line appended by the delta: valid JSON, correct 10-key schema, keyed to `4495bf8` — RUN 8's
+  **real** SHA, not re-keyed to the new HEAD. The claim of no fabrication holds.
+- No absolute paths or secret-shaped strings anywhere in the delta.
+
+## What was changed
+
+One documentation commit. Nothing that runs changed at all.
+
+Think of ADR 0012 as the logbook for the doorman. RUN 8 noticed the doorman had got slower — he now
+takes about 2.6 times as long to check every person walking through, because he re-verifies his own
+ID badge on every single check. RUN 8 asked whether that belonged in the logbook. The answer was
+yes, so this commit writes it down: how slow, why, what it buys, and what would make it faster later.
+
+The same commit files RUN 8's verdict itself into the record.
+
+## Does it do what you wanted?
+
+Yes, and it clears the bar it set for itself. The instruction was to record a cost; what landed
+records the cost, its provenance, its cause, its alternative, and its deferred fix.
+
+Two things deserve credit because they are the parts people usually skip:
+
+- The numbers were **re-measured rather than transcribed**, and when the two measurements disagreed
+  slightly (51→145 vs 52→147) the ADR **shows both** instead of quietly picking one. My own third
+  measurement agrees with both. That is what an honest number in an audit trail looks like.
+- RUN 8's verdict was **not re-keyed** to the new SHA to make it look current. Re-keying would have
+  been a one-character lie that no one would ever have caught.
+
+**On the "accepted, not dismissed" framing — I checked whether it is rationalising a regression, and
+it is not.** A rationalisation buries the number, quotes the flattering unit, omits the alternative,
+or calls the cost unavoidable. This bullet does the opposite on all four counts: the multiplier is in
+the bold heading, the cost is restated in the unit a human actually feels (+30 s per 300-call
+session), the alternative is named along with what it would cost (reopening a defect that blocked
+every Bash command machine-wide), and the relief is explicitly deferred *with a reason*. The claimed
+alternative harm is also verifiable rather than hypothetical — it is documented with a reproduction
+higher in the same file. If anything the stated "~2.8×" is at the pessimistic end of what I measured
+(I get 2.6×), which errs *against* the author's own interest. That is the right direction to err.
+
+## What could go wrong / what I'm unsure about
+
+**1. A broken cross-reference inside the new bullet (new, minor, confirmed).** It says `-I` "retired
+the `sys.path`-shadowing defect **two bullets up**". It is **four** bullets up (line 342). Two bullets
+up (line 358) is the unrelated one about the chained-command gap in `git-guard.sh` and
+`merge-guard.sh`. I verified the list is continuous with no intervening heading, so no alternative
+reading rescues it. Trivial to fix, but it is a dead pointer in the one commit whose stated purpose
+was making this reasoning findable six months from now.
+
+**2. The ADR pins "line 66" into a permanent record (new, minor).** Accurate today — line 66 really is
+the `-I` probe. But `judge-guard.sh` will keep changing and this number will silently become wrong,
+pointing confidently at whatever else lands there. Every other citation in this ADR refers to
+behaviour or symbol, not line number, so this is also inconsistent with its own house style.
+
+**3. A garbled sentence (new, cosmetic).** "A slower hook is a worse day than a hook that wedges the
+machine is a worse day still" is a mangled comparative. The intended meaning is clear but this is
+permanent prose.
+
+**4. The verdict-commit recursion — the one structural thing RUN 8 did not cover (new).** The gate
+requires a verdict whose `head_sha` equals current HEAD. Committing a verdict *changes* HEAD, which
+invalidates the verdict just written. That is precisely why this commit staleened RUN 8 and summoned
+RUN 9 — and if RUN 9's verdict is likewise committed here, it will staleen itself in exactly the same
+way. This is a genuine self-invalidating loop, not a one-off. Note that the decision to append the
+real verdict line to the primary store solves the *path* mismatch but **not** this recursion: an
+appended line is only truthful if it is keyed to the SHA that is actually the branch tip at the moment
+`gh pr create` runs. Worth an ADR line eventually — a docs-only delta arguably ought to be
+verdict-preserving.
+
+**Carried forward from RUN 8, unchanged, not re-litigated:** the ~2.6–2.8× per-call latency (real and
+shipping, but now documented, which is what RUN 8 asked for); the first-arming bootstrap risk
+(`~/.claude/hooks/lib/` absent); the Python-2-only hunch (still untested, no Python 2 available);
+and that this PR cannot pass its own gate. On that last one I withdraw RUN 8's `JUDGE_EXEMPT`
+recommendation — the user had already ruled against it, and the diagnosis is better than mine was:
+the installed hook reads a fixed absolute path, so this is a *path* mismatch wearing a *freshness*
+message.
+
+## What I'd double-check before merging
+
+1. **Fix the "two bullets up" → "four bullets up" pointer**, and consider replacing "line 66" with a
+   reference to the `PY_ISOLATED` probe. Both are one touch, in the same 15 lines, and this is the
+   last moment they are cheap.
+2. **Key the primary-store verdict line to the actual tip.** Before `gh pr create`, confirm the
+   `head_sha` on the appended line equals `git rev-parse HEAD`. If any further commit lands on this
+   branch afterwards, that line becomes false and must be re-appended, not edited.
+3. **Immediately after the primary checkout pulls this**, re-run RUN 8's arming check — it is still
+   the highest-consequence moment in the whole branch:
+   `printf '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"}}' | bash ~/.claude/hooks/judge-guard.sh; echo $?`
+   → must be `0`, and `~/.claude/hooks/lib/classify-pr-command.py` must exist.
+
+---
+
+## Dimensions (RUN 9)
+
+| dimension | verdict | why |
+|---|---|---|
+| intent | pass | The ask was to record the latency cost in ADR 0012. It is recorded, with more rigour than requested: independent re-measurement, both number sets shown, cause split into two separately-measured components. |
+| execution | pass | 101/0 run by me at this HEAD; delta is provably docs-only (both hook blobs byte-identical); appended JSONL is valid and correctly schema'd. |
+| trajectory | pass | Re-measuring instead of transcribing, publishing the disagreement between the two measurements, and refusing to re-key RUN 8's verdict to a fresher SHA are all deliberate integrity choices, not luck. |
+| regression | concern | Carried forward, deliberately not cleared: this delta breaks nothing (zero executable change), but the branch still ships a ~2.6–2.8× per-Bash-call latency increase. Documenting a cost reduces its severity; it does not erase it. |
+| context_budget | pass | No rule, skill, or prompt file touched. ADR grows 15 lines and loads on demand only. |
+| traceability | concern | The one dimension this commit lands on and partly misses: a dead cross-reference ("two bullets up" → actually four) and a line number pinned into a permanent record, both inside the bullet whose purpose is future findability. Minor and one-touch, but scored where it belongs. |
+| success_masking | pass | Green verified rather than trusted — I ran the suite myself, and blob-identity means RUN 8's mutation evidence applies to exactly this code. No unbounded or expensive loop introduced. |
+| intent_drift | pass | Scope is exactly the ADR bullet plus the verdict files it was meant to land. No drive-by edits, no new dependencies. |
+| checkpoint | pass | Single-purpose docs-only commit; a clean revert point that cannot take behaviour with it. |
+| audit_trail | pass | Provenance credited to the external critic that found it, both measurement sets preserved, deferral reasoned rather than asserted, prior verdict left honestly stale. The pointer error is charged to traceability, not double-counted here. |
+
+**risk:** low  **confidence:** high
+
+### Concerns (short form)
+
+- ADR cross-reference is wrong: "two bullets up" points at the chained-command-gap bullet; the `sys.path`-shadowing bullet it means is four up.
+- ADR pins "line 66" into a permanent record — accurate now, goes stale on the next edit to `judge-guard.sh`; inconsistent with the ADR's own behaviour-based citation style.
+- Garbled comparative sentence in the new bullet ("is a worse day than ... is a worse day still").
+- Verdict-commit recursion: committing a verdict moves HEAD and invalidates the verdict just written; the primary-store line is only truthful if keyed to the actual tip at `gh pr create` time.
+- Carried forward from RUN 8: ~2.6–2.8× per-Bash-call latency (now documented); first-arming bootstrap (`~/.claude/hooks/lib/` absent); Python-2-only machines untested.

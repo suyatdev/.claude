@@ -366,15 +366,18 @@ segment's command position — including a commit message whose quoted body span
 - **Isolation costs ~2.8× on every Bash call: 52 ms → 147 ms.** Written down because it is a *global*
   cost paid by every command on the machine, not just by `gh pr create`, and a cost that is only
   visible with a stopwatch is one nobody will attribute to this hook six months from now. Found by
-  observability-judge RUN 8 and re-measured independently before being recorded (judge: 51 → 145;
-  re-measure: 52 → 147; 20–30 calls per arm). Two causes, measured separately rather than inferred:
-  the `-I` probe at line 66 is an **extra Python process on every call** (`python3 -I -c ''`, ~30 ms),
-  and `-I` roughly **doubles interpreter startup** here (`python3 -c pass` 15.4 ms → 29.8 ms; the
+  observability-judge RUN 8 and re-measured independently before being recorded — three measurements,
+  all reported rather than the flattering one picked: **51 → 145** (RUN 8), **52 → 147** (re-measure),
+  **52.6 → 138** (RUN 9). 20–30 calls per arm. The headline ~2.8× is the pessimistic end of that
+  spread, which is the right direction to err about your own change. Two causes, measured separately
+  rather than inferred: the `PY_ISOLATED` probe — the one-off `"$py" "$PY_ISOLATED" -c ''` that tests
+  whether this interpreter accepts `-I` — is an **extra Python process on every call** (~30 ms), and
+  `-I` roughly **doubles interpreter startup** here (`python3 -c pass` 15.4 ms → 29.8 ms; the
   classifier 21.0 ms → 48.6 ms). At roughly 300 Bash calls in a session that is about +30 seconds.
   **Accepted, not dismissed.** The alternative is giving up `-I`, and `-I` is what retired the
-  `sys.path`-shadowing defect two bullets up — a defect that blocked *every* Bash command machine-wide.
-  A slower hook is a worse day than a hook that wedges the machine is a worse day still; correctness
-  wins. The obvious relief is deferred rather than taken here: the probe asks "does this interpreter
-  accept `-I`", whose answer is **machine-static**, so it can be cached and the extra process dropped.
+  `sys.path`-shadowing defect — the RETIRED 2026-07-31 bullet above — a defect that blocked *every*
+  Bash command machine-wide. Weigh the two failures against each other: a slower hook costs seconds a
+  session, a wedged machine costs the session. Correctness wins. The obvious relief is deferred rather
+  than taken here: the probe's answer is **machine-static**, so it can be cached and the process dropped.
   Not done in this change because it introduces a cache-invalidation question (interpreter upgrades)
   that deserves its own decision, and this branch was already closing a fail-open.
