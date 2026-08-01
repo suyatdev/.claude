@@ -1545,7 +1545,9 @@ how this file and its linked files should be written (plain language, major chan
 2. **compliance-judge — the predicted collision HAPPENED (2026-08-01, branch
    `docs/reconcile-judge-verdict-stores`).** "Revisit if cross-repo spec slugs ever collide" is
    now overtaken by events: the global store **forked in both directions**. **26 verdict lines
-   across 24 distinct `head_sha`** (two SHAs carry a second round) from
+   across 24 distinct `head_sha`** — measured: 23 SHAs carry one round each and **one SHA
+   (`6d8c675`) carries three**. (An earlier note here said "two SHAs carry a second round". That
+   was narrated, not measured, and was wrong in both numbers.) From
    `mtg-wizard`/`vibe-scape`/`Snatch-Bracket`/`.claude` (07-23→07-28) lived only in the working
    tree, uncommitted across two session clears; `main` held 2 the tree lacked. Neither side was a
    superset, so any checkout would have silently dropped one. Union-merged **13 → 39 lines**
@@ -1558,12 +1560,16 @@ how this file and its linked files should be written (plain language, major chan
    - **No re-fork guard.** Nothing checks parse/ordering/no-loss on the store, and "always union"
      lives in this index rather than in `coding-memory/compliance-judge/README.md` (which does not
      exist). Obs judge raised it; writing it is its own task, not a rider here.
-   - **19 absolute `/Users/marksuyat` paths** ride in on the rescued verdicts, against
-     core-conduct's no-absolute-paths rule. **Pre-existing pattern, not introduced here** —
-     `origin/main` already carries 49, incl. 5 in this same store. Left as-is on purpose: these are
-     historical audit records where the path was the judge's real cwd, and rewriting them would
-     falsify the record to satisfy a rule aimed at code and config. Root cause is the judge writing
-     absolute cwd into the verdict; fix it there, going forward, not by editing history.
+   - **Absolute `/Users/marksuyat` paths**, against core-conduct's no-absolute-paths rule.
+     **18 ride in on the rescued compliance records** — that is the stable number and the one the
+     argument is about. Left as-is on purpose: they are historical audit records where the path was
+     the judge's real cwd, and rewriting them would falsify the record to satisfy a rule aimed at
+     code and config. Largely pre-existing — `origin/main` already carries 49, incl. 5 in this same
+     store. **But "not introduced here" understates it:** the branch's own machinery adds a few
+     more, mostly the judge writing its own cwd, and *this very bullet is one of them* — which is
+     why no total is pinned here. A count that its own sentence changes is a count that will be
+     wrong by the next commit. Root cause: the judge writes absolute cwd into the verdict. Fix it
+     there, going forward — not by editing history, and **not yet owned by anyone.**
 2b. **Obs-judge calibration: verdict-commit recursion ruled (DECIDED 2026-08-01, user).** The 07-22
    policy read literally demotes *every* final round to `rework`, because the last commits before
    any merge are the verdict-landing commits themselves — which makes `clean` a value the policy
@@ -1580,6 +1586,16 @@ how this file and its linked files should be written (plain language, major chan
    Nulls **32 → 22** (the older "17 nulls" was stale; corrected in place at item 6).
    The 22 remaining need per-branch history reads; **architecting-stage entries still have no
    sub-policy** — no merge event means "shipped clean" has no meaning for them yet.
+   **Two limits on this ruling, both open:**
+   - **The ~34 pre-narrowing `clean` values were NOT re-audited.** They were set under the wide
+     reading and now sit unmarked beside post-narrowing `rework`s, so the aggregate reads more
+     calibrated than it is. Anyone computing a clean/rework ratio across the whole store is mixing
+     two policies.
+   - **Pointer-only fixes have no tie-break.** "Mechanical landing" vs "substantive fix" is crisp
+     at the extremes; a round that catches only a stale cross-reference is arguable either way.
+     The obs judge proposes defaulting to `rework` (matching the 07-22 rationale). **Left open on
+     purpose — this is the user's policy to extend, and amending it unilaterally is exactly the
+     defect that produced this item.**
 3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
@@ -1606,7 +1622,9 @@ how this file and its linked files should be written (plain language, major chan
    merged PR is clean" precisely because that would make the calibration history show the judge
    never prompting rework, which is false and useless for tuning it. Applied to pane-layout-v2:
    e12dc06 → `rework`, ec03621 → `clean`.
-   **22 nulls remain** — re-measured from the store 2026-08-01 (70 lines, 22 null, 0 malformed);
+   **22 nulls remain** — re-measured from the store **at `8143f29`** (70 lines, 22 null, 0
+   malformed). *Anchored to a SHA, not a date: the store grows, so a dated count is stale on
+   arrival — it was already stale in the commit that wrote it.*
    the figure here previously read "17" and its enumeration was two branches out of date. Still
    resolvable under that policy but NOT bulk-applied — each needs its per-branch history read to
    identify which round was final: statusline-command ×6, statusline-token-bar ×4,
