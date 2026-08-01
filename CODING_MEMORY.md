@@ -512,13 +512,42 @@ how this file and its linked files should be written (plain language, major chan
     `plugins/.../security-guidance/hooks/security_reminder_hook.py:1028`, and
     `code.claude.com/docs/en/hooks-reference` **404s**, so it could not be confirmed upstream. Labelled
     rather than absorbed, because the rejected option above turns on exactly this fact.
-  - **PROPOSED AND UNCHALLENGED, still to be ratified at the spec review gate** — stated to the user in
-    the same message as the decision above, but not themselves the question that was answered, so they
-    are not yet user rulings: marker store lives in `hooks/state/`; **strict 1:1 sibling** coverage
-    (`X.test.sh` certifies `X.sh` and nothing else — no declared coverage map, because a coverage map is
-    a second source of truth that can rot); `memsearch/tests/test_*.py`'s non-sibling layout is **out of
-    scope for v1** and documented as such (under the sibling rule it simply never fires, which is
-    under-coverage and never a false block).
+  - **ALL RATIFIED BY THE USER 2026-08-01** (was "proposed and unchallenged" — updated rather than left
+    standing, since a stale claim in an audit trail reads as settled): marker store in `hooks/state/`,
+    resolved from `git rev-parse --show-toplevel` and **never `$HOME`** · **strict 1:1 sibling** coverage,
+    **no declared coverage map** (a second source of truth that can rot) · `memsearch/tests/test_*.py`
+    **out of scope for v1 but explicitly NOT forgotten** — the user asked for a follow-up plan · **both
+    holes closed in v1**: the marker records the **test file's hash as well as the subject's** (so a test
+    version that was never run cannot ship), and **`git commit -a` gets its own branch** (it commits the
+    **worktree**, but a PreToolUse hook reading the index sees a stale value).
+  - **TWO USER PROPOSALS, both withdrawn on my feedback 2026-08-01 — the reasoning matters more than the
+    outcome, so it is recorded rather than just the "no".**
+    · **A repo-wide session lock.** The user attributed past bugs partly to running concurrent sessions.
+      **That diagnosis is mostly wrong and I said so:** the fail-open hook bugs were single-session logic
+      errors, and the `$HOME`-vs-project bug was path resolution surfaced by *worktrees*, not a race.
+      Concurrency has genuinely bitten only two places — `CODING_MEMORY.md` conflicts and the shared
+      index (hence the standing `-- <path>` rule). Decisive objection: **a lock deadlocks the repo when a
+      session dies**, and stale-lock detection would rest on liveness signals this repo has already
+      measured as unreliable (`ps | grep run-pane-agent` cannot see a live pane agent). Accepted
+      alternative: **worktree-per-session is the structural fix** (separate index + working tree); at most
+      a **warn-only** session-start notice. PARKED, its own feature, never bundled here.
+    · **Mutual test certification** (A certifies B + code, B certifies A, nothing self-certifies). The
+      instinct — the thing checked should not author its own certificate — is sound, but the mechanism
+      cannot deliver it: **a hash can only say a test *changed*, never that it got *weaker***. The
+      reframe that dissolved it: **the marker is a receipt, not a grade.** It records what contents were
+      present when a run reported zero failures; it does not vouch for quality, so a receipt naming
+      itself is no conflict of interest. The real abuse is already closed by the both-hashes rule.
+      Replacement parked: **mutation-test the hook suites** — the genuine "who tests the tests" control,
+      already proven in this repo (a planted mutant survived a happy 101/0 suite).
+  - **SPEC WRITTEN AND PUSHED `75f1ade` — `docs/features/verification-marker-gate.md`** (frontmatter +
+    spec + 14-task checklist, `phase: planning`, `branch: none`). Mermaid block passes
+    `validate-diagrams.sh`; pair count re-measured (9 shell + 1 python = the 10 suites task 8 names).
+    Self-review found and fixed one ambiguity: a pair whose **test file is deleted while the subject is
+    modified** resolves to ABSENT and blocks — implied by the resolver, but not stated until now.
+    Versions pinned from measurement: bash **3.2.57** (macOS system bash — no associative arrays, no
+    `mapfile`), Python **3.9.6**, git **2.50.1**.
+    **NEXT: compliance judge + obs judge (architecting stage), then the user review gate.** A failing or
+    missing compliance verdict blocks `superpowers:writing-plans`.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
