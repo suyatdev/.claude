@@ -1591,11 +1591,14 @@ how this file and its linked files should be written (plain language, major chan
      reading and now sit unmarked beside post-narrowing `rework`s, so the aggregate reads more
      calibrated than it is. Anyone computing a clean/rework ratio across the whole store is mixing
      two policies.
-   - **Pointer-only fixes have no tie-break.** "Mechanical landing" vs "substantive fix" is crisp
-     at the extremes; a round that catches only a stale cross-reference is arguable either way.
-     The obs judge proposes defaulting to `rework` (matching the 07-22 rationale). **Left open on
-     purpose — this is the user's policy to extend, and amending it unilaterally is exactly the
-     defect that produced this item.**
+   - **Pointer-only tie-break: DECIDED 2026-08-01 (user) — default to `rework`.** "Mechanical
+     landing" vs "substantive fix" is crisp at the extremes, but a round catching only a stale
+     cross-reference or a typo is arguable either way. Ruled `rework`, matching the 07-22
+     rationale: a ledger that under-reports the judge prompting changes is "false and useless for
+     tuning it", and erring toward the judge looking *worse* is the safe direction for a metric the
+     judge scores itself on. **Changes no existing data** — the default can only push toward
+     `rework`, and all ten PR #33 entries already sit there. Bites on the next round that lands a
+     pointer-only fix.
 3. **memsearch debt (recorded, not blocking; ledger `.superpowers/sdd/progress.md` has detail):**
    `index` exits 0 even when errors>0 (fix before wiring automation to exit codes); validate
    `ollama_url` is loopback; busy_timeout PRAGMA; fail-fast on Ollama-down backfill; `--since`
