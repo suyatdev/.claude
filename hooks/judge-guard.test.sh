@@ -510,8 +510,10 @@ run_in_poisoned "stray json.py: ordinary command unaffected"  0 "git status"
 run_in_poisoned "stray json.py: fresh verdict still passes"    0 "gh pr create --fill"
 rm -f "$VFILE"
 run_in_poisoned "stray json.py: missing verdict still blocks"  2 "gh pr create --fill"
-# The classifier is invoked as a script file, so its own directory heads sys.path rather than the
-# caller's — but PYTHON* still reaches it, so it is pinned from here too.
+# The classifier is invoked as a script file. Its own directory heads sys.path only WITHOUT `-I`;
+# measured under `-I` on 3.9.6, that directory is absent from sys.path entirely and a sibling import
+# raises ImportError. Either way PYTHON* is what these two pin, and the classifier imports nothing
+# local — which `-I` now makes a requirement rather than a coincidence.
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_in_poisoned "PYTHONIOENCODING=ascii: em-dash command passes" 0 "git commit -m 'a — b'" PYTHONIOENCODING=ascii
 run_in_poisoned "PYTHONPATH poisoned: ordinary command passes"   0 "git status" PYTHONPATH="$poison"

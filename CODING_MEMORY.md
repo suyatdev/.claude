@@ -380,11 +380,27 @@ how this file and its linked files should be written (plain language, major chan
   first, so the comment would tell the next editor a sibling import is safe. It is not.
   And `:171-172` claims `$(...)` substitution "is caught" — true unquoted, **false** for the quoted
   `PR="$(gh pr create)"` that ADR 0012 itself lists as accepted-open. **Fourth round of this class.**
+  · **C2 IS DONE — both claims re-measured BEFORE editing, per the standing rule, and both were
+  genuinely false.** (1) `sys.path`: measured on **Python 3.9.6**, under `-I` the script's own
+  directory is **absent from `sys.path` entirely** and a sibling import raises `ImportError` — the
+  old comment described the *non*-`-I` arrangement, so it would have told the next editor a local
+  import beside the classifier was safe. Corrected at `judge-guard.sh:55-57` and at the suite's copy
+  (now `:513-516`, not `:462-463` — C1 moved it). The correction also **strengthens** the rule: `-I`
+  means the classifier must stay stdlib-only, and since the pre-3.4 fallback can clear `-I`, neither
+  arrangement may be relied on. (2) Command substitution, measured against the classifier: unquoted
+  is caught (`$(gh pr create)`, `echo $(...)`, `PR=$(...)` → **PR**), quoted is **not**
+  (`PR="$(gh pr create)"`, `echo "$(...)"` → **NO**), backticks are not. The comment claimed
+  substitution was caught outright. Fixed at `judge-guard.sh:171-181`, which now names the quoted
+  form as a genuine accepted-open gap rather than a lexing subtlety.
+  · **The false claim was localised — I checked before assuming.** ADR `0012:278` and the classifier
+  unit tests (`classify-pr-command.test.py:39,81`) already stated both shapes correctly; only the one
+  hook comment was wrong. Comments-only change: suite **101/0**, classifier 51/0, shellcheck codes
+  identical before and after (3 SC2016 + 2 SC2181, all pre-existing).
   · **C3 — a committed verdict file is BINARY.** `...round6.md` carries a raw NUL at **offset 6360**
   (verified): a judge typed a literal NUL while *describing* the NUL finding. Git marks the file
   binary, so it will not render as a diff in the PR. Third instance of the raw-control-byte mistake
   on this branch — mine in the test draft, mine in a probe script, and this one.
-  · **NEXT: C2 → C3, then RUN 8, then the PR** (C1 landed, see above). RUN 7's verdict is committed below, which moves
+  · **NEXT: C3, then RUN 8, then the PR** (C1 and C2 landed, see above). RUN 7's verdict is committed below, which moves
   HEAD and staleens it — unavoidable, since C1–C3 move HEAD anyway. RUN 8 is required regardless.
   · **superseded pointer — fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (blocks for
   reason — append the genuine verdict to the primary store, see line 137's branch block).

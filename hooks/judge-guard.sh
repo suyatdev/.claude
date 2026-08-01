@@ -52,9 +52,13 @@ fi
 # project, a scratch dir, anywhere you happen to be standing — shadowed the stdlib module the parser
 # imports and failed this hook closed on EVERY Bash command on the machine, blaming a payload where
 # nothing was wrong. `-I` drops that directory and ignores PYTHON* in one token, which retires the
-# PYTHONIOENCODING trigger at the same time. The classifier takes it too: it is a script file, so
-# its own directory heads sys.path rather than the caller's, but PYTHON* still reaches it, and it
-# imports nothing local for `-I` to hide.
+# PYTHONIOENCODING trigger at the same time. The classifier takes it too, and for a STRONGER reason
+# than this comment used to give: it said the classifier's own directory heads sys.path, which is
+# what happens WITHOUT `-I` and not with it. Measured on 3.9.6 — under `-I` the script's directory is
+# not on sys.path at all, and a sibling import raises ImportError. So `-I` here is not only about
+# PYTHON*: it means the classifier must stay self-contained, importing nothing but the stdlib. Do not
+# add a local import next to it on the strength of the old comment; the fallback below can also clear
+# `-I` on a pre-3.4 interpreter, so neither arrangement may be relied on.
 PY_ISOLATED="-I"
 # `-I` arrived in Python 3.4. Older interpreters would reject the flag and fail this hook closed
 # machine-wide, so it is dropped rather than assumed — the shadowing is a bad day, refusing to run
@@ -169,7 +173,12 @@ esac
 # command just as `;` does), and EACH segment is tested: a chained or multi-line
 # `git push && gh pr create` is guarded exactly like a bare invocation.
 # (That chained form used to be an accepted gap; it is what let a PR ship unjudged, so it is now
-# caught. A `$(...)`-substituted `gh pr create` is likewise caught, since it too really runs.)
+# caught. Command substitution is caught only while UNQUOTED — measured: `$(gh pr create)`,
+# `echo $(gh pr create)` and `PR=$(gh pr create)` all classify as PR, while `PR="$(gh pr create)"`
+# and `echo "$(gh pr create)"` do not, because quoting collapses them into a single token that never
+# sits at a segment's command position. The quoted form really does run the command, so this is a
+# genuine gap, not a subtlety of lexing -- it is one of the shapes ADR 0012 lists as accepted-open,
+# alongside backticks. An earlier revision of this comment claimed substitution was caught outright.)
 # Quoted text survives as a single token, so `gh pr create` inside a commit message or an echo
 # argument can never sit at a segment's command position and is still ignored.
 #
