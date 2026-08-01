@@ -39,14 +39,53 @@ line() { # emit a verdict line with given stage/repo/branch/sha
   python3 -c 'import json,sys; print(json.dumps({"stage":sys.argv[1],"repo":sys.argv[2],"branch":sys.argv[3],"head_sha":sys.argv[4]}))' "$@"
 }
 
+# The same argument the quoted-JUDGE_EXEMPT case makes about exit 0, made about exit 2 — and it bites
+# harder here, because THREE doors exit 2: a payload that never parsed, a Bash call carrying nothing
+# runnable, and the internal-error assert. A test that checks only the number passes when the block
+# came from the wrong one, so it cannot fail for the reason it was written to catch. That is not
+# hypothetical: the first draft of the control-character cases below wrote RAW control bytes into the
+# JSON, which is illegal inside a JSON string, and every one of them was green off a PARSE error while
+# the fail-open they existed to pin stayed wide open. Blocking is not the assertion — blocking
+# BECAUSE THE HOOK READ THE COMMAND AND JUDGED IT is, and only the message says which happened.
+run_payload_msg() { # $1 desc, $2 want-exit, $3 substring the message must contain, $4 raw payload
+  local desc="$1" want="$2" want_msg="$3" raw="$4" out got
+  # `2>&1 >/dev/null` in this order captures stderr ONLY: stderr goes to the substitution, then
+  # stdout is discarded. Reversing the two would capture stdout and let the message escape.
+  out=$(printf '%s' "$raw" | bash "$HOOK" 2>&1 >/dev/null)
+  got=$?
+  if [ "$got" -eq "$want" ] && printf '%s' "$out" | grep -q -- "$want_msg"; then
+    printf 'ok   — %s (exit %s, "%s")\n' "$desc" "$got" "$want_msg"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (want exit %s + "%s", got exit %s: %s)\n' "$desc" "$want" "$want_msg" "$got" "$out"
+    fail=$((fail+1))
+  fi
+}
+# The three messages the doors below are told apart by. Named so a reworded message is one edit here
+# and a visibly wrong door in the output, rather than twenty silent passes.
+MSG_UNREADABLE='could not read the PreToolUse payload'
+MSG_NOTHING_RUNNABLE='no runnable command'
+MSG_NO_STORE='no verdict store at'
+MSG_NO_FRESH='no fresh observability-judge verdict'
+
+# Exit 2 says a command was blocked; it does not say the guard ever READ it. Every case below that
+# expects a block expects it from the VERDICT gate specifically, which is downstream of parsing and
+# classification -- so reaching that gate is itself the proof the command was lexed and recognised as
+# a PR creation. Measured, not assumed: with the classifier emptied, all 28 of these stayed green
+# while nothing was being classified at all.
+run_case_msg() { # $1 desc, $2 want-exit, $3 substring the message must contain, $4 command
+  local desc="$1" want="$2" want_msg="$3" cmd="$4" payload
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  run_payload_msg "$desc" "$want" "$want_msg" "$payload"
+}
+
 : > "$VFILE";                                   run_case "non-gh command passes"            0 "git status"
-rm -f "$VFILE";                                 run_case "gh pr create, no verdicts -> block" 2 "gh pr create --fill"
+rm -f "$VFILE";                                 run_case_msg "gh pr create, no verdicts -> block" 2 "$MSG_NO_STORE" "gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"; run_case "fresh verdict -> pass"     0 "gh pr create --fill"
-line implementation "$REPO" "$BRANCH" deadbeef > "$VFILE"; run_case "stale sha -> block"       2 "gh pr create --fill"
-line implementation "$REPO" other "$SHA"      > "$VFILE"; run_case "wrong branch -> block"      2 "gh pr create --fill"
-line architecting  "$REPO" "$BRANCH" "$SHA"   > "$VFILE"; run_case "architecting stage -> block" 2 "gh pr create --fill"
+line implementation "$REPO" "$BRANCH" deadbeef > "$VFILE"; run_case_msg "stale sha -> block"   2 "$MSG_NO_FRESH" "gh pr create --fill"
+line implementation "$REPO" other "$SHA"      > "$VFILE"; run_case_msg "wrong branch -> block"  2 "$MSG_NO_FRESH" "gh pr create --fill"
+line architecting  "$REPO" "$BRANCH" "$SHA"   > "$VFILE"; run_case_msg "architecting stage -> block" 2 "$MSG_NO_FRESH" "gh pr create --fill"
 rm -f "$VFILE";                                 run_case "JUDGE_EXEMPT=<reason> -> pass"     0 "JUDGE_EXEMPT=hotfix gh pr create --fill"
-rm -f "$VFILE";                                 run_case "JUDGE_EXEMPT= (empty) -> block"    2 "JUDGE_EXEMPT= gh pr create --fill"
+rm -f "$VFILE";                                 run_case_msg "JUDGE_EXEMPT= (empty) -> block" 2 "$MSG_NO_STORE" "JUDGE_EXEMPT= gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"; run_case "gh pr list unaffected"     0 "gh pr list"
 
 # Regression: the phrase inside another command must NOT trigger the guard.
@@ -56,7 +95,7 @@ run_case "echo containing phrase -> ignore"       0 "echo gh pr create"
 
 # Regression (round 2): a quoted-space env prefix must NOT silently bypass the guard.
 rm -f "$VFILE"
-run_case "quoted-space env prefix, no verdict -> block" 2 'FOO="a b" gh pr create --fill'
+run_case_msg "quoted-space env prefix, no verdict -> block" 2 "$MSG_NO_STORE" 'FOO="a b" gh pr create --fill'
 run_case "quoted multi-word JUDGE_EXEMPT -> exempt pass" 0 'JUDGE_EXEMPT="skip, docs only" gh pr create --fill'
 # Exit code alone can't distinguish a silent bypass from a real exemption (both exit 0),
 # so assert the quoted JUDGE_EXEMPT path actually LOGS its exemption.
@@ -72,7 +111,7 @@ fi
 # Regression: RTK rewrites commands in this environment, so a leading `rtk ` wrapper is
 # stripped before classification — `rtk gh pr create` must be guarded like a bare invocation.
 rm -f "$VFILE"
-run_case "rtk-wrapped invocation, no verdict -> block"   2 "rtk gh pr create --fill"
+run_case_msg "rtk-wrapped invocation, no verdict -> block" 2 "$MSG_NO_STORE" "rtk gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_case "rtk-wrapped invocation, fresh verdict -> pass" 0 "rtk gh pr create --fill"
 
@@ -89,15 +128,27 @@ run_case_default() { # $1 desc, $2 want-exit, $3 command — runs with JUDGE_VER
   if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
   else printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); fi
 }
+run_case_default_msg() { # $1 desc, $2 want-exit, $3 message substring, $4 command
+  local desc="$1" want="$2" want_msg="$3" cmd="$4" payload out got
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")
+  out=$( unset JUDGE_VERDICTS_FILE; printf '%s' "$payload" | bash "$HOOK" 2>&1 >/dev/null )
+  got=$?
+  if [ "$got" -eq "$want" ] && printf '%s' "$out" | grep -q -- "$want_msg"; then
+    printf 'ok   — %s (exit %s, "%s")\n' "$desc" "$got" "$want_msg"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (want exit %s + "%s", got exit %s: %s)\n' "$desc" "$want" "$want_msg" "$got" "$out"
+    fail=$((fail+1))
+  fi
+}
 
 RVFILE="$TMP/coding-memory/observability-judge/verdicts.jsonl"
 mkdir -p "$(dirname "$RVFILE")"
 rm -f "$RVFILE"
-run_case_default "repo store absent -> block"              2 "gh pr create --fill"
+run_case_default_msg "repo store absent -> block"          2 "$MSG_NO_STORE" "gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA"   > "$RVFILE"
 run_case_default "fresh verdict in repo store -> pass"     0 "gh pr create --fill"
 line implementation "$REPO" "$BRANCH" deadbeef > "$RVFILE"
-run_case_default "stale sha in repo store -> block"        2 "gh pr create --fill"
+run_case_default_msg "stale sha in repo store -> block"    2 "$MSG_NO_FRESH" "gh pr create --fill"
 rm -f "$RVFILE"
 
 # Regression: a chained `gh pr create` must be GUARDED, not skipped. This inverts a previously
@@ -106,11 +157,11 @@ rm -f "$RVFILE"
 # The quoted-phrase cases above must keep passing — detection is per shell segment, not a
 # substring match, so `gh pr create` inside a commit message is still ignored.
 rm -f "$VFILE"
-run_case "chained && -> block"             2 "cd /tmp && gh pr create --fill"
-run_case "chained && no spaces -> block"   2 "git push&&gh pr create --fill"
-run_case "chained ; -> block"              2 "git push; gh pr create --fill"
-run_case "chained || -> block"             2 "git push || gh pr create --fill"
-run_case "piped | -> block"                2 "foo | gh pr create --fill"
+run_case_msg "chained && -> block"         2 "$MSG_NO_STORE" "cd /tmp && gh pr create --fill"
+run_case_msg "chained && no spaces -> block" 2 "$MSG_NO_STORE" "git push&&gh pr create --fill"
+run_case_msg "chained ; -> block"          2 "$MSG_NO_STORE" "git push; gh pr create --fill"
+run_case_msg "chained || -> block"         2 "$MSG_NO_STORE" "git push || gh pr create --fill"
+run_case_msg "piped | -> block"            2 "$MSG_NO_STORE" "foo | gh pr create --fill"
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_case "chained && with fresh verdict -> pass" 0 "git push && gh pr create --fill"
 rm -f "$VFILE"
@@ -121,9 +172,9 @@ run_case "chained && with JUDGE_EXEMPT on gh segment -> pass" 0 'git push && JUD
 # lexed into ONE segment and no command ever sat at a segment's position 0. Same defect class the
 # chained cases above close, and multi-line command strings are a routine shape, not an exotic one.
 rm -f "$VFILE"
-run_case "newline-separated -> block"           2 $'git push -u origin br\ngh pr create --fill'
-run_case "newline, blank line between -> block" 2 $'git push\n\ngh pr create --fill'
-run_case "newline after a && chain -> block"    2 $'cd /tmp && git push\ngh pr create --fill'
+run_case_msg "newline-separated -> block"       2 "$MSG_NO_STORE" $'git push -u origin br\ngh pr create --fill'
+run_case_msg "newline, blank line between -> block" 2 "$MSG_NO_STORE" $'git push\n\ngh pr create --fill'
+run_case_msg "newline after a && chain -> block" 2 "$MSG_NO_STORE" $'cd /tmp && git push\ngh pr create --fill'
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_case "newline-separated, fresh verdict -> pass" 0 $'git push\ngh pr create --fill'
 rm -f "$VFILE"
@@ -141,11 +192,11 @@ run_case "multi-line quoted commit msg -> ignore" 0 $'git commit -m "feat: guard
 #    this is the already-guarded `&&` chain wearing a different coat. Deleting the pair before the
 #    newline translation routes it back into that path rather than adding a new matcher.
 rm -f "$VFILE"
-run_case "backslash-newline continuation -> block"  2 $'git push -u origin br && \\\ngh pr create --fill'
-run_case "backslash-newline, plain -> block"        2 $'git push \\\n&& gh pr create --fill'
+run_case_msg "backslash-newline continuation -> block" 2 "$MSG_NO_STORE" $'git push -u origin br && \\\ngh pr create --fill'
+run_case_msg "backslash-newline, plain -> block"    2 "$MSG_NO_STORE" $'git push \\\n&& gh pr create --fill'
 # 2. `gh -R owner/repo pr create` is a valid, documented gh form; `pr` simply is not token 1.
-run_case "gh with global -R flag -> block"          2 "gh -R owner/repo pr create --fill"
-run_case "gh with --repo flag -> block"             2 "gh --repo owner/repo pr create --fill"
+run_case_msg "gh with global -R flag -> block"      2 "$MSG_NO_STORE" "gh -R owner/repo pr create --fill"
+run_case_msg "gh with --repo flag -> block"         2 "$MSG_NO_STORE" "gh --repo owner/repo pr create --fill"
 # 3. Backticks are legacy command substitution and really run. Translating them to `;` DID catch
 #    them, and was reverted: shlex cannot see heredocs, so the same translation made any heredoc
 #    body containing a backticked `gh pr create` fail CLOSED — and writing exactly that text is
@@ -157,10 +208,10 @@ run_case "backtick substitution -> ignore (known)"  0 'echo `gh pr create --fill
 run_case "heredoc w/ backticked phrase -> ignore"   0 $'cat <<EOF\nsee `gh pr create` docs\nEOF'
 # 4. Keyword/builtin prefixes sit at the command position and displace `gh`, exactly as the
 #    already-stripped `rtk` wrapper does.
-run_case "time prefix -> block"                     2 "time gh pr create --fill"
-run_case "eval prefix -> block"                     2 "eval gh pr create --fill"
-run_case "command prefix -> block"                  2 "command gh pr create --fill"
-run_case "stacked prefixes -> block"                2 "time rtk gh pr create --fill"
+run_case_msg "time prefix -> block"                 2 "$MSG_NO_STORE" "time gh pr create --fill"
+run_case_msg "eval prefix -> block"                 2 "$MSG_NO_STORE" "eval gh pr create --fill"
+run_case_msg "command prefix -> block"              2 "$MSG_NO_STORE" "command gh pr create --fill"
+run_case_msg "stacked prefixes -> block"            2 "$MSG_NO_STORE" "time rtk gh pr create --fill"
 # The fresh-verdict and exemption paths must still work through each new shape.
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_case "continuation, fresh verdict -> pass"      0 $'git push && \\\ngh pr create --fill'
@@ -181,9 +232,9 @@ run_case "pr create without gh -> ignore"           0 "mytool pr create --fill"
 # the command slot and the `;` then opens a fresh segment. Both are pinned here so the distinction
 # cannot be lost again.
 rm -f "$VFILE"
-run_case "brace group alone -> block"               2 "{ gh pr create --fill; }"
-run_case "brace group after a command -> block"     2 "{ git push; gh pr create --fill; }"
-run_case "subshell paren group -> block"            2 "( gh pr create --fill )"
+run_case_msg "brace group alone -> block"           2 "$MSG_NO_STORE" "{ gh pr create --fill; }"
+run_case_msg "brace group after a command -> block" 2 "$MSG_NO_STORE" "{ git push; gh pr create --fill; }"
+run_case_msg "subshell paren group -> block"        2 "$MSG_NO_STORE" "( gh pr create --fill )"
 
 # Regression: extracting the classifier to hooks/lib/ introduced a failure mode that could not
 # exist while it was an inline string — the file can be ABSENT (a partial checkout, or a hook
@@ -304,36 +355,36 @@ run_payload() { # $1 desc, $2 want-exit, $3 raw payload written to stdin verbati
   if [ "$got" -eq "$want" ]; then printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
   else printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); fi
 }
-run_payload "truncated JSON -> block"       2 '{"hook_event_name":"PreToolUse","tool_input":{"command":'
-run_payload "non-JSON payload -> block"     2 'not json at all'
+run_payload_msg "truncated JSON -> block"       2 "$MSG_UNREADABLE" '{"hook_event_name":"PreToolUse","tool_input":{"command":'
+run_payload_msg "non-JSON payload -> block"     2 "$MSG_UNREADABLE" 'not json at all'
 # Valid JSON of the wrong SHAPE: `.get` on a list raises AttributeError, so the parser dies with an
 # empty stdout — indistinguishable, under the old check, from a deliberate "nothing to guard".
-run_payload "JSON array payload -> block"   2 '[1, 2, 3]'
-run_payload "JSON scalar payload -> block"  2 '"just a string"'
+run_payload_msg "JSON array payload -> block"   2 "$MSG_UNREADABLE" '[1, 2, 3]'
+run_payload_msg "JSON scalar payload -> block"  2 "$MSG_UNREADABLE" '"just a string"'
 # A payload that SAYS it is Bash but carries nothing runnable. Under the live `Bash` matcher these
 # are the only way the four shapes below can arrive at all, and none of them is a call this hook can
 # verify — so each blocks. (The gate is only ever crossed by commands this session itself issues;
 # a Bash call with no command in it has no legitimate sender.)
-run_payload "Bash, no tool_input -> block"            2 '{"hook_event_name":"PreToolUse","tool_name":"Bash"}'
-run_payload "Bash, no command key -> block"           2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"file_path":"/tmp/x"}}'
-run_payload "Bash, empty command string -> block"     2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":""}}'
-run_payload "Bash, non-string command -> block"       2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}'
+run_payload_msg "Bash, no tool_input -> block"            2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash"}'
+run_payload_msg "Bash, no command key -> block"           2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"file_path":"/tmp/x"}}'
+run_payload_msg "Bash, empty command string -> block"     2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":""}}'
+run_payload_msg "Bash, non-string command -> block"       2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":42}}'
 # "Nothing runnable" was implemented as `.strip()`, which removes whitespace and NOTHING else — so a
 # command made only of CONTROL characters survived it, read as runnable, and was allowed. That is
 # the very fail-open the rule above exists to close, arriving through the back door: NBSP and VT
 # count as whitespace to python, but NUL, SOH and DEL do not. The asymmetry was invisible and
 # absurd — a lone NUL blocked, a NUL followed by two spaces passed.
-run_payload "Bash, NUL + spaces -> block"             2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000   "}}'
-run_payload "Bash, lone NUL -> block"                 2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000"}}'
-run_payload "Bash, SOH -> block"                      2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0001"}}'
-run_payload "Bash, SOH + spaces -> block"             2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0001  "}}'
-run_payload "Bash, DEL -> block"                      2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u007f"}}'
+run_payload_msg "Bash, NUL + spaces -> block"         2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000   "}}'
+run_payload_msg "Bash, lone NUL -> block"             2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000"}}'
+run_payload_msg "Bash, SOH -> block"                  2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0001"}}'
+run_payload_msg "Bash, SOH + spaces -> block"         2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0001  "}}'
+run_payload_msg "Bash, DEL -> block"                  2 "$MSG_NOTHING_RUNNABLE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u007f"}}'
 # ...and "runnable" must not narrow to ASCII in the process. A control character mixed WITH real
 # content is still a command — it has to stay readable, or the guard stops seeing commands it is
 # meant to classify. Non-ASCII text is ordinary, not suspicious: an em-dash commit message is the
 # shape that already triggered a machine-wide block once on this branch.
 rm -f "$VFILE"
-run_payload "NUL before a real gh pr create -> block"  2 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000gh pr create --fill"}}'
+run_payload_msg "NUL before a real gh pr create -> block" 2 "$MSG_NO_STORE" '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"\u0000gh pr create --fill"}}'
 line implementation "$REPO" "$BRANCH" "$SHA" > "$VFILE"
 run_payload "em-dash command still runnable"           0 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git commit -m \"a — b\""}}'
 run_payload "CJK command still runnable"               0 '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo 你好"}}'
@@ -342,8 +393,8 @@ run_payload "tab-separated command still runnable"     0 '{"hook_event_name":"Pr
 # A payload whose tool cannot be identified is not a call this hook may reason about — same fail-
 # closed reading as an unusable classifier. `tool_name` is a required PreToolUse field, so its
 # absence means the payload is malformed, not that the tool is uninteresting.
-run_payload "tool_name absent -> block"               2 '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/tmp/x"}}'
-run_payload "tool_name non-string -> block"           2 '{"hook_event_name":"PreToolUse","tool_name":42,"tool_input":{}}'
+run_payload_msg "tool_name absent -> block"           2 "$MSG_UNREADABLE" '{"hook_event_name":"PreToolUse","tool_input":{"file_path":"/tmp/x"}}'
+run_payload_msg "tool_name non-string -> block"       2 "$MSG_UNREADABLE" '{"hook_event_name":"PreToolUse","tool_name":42,"tool_input":{}}'
 
 # Named NON-Bash tools pass, and this is the part that must not regress: it is what keeps the fix
 # from taking the editor down if the hook is ever registered on `*`. These shapes cannot reach the
@@ -363,10 +414,10 @@ run_payload "Write passes (no command to guard)"      0 '{"hook_event_name":"Pre
 # The rule these pin: a runnable command is classified on its own merits, whatever the tool is
 # called; `tool_name` decides only what to do when there is NOTHING runnable to classify.
 rm -f "$VFILE"
-run_payload "Shell + gh pr create, no verdict -> block"      2 '{"hook_event_name":"PreToolUse","tool_name":"Shell","tool_input":{"command":"gh pr create --fill"}}'
-run_payload "lowercase bash + gh pr create -> block"         2 '{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"gh pr create --fill"}}'
-run_payload "BashOutput + gh pr create -> block"             2 '{"hook_event_name":"PreToolUse","tool_name":"BashOutput","tool_input":{"command":"gh pr create --fill"}}'
-run_payload "mcp shell tool + gh pr create -> block"         2 '{"hook_event_name":"PreToolUse","tool_name":"mcp__shell__exec","tool_input":{"command":"gh pr create --fill"}}'
+run_payload_msg "Shell + gh pr create, no verdict -> block"  2 "$MSG_NO_STORE" '{"hook_event_name":"PreToolUse","tool_name":"Shell","tool_input":{"command":"gh pr create --fill"}}'
+run_payload_msg "lowercase bash + gh pr create -> block"     2 "$MSG_NO_STORE" '{"hook_event_name":"PreToolUse","tool_name":"bash","tool_input":{"command":"gh pr create --fill"}}'
+run_payload_msg "BashOutput + gh pr create -> block"         2 "$MSG_NO_STORE" '{"hook_event_name":"PreToolUse","tool_name":"BashOutput","tool_input":{"command":"gh pr create --fill"}}'
+run_payload_msg "mcp shell tool + gh pr create -> block"     2 "$MSG_NO_STORE" '{"hook_event_name":"PreToolUse","tool_name":"mcp__shell__exec","tool_input":{"command":"gh pr create --fill"}}'
 # ...and the correction must not overshoot in either direction. A non-Bash tool carrying a command
 # that is not a PR creation is still none of this hook's business, and an editor payload with no
 # command must keep passing even with no verdict on file — otherwise the fix takes the editor down

@@ -352,6 +352,28 @@ how this file and its linked files should be written (plain language, major chan
   GREEN against the buggy hook** — it would have tested nothing. Two other mutations (removing the
   parser's status check; reverting the fail-closed assertion) also leave the suite at a happy 101/0.
   **Fix: assert the MESSAGE, not just the code** — this file already does that three times elsewhere.
+  · **C1 IS DONE — and the surface was four times bigger than the finding said.** The five
+  control-character tests were the *named* instance; enumerating by measurement rather than by
+  reading found **48** blocking assertions with the same defect. Both test families now assert the
+  MESSAGE alongside the code, via `run_payload_msg` / `run_case_msg` / `run_case_default_msg` and
+  three named constants (`MSG_UNREADABLE`, `MSG_NOTHING_RUNNABLE`, `MSG_NO_STORE`, `MSG_NO_FRESH`).
+  Suite stays **101/0** — no behaviour changed, this is test strength only, and `judge-guard.sh` was
+  not touched.
+  · **Proved by mutation, since "the tests are stronger now" is exactly the claim that needs
+  evidence.** Two mutants, each measured against the committed suite and then against the new one:
+  **M1** (reroute the no-runnable-command door from `SystemExit(4)` to `(3)`, so the block message
+  becomes the parse-error one while the exit code stays 2) — committed suite **101/0, the mutant
+  survives completely**; now **92/9**. **M2** (empty the classifier, so every command blocks at the
+  classifier-unusable door instead of being read and classified) — committed suite 66/35; now
+  **33/68**, i.e. **33 further tests** that claimed to test blocking were passing while nothing was
+  being classified at all. M1 is the finding's own defect, reproduced: a mutant no committed test
+  could see.
+  · **The wider lesson, and it generalises past this hook:** `exit 2` is not one door — a payload
+  that never parsed, a Bash call with nothing runnable, an internal-error assert, an unusable
+  classifier, and the verdict gate all exit 2. Asserting the number tests that *something* refused;
+  only the message tests *that the guard read the command and judged it*. The suite had already made
+  this exact argument about `exit 0` for the quoted-`JUDGE_EXEMPT` case since round 2 — the
+  reasoning was sitting in the file, applied to one case, for five rounds.
   · **C2 — two live comments overstate the code, both mine, both from this session.**
   `judge-guard.sh:55-57` (copied into the suite at `:462-463`) explains `sys.path` in a way that
   measures **false under `-I`**: isolated mode *drops* the script's directory rather than putting it
@@ -362,7 +384,7 @@ how this file and its linked files should be written (plain language, major chan
   (verified): a judge typed a literal NUL while *describing* the NUL finding. Git marks the file
   binary, so it will not render as a diff in the PR. Third instance of the raw-control-byte mistake
   on this branch — mine in the test draft, mine in a probe script, and this one.
-  · **NEXT: C1 → C2 → C3, then RUN 8, then the PR.** RUN 7's verdict is committed below, which moves
+  · **NEXT: C2 → C3, then RUN 8, then the PR** (C1 landed, see above). RUN 7's verdict is committed below, which moves
   HEAD and staleens it — unavoidable, since C1–C3 move HEAD anyway. RUN 8 is required regardless.
   · **superseded pointer — fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (blocks for
   reason — append the genuine verdict to the primary store, see line 137's branch block).
