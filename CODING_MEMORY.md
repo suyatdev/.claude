@@ -123,19 +123,338 @@ how this file and its linked files should be written (plain language, major chan
   to how a classifier crash behaves today. That equivalence is why this commit is a pure refactor.
   It should fail **closed** with the named path, matching the missing-python branch above it and
   this file's own single-source-of-truth stance. Write the red test FIRST.
-  · **STILL OWED: ADR 0012 Consequences + the PR body are STALE** — they list 5 verified bypasses,
-  but 4 of those were closed in `e79749a`. The accurate open set is now: quoted `"$(…)"`, backticks,
-  `eval "…"`, variable/alias indirection, and the wrapper denylist (`env`, `timeout`, loop keywords).
+  · ~~**STILL OWED: ADR 0012 Consequences are STALE**~~ — **THAT CLAIM WAS WRONG, corrected
+  2026-07-31.** ADR 0012 already recorded those four shapes as *closed* (with a before/after table),
+  and its "known open shapes" list was already accurate. The stale 5-bypass list lived only in my
+  session notes. Flagged rather than quietly dropped, because **a wrong claim left in an audit trail
+  reads as settled** — the same failure mode this branch already paid for once on `{ …; }`.
+  What *was* genuinely stale: the ADR's apostrophe bullet described the single-quoted shell string
+  the classifier no longer lives in. Fixed on the follow-up branch.
+
+- **PR #32 MERGED 2026-07-31** (`2b8564b`, 03:17Z). Merged main verified green in a throwaway
+  worktree — suite 52/0, hook + lib present, one shellcheck finding, **no ADR number collision**
+  (0007–0012 unique; the recorded post-merge check, run and clean). Branch + worktrees pruned.
+- **FOLLOW-UP BRANCH `fix/judge-guard-fail-closed-classifier`** (off `2b8564b`), all four carried
+  items done, **suite 57/0 + 48 classifier assertions**:
+  · `8df7d7a` **red** → `c4e14cf` **green**: a missing `hooks/lib/classify-pr-command.py` now fails
+  **CLOSED** naming the path. Measured before fixing: an absent classifier exited **0 with no
+  output** — the gate looked armed and silently passed every `gh pr create`, the exact defect this
+  work exists to remove. **Accepted cost, recorded in ADR 0012:** with no classifier nothing can
+  distinguish a PR command from any other, so *all* Bash commands block until the install is
+  repaired. Mirrors the missing-python branch beside it. A loud halt is recoverable in seconds; a
+  silently dead gate ships unjudged code indefinitely and is invisible by definition.
+  · `4ed68a6`: **48 classifier unit tests** — the payoff of extraction (`classify()` is importable,
+  so shapes are asserted directly instead of probed through the hook). Pins guarded shapes, the
+  load-bearing *ignored* shapes, and the **accepted-open** shapes, so closing one becomes a
+  conscious decision with a failing test rather than drift. `{ gh pr create; }` and
+  `{ git push; gh pr create; }` sit side by side, since conflating them caused the bad correction.
+  **The unit suite immediately caught a wrong assumption of mine** — I asserted
+  `JUDGE_EXEMPT=a⏎b gh pr create` was `PR`; the newline is a real separator so the second segment's
+  command is `b`, not `gh`. bash agrees: the classifier was right, the test was wrong.
+  · **Verdict `outcome` backfill — and a POLICY EDGE CASE worth your call.** All three rounds on
+  `fix/judge-guard-verdict-lookup` (`97752e6`, `88ccb59`, `772affe0`) set to **`rework`**: each
+  round's findings changed code. **No round ever judged the shipped HEAD** (`d6c38de`) — code landed
+  after RUN 3 and no RUN 4 ran before merge. So this branch yields **no `clean` row at all**, which
+  the recorded policy ("the final round that shipped is `clean`") does not anticipate. Recorded
+  honestly rather than force-fitting a `clean`; it is also true calibration signal — the judge
+  prompted rework every round and the merged state went unjudged.
   · **NOT exhaustive, and the count is NOT closed.** Open shapes, each measured:
   `PR_URL="$(gh pr create)"` (inside double quotes the substitution is ONE token — the same property
   that stops a commit message tripping the gate, so **quoting is both the FP protection and the FN
   mechanism**; closing it is an architecture tradeoff, user-owned); backticks; `eval "gh pr create"`;
   function/alias indirection; the wrapper list is a denylist missing `env`/`timeout`/loop keywords.
   Gate stays a momentum guardrail, not a security boundary.
-  · **Next:** obs judge **RUN 3** pinning the final HEAD → push → `gh pr ready` → merge via GitHub
-  UI → prune branch local+remote → post-merge tip-reachability check + outcome backfill.
-  (PR #32 is already open, so judge-guard no longer gates anything here — RUN 3 is for the audit
-  trail and to score the enlarged change.)
+  · `51765fb`: scoped ADR 0012's apostrophe-hazard claim to the classifier only (the genuinely stale
+  bullet identified above).
+  · **`df1918e` red → `ec1fa1c` green — the fail-closed fix ITSELF failed open, and this is the
+  correction.** Obs judge RUN 1 (`bd2621c`) found it; **independently reproduced before being
+  believed or written down.** `[ -f "$CLASSIFIER" ]` checks existence, not usability, so four
+  present-but-unusable installs still exited **0 in silence** on `gh pr create`: empty, syntax error,
+  truncated, unreadable (`chmod 000`). Control with an intact classifier blocked (exit 2), so this
+  was the fail-open path and not a test artifact. **The truncated shape is the sharp one** — the
+  partial-checkout story ADR 0012 cites as the *motivation* for the missing-file branch produces a
+  truncated file at least as readily as a missing one. Fix validates the classifier's **output**
+  (`kind` is only ever `PR`/`NO`), covering all six shapes, and is **smaller than what it replaced**.
+  Suite **62/0** (was 57/0 + 5 red), classifier unit **50/0** (+2 adjacency cases — mutation testing
+  showed the adjacency property, which is what separates the classifier from a substring match, was
+  pinned by nothing). **Recovery decision (user, 2026-07-31): no new bypass variable** — the block is
+  machine-wide, so the message names the only two routes that survive it (Write tool, or unregister
+  in `settings.json`). A `JUDGE_GUARD_REPAIR` escape was rejected: it bypasses a gate whose value is
+  being un-bypassable, and a `VAR=x` prefix cannot reach a hook handed the command as a *string*
+  anyway — same reason `JUDGE_VERDICTS_FILE` never cleared the gate.
+  · **`b095c0a` red → green — RUN 2's severity-1 item, same defect class a THIRD time.** Shape-only
+  validation still accepted a classifier that *answers and then dies*: prints a well-formed `NO`,
+  exits 1 or raises, `kind` holds a legal value, hook exits 0, gate silently disarmed. Unreachable
+  against today's classifier **only because it happens to print its answer last** — the classifier's
+  shape protecting the hook, not the hook protecting itself. Guard is now
+  `case "$classify_rc:$kind" in 0:PR|0:NO)`. Suite **64/0**, classifier unit **51/0**.
+  · **RUN 2's `endswith("EXEMPT")` item was a COVERAGE claim, not a live bypass — measured before
+  acting.** Source uses exact equality (`classify-pr-command.py:95`) and `MERGE_EXEMPT=x gh pr create`
+  classifies `PR` with an empty reason, i.e. blocked. Pinned by a new case anyway: a suffix match
+  would hand every `*_EXEMPT` var in the repo a judge bypass, and `MERGE_EXEMPT` is a real one.
+  · **KNOWINGLY DEFERRED on this branch, recorded in ADR 0012:** a **hanging** classifier blocks every
+  Bash command indefinitely and *silently* (needs a timeout — larger than remaining scope, and the
+  ADR's "loud, self-describing halt" promise does not cover it); and **first arming is untested** —
+  the installed hook at `~/.claude/hooks/` predates the extraction and has no `lib/`. Do one arming
+  check after merge: pipe a fake `gh pr create` payload into the installed hook, expect exit **2 with
+  a readable message** — not a silent 0, not a hang.
+  · **RUN 4 (`822f60f`, clean/converging) found a FOURTH fail-open — the PAYLOAD PARSER, a different
+  component from the classifier. MEASURED, not accepted on report.** Control (valid payload, no
+  verdict) blocks exit 2; **malformed JSON → 0, non-JSON → 0, broken parser (import error) → 0**, all
+  silent, gate disarmed. **Zero tests touch that path**, so 64 green ticks say nothing about it.
+  **The nuance the judge did not separate, and the fix hinges on it:** there IS a legitimate exit 0
+  in that block — valid JSON with no `command` field is not a Bash command and *should* pass. The
+  defect is that a genuine **parse failure is indistinguishable** from that legitimate case. Fix must
+  distinguish the two (sentinel + status check), not just block on empty output, or it will wrongly
+  block every non-Bash tool call. `judge-guard.sh:40-52`; note `except ValueError: sys.exit(0)` and
+  the `2>/dev/null`. The file header's promise — *"any inability to verify blocks"* — is currently
+  **false**, and RUN 4 flagged the overclaim as being in the header rather than in the ADR bullet.
+  · **User decision 2026-07-31: FIX IT on this branch** (red/green + RUN 5), not defer. Reasoning
+  recorded because it is not obvious: *documenting instead costs the SAME judge round*, since any
+  commit moves HEAD and the gate pins a verdict to an exact SHA — so "document only" buys nothing
+  over fixing, and would ship a measurably false header promise on the branch whose entire subject
+  is this gate failing open.
+  · **DONE 2026-07-31, TDD: `77bfbed` (6 red) → `2acad5e` (green). Suite 64/0 → 75/0**, classifier
+  unit 51/0, three neighbouring hook suites unaffected, `shellcheck -x` clean apart from the
+  pre-existing SC2181 (now line **201**, was 158 — it moves with every edit, stop quoting the number
+  as if it were stable). Red run measured **four** shapes, one more than RUN 4 reported: truncated
+  JSON, non-JSON text, valid JSON of the wrong *top-level shape* (`.get` on a list raises), and an
+  interpreter on `PATH` that fails — the last stubbed via a fake `python3`, so the real hook runs end
+  to end rather than a mutant of it.
+  **The fix is a sentinel, and the four control cases are the load-bearing part:** the parser prints
+  `OK` on line 1 once it has decided, command from line 2, guarded by
+  `case "$parse_rc:$parse_ok" in 0:OK)`. Status *and* shape — the **third** time on this branch a
+  check had to stop accepting the appearance of a working component. The controls pin the shapes that
+  must still PASS (no `tool_input`, no `command`, empty command, non-string command), because the
+  obvious fix — block on empty output — would have closed the hole and denied every Edit and Read in
+  the session with it.
+  **Header narrowed, ADR 0012 updated.** *"Any inability to verify blocks"* was a coverage guarantee
+  the hook has never made; it now scopes the promise to the machinery (missing python, unreadable
+  payload, unusable classifier, unreadable verdict store) and names the accepted exceptions. The ADR
+  also **withdraws the word "stable"** from its own justification for leaving the parser inline — the
+  parser had zero tests, and *untested* is not *stable*. Reasoning from "we never edit it" to "it is
+  correct" is how the one component nobody was looking at became the one that was broken.
+  **Next: obs judge RUN 5 at `2acad5e`, then the PR** — and the PR *will* block for a PATH reason,
+  not a freshness one; see the append-to-primary-store decision at line 137's branch block.
+  · **RUN 5 (`0169fa1`, risk=medium confidence=high, judged at `e4a6c10`): the fix HOLDS, its stated
+  REASON does not.** Judge re-measured pre-fix disarmed / post-fix blocking, 75/0 + 51/0, red replayed
+  as genuinely red, four-vs-three expansion ruled justified. But F1/F2 — **verified myself 2026-07-31,
+  it is real** — three sites I wrote (`hooks/judge-guard.sh` parser comment, `judge-guard.test.sh`
+  Group comment, ADR 0012) claim *"every Edit, Read and Write in the session reaches this hook."*
+  They do not. Enumerated **every** settings file: exactly ONE registration, `~/.claude/settings.json`,
+  PreToolUse, matcher **`Bash`**. Editor calls go to phase-guard. Not cosmetic — **the false premise
+  chose the behaviour**: the four control tests pin "pass" on the strength of traffic that never
+  arrives. Same overclaim class RUN 4 caught in the header, now inside the fix's own commentary.
+  · **USER DECISION 2026-07-31 — a Bash payload with no readable `command` must BLOCK.** Reasoning
+  given: "you would be the only one who makes these bash calls, so you should have a reason to create
+  a bash call, and not just empty ones." Chosen over an unconditional four-way block because it makes
+  the hook correct under *any* matcher — the hidden cross-file dependency on `settings.json` is
+  precisely what produced this defect, so the hook now reads the payload instead of trusting its
+  registration.
+  · **⚠ The FIRST implementation of that decision was a regression, caught by RUN 6 and fixed at
+  `f92e44a`.** It keyed the SKIP on `tool_name` and returned *before reading the command*, so a live
+  `gh pr create` under any name but `Bash` passed unexamined. **Corrected form: the command decides,
+  `tool_name` only settles what an ABSENT command means** — runnable command → classify it whatever
+  the tool is called; nothing runnable + `Bash` → block; nothing runnable + any other tool → pass.
+  The claim "correct under any matcher" only became true at `f92e44a`; before it, the hook was
+  *weaker* under a wider matcher than the version it replaced.
+  · **`tool_name` presence VERIFIED before relying on it, not assumed** — this is the same shape of
+  premise that just failed, so it got evidence: no hook on this machine reads `tool_name` (all key off
+  `tool_input.*`), so there was zero local ground truth. Official docs (code.claude.com/docs/en/hooks)
+  document it as a **required** PreToolUse field and the one matcher filtering itself uses. Blocking on
+  its absence is therefore safe. **Test-harness fidelity gap found:** `judge-guard.test.sh`'s
+  `run_case()` builds payloads WITHOUT `tool_name`, so ~70 existing tests would block under the new
+  rule — the harness, not the rule, is what is wrong; it must emit a realistic Bash payload.
+  · **DONE 2026-07-31, suite 81/0 + classifier 51/0, 3 neighbouring suites unaffected, no net-new
+  shellcheck.** Four commits: `99807d6` red (6 fails) → `686917a` harness fidelity → `685f2af` green
+  → `5e84a5d` docs. **Five** builders lacked `tool_name`, not one — `run_case`, `run_case_default`,
+  `run_case_at`, the JUDGE_EXEMPT probe, the stubbed-interpreter probe. Split from the green commit
+  and **measured** behaviour-neutral: against the unmodified hook the fully-updated harness fails
+  exactly the six red cases and nothing else. That harness gap is *why* the false premise survived
+  five rounds — no test could tell a Bash call from an editor call, so the tests agreed with the
+  premise by construction.
+  · **`[ -n "$command_line" ] || exit 0` was left unreachable by the fix and INVERTED, not deleted** —
+  a fail-closed assertion now. Deleting was the KISS answer; on a branch that has found four silent
+  allows, a broken invariant should surface as a block.
+  · **Two ADR items VERIFIED, not carried on trust.** (a) open shapes measured via stdin (the way the
+  hook feeds the classifier — my first probe used argv and got `NO` for *everything*, including bare
+  `gh pr create`; the interface is stdin): `sudo`/`xargs`/`env`/`timeout`/`/usr/bin/gh` → `NO`,
+  `rtk`/`command` → `PR`. (b) residual **9** confirmed by reading the `PYEOF` matcher: it compares
+  only stage/repo/branch/head_sha, so `risk=high`+`execution=fail` opens the gate exactly as a clean
+  verdict does. Residual **8** (`JUDGE_VERDICTS_FILE`) was already in the ADR — no change needed.
+  · **Machine-wide trigger now pinned:** a `python3` that WORKS but prints to stdout displaces the
+  line-1 sentinel → parse refused → every Bash command blocks, from a cause outside this repo, with
+  a message pointing at the payload where nothing is wrong.
+  · **Live hook is UNAFFECTED** — `~/.claude/hooks/judge-guard.sh` is the primary checkout's copy
+  (`381bd79`, zero `tool_name` references), so none of this is armed on the machine yet. Checked
+  before committing, because the fix blocks Bash and I run on Bash.
+  · **RUN 6 IS IN** (`d51a431`, risk=medium/confidence=high, verdict committed). It did **not** clear
+  the branch. Three findings, the first one real and blocking:
+  · **⚠ F1 — the `tool_name` gate made the hook LESS covering, in exactly the direction it was
+  justified by.** The SKIP is keyed on the tool's **name**, and returns *before* the command is ever
+  read. So any `tool_name` that is not literally `Bash` passes **with a real `gh pr create` inside**.
+  **I measured this myself** against an empty store rather than trusting the verdict: `Bash` +
+  `gh pr create --fill` → exit 2 (correct); `Shell`, `bash`, `BashOutput`, `mcp__shell__exec` with
+  the same command → **exit 0**, command never examined. Pre-change the hook read the command
+  regardless of name, so this is a **regression**, not merely an uncovered case. Not live today
+  (only `Bash` can arrive under the current matcher) — but "correct under any matcher" was the whole
+  stated reason for keying on the payload, and under a wider matcher this is weaker than what it
+  replaced. **Third round running for this same overclaim class**, so the doc sites are as much the
+  defect as the code: `judge-guard.sh:62` and `:69`, ADR `0012:158`, `CODING_MEMORY.md:252`.
+  · **The green never covered it** — all three pass-through tests use payloads with **no `command`
+  field at all**, so none of them can catch a non-`Bash` name carrying a live command.
+  · **FIX (decided, not yet written): gate the SKIP on "no runnable command", not on the name.**
+  Check for a command first; consult `tool_name` only when there is none. That keeps the editor
+  pass-through *and* restores coverage. ~2 lines. Red test first: a non-`Bash` name + a real
+  `gh pr create` must block.
+  · **F2 — a NEW machine-wide block from outside the repo. FIXED @ `abb9562`.** `python3 -c` *and*
+  `python3 -` both put the CWD on `sys.path`, so a stray `json.py` in whatever directory you happen
+  to be in shadows the parser and blocks **every** Bash command, blaming the payload. **I reproduced
+  it before believing it:** from such a directory a bare `git status` exited 2. All three call sites
+  now take `-I` — parser, verdict matcher (the heredoc arm has the same exposure via `-`), and the
+  classifier — which drops the CWD and ignores `PYTHON*` in one token, so the `PYTHONIOENCODING`
+  trigger is retired by the same change. `-I` is **probed once and dropped** on pre-3.4 interpreters
+  rather than assumed: the shadowing is a bad day, a hook that will not run at all is worse.
+  The **stdout-noise trigger is NOT retired by this** — it needs no `sys.path` entry, still live.
+  · **⚠ F4 — found by the SECOND RUN 6 judge, FIXED @ `22a3323`. The pane that appeared to die had
+  actually run**, finishing at 02:35Z against the same `d51a431`; its verdict is kept as its own file
+  (`...-round6-independent.md`, committed `21f8930`) rather than overwriting the first. It confirmed
+  F1/F2/F3 independently **and** caught what neither the first judge nor I did: `.strip()` removes
+  whitespace and nothing else, so a `Bash` command of pure control characters read as runnable and
+  was **ALLOWED**. Reproduced against HEAD before accepting: `\x00␣␣␣`, `\x01`, `\x01␣␣`, `\x7f` all
+  rc=0. Fixed by defining runnable as *at least one non-whitespace, non-control character*
+  (`isprintable()`), which keeps em-dash/CJK/tab commands readable.
+  · **Two self-inflicted errors on this fix, both caught and recorded, neither shipped:** (1) the
+  first draft wrote **raw control bytes** into the test payloads — invalid inside a JSON string, so
+  those tests would have passed on a *parse error* rather than on the rule (green for the wrong
+  reason); rewritten as `\uXXXX` escapes. (2) `22a3323`'s message claimed "One shellcheck finding,
+  pre-existing" **without checking** — it had introduced SC2016 via backticks in a comment three
+  lines above that block's own "No backticks or apostrophes in here" warning. Bisected, fixed, and
+  corrected in `6c5acd6` rather than amended, because the claim is the class this branch exists to
+  stop making.
+  · **The F4 fix invalidated my own F3 comment** (lone NUL now blocks earlier, so it no longer
+  reaches the assertion). Rewritten in the same commit — but deliberately **not** back to
+  "unreachable by construction": that claim was already false once, and an assertion earns its keep
+  by catching the route nobody predicted.
+  · **F3 — cosmetic, FIXED @ `cd208a7`:** "unreachable by construction" was false and I measured it —
+  a lone-NUL command gets `0:OK` (NUL survives `.strip()`) then arrives empty because command
+  substitution drops NUL. Exit 2, right direction; the assertion is load-bearing, comment says so.
+  · **RUN 7 IS IN @ `249beee` — `risk=low`, `confidence=high`, and it found NO new fail-open.** First
+  low-risk verdict on this branch. It rebuilt the three test-first commits and confirmed each was
+  genuinely red (83/4, 88/4, 97/4), reverted each fix individually and saw the suite catch every one,
+  then put a fake `gh` on `PATH` and compared across 26 shapes what the hook allows against what bash
+  actually runs: **no new fail-open, only the four leaks already in ADR 0012**. 21 exotic payloads
+  (NBSP, zero-width space, surrogates, BOM, 1 MB commands) all behaved. F1's fix is strictly *more*
+  blocking, not less. Three quality items remain, none behavioural:
+  · **C1 (the important one — a test that cannot fail).** The five control-character tests assert
+  only `exit 2`, but **two different doors exit 2**, so they cannot tell "blocked for the right
+  reason" from "blocked by a parse error". Measured by the judge: **my rejected raw-byte draft is
+  GREEN against the buggy hook** — it would have tested nothing. Two other mutations (removing the
+  parser's status check; reverting the fail-closed assertion) also leave the suite at a happy 101/0.
+  **Fix: assert the MESSAGE, not just the code** — this file already does that three times elsewhere.
+  · **C1 IS DONE — and the surface was four times bigger than the finding said.** The five
+  control-character tests were the *named* instance; enumerating by measurement rather than by
+  reading found **48** blocking assertions with the same defect. Both test families now assert the
+  MESSAGE alongside the code, via `run_payload_msg` / `run_case_msg` / `run_case_default_msg` and
+  three named constants (`MSG_UNREADABLE`, `MSG_NOTHING_RUNNABLE`, `MSG_NO_STORE`, `MSG_NO_FRESH`).
+  Suite stays **101/0** — no behaviour changed, this is test strength only, and `judge-guard.sh` was
+  not touched.
+  · **Proved by mutation, since "the tests are stronger now" is exactly the claim that needs
+  evidence.** Two mutants, each measured against the committed suite and then against the new one:
+  **M1** (reroute the no-runnable-command door from `SystemExit(4)` to `(3)`, so the block message
+  becomes the parse-error one while the exit code stays 2) — committed suite **101/0, the mutant
+  survives completely**; now **92/9**. **M2** (empty the classifier, so every command blocks at the
+  classifier-unusable door instead of being read and classified) — committed suite 66/35; now
+  **33/68**, i.e. **33 further tests** that claimed to test blocking were passing while nothing was
+  being classified at all. M1 is the finding's own defect, reproduced: a mutant no committed test
+  could see.
+  · **The wider lesson, and it generalises past this hook:** `exit 2` is not one door — a payload
+  that never parsed, a Bash call with nothing runnable, an internal-error assert, an unusable
+  classifier, and the verdict gate all exit 2. Asserting the number tests that *something* refused;
+  only the message tests *that the guard read the command and judged it*. The suite had already made
+  this exact argument about `exit 0` for the quoted-`JUDGE_EXEMPT` case since round 2 — the
+  reasoning was sitting in the file, applied to one case, for five rounds.
+  · **C2 — two live comments overstate the code, both mine, both from this session.**
+  `judge-guard.sh:55-57` (copied into the suite at `:462-463`) explains `sys.path` in a way that
+  measures **false under `-I`**: isolated mode *drops* the script's directory rather than putting it
+  first, so the comment would tell the next editor a sibling import is safe. It is not.
+  And `:171-172` claims `$(...)` substitution "is caught" — true unquoted, **false** for the quoted
+  `PR="$(gh pr create)"` that ADR 0012 itself lists as accepted-open. **Fourth round of this class.**
+  · **C2 IS DONE — both claims re-measured BEFORE editing, per the standing rule, and both were
+  genuinely false.** (1) `sys.path`: measured on **Python 3.9.6**, under `-I` the script's own
+  directory is **absent from `sys.path` entirely** and a sibling import raises `ImportError` — the
+  old comment described the *non*-`-I` arrangement, so it would have told the next editor a local
+  import beside the classifier was safe. Corrected at `judge-guard.sh:55-57` and at the suite's copy
+  (now `:513-516`, not `:462-463` — C1 moved it). The correction also **strengthens** the rule: `-I`
+  means the classifier must stay stdlib-only, and since the pre-3.4 fallback can clear `-I`, neither
+  arrangement may be relied on. (2) Command substitution, measured against the classifier: unquoted
+  is caught (`$(gh pr create)`, `echo $(...)`, `PR=$(...)` → **PR**), quoted is **not**
+  (`PR="$(gh pr create)"`, `echo "$(...)"` → **NO**), backticks are not. The comment claimed
+  substitution was caught outright. Fixed at `judge-guard.sh:171-181`, which now names the quoted
+  form as a genuine accepted-open gap rather than a lexing subtlety.
+  · **The false claim was localised — I checked before assuming.** ADR `0012:278` and the classifier
+  unit tests (`classify-pr-command.test.py:39,81`) already stated both shapes correctly; only the one
+  hook comment was wrong. Comments-only change: suite **101/0**, classifier 51/0, shellcheck codes
+  identical before and after (3 SC2016 + 2 SC2181, all pre-existing).
+  · **The path-qualified `gh` naming gap was re-raised and REAFFIRMED OPEN by the user 2026-08-01**
+  — `/usr/bin/gh pr create` → `NO`, ADR `0012:291-295`. It is the one accepted-open shape that is a
+  patch rather than an architecture change (compare the path's basename), which is why it keeps
+  coming back up. Reason it stays open is unchanged: closing one naming gap while `sudo`, `env` and
+  `timeout` stay open buys no real coverage, and this is a momentum guardrail, not a security
+  boundary. **Second time this has been asked and answered — it is settled, do not re-litigate.**
+  The quoted-substitution gap likewise stays open per the 2026-07-30 decision at line 91.
+  · **C3 landed @ `07c2451` + `411416d` — docs only, no behaviour change.** `...round6.md` carried a
+  raw NUL at **offset 6360**: a judge typed a literal NUL while *describing* the NUL finding, so git
+  classified the whole verdict binary. Measured as an addition, which is how the PR diff `main..HEAD`
+  sees it — before `Bin 0 -> 11313 bytes`, after **147 insertions**. Escaped to `\x00`, the convention
+  the sibling independent verdict already used.
+  · **Because this was the THIRD instance, I enumerated instead of patching a fourth** — every tracked
+  file scanned for control bytes outside tab/LF/CR. Found **two more**, both in this branch's own RUN 7
+  verdict, both invisible to git because they sit **past the 8000-byte binary-sniff window**: the file
+  rendered fine and carried the bytes anyway. `:185` was the judge's instruction *to escape the RUN 6
+  NUL*, written with a literal NUL. `:100` was a table row labelled **"(committed, escaped)"** holding
+  a raw `0x01` — the label said escaped and the byte was not, so the row contradicted itself.
+  Both fixed @ `411416d`. Each fix diffed byte-for-byte against a copy with the same substitution
+  applied: **no claim changed, encoding only.**
+  · **Lesson, and it is the general one:** git's binary flag is a *sniff*, not an audit — it reads the
+  first 8000 bytes. "The diff renders" is not evidence a file is clean. Enumerate the surface.
+  · **One instance deliberately NOT fixed:** `...statusline-command-round3.md:22` carries a raw ESC
+  (`0x1b`). **Verified present in `origin/main` unchanged** — pre-existing, another feature's file,
+  not this branch's work. Own task; do not widen this PR for it.
+  · **NEXT: obs judge RUN 8 at the final HEAD, then the PR.** C1, C2 and C3 have all landed.
+  · **superseded pointer — fix F1 (red→green) + F2, then obs judge RUN 7**, then the PR (blocks for
+  reason — append the genuine verdict to the primary store, see line 137's branch block).
+  · **Endgame ordering, settled by measurement:** `judge-guard.sh` compares `head_sha` by **strict
+  equality**, so committing the verdict moves HEAD and staleens it. Do **not** re-key a verdict to a
+  later SHA — that is fabrication. Instead: leave the final verdict commit **pending**, append the
+  genuine line to the primary store, `gh pr create` at the matching HEAD, then commit and push.
+  · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
+  → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
+  backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
+- **SIBLING BRANCH `docs/verify-before-claiming`** (`1721a3c`, off `2b8564b`, pushed) — one line in
+  `rules/core-conduct.md`: **verification precedes both the claim and the write-down**, not just the
+  claim. Closes the gap the four corrections above all shared — each was a claim that entered a
+  durable artifact before it was checked. Triaged via `triaging-new-instructions` → **static rule,
+  not a hook**: keying on claim words fires on every Conventional-Commits `fix:` prefix, a
+  false-positive class this repo has already paid for. Committed `Doc-Exempt` to avoid a guaranteed
+  CODING_MEMORY conflict with this branch; **this bullet is that deferred entry.**
+- **PARKED — CODING_MEMORY consolidation, its own branch, AFTER the verification-marker gate (user
+  ruled 2026-07-31).** This file is **~1350 lines against the 200-line cap stated on its own line 3**,
+  and **six consecutive obs-judge verdicts have now flagged it**. Line 3's self-measurement ("778")
+  is itself **stale by ~550** — deliberately left uncorrected, because the user's call was to keep
+  the flag loud rather than cosmetically patch the number and make the file *look* maintained. Read
+  line 3 as known-wrong until that branch lands. The decision that branch owes: whether the cap is a
+  real policy this file can hold to, or the wrong shape for what the index has become — a limit
+  violated 6.7× across six verdicts is not functioning as a limit either way.
+- **PARKED — verification-marker gate (user ruled 2026-07-31: build it, after these two PRs).** The
+  prose rule above is deliberately the *weak* control, and this repo established this week that a
+  warning sitting where the mistake keeps being made is a **disproven** control. The strong version:
+  a test run writes a marker keyed to HEAD, and a hook requires a fresh one before commits that claim
+  a fix — **the judge-guard shape applied to tests** (mirror `hooks/judge-guard.sh`,
+  `judge-guard.test.sh`, and the extracted `hooks/lib/` classifier module). Its own branch, not
+  bundled. Undecided and load-bearing: what counts as a marker, what "fresh" means when a commit
+  moves HEAD, and how to avoid re-importing the `fix:`-prefix false positive that killed the
+  hook option for the prose rule.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
@@ -1105,6 +1424,20 @@ how this file and its linked files should be written (plain language, major chan
 - Brainstorm write-ups: `coding-memory/brainstorms/`
 
 ## Exact Next Steps
+0-NEW (parked 2026-08-01, own branch, do NOT widen PR #32). **Three Tier 1 hooks are registered in
+   `settings.json` and have NO test suite at all: `git-guard.sh` (default-branch + force-push),
+   `merge-guard.sh` (remote-merge), `doc-guard.sh` (documentation checkpoint).** Verified — no
+   `*.test.sh` for any of them, and no file matching `*test*` references them. These are the hooks
+   that block commits, pushes and merges, and `rules/gates.md` cites all three as enforcement.
+   Four more have neither a suite nor a `settings.json` registration — `scan-secrets`,
+   `scan-invisible-unicode`, `checkpoint-before-modify`, `require-project-standards` — dormant or
+   registered elsewhere, **unverified which; verify before designing anything.**
+   Suites that DO exist: judge-guard (101), phase-guard, pane-dispatch-guard, context-handoff-watch,
+   memsearch-nudge. **Unmeasured, do not assert:** whether phase-guard's or pane-dispatch-guard's
+   *deny* assertions carry C1's "exit code alone does not say which door" defect — they already do
+   some message checking. Found while scoping "should the C1 fix go broader"; the honest answer was
+   that assertion strength on a 101-test suite is the smaller risk. **User decision 2026-08-01:
+   park it, finish PR #32 first.** Owes `triaging-new-instructions` → brainstorming → spec before code.
 0-ACTIVE. **pane-layout-v2 — EXECUTING. Task 1 (live probe) DONE + pushed (ffe22d2)
    2026-07-21. Gates answered, do not re-ask: model = Opus 4.8 (user ran `/model`
    this session — satisfied); execution = SUBAGENT-DRIVEN, implementers PANE-routed.

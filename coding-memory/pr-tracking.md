@@ -446,3 +446,40 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - next: obs judge RUN 4 pinning the final HEAD (audit trail only — the PR is already open, so
   judge-guard gates nothing further here) → push → `gh pr ready` → merge via GitHub UI → prune
   branch local+remote → post-merge tip-reachability check + outcome backfill.
+
+### PR #33 — fix/judge-guard-fail-closed-classifier (OPEN, ready, opened 2026-08-01)
+- repo: suyatdev/.claude · branch: fix/judge-guard-fail-closed-classifier · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/33 · status: OPEN, ready for review
+- opened_by session_origin: desktop · last push: desktop · 45 commits, 15 files, +2800/-61
+- worktree: `~/.claude/.claude/worktrees/jg-failclosed` (NOT the primary checkout)
+- scope: successor to #32. Closes three fail-opens in `judge-guard.sh` — control characters read as
+  a runnable command; the CWD on `sys.path` letting a stray `json.py` block every Bash call
+  machine-wide (all interpreter calls now `-I`); and a suite that asserted only exit codes.
+  Suite 26→**101/0**, classifier unit 51/0.
+- **The suite was measurably asleep, and that is the branch's real finding.** Mutation M1 (reroute
+  one door's message, exit code unchanged) scored **101/0 on the committed suite — survived
+  completely**; the new suite gets 92/9. M2 (gut the classifier) 66/35 → 33/68. A test asserting
+  only an exit code will let a fail-open through; that already happened here.
+- judge: RUN 8 `4495bf8` risk=low conf=high; **RUN 9 `0f54622` risk=low conf=high** (the one the PR
+  was opened against). RUN 9 verified the latency commit docs-only three ways — empty non-docs diff,
+  both hook files byte-identical, suite green at the SHA. Both verdicts committed. outcome=null.
+- **Opened with NO `JUDGE_EXEMPT`, unlike #32 — and that difference is the lesson.** The installed
+  hook's refusal was a **path** mismatch wearing a **freshness** message: it reads a fixed absolute
+  `$HOME/.claude/...` store, not the worktree's. User ruled `JUDGE_EXEMPT` was the wrong answer, so
+  the *genuine* RUN 9 line was appended to the primary store (43→44 lines) and the installed hook
+  then exited 0 on its own terms. **Nothing fabricated, nothing re-keyed.** RUN 8 was deliberately
+  NOT re-keyed to a later SHA when HEAD moved — that would be a one-character lie nobody would catch.
+- **A stray line therefore sits uncommitted in the PRIMARY checkout** (`feat/pane-split-policy`):
+  `coding-memory/observability-judge/verdicts.jsonl`, +1 line. Genuine, but not that branch's work.
+  The other session's staged `compliance-judge/*` files were not touched.
+- known-open by decision, in the PR body: path-qualified `gh`, quoted `PR="$(gh pr create)"`.
+  Momentum guardrail, not a security boundary.
+- **HIGHEST-CONSEQUENCE POST-MERGE STEP — do this first.** `~/.claude/hooks/lib/` does not exist yet.
+  If the merge lands without `lib/classify-pr-command.py` the hook blocks **every Bash command
+  machine-wide** and you cannot `git` out (escapes: Write tool, or unregister in `settings.json`):
+  `printf '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git status"}}' | bash ~/.claude/hooks/judge-guard.sh; echo $?` must print `0`.
+- known cost, documented in ADR 0012: isolation is **~2.8× per Bash call, 52 → 147 ms** (three
+  measurements, 138–147; headline is the pessimistic end). Deferred relief: the `PY_ISOLATED` probe's
+  answer is machine-static and cacheable — own decision, cache invalidation on interpreter upgrades.
+- next: merge via GitHub UI → run the arming check above → prune branch + worktree local+remote →
+  tip-reachability check + outcome backfill for #33.

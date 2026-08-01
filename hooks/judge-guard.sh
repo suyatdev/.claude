@@ -7,9 +7,19 @@
 # full head_sha must equal current HEAD, so any commit added after judging forces
 # a re-run and the gate always reflects exactly what will ship.
 #
-# This is a safety gate (it prevents shipping un-judged code), so it fails CLOSED:
-# any inability to verify blocks. Contrast doc-guard.sh, a momentum guardrail that
-# fails open. Escape hatch: `JUDGE_EXEMPT=<reason> gh pr create ...` (logged).
+# This is a safety gate (it prevents shipping un-judged code), so its machinery
+# fails CLOSED: a missing python, an unreadable payload, an unusable classifier and
+# an unreadable verdict store each block rather than allow. Contrast doc-guard.sh,
+# a momentum guardrail that fails open.
+#
+# It is NOT a security boundary, and "fails closed" is a claim about the machinery,
+# not about coverage: some command SHAPES are deliberately not detected (a backticked
+# `gh pr create`, a heredoc body), an empty payload passes, and a classifier that hangs
+# rather than fails has no timeout. Those are named and accepted in ADR 0012 —
+# an earlier version of this header claimed "any inability to verify blocks", which
+# read as a coverage guarantee the hook has never made.
+#
+# Escape hatch: `JUDGE_EXEMPT=<reason> gh pr create ...` (logged).
 #
 # Regexes live in variables, never inline in `[[ ]]` — a bare `(` or `;` in an
 # inline regex kills bash's parser and a dead script exits non-zero. Same trap and
@@ -37,27 +47,138 @@ if [ -z "$py" ]; then
   printf 'judge-guard: python3 not on PATH; cannot verify a verdict -- failing closed.\n' >&2
   exit 2
 fi
+# Every python call below runs ISOLATED, and this is load-bearing rather than hygiene. `-c` and `-`
+# both put the CALLER's directory on sys.path, so an ordinary file named json.py — in a python
+# project, a scratch dir, anywhere you happen to be standing — shadowed the stdlib module the parser
+# imports and failed this hook closed on EVERY Bash command on the machine, blaming a payload where
+# nothing was wrong. `-I` drops that directory and ignores PYTHON* in one token, which retires the
+# PYTHONIOENCODING trigger at the same time. The classifier takes it too, and for a STRONGER reason
+# than this comment used to give: it said the classifier's own directory heads sys.path, which is
+# what happens WITHOUT `-I` and not with it. Measured on 3.9.6 — under `-I` the script's directory is
+# not on sys.path at all, and a sibling import raises ImportError. So `-I` here is not only about
+# PYTHON*: it means the classifier must stay self-contained, importing nothing but the stdlib. Do not
+# add a local import next to it on the strength of the old comment; the fallback below can also clear
+# `-I` on a pre-3.4 interpreter, so neither arrangement may be relied on.
+PY_ISOLATED="-I"
+# `-I` arrived in Python 3.4. Older interpreters would reject the flag and fail this hook closed
+# machine-wide, so it is dropped rather than assumed — the shadowing is a bad day, refusing to run
+# at all is a worse one.
+"$py" "$PY_ISOLATED" -c '' 2>/dev/null || PY_ISOLATED=""
 
-command_line=$(printf '%s' "$payload" | "$py" -c '
+# Parse the PreToolUse payload. The parser must SAY it ran, because silence here is ambiguous in a
+# way silence nowhere else in this hook is: a truncated payload, a non-JSON payload, a wrong-shaped
+# payload and a failing interpreter all produced exactly what a call with nothing to guard produced.
+# `except ValueError: sys.exit(0)` plus `2>/dev/null` collapsed them into one silent allow, so a
+# garbled payload disarmed the gate exactly as an absent classifier did. Hence a sentinel: the parser
+# prints its verdict on line 1 only after it has decided, and the command follows from line 2.
+#
+# The COMMAND decides, not the tool's name. A runnable command is classified on its own merits
+# whatever the caller is called; `tool_name` — a required PreToolUse field, and the one the matcher
+# itself filters on — is consulted only to settle what an ABSENT command means.
+#
+# Two earlier revisions got this wrong in opposite directions. The first reasoned from "every Edit,
+# Read and Write reaches this hook" to "an absent command must pass"; that premise was false (the
+# sole registration matches `Bash`) and it had quietly chosen the behaviour. The second corrected
+# the premise but keyed the SKIP on the name, which returned before the command was ever read — so
+# `gh pr create` under any name but `Bash` passed unexamined, weaker than the version it replaced,
+# in precisely the wider-matcher future that keying on the payload was meant to survive.
+#
+#   a runnable command         -> OK, classify it, whatever `tool_name` says. A `gh pr create` is a
+#                                 `gh pr create` whether it arrives as Bash, as some future Shell,
+#                                 or under a name this hook has never heard of.
+#   Bash + nothing runnable    -> exit 4, BLOCK: a Bash call this hook could not verify, and the
+#                                 only sender is the session itself, which has no reason to issue
+#                                 an empty one. Fail closed, as everywhere else on this branch.
+#   other tool, nothing to run -> SKIP, pass: an editor payload carries no command by design, so
+#                                 there is nothing here to guard. This arm is what keeps a `*`
+#                                 matcher from taking the editor down.
+#   anything else              -> exit 3, BLOCK: not a payload this hook can reason about. That
+#                                 covers a bad top-level type (an array or scalar is not a
+#                                 PreToolUse payload at all) and a missing or non-string
+#                                 `tool_name`, which means malformed input, not a boring tool.
+parsed=$(printf '%s' "$payload" | "$py" ${PY_ISOLATED:+"$PY_ISOLATED"} -c '
 import json, sys
 try:
     p = json.load(sys.stdin)
 except ValueError:
-    sys.exit(0)
+    raise SystemExit(3)
+if not isinstance(p, dict):
+    raise SystemExit(3)
+tn = p.get("tool_name")
+if not isinstance(tn, str) or not tn:
+    raise SystemExit(3)
 ti = p.get("tool_input")
-if isinstance(ti, dict):
-    v = ti.get("command")
-    if isinstance(v, str):
-        sys.stdout.write(v)
+c = ti.get("command") if isinstance(ti, dict) else None
+# Runnable means at least one character that could actually form a command: not whitespace, and not
+# a control character. An all-space string is as unrunnable as an empty one, and so is a lone NUL —
+# blocking all of them states the rule in terms of what the payload can DO, not which falsy shape it
+# arrived in. A bare strip() was not enough: it removes whitespace and nothing else, so NBSP and
+# VT counted as blank while NUL, SOH and DEL did not, and a command of pure control characters read
+# as runnable and was ALLOWED — the same fail-open this rule exists to close, through the back door.
+# isprintable() is false for exactly the control characters and true for ordinary text in any
+# script, so an em-dash or CJK command stays runnable; narrowing this to ASCII would blind the guard
+# to commands it must classify.
+# (No backticks or apostrophes in here: this block is single-quoted shell, and a stray one of
+# either ends the quote and breaks the whole hook. That is why the classifier lives in its own file.)
+if isinstance(c, str) and any((not ch.isspace()) and ch.isprintable() for ch in c):
+    sys.stdout.write("OK\n")
+    sys.stdout.write(c)
+    raise SystemExit(0)
+# Nothing runnable. ONLY here does the tool name decide anything, and only between two flavours of
+# "there is no command": a Bash call that should have carried one, and a tool for which carrying
+# one was never expected.
+if tn == "Bash":
+    raise SystemExit(4)
+sys.stdout.write("SKIP\n")
 ' 2>/dev/null)
-[ -n "$command_line" ] || exit 0
+# The parser is the last command in the pipeline and there is no `pipefail`, so this is its own
+# status, not the printf's — same reading as classify_rc below. Status is checked as well as the
+# sentinel because a parser can print its answer and still die afterwards.
+parse_rc=$?
+parse_ok=$(printf '%s\n' "$parsed" | sed -n '1p')
+command_line=$(printf '%s\n' "$parsed" | sed -n '2,$p')
+# Status AND sentinel, as a pair, on every arm: a parser can print its answer and still die
+# afterwards, and an interpreter that fails on its own can exit 4 without ever having decided
+# anything. `4:` matches only when stdout was empty, which is the shape the block below emits.
+case "$parse_rc:$parse_ok" in
+  0:OK)   ;;
+  0:SKIP) exit 0 ;;
+  4:)
+    printf 'judge-guard: a Bash call arrived with no runnable command -- failing closed.\n' >&2
+    printf 'judge-guard: this hook cannot verify a command it cannot read; re-issue the command, or unregister the hook in settings.json to recover.\n' >&2
+    exit 2
+    ;;
+  *)
+    printf 'judge-guard: could not read the PreToolUse payload (malformed JSON, missing tool_name, or python failed) -- failing closed.\n' >&2
+    printf 'judge-guard: if this persists, every Bash command stays blocked; unregister the hook in settings.json to recover.\n' >&2
+    exit 2
+    ;;
+esac
+
+# A defensive assertion, and deliberately not described as unreachable. It HAS been reached: while
+# "runnable" was `.strip()`, a lone NUL got `0:OK` from the parser and arrived here empty, because
+# command substitution drops NUL bytes. Measured, exit 2, right direction. The printable check above
+# now blocks that input earlier, so the one known route in is closed — but "no route exists" is a
+# claim this file has already made falsely once, and the whole point of an assertion is to catch the
+# route nobody predicted. Inverted from the exit 0 it used to be: if the parser ever reports OK with
+# nothing to show for it, the failure should be a block, not the silent allow this branch has now
+# found four times.
+[ -n "$command_line" ] || {
+  printf 'judge-guard: internal error -- parser reported OK with no command -- failing closed.\n' >&2
+  exit 2
+}
 
 # Classify the command with python — shlex handles the shell quoting a flat bash regex cannot.
 # The command line is split into shell segments on control operators (and on newlines, which end a
 # command just as `;` does), and EACH segment is tested: a chained or multi-line
 # `git push && gh pr create` is guarded exactly like a bare invocation.
 # (That chained form used to be an accepted gap; it is what let a PR ship unjudged, so it is now
-# caught. A `$(...)`-substituted `gh pr create` is likewise caught, since it too really runs.)
+# caught. Command substitution is caught only while UNQUOTED — measured: `$(gh pr create)`,
+# `echo $(gh pr create)` and `PR=$(gh pr create)` all classify as PR, while `PR="$(gh pr create)"`
+# and `echo "$(gh pr create)"` do not, because quoting collapses them into a single token that never
+# sits at a segment's command position. The quoted form really does run the command, so this is a
+# genuine gap, not a subtlety of lexing -- it is one of the shapes ADR 0012 lists as accepted-open,
+# alongside backticks. An earlier revision of this comment claimed substitution was caught outright.)
 # Quoted text survives as a single token, so `gh pr create` inside a commit message or an echo
 # argument can never sit at a segment's command position and is still ignored.
 #
@@ -67,9 +188,39 @@ if isinstance(ti, dict):
 # probing. Rationale and the accepted-open shapes: hooks/lib/classify-pr-command.py and ADR 0012.
 # Resolved from this script's own directory so the hook works from any $PWD, as the tests do.
 CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
-classify=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null)
+classify=$(printf '%s' "$command_line" | "$py" ${PY_ISOLATED:+"$PY_ISOLATED"} "$CLASSIFIER" 2>/dev/null)
+# No `set -e` and no `pipefail` here, so this is the classifier's own status, not the printf's.
+classify_rc=$?
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
+
+# An inability to verify blocks — same rule as the missing-python branch above, and the same
+# single-source-of-truth stance as the verdict store: a broken install surfaces as a named-path
+# error rather than being papered over.
+# This validates the classifier's OUTPUT rather than the file's existence, because `[ -f ]` only
+# catches an absent file. A present-but-unusable one — empty, truncated by a partial checkout
+# (the case ADR 0012 cites as motivation), syntactically broken, or unreadable — produces no
+# output past the `2>/dev/null`, leaving `kind` empty. Under a file-existence check that fell
+# through to `exit 0` and silently passed every `gh pr create`: a gate that looks armed and does
+# nothing, which is the exact defect this hook exists to prevent. `kind` is only ever PR or NO,
+# so anything else means the classifier did not run, whatever the reason.
+# The cost is deliberate and accepted: with no usable classifier, nothing can distinguish a PR
+# command from any other, so ALL Bash commands block until the install is repaired (ADR 0012).
+# That is also why the message must name a repair route that survives the block — git and every
+# other shell command is denied while this holds, so pointing at one would be a dead end.
+# Status is checked as well as shape, because a classifier can answer and still have failed: one
+# that prints a well-formed NO and then dies leaves `kind` holding a legal value, and shape alone
+# would pass it. That is only unreachable against today's classifier because it happens to print
+# its answer last — the classifier's shape protecting the hook rather than the hook protecting
+# itself, which stops holding the moment the classifier is refactored.
+case "$classify_rc:$kind" in
+  0:PR|0:NO) ;;
+  *)
+    printf 'judge-guard: classifier at %s produced no usable output -- failing closed (it is missing, empty, truncated, or broken).\n' "$CLASSIFIER" >&2
+    printf 'judge-guard: ALL Bash commands are blocked until it is repaired, so repair it with the Write tool, or unregister the hook in settings.json.\n' >&2
+    exit 2
+    ;;
+esac
 
 [ "$kind" = "PR" ] || exit 0
 
@@ -102,7 +253,7 @@ if [ ! -f "$VERDICTS" ]; then
   exit 2
 fi
 
-match=$("$py" - "$VERDICTS" "$repo" "$branch" "$head_sha" <<'PYEOF'
+match=$("$py" ${PY_ISOLATED:+"$PY_ISOLATED"} - "$VERDICTS" "$repo" "$branch" "$head_sha" <<'PYEOF'
 import json, sys
 path, repo, branch, head = sys.argv[1:5]
 found = False

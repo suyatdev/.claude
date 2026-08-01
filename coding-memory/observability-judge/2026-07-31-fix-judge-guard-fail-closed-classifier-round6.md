@@ -1,0 +1,147 @@
+# Observability judge — RUN 6 (implementation)
+
+- **repo:** `jg-failclosed` (worktree `~/.claude/.claude/worktrees/jg-failclosed` — measured here, not the primary checkout)
+- **branch:** `fix/judge-guard-fail-closed-classifier`
+- **head_sha:** `d51a4311a060396d067096d2a41fe380ba5a80c0`
+- **base:** `origin/main` @ `2b8564b` (also the merge-base; branch is 24 commits ahead)
+- **stage:** implementation
+- **tests run by me:** `bash hooks/judge-guard.test.sh` → **81 passed, 0 failed**; `python3 hooks/lib/classify-pr-command.test.py` → **51 passed, 0 failed**. Both reproduce the numbers in the dispatch.
+
+---
+
+## What was changed
+
+The hook that stops you opening a pull request before the judge has looked at your code used to
+decide "is there anything here to guard?" by asking *"does this payload contain a command string?"*
+If the answer was no, it waved the call through. This round it learned to ask the harness **which
+tool is calling** first (`tool_name`), and to act on that:
+
+- the `Bash` tool with a real command → check it, as before;
+- the `Bash` tool with **nothing runnable** in it (missing, empty, all spaces, wrong type) → **stop**,
+  because a Bash call this hook cannot read is a Bash call it cannot vouch for;
+- any other named tool → let it past;
+- a payload it cannot identify at all → **stop**.
+
+Two smaller things landed with it: a piece of dead code that used to say "if we somehow got here with
+no command, allow" was **flipped** to "…then stop and shout"; and a documentation claim the author had
+been repeating across three files — *"every Edit, Read and Write in the session reaches this hook"* —
+was found to be false and corrected (there is exactly **one** registration, and it matches `Bash`
+only; I re-enumerated the settings files myself and confirm this).
+
+## Does it do what you wanted?
+
+Yes, and the working is good. Think of it as a bouncer who previously checked "is this person holding
+a ticket?" and now checks "which door did they come through, *and* are they holding a ticket?" — the
+right question, asked in the right order. The evidence behind it is honest, not decorative:
+
+- The failing-tests-first claim replays exactly: the test file at `99807d6` **and** at `686917a`, run
+  against the pre-fix hook, both fail exactly the six new cases and nothing else. The fix commit
+  `685f2af` touches no test file.
+- The harness-fidelity commit really is behaviour-neutral, as claimed — I measured it, rather than
+  taking it on trust.
+- The false-premise correction is real, and the two places where the old wording survives
+  (`hooks/judge-guard.sh:60`, ADR `0012:140`) are quoted and immediately contradicted. That is a
+  correct audit trail, and I am **not** reporting it as an unfixed claim.
+
+## What could go wrong / what I'm unsure about
+
+**The headline: the new door check is an exact-name list of one, and the docs promise more than that.**
+The hook now passes anything whose `tool_name` is not the literal string `"Bash"` — *including a
+payload that carries a real, runnable `gh pr create`*. Measured, at this HEAD:
+
+| payload `tool_name` (all carrying `"command": "gh pr create --fill"`) | pre-change `307791c` | HEAD `d51a431` |
+|---|---|---|
+| `"Bash"` | block (2) | block (2) |
+| `"bash"` (lowercase) | block (2) | **pass (0)** |
+| `"Bash "` (trailing space) | block (2) | **pass (0)** |
+| `"BashOutput"` | block (2) | **pass (0)** |
+| `"mcp__shell__exec"` | block (2) | **pass (0)** |
+| `"Shell"` | block (2) | **pass (0)** |
+| duplicate key `…"tool_name":"Bash","tool_name":"Edit"…` (last wins) | block (2) | **pass (0)** |
+
+Under today's registration — which I verified independently: **one** entry, `PreToolUse`, matcher
+`'Bash'`, in `~/.claude/settings.json` — none of those payloads can arrive, so **there is no live
+defect**. But the stated reason for keying on the payload is *future*-matcher safety, and in exactly
+that future the new code is **less covering** than the code it replaced. So:
+
+- `hooks/judge-guard.sh:69` — "any other named tool -> SKIP, pass: **nothing here is a shell command
+  to guard**" — is false for the `mcp__shell__exec` row above. Same sentence at ADR `0012:158`.
+- `hooks/judge-guard.sh:62` / `CODING_MEMORY.md:252` — "correct under **any** matcher" — is true only
+  in the *outage* direction. ADR `0012:167` and `judge-guard.test.sh:331` state the accurate, narrower
+  version ("a settings edit, not a machine-wide outage"); those two are fine.
+
+This is the third consecutive round in which a claim on this branch is stronger than the code — RUN 4
+in the header, RUN 5 in the fix's own commentary, now in the fix for *that*. The pattern is what makes
+it worth naming, not the severity.
+
+**The green tests do not cover the case that matters.** The three new pass-through tests
+(`judge-guard.test.sh:325-327`) all use `Edit`/`Read`/`Write` payloads with **no `command` field at
+all**. Nothing pins the shape that would actually bite under a wider matcher: a non-`Bash` tool
+*carrying* a runnable command. One assertion would have caught the row above.
+
+**A new machine-wide block trigger from outside this repo, beyond the stdout-noise one already
+pinned.** `python3 -c` puts the current directory at the head of `sys.path`, so a file named
+`json.py` in whatever directory the session happens to be in shadows the parser's own import:
+
+- `git status`, run from a directory containing `json.py` → **rc=2**, "could not read the PreToolUse
+  payload" — a message pointing at the payload, where nothing is wrong. Every Bash command in that
+  directory is blocked.
+- `python3 -I -c` (isolated mode, available on the machine's 3.9.6) removes it — measured **rc=0** for
+  the same case.
+- `PYTHONIOENCODING=ascii` plus a non-ASCII command (`git commit -m "fix — thing"` — em-dashes are
+  routine in this repo) also blocks, at the parser *and*, once the parser is isolated, at the
+  classifier. Carried from RUN 5's F3; the ADR pinned only the stdout-noise instance of the class.
+
+Direction is fail-**closed** in every case, which is the intended trade — but the cause sits nowhere
+near this repo and the message misattributes it.
+
+**Small, correct-but-mislabelled:** `hooks/judge-guard.sh:123` calls the inverted assertion
+"unreachable by construction". It is reachable — a `Bash` payload whose command is a lone NUL
+(`"\x00"`) survives the parser's `strip()` and is then dropped by bash's command substitution,
+firing the assertion. Measured **rc=2**, "internal error — parser reported OK with no command". The
+behaviour is right and the assertion has now earned its keep; only the comment is wrong.
+
+## What I'd double-check before merging
+
+1. One sentence, or one test, for the non-`Bash`-tool-carrying-a-command row. Either narrow the claim
+   at `judge-guard.sh:62,69` / ADR `0012:158` / `CODING_MEMORY.md:252` to what the code does, or make
+   the SKIP conditional on "no runnable command present" rather than on the tool's name — the latter
+   keeps the editor pass-through *and* restores the lost coverage, and is roughly two lines.
+2. `python3 -I -c` for the inline parser (and `-I`/`-E` for the classifier invocation) — it deletes the
+   `json.py`-in-CWD, `PYTHONHOME` and `PYTHONIOENCODING` triggers in one token. Measured, not guessed.
+3. Fix or drop the "unreachable by construction" comment at `judge-guard.sh:123`.
+4. Arming is still the real risk and is still untested: the installed
+   `~/.claude/hooks/judge-guard.sh` is the primary checkout's copy (0 `tool_name` references, no
+   `lib/`), so nothing here is live. A **symlinked** install resolves `lib/` next to the symlink and
+   blocks every Bash command (measured) — though that one at least names the classifier path, so it
+   is the good failure.
+
+---
+
+## Dimensions
+
+| dimension | verdict | why |
+|---|---|---|
+| intent | pass | Implements the user's ruling (empty Bash payload blocks) exactly, keyed on the payload as decided. |
+| execution | pass | 81/0 and 51/0 reproduced by me; TDD replay genuine; harness-fidelity commit measured behaviour-neutral; shellcheck only the pre-existing SC2181 (line 235). |
+| trajectory | pass | `tool_name` verified against the docs before being relied on; the harness gap that hid the false premise was found and split into its own commit; dead code inverted rather than deleted. Reasoning, not luck. |
+| regression | concern | Six measured payload shapes flip block→pass. Unreachable under today's `Bash`-only matcher, but strictly worse in the wider-matcher world the change was designed for. |
+| context_budget | concern | `CODING_MEMORY.md` 1442 lines vs the 200-line cap on its own line 3 (+182/-7 this delta); 10th consecutive flag, deferral already ruled and recorded in-file. `judge-guard.sh` 248 lines, ~90 comment, one rationale restated in hook + test + ADR. |
+| traceability | concern | `judge-guard.sh:62,69`, ADR `0012:158`, `CODING_MEMORY.md:252` state more than the code supports; measured counterexample above. Third round running for this class. |
+| success_masking | concern | The three pass-through tests use command-less payloads only, so the green says nothing about the one shape that would fail open under a wider matcher; the external-trigger class is pinned by a single instance. |
+| intent_drift | pass | Files touched are hook + its suite + ADR 0012 + memory/verdict artifacts. No new dependencies, no drive-bys, worktree clean. |
+| checkpoint | pass | Clean red → harness → green → docs → memory sequence; every step independently revertable; green commit touches no test. |
+| audit_trail | pass | ADR carries a dated **Superseded** bullet naming its own false premise and who introduced it; each judge round has its own verdict file. Exemplary. |
+
+**risk: medium — confidence: high**
+
+## Concerns (short form)
+
+1. `judge-guard.sh:69` / ADR `0012:158` — "no shell command to guard" is false for a non-`Bash` tool carrying one; six shapes flipped block→pass vs `307791c`. Not live under the verified `Bash`-only matcher.
+2. `judge-guard.sh:62` / `CODING_MEMORY.md:252` — "correct under any matcher" holds only in the outage direction; ADR `0012:167` and `judge-guard.test.sh:331` have the accurate wording.
+3. `judge-guard.test.sh:325-327` — pass-through pinned only with command-less payloads; the load-bearing shape is untested.
+4. `json.py` in the session's CWD blocks every Bash command (`python3 -c` puts CWD on `sys.path`); `-I` fixes it (both measured). `PYTHONIOENCODING=ascii` + non-ASCII command also blocks. ADR pinned only stdout noise.
+5. `judge-guard.sh:123` "unreachable by construction" is wrong — a lone-NUL command reaches it (rc=2, correct direction).
+6. Context budget: `CODING_MEMORY.md` 1442 vs its own 200-line cap; continuity flag only, deferral already ruled.
+7. Carried unchanged: no classifier timeout (a hung one hangs Bash silently); symlinked install blocks machine-wide; residuals 8 and 9 re-read at ADR `0012:299-307` and accurate.
+8. Audit-trail check, as instructed: the surviving old phrasing at `judge-guard.sh:60` and ADR `0012:140` is quoted and contradicted — deliberate, **not** a finding. One unlabelled survivor at `CODING_MEMORY.md:229`, corrected ten lines below at `:239-247`; a chronological reader is fine, a grep-lander is not. Journal, not spec — nit.
