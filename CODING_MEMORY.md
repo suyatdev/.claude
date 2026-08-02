@@ -782,6 +782,26 @@ how this file and its linked files should be written (plain language, major chan
   Check `ps aux | grep '[c]laude -p'` for a live agent and `coding-memory/*/verdicts.jsonl` for a
   landed verdict before re-dispatching, or a round gets paid for twice. The compliance judge on this
   spec reliably needs **more than 540 s**; dispatch it with a longer wait or expect a second one.
+  - **WORK REGISTER 2026-08-02 — branch-per-defect, user-chosen. Full detail in
+    `.claude/session-state.md` (machine-local, survives branch switches).** Nine units of work; the
+    user takes one branch each, from `main`, in roughly this order:
+    `fix/git-guard-chained-command` (**L1 — the only item affecting real work today; live code**) ·
+    `feature/marker-gate-recognition-rule` (**D1+D2, ONE branch**) ·
+    `fix/marker-gate-classifier-contract` (**S1+S2, ONE branch**) ·
+    `fix/marker-gate-all-untracked-member` (S3) · `fix/marker-gate-python-call-site` (S4) ·
+    `fix/marker-gate-grammar-rule-2` (S5, largely superseded if D1+D2 lands first) ·
+    `docs/marker-gate-narration-fixes` (N1+N2) · `docs/marker-gate-revert-pair-7-13` (O1) ·
+    `feature/marker-gate-audit-logging` (D4+D5) · `docs/marker-gate-shrink` (O3, **last**).
+    ⚠️ **Two pairs must not be split** — D1+D2 are one cause (a recognition rule), and S1+S2 are two
+    halves of one contract. Splitting either leaves the document *more* self-contradictory than it is
+    now, i.e. manufactures a failure in the intermediate state.
+    · **Why branch-per-defect and not round-per-defect:** the judges re-read the **whole document**
+    every round and report everything they find regardless of what changed — round 4 changed the
+    grammar and its headline finding was `rtk`. So a one-change round still returns `fail` plus
+    unrelated findings, and the isolation never arrives. Attribution comes from **git** instead:
+    one commit per finding id, free, exact.
+    · **Accepted ceilings are NOT work items** — receipt-not-grade, non-Bash writes, `cmux.sh`
+    ungated, no self-arming. Fixing them means widening the feature, which the user ruled out.
   - **ROUND 4 VERDICTS 2026-08-02 @ `8923951` — compliance `fail` (4), obs **`risk=high`** (UP from
     medium). `api-contracts` has now been cited in **FOUR consecutive rounds**,
     `commit-form-coverage` in three, `writer-call-site-cwd` in two. Second consecutive mandatory
