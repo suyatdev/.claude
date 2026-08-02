@@ -597,6 +597,44 @@ how this file and its linked files should be written (plain language, major chan
       indistinguishable from "no files to check" → allow, which is `judge-guard` fail-open #3 reborn);
       which directory `rev-parse --show-toplevel` runs in; the full `MSG_` constant table (5 named
       against ≥8 doors); the mutant floor raised to one per door; where `TEST_EXEMPT` is logged.
+  - **ROUND 2 SPEC REVISED 2026-08-01 (`revision: 2` in frontmatter), every round-1 finding closed
+    against a fresh measurement, not against the judges' reports.** New probes, throwaway repos, git
+    2.50.1 — 18 observations across `PLAIN`/`PATHSPEC`/`ALL`/`INVALID`/`FOREIGN` and all three
+    `--amend` combinations. **The central fix: `form` now decides BOTH the path set AND the content
+    source** — round 1 branched only the hash source, which is why its own `-a` scenario was
+    unreachable.
+    · **Measured, and each is now a table row + a scenario:** `git commit -- f.sh` ships the
+      **worktree** (`v3`, not index `v2`) · a pathspec also **narrows** (`commit -- bar.md` with
+      `foo.sh` staged commits bar.md only, so index collection raises FALSE blocks) · a pathspec over
+      an **unchanged** file commits nothing for it, so `-- hooks/` is not a false block ·
+      `git diff --cached` returns **0 paths** for a never-staged edit while `-a` commits it ·
+      `git commit -a -- <path>` is **fatal 128**, git refuses, so the hook allows · `--amend` needs
+      base **`HEAD^`** (vs `HEAD` returns only the sidecar; vs `HEAD^` returns exactly the amended
+      commit's contents) and on a root commit `HEAD^` fails 128 → empty tree
+      `4b825dc642cb6eb9a060e54bf8d69288fbee4904` · `--diff-filter=d` keeps a rename's **new** path and
+      drops the old · outside a repo `git diff --cached` prints **nothing** and exits **128** — the
+      fail-open trap, now `MSG_GIT_FAILED` · `$0` from a subdir is **relative**
+      (`adapters/cmux-layout.test.sh`), fixed by `git ls-files --full-name`.
+    · **Two design changes beyond patching findings.** (1) **One helper, one line of JSON** replaces
+      the two-line `OK`/command protocol — a command or an exemption reason containing a newline
+      cannot desync a JSON object, so the desync class is removed rather than defended against;
+      the `v: 1` field carries the sentinel role (status *and* shape). (2) **`form: FOREIGN` blocks**
+      — `cd /other/repo && git commit`, `git -C`, `--git-dir`, `--work-tree` are unverifiable from a
+      PreToolUse hook, and both allowing and blocking on the wrong repo's markers is wrong, so it
+      fails closed with a named door.
+    · **Orphan suites: writer skips, gate never pairs, and a TEST freezes the inventory.** The
+      standing trigger fired — the round-1 defect was an inventory claim no test could contradict, so
+      correcting `10`→`11` alone would repeat it. `write-test-marker.test.py` now asserts 11 pairs and
+      exactly 2 named orphans; a rename that drops a subject out of the gate turns it red.
+    · Doors enumerated **11** (was 5), mutant floor one per door (was 2 total). `MSG_NO_MARKER`
+      remedy derived from the suite extension. `TEST_EXEMPT` → `hooks/state/test-exempt.log`. Store
+      `0700`/`0600`. Blob regex tightened to `^([0-9a-f]{40}|[0-9a-f]{64})$`. shellcheck **0.11.0**
+      pinned. Tasks 7+8 flagged **revert-as-a-pair**. `cmux.sh` coverage hole stated in Scope as a
+      named follow-up, not quietly closed.
+    · **NEXT: re-dispatch BOTH judges at round 2**, passing round 1's violation ids
+      (`writing-specs/{verified-scope-inventory,edge-cases,api-contracts,pinned-versions}`) — the
+      judge reuses ids for recurring violations, which is how persistence is detected. Escalate to
+      the user if an id recurs twice running, or if round 3 ends with anything outstanding.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
