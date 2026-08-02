@@ -715,6 +715,70 @@ how this file and its linked files should be written (plain language, major chan
       **Doors were miscounted at 11 — `MSG_STALE_SUBJECT`/`MSG_STALE_TEST` share one table row but
       are two doors.** True count 12, plus the two new = **14**; floor is one mutant per door plus
       one per allow-path.
+  - **ROUND 3 VERDICTS 2026-08-02 @ `6046565` — compliance `fail` (3), obs `risk=medium`
+    (unchanged). BOTH escalation triggers fired: `api-contracts` has now been cited in THREE
+    consecutive rounds, `commit-form-coverage` in two, and round 3 ended with violations
+    outstanding. Loop paused, awaiting the user. Nothing waived in any round.** Verdicts:
+    `coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md` §Round 3,
+    `coding-memory/observability-judge/2026-08-02-main-round3.md`.
+    · **The re-derivation DID work on what it targeted — verified, not assumed.** Obs re-measured and
+      confirmed **all eight** round-2 findings closed, the inventory (13/11/2) exact, and explicitly
+      that **no target is dressed up as a measurement anywhere** in the document. Neither judge
+      re-cited the frozen count or the vestigial strip — the two original root causes are dead.
+    · 🔴 **The recurring ids are NOT the old defects surviving. They are NEW defects the round-3
+      additions introduced, landing in the same id buckets.** `api-contracts`: the latency pre-filter
+      I added makes `MSG_NOTHING_RUNNABLE` unreachable (an absent command contains neither `git` nor
+      `commit`, so the cheap filter exits 0 first), and the flowchart's opposite ordering is only
+      implementable by spawning `python3` on every Bash call — which voids the ≤5 ms budget I wrote
+      in the same section. `commit-form-coverage`: the ABSENT rule I added probes `<base>` only,
+      but post-commit content comes from the index under `PLAIN` and the worktree under `ALL`, so a
+      test staged for deletion passes the base probe and the gate allows a commit whose tree drops
+      it — contradicting the spec's own scenario.
+    · **NEW `writing-specs/writer-call-site-cwd`, and it is the sharpest catch of the three:**
+      capturing `$0` and the toplevel before a `cd` fixes the *values* but not the **writer
+      process's cwd**, which both of its mandated resolution steps depend on. Measured from
+      `judge-guard.test.sh`'s post-`cd` shape: `git ls-files --full-name --error-unmatch` exits 1
+      and `rev-parse --show-toplevel` returns the *throwaway* repo — so my round-3 fix leaves one of
+      the 14 suites task 8 must wire permanently red.
+    · 🔴 **OBS FOUND THE LAYER UNDERNEATH, and this is the finding that should drive round 4:**
+      **`git commit -am x` is a live fail-open.** The form table defines `ALL` as `-a`/`--all` and
+      never mentions **bundled** flags, so a classifier matching those tokens reads `-am` as
+      `PLAIN`, uses the index collector, gets zero paths, and waves through untested content — the
+      round-1 `-a` fail-open walking back in through another door. `hooks/doc-guard.sh:132` already
+      carries an `-am` comment; the spec forgot what a sibling guard knew. Same cause:
+      **`git commit -m y foo.sh` (pathspec with no `--`)** ships the worktree blob while `PLAIN`
+      hashes the index blob. **Root cause in one sentence: the spec specifies the `paths` FIELD and
+      never the lexing GRAMMAR that fills it — the one paragraph in the document not measured to an
+      exit code, and the one everything else rests on.**
+    · **Obs also owed:** doors 3-6 appear nowhere in the flowchart (node E's "no" edge reads as
+      classifier-failure → ALLOW, the same prose/diagram contradiction class just fixed for
+      `FOREIGN`) · the tracked-ness probe is a **third** unchecked git call and it fails toward
+      *allow* · nothing distinguishes "allowed, verified" from "allowed, **inert**"
+      (`judge-guard.sh:204` records this exact failure in this exact family) · unborn HEAD:
+      `git diff --cached HEAD` exits 128, blocking a writer-installed repo's first commit ·
+      **the revert-pair warning names the wrong pair — the writer is task 5, so 5↔8 is the hazard,
+      not 7↔8** (carried forward from round 2 unre-derived, the exact class round 3 was meant to
+      kill) · allow-path list says seven, the flowchart has nine edges · drop `merge-guard.sh` from
+      the lexer list, add `checkpoint-before-modify.sh:97`.
+- 🔴 **`hooks/git-guard.sh` FAIL-OPENS ON ANY CHAINED COMMAND — found 2026-08-02, live, Tier 1.**
+  `git-guard.sh:89` anchors `commit_re='^git[[:space:]]+commit([[:space:]]|$)'` at the **start** of
+  the normalized command, so `git add -- <path> && git commit -- <path>` never matches and the
+  default-branch guard does not evaluate at all. Discovered because the obs judge flagged that spec
+  commit `6046565` staged `docs/features/` onto `main`, which the allowlist (`CODING_MEMORY.md` and
+  `coding-memory/*` only, lines 96-102) nominally blocks. It landed because the guard fail-opened,
+  not because the allowlist permitted it. **Every `docs(features)` commit on `main` in this repo's
+  recent history slipped the same way**, so the guard's stated policy and actual practice have
+  diverged silently. `rules/gates.md` documents this chained-command limitation for `merge-guard`
+  ("a chained `foo && gh pr merge` is not caught") but **not** for `git-guard`. Two separable
+  questions for the user: fix the lexer (it is the same lexing-grammar class the marker-gate spec
+  keeps failing on — arguably one shared helper), and decide whether the allowlist should legitimise
+  `docs/**`, which is what this repo actually does on `main` every day.
+  ⚠️ Not a new PARKED item until the user rules — recorded here so it cannot be lost.
+- **Pane-dispatch note 2026-08-02:** the compliance judge's `wait` returned **exit 2 (timeout)** at
+  the 540 s cap and **no result file was ever written**, yet the agent had finished — both verdict
+  files were on disk, timestamped after the wait began. A timeout from `dispatch-pane-agent.sh wait`
+  is therefore **not** evidence the judge failed; check `coding-memory/*/verdicts.jsonl` before
+  re-dispatching, or a round gets paid for twice.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
