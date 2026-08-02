@@ -631,10 +631,51 @@ how this file and its linked files should be written (plain language, major chan
       `0700`/`0600`. Blob regex tightened to `^([0-9a-f]{40}|[0-9a-f]{64})$`. shellcheck **0.11.0**
       pinned. Tasks 7+8 flagged **revert-as-a-pair**. `cmux.sh` coverage hole stated in Scope as a
       named follow-up, not quietly closed.
-    · **NEXT: re-dispatch BOTH judges at round 2**, passing round 1's violation ids
-      (`writing-specs/{verified-scope-inventory,edge-cases,api-contracts,pinned-versions}`) — the
-      judge reuses ids for recurring violations, which is how persistence is detected. Escalate to
-      the user if an id recurs twice running, or if round 3 ends with anything outstanding.
+  - **ROUND 2 VERDICTS 2026-08-02 — compliance `fail` again (4), obs `risk=medium` (was high).
+    TWO IDS RECURRED → MANDATORY ESCALATION TO THE USER, loop paused.** Verdicts:
+    `coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md` §Round 2,
+    `coding-memory/observability-judge/2026-08-02-main-round2.md`.
+    · **What round 2 CLOSED, re-measured by the judge and confirmed:** the whole form table (all
+      pathspec/`-a`/`--amend`/rename/root-commit rows held), the 11-pair inventory, orphan behaviour,
+      shellcheck pin. `writing-specs/{edge-cases,pinned-versions}` closed.
+    · 🔴 **`writing-specs/verified-scope-inventory` RECURRED.** I corrected 10→11 *and* froze it with
+      a test — and **the frozen count is false the moment implementation starts.** This feature adds
+      **3 conforming pairs of its own** (`test-marker-guard`, `classify-commit-command`,
+      `write-test-marker`): 12 pairs at task 4, 14 after task 7. The assertion "exactly 11 pairs, 2
+      orphans" fails → suite fails → no marker → **`write-test-marker.py` becomes uncommittable.**
+      The control I built to stop an uncheckable claim is itself uncheckable.
+    · 🔴 **`writing-specs/api-contracts` RECURRED.** I added the full JSON contract but never
+      reconciled it with the existing scenarios: the field table says the classifier **strips**
+      control chars, while the edge scenario demands `MSG_CLASSIFIER_BAD_OUTPUT` for a newline-bearing
+      `TEST_EXEMPT`. A *correct* classifier makes that scenario unreachable — the red test can only
+      pass by breaking the classifier.
+    · **NEW `writing-specs/commit-form-coverage` — I re-measured it myself and it is REAL:**
+      `git commit -i -- b.md` with `a.sh` staged commits **BOTH** (`a.sh` at its staged content);
+      the `PATHSPEC` collector returns `b.md` only → **fail-open, and `-i` lexes fine** so the
+      accepted-open clause does not cover it. (`-o`/`--only` measured equivalent to plain pathspec —
+      safe.) Also: the table defines content only for paths *in* the path set, while the pairing rule
+      hashes **both** members — a pair member outside the pathspec has no defined post-commit content.
+    · **NEW `writing-specs/scope-boundary` — verified:** all four sibling guards (`git-guard`,
+      `doc-guard`, `judge-guard`, `merge-guard`) are registered in the **global** `settings.json` with
+      matcher `Bash`, so they fire in **every repo**. The spec never says whether this gate is
+      `.claude`-only or global; `.gitignore:17`'s `/hooks/state/` cover does not travel, and a foreign
+      repo with the same sibling convention would block every commit with no writer present.
+    · **Obs (advisory, risk=medium) adds:** `FOREIGN` contradicts itself (flowchart blocks without
+      passing the `TEST_EXEMPT` node, prose advertises `TEST_EXEMPT` as the escape) · `FOREIGN`
+      ignores the payload `cwd` field `hooks/context-handoff-watch.sh:45` already consumes, so
+      `cd "$HOME/.claude" && git commit` is a **same-repo false block** · no latency budget (existing
+      PreToolUse chain measured ~373 ms; `python3` on every Bash call adds ≥56 ms) · the spec never
+      mentions the three sibling guards that already lex `git commit` with anchored regexes ·
+      `hooks/judge-guard.test.sh:13` does a top-level `cd`, so the canonical call site resolves the
+      wrong toplevel there (exactly 1 of 11) · the `INVALID` allow-path sits outside the one-mutant-
+      per-door floor · the frozen-inventory test has an instrument but **no trigger** · no Python
+      call-site form for pair #6.
+    · 🔴 **THE PATTERN, and the thing to decide before round 3:** both recurring ids are the same
+      shape — **I fixed the cited instance and not the class, patching the spot without re-deriving
+      the document.** Round 3 should be a whole-document consistency pass (does every scenario still
+      follow from the contracts? does every count survive the feature's own additions?), not four more
+      targeted patches. The standing trigger already says four rounds on PR #34 proved targeted
+      iteration will not converge.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
