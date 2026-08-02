@@ -774,11 +774,70 @@ how this file and its linked files should be written (plain language, major chan
   keeps failing on — arguably one shared helper), and decide whether the allowlist should legitimise
   `docs/**`, which is what this repo actually does on `main` every day.
   ⚠️ Not a new PARKED item until the user rules — recorded here so it cannot be lost.
-- **Pane-dispatch note 2026-08-02:** the compliance judge's `wait` returned **exit 2 (timeout)** at
-  the 540 s cap and **no result file was ever written**, yet the agent had finished — both verdict
-  files were on disk, timestamped after the wait began. A timeout from `dispatch-pane-agent.sh wait`
-  is therefore **not** evidence the judge failed; check `coding-memory/*/verdicts.jsonl` before
-  re-dispatching, or a round gets paid for twice.
+- **Pane-dispatch note 2026-08-02 (corrected):** the compliance judge's `wait` returned **exit 2
+  (timeout)** at the 540 s cap on both rounds 3 and 4, and **both times the judge was simply still
+  working** — round 3's result file landed ~2 min after the wait gave up, and round 4's finished on a
+  second `wait`. (An earlier version of this note said round 3's file was never written; that was a
+  timing artifact of when I looked, not a fact.) **A `wait` timeout is not evidence of failure.**
+  Check `ps aux | grep '[c]laude -p'` for a live agent and `coding-memory/*/verdicts.jsonl` for a
+  landed verdict before re-dispatching, or a round gets paid for twice. The compliance judge on this
+  spec reliably needs **more than 540 s**; dispatch it with a longer wait or expect a second one.
+  - **ROUND 4 VERDICTS 2026-08-02 @ `8923951` — compliance `fail` (4), obs **`risk=high`** (UP from
+    medium). `api-contracts` has now been cited in **FOUR consecutive rounds**,
+    `commit-form-coverage` in three, `writer-call-site-cwd` in two. Second consecutive mandatory
+    escalation. Nothing waived, ever.** Verdicts:
+    `coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md` §Round 4,
+    `coding-memory/observability-judge/2026-08-02-main-round4.md`.
+    · **Round 4's evidence discipline was the best of the four, per obs, re-run not re-derived:**
+      **G1-G9 reproduce 9/9 exactly**, the pair inventory, unborn-HEAD, M3, the rename filter, the
+      writer cwd fix, all four pinned versions and **all eight cited line numbers** check out; the
+      allow-path count of 9 is right; all 14 doors are in the flowchart; **the two-group value-flag
+      list is exactly right, all 14 flags, checked against `git commit -h`**. Obs states explicitly
+      that **round 3's "fix one thing, break another in the new prose" pattern did NOT repeat** —
+      the seams between new and untouched text held.
+    · 🔴 **THE SIXTH FAIL-OPEN, and it is upstream of everything: `rtk`.** This machine's token-saving
+      proxy is registered as the **first** Bash hook and rewrites `git commit -m x` into
+      **`rtk git commit -m x`** before any guard sees it. **Verified by me, not taken on the judge's
+      word:** `hooks/git-guard.sh:14-18` says so in a comment, and
+      `hooks/lib/classify-pr-command.py:39` carries `WRAPPERS = ("rtk","time","eval","command",
+      "builtin","exec","nohup")` (ADR 0012). **The spec mentions `rtk` zero times and never defines
+      the `kind: COMMIT` predicate at all**, so every real commit on this machine would classify as
+      not-a-commit and the gate would allow — **dead on arrival** — while task 14's hand-written
+      `git commit …` arming check goes green over it. `judge-guard` fail-open #3's exact shape, in
+      the control built to prevent it. It is also in my own `CLAUDE.md` (`RTK.md`), which I did not
+      consult.
+    · **Compliance's four:** `api-contracts` — `form` is a closed enum the hook validates **before**
+      consulting `kind`, but no `form` value is defined for the `OTHER`/`NOTHING_RUNNABLE` outputs
+      every non-commit payload produces, so a conforming classifier trips its own
+      `MSG_CLASSIFIER_BAD_OUTPUT`; and doors row 5 still routes *every* non-zero exit, including the
+      new exit 3, to `MSG_CLASSIFIER_FAILED`. · `commit-form-coverage` — the `ALL` row defines
+      outside-path-set content only "for a tracked path"; an **untracked** member on disk has no
+      defined answer, and `git commit -am y` excludes it from the tree while the worktree ABSENT
+      probe reports it present. · `writer-call-site-cwd` — the **Python** call site still resolves
+      `rev-parse` at the bottom, and checklist task 8 still prescribes round 3's superseded wording.
+      · **NEW `writing-specs/command-grammar`** — rule 2's unqualified "`--opt value` consumes the
+      next token" contradicts the group naming `--untracked-files`/`--gpg-sign` as never consuming
+      one, re-opening the exact G2 fail-open.
+    · **Obs also owed:** git accepts **unique prefixes** — `--includ`/`--inclu`/`--incl`/`--inc` all
+      mean `--include` and reproduce M3 verbatim, `--amen`/`--ame`/`--am` all mean `--amend`, so
+      literal matching closes only the fully-spelled forms · `-p/--patch` and `--interactive` mutate
+      the index *after* the hook runs, unmentioned · **the real revert pair is also 7↔13** (a
+      registered-yet-missing hook blocks *every* Bash call per `git-guard.sh:22-25`) · the exemption
+      log is gitignored + 0700 + local-only, so the auditability that section argues for is not
+      delivered · blocks are never logged, so nobody learns how often the gate fires.
+    · 🔴 **TWO NARRATION ERRORS CAUGHT — the standing trigger fires.** (1) The spec says
+      `git diff --cached --name-only` outside a repo exits **128**; **re-measured, it is 129** (128
+      is `rev-parse --show-toplevel`, a different command — the claim was inherited from round 1 and
+      never re-measured). (2) **`G10` does not exist** — the grammar table stops at G9, yet a
+      scenario cites "measured G10" and my own judge brief said "ten rows G1-G10". Both are claims
+      about my own work that the document does not support.
+    · 🔴 **THE CONCLUSION FOUR ROUNDS NOW SUPPORT:** every round closes its targets and the newly
+      written prose carries the next defect. Round 4 was the cleanest and *still* produced four
+      violations plus a dead-on-arrival gap. **This is PR #34's lesson again — iterating a large
+      spec against judges does not converge.** The document is **1023 lines** for one hook, against
+      a repo standard of <400. The bottleneck is no longer design correctness (obs: "architecture
+      holds, every fix is additive") but **prose consistency at this size**. Do not open round 5 as
+      more of the same.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
