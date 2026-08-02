@@ -548,6 +548,55 @@ how this file and its linked files should be written (plain language, major chan
     `mapfile`), Python **3.9.6**, git **2.50.1**.
     **NEXT: compliance judge + obs judge (architecting stage), then the user review gate.** A failing or
     missing compliance verdict blocks `superpowers:writing-plans`.
+  - **ROUND 1 VERDICTS ARE IN 2026-08-01 — BOTH NEGATIVE, and every load-bearing claim was
+    RE-MEASURED BY ME before being accepted.** Compliance: **`fail`**, 4 violations, confidence high
+    (`coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md`, spec blob `560b74ba`).
+    Obs: **`risk=high confidence=high`**, leading with a `fail` on `execution`
+    (`coding-memory/observability-judge/2026-08-02-main.md`). Probe:
+    `scratchpad/verify-judge-findings.sh`, throwaway repo outside any checkout.
+    · 🔴 **THE BLOCKER, measured not accepted on report: `git commit -- <path>` commits the WORKTREE,
+      not the index.** Probe: index=v2, worktree=v3, `git commit -- f.sh` → **committed v3**. The spec's
+      resolution table knows only `-a`→worktree and *everything else*→index, so **pathspec commits fall
+      into the index branch and the gate goes green while shipping untested content.** This repo's own
+      standing rule mandates `-- <path>` on **every** commit, so the hole sits under the exact command
+      form always used here. The spec found one member of that family (`-a`), said "measured, not
+      assumed", and stopped looking for siblings.
+    · 🔴 **The `-a` fix does not work either.** With an unstaged edit, `git diff --cached --name-only`
+      returns **0 paths** (measured) — so the collection step finds no files, no pairs, and allows. The
+      table branches *which file it hashes* but not *which files it looks at*. The spec's own headline
+      `-a` scenario silently passes.
+    · 🔴 **MY OWN CLAIM WAS FALSE, and this is the important one.** CODING_MEMORY and commit `1859c30`
+      say the pair count was "re-measured": **9 shell + 1 python = 10**. Truth, from `git ls-files`:
+      **13 suite files, 11 pairs, 2 orphans.** My glob was `hooks/*.sh panes/*.sh statusline-command.sh`
+      — **non-recursive**, so it never saw `panes/adapters/*.sh`, and it never globbed `*.test.sh` at
+      all, so orphan tests were structurally invisible. **I ran a command and called its output
+      verification; the instrument did not cover the surface.** Same shape as this branch's recorded
+      lesson that three false-positive probes all exercising quoting is one sample, not three.
+    · **Two ORPHAN TESTS with no sibling subject** — `panes/adapters.test.sh`,
+      `panes/adapters/cmux-exec.test.sh`. Sibling derivation resolves to a non-existent file, and the
+      ratified "a failed marker write fails the suite" rule would turn both permanently red, with no
+      specified error path and no scenario. **A guard that requires a routine `TEST_EXEMPT` teaches
+      the bypass.**
+    · **Coverage illusion, 8 unguarded subjects under `panes/`** (measured) — including
+      `panes/adapters/cmux.sh`, tested by the differently-named `cmux-exec.test.sh`. The spec's scope
+      sentence reads as though `panes/` is covered.
+    · **The one-line call site is wrong for 7 of 13 suites** — `$(dirname "$0")/lib/…` resolves only
+      under `hooks/`; with `|| exit 1` every one of them turns red.
+    · **Compliance's other 3:** unspecified stdin/stdout framing and no type constraint for
+      `classify-commit-command.py`'s free-text `exempt` (parsed from a user-controlled string onto a
+      line-oriented protocol — the hazard `classify-pr-command.py:96` already defends); `shellcheck`
+      (0.11.0 installed) gates checklist task 10 but is missing from the pinned-versions section;
+      plus the scope-inventory and orphan-test items above.
+    · **Explicitly NOT cited, so do not "fix" it:** the `docs/features/` spec-location deviation is
+      adequately reconciled. All three runtime version pins and the `.gitignore:17` citation
+      re-measured exact.
+    · **Both judges also credited what held:** the four `judge-guard` fail-open fixes are genuinely
+      carried, not name-checked, and the fail-closed contract is honestly shaped. Obs: "the gap is
+      verification of the repo it gates, not thinking."
+    · **STILL OWED, round 2:** git-command failure is absent from the blocking list (a git error is
+      indistinguishable from "no files to check" → allow, which is `judge-guard` fail-open #3 reborn);
+      which directory `rev-parse --show-toplevel` runs in; the full `MSG_` constant table (5 named
+      against ≥8 doors); the mutant floor raised to one per door; where `TEST_EXEMPT` is logged.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
