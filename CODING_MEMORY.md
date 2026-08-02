@@ -676,6 +676,45 @@ how this file and its linked files should be written (plain language, major chan
       follow from the contracts? does every count survive the feature's own additions?), not four more
       targeted patches. The standing trigger already says four rounds on PR #34 proved targeted
       iteration will not converge.
+  - **ROUND 3 DIRECTED BY THE USER 2026-08-02 — escalation resolved, nothing waived.** Two rulings:
+    (1) **whole-document re-derivation**, not targeted patches; (2) `scope-boundary` closed by
+    decision — the gate registers **globally** like its four siblings but is **inert unless the
+    resolved repo has the writer installed**, so a foreign repo with sibling-test naming can never be
+    locked out with no marker writer present.
+    · **Re-measured before rewriting (all five confirm the record, none taken on trust):** inventory
+      is **13 suites / 11 pairs / 2 orphans**, unchanged · `hooks/judge-guard.test.sh:13` really does
+      `cd "$TMP"` at top level (**exactly 1 of 11**, so the call site must capture `$0` + toplevel at
+      the top) · `git commit -i -- b.md` with `a.sh` staged commits **BOTH** and `HEAD:a.sh` is the
+      staged `v2`, while the `PATHSPEC` collector returns `b.md` only — **fail-open reproduced** ·
+      a pair member modified in the worktree but **outside** the pathspec ships at **base** content
+      (`t1`), not worktree content (`t2`) — its post-commit content was genuinely undefined ·
+      `rev-parse --show-toplevel` outside a repo exits **128 with empty stdout**.
+    · **Derived fixes (the class, not the instances) — these are what round 3 writes:**
+      **`verified-scope-inventory` root cause: the frozen literal count was the wrong control.** It
+      froze a number the feature itself invalidates. Replaced by two assertions that survive the
+      feature's additions: *every tracked pair's suite contains the marker-write call* (real trigger:
+      add a pair without wiring → red) and *the two named orphans are still orphans* (protects the
+      `cmux.sh` hole claim; goes red on the follow-up rename, which is correct). The wiring assertion
+      lands **in task 8's own commit**, not task 4 — at task 4 it would be red for four tasks.
+      **Task 8 therefore wires 14 suites, not 11:** the feature's own three pairs
+      (`test-marker-guard`, `classify-commit-command`, `write-test-marker`) are `hooks/` files with
+      sibling tests, so the gate demands markers for them and they become uncommittable if unwired.
+      **`api-contracts` root cause: the strip was vestigial** from the dead two-line protocol — JSON
+      framing already survives a newline. Classifier no longer sanitises; the hook validates and
+      blocks a bad exemption at its **own** door, `MSG_BAD_EXEMPT`. Over-long is blocked, never
+      silently truncated (an unauditable truncated reason defeats the exemption log).
+      **`-i`/`--include` → `form: INCLUDE` → block** (`MSG_UNSUPPORTED_FORM`), same fail-closed
+      precedent as `FOREIGN`; the repo's house style never uses it.
+      **Post-commit content is now defined for EVERY pair member**, not just those in the path set:
+      the blob the resulting tree will hold — `PATHSPEC` → worktree if matched, else the `<base>`
+      blob (M4); `PLAIN` → index; `ALL` → worktree if tracked.
+      **`TEST_EXEMPT` moves BEFORE the `FOREIGN` check** — the round-2 flowchart blocked `FOREIGN`
+      without ever reaching the exemption node while the prose advertised it as the escape.
+      **Repo resolves from the payload `cwd`**, which is the correct use of that field; it is still
+      NOT used to follow a `cd` (the payload cwd is the session's, pre-`cd`).
+      **Doors were miscounted at 11 — `MSG_STALE_SUBJECT`/`MSG_STALE_TEST` share one table row but
+      are two doors.** True count 12, plus the two new = **14**; floor is one mutant per door plus
+      one per allow-path.
 - **PR #31 (verdict outcome backfill) MERGED 2026-07-30T04:22Z (`8dfe05c`)** — 22 rows null→clean.
   Tip-reachability verified; branch `docs/verdict-outcome-backfill` pruned local+remote and its
   worktree (the misnamed `phase-guard-hook` dir) removed. Doc-system consolidation is now unblocked.
