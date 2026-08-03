@@ -809,8 +809,29 @@ how this file and its linked files should be written (plain language, major chan
   at `phase: planning` (i.e. the whole remaining marker-gate register, ~8 branches) **every memory
   write is refused**, and `rules/gates.md` promises "docs and memory paths are never blocked". One
   line to fix; do it on the same branch as the regression above, since both are live guard friction.
-- ⚠️ **`fix/git-guard-empty-index` @ `4542e89` — BOTH DEFECTS FIXED BUT THE BRANCH MUST NOT MERGE.**
-  **Obs judge RUN 1 = `risk=high`, did not clear it: I introduced a fail-open.** Four shapes `main`
+- ✅ **`fix/git-guard-empty-index` @ `4be542b` — NARROWED, GREEN, PUSHED; awaiting obs judge RUN 3,
+  then the PR from the worktree.** Policy now: with nothing staged on `main`, relax **only** where
+  the commit names its own paths after `--` and nothing on the line widens them (`-a`, `--amend`,
+  `-i`/`--include`, `--only`, and args it cannot read each veto); everything else denies exactly as
+  `main` does. Detail lives in **ADR 0014** (rewritten) and the feature file's `## Verification`,
+  deliberately not restated here. Replayed 51 commands × 6 index/worktree states against `main`'s
+  hook: the rejected design allowed **36 distinct commands `main` blocks**, this fix allows **6**,
+  every one of them naming only documentation. git-guard **67/0**, classifier **73/0**, seven
+  neighbours unchanged, shellcheck clean.
+  · 🔴 **Two defects found while narrowing, both measured, both fixed here.**
+  `git commit -i -m msg -- docs/x.md` was a **live fail-open**: `-i` commits the index *as well as*
+  the named paths, and the classifier returned the paths the moment it saw `--`, before consulting
+  the flag table — so a staged source file rode onto `main` behind a documentation pathspec.
+  Verified against git itself rather than the manual. Second: `has_fact` word-split a fact stream
+  whose paths ride after a **tab**, so committing a file named `PUSH_FORCE` produced the force-push
+  fact and blocked an unrelated `git push` in the same command line.
+  · ⚠️ **A probe reported the wrong exit code and briefly hid the `-i` bug.** A command substitution
+  inside the reporting `printf`'s own argument list resets `$?`, so both arms came back `0` and read
+  as "pre-fix and fixed behave identically" — the opposite of the truth. A measurement bug that
+  fabricates *agreement* argues against a change that is actually needed. Owed to auto-memory as
+  `feedback_capture_exit_code_before_anything_else`; **blocked by the live phase-guard — Defect B
+  demonstrating itself.** Draft text: `.claude/session-state.md`.
+  · **HISTORY, from here down.** **Obs judge RUN 1 = `risk=high`, did not clear it: I introduced a fail-open.** Four shapes `main`
   blocks today are ALLOWED by the branch (each reproduced by me, not taken on report):
   `git add -- hooks/x.sh && git commit -m msg`, `git add -A && git commit -m msg`,
   `git commit --amen --no-edit`, `git commit --pathspec-from-file=list`. The derivation enumerates
@@ -847,7 +868,10 @@ how this file and its linked files should be written (plain language, major chan
   · **User committed the RUN 1 fix by hand** (3 commits, `aedaf38`/`8099d0a`/`833e3eb`, red before
   green, `settings.json` correctly kept out) — the human checkpoint caught nothing wrong with the
   code and the judge caught what review would not have.
-  · Below is the pre-judge summary; it remains accurate about what was built, not about readiness.
+  · Below is the pre-judge summary of a design that has since been **replaced**, kept for the
+  record. ⚠️ Its claim that an empty result allows *"because git refuses such a commit itself"* is
+  false whenever a sibling `git add` precedes it, and describes neither the current code nor the
+  current policy. Read it as history only.
 - ✅ **Built on `fix/git-guard-empty-index`, 8 commits (pre-judge state `5aa220e`).**
   Full detail is in `docs/features/git-guard-empty-index.md` (checklist notes + `## Verification`)
   — deliberately not restated here. Headlines: an empty index now means *the index cannot answer*,
