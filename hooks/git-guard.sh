@@ -112,14 +112,19 @@ on_main() {
 # line will have staged by the time git looks. Two review rounds tried; each
 # enumeration was measured short (first the chain's own `git add`, then nine
 # further commands that fill the index), and short in the ALLOW direction is a
-# fail-open. Reading the commit's own pathspec cannot be short in that
-# direction: every path it grants is one the hook has actually read.
+# fail-open. Reading the commit's own pathspec is a much narrower question, and
+# every path it grants is one the hook has read off the command line -- but
+# "read" is not "resolved": a path with a `..` component names a file other than
+# the one the pattern matched, so the allowlist below refuses those outright.
 #
 # A pathspec is EXCLUSIVE -- git commits those paths and leaves whatever else is
-# staged sitting in the index -- but only while nothing else on the line widens
-# it, so three facts veto it. The classifier suppresses COMMIT_PATHSPEC for
-# `-i`/`--include` (which commits the index as well) by refusing to recognise
-# the flag at all; -a and --amend arrive as facts of their own. See ADR 0014.
+# staged sitting in the index -- but only while nothing else on the LINE widens
+# it. The classifier withholds COMMIT_PATHSPEC unless every commit segment names
+# its own paths and none of them carries -i/--include (unrecognised on purpose),
+# -a or --amend. The three checks below are belt and braces over that: they bind
+# across the whole line rather than per segment, so they can only ever refuse
+# more, and they keep a classifier regression from becoming a fail-open here.
+# See ADR 0014.
 commit_pathspec_files() {
   local tab
   tab=$(printf '\t')
@@ -167,6 +172,15 @@ if has_fact COMMIT && on_main; then
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     case "$f" in
+      # A `..` COMPONENT means the string matched here and the file git will
+      # actually commit are two different things: `coding-memory/../src/app.sh`
+      # satisfies `coding-memory/*`, and `docs/../notes.md` satisfies `docs/*.md`
+      # from anywhere in the repo. The hook may only judge what it has read, so a
+      # traversing path is refused rather than resolved — resolving it would mean
+      # answering "relative to which directory?", which is Defect C's question and
+      # is not settled here. A `..` inside a file NAME (`docs/v1..v2.md`) traverses
+      # nothing and is untouched by these four patterns.
+      ..|../*|*/../*|*/..) allowed=0 ;;
       # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
       # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
       CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;

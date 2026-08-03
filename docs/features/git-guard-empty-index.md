@@ -69,15 +69,20 @@ at all — a bare token the flag table cannot account for, an unrecognised optio
 abbreviations, so `--amen` amends), or `--pathspec-from-file`, whose paths live in a file this hook
 cannot read. `-o`/`--only` is unrecognised, so it blocks with that last group.
 
-**Why this shape:** it only ever grants permission for paths the hook has actually read off the
-command line, so it is **provably never weaker than `main`** — checkable by replay, where "is this
-enumeration complete?" is not checkable at all. Accepted cost: `git add X && git commit -m msg`
+**Why this shape:** it only ever grants permission for paths the hook has read off the command
+line, so it is **measured never weaker than `main`** by replay — where "is this enumeration
+complete?" is not checkable at all. *Measured, not proven:* round 3 found two ways it was weaker
+that the matrix of the day did not contain — path facts from one segment answering for a whole
+line, and a `..` component making the string matched and the file committed two different things.
+Both are fixed and both are now in the matrix. Accepted cost: `git add X && git commit -m msg`
 with no pathspec stays denied, which is today's behaviour and what the house rule already forbids.
 
 ⚠️ **Do not restate the block case as "git refuses such a commit anyway".** That is false whenever
 a sibling `git add` precedes it, and believing it is exactly what produced the fail-open in task 8.
 
-The allowlist itself is unchanged: `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`.
+The allowlist entries themselves are unchanged — `CODING_MEMORY.md`, `coding-memory/*`,
+`docs/*.md` — but a path carrying a `..` **component** is refused before they are consulted,
+because the string matched and the file git resolves are then not the same thing (round 3).
 Flag detection reuses the existing segment lexer (`hooks/lib/shell_segments.py`) the way
 `doc-guard.sh` reads `-a` — **no third lexer.**
 
@@ -254,29 +259,52 @@ Fix: add `projects/*/memory/*` to that list. One line.
         a fact stream whose paths ride after a **tab**, so committing a file named `PUSH_FORCE`
         blocked an unrelated `git push` in the same line.
 
+- [x] 10. **RUN 3 → two more shapes, both fixed here.** Verdict appended to the same file, pinned
+      `4be542b`, `risk=medium confidence=high`, `regression: fail`, `success_masking: fail`.
+      Rounds 1 and 2 confirmed genuinely closed — the judge re-measured rather than trusting the
+      write-up. Two new shapes were weaker than `main`, both now red-tested (`b17a666`) and fixed:
+      · **The line was judged by one segment.** Facts are a flat set with no segment identity, so
+        `git commit -m a -- docs/a.md && git add -- src/b.sh && git commit -m b` allowed a second
+        commit that really carries `src/b.sh`. The classifier now withholds `COMMIT_PATHSPEC` and
+        its paths unless **every** commit on the line names its own and none is widened. Stated as
+        a rule for any fact added later: **granting facts must hold line-wide, denying facts may
+        hold per segment** — which is what `PUSH_FORCE` already did.
+      · **A path was matched as a string.** `coding-memory/../src/app.sh` satisfied
+        `coding-memory/*`; `docs/../notes.md` satisfied `docs/*.md` from anywhere in the repo. A
+        `..` **component** is now refused before the allowlist, rather than resolved — resolving
+        asks "relative to which directory?", which is Defect C's open question. `docs/v1..v2.md`
+        traverses nothing and stays allowed.
+      · ADR 0014's two proof claims softened to what was measured, and `git -C <dir> commit`
+        (invisible to the classifier, both hooks exit 0, **not** widened here) added to its open list.
+
 ## Verification
 
-**Suites — all green.** `git-guard` 33/0 → **67/0** · `phase-guard` 130/0 → **134/0** ·
-`classify-git-command` 47/0 → **73/0**. Unaffected neighbours re-run and unchanged: `judge-guard`
+**Suites — all green.** `git-guard` 33/0 → **77/0** · `phase-guard` 130/0 → **134/0** ·
+`classify-git-command` 47/0 → **78/0**. Unaffected neighbours re-run and unchanged: `judge-guard`
 101/0, `doc-guard` 16/0, `context-handoff-watch` 19/0, `pane-dispatch-guard` 34/0,
 `classify-pr-command` 51/0, `memsearch-nudge` 5/5.
 
 **shellcheck 0.11.0** — zero findings on `git-guard.sh` and `git-guard.test.sh`. No net-new.
 
-**The tests detect the bug: 21 of 67 hook cases and 12 of 73 unit cases were red** at the
-tests-only commit that precedes the fix, and green after it.
+**The tests detect the bug**, each round measured at its own tests-only commit and green after the
+fix that follows it: **21 of 67 hook and 12 of 73 unit** cases red at `5545f64` (the narrowing),
+then **5 of 77 hook and 6 of 78 unit** red at `b17a666` (round 3's two shapes).
 
-**The load-bearing claim, replayed rather than asserted — 51 commands × 6 index/worktree states,
-306 pairs, `main`'s hook vs the candidate, comparing exit codes:**
+**The load-bearing claim, replayed rather than asserted — 63 commands × 6 index/worktree states,
+378 pairs, `main`'s hook vs the candidate, comparing exit codes.** The matrix grew from 51 commands
+to 63: round 3's two shapes were not in it, which is why it passed them.
 
 | Candidate | identical to `main` | stricter | **allowed where `main` blocks** |
 |---|---|---|---|
-| the rejected enumerate-what-gets-staged design (`27c5ac5`) | 173 | 1 | **132 pairs / 36 distinct commands** |
-| this fix | 282 | 0 | **24 pairs / 6 distinct commands** |
+| the rejected enumerate-what-gets-staged design (`27c5ac5`) | 215 | 1 | **162 pairs / 44 distinct commands** |
+| the narrowed fix as RUN 3 received it (`4be542b`) | 326 | 0 | **52 pairs / 13 distinct commands** |
+| this fix | 346 | 0 | **32 pairs / 8 distinct commands** |
 
-All six relaxations name **only** documentation after a `--` (`docs/*.md`, `CODING_MEMORY.md`,
-`coding-memory/*`), which is the entire intended change. The 36 include `git rm`, `git commit -a`,
-`git commit --amend` and a bare `git commit -m msg`.
+All eight relaxations name **only** documentation after a `--` (`docs/*.md`, `CODING_MEMORY.md`,
+`coding-memory/*`), which is the entire intended change; one of them is the newly-legal
+`git commit -m a -- docs/x.md && git commit -m b -- docs/x.md`. The five that left the list between
+`4be542b` and here are exactly round 3's two defects — three multi-commit lines and two `..` paths.
+The 44 include `git rm`, `git commit -a`, `git commit --amend` and a bare `git commit -m msg`.
 
 **Git's own behaviour, measured directly rather than read off the manual** — the premise the whole
 policy rests on. With `src/a.sh` staged:

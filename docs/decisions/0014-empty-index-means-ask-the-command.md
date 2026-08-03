@@ -49,14 +49,29 @@ shown to be complete. Two independent review rounds each measured it short:
   `git checkout HEAD~1 -- <p>`, `git restore --staged`, `git apply --cached`,
   `git stash pop --index`, `git cherry-pick -n`, `git revert -n`.
 
-Replayed against `main` across 51 commands × 6 index/worktree states, that design allowed **36
-distinct commands** `main` blocks. The narrow policy allows **6**, and all six name only
+Replayed against `main` across 63 commands × 6 index/worktree states, that design allowed **44
+distinct commands** `main` blocks. The narrow policy allows **8**, and all eight name only
 documentation (`docs/*.md`, `CODING_MEMORY.md`, `coding-memory/*`) after a `--`.
 
 The asymmetry is the point: a list of staging commands that is short **grants** permission it should
-not, while reading the commit's own pathspec can only ever grant paths the hook has actually read.
-The narrow policy is therefore *provably* never weaker than `main` — a property that can be checked
-by replay, where "is this enumeration complete?" cannot be checked at all.
+not, while reading the commit's own pathspec is a question the hook can answer from the text in
+front of it.
+
+**How far that carries, stated honestly.** The narrow policy is *measured* never weaker than `main`
+across that replay matrix — not proven. Round 3 found two ways it was weaker that the matrix of the
+day did not contain, and both were shipped as passing:
+
+- The **whole line** was judged by **one segment's** paths, so a second commit naming nothing rode
+  in behind the first one's documentation pathspec (`git commit -m a -- docs/a.md && git add --
+  src/b.sh && git commit -m b`, where the second commit really carries `src/b.sh`).
+- A path was matched **as a string**, so `coding-memory/../src/app.sh` satisfied `coding-memory/*`
+  and `docs/../notes.md` satisfied `docs/*.md`. "Read off the command line" was doing work the
+  reading could not support: the hook had read a token, not the file git would resolve it to.
+
+Both are fixed, and the replay matrix now contains them. The claim a reader may rely on is the
+measured one, over a matrix that has twice been found incomplete — replay checks what it is given,
+which is still a strictly better position than "is this enumeration complete?", a question with no
+check at all.
 
 ## Consequences
 
@@ -97,6 +112,27 @@ The suite now pins all nine staging commands as blocked. They pass **without the
 them** — they block for the same reason every unreadable shape blocks. That is the test the previous
 design could not have: it fails if a future change starts inferring what a sibling command stages.
 
+### A fact that grants permission must hold for the whole line
+
+The classifier hands the hook a flat **set** of facts with no segment identity. `PUSH_FORCE` was
+already built for that — it means "this segment force-pushes without a lease of its own", so a lease
+elsewhere cannot excuse it. `COMMIT_PATHSPEC` was not, and it is the only fact that *grants*
+anything: emitted from a single segment, it let one commit's paths answer for a line containing
+another commit that named none.
+
+The rule now stated in that file, and the one to apply to any fact added later: **a granting fact
+must be true of every segment; a denying fact may be true of any one.** `COMMIT_PATHSPEC` and its
+`COMMIT_PATH` entries are therefore withheld unless *every* commit on the line names its own paths
+and none of them is widened by `-a`, `--amend`, `-i` or an unreadable token.
+
+### A path is not the file it names
+
+The allowlist is a `case` over the literal token, and a `..` component makes the string matched and
+the file committed two different things. It now refuses any path with a `..` **component** (`..`,
+`../*`, `*/../*`, `*/..`) before the allowlist is consulted, rather than resolving it — resolving
+would mean answering "relative to which directory?", which is the identity-from-cwd question left
+open below. A `..` inside a file *name* (`docs/v1..v2.md`) traverses nothing and stays allowed.
+
 ### Accepted costs
 
 - **`git add X && git commit -m msg`, with no pathspec, stays blocked on `main`.** This is `main`'s
@@ -122,6 +158,11 @@ design could not have: it fails if a future change starts inferring what a sibli
   `git diff` in the hook's cwd, so cwd now affects only the branch name and the index read.
 - **`--amend` with a *populated* index** still evaluates only the staged files, not HEAD's tree as
   well. Pre-existing, unchanged by this ADR, and not widened into it.
+- **`git -C <dir> commit` is invisible to the classifier**, which reads `argv[1]` as the subcommand
+  and sees `-C`. Measured, both directly and across all six replay states: `main` and this branch
+  both exit **0** and yield no facts at all, so the shape
+  is pre-existing and **not widened here** — but it means a commit can name a directory the guard
+  never looks at. The same class as identity-from-cwd above, and it belongs with that decision.
 - The accepted-open lexing shapes from ADR 0013 are unchanged.
 
 This guard remains a **momentum guardrail, not a security boundary**.

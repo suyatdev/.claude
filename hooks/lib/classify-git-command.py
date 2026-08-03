@@ -9,10 +9,12 @@ unrecognised command simply yields no facts.
     COMMIT_ALL  ...and that same segment carries -a / --all / -am, which stages tracked
                 edits at commit time, so the change to inspect is HEAD's diff, not the index
     COMMIT_AMEND      ...and that segment carries --amend, which re-writes HEAD's tree
-    COMMIT_PATHSPEC   ...and that segment names paths after a `--` separator AND carries
-                nothing before it that could commit more besides
+    COMMIT_PATHSPEC   EVERY `git commit` on the line names paths after a `--` separator and
+                carries nothing besides that could commit more -- so the COMMIT_PATH facts
+                below are the whole file set of the whole line
     COMMIT_PATH<tab><path>
-                one per path after `--`. A path rides in the fact stream rather than being
+                one per path after `--`, across every commit on the line, and only
+                alongside COMMIT_PATHSPEC. A path rides in the fact stream rather than being
                 re-lexed by the caller, so there is no second parser to disagree with this
                 one; the tab keeps a path containing spaces in one piece.
     COMMIT_BARE_ARGS  ...and that segment has a token the flag table cannot account for,
@@ -25,6 +27,14 @@ unrecognised command simply yields no facts.
 Both guards previously matched a regex anchored to the start of the command string, so
 `git add -- x && git commit -m y` -- the shape this repo uses constantly -- never matched
 and the guard body never ran. See shell_segments.py for the lexer and its accepted limits.
+
+GRANTING vs DENYING facts. The caller gets a flat SET with no segment identity, so a fact
+that GRANTS permission must be true of the whole LINE, while a fact that DENIES may be true
+of any one segment. COMMIT_PATHSPEC is the only granting fact and used to be emitted from a
+single segment: in `git commit -m a -- docs/a.md && git add -- src/b.sh && git commit -m b`
+the first commit's paths answered for a line whose second commit really carries src/b.sh.
+PUSH_FORCE already followed the rule in the denying direction -- a lease in a different
+segment must not excuse a bare force in this one.
 
 Why the flags are judged PER SEGMENT rather than by searching the whole string, which is
 what the shell versions did:
@@ -128,6 +138,12 @@ def commit_scan(rest):
 def classify(src):
     """Return the sorted list of fact tokens for a raw Bash command string."""
     facts = set()
+    # One entry per `git commit` segment: the paths that commit names for itself,
+    # or None when it names none this file can vouch for. The path facts are
+    # emitted only if NO entry is None -- see "granting vs denying" in the module
+    # docstring. Collected first and emitted after the loop because a segment
+    # cannot know whether a LATER one will name nothing.
+    commit_scopes = []
     for _assigns, argv in segments(src):
         if len(argv) < 2 or argv[0] != "git":
             continue
@@ -135,17 +151,20 @@ def classify(src):
 
         if subcommand == "commit":
             facts.add("COMMIT")
+            widened = False
             if any(tok in ALL_FLAGS for tok in rest):
                 facts.add("COMMIT_ALL")
+                widened = True
             if "--amend" in rest:
                 facts.add("COMMIT_AMEND")
+                widened = True
             paths, bare = commit_scan(rest)
-            if paths:
-                facts.add("COMMIT_PATHSPEC")
-                for path in paths:
-                    facts.add("COMMIT_PATH\t" + path)
             if bare:
                 facts.add("COMMIT_BARE_ARGS")
+            # -a and --amend commit more than the pathspec names, so this segment
+            # does not describe itself even though it does name paths.
+            scoped = bool(paths) and not bare and not widened
+            commit_scopes.append(paths if scoped else None)
 
         elif subcommand == "push":
             facts.add("PUSH")
@@ -160,6 +179,12 @@ def classify(src):
             # in a different segment excuse a bare force in this one.
             if not leased and any(tok in FORCE_FLAGS for tok in rest):
                 facts.add("PUSH_FORCE")
+
+    if commit_scopes and all(scope is not None for scope in commit_scopes):
+        facts.add("COMMIT_PATHSPEC")
+        for scope in commit_scopes:
+            for path in scope:
+                facts.add("COMMIT_PATH\t" + path)
 
     return sorted(facts)
 
