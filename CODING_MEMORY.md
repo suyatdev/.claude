@@ -805,8 +805,10 @@ how this file and its linked files should be written (plain language, major chan
   Check `ps aux | grep '[c]laude -p'` for a live agent and `coding-memory/*/verdicts.jsonl` for a
   landed verdict before re-dispatching, or a round gets paid for twice. The compliance judge on this
   spec reliably needs **more than 540 s**; dispatch it with a longer wait or expect a second one.
-  - **WORK REGISTER 2026-08-02 — branch-per-defect, user-chosen. Full detail in
-    `.claude/session-state.md` (machine-local, survives branch switches).** Nine units of work; the
+  - **WORK REGISTER 2026-08-02 — branch-per-defect, user-chosen. Per-defect detail now committed at
+    `coding-memory/marker-gate-defect-register.md`** (moved there 2026-08-03; it had existed only in
+    the machine-local `.claude/session-state.md`, one `/clear`-adjacent rewrite from being lost).
+    Nine units of work; the
     user takes one branch each, from `main`, in roughly this order:
     `fix/git-guard-chained-command` (**L1 — the only item affecting real work today; live code**) ·
     `feature/marker-gate-recognition-rule` (**D1+D2, ONE branch**) ·
