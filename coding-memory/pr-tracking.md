@@ -523,7 +523,11 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 
 ### PR #35 — fix/fix-l1 (L1 of the branch-per-defect register)
 - repo: suyatdev/.claude · branch: fix/fix-l1 · remote: origin
-- PR: https://github.com/suyatdev/.claude/pull/35 · status: OPEN, opened 2026-08-03
+- PR: https://github.com/suyatdev/.claude/pull/35 · status: **MERGED 2026-08-03 05:11Z**, merge
+  commit `67598b2`. Branch pruned local+remote. Both rounds backfilled `outcome: rework` — strict
+  reading of the narrowed carve-out: each round's findings caused substantive changes (R1 new tests
+  + `docs/*.md` + ADR 0013 + gates trim; R2 a stale rule in an always-loaded file + two
+  missing-rationale comments), and only landing a verdict is exempt.
 - opened_by session_origin: desktop · last push: desktop
 - scope: `git-guard.sh` + `doc-guard.sh` fail-opened on **every chained command** — both anchored
   `^git[[:space:]]+commit` to the start of the string, so `git add -- x && git commit` never matched
@@ -553,5 +557,19 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   `require-project-standards.sh`, `scan-invisible-unicode.sh`, `scan-secrets.sh`. `rules/gates.md`
   had been asserting phase-guard enforced the phase gate; corrected here. `scan-secrets.sh` is
   advertised protection that is not running.
-- next: merge via GitHub UI → prune branch local+remote → backfill #35's `outcome` → D1+D2
+- 🔴 **post-merge discovery — the "not registered" framing in this PR is imprecise, correct it.**
+  `git ls-files -v` reports `S settings.json`: **`skip-worktree` is set** (2026-07-22, on the obs
+  judge's advice, so a stray `git commit -a` can't publish machine-local settings — see §PR #29
+  local hygiene). Consequence nobody foresaw: `9024b64` (2026-07-27, *"register phase-guard …
+  Closes task 14"*) registered phase-guard in the **committed** file, and skip-worktree meant it
+  **never reached the live file** — the hook had never run once. Committed vs live differed by
+  phase-guard alone (plus `model`, expected). **Reconciled on the live file 2026-08-03**; takes
+  effect next session. The other four scanners are **deliberately opt-in**, not an oversight —
+  `059e01b`: *"Designed, not installed: settings.json is deliberately untouched. hooks/README.md
+  documents the exact PreToolUse JSON to opt each hook in per-repo."*
+- next: **one follow-up branch** covering (a) the corrected wording in `rules/gates.md` +
+  `CODING_MEMORY.md` and (b) a settings committed-vs-live drift check. ⚠️ The detector has a
+  bootstrap problem — registering it means editing the very file whose edits don't propagate; the
+  likely design is folding it into an already-registered hook (`doc-guard`'s SessionStart branch
+  already surfaces record-vs-reality mismatches) so it needs no settings edit. Then D1+D2
   (`feature/marker-gate-recognition-rule`, ONE branch) per the register at `CODING_MEMORY.md:786`.
