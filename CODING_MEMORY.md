@@ -773,7 +773,9 @@ how this file and its linked files should be written (plain language, major chan
   questions for the user: fix the lexer (it is the same lexing-grammar class the marker-gate spec
   keeps failing on — arguably one shared helper), and decide whether the allowlist should legitimise
   `docs/**`, which is what this repo actually does on `main` every day.
-  ✅ **FIXED 2026-08-03 on `fix/fix-l1` @ `ac5afa2` (L1).** Both guards now lex the command into
+  ✅ **FIXED 2026-08-03 — PR #35 `fix/fix-l1`, OPEN, awaiting your merge in the GitHub UI**
+  (https://github.com/suyatdev/.claude/pull/35 · detail: `coding-memory/pr-tracking.md` §PR #35).
+  Both guards now lex the command into
   shell segments via the new `hooks/lib/classify-git-command.py`; the generic half of
   `classify-pr-command.py` moved to `hooks/lib/shell_segments.py` and both classifiers share it
   (`classify-pr-command.test.py` stayed green and untouched as the regression baseline). git-guard's

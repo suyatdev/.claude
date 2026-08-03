@@ -520,3 +520,38 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   vs its own 200 cap.
 - next: merge via GitHub UI → prune branch local+remote → post-merge tip-reachability check →
   backfill #34's own `outcome` → open the policy-propagation branch (ADR first).
+
+### PR #35 — fix/fix-l1 (L1 of the branch-per-defect register)
+- repo: suyatdev/.claude · branch: fix/fix-l1 · remote: origin
+- PR: https://github.com/suyatdev/.claude/pull/35 · status: OPEN, opened 2026-08-03
+- opened_by session_origin: desktop · last push: desktop
+- scope: `git-guard.sh` + `doc-guard.sh` fail-opened on **every chained command** — both anchored
+  `^git[[:space:]]+commit` to the start of the string, so `git add -- x && git commit` never matched
+  and the guard body never ran. Live Tier 1; commit `6046565` reached `main` past the allowlist this
+  way, as did recent `docs(*)` commits. Fixed by extracting `judge-guard`'s existing shlex segment
+  lexer to `hooks/lib/shell_segments.py` and adding `classify-git-command.py`; `main` allowlist
+  widened to `docs/*.md` (by file type). New: ADR 0013, `docs/features/git-guard-chained-command.md`.
+- **TDD, and neither hook had ANY test suite before this.** 17 fail-open cases written and confirmed
+  red first; 436 assertions green across 9 suites at merge time (was 429 + 7 from judge round 1).
+- three further defects found by writing the cases, none previously reported:
+  `git push --force && echo --force-with-lease` was **allowed** (whole-string flag search — a lease
+  anywhere excused a bare force anywhere), `git push && echo --force` was **blocked**, and doc-guard
+  read `-a` from any segment (`git commit -m msg && ls -a` judged every dirty file, not the index).
+- judge: **two rounds, both risk=low conf=high** — RUN 1 `4335eb6`, RUN 2 `af51f88`. Every finding
+  from both acted on. RUN 1 independently fuzzed **24,016 strings** through old vs new
+  `classify-pr-command.classify()` (**0 divergences**) — that file was left untouched on purpose as
+  the extraction's regression baseline. RUN 2 **mutation-tested** RUN 1's fixes: flipped each new
+  behaviour and confirmed exactly the corresponding cases went red, so none are decoration.
+- **Opened under a logged `JUDGE_EXEMPT`** — the final commit `e2a6fe9` postdates RUN 2 and changes
+  one word of prose plus two comments, no logic. `judge-guard` gates on freshness only.
+- ⚠️ accepted cliff, **explicit user decision 2026-08-03** (ADR 0013): `git-guard` fails CLOSED if
+  `shell_segments.py` won't load, and it runs on every Bash call — so that file breaking blocks every
+  Bash command until restored. Alternatives weighed and rejected: a non-git fallback (a code path
+  reachable only when already degraded) and failing open (this ticket's original bug, new trigger).
+- 🔴 **incidental, out of scope, own branch:** five of seventeen `hooks/` scripts are **not
+  registered in `settings.json` and never run** — `phase-guard.sh`, `checkpoint-before-modify.sh`,
+  `require-project-standards.sh`, `scan-invisible-unicode.sh`, `scan-secrets.sh`. `rules/gates.md`
+  had been asserting phase-guard enforced the phase gate; corrected here. `scan-secrets.sh` is
+  advertised protection that is not running.
+- next: merge via GitHub UI → prune branch local+remote → backfill #35's `outcome` → D1+D2
+  (`feature/marker-gate-recognition-rule`, ONE branch) per the register at `CODING_MEMORY.md:786`.
