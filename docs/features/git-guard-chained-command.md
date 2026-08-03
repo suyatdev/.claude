@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: fix/fix-l1
 ---
@@ -149,4 +149,23 @@ boundaries; closing them belongs to the permission system.
 
 ## Verification
 
-<Appended during review.>
+All nine suites green — 429 assertions, 0 failures, run at `1da6ac9`:
+
+| Suite | Result |
+|---|---|
+| `hooks/git-guard.test.sh` | 28 passed (**new**; 11 of these failed before the fix) |
+| `hooks/doc-guard.test.sh` | 14 passed (**new**; 6 failed before the fix) |
+| `hooks/lib/classify-git-command.test.py` | 47 passed (**new**) |
+| `hooks/lib/classify-pr-command.test.py` | 51 passed — unchanged file, the extraction's regression baseline |
+| `hooks/judge-guard.test.sh` | 101 passed — the direct consumer of the refactored classifier |
+| `hooks/phase-guard.test.sh` | 130 passed |
+| `hooks/pane-dispatch-guard.test.sh` | 34 passed |
+| `hooks/context-handoff-watch.test.sh` | 19 passed |
+| `hooks/memsearch-nudge.test.sh` | 5 passed |
+
+Dogfooded live: both commits on this branch were made with a chained
+`git add -- … && git commit …`, which the fixed guards evaluated (rather than skipped) and allowed —
+feature branch, documentation staged. The pre-fix code would not have evaluated either one.
+
+Open issues: none blocking. Out of scope and recorded for a later branch — five hook scripts are not
+registered in `settings.json` and never run.
