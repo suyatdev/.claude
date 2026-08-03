@@ -116,5 +116,45 @@ run_case "--force-with-lease CHAINED on main -> block"       2 'git fetch && git
 run_case "plain push on main -> allow"                       0 'git push'
 
 # ---------------------------------------------------------------------------
+# docs/ is allowed by FILE TYPE, not by directory
+# ---------------------------------------------------------------------------
+on_branch main
+stage docs/tool.sh
+run_case "a script under docs/ on main -> block"             2 'git commit -m tool'
+stage docs/notes.md.sh
+run_case "a .sh merely ending in .md.sh on main -> block"    2 'git commit -m sneaky'
+stage docs/a/b/deep.md
+run_case "markdown nested any depth on main -> allow"        0 'git commit -m deep'
+
+# ---------------------------------------------------------------------------
+# Fail direction. git-guard protects against a destructive or unreviewable action,
+# so "cannot tell" must mean "block" -- the opposite of doc-guard, whose matching
+# case is pinned in doc-guard.test.sh. Until this pair existed the two hooks'
+# opposite behaviours lived only in comments, with nothing holding them apart.
+#
+# The hook resolves its classifier relative to its own location, so copying it
+# somewhere with no lib/ beside it is exactly the "classifier missing" condition.
+# ---------------------------------------------------------------------------
+ORPHAN="$TMP/orphan"
+mkdir -p "$ORPHAN"
+cp "$HOOK" "$ORPHAN/git-guard.sh"
+
+orphan_case() { # $1 desc, $2 want-exit, $3 command
+  local desc="$1" want="$2" cmd="$3" got
+  ( cd "$REPO" && payload "$cmd" | bash "$ORPHAN/git-guard.sh" >/dev/null 2>&1 )
+  got=$?
+  if [ "$got" -eq "$want" ]; then
+    printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1))
+  fi
+}
+
+orphan_case "no classifier, commit -> FAIL CLOSED"           2 'git commit -m msg'
+# The cost of failing closed, stated as a test rather than left as a surprise:
+# this hook runs on every Bash call, so an unreadable classifier stops all of them.
+orphan_case "no classifier, unrelated command -> FAIL CLOSED" 2 'ls -la'
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -4,8 +4,10 @@
 #
 # Two deterministic guards an instruction alone cannot hold under momentum:
 #   1. Default-branch commit guard: blocks `git commit` on main/master unless
-#      every staged file is CODING_MEMORY.md, under coding-memory/, or under
-#      docs/ (the brainstorm-then-branch and documentation exceptions).
+#      every staged file is CODING_MEMORY.md, under coding-memory/, or a MARKDOWN
+#      file under docs/ (the brainstorm-then-branch and documentation exceptions).
+#      The docs/ exception is deliberately by file type, not by directory: an
+#      executable dropped under docs/ must not inherit a free ride onto main.
 #   2. Force-push guard: blocks a bare `git push --force`/`-f` on any branch;
 #      allows `--force-with-lease` except when the current branch is main/master.
 #      Scope note: this matches `--force`/`-f`/`--force-with-lease` specifically,
@@ -111,13 +113,15 @@ if has_fact COMMIT && on_main; then
     while IFS= read -r f; do
       [ -z "$f" ] && continue
       case "$f" in
-        CODING_MEMORY.md|coding-memory/*|docs/*) ;;
+        # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
+        # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
+        CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
         *) allowed=0 ;;
       esac
     done <<< "$staged"
   fi
   if [ "$allowed" -ne 1 ]; then
-    printf 'git-guard: commits to main/master are blocked except documentation (CODING_MEMORY.md, coding-memory/*, docs/*).\n' >&2
+    printf 'git-guard: commits to main/master are blocked except documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' >&2
     printf 'Staged files:\n%s\n' "$staged" | sed 's/^/  /' >&2
     printf 'Create a feature branch instead, or stage only documentation.\n' >&2
     exit 2

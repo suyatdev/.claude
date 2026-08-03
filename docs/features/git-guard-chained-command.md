@@ -149,12 +149,12 @@ boundaries; closing them belongs to the permission system.
 
 ## Verification
 
-All nine suites green — 429 assertions, 0 failures, run at `1da6ac9`:
+All nine suites green — 436 assertions, 0 failures:
 
 | Suite | Result |
 |---|---|
-| `hooks/git-guard.test.sh` | 28 passed (**new**; 11 of these failed before the fix) |
-| `hooks/doc-guard.test.sh` | 14 passed (**new**; 6 failed before the fix) |
+| `hooks/git-guard.test.sh` | 33 passed (**new**; 11 of these failed before the fix) |
+| `hooks/doc-guard.test.sh` | 16 passed (**new**; 6 failed before the fix) |
 | `hooks/lib/classify-git-command.test.py` | 47 passed (**new**) |
 | `hooks/lib/classify-pr-command.test.py` | 51 passed — unchanged file, the extraction's regression baseline |
 | `hooks/judge-guard.test.sh` | 101 passed — the direct consumer of the refactored classifier |
@@ -167,5 +167,29 @@ Dogfooded live: both commits on this branch were made with a chained
 `git add -- … && git commit …`, which the fixed guards evaluated (rather than skipped) and allowed —
 feature branch, documentation staged. The pre-fix code would not have evaluated either one.
 
+### Observability judge, round 1 — `risk=low confidence=high` at `4335eb6`
+
+Verdict: `coding-memory/observability-judge/2026-08-03-fix-fix-l1.md`. It re-derived the claims
+independently rather than reading the summary: ran both hook versions side by side against the
+merge-base, re-ran all nine suites, and fuzzed 24,016 command strings through the old and new
+`classify-pr-command.classify()` with zero divergences. Four findings, all acted on:
+
+1. **The fail-closed cliff was untested.** `git-guard` runs on every Bash call and now refuses
+   everything if the classifier will not load — correct direction, but the two hooks' *opposite*
+   fail directions lived only in comments. Both are now pinned, git-guard's with an `ls -la` case
+   proving the blast radius, doc-guard's with a control proving the pass is the fail-open path and
+   not an empty fixture.
+2. **A dangling pointer this change introduced** — `gates.md` cited ADR 0012 for the lexer's limits
+   while the lexer had moved. Resolved by ADR 0013, which amends 0012 rather than editing it.
+3. **`docs/*` trusted a directory, not a file type.** Narrowed to `docs/*.md`. `*` spans `/` in a
+   case pattern, so any depth is still covered while `docs/tool.sh` — and `docs/notes.md.sh` — are
+   not. Free today: all 34 files under `docs/` are markdown.
+4. **`gates.md` had grown 21%** for a bug fix, in a file that loads every turn. Trimmed to +10%
+   over `main` (7,922 → 8,725 bytes), keeping the two genuinely new facts and dropping the history
+   already in `CODING_MEMORY.md`.
+
+Its fifth point — that the dormant-hooks finding must not evaporate — was already satisfied by
+`1da6ac9`.
+
 Open issues: none blocking. Out of scope and recorded for a later branch — five hook scripts are not
-registered in `settings.json` and never run.
+registered in `settings.json` and never run, `scan-secrets.sh` among them.

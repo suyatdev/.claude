@@ -119,5 +119,34 @@ modify_unstaged src/f1.sh src/f2.sh src/f3.sh
 run_case "-a owned by ANOTHER segment -> allow"             0 'git commit -m msg && ls -a'
 
 # ---------------------------------------------------------------------------
+# Fail direction. This hook fails OPEN -- a missing note is not worth blocking work
+# over -- which is the exact OPPOSITE of git-guard on the identical condition, whose
+# matching case is pinned in git-guard.test.sh. The two directions are a deliberate
+# design split that until now lived only in comments, so a future refactor could
+# have quietly aligned them and nothing would have failed.
+#
+# The hook resolves its classifier relative to its own location, so copying it
+# somewhere with no lib/ beside it is exactly the "classifier missing" condition.
+# ---------------------------------------------------------------------------
+ORPHAN="$TMP/orphan"
+mkdir -p "$ORPHAN"
+cp "$HOOK" "$ORPHAN/doc-guard.sh"
+
+# Staged state that WOULD be blocked if the classifier were readable, so a pass here
+# can only mean the fail-open path ran -- not that there was nothing to complain about.
+stage src/f1.sh src/f2.sh src/f3.sh
+( cd "$REPO" && payload 'git commit -m msg' | bash "$ORPHAN/doc-guard.sh" >/dev/null 2>&1 )
+got=$?
+if [ "$got" -eq 0 ]; then
+  printf 'ok   — no classifier, blockable commit -> FAIL OPEN (exit %s)\n' "$got"; pass=$((pass+1))
+else
+  printf 'FAIL — no classifier, blockable commit -> FAIL OPEN (want 0, got %s)\n' "$got"; fail=$((fail+1))
+fi
+
+# Control: the same staged state through the real hook still blocks, so the case
+# above is proving the fail-open path and not a broken fixture.
+run_case "control: same state, real hook -> block"          2 'git commit -m msg'
+
+# ---------------------------------------------------------------------------
 printf '\ndoc-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
