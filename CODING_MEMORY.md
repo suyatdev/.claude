@@ -776,8 +776,11 @@ how this file and its linked files should be written (plain language, major chan
   ✅ **FIXED 2026-08-03 on `fix/fix-l1` @ `ac5afa2` (L1).** Both guards now lex the command into
   shell segments via the new `hooks/lib/classify-git-command.py`; the generic half of
   `classify-pr-command.py` moved to `hooks/lib/shell_segments.py` and both classifiers share it
-  (`classify-pr-command.test.py` stayed green and untouched as the regression baseline). Allowlist
-  widened to `docs/*`. Neither hook had ANY tests; both now do, with the 17 fail-open cases pinned
+  (`classify-pr-command.test.py` stayed green and untouched as the regression baseline). git-guard's
+  `main` allowlist widened to `docs/*.md` — by file *type*, so a script under `docs/` gets no free
+  ride; doc-guard keeps the broader `docs/*`, since a diagram counts as documentation riding along
+  with a commit but should not thereby reach `main`. Neither hook had ANY tests; both now do, with
+  the 17 fail-open cases pinned
   as failing first. Per-segment flag judging fixed two further defects nobody had predicted:
   `git push --force && echo --force-with-lease` was **allowed**, `git push && echo --force` was
   **blocked**, and doc-guard read `-a` from any segment. `checkpoint-before-modify.sh` deliberately

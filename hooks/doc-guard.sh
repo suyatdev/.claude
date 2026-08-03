@@ -163,6 +163,10 @@ src_lines=0
 while IFS=$'\t' read -r add del path; do
   [ -z "$path" ] && continue
   case "$path" in
+    # Broader than git-guard.sh's `docs/*.md`, deliberately: the question here is
+    # "did documentation ride along with this commit?", and a diagram or screenshot
+    # counts. git-guard asks "may this reach main unreviewed?", where it must not.
+    # The two rules are not meant to agree — do not align them.
     CODING_MEMORY.md|coding-memory/*|docs/*) has_doc=1; continue ;;
   esac
   src_files=$((src_files + 1))

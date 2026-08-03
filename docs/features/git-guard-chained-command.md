@@ -191,5 +191,27 @@ merge-base, re-ran all nine suites, and fuzzed 24,016 command strings through th
 Its fifth point — that the dormant-hooks finding must not evaporate — was already satisfied by
 `1da6ac9`.
 
+### Observability judge, round 2 — `risk=low confidence=high` at `af51f88`
+
+The judge mutation-tested the round 1 fixes rather than reading them: it flipped `git-guard` to fail
+open (exactly the 2 new cases failed), flipped `doc-guard` to fail closed (exactly the 1 new case
+failed), and reverted `docs/*.md` to `docs/*` (exactly the 2 new file-type cases failed) — confirming
+none of the new tests are decoration. Two findings, both fixed in the commit that carries this note:
+
+- **`CODING_MEMORY.md` still claimed the allowlist was "widened to `docs/*`"** after it had been
+  narrowed to `docs/*.md` — a stale rule in an always-loaded file, the same defect class as round
+  1's stale ADR pointer, one level down.
+- **The two hooks now treat `docs/` differently on purpose, with nothing saying so.** git-guard uses
+  `docs/*.md`, doc-guard keeps `docs/*`. Correct — a diagram is documentation riding along, but must
+  not reach `main` unreviewed — but undocumented divergence is exactly what round 1 fixed for the
+  fail directions. Both hooks now carry a "do not align them" note.
+
+Its third point was a decision, not a defect: the fail-closed cliff is **explicitly accepted** (user,
+2026-08-03), with the two alternatives it offered considered and rejected. Recorded in ADR 0013.
+
+**Verdict freshness:** that commit postdates the round 2 verdict. Since it changes one word of prose
+and two comments — no logic, both suites still green — the PR was opened with the documented
+`JUDGE_EXEMPT` bypass rather than a third judge round (user decision, 2026-08-03).
+
 Open issues: none blocking. Out of scope and recorded for a later branch — five hook scripts are not
 registered in `settings.json` and never run, `scan-secrets.sh` among them.

@@ -8,6 +8,10 @@
 #      file under docs/ (the brainstorm-then-branch and documentation exceptions).
 #      The docs/ exception is deliberately by file type, not by directory: an
 #      executable dropped under docs/ must not inherit a free ride onto main.
+#      doc-guard.sh deliberately uses the BROADER `docs/*` for the same directory.
+#      The two are not meant to agree: doc-guard asks "did documentation ride along
+#      with this commit?", where a diagram or screenshot counts; this guard asks
+#      "may this file reach main unreviewed?", where it must not. Do not align them.
 #   2. Force-push guard: blocks a bare `git push --force`/`-f` on any branch;
 #      allows `--force-with-lease` except when the current branch is main/master.
 #      Scope note: this matches `--force`/`-f`/`--force-with-lease` specifically,

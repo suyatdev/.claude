@@ -67,6 +67,11 @@ divergences.
   it is a real cliff. `doc-guard.sh` fails **open** on the identical condition, because a
   missing note is not worth blocking work over. Both directions are now pinned by tests
   (`git-guard.test.sh`, `doc-guard.test.sh`); before this change they existed only in comments.
+  **Explicitly accepted by the user on 2026-08-03**, after the observability judge raised it in
+  both rounds and offered two alternatives: a fallback allowing non-git commands through while the
+  classifier is broken (rejected — a code path reachable only in a degraded state is the hardest
+  kind to keep correct), and failing open with a warning (rejected — that is this ADR's original
+  bug with a different trigger). Recorded here so it stays a decision rather than an inheritance.
 - **Accepted limits are inherited, not re-litigated.** Option *values* are not tracked, so a
   commit whose message is literally `-a` is read as `--all`. git accepts any unambiguous
   prefix of a long option (`--amen` == `--amend`), so modelling that grammar is unbounded.
