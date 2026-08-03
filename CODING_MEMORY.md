@@ -787,6 +787,28 @@ how this file and its linked files should be written (plain language, major chan
   `git push --force && echo --force-with-lease` was **allowed**, `git push && echo --force` was
   **blocked**, and doc-guard read `-a` from any segment. `checkpoint-before-modify.sh` deliberately
   untouched — its match is an *allowlist*, so the same shape has the opposite effect.
+- 🔴 **L1 SHIPPED A REGRESSION — live on `main` now, found 2026-08-03 post-merge.** On `main`,
+  `git add X && git commit X` is **blocked even for documentation**. PreToolUse fires *before* the
+  command, so at hook time `git add` has not run, `git diff --cached` is empty, and `git-guard.sh`
+  treats an empty index as `allowed=0`. Pre-L1 the chained form fail-opened and never reached that
+  branch; now it does. Fail-**closed**, so friction not a safety hole, and only on `main`. Workaround:
+  `git add` and `git commit` as two separate calls. Likely fix: an empty index should not deny — such
+  a commit fails on its own ("nothing to commit") unless `-a`/`--amend`, which can be evaluated the
+  way doc-guard does. **User-approved: fix on its own branch, first, ahead of the other follow-ups.**
+  ⚠️ **Why 33 tests + a 24,016-case fuzz + a mutation round all missed it:** the suite's `stage …`
+  helper ran *before* invoking the hook, so the hook always saw a populated index. Chained-ness was
+  tested; *staging inside the chain* never was. **A fixture that pre-creates state the real command
+  would create itself hides the bug, and neither fuzzing nor mutation testing can catch it — both
+  validate assertions, never the fixture's premise.** Any fix needs a case whose only `git add` is
+  inside the command string. (Belongs in auto-memory as `feedback-fixture-must-not-pre-create-state`;
+  **could not be written — see the phase-guard gap below.**)
+- 🔴 **`phase-guard.sh` BLOCKS THE AUTO-MEMORY DIRECTORY — found 2026-08-03, live.** Its exempt-path
+  list at `hooks/phase-guard.sh:285` is
+  `CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json` — which omits
+  `projects/*/memory/*`, where the harness's own memory tool writes. So while any feature file sits
+  at `phase: planning` (i.e. the whole remaining marker-gate register, ~8 branches) **every memory
+  write is refused**, and `rules/gates.md` promises "docs and memory paths are never blocked". One
+  line to fix; do it on the same branch as the regression above, since both are live guard friction.
 - 🔴 **FIVE OF THE 17 SCRIPTS IN `hooks/` ARE NOT REGISTERED IN `settings.json` — found 2026-08-03.**
   `phase-guard.sh` (32 KB + a 69 KB test suite), `checkpoint-before-modify.sh`,
   `require-project-standards.sh`, `scan-invisible-unicode.sh`, `scan-secrets.sh`. They exist, they
