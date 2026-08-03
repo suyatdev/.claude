@@ -825,6 +825,28 @@ how this file and its linked files should be written (plain language, major chan
   · **The suite could not have caught it: the test comment's enumeration IS the code's
   enumeration**, so 40/0 only ever confirmed my own list. Third instance on this branch of a check
   inheriting the blind spot of the thing it checks (after the `stage` fixture and `empty_index`).
+  · **RUN 2 @ `833e3eb` = `risk=medium confidence=high`. Round 1's blocker IS closed** (judge
+  re-measured every number exact, probed 8/8, and confirmed the five changed test expectations only
+  ADDED facts). **The CLASS is not.** Nine more commands stage things and all nine are regressions —
+  blocked on `main`, allowed by the branch, no `doc-guard` backstop — `git rm`, `git mv`,
+  `git reset --soft`, `git checkout -- <p>`, `git restore --staged`, `git apply --cached`,
+  `git stash pop --index`, `git cherry-pick -n`, `git revert -n`. **All nine re-measured by me.**
+  · 🔴 **TWO ROUNDS HAVE NOW EACH FOUND THE ENUMERATION SHORT — that is evidence about the
+  approach, not about the list.** I kept asking "what commits content the index cannot show?" when
+  the question was "what can PUT something in the index?". ADR 0014 additionally asserts
+  completeness ("Four shapes… all four are consulted") that is measurably false, inside a document
+  whose own headings explain why a wrong stated reason is worse than a known gap.
+  · ✅ **USER DECISION 2026-08-03 — NARROW THE FIX RIGHT DOWN, next session.** Relax the guard
+  **only** where the commit names its own paths (`git commit … -- <p>`); everything else keeps
+  today's deny. **Provably never weaker than `main`**, because it only grants permission for paths
+  the hook can actually read — so all ten staging commands go back to denied without being
+  enumerated. Fixes the real friction anyway, since the house rule mandates `-- <path>`. Accepted
+  cost: `git add X && git commit -m msg` with no pathspec stays denied, exactly as today.
+  Step-by-step plan, including what to delete and the RUN 2 leftovers to re-check:
+  `.claude/session-state.md`.
+  · **User committed the RUN 1 fix by hand** (3 commits, `aedaf38`/`8099d0a`/`833e3eb`, red before
+  green, `settings.json` correctly kept out) — the human checkpoint caught nothing wrong with the
+  code and the judge caught what review would not have.
   · Below is the pre-judge summary; it remains accurate about what was built, not about readiness.
 - ✅ **Built on `fix/git-guard-empty-index`, 8 commits (pre-judge state `5aa220e`).**
   Full detail is in `docs/features/git-guard-empty-index.md` (checklist notes + `## Verification`)
