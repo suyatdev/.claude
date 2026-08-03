@@ -100,22 +100,43 @@ on_main() {
 # PreToolUse runs BEFORE the command, so `git add -- x && git commit -- x` -- the
 # form this repo mandates on every commit -- arrives here with NOTHING staged. An
 # empty index means "the index cannot answer", not "nothing is allowed", so the
-# command is asked instead. Three forms commit content the index never shows:
+# command is asked instead. FOUR forms commit content the index never shows:
 #
-#   --        the paths it names, taken from the classifier's fact stream so that
-#             nothing is re-lexed here and there is no second parser to drift
+#   git add   what this same command line stages a moment from now. Easy to
+#             forget precisely because it is not part of the `commit` -- and
+#             forgetting it once let a chained source commit onto main.
+#   --        the paths the commit names, taken from the classifier's fact stream
+#             so nothing is re-lexed here and no second parser can drift
 #   -a        tracked edits sitting in the WORKTREE
 #   --amend   whatever is already in HEAD's tree
 #
-# Empty output is a real answer: such a commit has nothing to commit and git
-# refuses it on its own.
+# Empty output means no shape named anything, which is genuinely nothing to
+# commit. Do NOT restate that as "git refuses it anyway": that is false the
+# moment a sibling `git add` is present, and believing it is what produced the
+# fail-open above.
 commit_target_files() {
   local tab paths
   tab=$(printf '\t')
   paths=""
+
   if has_fact COMMIT_PATHSPEC; then
+    # An explicit pathspec is EXCLUSIVE: git commits exactly these paths and
+    # leaves anything else the chain staged sitting in the index, uncommitted.
     paths=$(printf '%s\n' "$facts" | grep "^COMMIT_PATH${tab}" | cut -f2-)
+  else
+    # No pathspec, so the commit takes whatever the index holds -- which at hook
+    # time is whatever this same command line is about to put there.
+    if has_fact ADD_ALL; then
+      # -A/-u/`.` name an unbounded set, so ask git rather than the command line.
+      # A rename reads as `old -> new` and matches no allowlist entry, i.e. it
+      # blocks; that is the intended direction for a shape this cannot parse.
+      paths=$(printf '%s\n%s' "$paths" "$(git status --porcelain 2>/dev/null | cut -c4-)")
+    fi
+    if has_fact ADD_PATH; then
+      paths=$(printf '%s\n%s' "$paths" "$(printf '%s\n' "$facts" | grep "^ADD_PATH${tab}" | cut -f2-)")
+    fi
   fi
+
   if has_fact COMMIT_ALL; then
     paths=$(printf '%s\n%s' "$paths" "$(git diff --name-only 2>/dev/null)")
   fi
@@ -155,10 +176,10 @@ if has_fact COMMIT && on_main; then
     label="Files this commit would contain"
   fi
 
-  # An empty list here is ALLOW, not deny: nothing is staged and the command names
-  # nothing, so git refuses it itself with "nothing to commit". Denying would
-  # report the wrong reason for the wrong problem -- and denying on an empty index
-  # is exactly the regression this branch exists to remove.
+  # An empty list here is ALLOW, not deny -- but only because NONE of the four
+  # shapes named a file, the chain's own `git add` included. Denying instead
+  # reports the wrong reason for the wrong problem, and denying on a merely empty
+  # INDEX is the regression this branch exists to remove.
   allowed=1
   if [ -n "$files" ]; then
     while IFS= read -r f; do

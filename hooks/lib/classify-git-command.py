@@ -66,12 +66,34 @@ COMMIT_VALUE_FLAGS = (
     "-m", "-am", "-F", "-c", "-C", "-t",
     "--message", "--file", "--reedit-message", "--reuse-message",
     "--author", "--date", "--fixup", "--squash", "--cleanup",
-    "--template", "--pathspec-from-file",
+    "--template",
 )
 
+# Options that take no value AND cannot widen what gets committed. Anything not
+# on this list or the value list above is UNRECOGNISED, and unrecognised means
+# block: git honours any unambiguous abbreviation of a long option, so testing
+# for the exact spelling `--amend` is not a test for amending -- `--amen` does
+# the same thing and would otherwise pass unexamined. `--pathspec-from-file` is
+# deliberately absent from both lists for the same reason: its paths live in a
+# file this hook cannot read, so it must fail closed rather than look harmless.
+COMMIT_SAFE_FLAGS = (
+    "-a", "--all", "--amend",
+    "-e", "--edit", "--no-edit", "-n", "--no-verify", "--verify",
+    "-q", "--quiet", "-v", "--verbose", "-s", "--signoff", "--no-signoff",
+    "--allow-empty", "--allow-empty-message", "--reset-author",
+    "--short", "--branch", "--porcelain", "--long", "-z", "--null",
+    "--dry-run", "--status", "--no-status", "--no-post-rewrite",
+    "-S", "--gpg-sign", "--no-gpg-sign",
+)
 
-def commit_pathspec(rest):
-    """(paths named after `--`, whether a path is SUSPECTED without one)."""
+# `git add` forms whose file set cannot be read off the command line.
+ADD_ALL_FLAGS = ("-A", "--all", "-u", "--update", "--ignore-removal",
+                 "--no-ignore-removal", "--renormalize", "--pathspec-from-file")
+ADD_WIDE_PATHSPECS = (".", ":/", "*", "./")
+
+
+def commit_scan(rest):
+    """(paths named after `--`, whether the file set is UNKNOWABLE)."""
     if "--" in rest:
         return rest[rest.index("--") + 1:], False
     skip = False
@@ -80,10 +102,35 @@ def commit_pathspec(rest):
             skip = False
             continue
         if not tok.startswith("-"):
-            return [], True
-        if tok in COMMIT_VALUE_FLAGS:
-            skip = True
+            return [], True                   # a stray token: suspected pathspec
+        name = tok.split("=", 1)[0]
+        if name in COMMIT_VALUE_FLAGS:
+            skip = "=" not in tok             # `--opt=value` carries its value inline
+            continue
+        if name in COMMIT_SAFE_FLAGS:
+            continue
+        return [], True                       # unrecognised option: cannot tell
     return [], False
+
+
+def add_scan(rest):
+    """(paths this `git add` names, whether it stages an UNBOUNDED set)."""
+    if "--" in rest:
+        cut = rest.index("--")
+        flags, paths = rest[:cut], list(rest[cut + 1:])
+    else:
+        flags, paths = rest, []
+    everything = False
+    for tok in flags:
+        if not tok.startswith("-"):
+            paths.append(tok)                 # for `git add` a bare token IS a path
+            continue
+        if tok.split("=", 1)[0] in ADD_ALL_FLAGS:
+            everything = True
+    # A `.` or `:/` names the whole tree just as surely as -A does.
+    if any(p in ADD_WIDE_PATHSPECS for p in paths):
+        everything = True
+    return paths, everything
 
 
 def classify(src):
@@ -100,13 +147,24 @@ def classify(src):
                 facts.add("COMMIT_ALL")
             if "--amend" in rest:
                 facts.add("COMMIT_AMEND")
-            paths, bare = commit_pathspec(rest)
+            paths, bare = commit_scan(rest)
             if paths:
                 facts.add("COMMIT_PATHSPEC")
                 for path in paths:
                     facts.add("COMMIT_PATH\t" + path)
             if bare:
                 facts.add("COMMIT_BARE_ARGS")
+
+        elif subcommand == "add":
+            paths, everything = add_scan(rest)
+            if everything:
+                # ADD_ALL means "resolve the set from git, not from this command",
+                # which supersedes any individual path -- emitting both would
+                # invite a reader to think the path list were complete.
+                facts.add("ADD_ALL")
+            else:
+                for path in paths:
+                    facts.add("ADD_PATH\t" + path)
 
         elif subcommand == "push":
             facts.add("PUSH")

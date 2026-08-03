@@ -35,14 +35,20 @@ string**, with no helper staging.
 
 ### The trap — "empty index → allow" is a fail-open
 
-An unconditional allow-on-empty would open a real hole, because three command shapes commit
+An unconditional allow-on-empty would open a real hole, because **four** command shapes commit
 content the index does not show:
 
 | Shape | What actually gets committed | Index at hook time |
 |---|---|---|
+| `git add X && git commit -m m` | whatever the **chain itself** stages, a moment later | empty *now*, not at commit time |
 | `git commit -m m -- docs/x.md` | the **worktree** content of the pathspec | may be empty |
 | `git commit -a -m m` | all tracked **worktree** modifications | may be empty |
 | `git commit --amend` | HEAD's tree, re-written | may be empty |
+
+⚠️ **The first row is listed first because it is the one that hides.** It is not part of the
+`commit` at all, so enumerating the commit's own options feels complete while missing the single
+most common shape in this repo. The first implementation of this spec listed only the other three
+and shipped a fail-open — four commands `main` blocks were allowed. See task 8.
 
 The pathspec row is measured, not assumed — the same finding blocks the marker-gate spec
 (`CODING_MEMORY.md:557`): `git commit -- <path>` commits the worktree, not the index. It matters
@@ -57,12 +63,21 @@ purpose is removing friction.
 
 When the index is empty, derive the file set from the command instead of denying:
 
-- **Pathspec present** (`git commit … -- a b`, or trailing paths) → evaluate **those paths**
-  against the documentation allowlist.
+- **Pathspec present** (`git commit … -- a b`) → evaluate **those paths**, and only those: a
+  pathspec is exclusive, so anything else the chain staged stays in the index uncommitted.
+- **Otherwise, a `git add` in the same command** → evaluate the paths it names, or
+  `git status --porcelain` when it names an unbounded set (`-A`, `-u`, `.`).
 - **`-a` / `--all` present** → evaluate tracked worktree modifications (`git diff --name-only`).
 - **`--amend` present** → evaluate the files in HEAD's commit.
-- **None of the above** → **allow**. Such a commit has nothing to commit and git fails it on its
-  own; a guard that refuses it reports the wrong reason for the wrong thing.
+- **No shape names any file** → **allow**: nothing is staged and nothing is named, so there is
+  genuinely nothing to commit.
+- **The command cannot be understood** → **block**. A bare token the flag table cannot account
+  for, an unrecognised option (git honours abbreviations, so `--amen` amends), or
+  `--pathspec-from-file`, whose paths live in a file this hook cannot read.
+
+⚠️ **Do not restate the allow case as "git refuses such a commit anyway".** That is false whenever
+a sibling `git add` precedes it, and believing it is exactly what produced the fail-open recorded
+in task 8. The allow is justified by *no shape naming a file*, not by git's own behaviour.
 
 The allowlist itself is unchanged: `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`.
 Flag detection reuses the existing segment lexer (`hooks/lib/shell_segments.py`) the way
@@ -200,6 +215,27 @@ Fix: add `projects/*/memory/*` to that list. One line.
       · Also owed: an ADR for the empty-index policy and the bare-args rule (two Tier-1 guard policy
         decisions with no record), and `gh pr create` must run **from this worktree** — the verdict
         row records `repo: git-guard-empty-index` and a run from the primary checkout will not match.
+      · ✅ **ALL RUN 1 ITEMS ADDRESSED — written, measured, left UNCOMMITTED for human review**
+        (user asked to stage and commit these personally, 2026-08-03).
+        · The chain's own `git add` is now the **first** of four shapes, in code, spec and ADR.
+          New facts `ADD_PATH<tab><path>` and `ADD_ALL`; an unbounded add (`-A`, `-u`, `.`) resolves
+          via `git status --porcelain` rather than off the command line. A commit pathspec is
+          **exclusive** and suppresses the add, because git commits only the named paths.
+        · Unrecognised options now fail closed (`COMMIT_BARE_ARGS`), which covers git's
+          abbreviations (`--amen`) and `--pathspec-from-file`. A curated safe-list keeps
+          `--no-edit`/`--no-verify`/`-q`/`--signoff` from becoming false positives.
+        · **The false sentence is corrected in all three places** — spec, hook comment, and ADR 0014
+          — and each now states the allow is justified by *no shape naming a file*, not by git's
+          own behaviour.
+        · ADR **0014** written. Defect C's grown blast radius recorded in `## Verification`.
+        · Five pre-existing separator tests had their expected value **updated, not weakened**:
+          they used `git add -- x` purely as a lexing fixture, and now also assert the staged path
+          is seen through each separator form.
+        · Re-measured: git-guard **50/0**, classifier **66/0**, phase-guard 134/0, ten neighbours
+          unchanged, shellcheck clean. Replayed against the pre-fix code: **5** and **13** genuine
+          reds. All four RUN 1 regressions re-probed on a dirty scratch repo — source via `-A`/`.`/
+          `-u` blocks, docs-only allows, untracked source blocks.
+        · **Still owed: obs judge RUN 2** at whatever SHA these land on, then the PR.
 
 ## Verification
 
@@ -228,9 +264,20 @@ on `main`. No net-new.
 **Open, deliberately not fixed here — Defect C, `git-guard.sh:88`.** `current_branch` runs
 `git rev-parse` in the *hook's own* working directory, which is the session's, not the directory
 the command will run in. Measured: the same payload exits 2 from the primary checkout and 0 from a
-worktree, so **work in any worktree is judged against `main`**. It bit twice during this branch.
+worktree, so **work in any worktree is judged against `main`**. It bit three times during this
+branch — twice on a commit and once on a probe that merely *contained* the string `git commit`.
 Not widened into this diff — the payload `cwd` is also pre-`cd` (`CODING_MEMORY.md:713`), and
 `phase-guard`'s trick of resolving from the file being written has no analogue for a commit, so
 this needs a decision rather than a patch. Same "identity-from-cwd" class already fixed in
 `phase-guard` and still open in `judge-guard`; enumerated across the live guards, it is
 **git-guard, judge-guard, and partially doc-guard**.
+
+⚠️ **Its blast radius GREW on this branch and that is a cost of this change, not a pre-existing
+one.** `commit_target_files` adds `git status --porcelain`, `git diff` and `git diff-tree` calls
+that also run in the hook's own directory. Before, a wrong directory produced the wrong *branch
+name*; now it also produces the wrong *file list*. The deferral still stands, but it is a worse
+bug than when this branch opened.
+
+**Also open, pre-existing and NOT widened into this diff:** `--amend` with a *populated* index
+evaluates only the staged files, not HEAD's tree as well. Unchanged by this work; recorded so it
+is not mistaken for something this branch introduced.
