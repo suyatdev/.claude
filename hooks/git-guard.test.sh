@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# git-guard.test.sh — drives the hook with PreToolUse JSON on stdin (the production
+# code path). Run: bash hooks/git-guard.test.sh
+#
+# Why this suite exists: git-guard shipped with no tests at all, and for as long as
+# it has existed both of its guards matched a regex ANCHORED to the start of the
+# command string. Anything chained -- `git add -- x && git commit -m y`, the shape
+# this repo uses constantly -- never matched, so the guard body never ran and the
+# hook exited 0 without having evaluated anything. Commits reached `main` that the
+# allowlist forbids; the guard's stated policy and its behaviour had diverged
+# silently, and no test could catch it because there were no tests.
+#
+# The commands below are DATA fed to the hook on stdin. Nothing here executes them.
+set -u
+
+HOOK="$(cd "$(dirname "$0")" && pwd)/git-guard.sh"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+REPO="$TMP/repo"
+mkdir -p "$REPO"
+git -C "$REPO" init -q -b main
+git -C "$REPO" config user.email test@example.com
+git -C "$REPO" config user.name  test
+printf 'seed\n' > "$REPO/CODING_MEMORY.md"
+git -C "$REPO" add -- CODING_MEMORY.md
+git -C "$REPO" commit -qm seed
+git -C "$REPO" branch feature
+
+pass=0; fail=0
+
+payload() { /usr/bin/jq -nc --arg c "$1" '{hook_event_name:"PreToolUse",tool_input:{command:$c}}'; }
+
+on_branch() { git -C "$REPO" checkout -q "$1"; }
+
+stage() { # $@ = paths to create and stage; no args = stage nothing
+  git -C "$REPO" reset -q
+  local f
+  for f in "$@"; do
+    mkdir -p "$REPO/$(dirname "$f")"
+    printf 'change %s\n' "$$" > "$REPO/$f"
+    git -C "$REPO" add -- "$f"
+  done
+}
+
+run_case() { # $1 desc, $2 want-exit, $3 command string
+  local desc="$1" want="$2" cmd="$3" got
+  ( cd "$REPO" && payload "$cmd" | bash "$HOOK" >/dev/null 2>&1 )
+  got=$?
+  if [ "$got" -eq "$want" ]; then
+    printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1))
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Guard 1 — default-branch commit
+# ---------------------------------------------------------------------------
+on_branch main
+stage src/app.sh
+
+run_case "plain commit, source staged on main -> block"      2 'git commit -m msg'
+run_case "CHAINED commit, source staged on main -> block"    2 'git add -- src/app.sh && git commit -m msg'
+run_case "chained with ; separator -> block"                 2 'git add -- src/app.sh ; git commit -m msg'
+run_case "chained with || separator -> block"                2 'false || git commit -m msg'
+run_case "newline-separated -> block"                        2 'git add -- src/app.sh
+git commit -m msg'
+run_case "rtk wrapper, plain -> block"                       2 'rtk git commit -m msg'
+run_case "rtk wrapper, CHAINED -> block"                     2 'git add -- src/app.sh && rtk git commit -m msg'
+run_case "env prefix before commit -> block"                 2 'GIT_AUTHOR_NAME=x git commit -m msg'
+
+# False positives are as damaging as fail-opens: a guard that blocks legitimate
+# work gets disabled. Quoted text is one token and can never hold a command slot.
+run_case "commit named inside a quoted message -> allow"     0 'echo "remember to git commit later"'
+run_case "commit as a commit-message substring -> allow"     0 'git log --grep "git commit"'
+run_case "unrelated command -> allow"                        0 'ls -la'
+
+# The brainstorm exception, and the docs/** widening that keeps the real
+# workflow legal once the guard actually evaluates.
+stage CODING_MEMORY.md
+run_case "CODING_MEMORY.md only on main -> allow"            0 'git commit -m notes'
+stage coding-memory/verdicts.jsonl
+run_case "coding-memory/* on main -> allow"                  0 'git commit -m verdicts'
+stage docs/features/x.md
+run_case "docs/** on main -> allow (widened)"                0 'git commit -m spec'
+stage docs/features/x.md
+run_case "docs/** on main, CHAINED -> allow (widened)"       0 'git add -- docs/features/x.md && git commit -m spec'
+stage docs/features/x.md src/app.sh
+run_case "docs/** mixed with source on main -> block"        2 'git commit -m mixed'
+
+# Off the default branch the guard has no opinion at all.
+on_branch feature
+stage src/app.sh
+run_case "source on a feature branch -> allow"               0 'git add -- src/app.sh && git commit -m msg'
+
+# ---------------------------------------------------------------------------
+# Guard 2 — force push
+# ---------------------------------------------------------------------------
+on_branch feature
+run_case "bare --force on a feature branch -> block"         2 'git push --force'
+run_case "bare --force CHAINED -> block"                     2 'git fetch && git push --force'
+run_case "bare -f CHAINED -> block"                          2 'git fetch && git push -f'
+run_case "--force-with-lease on a feature branch -> allow"   0 'git push --force-with-lease'
+run_case "--force-with-lease CHAINED on feature -> allow"    0 'git fetch && git push --force-with-lease'
+
+# The flag must belong to the SAME segment as the push. Searching the whole
+# command string made an unrelated argument elsewhere block a legitimate push.
+run_case "--force in a LATER segment -> allow"               0 'git push && echo --force'
+run_case "--force in an EARLIER segment -> allow"            0 'echo --force && git push'
+run_case "--force inside a quoted string -> allow"           0 'git push -m "do not use --force"'
+
+on_branch main
+run_case "--force-with-lease on main -> block"               2 'git push --force-with-lease'
+run_case "--force-with-lease CHAINED on main -> block"       2 'git fetch && git push --force-with-lease'
+run_case "plain push on main -> allow"                       0 'git push'
+
+# ---------------------------------------------------------------------------
+printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

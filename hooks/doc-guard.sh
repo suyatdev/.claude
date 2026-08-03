@@ -40,6 +40,8 @@ set -u
 DOC_GUARD_THRESH_FILES=3
 DOC_GUARD_THRESH_LINES=20
 
+CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-git-command.py"
+
 payload=""
 if [ ! -t 0 ]; then
   payload=$(cat)
@@ -113,27 +115,42 @@ if isinstance(ti, dict):
 ' 2>/dev/null)
 [ -n "$command_line" ] || exit 0
 
-# Strip leading whitespace, then a leading rtk wrapper (the RTK hook runs first
-# and may already have rewritten `git ...` to `rtk git ...`).
-normalized="${command_line#"${command_line%%[![:space:]]*}"}"
-if [[ "$normalized" == rtk\ * ]]; then
-  normalized="${normalized#rtk }"
-fi
+# Whether this really runs `git commit` is decided by lib/classify-git-command.py,
+# which lexes the command into shell segments (and absorbs the `rtk git ...` form the
+# RTK hook produces by rewriting plain git commands ahead of this one). This used to
+# be a regex ANCHORED to the start of the command string, so anything chained —
+# `git add -- x && git commit -m y`, the shape this repo uses constantly — skipped the
+# check entirely, and the documentation guarantee this hook exists to provide was not
+# enforced on the commit shape actually in use.
+#
+# A classifier that will not run leaves `facts` empty and the commit allowed: this hook
+# fails OPEN throughout, because a missing note is not worth blocking work over.
+# Contrast git-guard.sh, which fails closed on the same condition.
+facts=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null) || exit 0
 
-commit_re='^git[[:space:]]+commit([[:space:]]|$)'
-[[ "$normalized" =~ $commit_re ]] || exit 0
+has_fact() {
+  local f
+  for f in $facts; do
+    [ "$f" = "$1" ] && return 0
+  done
+  return 1
+}
+
+has_fact COMMIT || exit 0
 in_git_repo || exit 0
 
 # Bypass: a Doc-Exempt: trailer anywhere in the command allows the commit.
-if [[ "$normalized" == *Doc-Exempt:* ]]; then
+if [[ "$command_line" == *Doc-Exempt:* ]]; then
   exit 0
 fi
 
 # `commit -a`/`--all`/`-am` stages tracked edits at commit time — they are not in
 # the index yet when this PreToolUse fires — so diff against HEAD for those;
-# otherwise inspect the staged index.
-all_re='(^|[[:space:]])(-a|--all|-am)([[:space:]]|$)'
-if [[ "$normalized" =~ $all_re ]] && git rev-parse HEAD >/dev/null 2>&1; then
+# otherwise inspect the staged index. COMMIT_ALL is set only when that flag belongs
+# to the commit's OWN segment; it used to be searched for across the whole command
+# string, so `git commit -m msg && ls -a` made this judge every dirty tracked file
+# instead of the (empty) index it was actually about to commit.
+if has_fact COMMIT_ALL && git rev-parse HEAD >/dev/null 2>&1; then
   numstat=$(git diff HEAD --numstat 2>/dev/null)
 else
   numstat=$(git diff --cached --numstat 2>/dev/null)
