@@ -281,8 +281,12 @@ esac
 # exempt because it holds this hook's own registration, and a guard that can block edits
 # to its own off switch is a footgun. The escape hatch for a stale planning file is to
 # edit that file, which works because feature files live under docs/**.
+# projects/*/memory/* is where the harness's own memory tool writes. It is the
+# memory DIRECTORY that is exempt, not projects/ at large: a repo may keep source
+# under projects/, and mid-planning that source is exactly what this hook guards.
 case "$rel" in
   CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
+  projects/*/memory/*) exit 0 ;;
 esac
 
 # --- Step 7: which feature files sit at phase: planning? --------------------------------

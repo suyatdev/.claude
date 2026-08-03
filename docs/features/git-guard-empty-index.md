@@ -149,7 +149,13 @@ Fix: add `projects/*/memory/*` to that list. One line.
       · Baseline **130/0** → **132/2**. Two reds (a memory file and `MEMORY.md` itself) plus two
         deny pins, so the fix cannot over-exempt: `projects/p/app.sh` and `projects/p/memory.sh`
         must both stay blocked. The exemption is the memory *directory*, not `projects/` at large.
-- [ ] 5. **Green** — add `projects/*/memory/*` to the exempt list at `hooks/phase-guard.sh:285`.
+- [x] 5. **Green** — add `projects/*/memory/*` to the exempt list at `hooks/phase-guard.sh:285`.
+      · **132/2 → 134/0.** Its own `case` arm rather than an extra alternation on the existing one,
+        so the comment explaining *why* memory is exempt sits against the pattern it explains.
+      · `rules/gates.md:5`'s parenthetical "(docs and memory paths never blocked)" becomes true
+        with this commit — it was describing intent, not behaviour. The *other* stale claim in that
+        same line, that the hook is "not registered in `settings.json`", is measurably false and
+        deliberately **left alone**: it belongs to the already-approved wording branch.
 - [ ] 6. Write the owed memory file `feedback_fixture_must_not_pre_create_state` and its
       `MEMORY.md` line. This doubles as the end-to-end check of Defect B; text is drafted in
       `.claude/session-state.md`.
