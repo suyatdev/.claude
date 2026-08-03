@@ -773,7 +773,25 @@ how this file and its linked files should be written (plain language, major chan
   questions for the user: fix the lexer (it is the same lexing-grammar class the marker-gate spec
   keeps failing on — arguably one shared helper), and decide whether the allowlist should legitimise
   `docs/**`, which is what this repo actually does on `main` every day.
-  ⚠️ Not a new PARKED item until the user rules — recorded here so it cannot be lost.
+  ✅ **FIXED 2026-08-03 on `fix/fix-l1` @ `ac5afa2` (L1).** Both guards now lex the command into
+  shell segments via the new `hooks/lib/classify-git-command.py`; the generic half of
+  `classify-pr-command.py` moved to `hooks/lib/shell_segments.py` and both classifiers share it
+  (`classify-pr-command.test.py` stayed green and untouched as the regression baseline). Allowlist
+  widened to `docs/*`. Neither hook had ANY tests; both now do, with the 17 fail-open cases pinned
+  as failing first. Per-segment flag judging fixed two further defects nobody had predicted:
+  `git push --force && echo --force-with-lease` was **allowed**, `git push && echo --force` was
+  **blocked**, and doc-guard read `-a` from any segment. `checkpoint-before-modify.sh` deliberately
+  untouched — its match is an *allowlist*, so the same shape has the opposite effect.
+- 🔴 **FIVE OF THE 17 SCRIPTS IN `hooks/` ARE NOT REGISTERED IN `settings.json` — found 2026-08-03.**
+  `phase-guard.sh` (32 KB + a 69 KB test suite), `checkpoint-before-modify.sh`,
+  `require-project-standards.sh`, `scan-invisible-unicode.sh`, `scan-secrets.sh`. They exist, they
+  pass their tests, and nothing invokes them. The only reference to `phase-guard.sh` anywhere is a
+  stale worktree copy at `.claude/worktrees/verify-rule/settings.json`. **`rules/gates.md` claimed
+  the phase gate was "Enforced by `hooks/phase-guard.sh` (Tier 1)"** — corrected in `ac5afa2`; the
+  gate is judgment-only in both halves. Live hooks are git-guard, doc-guard, judge-guard,
+  merge-guard, pane-dispatch-guard, context-handoff-watch, memsearch-nudge, and the orca
+  `claude-hook.sh`. Deciding which of the five to wire up is **open work, user's call** — the
+  secret/unicode scanners in particular are advertised protection that is not running.
 - **Pane-dispatch note 2026-08-02 (corrected):** the compliance judge's `wait` returned **exit 2
   (timeout)** at the 540 s cap on both rounds 3 and 4, and **both times the judge was simply still
   working** — round 3's result file landed ~2 min after the wait gave up, and round 4's finished on a
