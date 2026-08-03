@@ -809,7 +809,24 @@ how this file and its linked files should be written (plain language, major chan
   at `phase: planning` (i.e. the whole remaining marker-gate register, ~8 branches) **every memory
   write is refused**, and `rules/gates.md` promises "docs and memory paths are never blocked". One
   line to fix; do it on the same branch as the regression above, since both are live guard friction.
-- ✅ **BOTH FIXED on `fix/git-guard-empty-index`, pushed `5aa220e`, 8 commits, PR not yet open.**
+- ⚠️ **`fix/git-guard-empty-index` @ `4542e89` — BOTH DEFECTS FIXED BUT THE BRANCH MUST NOT MERGE.**
+  **Obs judge RUN 1 = `risk=high`, did not clear it: I introduced a fail-open.** Four shapes `main`
+  blocks today are ALLOWED by the branch (each reproduced by me, not taken on report):
+  `git add -- hooks/x.sh && git commit -m msg`, `git add -A && git commit -m msg`,
+  `git commit --amen --no-edit`, `git commit --pathspec-from-file=list`. The derivation enumerates
+  pathspec/`-a`/`--amend` and misses **the chain's own `git add`** — the shape the branch exists for.
+  Not armed on this machine (live hook is `main`'s copy); the only risk is merging. Fix list in
+  order + RUN 1 detail: feature file task 8 and `.claude/session-state.md`. Verdict committed at
+  `coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md`.
+  · **The stated REASON was the worse half.** *"git refuses such a commit itself"* is false whenever
+  a sibling `git add` precedes it, and it went into both the spec and the hook comment. Every number
+  I reported re-measured **exact** while the reasoning around them was wrong — the recorded
+  "measure the explanation, not just the number" lesson, hit again.
+  · **The suite could not have caught it: the test comment's enumeration IS the code's
+  enumeration**, so 40/0 only ever confirmed my own list. Third instance on this branch of a check
+  inheriting the blind spot of the thing it checks (after the `stage` fixture and `empty_index`).
+  · Below is the pre-judge summary; it remains accurate about what was built, not about readiness.
+- ✅ **Built on `fix/git-guard-empty-index`, 8 commits (pre-judge state `5aa220e`).**
   Full detail is in `docs/features/git-guard-empty-index.md` (checklist notes + `## Verification`)
   — deliberately not restated here. Headlines: an empty index now means *the index cannot answer*,
   so the command is asked instead (paths after `--`, `-a` → worktree, `--amend` → HEAD's tree), and
