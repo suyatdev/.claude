@@ -809,6 +809,40 @@ how this file and its linked files should be written (plain language, major chan
   at `phase: planning` (i.e. the whole remaining marker-gate register, ~8 branches) **every memory
   write is refused**, and `rules/gates.md` promises "docs and memory paths are never blocked". One
   line to fix; do it on the same branch as the regression above, since both are live guard friction.
+- ✅ **BOTH FIXED on `fix/git-guard-empty-index`, pushed `5aa220e`, 8 commits, PR not yet open.**
+  Full detail is in `docs/features/git-guard-empty-index.md` (checklist notes + `## Verification`)
+  — deliberately not restated here. Headlines: an empty index now means *the index cannot answer*,
+  so the command is asked instead (paths after `--`, `-a` → worktree, `--amend` → HEAD's tree), and
+  an empty result **allows** because git refuses such a commit itself. Path extraction went into
+  `lib/classify-git-command.py`, which already owns the lexer, so there is still one parser.
+  git-guard **40/0**, phase-guard **134/0**, classify-git **55/0**, nine neighbours unchanged,
+  shellcheck clean on both sides.
+  · **The naive fix was a fail-open and is pinned against.** Pathspec, `-a` and `--amend` each
+  commit content the index never shows; a mutant implementing "empty → allow" fails four cases.
+  Telling a pathspec from an option value needed a small table of which `git commit` flags consume
+  a value — scoped to that job only, so the pinned `git commit -m '-a'` → `COMMIT_ALL` is unchanged.
+  · 🔴 **DEFECT C FOUND AND MEASURED, NOT FIXED — `git-guard.sh:88` resolves the branch from the
+  HOOK's own cwd**, not the directory the command will run in. Same payload: exit 2 from the primary
+  checkout, exit 0 from a worktree, so **all worktree work is judged against `main`**. It blocked two
+  commits mid-session; the workaround is to keep the shell's cwd inside the worktree, since a `cd`
+  inside the command cannot help a hook that runs first. **Enumerated rather than patched** (the
+  standing rule after a repeat class): live guards resolving identity from cwd are **git-guard,
+  judge-guard, and partially doc-guard**; `phase-guard` fixed it by resolving from the file being
+  written, which has **no analogue for a commit** — and the payload `cwd` is pre-`cd` too (line 713).
+  So this is a design decision, not a patch. **User ruled: do not widen that branch.** Own task.
+  · ⚠️ **`/model sonnet` wrote into the WORKTREE's tracked `settings.json`**, not the live one:
+  live `opus[1m]`, worktree copy `sonnet`, committed main `claude-fable-5[1m]`. Kept out of all 8
+  commits only because every commit used an explicit `-- <path>`. **Never `git add -A` in a
+  worktree of this repo.** Unresolved — user's call.
+  · **Two fixture defects found, and they are the same lesson as the bug.** The suite's `stage`
+  helper pre-created the populated index, which is why 33 tests + a 24,016-case fuzz + a mutation
+  round all missed the regression; and `empty_index`'s plain `git reset` left the previous case's
+  worktree edits behind, so "only docs modified" silently also had source modified. Also fixed a
+  harness gap this exposed: `on_branch` ignored `git checkout`'s status, so a refused switch left
+  later cases running on the **wrong branch** reporting real-looking results.
+  · **STILL OWED, after merge only:** write
+  `projects/-Users-marksuyat--claude/memory/feedback_fixture_must_not_pre_create_state.md` + its
+  `MEMORY.md` line. Cannot be done before merge — the live hook is `main`'s copy.
 - 🔴 **FIVE OF THE 17 SCRIPTS IN `hooks/` ARE NOT REGISTERED IN `settings.json` — found 2026-08-03.**
   `phase-guard.sh` (32 KB + a 69 KB test suite), `checkpoint-before-modify.sh`,
   `require-project-standards.sh`, `scan-invisible-unicode.sh`, `scan-secrets.sh`. They exist, they
