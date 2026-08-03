@@ -31,7 +31,15 @@ pass=0; fail=0
 
 payload() { /usr/bin/jq -nc --arg c "$1" '{hook_event_name:"PreToolUse",tool_input:{command:$c}}'; }
 
-on_branch() { git -C "$REPO" checkout -q "$1"; }
+# A checkout that cannot proceed -- e.g. a tracked file left modified by an
+# earlier case -- otherwise fails silently and every later case runs on the
+# WRONG branch, reporting a real-looking pass or fail for the wrong reason.
+on_branch() {
+  git -C "$REPO" checkout -q "$1" || {
+    printf 'HARNESS — could not switch to %s (dirty worktree?)\n' "$1" >&2
+    exit 1
+  }
+}
 
 stage() { # $@ = paths to create and stage; no args = stage nothing
   git -C "$REPO" reset -q
@@ -93,6 +101,67 @@ run_case "docs/** mixed with source on main -> block"        2 'git commit -m mi
 on_branch feature
 stage src/app.sh
 run_case "source on a feature branch -> allow"               0 'git add -- src/app.sh && git commit -m msg'
+
+# ---------------------------------------------------------------------------
+# Guard 1 — EMPTY INDEX at hook time.
+#
+# PreToolUse fires BEFORE the command runs, so a command that does its own
+# `git add` reaches the hook with nothing staged. Every case below therefore
+# stages ONLY inside the command string and never calls `stage`: that helper
+# pre-creates precisely the state which hid this bug from 33 tests, a
+# 24,016-case fuzz run and a mutation round. A fixture that creates what the
+# command under test would create itself cannot see the bug, and neither
+# fuzzing nor mutation can find it -- both validate assertions, never the
+# fixture's premise.
+#
+# "Empty index -> allow" would be a fail-OPEN, because three shapes commit
+# content the index does not show. Each gets a case pinning it blocked.
+# ---------------------------------------------------------------------------
+on_branch main
+
+# A tracked, COMMITTED pair. `stage`-created files are untracked, and neither
+# `commit -a` nor `--amend` ever picks an untracked file up -- so without this
+# the -a cases below would pass for the wrong reason.
+mkdir -p "$REPO/src" "$REPO/docs"
+printf 'v1\n' > "$REPO/src/tracked.sh"
+printf 'v1\n' > "$REPO/docs/tracked.md"
+git -C "$REPO" add -- src/tracked.sh docs/tracked.md
+git -C "$REPO" commit -qm "tracked pair"
+
+empty_index() { # $@ = tracked paths to modify in the WORKTREE ONLY, never staged
+  git -C "$REPO" reset -q
+  local f
+  for f in "$@"; do printf 'change %s\n' "$$" > "$REPO/$f"; done
+}
+
+# The regression itself: documentation, refused because the add had not run yet.
+empty_index
+run_case "docs pathspec, add INSIDE the command, empty index -> allow"   0 'git add -- docs/tracked.md && git commit -m msg -- docs/tracked.md'
+run_case "bare commit, empty index -> allow (git itself refuses it)"     0 'git commit -m msg'
+
+# Same shape, source file: the index is equally empty, so only the pathspec
+# distinguishes these two. This is the case a naive "empty -> allow" breaks.
+run_case "source pathspec, add INSIDE the command, empty index -> block"  2 'git add -- src/tracked.sh && git commit -m msg -- src/tracked.sh'
+
+# -a commits the WORKTREE, which an index read cannot see.
+empty_index src/tracked.sh
+run_case "commit -a, source modified, empty index -> block"              2 'git commit -a -m msg'
+empty_index docs/tracked.md
+run_case "commit -a, only docs modified, empty index -> allow"           0 'git commit -a -m msg'
+
+# --amend re-writes HEAD's tree; HEAD here is the source-bearing "tracked pair".
+empty_index
+run_case "commit --amend, source in HEAD, empty index -> block"          2 'git commit --amend --no-edit'
+
+# No `--` separator: telling a pathspec from an option value needs a table of
+# which git flags take arguments. The hook does not have one, and this file's
+# stated fail direction is that "cannot tell" means block.
+run_case "docs path with NO -- separator, empty index -> block"          2 'git commit -m msg docs/tracked.md'
+
+# Hand the worktree back clean. These cases deliberately leave tracked files
+# modified, and `feature` does not carry them -- so the next branch switch
+# would refuse, which used to happen without a word.
+git -C "$REPO" reset -q --hard
 
 # ---------------------------------------------------------------------------
 # Guard 2 — force push

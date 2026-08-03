@@ -106,10 +106,25 @@ Fix: add `projects/*/memory/*` to that list. One line.
         `hooks/phase-guard.sh`, on `main`; fixing it here does not arm it. The memory write is
         blocked until this PR lands. Pre-merge, Defect B is verified by its test only (task 4);
         do the real write after merge.
-- [ ] 2. **Red** — add failing cases to `hooks/git-guard.test.sh`. At minimum: docs pathspec commit
+- [x] 2. **Red** — add failing cases to `hooks/git-guard.test.sh`. At minimum: docs pathspec commit
       whose only `git add` is *inside* the command string (must allow); bare `git commit` with an
       empty index (must allow); `-a` with a source file modified and nothing staged (must block);
       `--amend` with an empty index (must block for source). No helper staging in the first case.
+      · Baseline before touching anything: **33/0**. After: **37 pass, 3 fail** — the three reds are
+        the docs pathspec, the bare commit, and `-a` with only docs modified. Seven cases added:
+        the other four pin the fail-CLOSED answers a naive "empty → allow" would break.
+      · Needed a tracked, **committed** pair (`src/tracked.sh`, `docs/tracked.md`); `stage`-created
+        files are untracked and `commit -a`/`--amend` never pick those up, so the `-a` cases would
+        otherwise have passed for the wrong reason.
+      · ⚠️ **Harness fidelity gap found and fixed in the same step:** `on_branch` ignored
+        `git checkout`'s exit status. My cases leave tracked files modified, `feature` does not carry
+        them, so the checkout refused and **two force-push cases silently ran on `main`** — reporting
+        a real-looking FAIL for the wrong reason. `on_branch` now aborts loudly; the section resets
+        `--hard` on the way out. Same class as the `tool_name` harness gap that let a false premise
+        survive five judge rounds on `judge-guard`.
+      · No-`--` pathspec (`git commit -m msg docs/x.md`) is pinned **blocked**, not allowed: telling
+        a path from an option value needs a table of which git flags take arguments, and this file's
+        stated fail direction is that "cannot tell" means block.
 - [ ] 3. **Green** — implement the empty-index file-set derivation in `hooks/git-guard.sh`, reusing
       `hooks/lib/shell_segments.py` for flag and pathspec extraction.
 - [ ] 4. **Red** — add a failing case to `hooks/phase-guard.test.sh`: a write under
