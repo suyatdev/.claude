@@ -129,7 +129,11 @@ git -C "$REPO" add -- src/tracked.sh docs/tracked.md
 git -C "$REPO" commit -qm "tracked pair"
 
 empty_index() { # $@ = tracked paths to modify in the WORKTREE ONLY, never staged
-  git -C "$REPO" reset -q
+  # --hard, not a plain reset: a plain one clears the index but leaves the
+  # PREVIOUS case's edits sitting in the worktree, so a case asking for "only
+  # docs modified" silently also had source modified, and `commit -a` read the
+  # leftover. The helper has to establish the whole state it claims, not part.
+  git -C "$REPO" reset -q --hard
   local f
   for f in "$@"; do printf 'change %s\n' "$$" > "$REPO/$f"; done
 }

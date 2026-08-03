@@ -125,6 +125,12 @@ Fix: add `projects/*/memory/*` to that list. One line.
       · No-`--` pathspec (`git commit -m msg docs/x.md`) is pinned **blocked**, not allowed: telling
         a path from an option value needs a table of which git flags take arguments, and this file's
         stated fail direction is that "cannot tell" means block.
+      · ⚠️ **Second fixture defect, found by the implementation and fixed separately:** `empty_index`
+        used a plain `git reset`, which clears the index but leaves the *previous* case's worktree
+        edits in place — so "only docs modified" silently also had source modified and `commit -a`
+        read the leftover. Now `reset --hard`. Same lesson as the bug under repair: **a fixture must
+        establish the whole state it claims.** Verified against the pre-fix hook that this did not
+        mask the defect — still exactly 3 reds.
 - [x] 3. **Green** — implement the empty-index file-set derivation in `hooks/git-guard.sh`, reusing
       `hooks/lib/shell_segments.py` for flag and pathspec extraction.
       · Extraction went into `lib/classify-git-command.py` (which already owns the lexer) rather
