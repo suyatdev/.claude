@@ -144,8 +144,11 @@ Fix: add `projects/*/memory/*` to that list. One line.
         pinned `git commit -m '-a'` → `COMMIT_ALL` case is unchanged.
       · An unknown flag is assumed to take no value, so its value looks like a stray path and the
         commit fails closed. Deliberate — it matches the fail direction this hook states for itself.
-- [ ] 4. **Red** — add a failing case to `hooks/phase-guard.test.sh`: a write under
+- [x] 4. **Red** — add a failing case to `hooks/phase-guard.test.sh`: a write under
       `projects/*/memory/*` while a `planning` feature file exists must be allowed.
+      · Baseline **130/0** → **132/2**. Two reds (a memory file and `MEMORY.md` itself) plus two
+        deny pins, so the fix cannot over-exempt: `projects/p/app.sh` and `projects/p/memory.sh`
+        must both stay blocked. The exemption is the memory *directory*, not `projects/` at large.
 - [ ] 5. **Green** — add `projects/*/memory/*` to the exempt list at `hooks/phase-guard.sh:285`.
 - [ ] 6. Write the owed memory file `feedback_fixture_must_not_pre_create_state` and its
       `MEMORY.md` line. This doubles as the end-to-end check of Defect B; text is drafted in

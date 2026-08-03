@@ -210,9 +210,22 @@ allow_silent "A1.6 path outside the repository root (step 5)"   "$OPTED"  "$(pay
 # to its own off switch is a footgun.
 
 for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-memory/x.md \
-           .claude/session-state.md settings.json; do
+           .claude/session-state.md settings.json \
+           projects/-Users-x--claude/memory/feedback_x.md \
+           projects/-Users-x--claude/memory/MEMORY.md; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
+
+# projects/*/memory/* is where the harness's own memory tool writes. Omitting it
+# meant EVERY memory write was refused while any feature file sat at planning --
+# i.e. for the whole of a multi-branch register -- while rules/gates.md promised
+# that documentation and memory paths are never blocked.
+#
+# The exemption is the memory directory, NOT projects/ at large: a repo could
+# hold source under projects/, and this hook is the only thing standing between
+# a planning phase and an unreviewed edit to it.
+deny "projects/ is not exempt outside memory/" "$OPTED" "$(payload Write file_path "$OPTED/projects/p/app.sh")"
+deny "a file merely NAMED memory is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/projects/p/memory.sh")"
 
 # --- Group B row 1: the core deny ------------------------------------------------------
 # A feature file at phase: planning, on a branch no feature file claims, and a write to
