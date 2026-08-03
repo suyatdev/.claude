@@ -9,7 +9,8 @@ unrecognised command simply yields no facts.
     COMMIT_ALL  ...and that same segment carries -a / --all / -am, which stages tracked
                 edits at commit time, so the change to inspect is HEAD's diff, not the index
     COMMIT_AMEND      ...and that segment carries --amend, which re-writes HEAD's tree
-    COMMIT_PATHSPEC   ...and that segment names paths after a `--` separator
+    COMMIT_PATHSPEC   ...and that segment names paths after a `--` separator AND carries
+                nothing before it that could commit more besides
     COMMIT_PATH<tab><path>
                 one per path after `--`. A path rides in the fact stream rather than being
                 re-lexed by the caller, so there is no second parser to disagree with this
@@ -33,6 +34,13 @@ what the shell versions did:
   * `git push && echo --force` used to be blocked, because the force check was too.
   * doc-guard read `-a` from ANY segment, so `git commit -m msg && ls -a` made it judge
     every dirty tracked file instead of the (empty) index.
+
+Deliberately NOT reported: what a SIBLING command stages. `git add` briefly had ADD_PATH /
+ADD_ALL facts so git-guard could add them to a commit's file set, and that was wrong in kind
+rather than in detail -- at least ten commands fill the index (add, rm, mv, reset --soft,
+checkout -- , restore --staged, apply --cached, stash pop --index, cherry-pick -n, revert -n),
+two review rounds each measured the list short, and a list that is short in the ALLOW direction
+is a fail-open. The guard now trusts only what the `commit` itself names. See ADR 0014.
 
 Deliberately NOT parsed: git accepts any unambiguous prefix of a long option (`--amen` ==
 `--amend`), so enumerating the grammar cannot be completed. Only fully-spelled forms are
@@ -86,18 +94,22 @@ COMMIT_SAFE_FLAGS = (
     "-S", "--gpg-sign", "--no-gpg-sign",
 )
 
-# `git add` forms whose file set cannot be read off the command line.
-ADD_ALL_FLAGS = ("-A", "--all", "-u", "--update", "--ignore-removal",
-                 "--no-ignore-removal", "--renormalize", "--pathspec-from-file")
-ADD_WIDE_PATHSPECS = (".", ":/", "*", "./")
-
-
 def commit_scan(rest):
-    """(paths named after `--`, whether the file set is UNKNOWABLE)."""
+    """(paths named after `--`, whether the file set is UNKNOWABLE).
+
+    The flags BEFORE a `--` are scanned even though the paths after it are
+    unambiguous, because some of them mean the paths are not the whole commit:
+    `-i`/`--include` commits the index AS WELL. Returning the paths as soon as a
+    `--` was seen -- the obvious reading, and what this did first -- handed the
+    caller a pathspec that looked exhaustive and was not.
+    """
     if "--" in rest:
-        return rest[rest.index("--") + 1:], False
+        cut = rest.index("--")
+        flags, paths = rest[:cut], rest[cut + 1:]
+    else:
+        flags, paths = rest, []
     skip = False
-    for tok in rest:
+    for tok in flags:
         if skip:
             skip = False
             continue
@@ -110,27 +122,7 @@ def commit_scan(rest):
         if name in COMMIT_SAFE_FLAGS:
             continue
         return [], True                       # unrecognised option: cannot tell
-    return [], False
-
-
-def add_scan(rest):
-    """(paths this `git add` names, whether it stages an UNBOUNDED set)."""
-    if "--" in rest:
-        cut = rest.index("--")
-        flags, paths = rest[:cut], list(rest[cut + 1:])
-    else:
-        flags, paths = rest, []
-    everything = False
-    for tok in flags:
-        if not tok.startswith("-"):
-            paths.append(tok)                 # for `git add` a bare token IS a path
-            continue
-        if tok.split("=", 1)[0] in ADD_ALL_FLAGS:
-            everything = True
-    # A `.` or `:/` names the whole tree just as surely as -A does.
-    if any(p in ADD_WIDE_PATHSPECS for p in paths):
-        everything = True
-    return paths, everything
+    return paths, False
 
 
 def classify(src):
@@ -154,17 +146,6 @@ def classify(src):
                     facts.add("COMMIT_PATH\t" + path)
             if bare:
                 facts.add("COMMIT_BARE_ARGS")
-
-        elif subcommand == "add":
-            paths, everything = add_scan(rest)
-            if everything:
-                # ADD_ALL means "resolve the set from git, not from this command",
-                # which supersedes any individual path -- emitting both would
-                # invite a reader to think the path list were complete.
-                facts.add("ADD_ALL")
-            else:
-                for path in paths:
-                    facts.add("ADD_PATH\t" + path)
 
         elif subcommand == "push":
             facts.add("PUSH")

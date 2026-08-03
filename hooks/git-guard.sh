@@ -77,11 +77,15 @@ if ! facts=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null); the
   exit 2
 fi
 
+# One fact per LINE, and compared as a whole line. An unquoted `for f in $facts`
+# splits on bash's default IFS, which includes the TAB that carries a path in
+# `COMMIT_PATH<tab><path>` -- so committing a file named PUSH_FORCE produced the
+# token PUSH_FORCE and blocked the push in the very same command line.
 has_fact() {
   local f
-  for f in $facts; do
+  while IFS= read -r f; do
     [ "$f" = "$1" ] && return 0
-  done
+  done <<< "$facts"
   return 1
 }
 
@@ -95,55 +99,36 @@ on_main() {
   [ "$b" = "main" ] || [ "$b" = "master" ]
 }
 
-# What would this commit actually contain, when the index cannot say?
+# The paths this commit names for ITSELF, or nothing at all.
 #
-# PreToolUse runs BEFORE the command, so `git add -- x && git commit -- x` -- the
-# form this repo mandates on every commit -- arrives here with NOTHING staged. An
-# empty index means "the index cannot answer", not "nothing is allowed", so the
-# command is asked instead. FOUR forms commit content the index never shows:
+# PreToolUse runs BEFORE the command, so `git add -- x && git commit -m msg -- x`
+# -- the form this repo mandates on every commit -- arrives here with NOTHING
+# staged. An empty index means "the index cannot answer", not "nothing is
+# allowed", so the command is asked instead. It is asked exactly ONE question:
+# which paths does the `commit` name after a `--`? Printing nothing means the
+# question had no answer, and the caller treats that as block.
 #
-#   git add   what this same command line stages a moment from now. Easy to
-#             forget precisely because it is not part of the `commit` -- and
-#             forgetting it once let a chained source commit onto main.
-#   --        the paths the commit names, taken from the classifier's fact stream
-#             so nothing is re-lexed here and no second parser can drift
-#   -a        tracked edits sitting in the WORKTREE
-#   --amend   whatever is already in HEAD's tree
+# What this deliberately does NOT do is work out what the rest of the command
+# line will have staged by the time git looks. Two review rounds tried; each
+# enumeration was measured short (first the chain's own `git add`, then nine
+# further commands that fill the index), and short in the ALLOW direction is a
+# fail-open. Reading the commit's own pathspec cannot be short in that
+# direction: every path it grants is one the hook has actually read.
 #
-# Empty output means no shape named anything, which is genuinely nothing to
-# commit. Do NOT restate that as "git refuses it anyway": that is false the
-# moment a sibling `git add` is present, and believing it is what produced the
-# fail-open above.
-commit_target_files() {
-  local tab paths
+# A pathspec is EXCLUSIVE -- git commits those paths and leaves whatever else is
+# staged sitting in the index -- but only while nothing else on the line widens
+# it, so three facts veto it. The classifier suppresses COMMIT_PATHSPEC for
+# `-i`/`--include` (which commits the index as well) by refusing to recognise
+# the flag at all; -a and --amend arrive as facts of their own. See ADR 0014.
+commit_pathspec_files() {
+  local tab
   tab=$(printf '\t')
-  paths=""
-
-  if has_fact COMMIT_PATHSPEC; then
-    # An explicit pathspec is EXCLUSIVE: git commits exactly these paths and
-    # leaves anything else the chain staged sitting in the index, uncommitted.
-    paths=$(printf '%s\n' "$facts" | grep "^COMMIT_PATH${tab}" | cut -f2-)
-  else
-    # No pathspec, so the commit takes whatever the index holds -- which at hook
-    # time is whatever this same command line is about to put there.
-    if has_fact ADD_ALL; then
-      # -A/-u/`.` name an unbounded set, so ask git rather than the command line.
-      # A rename reads as `old -> new` and matches no allowlist entry, i.e. it
-      # blocks; that is the intended direction for a shape this cannot parse.
-      paths=$(printf '%s\n%s' "$paths" "$(git status --porcelain 2>/dev/null | cut -c4-)")
-    fi
-    if has_fact ADD_PATH; then
-      paths=$(printf '%s\n%s' "$paths" "$(printf '%s\n' "$facts" | grep "^ADD_PATH${tab}" | cut -f2-)")
-    fi
+  if has_fact COMMIT_PATHSPEC \
+     && ! has_fact COMMIT_ALL \
+     && ! has_fact COMMIT_AMEND \
+     && ! has_fact COMMIT_BARE_ARGS; then
+    printf '%s\n' "$facts" | grep "^COMMIT_PATH${tab}" | cut -f2-
   fi
-
-  if has_fact COMMIT_ALL; then
-    paths=$(printf '%s\n%s' "$paths" "$(git diff --name-only 2>/dev/null)")
-  fi
-  if has_fact COMMIT_AMEND; then
-    paths=$(printf '%s\n%s' "$paths" "$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null)")
-  fi
-  printf '%s\n' "$paths" | grep -v '^[[:space:]]*$'
 }
 
 # --- Guard 2: force-push ---
@@ -160,38 +145,34 @@ fi
 
 # --- Guard 1: default-branch commit ---
 if has_fact COMMIT && on_main; then
-  staged=$(git diff --cached --name-only 2>/dev/null || echo "")
-  files="$staged"
+  files=$(git diff --cached --name-only 2>/dev/null || echo "")
   label="Staged files"
 
   if [ -z "$files" ]; then
-    # A token the flag table could not account for is PROBABLY a pathspec, and
-    # "probably" is not enough to let a commit onto main unreviewed.
-    if has_fact COMMIT_BARE_ARGS; then
-      printf 'git-guard: nothing is staged and this commit carries arguments that may be file paths, so what it would commit cannot be determined -- failing closed.\n' >&2
-      printf 'Name them after a separator (git commit -m msg -- <path>) so they can be checked.\n' >&2
+    files=$(commit_pathspec_files)
+    label="Files this commit would contain"
+    if [ -z "$files" ]; then
+      # Nothing staged AND the commit names nothing checkable. Everything this
+      # branch relaxed is above; this is main's behaviour, unchanged, and it is
+      # what keeps the ten commands that fill an index blocked without the hook
+      # having to know a single one of them.
+      printf 'git-guard: nothing is staged yet, so this commit is judged by the paths it names -- and it names none that can be checked.\n' >&2
+      printf 'Name them after a separator: git commit -m msg -- <path>\n' >&2
+      printf '(-a, --amend, -i/--include and an unseparated path all commit more than the paths given, so none of them can stand in for one.)\n' >&2
       exit 2
     fi
-    files=$(commit_target_files)
-    label="Files this commit would contain"
   fi
 
-  # An empty list here is ALLOW, not deny -- but only because NONE of the four
-  # shapes named a file, the chain's own `git add` included. Denying instead
-  # reports the wrong reason for the wrong problem, and denying on a merely empty
-  # INDEX is the regression this branch exists to remove.
   allowed=1
-  if [ -n "$files" ]; then
-    while IFS= read -r f; do
-      [ -z "$f" ] && continue
-      case "$f" in
-        # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
-        # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
-        CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
-        *) allowed=0 ;;
-      esac
-    done <<< "$files"
-  fi
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+      # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
+      # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
+      CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
+      *) allowed=0 ;;
+    esac
+  done <<< "$files"
   if [ "$allowed" -ne 1 ]; then
     printf 'git-guard: commits to main/master are blocked except documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' >&2
     printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2

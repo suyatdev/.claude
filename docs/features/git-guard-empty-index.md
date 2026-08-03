@@ -33,51 +33,49 @@ against the fixture's premise and can never question the premise itself.
 **This constrains the fix:** at least one new case must do its `git add` **only inside the command
 string**, with no helper staging.
 
-### The trap — "empty index → allow" is a fail-open
+### The trap — "empty index → allow" is a fail-open, and so is enumerating the alternatives
 
-An unconditional allow-on-empty would open a real hole, because **four** command shapes commit
-content the index does not show:
+An unconditional allow-on-empty would open a real hole, because plenty of command shapes commit
+content the index does not show at hook time. **This spec twice tried to list them, and both lists
+were measured short** — see tasks 8 and 9:
 
-| Shape | What actually gets committed | Index at hook time |
+| Round | The list | What it missed |
 |---|---|---|
-| `git add X && git commit -m m` | whatever the **chain itself** stages, a moment later | empty *now*, not at commit time |
-| `git commit -m m -- docs/x.md` | the **worktree** content of the pathspec | may be empty |
-| `git commit -a -m m` | all tracked **worktree** modifications | may be empty |
-| `git commit --amend` | HEAD's tree, re-written | may be empty |
+| 1 | pathspec, `-a`, `--amend` | the chain's own `git add` — 4 commands `main` blocks were allowed |
+| 2 | …plus `git add` | `rm`, `mv`, `reset --soft`, `checkout HEAD~1 -- <p>`, `restore --staged`, `apply --cached`, `stash pop --index`, `cherry-pick -n`, `revert -n` |
 
-⚠️ **The first row is listed first because it is the one that hides.** It is not part of the
-`commit` at all, so enumerating the commit's own options feels complete while missing the single
-most common shape in this repo. The first implementation of this spec listed only the other three
-and shipped a fail-open — four commands `main` blocks were allowed. See task 8.
+⚠️ **Do not add a tenth row.** A list of the ways an index gets filled cannot be shown to be
+complete, and every omission grants permission it should not — short in the **allow** direction.
+The two rounds are evidence about the *approach*, not about the entries.
 
-The pathspec row is measured, not assumed — the same finding blocks the marker-gate spec
-(`CODING_MEMORY.md:557`): `git commit -- <path>` commits the worktree, not the index. It matters
-doubly here because this repo's own standing rule mandates `-- <path>` on **every** commit, so the
-guard's most common input is exactly the shape it reads wrongly.
-
-`-a` today fails **closed** on `main` (empty index → deny), which is safe. A naive fix would turn
-it into a silent allow for source files — a new fail-open in a Tier 1 guard, on the branch whose
-purpose is removing friction.
+The pathspec behaviour is measured, not assumed — the same finding blocks the marker-gate spec
+(`CODING_MEMORY.md:557`): `git commit -- <path>` commits the worktree, not the index, and commits
+**only** those paths, leaving anything else staged in the index. It matters doubly here because this
+repo's own standing rule mandates `-- <path>` on **every** commit.
 
 ### Required behaviour
 
-When the index is empty, derive the file set from the command instead of denying:
+When the index is empty, judge the commit by **the paths it names for itself**, and deny otherwise:
 
-- **Pathspec present** (`git commit … -- a b`) → evaluate **those paths**, and only those: a
-  pathspec is exclusive, so anything else the chain staged stays in the index uncommitted.
-- **Otherwise, a `git add` in the same command** → evaluate the paths it names, or
-  `git status --porcelain` when it names an unbounded set (`-A`, `-u`, `.`).
-- **`-a` / `--all` present** → evaluate tracked worktree modifications (`git diff --name-only`).
-- **`--amend` present** → evaluate the files in HEAD's commit.
-- **No shape names any file** → **allow**: nothing is staged and nothing is named, so there is
-  genuinely nothing to commit.
-- **The command cannot be understood** → **block**. A bare token the flag table cannot account
-  for, an unrecognised option (git honours abbreviations, so `--amen` amends), or
-  `--pathspec-from-file`, whose paths live in a file this hook cannot read.
+| Shape, with nothing staged | Answer |
+|---|---|
+| commit names paths after `--`, and nothing on the line can widen them | check those paths against the allowlist |
+| anything else — bare commit, `-a`, `--amend`, `-i`, `--only`, an unseparated path, any chain | **block**, exactly as `main` does today |
 
-⚠️ **Do not restate the allow case as "git refuses such a commit anyway".** That is false whenever
-a sibling `git add` precedes it, and believing it is exactly what produced the fail-open recorded
-in task 8. The allow is justified by *no shape naming a file*, not by git's own behaviour.
+Four things veto the pathspec, because each commits more than the paths given: `-a`/`--all`
+(tracked worktree edits), `--amend` (HEAD's tree), `-i`/`--include` (**the index as well** — measured:
+it committed a staged source file alongside the named doc), and a command that cannot be understood
+at all — a bare token the flag table cannot account for, an unrecognised option (git honours
+abbreviations, so `--amen` amends), or `--pathspec-from-file`, whose paths live in a file this hook
+cannot read. `-o`/`--only` is unrecognised, so it blocks with that last group.
+
+**Why this shape:** it only ever grants permission for paths the hook has actually read off the
+command line, so it is **provably never weaker than `main`** — checkable by replay, where "is this
+enumeration complete?" is not checkable at all. Accepted cost: `git add X && git commit -m msg`
+with no pathspec stays denied, which is today's behaviour and what the house rule already forbids.
+
+⚠️ **Do not restate the block case as "git refuses such a commit anyway".** That is false whenever
+a sibling `git add` precedes it, and believing it is exactly what produced the fail-open in task 8.
 
 The allowlist itself is unchanged: `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`.
 Flag detection reuses the existing segment lexer (`hooks/lib/shell_segments.py`) the way
@@ -237,29 +235,58 @@ Fix: add `projects/*/memory/*` to that list. One line.
           `-u` blocks, docs-only allows, untracked source blocks.
         · **Still owed: obs judge RUN 2** at whatever SHA these land on, then the PR.
 
+- [x] 9. **RUN 2 → the design was narrowed.** Verdict appended to the same file, pinned `833e3eb`,
+      `risk=medium confidence=high`. RUN 1's blocker genuinely closed — every number re-measured
+      exact, 8/8 shapes probed, and the five changed test expectations confirmed to have only
+      **added** facts. But the *class* was not closed: **nine further staging commands** were all
+      regressions (blocked on `main`, allowed by the branch), and ADR 0014's "all four are
+      consulted" was a false completeness claim — the same error the ADR itself diagnoses.
+      · ✅ **User decision, 2026-08-03: stop predicting what a command stages.** Relax only where the
+        commit names its own paths; restore `main`'s behaviour everywhere else. Two short lists are
+        evidence about the approach, not about the entries. Rationale, both rounds and the rejected
+        design: **ADR 0014**, rewritten. `### Required behaviour` above is the current policy.
+      · Dropped `ADD_PATH`/`ADD_ALL`/`add_scan` and the `git status --porcelain` resolution;
+        `commit_target_files` → `commit_pathspec_files`, which makes no git calls at all.
+      · **Two defects found while narrowing, both measured, both fixed here:**
+        `git commit -i -m msg -- docs/x.md` was a **live fail-open** — `-i` commits the index as
+        well, and the classifier returned the paths on seeing `--` before consulting the flag table,
+        so a staged source file rode in behind a documentation pathspec. And `has_fact` word-split
+        a fact stream whose paths ride after a **tab**, so committing a file named `PUSH_FORCE`
+        blocked an unrelated `git push` in the same line.
+
 ## Verification
 
-**Suites — all green.** `git-guard` 33/0 → **40/0** · `phase-guard` 130/0 → **134/0** ·
-`classify-git-command` 47/0 → **55/0**. Unaffected neighbours re-run and unchanged: `judge-guard`
+**Suites — all green.** `git-guard` 33/0 → **67/0** · `phase-guard` 130/0 → **134/0** ·
+`classify-git-command` 47/0 → **73/0**. Unaffected neighbours re-run and unchanged: `judge-guard`
 101/0, `doc-guard` 16/0, `context-handoff-watch` 19/0, `pane-dispatch-guard` 34/0,
-`classify-pr-command` 51/0, `panes/*` 45+113+10+9, `memsearch-nudge` 5/5, `statusline-command` 50/50.
+`classify-pr-command` 51/0, `memsearch-nudge` 5/5.
 
-**shellcheck 0.11.0** — zero findings on `git-guard.sh` and `phase-guard.sh`, on this branch *and*
-on `main`. No net-new.
+**shellcheck 0.11.0** — zero findings on `git-guard.sh` and `git-guard.test.sh`. No net-new.
 
-**The tests detect the bug, proven two ways rather than asserted.**
-- Replayed against the pre-fix hook: exactly the 3 intended reds, no more.
-- **Mutation — the naive fix.** Replacing the derivation with a blanket "empty index → allow"
-  leaves the suite at **36/4**: source pathspec, `-a` with source, `--amend`, and the no-separator
-  case all fire. That mutant is the plausible wrong fix, and it cannot pass.
+**The tests detect the bug: 21 of 67 hook cases and 12 of 73 unit cases were red** at the
+tests-only commit that precedes the fix, and green after it.
 
-**End-to-end against the real repo, live hook vs fixed hook:**
+**The load-bearing claim, replayed rather than asserted — 51 commands × 6 index/worktree states,
+306 pairs, `main`'s hook vs the candidate, comparing exit codes:**
 
-| Case | Live (`main`) | Fixed |
-|---|---|---|
-| Write to `projects/*/memory/…` mid-planning | **2** blocked | **0** allowed |
-| `git add -- docs/x.md && git commit … -- docs/x.md` on `main` | **2** blocked | **0** allowed |
-| same shape with `hooks/x.sh` on `main` | 2 blocked | **2** still blocked |
+| Candidate | identical to `main` | stricter | **allowed where `main` blocks** |
+|---|---|---|---|
+| the rejected enumerate-what-gets-staged design (`27c5ac5`) | 173 | 1 | **132 pairs / 36 distinct commands** |
+| this fix | 282 | 0 | **24 pairs / 6 distinct commands** |
+
+All six relaxations name **only** documentation after a `--` (`docs/*.md`, `CODING_MEMORY.md`,
+`coding-memory/*`), which is the entire intended change. The 36 include `git rm`, `git commit -a`,
+`git commit --amend` and a bare `git commit -m msg`.
+
+**Git's own behaviour, measured directly rather than read off the manual** — the premise the whole
+policy rests on. With `src/a.sh` staged:
+
+| command | files in the resulting commit |
+|---|---|
+| `git commit -m msg -- docs/b.md` | `docs/b.md` only; `src/a.sh` still staged afterwards |
+| `git commit -i -m msg -- docs/b.md` | `docs/b.md` **and** `src/a.sh` |
+
+The second row is why `-i` now blocks: pre-fix it exited **0**, post-fix **2**.
 
 **Open, deliberately not fixed here — Defect C, `git-guard.sh:88`.** `current_branch` runs
 `git rev-parse` in the *hook's own* working directory, which is the session's, not the directory
@@ -272,11 +299,11 @@ this needs a decision rather than a patch. Same "identity-from-cwd" class alread
 `phase-guard` and still open in `judge-guard`; enumerated across the live guards, it is
 **git-guard, judge-guard, and partially doc-guard**.
 
-⚠️ **Its blast radius GREW on this branch and that is a cost of this change, not a pre-existing
-one.** `commit_target_files` adds `git status --porcelain`, `git diff` and `git diff-tree` calls
-that also run in the hook's own directory. Before, a wrong directory produced the wrong *branch
-name*; now it also produces the wrong *file list*. The deferral still stands, but it is a worse
-bug than when this branch opened.
+✅ **Its blast radius no longer grows here — corrected.** The rejected design added
+`git status --porcelain`, `git diff` and `git diff-tree` calls that also ran in the hook's own
+directory, so a wrong directory produced a wrong *file list* and not just a wrong *branch name*.
+`commit_pathspec_files` makes **no git calls at all**, so cwd again affects only the branch name
+and the index read, exactly as on `main`. The deferral stands and the cost is back to where it was.
 
 **Also open, pre-existing and NOT widened into this diff:** `--amend` with a *populated* index
 evaluates only the staged files, not HEAD's tree as well. Unchanged by this work; recorded so it
