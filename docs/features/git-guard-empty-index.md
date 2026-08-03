@@ -159,11 +159,44 @@ Fix: add `projects/*/memory/*` to that list. One line.
 - [ ] 6. Write the owed memory file `feedback_fixture_must_not_pre_create_state` and its
       `MEMORY.md` line. This doubles as the end-to-end check of Defect B; text is drafted in
       `.claude/session-state.md`.
-- [ ] 7. Run both suites plus the neighbouring hook suites and `shellcheck -x`; record pass/fail
+      · ⏸ **Blocked until merge, by design** — the live hook is `main`'s copy, so the fix is not
+        armed on this machine yet. The fixed hook was verified to allow that exact path directly
+        (see `## Verification`); the real write happens on `main` after the PR lands.
+- [x] 7. Run both suites plus the neighbouring hook suites and `shellcheck -x`; record pass/fail
       in `## Verification`.
 - [ ] 8. Observability judge (implementation stage), then `gh pr create`. User merges in the
       GitHub UI.
 
 ## Verification
 
-_Not started._
+**Suites — all green.** `git-guard` 33/0 → **40/0** · `phase-guard` 130/0 → **134/0** ·
+`classify-git-command` 47/0 → **55/0**. Unaffected neighbours re-run and unchanged: `judge-guard`
+101/0, `doc-guard` 16/0, `context-handoff-watch` 19/0, `pane-dispatch-guard` 34/0,
+`classify-pr-command` 51/0, `panes/*` 45+113+10+9, `memsearch-nudge` 5/5, `statusline-command` 50/50.
+
+**shellcheck 0.11.0** — zero findings on `git-guard.sh` and `phase-guard.sh`, on this branch *and*
+on `main`. No net-new.
+
+**The tests detect the bug, proven two ways rather than asserted.**
+- Replayed against the pre-fix hook: exactly the 3 intended reds, no more.
+- **Mutation — the naive fix.** Replacing the derivation with a blanket "empty index → allow"
+  leaves the suite at **36/4**: source pathspec, `-a` with source, `--amend`, and the no-separator
+  case all fire. That mutant is the plausible wrong fix, and it cannot pass.
+
+**End-to-end against the real repo, live hook vs fixed hook:**
+
+| Case | Live (`main`) | Fixed |
+|---|---|---|
+| Write to `projects/*/memory/…` mid-planning | **2** blocked | **0** allowed |
+| `git add -- docs/x.md && git commit … -- docs/x.md` on `main` | **2** blocked | **0** allowed |
+| same shape with `hooks/x.sh` on `main` | 2 blocked | **2** still blocked |
+
+**Open, deliberately not fixed here — Defect C, `git-guard.sh:88`.** `current_branch` runs
+`git rev-parse` in the *hook's own* working directory, which is the session's, not the directory
+the command will run in. Measured: the same payload exits 2 from the primary checkout and 0 from a
+worktree, so **work in any worktree is judged against `main`**. It bit twice during this branch.
+Not widened into this diff — the payload `cwd` is also pre-`cd` (`CODING_MEMORY.md:713`), and
+`phase-guard`'s trick of resolving from the file being written has no analogue for a commit, so
+this needs a decision rather than a patch. Same "identity-from-cwd" class already fixed in
+`phase-guard` and still open in `judge-guard`; enumerated across the live guards, it is
+**git-guard, judge-guard, and partially doc-guard**.
