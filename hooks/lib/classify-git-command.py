@@ -8,6 +8,14 @@ unrecognised command simply yields no facts.
     COMMIT      some segment runs `git commit`
     COMMIT_ALL  ...and that same segment carries -a / --all / -am, which stages tracked
                 edits at commit time, so the change to inspect is HEAD's diff, not the index
+    COMMIT_AMEND      ...and that segment carries --amend, which re-writes HEAD's tree
+    COMMIT_PATHSPEC   ...and that segment names paths after a `--` separator
+    COMMIT_PATH<tab><path>
+                one per path after `--`. A path rides in the fact stream rather than being
+                re-lexed by the caller, so there is no second parser to disagree with this
+                one; the tab keeps a path containing spaces in one piece.
+    COMMIT_BARE_ARGS  ...and that segment has a token the flag table cannot account for,
+                i.e. a suspected pathspec with no `--` to confirm it
     PUSH        some segment runs `git push`
     PUSH_FORCE  some segment runs `git push` with a bare --force / -f AND NO
                 --force-with-lease of its own
@@ -47,6 +55,36 @@ ALL_FLAGS = ("-a", "--all", "-am")
 FORCE_FLAGS = ("--force", "-f")
 LEASE_FLAG = "--force-with-lease"
 
+# `git commit` options that consume the NEXT token. This exists only to tell a
+# pathspec from an option value when there is no `--` separator; -a detection
+# still ignores option values entirely (see the `git commit -m '-a'` case in the
+# unit suite, which must keep reporting COMMIT_ALL). A long option spelled
+# `--opt=value` carries its value inline and needs no entry. An unknown flag is
+# assumed to take no value, so its value looks like a stray path -- which errs
+# toward blocking, the fail direction git-guard.sh states for itself.
+COMMIT_VALUE_FLAGS = (
+    "-m", "-am", "-F", "-c", "-C", "-t",
+    "--message", "--file", "--reedit-message", "--reuse-message",
+    "--author", "--date", "--fixup", "--squash", "--cleanup",
+    "--template", "--pathspec-from-file",
+)
+
+
+def commit_pathspec(rest):
+    """(paths named after `--`, whether a path is SUSPECTED without one)."""
+    if "--" in rest:
+        return rest[rest.index("--") + 1:], False
+    skip = False
+    for tok in rest:
+        if skip:
+            skip = False
+            continue
+        if not tok.startswith("-"):
+            return [], True
+        if tok in COMMIT_VALUE_FLAGS:
+            skip = True
+    return [], False
+
 
 def classify(src):
     """Return the sorted list of fact tokens for a raw Bash command string."""
@@ -60,6 +98,15 @@ def classify(src):
             facts.add("COMMIT")
             if any(tok in ALL_FLAGS for tok in rest):
                 facts.add("COMMIT_ALL")
+            if "--amend" in rest:
+                facts.add("COMMIT_AMEND")
+            paths, bare = commit_pathspec(rest)
+            if paths:
+                facts.add("COMMIT_PATHSPEC")
+                for path in paths:
+                    facts.add("COMMIT_PATH\t" + path)
+            if bare:
+                facts.add("COMMIT_BARE_ARGS")
 
         elif subcommand == "push":
             facts.add("PUSH")

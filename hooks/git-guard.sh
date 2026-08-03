@@ -95,6 +95,36 @@ on_main() {
   [ "$b" = "main" ] || [ "$b" = "master" ]
 }
 
+# What would this commit actually contain, when the index cannot say?
+#
+# PreToolUse runs BEFORE the command, so `git add -- x && git commit -- x` -- the
+# form this repo mandates on every commit -- arrives here with NOTHING staged. An
+# empty index means "the index cannot answer", not "nothing is allowed", so the
+# command is asked instead. Three forms commit content the index never shows:
+#
+#   --        the paths it names, taken from the classifier's fact stream so that
+#             nothing is re-lexed here and there is no second parser to drift
+#   -a        tracked edits sitting in the WORKTREE
+#   --amend   whatever is already in HEAD's tree
+#
+# Empty output is a real answer: such a commit has nothing to commit and git
+# refuses it on its own.
+commit_target_files() {
+  local tab paths
+  tab=$(printf '\t')
+  paths=""
+  if has_fact COMMIT_PATHSPEC; then
+    paths=$(printf '%s\n' "$facts" | grep "^COMMIT_PATH${tab}" | cut -f2-)
+  fi
+  if has_fact COMMIT_ALL; then
+    paths=$(printf '%s\n%s' "$paths" "$(git diff --name-only 2>/dev/null)")
+  fi
+  if has_fact COMMIT_AMEND; then
+    paths=$(printf '%s\n%s' "$paths" "$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null)")
+  fi
+  printf '%s\n' "$paths" | grep -v '^[[:space:]]*$'
+}
+
 # --- Guard 2: force-push ---
 # PUSH_FORCE already means "bare force, with no --force-with-lease in that same
 # segment", so the two cases below cannot both fire for one push.
@@ -110,10 +140,27 @@ fi
 # --- Guard 1: default-branch commit ---
 if has_fact COMMIT && on_main; then
   staged=$(git diff --cached --name-only 2>/dev/null || echo "")
+  files="$staged"
+  label="Staged files"
+
+  if [ -z "$files" ]; then
+    # A token the flag table could not account for is PROBABLY a pathspec, and
+    # "probably" is not enough to let a commit onto main unreviewed.
+    if has_fact COMMIT_BARE_ARGS; then
+      printf 'git-guard: nothing is staged and this commit carries arguments that may be file paths, so what it would commit cannot be determined -- failing closed.\n' >&2
+      printf 'Name them after a separator (git commit -m msg -- <path>) so they can be checked.\n' >&2
+      exit 2
+    fi
+    files=$(commit_target_files)
+    label="Files this commit would contain"
+  fi
+
+  # An empty list here is ALLOW, not deny: nothing is staged and the command names
+  # nothing, so git refuses it itself with "nothing to commit". Denying would
+  # report the wrong reason for the wrong problem -- and denying on an empty index
+  # is exactly the regression this branch exists to remove.
   allowed=1
-  if [ -z "$staged" ]; then
-    allowed=0
-  else
+  if [ -n "$files" ]; then
     while IFS= read -r f; do
       [ -z "$f" ] && continue
       case "$f" in
@@ -122,11 +169,11 @@ if has_fact COMMIT && on_main; then
         CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
         *) allowed=0 ;;
       esac
-    done <<< "$staged"
+    done <<< "$files"
   fi
   if [ "$allowed" -ne 1 ]; then
     printf 'git-guard: commits to main/master are blocked except documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' >&2
-    printf 'Staged files:\n%s\n' "$staged" | sed 's/^/  /' >&2
+    printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2
     printf 'Create a feature branch instead, or stage only documentation.\n' >&2
     exit 2
   fi

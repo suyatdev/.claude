@@ -125,8 +125,19 @@ Fix: add `projects/*/memory/*` to that list. One line.
       · No-`--` pathspec (`git commit -m msg docs/x.md`) is pinned **blocked**, not allowed: telling
         a path from an option value needs a table of which git flags take arguments, and this file's
         stated fail direction is that "cannot tell" means block.
-- [ ] 3. **Green** — implement the empty-index file-set derivation in `hooks/git-guard.sh`, reusing
+- [x] 3. **Green** — implement the empty-index file-set derivation in `hooks/git-guard.sh`, reusing
       `hooks/lib/shell_segments.py` for flag and pathspec extraction.
+      · Extraction went into `lib/classify-git-command.py` (which already owns the lexer) rather
+        than the hook, so there is still exactly one parser. New facts: `COMMIT_AMEND`,
+        `COMMIT_PATHSPEC`, `COMMIT_BARE_ARGS`, and `COMMIT_PATH<tab><path>` per path. The tab keeps
+        a path with spaces in one piece through the hook's word splitting. Classifier unit
+        **47 → 55/0**.
+      · Needed a small table of which `git commit` flags consume the next token — otherwise
+        `git commit -m msg` (allow) is indistinguishable from `git commit -m msg docs/x.md` (block).
+        Scoped to pathspec detection only: `-a` detection still ignores option values, so the
+        pinned `git commit -m '-a'` → `COMMIT_ALL` case is unchanged.
+      · An unknown flag is assumed to take no value, so its value looks like a stray path and the
+        commit fails closed. Deliberate — it matches the fail direction this hook states for itself.
 - [ ] 4. **Red** — add a failing case to `hooks/phase-guard.test.sh`: a write under
       `projects/*/memory/*` while a `planning` feature file exists must be allowed.
 - [ ] 5. **Green** — add `projects/*/memory/*` to the exempt list at `hooks/phase-guard.sh:285`.
