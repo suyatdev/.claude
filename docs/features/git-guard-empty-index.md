@@ -166,6 +166,40 @@ Fix: add `projects/*/memory/*` to that list. One line.
       in `## Verification`.
 - [ ] 8. Observability judge (implementation stage), then `gh pr create`. User merges in the
       GitHub UI.
+      · **RUN 1 IS IN — `risk=high`, `confidence=high`, and it did NOT clear the branch.** Verdict
+        `coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md`, pinned
+        `5aa220e`. Every number I claimed re-measured exact (40/0, 134/0, 55/0, 37/3 replay, 36/4
+        mutant, all three end-to-end rows, shellcheck) — **and the branch is still wrong.**
+      · 🔴 **THE BLOCKER, reproduced by me before being accepted: I INTRODUCED A FAIL-OPEN.**
+        The design enumerates three shapes that commit content the index does not show. There is a
+        **fourth: the chain's own `git add`** — the very shape this branch exists for. With no
+        pathspec on the `commit`, the derivation finds nothing and ALLOWS, but the `git add` runs
+        first, so the index is not empty by then. Measured on the real repo, `main` vs branch:
+
+        | command | `main` | this branch |
+        |---|---|---|
+        | `git add -- hooks/x.sh && git commit -m msg` | 2 | **0** |
+        | `git add -A && git commit -m msg` | 2 | **0** |
+        | `git commit --amen --no-edit` | 2 | **0** |
+        | `git commit --pathspec-from-file=list` | 2 | **0** |
+
+        All four are **regressions**, not uncovered cases: blocked today, allowed by this branch.
+      · **The stated reason is false, and that is worse than the gap.** *"git refuses such a commit
+        itself"* holds only with no sibling `git add`. It is written into this spec **and** into the
+        hook comment, so it actively misleads the next reader. Fix the sentence wherever the gap is
+        closed or accepted.
+      · **The suite could never have caught it:** the test comment's enumeration *is* the code's
+        enumeration, so 40/0 only ever confirmed my own list. Same shape as the fixture defect this
+        branch already documents — the check inherits the blind spot of the thing being checked.
+      · `--amen` is a valid git abbreviation and `--pathspec-from-file=list` hides its paths in a
+        file; both slip the literal `"--amend" in rest` test and the flag table, so the fail-closed
+        pins are weaker than they look.
+      · **Defect C's blast radius GREW and the feature file must say so:** `commit_target_files`
+        adds `git diff` / `git diff-tree` calls that also run in the hook's cwd, so the cwd bug now
+        corrupts the *file list*, not just the branch name. Deferral still right; the cost is higher.
+      · Also owed: an ADR for the empty-index policy and the bare-args rule (two Tier-1 guard policy
+        decisions with no record), and `gh pr create` must run **from this worktree** — the verdict
+        row records `repo: git-guard-empty-index` and a run from the primary checkout will not match.
 
 ## Verification
 
