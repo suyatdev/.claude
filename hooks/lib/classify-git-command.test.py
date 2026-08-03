@@ -94,6 +94,33 @@ CASES = [
     ("G=git; $G commit", [], "variable indirection is invisible to lexing"),
     ("git commit -m '-a'", ["COMMIT", "COMMIT_ALL"],
      "option values are not tracked; reading a `-a` message as --all errs toward inspecting more"),
+
+    # --- pathspec and --amend, needed because an EMPTY index at hook time cannot
+    # --- say what a commit will contain. Paths ride as `COMMIT_PATH\t<path>` so a
+    # --- path containing whitespace survives; a tab sorts before `S`, which is why
+    # --- COMMIT_PATH entries land ahead of COMMIT_PATHSPEC.
+    ("git commit -m msg -- docs/x.md",
+     ["COMMIT", "COMMIT_PATH\tdocs/x.md", "COMMIT_PATHSPEC"],
+     "after `--` every token is definitively a path"),
+    ("git commit -- a.md src/b.sh",
+     ["COMMIT", "COMMIT_PATH\ta.md", "COMMIT_PATH\tsrc/b.sh", "COMMIT_PATHSPEC"],
+     "several paths after the separator"),
+    ("git commit --amend --no-edit", ["COMMIT", "COMMIT_AMEND"],
+     "--amend re-writes HEAD's tree, which the index does not show"),
+
+    # Without `--`, telling a path from an option VALUE needs a table of which
+    # flags take arguments. The table below covers git commit's documented ones;
+    # anything left over is a suspected path and the hook's fail direction is block.
+    ("git commit -m msg", ["COMMIT"],
+     "-m consumes its value, so nothing here is a stray path"),
+    ("git commit -m msg docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "a token surviving the flag table is a suspected pathspec with no separator"),
+    ("git commit -am msg", ["COMMIT", "COMMIT_ALL"],
+     "-am is -a plus -m, so it consumes the message that follows"),
+    ("git commit --message=x", ["COMMIT"],
+     "an inline long-option value consumes no following token"),
+    ("git commit -a -m msg", ["COMMIT", "COMMIT_ALL"],
+     "-a takes no value; -m does"),
 ]
 
 
