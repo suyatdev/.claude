@@ -32,12 +32,12 @@ CASES = [
     ("GIT_AUTHOR_NAME=x git commit", ["COMMIT"], "env prefix does not hide the command"),
 
     # --- commit, chained. THE bug: every one of these used to yield nothing at all. ---
-    ("git add -- x && git commit -m msg", ["COMMIT"], "&& -- the shape that let commits reach main"),
-    ("git add -- x&&git commit -m msg", ["COMMIT"], "unspaced && needs punctuation_chars"),
-    ("git add -- x ; git commit -m msg", ["COMMIT"], "; separator"),
+    ("git add -- x && git commit -m msg", ["ADD_PATH\tx", "COMMIT"], "&& -- the shape that let commits reach main"),
+    ("git add -- x&&git commit -m msg", ["ADD_PATH\tx", "COMMIT"], "unspaced && needs punctuation_chars"),
+    ("git add -- x ; git commit -m msg", ["ADD_PATH\tx", "COMMIT"], "; separator"),
     ("false || git commit -m msg", ["COMMIT"], "|| separator"),
-    ("git add -- x\ngit commit -m msg", ["COMMIT"], "newline ends a command exactly as ; does"),
-    ("git add -- x && \\\ngit commit", ["COMMIT"], "backslash-newline is a CONTINUATION"),
+    ("git add -- x\ngit commit -m msg", ["ADD_PATH\tx", "COMMIT"], "newline ends a command exactly as ; does"),
+    ("git add -- x && \\\ngit commit", ["ADD_PATH\tx", "COMMIT"], "backslash-newline is a CONTINUATION"),
     ("( git commit )", ["COMMIT"], "subshell"),
     ("{ git commit; }", ["COMMIT"], "brace group -- { is not a shlex punctuation char by default"),
 
@@ -121,6 +121,35 @@ CASES = [
      "an inline long-option value consumes no following token"),
     ("git commit -a -m msg", ["COMMIT", "COMMIT_ALL"],
      "-a takes no value; -m does"),
+
+    # --- the chain's own `git add`: the fourth source of content the index
+    # --- cannot show, and the one the first version of this fix missed.
+    ("git add -- src/x.sh && git commit -m msg",
+     ["ADD_PATH\tsrc/x.sh", "COMMIT"],
+     "the add stages a source file a moment before the commit reads the index"),
+    ("git add src/x.sh", ["ADD_PATH\tsrc/x.sh"],
+     "for `git add` a bare token really is a pathspec, unlike `git commit`"),
+    ("git add -A && git commit -m msg", ["ADD_ALL", "COMMIT"],
+     "-A stages everything, so the paths cannot be read off the command"),
+    ("git add . && git commit -m msg", ["ADD_ALL", "COMMIT"],
+     "a `.` pathspec is equally unbounded"),
+    ("git add -u && git commit -m msg", ["ADD_ALL", "COMMIT"],
+     "-u stages every tracked modification"),
+
+    # --- options the hook cannot understand must fail closed, not sail through.
+    # --- git accepts any unambiguous prefix of a long option, so an exact-match
+    # --- test for `--amend` is not a test for amending.
+    ("git commit --amen --no-edit", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "an abbreviation git honours but this table does not recognise"),
+    ("git commit --pathspec-from-file=list", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "the paths live in a file the hook cannot read"),
+    ("git commit --some-future-option", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "an unrecognised option could mean anything, including a wider file set"),
+
+    # ...and the ordinary harmless ones must not start blocking real work.
+    ("git commit --no-edit -m msg", ["COMMIT"], "known-harmless option"),
+    ("git commit --no-verify -m msg", ["COMMIT"], "known-harmless option"),
+    ("git commit -q --signoff -m msg", ["COMMIT"], "known-harmless short and long forms"),
 ]
 
 

@@ -133,7 +133,12 @@ empty_index() { # $@ = tracked paths to modify in the WORKTREE ONLY, never stage
   # PREVIOUS case's edits sitting in the worktree, so a case asking for "only
   # docs modified" silently also had source modified, and `commit -a` read the
   # leftover. The helper has to establish the whole state it claims, not part.
+  #
+  # `clean -fdq` for the same reason one level out: earlier sections leave
+  # UNTRACKED files behind, and `git add -A` stages those too -- so "only docs
+  # modified" would still have handed a source file to the -A cases.
   git -C "$REPO" reset -q --hard
+  git -C "$REPO" clean -fdq
   local f
   for f in "$@"; do printf 'change %s\n' "$$" > "$REPO/$f"; done
 }
@@ -162,10 +167,51 @@ run_case "commit --amend, source in HEAD, empty index -> block"          2 'git 
 # stated fail direction is that "cannot tell" means block.
 run_case "docs path with NO -- separator, empty index -> block"          2 'git commit -m msg docs/tracked.md'
 
+# ---------------------------------------------------------------------------
+# Guard 1 — THE CHAIN'S OWN `git add`.
+#
+# The fourth way a commit carries content the index cannot show, and the one
+# the first version of this fix missed: the command stages its OWN files a
+# moment before committing. With no pathspec on the `commit`, asking the
+# command what it will commit finds nothing -- but the `git add` runs first, so
+# the index is emphatically not empty by the time git looks.
+#
+# "git refuses an empty commit itself" is therefore FALSE for exactly the shape
+# this repo uses constantly. These cases are the four regressions that reasoning
+# produced, each measured against main before being written.
+# ---------------------------------------------------------------------------
+on_branch main
+
+empty_index src/tracked.sh
+run_case "chain stages SOURCE, commit takes no pathspec -> block"        2 'git add -- src/tracked.sh && git commit -m msg'
+run_case "chain stages source with -A -> block"                          2 'git add -A && git commit -m msg'
+run_case "chain stages source with . -> block"                           2 'git add . && git commit -m msg'
+
+empty_index docs/tracked.md
+run_case "chain stages DOCS, commit takes no pathspec -> allow"          0 'git add -- docs/tracked.md && git commit -m msg'
+run_case "chain stages docs with -A -> allow"                            0 'git add -A && git commit -m msg'
+
+# An explicit pathspec on the commit wins: git commits those paths and leaves
+# whatever else the chain staged sitting in the index, uncommitted.
+empty_index src/tracked.sh docs/tracked.md
+run_case "chain stages source, commit names only docs -> allow"          0 'git add -- src/tracked.sh && git commit -m msg -- docs/tracked.md'
+
+# Abbreviated and paths-from-a-file options: git accepts an unambiguous prefix,
+# and --pathspec-from-file hides its paths in a file this hook cannot read.
+# Neither can be understood, so both must fail closed rather than sail through.
+empty_index
+run_case "abbreviated --amen -> block"                                   2 'git commit --amen --no-edit'
+run_case "--pathspec-from-file hides its paths -> block"                 2 'git commit --pathspec-from-file=list'
+
+# ...but the ordinary harmless options must NOT become false positives.
+run_case "harmless --no-edit with nothing staged -> allow"               0 'git commit --no-edit -m msg'
+run_case "harmless --no-verify with nothing staged -> allow"             0 'git commit --no-verify -m msg'
+
 # Hand the worktree back clean. These cases deliberately leave tracked files
 # modified, and `feature` does not carry them -- so the next branch switch
 # would refuse, which used to happen without a word.
 git -C "$REPO" reset -q --hard
+git -C "$REPO" clean -fdq
 
 # ---------------------------------------------------------------------------
 # Guard 2 — force push
