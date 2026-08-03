@@ -171,14 +171,39 @@ CASES = [
     ("git commit -i -m msg docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
      "with no separator this blocked already -- by the stray-token rule, not by -i"),
 
-    # --amend and -a can ride ALONGSIDE a pathspec, so the pathspec facts are not on
-    # their own enough for the guard to trust: both must still be reported.
+    # --amend and -a ride ALONGSIDE a pathspec and commit more than it names, so
+    # that segment does not describe itself and the path facts are WITHHELD --
+    # they would otherwise read as the commit's whole file set. The widening
+    # flag is still reported in its own right.
     ("git commit --amend -m msg -- docs/x.md",
-     ["COMMIT", "COMMIT_AMEND", "COMMIT_PATH\tdocs/x.md", "COMMIT_PATHSPEC"],
+     ["COMMIT", "COMMIT_AMEND"],
      "--amend re-writes HEAD's tree on top of whatever the pathspec names"),
     ("git commit -a -m msg -- docs/x.md",
-     ["COMMIT", "COMMIT_ALL", "COMMIT_PATH\tdocs/x.md", "COMMIT_PATHSPEC"],
-     "-a widens to tracked worktree edits; reported, not silently trusted"),
+     ["COMMIT", "COMMIT_ALL"],
+     "-a widens to tracked worktree edits, so the named paths are not the whole commit"),
+
+    # --- ONE LINE, SEVERAL COMMITS. Facts arrive as a flat set with no segment
+    # --- identity, so a fact that GRANTS permission has to be true of the whole
+    # --- line; a fact that DENIES may be true of any one segment. PUSH_FORCE
+    # --- already follows this rule in the denying direction. COMMIT_PATHSPEC is
+    # --- the only granting fact, and a second commit naming nothing used to hide
+    # --- behind the first one's paths -- the union read as documentation while
+    # --- the second commit really carried the source file the chain had staged.
+    ("git commit -m a -- docs/a.md && git add -- src/b.sh && git commit -m b",
+     ["COMMIT"],
+     "the second commit names nothing, so no path fact describes this line"),
+    ("git commit -m a && git commit -m b -- docs/a.md",
+     ["COMMIT"],
+     "order does not matter: one unscoped commit is enough"),
+    ("git commit -m a -- docs/a.md ; git commit -m b",
+     ["COMMIT"],
+     "every separator the lexer knows, not just &&"),
+    ("git commit -m a -- docs/a.md && git commit -a -m b",
+     ["COMMIT", "COMMIT_ALL"],
+     "a widened second commit is unscoped for the same reason a bare one is"),
+    ("git commit -m a -- docs/a.md && git commit -m b -- docs/b.md",
+     ["COMMIT", "COMMIT_PATH\tdocs/a.md", "COMMIT_PATH\tdocs/b.md", "COMMIT_PATHSPEC"],
+     "every commit names its own paths, so their union IS the line's file set"),
 ]
 
 

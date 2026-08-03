@@ -248,6 +248,41 @@ run_case "--only, docs pathspec -> block"                         2 'git commit 
 run_case "-a alongside a docs pathspec -> block"                  2 'git commit -a -m msg -- docs/tracked.md'
 run_case "--amend alongside a docs pathspec -> block"             2 'git commit --amend -m msg -- docs/tracked.md'
 
+# ---------------------------------------------------------------------------
+# Guard 1 — ONE LINE, SEVERAL COMMITS.
+#
+# Facts reach the hook as a flat SET with no segment identity, so the paths named
+# by one commit used to answer for the whole line. In the first case the second
+# commit really does carry src/tracked.sh: `main` blocks it and this branch
+# allowed it, because the union of facts said "documentation". A fact that GRANTS
+# permission has to hold for every commit on the line -- which is the rule
+# PUSH_FORCE already follows in the denying direction.
+# ---------------------------------------------------------------------------
+empty_index docs/tracked.md src/tracked.sh
+
+run_case "docs commit, then a bare second commit -> block"  2 'git commit -m a -- docs/tracked.md && git add -- src/tracked.sh && git commit -m b'
+run_case "bare commit FIRST, docs commit second -> block"   2 'git commit -m a && git commit -m b -- docs/tracked.md'
+run_case "second commit after a ; separator -> block"       2 'git commit -m a -- docs/tracked.md ; git commit -m b'
+run_case "second commit carries -a -> block"                2 'git commit -m a -- docs/tracked.md && git commit -a -m b'
+run_case "one names docs, the other names source -> block"  2 'git commit -m a -- docs/tracked.md && git commit -m b -- src/tracked.sh'
+# The rule must not cost the shape it is meant to leave alone.
+run_case "BOTH commits name only docs -> allow"             0 'git commit -m a -- docs/tracked.md && git commit -m b -- docs/tracked.md'
+
+# ---------------------------------------------------------------------------
+# Guard 1 — A PATHSPEC IS JUDGED AS A PATH, NOT AS A STRING.
+#
+# The allowlist is a `case` over the literal token, so `coding-memory/../src/x`
+# satisfied `coding-memory/*` while git resolves it to a source file, and a .md
+# file anywhere in the repo satisfied `docs/*.md` by way of `docs/../`. A `..`
+# COMPONENT means the string the hook read and the file git will commit are two
+# different things, and the hook may only judge what it has actually read. A `..`
+# inside a file NAME traverses nothing and stays allowed.
+# ---------------------------------------------------------------------------
+run_case "a .. component escapes coding-memory/ -> block"   2 'git commit -m msg -- coding-memory/../src/tracked.sh'
+run_case "a .. component escapes docs/ -> block"            2 'git commit -m msg -- docs/../notes.md'
+run_case "a leading ../ -> block"                           2 'git commit -m msg -- ../docs/tracked.md'
+run_case ".. inside a FILENAME is not traversal -> allow"   0 'git commit -m msg -- docs/v1..v2.md'
+
 # Hand the worktree back clean. These cases deliberately leave tracked files
 # modified, and `feature` does not carry them -- so the next branch switch
 # would refuse, which used to happen without a word.
