@@ -415,3 +415,225 @@ this worktree or `judge-guard` will compute `repo=.claude` and not match either 
 9. Identity-from-cwd (`git-guard.sh:88`) with its widened blast radius remains open — agreed, correctly documented in both the feature file and ADR 0014, out of scope per the user's ruling
 10. Verdict store is worktree-local with `repo: git-guard-empty-index`; `gh pr create` must run from this worktree or `judge-guard` computes `repo=.claude` and matches neither round
 11. Uncommitted `settings.json` model-selector edit still sitting in the worktree
+
+---
+---
+
+# Observability verdict — `fix/git-guard-empty-index` @ `4be542b` — **ROUND 3**
+
+- **repo:** `git-guard-empty-index` (git worktree of `$HOME/.claude`, at
+  `/Users/marksuyat/.claude/.claude/worktrees/git-guard-empty-index`)
+- **branch:** `fix/git-guard-empty-index` · **head:** `4be542b8a054a5e998d386cdcef252b5efc0af5e`
+- **base:** `main` @ `9fb2f64` · 15 commits · 10 files, +1278/−19 (round-3 delta: 2 commits)
+- **stage:** implementation · **ts:** 2026-08-03T20:22:19Z
+- **risk: medium · confidence: high** (round 1 `high`, round 2 `medium`)
+
+> ⚠️ **Leading with the failures.** `regression` = **fail** and `success_masking` = **fail**.
+>
+> **The round-2 findings are genuinely closed, not relocated.** I re-measured all fourteen prior
+> regressions (round 1's five, round 2's nine) against `main`'s own hook: every one now blocks.
+> The narrowing is the right design and I would not ask for it to be undone.
+>
+> But two **new** fail-opens exist, of a *different* class, and I verified both end-to-end putting
+> `src/app.sh` into a commit on `main`. Neither is caused by a short enumeration — they are (a) one
+> fact set shared across two `git commit` segments, and (b) allowlisting the path *string* instead
+> of the path git resolves. `doc-guard` returns 0 on both, and `git-guard` **is** registered in
+> `settings.json`, so both arm on merge.
+
+---
+
+## What was changed
+
+The guard is a bouncer deciding whether a commit may go onto `main`. He used to check the staging
+area — but he stands at the door *before* the command runs, so for the form this repo mandates
+(`git add X && git commit -m m -- X`) the staging area is still empty when he looks, and he refused
+even plain documentation.
+
+Rounds 1 and 2 tried to fix this by having him **guess what the rest of the sentence would put in
+the staging area**. Round 1's guess list missed `git add`; round 2's missed nine more commands
+(`git rm`, `git mv`, `git reset --soft`, …). A guess list that is short says *yes* when it should
+say *no*, so being short is exactly the wrong kind of wrong.
+
+**Round 3 stops guessing.** The bouncer now asks the commit exactly one question: *which files do
+you name for yourself, after a `--`?* If it names them and nothing on the line can quietly widen
+them (`-a`, `--amend`, `-i`/`--include`, a stray un-separated word, or any option he doesn't
+recognise), he checks those names against the documentation allowlist. Anything else — including
+all ten index-filling commands — is refused exactly as `main` refuses it today, **without the hook
+needing to know a single one of them**. That last property is the real win: the fix can no longer
+be short in the dangerous direction.
+
+Two unrelated bugs were found while narrowing and fixed here: `-i` was a live hole (the parser
+handed back the paths the moment it saw `--`, before checking the flags), and the fact-lookup
+helper was splitting on tabs, so a *file named* `PUSH_FORCE` was being read as a force-push.
+
+A four-line, deliberately narrow exemption was also added to `phase-guard.sh` so the assistant's
+own memory tool can write to `projects/*/memory/*`.
+
+## Does it do what you wanted?
+
+**For the named job and for both prior rounds — yes, and I re-measured rather than accepted it.**
+
+| Claim | Re-measured | Result |
+|---|---|---|
+| `git-guard.test.sh` → 67/0 | ran it | **67 passed, 0 failed** ✔ |
+| `classify-git-command.test.py` → 73/0 | ran it | **73 passed, 0 failed** ✔ |
+| `phase-guard.test.sh` → 134/0 | ran it | **134 passed, 0 failed** ✔ |
+| Round 2's nine staging commands now block | replayed `main`'s hook vs HEAD's, scratch repo on `main`, empty index | **9/9 `main=2 → HEAD=2`** ✔ |
+| Round 1's five shapes still block | same replay | **5/5 `main=2 → HEAD=2`** ✔ (`add --`, `add -A`, `add .`, `--amen`, `--pathspec-from-file`) |
+| Only documentation is relaxed | probed the intended set | `docs/a.md`, `coding-memory/m.md`, `CODING_MEMORY.md` allow; `src/app.sh` blocks ✔ |
+| "21 hook / 12 unit cases red at the tests-only commit" | built `5545f64`'s tree and ran both suites | **46/21 and 61/12 — exact** ✔ |
+| The `-i` fix is pinned | mutant: return paths on seeing `--` | **4 hook cases + 4 unit cases go red** ✔ |
+| The `has_fact` fix is pinned | mutant: restore `for f in $facts` | **`a file named PUSH_FORCE…` goes red** ✔ |
+| No always-on context growth | diffed `CLAUDE.md`, `rules/`, `RTK.md`, `settings.json`, `.claude/` | **untouched** ✔ |
+| Round 2's space-in-filename false positive | probed | `git commit -m msg -- "docs/a b.md"` now **allows** ✔ |
+
+The judgement call I most want to credit: **the design was abandoned rather than patched a third
+time.** That is the correct response to "my enumeration was short, twice", and it is rare. The test
+suite improved structurally too — it pins all nine round-2 commands as blocked *while the hook knows
+none of them*, so it fails if anyone reintroduces sibling-inference. That is a real test, not a
+mirror of the code.
+
+**For the underlying question "is anything blocked today allowed tomorrow" — no.** See below.
+
+## What could go wrong / what I'm unsure about
+
+**1. `regression` = FAIL — two `git commit`s in one command line share one fact set.**
+
+The classifier collects facts into a **set over all segments**. So a documentation pathspec on the
+*first* commit satisfies the guard for a *second, bare* commit on the same line. `main` blocks
+these; this branch allows them:
+
+```
+main=2  HEAD=0   git commit -m a -- docs/a.md && git add -- src/app.sh && git commit -m b
+main=2  HEAD=0   git add -- src/app.sh && git commit -m a -- docs/a.md && git commit -m b
+main=2  HEAD=0   git commit -m b && git commit -m a -- docs/a.md
+main=2  HEAD=0   git commit -m a -- docs/a.md ;  git commit -m b
+main=2  HEAD=0   git commit -m a -- docs/a.md || git commit -m b
+main=2  HEAD=0   git commit -m a -- docs/a.md  <newline>  git commit -m b
+main=2  HEAD=0   git commit -m a -- docs/a.md && git add -A && git commit -m b && git push
+```
+
+Run for real on `main`, empty index:
+
+```
+git commit -m a -- docs/a.md && git add -- src/app.sh && git commit -m b
+  ->  HEAD   touches: src/app.sh      <- source, on main
+  ->  HEAD~1 touches: docs/a.md
+```
+
+This is the *same shape* as the bug `classify-git-command.py`'s own docstring says it fixed for
+push — "`git push --force && echo --force-with-lease` used to read as a leased push, because the
+lease check was a substring search over everything." Facts are judged per segment for `push` and
+unioned for `commit`. `-a` and `--amend` in a sibling segment do veto (I confirmed), so the hole is
+specifically *bare commit alongside pathspec commit*.
+
+**2. `regression` = FAIL — the allowlist matches the path *string*, not the path git resolves.**
+
+`commit_pathspec_files` hands the raw token to the same `case` globs, and `*` spans `/`:
+
+```
+main=2  HEAD=0   git commit -m msg -- coding-memory/../src/app.sh
+  -> ran it: HEAD touches: src/app.sh      <- source, on main
+main=2  HEAD=0   git commit -m msg -- docs/../src/app.md
+```
+
+`coding-memory/../src/app.sh` matches `coding-memory/*`, so any file of any type is reachable.
+ADR 0014's safety argument — *"every path it grants is one the hook has actually read"* — holds for
+the string and not for the file. This one needs intent to trigger, so as a *momentum* guardrail it
+is far less pressing than (1); it is a two-line fix (reject any token containing `..`, or normalise
+before matching) and it should not ship silently.
+
+**No backstop.** I fired both at `doc-guard.sh`: it returns **0** on both. And `git-guard.sh` **is**
+registered in `settings.json` (on `main` and at HEAD), so this is live behaviour the moment the PR
+lands, not dormant code.
+
+**3. The completeness overclaim has recurred, for the third round running.** ADR 0014 says the
+narrow policy is *"**provably** never weaker than `main`"* and that *"every path it grants is one
+the hook has actually read"*. Both are measurably false — I disproved them in minutes with a replay
+built from `main`'s own hook. The 51 × 6 replay is genuinely good evidence and I re-derived its
+qualitative result, but its command set contains **no two-commit chain and no non-normalised path**,
+so "6 relaxations, all documentation" is a statement about that set, not a proof about all commands.
+The ADR's own section heading — *"A stated completeness claim is a load-bearing claim"* — is the
+right lesson, and the document then makes a stronger claim than the previous two rounds did.
+
+**4. `success_masking` = FAIL — 67/0 and 73/0 green with both shapes untested.** I grepped: no case
+in either suite chains two `git commit` segments, and no case anywhere uses a `..` path. The suite is
+materially better than round 2's (the nine negative pins are structural, and both incidental fixes
+are mutation-verified — I built both mutants and both were caught), but it is still derived from the
+code's own model of a command line, so it cannot ask a question the model does not have a word for.
+
+**5. Pre-existing, unchanged, but unrecorded: `git -C <dir> commit -m msg` is invisible.** The
+classifier reads `argv[1]` as the subcommand, so a global option before it means no `COMMIT` fact at
+all. Measured `main=0  HEAD=0` — **not a regression, not widened by this branch**, and out of scope.
+But the branch's open-issues list is otherwise complete and this belongs on it.
+
+**6. The `phase-guard` exemption is correctly scoped, and I verified the fix is real.** Tests pin
+both directions (`projects/p/app.sh` and `projects/p/memory.sh` deny). `phase-guard.sh` is in fact
+**registered** in `settings.json`, so the memory-write blockage it fixes was live — note that
+always-on `rules/gates.md` still describes this hook as dormant, which is stale on `main` too and
+correctly left to the other branch. The new pattern inherits the same un-normalised-path property as
+the existing `docs/*` / `coding-memory/*` entries; one more surface of a shape that already exists,
+and this hook only ever *denies*, so the direction is safe.
+
+**Minor:** `settings.json` (`"claude-fable-5[1m]"` → `"sonnet"`) is still uncommitted in this
+worktree and must not ride into the PR. The verdict store here is worktree-local with
+`repo: git-guard-empty-index`, so `gh pr create` **must** run from this worktree or `judge-guard`
+computes `repo=.claude` and matches none of the three rows.
+
+## What I'd double-check before merging
+
+1. **Close the two-commit chain, or write it down.** The cheapest in-design fix: emit facts per
+   *commit segment* rather than unioning them — a segment with `COMMIT` and no `COMMIT_PATHSPEC`
+   must veto on its own, exactly as `PUSH_FORCE` is already self-contained. Add a test pinning
+   `git commit -m a -- docs/a.md && git add -- src/app.sh && git commit -m b` as **block**.
+2. **Reject or normalise `..` in a pathspec token** before the allowlist `case`, with a test.
+3. **Soften the two proof claims in ADR 0014** to what was actually checked ("across the 51-command
+   replay set, the only relaxations are documentation-only pathspecs"), and add both new shapes to
+   *Known open* with their measured `main=2 → HEAD=0` rows — even if the code does not change.
+4. **Re-run the red replay after any of the above** and confirm the reds stay exactly 21 and 12,
+   with nothing newly passing for a different reason.
+5. **Add `git -C <dir> commit` to the open list** as pre-existing and not widened.
+6. **Run `gh pr create` from this worktree**, and drop the stray `settings.json` edit.
+
+---
+
+## Dimension table
+
+| Dimension | Verdict | Why |
+|---|---|---|
+| `intent` | concern | The named regression is removed and the *right* design was chosen: the hook no longer guesses what a sibling command stages, so it cannot be short in the allow direction for that reason. All 14 prior regressions re-measured closed. But the spec's own non-goal — never weaker than `main` outside documentation — is violated in two measured shapes, one of them plausible. |
+| `execution` | concern | All three suites run by me and exact (67/0, 73/0, 134/0); red-before-green re-derived exactly (21 and 12); both incidental fixes mutation-verified by me. The shipped artifact still allows a source file onto `main` in two shapes, both verified end-to-end, with no backstop from `doc-guard`. |
+| `trajectory` | concern | The pivot is the best decision on this branch — abandoning an enumeration after two rounds proved it unclosable, and building a suite that pins the nine commands *without the hook knowing them*. Offset by a **proof that does not hold**: "provably never weaker than `main`" and "every path it grants is one the hook has read" are both false, and this is the third consecutive round where a load-bearing claim outran what was measured. |
+| `regression` | **fail** | Measured `main=2 → HEAD=0` and verified end-to-end committing `src/app.sh` to `main`: (a) two `git commit` segments sharing one fact set, across `&&`, `;`, `||` and newline; (b) `coding-memory/../src/app.sh` matching `coding-memory/*`. `doc-guard` returns 0 on both; `git-guard` is registered, so both arm on merge. |
+| `context_budget` | pass | `CLAUDE.md`, `rules/*`, `RTK.md`, `settings.json` and `.claude/*` are all untouched by the diff — verified. ADR and feature file are load-on-demand. |
+| `traceability` | concern | Among the best documentation I have judged on this repo: the rejected design is on the record with its measured blast radius, the predecessor's false reason is deliberately preserved as a lesson, in-code comments explain *why* the hook refuses to model siblings, and the replay method is stated not just its result. Undercut by the two overclaims in §3, which are precisely the failure the ADR names. |
+| `success_masking` | **fail** | 67/0 and 73/0 green while both new fail-opens are untested — no case chains two `git commit` segments, none uses a `..` path. Structurally better than round 2 (nine negative pins that pass without the hook knowing them; both incidental fixes caught by my mutants), but the suite is still built from the code's own model of a command line. |
+| `intent_drift` | pass | 15 tightly-scoped commits, red before green in separate commits. `phase-guard` change is 4 lines, deliberately narrower than `projects/*`, and pinned in both directions. No new dependencies. Defect C and `rules/gates.md` correctly left out per the user's ruling. `settings.json` correctly uncommitted and absent from the diff. |
+| `checkpoint` | pass | Clean history with a genuine red/green split I re-derived (21 hook + 12 unit cases red at `5545f64`, green at `4be542b`). Work isolated in a worktree, so the live hooks on `main` are untouched until merge; revert = drop the branch. Both prior verdicts committed and preserved on the branch. |
+| `audit_trail` | concern | ADR 0014 rewritten to cover the rejected design and both prior rounds; the feature file records each verdict inline with what changed in response; commits attributable and well-messaged. Remaining: the two new shapes and the pre-existing `git -C` gap appear in no open-issues list, and the verdict store is worktree-local under `repo: git-guard-empty-index`, so `gh pr create` must run from this worktree. |
+
+## Concerns
+
+1. NEW FAIL-OPEN, verified end-to-end: facts are a SET over all segments, so a documentation pathspec on one `git commit` excuses a bare `git commit` in the same command line — `git commit -m a -- docs/a.md && git add -- src/app.sh && git commit -m b` measured `main=2 → HEAD=0` and put `src/app.sh` in a commit on `main`
+2. The same shape works across `&&`, `;`, `||` and a newline, and with `git add -A` between the two commits; `-a`/`--amend` in a sibling segment do correctly veto, so the hole is specifically bare-commit-beside-pathspec-commit
+3. NEW FAIL-OPEN, verified end-to-end: the allowlist matches the path STRING, not the path git resolves — `git commit -m msg -- coding-memory/../src/app.sh` matches `coding-memory/*`, measured `main=2 → HEAD=0`, committed `src/app.sh` to `main`; needs intent, so lower priority than (1)
+4. `doc-guard.sh` returns 0 on both, so nothing backstops them, and `git-guard.sh` is registered in `settings.json` — both arm the moment this merges
+5. ADR 0014's "provably never weaker than `main`" and "every path it grants is one the hook has actually read" are both measurably false — the third consecutive round in which a load-bearing claim outruns what was measured, in the document whose own heading says a stated completeness claim is load-bearing
+6. The 51 × 6 replay is strong evidence but its command set contains no two-commit chain and no non-normalised path, so "6 relaxations, all documentation-only" is a property of that set, not the proof the ADR presents it as
+7. 67/0 and 73/0 green with both new shapes untested: no case in either suite chains two `git commit` segments, and no case uses a `..` path
+8. `git -C <dir> commit -m msg` is invisible to the classifier and allowed on `main` — measured `main=0 HEAD=0`, pre-existing and NOT widened here, but absent from the branch's otherwise-complete open list
+9. `phase-guard`'s new `projects/*/memory/*` exemption inherits the same un-normalised-path property as the existing `docs/*` and `coding-memory/*` entries — one more surface of a pre-existing shape; the hook only denies, so the direction is safe
+10. Verdict store is worktree-local with `repo: git-guard-empty-index`; `gh pr create` must run from this worktree or `judge-guard` computes `repo=.claude` and matches none of the three rows
+11. Uncommitted `settings.json` model-selector edit still sitting in the worktree
+12. Always-on `rules/gates.md` still calls `phase-guard.sh` dormant while `settings.json` registers it — stale on `main` too, correctly out of scope here, but it is why the memory-write blockage this branch fixes was real
+
+### Closed since round 2 — re-measured, not accepted
+
+- All nine index-writing commands (`git rm`, `git mv`, `git reset --soft`, `git checkout <tree> -- <path>`, `git restore --staged`, `git apply --cached`, `git stash pop --index`, `git cherry-pick -n`, `git revert -n`) now block: **9/9 `main=2 → HEAD=2`**
+- All five round-1 shapes still block: `git add -- x && git commit`, `git add -A`, `git add .`, `git commit --amen`, `git commit --pathspec-from-file=list`
+- Round 2 concern 3 (false completeness table) — the "all four are consulted" claim is gone
+- Round 2 concern 5 (rename/allowlist reasoning) — the `git status --porcelain` derivation was deleted outright
+- Round 2 concern 6 (C-quoted paths) — `git commit -m msg -- "docs/a b.md"` now allows
+- Round 2 concern 7 (`has_fact` word-split) — fixed and pinned; my mutant reverting it turns the suite red
+- Round 2 concern 8 (`-i`/`-o`/`--only`/`--include` unpinned) — now pinned by 4 hook + 5 unit cases; my mutant is caught
+- Round 1 concern 8 (no ADR) — ADR 0014 exists and is unusually candid about its own rejected design
