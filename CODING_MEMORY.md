@@ -816,8 +816,9 @@ how this file and its linked files should be written (plain language, major chan
   author's list, and each round's tests mirrored that same list, so green meant nothing.**
   · **The design was abandoned, not patched a third time.** The narrowing (`4be542b`) stops asking
   what filled the index and asks what the *commit itself* names after `--`, vetoing on anything that
-  could widen it. Blast radius measured by replay, 51 shapes × 6 states: the rejected design allowed
-  **36** commands `main` blocks, the narrowing allows **6**, all documentation-only.
+  could widen it. Blast radius measured by replay, now 63 shapes × 6 states: the rejected design
+  allowed **44** commands `main` blocks, the narrowing **13**, and after round 3 **8**, all
+  documentation-only.
   · **RUN 3 @ `4be542b` — `risk=medium`, `regression: fail`, `success_masking: fail`. PR stays shut.**
   Rounds 1-2 are genuinely closed (judge re-measured: 14/14 shapes block, `main=2 → HEAD=2`; suites
   67/0, 73/0, 134/0; mutants for both incidental fixes caught). **Two NEW shapes, each verified
@@ -832,6 +833,13 @@ how this file and its linked files should be written (plain language, major chan
   actually read"; both were disproved in minutes. The 51×6 replay contains **no two-commit chain and
   no `..` path**, so it is evidence about that set, not the proof the ADR presents it as. Soften the
   claim to what was measured — a stated completeness claim is load-bearing, as the ADR itself warns.
+  · ✅ **Both RUN 3 shapes closed 2026-08-03 — `b17a666` red, `d222e0e` green; RUN 4 not yet run.**
+  The rule that came out of it, to apply to any fact the classifier gains later: **a fact that
+  GRANTS permission must hold for the whole line; a fact that DENIES may hold for one segment.**
+  `PUSH_FORCE` was built that way, `COMMIT_PATHSPEC` was not. The `..` path is **refused, not
+  resolved** — resolving asks "relative to which directory?", which is Defect C's open question.
+  ADR 0014's two claims now read as measured-not-proven, and `git -C <dir> commit` (invisible to the
+  classifier, both hooks exit 0, not widened here) joined its open list.
   · **Two unrelated defects found and fixed while narrowing, both measured:** `-i` was a **live
   fail-open** (the `--` short-circuit returned before the flag table was read), and `has_fact`
   **word-split** on tab-bearing facts, so a file literally named `PUSH_FORCE` let an unrelated
