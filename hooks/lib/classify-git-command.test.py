@@ -32,12 +32,12 @@ CASES = [
     ("GIT_AUTHOR_NAME=x git commit", ["COMMIT"], "env prefix does not hide the command"),
 
     # --- commit, chained. THE bug: every one of these used to yield nothing at all. ---
-    ("git add -- x && git commit -m msg", ["ADD_PATH\tx", "COMMIT"], "&& -- the shape that let commits reach main"),
-    ("git add -- x&&git commit -m msg", ["ADD_PATH\tx", "COMMIT"], "unspaced && needs punctuation_chars"),
-    ("git add -- x ; git commit -m msg", ["ADD_PATH\tx", "COMMIT"], "; separator"),
+    ("git add -- x && git commit -m msg", ["COMMIT"], "&& -- the shape that let commits reach main"),
+    ("git add -- x&&git commit -m msg", ["COMMIT"], "unspaced && needs punctuation_chars"),
+    ("git add -- x ; git commit -m msg", ["COMMIT"], "; separator"),
     ("false || git commit -m msg", ["COMMIT"], "|| separator"),
-    ("git add -- x\ngit commit -m msg", ["ADD_PATH\tx", "COMMIT"], "newline ends a command exactly as ; does"),
-    ("git add -- x && \\\ngit commit", ["ADD_PATH\tx", "COMMIT"], "backslash-newline is a CONTINUATION"),
+    ("git add -- x\ngit commit -m msg", ["COMMIT"], "newline ends a command exactly as ; does"),
+    ("git add -- x && \\\ngit commit", ["COMMIT"], "backslash-newline is a CONTINUATION"),
     ("( git commit )", ["COMMIT"], "subshell"),
     ("{ git commit; }", ["COMMIT"], "brace group -- { is not a shlex punctuation char by default"),
 
@@ -122,19 +122,23 @@ CASES = [
     ("git commit -a -m msg", ["COMMIT", "COMMIT_ALL"],
      "-a takes no value; -m does"),
 
-    # --- the chain's own `git add`: the fourth source of content the index
-    # --- cannot show, and the one the first version of this fix missed.
-    ("git add -- src/x.sh && git commit -m msg",
-     ["ADD_PATH\tsrc/x.sh", "COMMIT"],
-     "the add stages a source file a moment before the commit reads the index"),
-    ("git add src/x.sh", ["ADD_PATH\tsrc/x.sh"],
-     "for `git add` a bare token really is a pathspec, unlike `git commit`"),
-    ("git add -A && git commit -m msg", ["ADD_ALL", "COMMIT"],
-     "-A stages everything, so the paths cannot be read off the command"),
-    ("git add . && git commit -m msg", ["ADD_ALL", "COMMIT"],
-     "a `.` pathspec is equally unbounded"),
-    ("git add -u && git commit -m msg", ["ADD_ALL", "COMMIT"],
-     "-u stages every tracked modification"),
+    # --- what a SIBLING command stages is deliberately not modelled. `git add` was
+    # --- once reported as ADD_PATH/ADD_ALL facts so the guard could add them to the
+    # --- commit's file set; that enumeration was abandoned, because `git add` is one
+    # --- of at least ten commands that fill the index (rm, mv, reset --soft,
+    # --- checkout -- , restore --staged, apply --cached, stash pop --index,
+    # --- cherry-pick -n, revert -n) and two review rounds each found the list short.
+    # --- The guard now trusts only what the COMMIT ITSELF names. See ADR 0014.
+    ("git add -- src/x.sh && git commit -m msg", ["COMMIT"],
+     "the add is not modelled; the commit names no paths, which is what makes it block"),
+    ("git add src/x.sh", [],
+     "a `git add` on its own commits nothing, so there is nothing to report"),
+    ("git add -A && git commit -m msg", ["COMMIT"],
+     "-A stages everything -- still not the classifier's business"),
+    ("git rm src/x.sh && git commit -m msg", ["COMMIT"],
+     "one of the nine other staging commands; identical treatment, no entry needed"),
+    ("git cherry-pick -n abc123 && git commit -m msg", ["COMMIT"],
+     "and another -- not enumerating them is the point"),
 
     # --- options the hook cannot understand must fail closed, not sail through.
     # --- git accepts any unambiguous prefix of a long option, so an exact-match
@@ -150,6 +154,31 @@ CASES = [
     ("git commit --no-edit -m msg", ["COMMIT"], "known-harmless option"),
     ("git commit --no-verify -m msg", ["COMMIT"], "known-harmless option"),
     ("git commit -q --signoff -m msg", ["COMMIT"], "known-harmless short and long forms"),
+
+    # --- the flags BEFORE a `--` decide whether the paths after it are the WHOLE
+    # --- commit. `-i`/`--include` commits the index as well, so the pathspec is not
+    # --- exclusive; `-o`/`--only` is not understood either. A `--` used to return
+    # --- the paths immediately, skipping the flag table entirely, so this whole
+    # --- family reported a clean pathspec and the guard trusted it.
+    ("git commit -i -m msg -- docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "-i ALSO commits the index, so the paths after `--` are not the whole commit"),
+    ("git commit --include -m msg -- docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "long form of the same"),
+    ("git commit -o -m msg -- docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "-o/--only is unrecognised, and unrecognised means cannot tell"),
+    ("git commit --only -m msg -- docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "long form of the same"),
+    ("git commit -i -m msg docs/x.md", ["COMMIT", "COMMIT_BARE_ARGS"],
+     "with no separator this blocked already -- by the stray-token rule, not by -i"),
+
+    # --amend and -a can ride ALONGSIDE a pathspec, so the pathspec facts are not on
+    # their own enough for the guard to trust: both must still be reported.
+    ("git commit --amend -m msg -- docs/x.md",
+     ["COMMIT", "COMMIT_AMEND", "COMMIT_PATH\tdocs/x.md", "COMMIT_PATHSPEC"],
+     "--amend re-writes HEAD's tree on top of whatever the pathspec names"),
+    ("git commit -a -m msg -- docs/x.md",
+     ["COMMIT", "COMMIT_ALL", "COMMIT_PATH\tdocs/x.md", "COMMIT_PATHSPEC"],
+     "-a widens to tracked worktree edits; reported, not silently trusted"),
 ]
 
 
