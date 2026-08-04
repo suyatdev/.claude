@@ -1,0 +1,148 @@
+---
+phase: implementation
+model_tier: high
+branch: fix/shell-segments-redirects
+---
+
+# `shell_segments.py` misreads redirections as command separators
+
+Queue item 1. Branched from `main` @ `bc7da76`. User confirmed the gate 2026-08-04 (session 9) and
+chose the **root-cause** scope over patching the one symptom that bites.
+
+## Spec
+
+### Root cause
+
+`OPS` (`hooks/lib/shell_segments.py:25`) contains `<` and `>`, and the split loop at :78-82 starts a
+new segment for any token made entirely of `OPS` characters. That treats a redirection operator as a
+**control** operator — as if `>` ended one command and began another. It does not: a redirection is
+part of the command it attaches to, and may appear anywhere in it, including before the command name.
+
+One misclassification, three observable failures. All three are reproduced, not inferred:
+
+| # | Shape | Current `segments()` output | Effect |
+|---|---|---|---|
+| a | `git commit -m msg -- FILE 2>&1` | `[…,'--','FILE','2']` + `['1']` | **fail-CLOSED.** The stray fd digit `2` becomes a pathspec; `2` is not documentation, so `doc-guard` denies a legitimate commit. The symptom the user hits. |
+| b | `git commit -m x -- foo.sh > out.txt` | `[…,'foo.sh']` + `['out.txt']` | Redirect **target** lands in command position as its own segment. Noise; harmless only because no guard matches `out.txt` / `/dev/null` / `1` / `log`. |
+| c | `> out.txt git commit -m x -- foo.sh` | `[]` + `['out.txt','git','commit',…]` | 🔴 **fail-OPEN.** `argv[0]` is never `git`, so **no guard sees a commit at all**. `git >out.txt commit …` likewise yields a bare `['git']`. A real bypass of a Tier-1 guard. |
+
+Mode (c) is a **momentum guardrail failure, not a security-boundary breach** — the house rules class
+these hooks as guardrails, and this document does not claim otherwise.
+
+### The rule
+
+Partition punctuation tokens instead of lumping them:
+
+- A token made entirely of `OPS` chars **that contains `<` or `>`** is a **redirection operator**.
+  It does not split. It is dropped along with the single token that follows it (its target).
+- Any other all-`OPS` token is a **control operator** and splits, exactly as today.
+
+This classifies correctly across the set: `>` `>>` `<` `<<` `<<<` `<>` `>|` `>&` `<&` `&>` `&>>` are
+redirections (all contain `<` or `>`); `|` `||` `&&` `;` `;;` `&` `(` `)` `{` `}` `|&` remain control
+operators. Note `|&` — bash's pipe-with-stderr — contains neither `<` nor `>` and so stays a splitter,
+which is correct.
+
+**Leading fd digit.** `2>&1` lexes as `2`, `>&`, `1`; shlex discards spacing, so `cmd 2>x` and
+`cmd 2 >x` are indistinguishable at the token level. On encountering a redirection operator, a
+trailing bare-digit token already appended to the current segment is dropped.
+
+> **Accepted limit, stated not discovered.** This loses a genuine operand in `cmd -- 2 > out`, i.e. a
+> file literally named `2` passed immediately before a redirect. That is strictly better than today,
+> which *invents* the same operand in the far more common `2>&1`, and a bare digit can never be
+> `argv[0]`, so command recognition is unaffected. Same denylist philosophy as `WRAPPERS`.
+
+**Heredocs stay out of scope and stay working.** shlex cannot see heredoc bodies — a documented limit
+(ADR 0012). The existing `\n` → `;` translation (:71) already isolates each body line into its own
+segment, so consuming `<<` plus its delimiter leaves the real command's argv intact. Scenario H below
+pins this, because the naive reading — that body words would be appended to the command — was the one
+plausible regression in this change.
+
+### Scenarios
+
+```gherkin
+Scenario A: fd-duplicating redirect no longer invents a pathspec
+  When segments("git commit -m msg -- FILE 2>&1 | tail -3")
+  Then one segment has argv ["git","commit","-m","msg","--","FILE"]
+   And no segment has argv ["1"]
+
+Scenario B: a redirect target never reaches command position
+  When segments("git commit -m x -- foo.sh > out.txt")
+  Then the only non-empty segment is ["git","commit","-m","x","--","foo.sh"]
+
+Scenario C: a leading redirect does not hide the command
+  When segments("> out.txt git commit -m x -- foo.sh")
+  Then some segment has argv[0] == "git"
+
+Scenario D: a mid-command redirect does not truncate the command
+  When segments("git >out.txt commit -m x -- foo.sh")
+  Then some segment has argv ["git","commit","-m","x","--","foo.sh"]
+
+Scenario E: control operators still split
+  When segments("git add -- a.sh && git commit -m x -- a.sh")
+  Then there are two segments with argv[0] == "git"
+
+Scenario F: pipe-with-stderr still splits
+  When segments("git log |& tail")
+  Then some segment has argv[0] == "tail"
+
+Scenario G: wrapper stripping still composes with redirects
+  When segments("rtk git commit -m x -- a.sh 2>/dev/null")
+  Then some segment has argv ["git","commit","-m","x","--","a.sh"]
+
+Scenario H: a heredoc body does not leak into the command's argv
+  When segments("git commit -q -F - -- CODING_MEMORY.md <<'MSG'\ndocs: subject\nMSG\n")
+  Then some segment has argv ["git","commit","-q","-F","-","--","CODING_MEMORY.md"]
+
+Scenario I: quoted redirect characters are untouched
+  When segments("git commit -m 'a > b' -- a.sh")
+  Then some segment has argv ["git","commit","-m","a > b","--","a.sh"]
+```
+
+## Corrections found by measuring (the spec above was written before these)
+
+1. **Mode (a) bites `git-guard`, not `doc-guard`** — the queue note said doc-guard. Measured:
+   `doc-guard.sh:154-157` inspects the **staged index** (or `git diff HEAD` under `-a`) and never
+   consults the pathspec, so a phantom `COMMIT_PATH` cannot reach it. The real site is
+   `git-guard.sh:155-157`: guard 1 uses `commit_pathspec_files()` **only when nothing is staged**.
+   So mode (a) fires exactly on the empty-index path — the same path
+   `docs/features/git-guard-empty-index.md` covers.
+2. **The replay harness is blind to this defect class.** `git-guard.replay.sh` reports
+   378/378 identical, 0 relaxed — but its 63-command matrix contains **zero** redirect shapes, so
+   that result is evidence of *no regression* and is **not** evidence the fix works. Recorded because
+   the standing note ("has missed a shape in three consecutive rounds") applies here too.
+3. **Heredocs put `git commit` at a command position — on both lexers, identically.** A probe script
+   whose heredoc body contained `git commit …` was blocked by the live doc-guard. Verified this is the
+   pre-existing ADR 0012 shlex limit, unchanged by this fix, by running both lexers over the same
+   string. Not a regression; noted so the next person does not re-diagnose it.
+
+## Checklist
+
+- [x] 1. Red: `hooks/lib/shell_segments.test.py` — the suite this module has never had. Scenarios A-I
+      plus the existing behaviour it must not break (chaining, newline/continuation, braces, quoting,
+      `WRAPPERS`, `VAR=` assignments, unparseable input → `[]`). **31 checks.**
+- [x] 2. Confirmed red for the stated reason: **14 failed, 17 passed** on the unfixed module. The 17
+      were the regression block, and the heredoc check was among them — current behaviour there was
+      already correct, which is what the fix had to preserve.
+- [x] 3. Green: `_is_redirect()` + redirect-aware split loop in `shell_segments.py`; trailing
+      bare-digit dropped; accepted limit documented in the source and pinned by
+      `check_accepted_limit()`. **31/31.**
+- [x] 4. Dependent suites all green: `git-guard` **77/0**, `doc-guard` **16/0**, `phase-guard`
+      **134/0**, `judge-guard` **101/0**, `classify-git-command` **78/0**, `classify-pr-command`
+      **51/0**. With the new 31, **488 checks passing**.
+- [x] 5. Replay: 63 × 6 = 378 pairs, 378 identical, 0 stricter, 0 relaxed. **See correction 2 — this
+      does not demonstrate the fix.**
+- [x] 6. End-to-end falsifier, old lexer vs new, driving the real `git-guard.sh`:
+      | case | old | new |
+      |---|---|---|
+      | docs commit, no redirect (baseline) | 0 allow | 0 allow |
+      | mode (a) `… -- docs/foo.md 2>&1 \| tail -3` | **2 BLOCK** | **0 allow** |
+      | mode (c) `> out.txt git commit -m x -- src/app.js` on `main` | **0 allow** | **2 BLOCK** |
+      | control: plain source commit to `main` | 2 block | 2 block |
+      The baseline row is load-bearing: the same commit without the redirect is allowed by both, so
+      the redirect alone caused the denial. Classifier level: old emits a phantom `COMMIT_PATH -> 2`,
+      new does not.
+- [ ] 7. Observability judge (implementation stage) pinning final HEAD → PR → user merges in the UI.
+
+**Not in scope, deliberately:** the `^git`-anchored lexer in `checkpoint-before-modify.sh:97` (dormant,
+unregistered — fixes nothing observable today); unifying the four `git commit` lexers; `env`/`timeout`
+wrapper shapes, which remain the accepted-open denylist from ADR 0012.

@@ -24,6 +24,24 @@ import shlex
 # while `( gh pr create )` did not.
 OPS = "(){};<>|&"
 
+
+def _is_redirect(tok):
+    """True for a punctuation token that redirects rather than separates two commands.
+
+    `<` and `>` are in OPS because shlex must emit them as standalone tokens, but a redirection is
+    PART of the command it attaches to and may appear anywhere in it -- including before the command
+    name. Treating one as a separator (which this module did until 2026-08-04) produced three
+    failures at once: `2>&1` left the fd digit behind as a phantom operand so doc-guard denied real
+    commits; the redirect target reached a segment command position; and a LEADING redirect
+    (`> out.txt git commit ...`) pushed the real command out of position 0 entirely, so no guard saw
+    it. See docs/features/shell-segments-redirects.md.
+
+    Containing `<` or `>` is the whole test, and it partitions the operator set exactly: redirections
+    `> >> < << <<< <> >| >& <& &> &>>` all contain one; control operators `| || && ; ;; & ( ) { }`
+    contain neither. `|&` -- bash's pipe-with-stderr -- correctly stays a separator.
+    """
+    return "<" in tok or ">" in tok
+
 # Words that occupy the command position while the real command follows them. `rtk` is the
 # token-proxy wrapper used in this repo; the rest are shell keywords/builtins that take a
 # command as an argument. Stripped in a loop so they stack (`time rtk gh pr create`).
@@ -74,10 +92,28 @@ def segments(src):
     except ValueError:
         return []
 
+    # A redirection is consumed with its target instead of splitting; only control operators split.
+    #
+    # The leading fd digit (`2` in `2>&1`) is dropped from the segment it was already appended to.
+    # shlex discards spacing, so `cmd 2>x` and `cmd 2 >x` are the same token stream and no lexer can
+    # tell them apart. ACCEPTED LIMIT, stated rather than discovered: this loses a genuine operand in
+    # `cmd -- 2 > out`, i.e. a file literally named `2` immediately before a redirect. That is
+    # strictly better than the old behaviour, which INVENTED that operand in the far more common
+    # `2>&1`, and a bare digit can never be argv[0], so command recognition is unaffected. Pinned by
+    # check_accepted_limit() in the sibling test so the trade-off cannot change silently.
     raw = [[]]
+    drop_target = False
     for t in toks:
+        if drop_target:
+            drop_target = False
+            continue
         if t and all(ch in OPS for ch in t):
-            raw.append([])
+            if _is_redirect(t):
+                if raw[-1] and raw[-1][-1].isdigit():
+                    raw[-1].pop()
+                drop_target = True
+            else:
+                raw.append([])
         else:
             raw[-1].append(t)
 
