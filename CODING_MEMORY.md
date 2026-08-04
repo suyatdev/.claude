@@ -1002,6 +1002,31 @@ how this file and its linked files should be written (plain language, major chan
   Check `ps aux | grep '[c]laude -p'` for a live agent and `coding-memory/*/verdicts.jsonl` for a
   landed verdict before re-dispatching, or a round gets paid for twice. The compliance judge on this
   spec reliably needs **more than 540 s**; dispatch it with a longer wait or expect a second one.
+  - **`rtk` SETTLED 2026-08-04 (session 9), user-directed, ahead of the 5 round-5 violations — the
+    observability judge's `risk=high` headline is OVERSTATED. The design is NOT inert.** Measured, not
+    reasoned: `segments('rtk git commit -m x -- a.sh')` and `segments('git commit -m x -- a.sh')` return
+    **identical** argv, because `shell_segments.py:34` lists `rtk` in `WRAPPERS` and :86 strips wrappers
+    in a stacking loop (`time rtk git …` also reduces correctly). The spec already routes tokenisation
+    there — l.471-476, *"the decision is made once, in the shared lexer"* — so a classifier built to spec
+    inherits wrapper-stripping for free. `rtk hook claude` is confirmed **first** in the `PreToolUse`
+    Bash chain (`settings.json:13`), ahead of all four guards, so the prefix genuinely does reach them —
+    the mechanism the judge described is real; only its *consequence* was wrong.
+    · **What survives as genuine, and is smaller and different:** (a) the spec's deferral list names only
+    three tokenisation questions — tokens, `git <global-opts> commit`, and chaining — and **wrapper
+    stripping is not among them**, so nothing in the spec *instructs* the implementer to route through
+    `segments()` for this; (b) task 14's hand-written payloads and all 24 mutants contain no `rtk` form,
+    so **nothing would catch a regression** if the classifier ever grew its own lexer — a check that
+    cannot fail, the exact pattern in `feedback_confirm_the_check_can_fail`. Both are cheap: one
+    sentence, one mutant.
+    · 🆕 **STALE-TEXT FINDING, same class as PR #37 and queue item 8 — found while checking the above.**
+    Spec l.166-172 asserts the three production lexers are `git-guard.sh:89`, `doc-guard.sh:123` and
+    `checkpoint-before-modify.sh:97` and that **"all three anchor the pattern at `^git[[:space:]]+`"**,
+    calling it a *"live fail-open in all three"*. **Two of the three are wrong today:** `git-guard.sh:44`
+    and `doc-guard.sh:43` both delegate to `lib/classify-git-command.py` (which imports the lexer) and
+    carry no `^git` anchor. Only `checkpoint-before-modify.sh:97` still anchors — **and that hook is
+    dormant, unregistered in `settings.json`** (`gates.md` §Dormant hooks), so the one true instance
+    never runs. The spec is reasoning from a pre-PR-#36 snapshot of its own repo.
+    ⚠️ Do **not** fold these into a round-6 auto-revise — round 5 is past the cap and the user directs.
   - **WORK REGISTER 2026-08-02 — branch-per-defect, user-chosen. Per-defect detail now committed at
     `coding-memory/marker-gate-defect-register.md`** (moved there 2026-08-03; it had existed only in
     the machine-local `.claude/session-state.md`, one `/clear`-adjacent rewrite from being lost).
