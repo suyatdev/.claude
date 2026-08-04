@@ -1,6 +1,6 @@
 ---
-phase: implementation
-model_tier: low
+phase: review
+model_tier: high
 branch: fix/git-guard-empty-index
 ---
 
