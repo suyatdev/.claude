@@ -812,6 +812,17 @@ how this file and its linked files should be written (plain language, major chan
   `feedback_capture_exit_code_before_anything_else` (written 2026-08-04; `projects/` is gitignored,
   so they are local-only and will not appear in git). Writing them *was* the end-to-end check of
   Defect B, and it passed.
+  · 🆕 **NEW, found within minutes of the merge by the armed hook blocking a real commit — a shell
+  redirect after the pathspec becomes a phantom file.** `shell_segments.py` does not strip
+  redirections, so `git commit -m msg -- CODING_MEMORY.md 2>&1 | tail -3` classifies as
+  `COMMIT_PATH 2` **plus** `COMMIT_PATH CODING_MEMORY.md`; `2` is not documentation, so the whole
+  commit is denied. Measured against the control (same line without `2>&1` → only the real path).
+  **Fail-CLOSED, so friction rather than a hole** — but it denies precisely the documentation commit
+  this branch existed to permit, and appending `2>&1` is habitual. Workaround: no redirect on the
+  same line as the pathspec, or stage first so the populated-index path is taken instead.
+  Fix belongs in `hooks/lib/shell_segments.py` and therefore **shares a blast radius with D1+D2**,
+  which must also reuse that lexer — sequence them together. Affects `doc-guard` too (same
+  classifier).
   Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
   `docs/features/git-guard-empty-index.md` `## Verification`, and
   `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;
