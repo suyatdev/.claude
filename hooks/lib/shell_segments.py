@@ -24,6 +24,36 @@ import shlex
 # while `( gh pr create )` did not.
 OPS = "(){};<>|&"
 
+
+def _is_redirect(tok):
+    """True for a punctuation token that redirects rather than separates two commands.
+
+    `<` and `>` are in OPS because shlex must emit them as standalone tokens, but a redirection is
+    PART of the command it attaches to and may appear anywhere in it -- including before the command
+    name. Treating one as a separator (which this module did until 2026-08-04) produced three
+    failures at once: `2>&1` left the fd digit behind as a phantom operand so doc-guard denied real
+    commits; the redirect target reached a segment command position; and a LEADING redirect
+    (`> out.txt git commit ...`) pushed the real command out of position 0 entirely, so no guard saw
+    it. See docs/features/shell-segments-redirects.md.
+
+    Containing `<` or `>` is necessary but NOT sufficient, and the exception is load-bearing.
+    PROCESS SUBSTITUTION -- `<(cmd)` and `>(cmd)` -- contains `<`/`>` yet OPENS A COMMAND CONTEXT
+    exactly as `(` does. Treating it as a redirection eats the substituted command's NAME along with
+    the operator: `cat <(gh pr create)` lexed to ['cat','pr','create'] and
+    `echo hi > >(git commit -m x -- src/app.js)` buried a whole commit inside echo's argv, so
+    argv[0] was never `git` -- reintroducing, in a new shape, the very fail-open this change was
+    written to close. Both are valid executable bash (`bash -n`). Caught by the observability judge
+    on the first revision of this fix, not by the test suite, which had no case for it.
+
+    So: a redirection contains `<` or `>` AND no paren. That partitions the set exactly --
+    redirections `> >> < << <<< <> >| >& <& &> &>>`; control operators `| || && ; ;; & ( ) { }` plus
+    the substitution openers `<(` `>(`, which MUST split so the command inside reaches a segment
+    command position. `|&` -- bash's pipe-with-stderr -- contains neither and stays a separator.
+    """
+    if "(" in tok or ")" in tok:
+        return False
+    return "<" in tok or ">" in tok
+
 # Words that occupy the command position while the real command follows them. `rtk` is the
 # token-proxy wrapper used in this repo; the rest are shell keywords/builtins that take a
 # command as an argument. Stripped in a loop so they stack (`time rtk gh pr create`).
@@ -74,10 +104,40 @@ def segments(src):
     except ValueError:
         return []
 
+    # A redirection is consumed with its target instead of splitting; only control operators split.
+    #
+    # The leading fd digit (`2` in `2>&1`) is dropped from the segment it was already appended to.
+    # shlex discards spacing, so `cmd 2>x` and `cmd 2 >x` are the same token stream and no lexer can
+    # tell them apart. ACCEPTED LIMIT, stated rather than discovered -- and the width is ANY trailing
+    # bare digit, not only a file named `2`:
+    #   `git log -n 5 > out`                       loses the `5` (an option value, no guard impact)
+    #   `git commit -m x -- docs/foo.md 2 > out`   loses the pathspec: git-guard BLOCK -> ALLOW
+    # The pathspec case is the one guard-visible flip, because git-guard's docs-only exemption is
+    # decided from the pathspec. Accepted anyway: the alternative reinstates a FALSE DENIAL on the
+    # routine `2>&1` idiom, and a bare digit can never be argv[0], so the command itself is still
+    # always recognised. It is a fail-OPEN on a Tier-1 guard, recorded as one -- see ADR 0015.
+    # Pinned from both sides by check_accepted_limit() in the sibling test (the digit IS dropped, an
+    # ordinary filename is NOT) so the trade-off cannot widen silently.
     raw = [[]]
+    drop_target = False
     for t in toks:
-        if t and all(ch in OPS for ch in t):
-            raw.append([])
+        is_op = bool(t) and all(ch in OPS for ch in t)
+        if drop_target:
+            drop_target = False
+            # A redirection's target is a WORD. If the next token is punctuation it is not a
+            # target and must not be swallowed -- decisively in `echo hi > >(git commit ...)`,
+            # where the target is a process substitution that still has to open a command
+            # context. Consuming it blindly left argv[0] == "echo" and hid the commit, which is
+            # the same fail-open in a new shape. Fall through and classify it normally.
+            if not is_op:
+                continue
+        if is_op:
+            if _is_redirect(t):
+                if raw[-1] and raw[-1][-1].isdigit():
+                    raw[-1].pop()
+                drop_target = True
+            else:
+                raw.append([])
         else:
             raw[-1].append(t)
 
