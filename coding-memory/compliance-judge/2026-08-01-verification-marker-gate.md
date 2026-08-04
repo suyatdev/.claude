@@ -455,3 +455,133 @@ edge cases, pinned versions and scope boundary, all still closed and re-verified
 
 None. No violation ids have been waived in any round; both prior escalations were resolved by the
 user directing a different fix.
+
+---
+
+## Round 5 — 2026-08-04T16:10:46Z · **FAIL** (5 violations, 1 waived) · confidence: high
+
+HEAD `00583c21d997282f096025e9f67cdc011064c41b` · spec blob `e99b60f3a8a17a42f0b0485e8a8caec7d1c57b4a`
+· 1,166 lines
+
+### Layman summary
+
+Round 5 was told to stop patching cells and enumerate the class. It half succeeded, and the half that
+succeeded is real: **the wire contract is now genuinely total over `kind`** — `form: NONE` is a value,
+all 18 cells are defined, the validation order is stated once instead of twice, and the duplicated
+read-side-validation paragraph is gone. **Round 4's `writer-call-site-cwd` finding is fully closed** —
+the Python and shell call sites are now true mirrors, both capture absolute values before any chdir,
+both run the writer with the repo root as its cwd, and checklist task 8 finally prescribes that form
+rather than round 3's superseded one. Doors rows 1, 5 and 8 are reconciled. Every count the dispatching
+prompt asked me to confirm holds: **14 doors, 9 allow paths, 24-mutant floor (14 + 9 + 1)**, and the 9
+allow paths still match the flowchart's 9 ALLOW edges exactly.
+
+But the totality claim was applied to one axis and not the other, and the round-5 edits again broke a
+distant section — the fifth round running.
+
+**The three substantive findings:**
+
+1. **The new ABSENT rule contradicts its own probe, and I measured the false block.** Round 5 correctly
+   promoted ABSENT to one semantic definition — "the resulting commit's tree will have no entry at this
+   path" — and demoted the probes to implementations of it, writing that "a probe that ever disagrees
+   with it is a defect in the probe". Then it merged the `ALL`-outside case into the *same table row*
+   as `PATHSPEC`-outside and gave the merged row a two-condition test. The second condition ("the path
+   does not exist on disk") is correct for `ALL` and wrong for `PATHSPEC`. Measured on git 2.50.1 in a
+   disposable repo: subject modified, sibling test deleted from the worktree but unstaged and outside
+   the pathspec, `git commit -m x -- foo.sh` → **the resulting tree still contains `foo.test.sh` at its
+   base content `t1`**. Not absent. The probe says absent, so the gate raises `MSG_STALE_TEST` on a
+   commit that ships exactly the content the marker certified. The prose at l.563 even calls this "the
+   `ALL`-outside row" — it is not a separate row, and that is the whole defect.
+
+2. **`form` is still not a total function of its input.** The contract became total over `kind`; it did
+   not become total over commands. The form-resolution rules are declared "in order" and list five
+   values (`INCLUDE` → `INVALID` → `ALL` → `PATHSPEC` → `PLAIN`). `FOREIGN` is defined 160 lines later
+   with **no position in that order**. `cd /other && git commit -am msg -- foo.sh` fires both the
+   `FOREIGN` trigger and the `INVALID` rule, and the two answers differ at the top level of the
+   flowchart: `FOREIGN` blocks, `INVALID` allows. `cd /other && git commit -m x -i -- b.md` fires both
+   `FOREIGN` and `INCLUDE`, two different doors — and the suite is required to assert the *message*.
+   This is the same closed-enum-not-total class that has now been cited in five consecutive rounds, at
+   a fifth location. It is **not** the waived tokenisation question: precedence between enum values
+   survives whatever lexer lands in `shell_segments.py`.
+
+3. **Nothing states how the gate decides a path has a sibling test — and two scenarios need it to.**
+   The flowchart says "Pair each path with its sibling test"; the only stated pairing predicate is the
+   mirror of the writer's rule, which uses `git ls-files --error-unmatch`, i.e. *tracked*. Under that
+   predicate, measured on git 2.50.1: a test **staged as a deletion** has no index entry, so
+   `ls-files --error-unmatch` exits 1 → no pair → **allow**, contradicting the scenario at l.903 that
+   demands `MSG_STALE_TEST`; and an **untracked** test on disk likewise exits 1 → no pair → **allow**,
+   contradicting round 5's brand-new scenario at l.966 that demands `MSG_STALE_TEST`. Only a union
+   predicate (disk ∪ index ∪ `<base>`) satisfies both plus §Scope's "files with no sibling test are
+   never gated", and the spec never states one. Round 5 added the scenario without adding the rule it
+   depends on.
+
+**The two cheap ones** are one-line fixes and are listed only because the artifact is meant to be
+buildable as written: §Latency now says task 10 "measures and records **all three**" budgets while
+checklist task 10 still says "record the **two** numbers" — the diff confirms the prose was updated in
+round 5 and the checklist was not; and the exemption log is a generated data store with no mode, in a
+directory (`hooks/state/`, which does not yet exist in this repo) whose sibling store is meticulously
+specified `0700`/`0600` on core-conduct's default-deny grounds.
+
+**Not re-opened:** the `docs/features/` location (adequate, round 1); scope inventory; edge cases;
+pinned versions (bash 3.2.57 / Python 3.9.6 / git 2.50.1 / shellcheck 0.11.0, all four still present
+and complete); scope boundary; `writer-call-site-cwd` — **closed, verified line by line**.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/commit-form-coverage` *(recurring, 4th round)* | `~/.claude/skills/writing-specs/SKILL.md` | "Good, bad, and edge-case scenarios: state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from" (§What a Spec Must Contain) | §"Which paths, and which content" → ABSENT probe table row 3 (l.561), read against the semantic definition (l.551), the round-5 rationale (l.563–565) and the outside-path-set content table (l.528) | Round 5 merged the `ALL`-outside case into the same `<base>`-source row as `PATHSPEC`-outside and gave the merged row the two-condition test "`cat-file -e` non-zero **or** the path does not exist on disk"; the disk condition is correct for `ALL` and wrong for `PATHSPEC`. **Measured on git 2.50.1** (disposable repo): with the sibling test deleted from the worktree, unstaged, and outside the pathspec, `git commit -m x -- foo.sh` yields a tree that **still contains `foo.test.sh` at base content**, so by the section's own definition it is not ABSENT — yet the probe reports ABSENT and the gate false-blocks with `MSG_STALE_TEST` on a commit whose content the marker certified. The prose at l.563 calls this "the `ALL`-outside row", but the table has no such row. |
+| 2 | `writing-specs/api-contracts` *(recurring, 5th round)* | `~/.claude/skills/writing-specs/SKILL.md` | "Database schemas and API contracts: these give the agent the real data structures and interface boundaries to build against, instead of letting it improvise shapes that other components then fail to match" (§What a Spec Must Contain) | §"The command grammar" → "The rules the classifier implements, **in order**" (l.439, rule 4 at l.448–450); §"`FOREIGN` — which repo is this commit for?" (l.606–612); `form` domain (l.358); flowchart node `I` (l.39–43); resolution table (l.505–512) | The round-5 fix made the contract total over `kind`, but `form` is still not a total function of the command: the ordered resolution list contains five of the seven values and `FOREIGN` is defined 160 lines later with no position in it, so a command firing both triggers has two legal answers with **materially different outcomes** — `cd /other && git commit -am msg -- foo.sh` is `FOREIGN` (block, `MSG_FOREIGN_REPO`) or `INVALID` (allow), and `cd /other && git commit -m x -i -- b.md` is `FOREIGN` or `INCLUDE`, two doors whose *messages* the suite is required to assert and whose allow-path mutant (`INVALID`) is therefore underdetermined. Distinct from the waived `writing-specs/command-grammar`: enum precedence is not tokenisation and survives any shared lexer. |
+| 3 | `writing-specs/pair-formation-rule` *(new)* | `~/.claude/skills/writing-specs/SKILL.md` | "Requirements, not one-liners: break the feature into concrete requirements the agent can satisfy and you can check" and "Anything you leave implicit, the agent infers — and inference is where the defects come from" (§What a Spec Must Contain) | Flowchart node `K` (l.45); §"Pairing rule" (l.625–629, esp. l.628); the writer's mirror (l.198–200); §Scope (l.152); scenarios at l.903–908 and l.966–973 | The spec never states the predicate that decides whether a path in the path set *has* a sibling test; the only stated pairing rule is the mirror of the writer's `git ls-files --error-unmatch` (tracked). **Measured on git 2.50.1:** a test staged as a deletion has no index entry (`ls-files --error-unmatch` exits 1) and an untracked test likewise, so under the only stated predicate both form no pair and the gate **allows** — contradicting the scenario at l.903 (`MSG_STALE_TEST`) and round 5's newly added scenario at l.966 (`MSG_STALE_TEST`). Only an unstated union of disk ∪ index ∪ `<base>` satisfies those two together with §Scope's "the gate never demands a test that does not exist". |
+| 4 | `writing-specs/latency-budget-count` *(new)* | `~/.claude/skills/writing-specs/SKILL.md` | "Requirements, not one-liners: break the feature into concrete requirements the agent can satisfy **and you can check**" (§What a Spec Must Contain); "Maintain it with production rigor … updates when reality changes" (§The Spec Is the Source of Truth) | §Latency → Budgets (l.671) vs. Checklist task 10 (l.1140–1141) | Round 5 added a third latency budget and updated the prose to "checklist task 10 measures and records **all three**", but left task 10 reading "record the **two** numbers here" — confirmed against the round-4→5 diff, where l.671 changed and task 10 did not. An implementer working the checklist records two of three budgets and the new `kind: OTHER` row, added precisely because "an output with no budget is a cost nobody measures", goes unmeasured. |
+| 5 | `core-conduct/default-deny-store` *(new)* | `~/.claude/rules/core-conduct.md` | "Secrets and PII stay behind placeholders … nothing sensitive lives client-side; **default-deny every generated data store**" (§Zero-Trust Invariants) | §"Exemption logging" (l.1074–1078) and the scenarios that write it (l.927, l.934), read against §Architecture 2 (l.297) | The feature creates `<repo>/hooks/state/` — which does not exist in this repo today — and appends the exemption audit trail to `<repo>/hooks/state/test-exempt.log`, and neither the new parent directory nor the log file is given a mode, so both fall to the ambient umask. The spec makes the default-deny argument explicitly for the sibling marker store (`0700`/`0600`, "there is no reason for it to be world-readable") and the same argument applies at least as strongly to the log that records every occasion on which verification was skipped. |
+
+### Notes (non-blocking)
+
+- **The ABSENT probe table keys on the wrong partition.** Its `PATHSPEC` rows say "in/outside the
+  **pathspec**" while both content tables key on "in/outside the **path set**". Those differ: a
+  pathspec-matched file identical to `<base>` is inside the pathspec and outside the path set. The
+  row's key column (content source) resolves it, but fixing violation 1 is the moment to align the
+  wording. Relatedly, the worktree row's stated coverage ("a pathspec naming a deleted file commits
+  the deletion") is unreachable — `--diff-filter=d` removes it from the path set, exactly as l.567–568
+  already argues for `ALL`.
+- **Store-key encoding order — third round unaddressed.** l.293 still lists "`/`→`%2F`, `%`→`%25`"
+  with no order. Applied left to right the map is not injective: `a/b` and a literal `a%2Fb` both land
+  on `a%252Fb`, two subjects sharing one marker file, defeating the "one file per subject" rationale
+  one line above. Escape `%` **first**; say so in six words.
+- **`--status` has no defined input.** l.98 promises it prints "the resolved toplevel … without
+  reading any payload", but l.325–327 forbids the hook's own cwd as a toplevel source and there is no
+  payload in `--status` mode. Task 14 implies process cwd; state it.
+- **Flowchart edge `CF -- "0 with one line"`** does not route exit 0 with *more* than one line. Prose
+  step 1 catches it (`MSG_CLASSIFIER_BAD_OUTPUT`), so this is a label imprecision, not a gap.
+- **Stale narration at l.1030–1032:** "with the two this round adds it is fourteen" — those two were
+  added in an earlier round; at revision 5 "this round" reads wrong. Same family as the round-by-round
+  archaeology flagged in rounds 3 and 4.
+- **Path splitting.** Every collector is `git diff --name-only` without `-z`, consumed by bash 3.2. A
+  tracked path containing a newline mis-splits. The gate is registered **globally**, so it is not this
+  repo's file names that bound the risk. Not cited — it is arguably an implementation concern — but it
+  is one sentence in §"Every git invocation is status-checked".
+- **Call-site mirror asymmetry.** l.245 uses `python3 -I`, l.259 uses `sys.executable -I`, under a rule
+  that says "a reviewer should be able to diff the two blocks and find no behavioural difference".
+  `sys.executable` is the better choice; the sentence is what needs adjusting.
+- **What is genuinely strong this round:** the `kind` × field totality matrix is correct and complete
+  (18 cells, `NONE` as a value not an absence), and its "no per-kind special case" rationale is the
+  right diagnosis of why the defect kept returning; the two-step validation order with the regex at
+  node `H` is right and the scenario at l.983 pins it; the writer call-site fix is complete and
+  checklist task 8 now matches it; the anti-duplication rule under the doors table (l.1051–1057) is
+  the correct structural response and rows 1/5/8 are reconciled; 14 doors / 9 allow paths / 24 mutants
+  all verified consistent against the flowchart.
+- **Length.** 1,166 lines, up 143 from round 4. Every round adds narration about prior rounds. That
+  history belongs in this ledger.
+- **Measurement provenance for this round's findings:** git 2.50.1 (Apple Git-155), three disposable
+  `mktemp -d` repos, no commit to any tracked repository.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — waived by the user (Mark Suyat) on 2026-08-04. Rationale: the
+  violation is the tokenisation model, which is the question `hooks/lib/shell_segments.py` already
+  answers for `git-guard`, `doc-guard` and `classify-pr-command.py`; specifying a second independent
+  grammar here is how the two would drift, so the decision is made once, in the shared lexer, as
+  separate work. Verified present in the artifact: the blockquote callout at l.461–477 marks the
+  contradiction in place and states that implementation is blocked on that decision, frontmatter
+  carries `waived: [writing-specs/command-grammar]`, and checklist task 2 (l.1117–1119) repeats the
+  block. Recorded, not counted toward this verdict.
