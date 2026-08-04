@@ -802,11 +802,16 @@ how this file and its linked files should be written (plain language, major chan
   validate assertions, never the fixture's premise.** Any fix needs a case whose only `git add` is
   inside the command string. (Belongs in auto-memory as `feedback-fixture-must-not-pre-create-state`;
   **could not be written — see the phase-guard gap below.**)
-- **L1's fix — `fix/git-guard-empty-index`, four judge rounds. PR #36 OPEN 2026-08-04, awaiting
-  your merge in the GitHub UI** — https://github.com/suyatdev/.claude/pull/36. RUN 4 pinned
-  `5154dec`, `risk=medium confidence=high`.
-  ⚠️ Expect a `CODING_MEMORY.md` conflict at merge: take **this branch's** version of this region,
-  keep everything else from `main`. Verified — nothing unique to `main` is lost.
+- **L1's fix — `fix/git-guard-empty-index`, four judge rounds. ✅ PR #36 MERGED 2026-08-04T03:47Z
+  (`aa47a78`)** — https://github.com/suyatdev/.claude/pull/36. RUN 4 pinned `5154dec`,
+  `risk=medium confidence=high`. Post-merge on `main`: suites **77/0 · 134/0 · 78/0**, and the
+  `CODING_MEMORY.md` conflict resolved with **zero** lines lost from `main`'s side (verified by
+  set-difference against `69f6380`, not by eye).
+  · **Both hooks are now armed on this machine for the first time**, which unblocked the two owed
+  memory files — `feedback_fixture_must_not_pre_create_state` and
+  `feedback_capture_exit_code_before_anything_else` (written 2026-08-04; `projects/` is gitignored,
+  so they are local-only and will not appear in git). Writing them *was* the end-to-end check of
+  Defect B, and it passed.
   Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
   `docs/features/git-guard-empty-index.md` `## Verification`, and
   `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;
