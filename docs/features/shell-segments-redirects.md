@@ -141,7 +141,41 @@ Scenario I: quoted redirect characters are untouched
       The baseline row is load-bearing: the same commit without the redirect is allowed by both, so
       the redirect alone caused the denial. Classifier level: old emits a phantom `COMMIT_PATH -> 2`,
       new does not.
-- [ ] 7. Observability judge (implementation stage) pinning final HEAD → PR → user merges in the UI.
+- [x] 7a. Observability judge, round 1 on `64ba2fa` — **`risk=medium confidence=high`**, and it found
+      a **regression the fix itself introduced**. Verdict:
+      `coding-memory/observability-judge/2026-08-04-fix-shell-segments-redirects.md`.
+- [ ] 7b. Re-run the judge on the new HEAD (round 1's verdict pins `64ba2fa` and is now stale) → PR.
+
+## Judge round 1 — what it caught, and the fix
+
+**🔴 Process substitution.** `<(cmd)` and `>(cmd)` contain `<`/`>` but **open a command context**, so
+`_is_redirect` classified them as redirections and ate the substituted command's name. Verified at
+three levels: `cat <(gh pr create)` → `['cat','pr','create']`; the PR classifier flipped `PR` → `NO`;
+and `echo hi > >(git commit -m x -- src/app.js)` on `main` went **block → allow**. Both shapes are
+valid executable bash. **Same fail-open class as mode (c) — reintroduced by the fix for mode (c).**
+
+The naive repair (exclude parens from `_is_redirect`) is **not sufficient**: in `> >(cmd)` the
+redirection's *target* is itself a substitution, so blindly consuming the next token still buried the
+command in `echo`'s argv. Full rule now: a redirection contains `<`/`>` and **no paren**, *and* its
+target must be a **word** — a punctuation token is never consumed as a target.
+
+**🔴 The accepted limit was undersold.** The original note said a dropped bare digit leaves "command
+recognition unaffected". True of `argv[0]`, and beside the point: git-guard's docs-only exemption is
+decided from the **pathspec**, so losing a path flips deny → allow. Concrete:
+`git commit -m x -- docs/foo.md 2 > out` on `main` — old **blocks**, new **allows**. Still accepted
+(it beats a false denial on the routine `2>&1` idiom) but now recorded as a **fail-open on a Tier-1
+guard** and pinned at guard level, not merely described.
+
+**Also actioned:** the falsifier is now `hooks/shell-segments-falsifier.sh` — a real script with
+expected values per row that **fails** on regression, replacing a markdown table nobody could re-run.
+It carries the baseline and control rows, and the process-substitution and fail-open rows above.
+
+**Judge findings NOT actioned, deliberately:** amending ADR 0013 for the changed lexer semantics.
+That is a docs change to a decision record and is left for the user to direct — it does not affect
+behaviour and would move HEAD again before the re-judge.
+
+**Note for the re-judge:** the suite that was added to prevent this defect class had no `<(`/`>(`
+case, so it could not see the defect the change introduced. Four cases now cover it (35 checks).
 
 **Not in scope, deliberately:** the `^git`-anchored lexer in `checkpoint-before-modify.sh:97` (dormant,
 unregistered — fixes nothing observable today); unifying the four `git commit` lexers; `env`/`timeout`

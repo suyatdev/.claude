@@ -68,6 +68,19 @@ CASES = [
     ("git add -- a.sh; git commit -m x -- a.sh",
      [["git", "add", "--", "a.sh"], ["git", "commit", "-m", "x", "--", "a.sh"]], "; still splits"),
 
+    # PROCESS SUBSTITUTION. `<(` and `>(` contain < / > but OPEN A COMMAND CONTEXT, so they must
+    # split like `(` does. The first revision of this fix classified them as redirections and ate the
+    # substituted command's NAME -- a fail-open in a new shape, found by the observability judge and
+    # NOT by this suite, which had no case for it. These are the cases that absence cost.
+    ("cat <(gh pr create)", [["cat"], ["gh", "pr", "create"]],
+     "<( must not eat 'gh' -- the command inside really runs"),
+    ("echo hi > >(git commit -m x -- src/app.js)",
+     [["echo", "hi"], ["git", "commit", "-m", "x", "--", "src/app.js"]],
+     ">( as a redirect TARGET still opens a command context; argv[0] must not stay 'echo'"),
+    ("diff <(git show a) <(git show b)",
+     [["diff"], ["git", "show", "a"], ["git", "show", "b"]], "two substitutions in one command"),
+    ("git commit -m x -- foo.sh > out.txt", [GIT_COMMIT], "a plain word target is still consumed"),
+
     # Composition with the wrapper stripping the module already did.
     ("rtk git commit -m x -- a.sh 2>/dev/null",
      [["git", "commit", "-m", "x", "--", "a.sh"]], "wrapper strip and redirect strip compose"),
@@ -135,9 +148,17 @@ def check_heredoc():
 def check_accepted_limit():
     """A bare digit immediately before a redirect is dropped. Stated, not discovered.
 
-    shlex discards spacing, so `cmd 2>x` and `cmd 2 >x` are indistinguishable. Dropping is strictly
-    better than today, which INVENTS the same operand in the common 2>&1 form -- and a bare digit can
-    never be argv[0], so command recognition is unaffected. Pinned so the trade-off stays visible.
+    shlex discards spacing, so `cmd 2>x` and `cmd 2 >x` are indistinguishable. Dropping is still the
+    right direction -- it beats INVENTING the operand in the common 2>&1 form -- but the first
+    version of this note undersold the cost by saying "a bare digit can never be argv[0], so command
+    recognition is unaffected". True of argv[0], and beside the point: git-guard's docs-only
+    exemption is decided from the PATHSPEC, so losing a path can flip deny -> allow.
+
+    CONCRETE FAIL-OPEN, pinned at guard level by hooks/shell-segments-falsifier.sh:
+      `git commit -m x -- docs/foo.md 2 > out` on main -- old BLOCKS (the file `2` is not
+      documentation), new ALLOWS. Requires a file literally named `2` immediately before a redirect.
+      Accepted as the lesser error against a false denial on the routine `2>&1` idiom, but it is a
+      fail-OPEN on a Tier-1 guard and is recorded as one, not as "unaffected".
     """
     got = argvs("git commit -m x -- 2 > out")
     if got != [["git", "commit", "-m", "x", "--"]]:

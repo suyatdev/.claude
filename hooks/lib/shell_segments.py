@@ -36,10 +36,22 @@ def _is_redirect(tok):
     (`> out.txt git commit ...`) pushed the real command out of position 0 entirely, so no guard saw
     it. See docs/features/shell-segments-redirects.md.
 
-    Containing `<` or `>` is the whole test, and it partitions the operator set exactly: redirections
-    `> >> < << <<< <> >| >& <& &> &>>` all contain one; control operators `| || && ; ;; & ( ) { }`
-    contain neither. `|&` -- bash's pipe-with-stderr -- correctly stays a separator.
+    Containing `<` or `>` is necessary but NOT sufficient, and the exception is load-bearing.
+    PROCESS SUBSTITUTION -- `<(cmd)` and `>(cmd)` -- contains `<`/`>` yet OPENS A COMMAND CONTEXT
+    exactly as `(` does. Treating it as a redirection eats the substituted command's NAME along with
+    the operator: `cat <(gh pr create)` lexed to ['cat','pr','create'] and
+    `echo hi > >(git commit -m x -- src/app.js)` buried a whole commit inside echo's argv, so
+    argv[0] was never `git` -- reintroducing, in a new shape, the very fail-open this change was
+    written to close. Both are valid executable bash (`bash -n`). Caught by the observability judge
+    on the first revision of this fix, not by the test suite, which had no case for it.
+
+    So: a redirection contains `<` or `>` AND no paren. That partitions the set exactly --
+    redirections `> >> < << <<< <> >| >& <& &> &>>`; control operators `| || && ; ;; & ( ) { }` plus
+    the substitution openers `<(` `>(`, which MUST split so the command inside reaches a segment
+    command position. `|&` -- bash's pipe-with-stderr -- contains neither and stays a separator.
     """
+    if "(" in tok or ")" in tok:
+        return False
     return "<" in tok or ">" in tok
 
 # Words that occupy the command position while the real command follows them. `rtk` is the
@@ -104,10 +116,17 @@ def segments(src):
     raw = [[]]
     drop_target = False
     for t in toks:
+        is_op = bool(t) and all(ch in OPS for ch in t)
         if drop_target:
             drop_target = False
-            continue
-        if t and all(ch in OPS for ch in t):
+            # A redirection's target is a WORD. If the next token is punctuation it is not a
+            # target and must not be swallowed -- decisively in `echo hi > >(git commit ...)`,
+            # where the target is a process substitution that still has to open a command
+            # context. Consuming it blindly left argv[0] == "echo" and hid the commit, which is
+            # the same fail-open in a new shape. Fall through and classify it normally.
+            if not is_op:
+                continue
+        if is_op:
             if _is_redirect(t):
                 if raw[-1] and raw[-1][-1].isdigit():
                     raw[-1].pop()
