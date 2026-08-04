@@ -977,16 +977,23 @@ how this file and its linked files should be written (plain language, major chan
   · **STILL OWED, after merge only:** write
   `projects/-Users-marksuyat--claude/memory/feedback_fixture_must_not_pre_create_state.md` + its
   `MEMORY.md` line. Cannot be done before merge — the live hook is `main`'s copy.
-- 🔴 **FIVE OF THE 17 SCRIPTS IN `hooks/` ARE NOT REGISTERED IN `settings.json` — found 2026-08-03.**
-  `phase-guard.sh` (32 KB + a 69 KB test suite), `checkpoint-before-modify.sh`,
-  `require-project-standards.sh`, `scan-invisible-unicode.sh`, `scan-secrets.sh`. They exist, they
-  pass their tests, and nothing invokes them. The only reference to `phase-guard.sh` anywhere is a
-  stale worktree copy at `.claude/worktrees/verify-rule/settings.json`. **`rules/gates.md` claimed
-  the phase gate was "Enforced by `hooks/phase-guard.sh` (Tier 1)"** — corrected in `ac5afa2`; the
-  gate is judgment-only in both halves. Live hooks are git-guard, doc-guard, judge-guard,
-  merge-guard, pane-dispatch-guard, context-handoff-watch, memsearch-nudge, and the orca
-  `claude-hook.sh`. Deciding which of the five to wire up is **open work, user's call** — the
-  secret/unicode scanners in particular are advertised protection that is not running.
+- 🔴 **FOUR OF THE TWELVE SCRIPTS IN `hooks/` ARE NOT REGISTERED IN `settings.json`** — recorded
+  2026-08-03 as "five of 17"; **both numbers corrected 2026-08-04 by measurement.** Still dormant:
+  `checkpoint-before-modify.sh`, `require-project-standards.sh`, `scan-invisible-unicode.sh`,
+  `scan-secrets.sh`. They exist, they pass their tests, and nothing invokes them.
+  **`phase-guard.sh` is no longer among them** — registered at `settings.json:42-49` (`PreToolUse` on
+  `Edit|Write|NotebookEdit`), and separately observed firing on 2026-08-03 (it was what blocked the
+  auto-memory directory write — Defect B). Live hooks are git-guard, doc-guard, judge-guard,
+  merge-guard, pane-dispatch-guard, context-handoff-watch, memsearch-nudge, **phase-guard**, and the
+  orca `claude-hook.sh`. **Committed vs live `settings.json` differ only in the machine-local
+  `model` line** (`claude-fable-5[1m]` committed, `opus[1m]` live — the difference §PR #36 already
+  called expected); every hook registration is byte-identical, so the committed≠armed split that
+  produced the original entry is closed. ⚠️ **`git status` cannot detect drift on this file** —
+  `skip-worktree` is set (`git ls-files -v settings.json` → `S`), which is the whole mechanism
+  behind the original split. The only sound check is
+  `git show HEAD:settings.json | diff - settings.json`. Checked that way 2026-08-04. Deciding
+  which of the remaining four to wire up is **open work, user's call** — the secret/unicode scanners
+  in particular are advertised protection that is not running.
 - **Pane-dispatch note 2026-08-02 (corrected):** the compliance judge's `wait` returned **exit 2
   (timeout)** at the 540 s cap on both rounds 3 and 4, and **both times the judge was simply still
   working** — round 3's result file landed ~2 min after the wait gave up, and round 4's finished on a

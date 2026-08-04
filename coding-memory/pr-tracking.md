@@ -573,3 +573,28 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   likely design is folding it into an already-registered hook (`doc-guard`'s SessionStart branch
   already surfaces record-vs-reality mismatches) so it needs no settings edit. Then D1+D2
   (`feature/marker-gate-recognition-rule`, ONE branch) per the register at `CODING_MEMORY.md:786`.
+
+### PR #37 — fix/stale-phase-guard-rule-text (OPEN, opened 2026-08-04)
+- repo: suyatdev/.claude · branch: fix/stale-phase-guard-rule-text · remote: origin
+  (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/37 · status: **OPEN** (created 2026-08-04, HEAD
+  `053d59c` at creation)
+- session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session for every push so far.
+- scope: **part (a) only** of the follow-up named in §PR #36's `next:` — corrected wording in
+  `rules/gates.md` (2 sites) and `CODING_MEMORY.md` (1 site). Docs only, no hook/script/settings
+  change. Numbers corrected by measurement: dormant hooks are **four of twelve**, not five of 17.
+- judge: **skipped via `JUDGE_EXEMPT`**, user's call, recorded in the run — no behaviour to score.
+- canonical record: `docs/features/stale-phase-guard-rule-text.md`. It exists only because
+  `phase-guard.sh:288` exempts `docs/*` but **not** `rules/`, so this branch could not edit
+  `rules/gates.md` without an `implementation` feature file naming the branch. Whether `rules/`
+  belongs in that exempt list is deliberately left open.
+- ⚠️ **part (b) — the committed-vs-live drift *detector* — is NOT built here.** This branch only
+  *ran* the comparison once. The first attempt used `git status --porcelain settings.json` and was
+  **unsound**: `skip-worktree` is set, so status is blind to that file by construction and the check
+  can never fail — the same mechanism that caused the original committed≠live split. Re-measured
+  with `git show HEAD:settings.json | diff - settings.json`: differs **only** in the machine-local
+  `model` line (`claude-fable-5[1m]` committed, `opus[1m]` live), every hook registration identical.
+  The bootstrap problem §PR #36 flagged is untouched and still open work.
+- found, not fixed: `CODING_MEMORY.md:2048-2051` claims `git-guard`/`merge-guard`/`doc-guard` have
+  no test suite at all, but §PR #36 reported git-guard at 77/0 — likely stale in the same way this
+  PR's target was.
