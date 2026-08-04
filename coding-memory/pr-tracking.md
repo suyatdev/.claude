@@ -603,6 +603,46 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   no test suite at all, but §PR #36 reported git-guard at 77/0 — likely stale in the same way this
   PR's target was.
 
+### PR #38 — fix/shell-segments-redirects (OPEN, opened 2026-08-04)
+- repo: suyatdev/.claude · branch: fix/shell-segments-redirects · remote: origin
+  (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/38 · status: **OPEN**. Created at HEAD `28e2053`;
+  tip now `4ecd996`. Branched from `main` @ `bc7da76`.
+- session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session for every push so far.
+- scope: queue item 1, **root cause** (user's explicit choice over patching the one biting symptom).
+  `hooks/lib/shell_segments.py` lumped `<`/`>` in with the control operators, so a **redirection**
+  split a command in two. Three reproduced modes: (a) fail-CLOSED — `2>&1` invents a pathspec `2` and
+  git-guard denies a real docs commit; (b) redirect target reaches command position; (c) 🔴 fail-OPEN
+  — `> out.txt git commit …` means `argv[0]` is never `git`, so **no guard sees a commit at all**.
+- commits: `64ba2fa` (the partition + the module's first-ever test suite) → `28e2053` (process
+  substitution, found by judge round 1) → `d4d813b` (verdicts) → `4ecd996` (ADR 0015 + width fix).
+- judge: **two rounds**, both in
+  `coding-memory/observability-judge/2026-08-04-fix-shell-segments-redirects.md`.
+  Round 1 on `64ba2fa` `risk=medium` — caught a regression **the fix itself introduced**: `<(cmd)` /
+  `>(cmd)` contain `<`/`>` but open a *command* context, so they were eaten as redirections. Round 2
+  on `28e2053` **`risk=low confidence=high`**, 9/10 pass, one `audit_trail` concern, both items of
+  which are now closed on the branch.
+- ⚠️ **the PR was opened at the judged commit, then two docs commits landed on top** — user's
+  decision (the alternative was a third judge round, since any commit stales the verdict and
+  re-blocks `gh pr create`). So the merged tree is *not* the judged tree; the difference is prose
+  plus one test assertion, no implementation logic.
+- ⚠️ **excluding parens from `_is_redirect` is not sufficient on its own.** In `> >(cmd)` the
+  redirect's *target* is a substitution, so consuming the next token blindly still buried the
+  command. A target must be a **word**; punctuation is never consumed as one.
+- ⚠️ **the accepted limit has now been written too narrowly three times.** It is *any* trailing bare
+  digit before a redirect, not "a file named `2`" — `git log -n 5 > out` loses the `5`. As of
+  `4ecd996` the width is **pinned by a second assertion**, not just described. Both assertions were
+  confirmed falsifiable by mutating `argvs`.
+- ⚠️ **the 378-pair replay proves nothing here** — its 63-command matrix has **zero redirect shapes**,
+  so 378/378 identical is no-regression evidence only. `hooks/shell-segments-falsifier.sh` is the
+  evidence, and it fails on regression.
+- bonus, unclaimed by the change itself: the judge's 44-shape sweep found **five further bypasses**
+  closed vs `main`, including `> out git push --force` — a force-push hole, not only a commit hole.
+- decision record: **ADR 0015** (amending 0013, amending 0012); `rules/gates.md:14` repointed.
+- canonical record: `docs/features/shell-segments-redirects.md`.
+- next: user merges in the GitHub UI. Then queue item 5 (marker-gate spec) is unblocked — its
+  tokenisation depended on this.
+
 ### Branch cleanup — 2026-08-04 (authoritative; supersedes older per-entry deletion notes)
 
 Every branch merged into `main` was deleted, **local + remote**, at `main` @ `c3ec4b1`:

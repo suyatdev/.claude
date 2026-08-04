@@ -823,6 +823,16 @@ how this file and its linked files should be written (plain language, major chan
   Fix belongs in `hooks/lib/shell_segments.py` and therefore **shares a blast radius with D1+D2**,
   which must also reuse that lexer — sequence them together. Affects `doc-guard` too (same
   classifier).
+  · ✅ **FIXED — PR #38 OPEN 2026-08-04**, https://github.com/suyatdev/.claude/pull/38, branch
+  `fix/shell-segments-redirects`. Detail: `coding-memory/pr-tracking.md` §PR #38; decision record
+  **ADR 0015**; canonical file `docs/features/shell-segments-redirects.md`. **The scope grew when
+  measured**: this phantom-pathspec symptom is mode (a) of *one* misclassification, and mode (c) —
+  `> out.txt git commit …` — is a genuine **fail-OPEN** in which no guard sees the commit at all.
+  Two things worth carrying forward and nothing else: the fix's own first revision **reintroduced
+  mode (c)** in a new shape (`<(cmd)`/`>(cmd)` contain `<`/`>` but open a *command* context), caught
+  by the observability judge and not by the new test suite, which had no such case; and the accepted
+  limit was written too narrowly **three times running** before being pinned by an assertion rather
+  than described. Judge round 2 `risk=low confidence=high`.
   Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
   `docs/features/git-guard-empty-index.md` `## Verification`, and
   `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;
