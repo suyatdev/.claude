@@ -843,6 +843,24 @@ how this file and its linked files should be written (plain language, major chan
   the noisy direction is the dangerous one — a permanently-red check teaches the reader to ignore
   it, and ADR 0015 cites this script as *the* thing that demonstrates the fix. Detail in
   `coding-memory/pr-tracking.md` §PR #38.
+  · ✅ **FIXED — PR #39 OPEN 2026-08-04**, https://github.com/suyatdev/.claude/pull/39, branch
+  `fix/falsifier-base-pin`, judge `risk=low confidence=high`. Two parts, not one: pin the default to
+  `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
+  leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
+  `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
+  · 🆕 **NEXT ITEM — the same class is live and SILENT in `git-guard.replay.sh:13-15`.** It
+  hard-codes `git show main:…` for all three files it compares and takes **no** base parameter.
+  Verified: those three files are byte-identical to `main` today, so its `378 identical, 0 relaxed`
+  is a **tautology — a false green**, and this repo has cited that 378/378 as evidence in several
+  rounds. **Quieter than the falsifier's failure and therefore worse.** Needs a different remedy:
+  assert base ≠ candidate ("this proves nothing" if they match) *plus* the missing base parameter.
+  · 📐 **The general rule, worth generalising beyond these two scripts:** a differential harness's
+  baseline must be a **fixed commit, never a branch** — a branch that will eventually contain the
+  change under test is not a baseline, it is the thing being tested twice. And the harness must
+  **prove its own baseline is valid** before reporting any row, because otherwise a broken control
+  is indistinguishable from broken code.
+  · ⚠️ **Calibration: the judge passed PR #38 at `risk=low` and did not catch the moving baseline.**
+  A human found it post-merge, by running the script from `main`. The judge is a check, not a proof.
   Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
   `docs/features/git-guard-empty-index.md` `## Verification`, and
   `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;

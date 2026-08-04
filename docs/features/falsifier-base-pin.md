@@ -120,4 +120,33 @@ Scenario D: an explicit valid base still works
       this the branch would have been untested by all four scenarios.
 - [x] 5. Dependent suites unchanged: **492 checks, 0 failed** (35·77·16·134·101·78·51). `bash -n`
       clean. No file outside `hooks/shell-segments-falsifier.sh` changed.
-- [ ] 6. Observability judge, then PR.
+- [x] 6. Observability judge on `d0dac2e` — **`risk=low confidence=high`**, 9/10 pass, one
+      `success_masking` concern (the replay harness below). Verdict:
+      `coding-memory/observability-judge/2026-08-04-fix-falsifier-base-pin.md`. **PR #39** opened at
+      that commit.
+
+## What the judge added, and the one thing it found
+
+It did not take the probe on trust. It extracted **every version of `shell_segments.py` that has ever
+existed** and ran the self-check against each — no disagreements — then measured *why* the leading
+redirect is the right probe: of the five command shapes the rig tests, it is the **only** one whose
+behaviour differs before and after the fix. The other four are identical in both worlds and would
+have made a useless probe. It also fed four broken baselines (syntax error, wrong return shape,
+missing function, noisy import); all four are refused.
+
+It also said plainly that it passed PR #38 at `risk=low` and **did not catch** that the baseline was
+a moving ref — a human found that post-merge. Worth keeping: the judge is a check, not a proof.
+
+### 🆕 The same class is alive in `git-guard.replay.sh` — NOT fixed here
+
+`git-guard.replay.sh:13-15` hard-codes `git show main:…` for all three files it compares, with **no
+override parameter** (`grep -c 'BASE_REV|${1:-|getopts'` → 0). Confirmed independently on this
+branch: `git-guard.sh`, `classify-git-command.py` and `shell_segments.py` are all **byte-identical to
+`main`** right now, so its `378 identical, 0 relaxed, 0 stricter` is a tautology — **a false green**.
+
+Same class, **quieter direction, which is worse**: the falsifier screamed in red, replay smiles and
+says nothing. The argument for part 2 of this change applies to it word for word.
+
+Deliberately left for its own branch — widening a fix mid-branch is how this repo has shipped a
+second defect alongside the first, and replay needs a *different* remedy (a "base and candidate are
+identical, this proves nothing" assertion, plus the base parameter it lacks). Queued.

@@ -659,6 +659,39 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - next: queue item 5 (marker-gate spec) is unblocked — its tokenisation depended on this. Plus the
   falsifier base pin above.
 
+### PR #39 — fix/falsifier-base-pin (OPEN, opened 2026-08-04)
+- repo: suyatdev/.claude · branch: fix/falsifier-base-pin · remote: origin
+  (git@github.com:suyatdev/.claude.git)
+- PR: https://github.com/suyatdev/.claude/pull/39 · status: **OPEN**. Created at HEAD `d0dac2e`
+  (single commit). Branched from `main` @ `e0d8546`.
+- session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session as #38.
+- scope: `hooks/shell-segments-falsifier.sh` only. **Its baseline defaulted to `main`**, a moving
+  ref, and the branch that wrote it existed in order to merge there — so it self-invalidated at
+  `cc035d2`, ~40 min after being written, and reported **4 rows UNEXPECTED, exit 1, permanently**.
+  Every `new=` column was still correct; only the baseline had moved, and nothing said so.
+- fix is **two parts, deliberately**: pin the default to `bc7da76`, *and* self-check that the base
+  actually predates the fix before any row runs. The pin alone cures the symptom and leaves the
+  failure mode — a silently invalid baseline reported as content failures — intact for the next
+  caller who passes a base by hand. User chose this over pin-only and over dropping the diff.
+- judge: **`risk=low confidence=high`**, 9/10 pass, one `success_masking` concern (the replay
+  harness below). `coding-memory/observability-judge/2026-08-04-fix-falsifier-base-pin.md`.
+  It verified the probe by extracting **every** historical version of `shell_segments.py` and
+  running the self-check against each, and measured that the leading redirect is the **only** one of
+  the rig's five shapes that behaves differently pre/post fix — a deliberate probe, not a lucky one.
+- ⚠️ **the judge passed PR #38 at `risk=low` and did NOT catch that its baseline was a moving ref** —
+  a human found it post-merge. Keep as calibration: the judge is a check, not a proof.
+- 🆕 **SAME CLASS STILL LIVE, next item: `git-guard.replay.sh:13-15`** hard-codes `git show main:…`
+  for all three compared files, with **no override parameter**. Confirmed independently: those three
+  files are byte-identical to `main` right now, so its `378 identical, 0 relaxed` is a tautology —
+  **a false green**. Quieter than the falsifier's failure and therefore worse. Needs a *different*
+  remedy: a "base and candidate are identical, this proves nothing" assertion, plus the base
+  parameter it lacks. Not folded into #39 on purpose — widening a fix mid-branch is how this repo
+  has previously shipped a second defect alongside the first.
+- also open, flagged twice now: `hooks/README.md` does not mention the falsifier at all, though
+  ADR 0015 designates it the evidence for a Tier-1 guard fix.
+- canonical record: `docs/features/falsifier-base-pin.md`.
+- next: user merges in the GitHub UI, then the replay harness above.
+
 ### Branch cleanup — 2026-08-04 (authoritative; supersedes older per-entry deletion notes)
 
 Every branch merged into `main` was deleted, **local + remote**, at `main` @ `c3ec4b1`:
