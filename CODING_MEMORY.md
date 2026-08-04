@@ -985,8 +985,13 @@ how this file and its linked files should be written (plain language, major chan
   `Edit|Write|NotebookEdit`), and separately observed firing on 2026-08-03 (it was what blocked the
   auto-memory directory write — Defect B). Live hooks are git-guard, doc-guard, judge-guard,
   merge-guard, pane-dispatch-guard, context-handoff-watch, memsearch-nudge, **phase-guard**, and the
-  orca `claude-hook.sh`. Committed `settings.json` == live file, no `settings.local.json` (checked
-  2026-08-04) — so the committed≠armed split that produced the original entry is closed. Deciding
+  orca `claude-hook.sh`. **Committed vs live `settings.json` differ only in the machine-local
+  `model` line** (`claude-fable-5[1m]` committed, `opus[1m]` live — the difference §PR #36 already
+  called expected); every hook registration is byte-identical, so the committed≠armed split that
+  produced the original entry is closed. ⚠️ **`git status` cannot detect drift on this file** —
+  `skip-worktree` is set (`git ls-files -v settings.json` → `S`), which is the whole mechanism
+  behind the original split. The only sound check is
+  `git show HEAD:settings.json | diff - settings.json`. Checked that way 2026-08-04. Deciding
   which of the remaining four to wire up is **open work, user's call** — the secret/unicode scanners
   in particular are advertised protection that is not running.
 - **Pane-dispatch note 2026-08-02 (corrected):** the compliance judge's `wait` returned **exit 2

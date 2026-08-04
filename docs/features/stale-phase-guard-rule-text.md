@@ -27,7 +27,7 @@ This is a documentation-accuracy fix. **No hook, script, or setting changes.**
 | Dormant hooks number **four** | `checkpoint-before-modify`, `require-project-standards`, `scan-invisible-unicode`, `scan-secrets` — zero occurrences each in `settings.json` |
 | `hooks/` holds **twelve** non-test scripts | `ls hooks/*.sh` minus `.test.`/`replay` |
 | **Eight** are registered | git-guard, doc-guard (×2), judge-guard, merge-guard, pane-dispatch-guard, context-handoff-watch, memsearch-nudge, phase-guard |
-| No committed-vs-live drift | `git status --porcelain settings.json` empty; no `settings.local.json` exists |
+| Committed vs live `settings.json` | Differ **only** in the machine-local `model` line; all hook registrations byte-identical. ⚠️ First measured with `git status --porcelain`, which is **unsound here** — `skip-worktree` is set (`git ls-files -v` → `S`), so status is blind to this file by design. Re-measured with `git show HEAD:settings.json \| diff - settings.json` |
 
 ## The correction must not overshoot
 
