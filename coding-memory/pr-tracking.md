@@ -580,8 +580,9 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   (git@github.com:suyatdev/.claude.git)
 - PR: https://github.com/suyatdev/.claude/pull/37 · status: **MERGED 2026-08-04** (merge commit
   `beb7e33`, PR tip `30e3060`; created at HEAD `053d59c`). Merged in the GitHub UI by the user.
-  Branch NOT deleted, local or remote. Verified on `main` after pull: both corrected strings present
-  in `rules/gates.md` and `CODING_MEMORY.md`, not merely reported as merged.
+  Branch **DELETED 2026-08-04, local + remote** (see Branch cleanup below). Verified on `main` after
+  pull: both corrected strings present in `rules/gates.md` and `CODING_MEMORY.md`, not merely
+  reported as merged.
 - session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session for every push so far.
 - scope: **part (a) only** of the follow-up named in §PR #36's `next:` — corrected wording in
   `rules/gates.md` (2 sites) and `CODING_MEMORY.md` (1 site). Docs only, no hook/script/settings
@@ -601,3 +602,25 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - found, not fixed: `CODING_MEMORY.md:2048-2051` claims `git-guard`/`merge-guard`/`doc-guard` have
   no test suite at all, but §PR #36 reported git-guard at 77/0 — likely stale in the same way this
   PR's target was.
+
+### Branch cleanup — 2026-08-04 (authoritative; supersedes older per-entry deletion notes)
+
+Every branch merged into `main` was deleted, **local + remote**, at `main` @ `c3ec4b1`:
+`feat/pane-split-policy`, `fix/pr26-stranded-commits`, `fix/stale-phase-guard-rule-text`,
+`worktree-phase-guard-hook`, `fix/git-guard-empty-index`. Deleted with `git branch -d` (never `-D`),
+so git itself confirmed each was merged. GitHub retains merged PR head refs, so any of these can be
+restored from its PR page.
+
+`.claude/worktrees/git-guard-empty-index` was removed with `--force` to free its branch. The
+uncommitted change it held — long carried in the handoff as "a dirty `settings.json` that is NOT
+mine", ask before touching — was inspected first and was **one line**, `"model": "sonnet"`. A local
+preference, not work. Worktrees keep their own index, which is why `skip-worktree` on the main
+checkout did not hide it there.
+
+**Older entries above saying a branch was "NOT deleted" are point-in-time records and are now
+superseded by this note** — e.g. §PR #21's `feature/add-claude-code-handoff`, which is likewise
+absent from both sides today.
+
+**Still present, all unmerged, deliberately untouched:** `backup-calibration-policy-propagation`
+(local only), `docs/verify-before-claiming` (checked out in the surviving `verify-rule` worktree),
+`feature/cmux-version-gate`, `feature/judge-terminal-enforcement`.
