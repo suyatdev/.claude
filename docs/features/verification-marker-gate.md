@@ -2,7 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 4
+revision: 5
+waived: [writing-specs/command-grammar]
 ---
 
 # verification-marker gate
@@ -248,12 +249,15 @@ MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 Python form, for pairs 6, 12 and 13:
 
 ```python
+# at module level, at the TOP of the suite, before any os.chdir — both values ABSOLUTE:
+MARKER_SELF = os.path.abspath(__file__)
+MARKER_ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+
 # after the tally, in the suite's __main__:
 if failures == 0:
-    root = subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                          capture_output=True, text=True, check=True).stdout.strip()
-    subprocess.run([sys.executable, "-I", "hooks/lib/write-test-marker.py",
-                    os.path.abspath(__file__)], cwd=root, check=True)
+    subprocess.run([sys.executable, "-I", "hooks/lib/write-test-marker.py", MARKER_SELF],
+                   cwd=MARKER_ROOT, check=True)
 ```
 
 Resolved from the **repo root**, not `$(dirname "$0")/lib` — that round-1 form resolves only for the
@@ -271,6 +275,15 @@ in the values it was handed. Launched from a suite sitting in `$TMP`, `ls-files`
 `rev-parse` returns the throwaway repo — so the mandated `|| exit 1` would have left that suite
 permanently red. Hence: **absolute `MARKER_SELF`, and the writer invoked with `cd "$MARKER_ROOT"` in
 a subshell.** Task 8 must not paste the call blindly into any suite.
+
+**The rule binds both forms identically, and round 4's Python form broke it.** That form resolved
+`--show-toplevel` inside `__main__`, at the bottom — and `os.path.abspath(__file__)` there is equally
+cwd-dependent, since `__file__` may be relative on Python 3.9.6. §Testing requirements obliges pairs
+12 and 13 to build throwaway repos, so a Python suite that `os.chdir`s into one would hand the writer
+that repo as its root. The two forms are therefore written as mirrors: **capture `MARKER_SELF` and
+`MARKER_ROOT` at module level before any chdir, both absolute; pass `MARKER_SELF`; run the writer with
+`MARKER_ROOT` as its cwd** — `cd` in a subshell for shell, `cwd=` for Python. A reviewer should be able
+to diff the two blocks and find no behavioural difference.
 
 A failed marker write **fails the suite**. A silent no-marker would surface later as a confusing block.
 
@@ -342,10 +355,49 @@ unit-testable, not less. The four reused fail-open defences survive intact; only
 | `v` | `1` | schema sentinel — status *and* shape, because three rounds on `judge-guard` showed a status check alone accepts a component that answers and then dies |
 | `tool` | string | `tool_name` from the payload; only ever used to settle what an **absent** command means |
 | `kind` | `COMMIT` \| `OTHER` \| `NOTHING_RUNNABLE` | `NOTHING_RUNNABLE` = command absent, empty, or only whitespace/control characters |
-| `form` | `PLAIN` \| `PATHSPEC` \| `ALL` \| `INCLUDE` \| `INVALID` \| `FOREIGN` | see the resolution table |
+| `form` | `PLAIN` \| `PATHSPEC` \| `ALL` \| `INCLUDE` \| `INVALID` \| `FOREIGN` \| `NONE` | see the resolution table; `NONE` is the value whenever `kind` is not `COMMIT` |
 | `amend` | bool | `--amend` present |
 | `paths` | list of strings | the pathspec operands; empty unless `form` is `PATHSPEC` or `INCLUDE` |
 | `exempt` | the **raw** `TEST_EXEMPT` value, JSON-escaped, or `""` when unset or empty | parsed from the command **string** — a `VAR=x` prefix never reaches a hook's environment. **The classifier does not sanitise it** |
+
+**The contract is total over `kind`, and that totality is the round-5 `api-contracts` fix.** Rounds
+1–4 specified the fields for a `COMMIT` and left every other output undefined, while the hook validates
+**every field against its domain before it ever consults `kind`** — the flowchart's `CO` node precedes
+`E`. A conforming classifier answering a payload like `ls` therefore had no legal value to put in
+`form`, and whatever it chose tripped `MSG_CLASSIFIER_BAD_OUTPUT`: the component failing its own
+contract on the commonest input it will ever see. Rounds 1–4 each fixed the cell the judge named and
+left the rest of the grid undefined, which is why this violation recurred in four different places.
+Every cell is now defined:
+
+| field | `kind: COMMIT` | `kind: OTHER` | `kind: NOTHING_RUNNABLE` |
+|---|---|---|---|
+| `v` | `1` | `1` | `1` |
+| `tool` | `tool_name`, verbatim | `tool_name`, verbatim | `tool_name`, verbatim |
+| `form` | one of the six commit forms | **`NONE`** | **`NONE`** |
+| `amend` | `--amend` present | **`false`** | **`false`** |
+| `paths` | operands; `[]` unless `PATHSPEC`/`INCLUDE` | **`[]`** | **`[]`** |
+| `exempt` | raw `TEST_EXEMPT`, or `""` | raw `TEST_EXEMPT`, or `""` | **`""`** |
+
+`NONE` is a **value** of `form`, not an absence. No field is ever optional and no field is ever null,
+so the hook's domain check needs no per-kind special case — which is what kept re-introducing this
+defect. `exempt` is still reported under `OTHER` because `TEST_EXEMPT=x ls` lexes perfectly well and
+the hook, not the classifier, decides what an exemption is worth; under `NOTHING_RUNNABLE` there is no
+command string to parse one out of, so `""` is the only honest answer.
+
+**Validation order — stated, because the flowchart and the prose disagreed about it.** The hook
+applies exactly two checks, in this order:
+
+1. **Shape and domain, at node `CO`, for every payload regardless of `kind`:** output parses as one
+   JSON object, `v == 1`, every field present, each inside the domain above, `paths` a list of
+   strings, `exempt` a string. Anything else → `MSG_CLASSIFIER_BAD_OUTPUT` → block. This check never
+   inspects the *content* of `exempt`.
+2. **Exemption validity, at node `H`, only once `kind == COMMIT`:** a non-empty `exempt` must match
+   `^[^\x00-\x1f\x7f]{1,200}$`, else **`MSG_BAD_EXEMPT`** — its own door, because a malformed
+   exemption reason is a user error, not a broken component. Over-length is rejected, never silently
+   truncated: a truncated reason in the exemption log is an unauditable exemption.
+
+Putting the regex at step 1 would let `TEST_EXEMPT=$'a\nb' ls` — a non-commit — block the session,
+which is why the order is load-bearing rather than incidental.
 
 **The classifier no longer strips control characters, and this is the round-2 `api-contracts` fix.**
 The strip was a leftover from the dead two-line protocol; a JSON string survives a newline intact, so
@@ -353,12 +405,10 @@ sanitising bought nothing and made the hook's re-validation unreachable — the 
 a block for a newline-bearing `TEST_EXEMPT` could only pass by breaking the classifier. The contract
 is now single-sourced: **the classifier reports, the hook decides.**
 
-Read-side validation in the hook: output parses as a JSON object, `v == 1`, every field present and
-inside its domain, `paths` a list of strings. Anything else → `MSG_CLASSIFIER_BAD_OUTPUT` → block.
-Existence is not usability. A non-empty `exempt` is validated separately against
-`^[^\x00-\x1f\x7f]{1,200}$`; a failure is **`MSG_BAD_EXEMPT`**, its own door, because a malformed
-exemption reason is a user error and not a broken component. Over-length is rejected, never silently
-truncated — a truncated reason in the exemption log is an unauditable exemption.
+Existence is not usability. The two numbered checks above are the **whole** of read-side validation and
+are specified once, there — this paragraph deliberately does not restate them. Round 4 carried a second
+copy of the validation rules here, and the two copies is how the `exempt` ordering came to be specified
+one way in the prose and another way in the flowchart.
 
 **`python3 -I`** at every call site, so a stray `json.py` in the working directory cannot shadow the
 helper and block every Bash command.
@@ -408,6 +458,24 @@ pathspec (G5). Two groups, and the distinction is load-bearing:
 - **Optional value, attached only** — these must **never** consume the next token, or they would eat
   a pathspec: `-u/--untracked-files`, `-S/--gpg-sign`.
 
+> ⚠️ **UNRESOLVED — user-waived at round 5 (`writing-specs/command-grammar`), decided elsewhere.
+> Do not implement rule 2 as written.** Rule 2's unqualified "`--opt value` consumes the next token"
+> contradicts the group immediately above it, which names `--untracked-files` and `--gpg-sign` as long
+> options that must never consume one. Measured on git 2.50.1:
+> `git commit -m msg --untracked-files foo.sh` ships the **worktree** blob, because `foo.sh` is a
+> pathspec — so a classifier applying rule 2 literally reports `PLAIN`, hashes the index, and re-opens
+> G2, the exact fail-open this section exists to close. The section also does not state how the command
+> string becomes tokens, how `git <global-opts> commit` is told from `git commit <opts>` (which
+> `FOREIGN`'s `-C` test depends on), or how a `git add … && git commit …` chain is segmented.
+>
+> **Deferred, not dismissed.** This is the same tokenisation question `hooks/lib/shell_segments.py`
+> already answers for `git-guard`, `doc-guard` and `classify-pr-command.py`, and the open defect where
+> a redirection after a pathspec becomes a phantom operand is a defect in *that* file. Writing a
+> second, independent grammar here is precisely how the two would drift apart — the outcome this
+> document's own follow-up list warns about. **The decision is made once, in the shared lexer, and
+> this section then cites it rather than restating it.** Implementation of this feature is blocked on
+> that decision landing; the rest of the spec is not.
+
 `--pathspec-from-file` is **refused**, not half-supported: it sources operands from a file the hook
 would have to read and re-resolve. It joins `INCLUDE` under `MSG_UNSUPPORTED_FORM`.
 
@@ -446,15 +514,28 @@ an infrastructure failure.
 **Every row's trigger is the decomposed flag set from §"The command grammar", never a raw token
 match.** `-am` reaching the `ALL` row rather than the `PLAIN` row is the whole point of that section.
 
+**`NONE` has no row here, and that is not a gap.** It cannot reach this table: the hook consults `form`
+only after `kind == COMMIT` (the flowchart's `E` precedes `I`), and `NONE` is by definition the value
+for every non-`COMMIT` output. The table is total over the forms that reach it — six of the seven
+domain values — and the seventh is unreachable by construction rather than undefined by omission.
+
 **Post-commit content of a pair member that is NOT in the path set.** Round 2 defined content only for
 paths *in* the path set, while the pairing rule hashes **both** members — so the commonest real case
 had no defined answer. The rule is uniform: **the blob the resulting commit's tree will hold.**
 
-| `form` | member outside the path set |
-|---|---|
-| `PLAIN` | index blob — the new tree *is* the index |
-| `PATHSPEC` | the `<base>` blob: the commit does not touch it |
-| `ALL` | worktree blob for a tracked path — `-a` would stage it |
+| `form` | member outside the path set | why |
+|---|---|---|
+| `PLAIN` | index blob | the new tree *is* the index |
+| `PATHSPEC` | the `<base>` blob | the commit does not touch it |
+| `ALL` | the `<base>` blob | **corrected in round 5.** Outside this path set means *unmodified against `<base>`* — the path set is every tracked worktree difference — so the base and worktree blobs are identical here and `-a` changes nothing. Round 4 said "worktree blob for a tracked path" and left the untracked case undefined |
+
+**Why the `ALL` row is stated against `<base>` and not the worktree.** The two blobs are equal for
+every path this row can reach, so the choice looks cosmetic and is not: naming the worktree invites a
+`hash-object` on any path that happens to be on disk, and **an untracked file is on disk without ever
+entering the commit.** Measured on git 2.50.1: with `note.txt` untracked, `git commit -am y` produces a
+tree with no entry at `note.txt`. Naming `<base>` makes the untracked case fall out of the rule rather
+than needing a clause — which is exactly the difference between a total table and one with a guard on
+its last row.
 
 **Measured (M4):** with `foo.sh` and `foo.test.sh` both modified in the worktree,
 `git commit -m x -- foo.sh` yields `HEAD:foo.test.sh` = the **old** content, while the worktree holds
@@ -462,18 +543,29 @@ the new one, and the two blobs differ. So a pair whose test was edited but not c
 against the base blob and **blocks with `MSG_STALE_TEST`** — correct and fail-closed: the shipped
 combination of new subject and old test is one no suite run ever certified.
 
-**ABSENT is a defined result, not a git failure — and it is probed against the source the content
-actually comes from.** Round 3 probed `<base>` unconditionally, which was wrong in both directions: a
-member staged for deletion passes a base probe, so the gate would allow a commit whose tree drops it,
-and under `ALL` a member deleted from the worktree turned `git hash-object`'s exit 128 into
-`MSG_GIT_FAILED` instead of a stale door. **The probe follows the content source, per the two tables
-above:**
+**ABSENT is a defined result, not a git failure.** Rounds 3 and 4 each wrote a probe table and each
+had a cell that disagreed with the principle the table was supposed to implement — round 3 probed
+`<base>` unconditionally, round 4 probed the *disk* under `ALL` and so reported an untracked file
+present. The round-5 fix is to stop treating the probes as the rule. There is **one** definition:
 
-| content source | ABSENT test |
-|---|---|
-| index blob (`PLAIN`; any member) | `git ls-files --stage -- <path>` prints nothing |
-| worktree blob (`PATHSPEC` in-pathspec, `ALL` tracked) | the path does not exist on disk |
-| `<base>` blob (`PATHSPEC`, member outside the pathspec) | `git cat-file -e <base>:<path>` exits non-zero |
+> A pair member is **ABSENT** iff **the resulting commit's tree will have no entry at its path.**
+
+The probes below are *implementations* of that sentence for each content source, and a probe that ever
+disagrees with it is a defect in the probe. Stating the semantics separately from the mechanics is what
+makes the next case derivable instead of needing another round:
+
+| content source | ABSENT iff | covers |
+|---|---|---|
+| index blob (`PLAIN`, any member) | `git ls-files --stage -- <path>` prints nothing | untracked (no index entry) and staged-for-deletion (entry removed) |
+| worktree blob (`PATHSPEC`, member *in* the pathspec) | the path does not exist on disk | a pathspec naming a deleted file commits the deletion |
+| `<base>` blob (`PATHSPEC` outside the pathspec; **`ALL` outside the path set**) | `git cat-file -e <base>:<path>` exits non-zero **or** the path does not exist on disk | untracked → no base entry → ABSENT; tracked but deleted in the worktree → `--diff-filter=d` keeps it out of the path set while `-a` still stages the deletion → ABSENT |
+
+The `ALL`-outside row is the only two-condition cell, and it is two conditions because two different
+states produce an empty tree entry there. Round 4's single disk check got the first wrong; round 3's
+single base check got the second wrong. Enumerating both is what closes the pair.
+
+Under `ALL`, a member **in** the path set needs no ABSENT case at all: `--diff-filter=d` has already
+removed deletions, so every path the collector returns exists on disk.
 
 ABSENT means the pair cannot be certified: the door is `MSG_STALE_SUBJECT` / `MSG_STALE_TEST`, *not*
 `MSG_GIT_FAILED`. The gate never calls `hash-object` on a path it has already found ABSENT, which is
@@ -576,10 +668,18 @@ runnable and no `commit` anywhere is allowed, correctly: nothing in it can commi
 The filter skips only commands that could not classify as `COMMIT`, except for shapes already on the
 accepted-open list (alias and variable indirection).
 
-**Budgets — targets, not measurements; checklist task 10 measures them and records the numbers:**
-≤5 ms added for a non-commit Bash call (pure bash, no subprocess), ≤150 ms for an actual `git commit`.
-If the measured figure exceeds the budget, the number gets recorded and the budget revised — it does
-not get quietly dropped.
+**Budgets — targets, not measurements; checklist task 10 measures and records all three:**
+
+| payload | budget | what it pays for |
+|---|---|---|
+| no `commit` substring anywhere | **≤5 ms** | pure bash, no subprocess — the pre-filter exits 0 |
+| mentions `commit` but is not one (`kind: OTHER` or `NOTHING_RUNNABLE`) | **≤80 ms** | one `python3 -I` start (measured ≥56 ms) plus classification; no git calls |
+| an actual `git commit` | **≤150 ms** | the above plus the collection and hashing calls |
+
+**The middle row is new in round 5**, and it exists *because* the contract became total: `kind: OTHER`
+is now a defined and plainly reachable output — `echo "commit this"` and `git log --grep commit` both
+land there — and an output with no budget is a cost nobody measures. If a measured figure exceeds its
+budget, the number gets recorded and the budget revised; it does not get quietly dropped.
 
 ## Scenarios
 
@@ -863,6 +963,31 @@ Scenario: a member staged for deletion is ABSENT under an index source
    # PLAIN's content source is the index, so the ABSENT probe is "ls-files --stage prints
    # nothing"; probing <base> instead would pass and allow a commit whose tree drops the test
 
+Scenario: an untracked pair member is ABSENT under -a, never hashed from disk
+  Given hooks/foo.sh is tracked, modified, and covered by a valid marker
+    And hooks/foo.test.sh is UNTRACKED and present on disk
+   When "git commit -am msg" runs
+   Then the hook exits 2 with MSG_STALE_TEST
+   # measured on git 2.50.1: -a does not add an untracked file, so the resulting tree holds no
+   # entry for it. Round 4's disk probe reported it present and hashed a blob the commit will
+   # never contain — the gap that made ABSENT a semantic definition rather than three probes
+
+Scenario: a payload that mentions commit without being one is fully classified and allowed
+  Given a Bash payload whose command is: echo "commit this"
+   When the hook runs
+   Then the classifier reports kind OTHER with form NONE, and the hook exits 0
+   # the substring pre-filter cannot rule this out, so the contract must define every field for
+   # a non-commit; form NONE is a value, and a classifier emitting null here would trip
+   # MSG_CLASSIFIER_BAD_OUTPUT on the commonest input the gate sees
+
+Scenario: a malformed TEST_EXEMPT on a non-commit does not block
+  Given a Bash payload that sets TEST_EXEMPT to a value containing a newline
+    And whose command is not a commit
+   When the hook runs
+   Then it exits 0
+   # the exempt regex is checked at node H, only once kind is COMMIT; folding it into shape
+   # validation would let any non-commit carrying a stray TEST_EXEMPT block the session
+
 Scenario: a non-Bash tool with no command passes
   Given an Edit payload with no command field
    When the hook runs
@@ -908,20 +1033,28 @@ figure was twelve; with the two this round adds it is **fourteen**.
 
 | # | constant | fires when |
 |---|---|---|
-| 1 | `MSG_BAD_PAYLOAD` | the PreToolUse payload does not parse |
+| 1 | `MSG_BAD_PAYLOAD` | the classifier exits **3** — the PreToolUse payload does not parse |
 | 2 | `MSG_NOTHING_RUNNABLE` | `Bash` payload with no runnable command |
 | 3 | `MSG_NO_PYTHON` | `python3` missing or not executable |
 | 4 | `MSG_CLASSIFIER_MISSING` | the classifier file is absent or unreadable |
-| 5 | `MSG_CLASSIFIER_FAILED` | the classifier exits non-zero or prints nothing |
+| 5 | `MSG_CLASSIFIER_FAILED` | the classifier exits non-zero **other than 3**, or exits 0 printing nothing |
 | 6 | `MSG_CLASSIFIER_BAD_OUTPUT` | output is not one JSON object passing every field check |
 | 7 | `MSG_BAD_EXEMPT` | a non-empty `TEST_EXEMPT` fails `^[^\x00-\x1f\x7f]{1,200}$` |
-| 8 | `MSG_UNSUPPORTED_FORM` | `-i`/`--include`, whose contents the gate will not guess at |
+| 8 | `MSG_UNSUPPORTED_FORM` | `form: INCLUDE` — `-i`/`--include` **or `--pathspec-from-file`**, whose contents the gate will not guess at |
 | 9 | `MSG_FOREIGN_REPO` | the commit's target repository cannot be determined |
 | 10 | `MSG_GIT_FAILED` | an unexpected non-zero exit from a collection or hashing command |
 | 11 | `MSG_NO_MARKER` | a pair is in the path set with no marker file |
 | 12 | `MSG_BAD_MARKER` | the marker exists but fails schema or path validation |
 | 13 | `MSG_STALE_SUBJECT` | the marker is valid but the subject blob does not match |
 | 14 | `MSG_STALE_TEST` | the marker is valid but the test blob does not match, or the test is ABSENT |
+
+**Each row names its trigger, and no row restates a rule specified elsewhere — the round-5 structural
+fix.** Rows 1 and 5 partition the classifier's exit codes and are now the *only* place that mapping
+appears; round 4 kept a second copy in §3's prose, the two disagreed about exit 3, and the table held
+the stale one. Row 8's trigger is `form: INCLUDE`, so adding a form to that door is a change to the
+resolution table, not to this one. **Anything a reviewer would otherwise have to keep in sync by hand
+lives in exactly one table, with the others pointing at it.** Four rounds of this violation were all
+the same shape: two copies of one rule, edited singly.
 
 The suite asserts **the message, not just the code** — mutation testing on `judge-guard` showed 48
 assertions that could not tell one door from another, and a mutant survived a happy 101/0 suite.
@@ -963,9 +1096,12 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
 - `hooks/lib/classify-commit-command.test.py` — direct unit assertions on the JSON contract: **one
   case per grammar row G1-G9**, bundle decomposition with both attached and detached values, every
   value-taking flag in both groups, `--opt=value`, a `--` inside a value, every `form` including
-  `INCLUDE`, `--amend`, the **unsanitised** `exempt` passthrough, the `FOREIGN` triggers, exit 3 for
-  an unreadable payload, and the accepted-open shapes, so closing one later is a conscious decision
-  with a failing test rather than drift. **This suite is where the two measured fail-opens are pinned;
+  `INCLUDE` and `NONE`, `--amend`, the **unsanitised** `exempt` passthrough, the `FOREIGN` triggers,
+  exit 3 for an unreadable payload, and the accepted-open shapes, so closing one later is a conscious
+  decision with a failing test rather than drift. **Every cell of the `kind` × field totality matrix
+  gets its own assertion** — 18 cells, not just the `COMMIT` column — because four rounds of
+  `api-contracts` were four different undefined cells, and a column nobody asserts is a column that
+  goes undefined again. **This suite is where the two measured fail-opens are pinned;
   if any single file in this feature deserves over-testing, it is this one.**
 - **Mutation check before the PR:** the 24 above.
 
@@ -977,7 +1113,10 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       `cmux.sh` coverage hole. Check the next free ADR number against `main` first.
 - [ ] 2. Red: `classify-commit-command.test.py` — **the grammar first** (G1-G9, bundles, value-taking
       flags in both groups, `--opt=value`, `--` inside a value), then every `form`, `--amend`, raw
-      `exempt` passthrough, `FOREIGN` triggers, `INCLUDE`, exit 3, ignored and accepted-open shapes.
+      `exempt` passthrough, `FOREIGN` triggers, `INCLUDE`, exit 3, ignored and accepted-open shapes,
+      **and all 18 cells of the `kind` × field totality matrix**. ⚠️ The grammar's rule 2 is
+      user-waived and unresolved — see the callout in §"The command grammar". Do not encode rule 2
+      literally; this task is blocked on the shared-lexer decision landing in `shell_segments.py`.
 - [ ] 3. Green: `hooks/lib/classify-commit-command.py`.
 - [ ] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
       schema, mode, failure exits. **No inventory assertion yet** — see task 8.
@@ -985,8 +1124,12 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
 - [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code.
 - [ ] 7. Green: `hooks/test-marker-guard.sh`.
 - [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
-      this feature's own 3 — capturing `$0` and the toplevel at the top of each (`judge-guard.test.sh`
-      cds at line 13). Add the two inventory assertions to `write-test-marker.test.py` in this same
+      this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
+      `MARKER_ROOT` captured at the top, before any chdir, both absolute; the writer run with
+      `MARKER_ROOT` as its cwd** (`cd` in a subshell for shell suites, `cwd=` for the three Python
+      ones). `judge-guard.test.sh` cds at line 13 and pairs 12–13 build throwaway repos, so a
+      bottom-of-file resolution is wrong in both languages. Add the two inventory assertions to
+      `write-test-marker.test.py` in this same
       commit. **Own commit**, measured behaviour-neutral against the unmodified hook — never bundled
       with a green step. ⚠️ **Tasks 5 and 8 revert as a pair** — round 3 said 7 and 8 and had the
       wrong hazard. The **writer** is task 5, so reverting 5 without 8 leaves 14 suites calling a
