@@ -802,6 +802,61 @@ how this file and its linked files should be written (plain language, major chan
   validate assertions, never the fixture's premise.** Any fix needs a case whose only `git add` is
   inside the command string. (Belongs in auto-memory as `feedback-fixture-must-not-pre-create-state`;
   **could not be written — see the phase-guard gap below.**)
+- **L1's fix — `fix/git-guard-empty-index`, four judge rounds. PR #36 OPEN 2026-08-04, awaiting
+  your merge in the GitHub UI** — https://github.com/suyatdev/.claude/pull/36. RUN 4 pinned
+  `5154dec`, `risk=medium confidence=high`.
+  ⚠️ Expect a `CODING_MEMORY.md` conflict at merge: take **this branch's** version of this region,
+  keep everything else from `main`. Verified — nothing unique to `main` is lost.
+  Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
+  `docs/features/git-guard-empty-index.md` `## Verification`, and
+  `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;
+  do not restate them here. The arc, because only the arc is not written down anywhere else:
+  · **Round 4 shipped a known hole rather than patching it — the first time this repo chose that.**
+  A pathspec naming a *directory* (`docs/x.md/`) clears the `docs/*.md` allowlist and commits
+  everything under it (2 → 0, latent). It is the third member of the class ADR 0014 already has a
+  heading for — "a path is not the file it names" — of which only `..` was fixed. After three rounds
+  of patch-the-instance, the class earns **one** fix: `..` ✅, directory ❌, symlink ❌ untested.
+  · **Rounds 1 and 2 both died the same death.** The design *enumerated the commands that fill the
+  index* so the hook could ask them for a file list. Round 1 (`5aa220e`) found `git add -- x &&
+  git commit` unmodelled; round 2 (`833e3eb`) found **nine more** — `git rm`, `git mv`,
+  `git reset --soft`, `git checkout <tree> -- <path>`, `git restore --staged`, `git apply --cached`,
+  `git stash pop --index`, `git cherry-pick -n`, `git revert -n` — four verified end-to-end putting
+  a source file onto `main`. **An enumeration of an open-ended set is only ever as complete as its
+  author's list, and each round's tests mirrored that same list, so green meant nothing.**
+  · **The design was abandoned, not patched a third time.** The narrowing (`4be542b`) stops asking
+  what filled the index and asks what the *commit itself* names after `--`, vetoing on anything that
+  could widen it. Blast radius measured by replay, now 63 shapes × 6 states: the rejected design
+  allowed **44** commands `main` blocks, the narrowing **13**, and after round 3 **8**, all
+  documentation-only.
+  · **RUN 3 @ `4be542b` — `risk=medium`, `regression: fail`, `success_masking: fail`. PR stays shut.**
+  Rounds 1-2 are genuinely closed (judge re-measured: 14/14 shapes block, `main=2 → HEAD=2`; suites
+  67/0, 73/0, 134/0; mutants for both incidental fixes caught). **Two NEW shapes, each verified
+  putting `src/app.sh` onto `main`:** (a) **facts are unioned across a chained line, not per-segment**,
+  so a docs pathspec on the first commit excuses a *bare* second commit — `git commit -m a --
+  docs/a.md && git add -- src/app.sh && git commit -m b`; the classifier already does this correctly
+  for `push`, so the fix is to make `COMMIT` veto per segment the way `PUSH_FORCE` does; (b) the
+  allowlist matches the **path string, not the path git resolves**, so `coding-memory/../src/app.sh`
+  satisfies `coding-memory/*`. `doc-guard` returns 0 on both — no backstop.
+  · ⚠️ **The completeness overclaim has now recurred in all three rounds.** ADR 0014 asserts the
+  policy is "provably never weaker than `main`" and "every path it grants is one the hook has
+  actually read"; both were disproved in minutes. The 51×6 replay contains **no two-commit chain and
+  no `..` path**, so it is evidence about that set, not the proof the ADR presents it as. Soften the
+  claim to what was measured — a stated completeness claim is load-bearing, as the ADR itself warns.
+  · ✅ **Both RUN 3 shapes closed 2026-08-03 — `b17a666` red, `d222e0e` green; RUN 4 not yet run.**
+  The rule that came out of it, to apply to any fact the classifier gains later: **a fact that
+  GRANTS permission must hold for the whole line; a fact that DENIES may hold for one segment.**
+  `PUSH_FORCE` was built that way, `COMMIT_PATHSPEC` was not. The `..` path is **refused, not
+  resolved** — resolving asks "relative to which directory?", which is Defect C's open question.
+  ADR 0014's two claims now read as measured-not-proven, and `git -C <dir> commit` (invisible to the
+  classifier, both hooks exit 0, not widened here) joined its open list.
+  · **Two unrelated defects found and fixed while narrowing, both measured:** `-i` was a **live
+  fail-open** (the `--` short-circuit returned before the flag table was read), and `has_fact`
+  **word-split** on tab-bearing facts, so a file literally named `PUSH_FORCE` let an unrelated
+  force-push through.
+  · **Pane note:** the first RUN 3 dispatch reported `PANE_REF: surface:109`-style success and then
+  **vanished** — surface gone from `cmux tree`, no result file, no `claude -p`, and **no
+  adapter-failure cooldown recorded**, because `open_pane` had returned 0. The retry ran fine. A
+  reported pane is not a live pane; check `cmux tree --all` for the surface before trusting a wait.
 - 🔴 **`phase-guard.sh` BLOCKS THE AUTO-MEMORY DIRECTORY — found 2026-08-03, live.** Its exempt-path
   list at `hooks/phase-guard.sh:285` is
   `CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json` — which omits

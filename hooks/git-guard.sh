@@ -77,11 +77,15 @@ if ! facts=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null); the
   exit 2
 fi
 
+# One fact per LINE, and compared as a whole line. An unquoted `for f in $facts`
+# splits on bash's default IFS, which includes the TAB that carries a path in
+# `COMMIT_PATH<tab><path>` -- so committing a file named PUSH_FORCE produced the
+# token PUSH_FORCE and blocked the push in the very same command line.
 has_fact() {
   local f
-  for f in $facts; do
+  while IFS= read -r f; do
     [ "$f" = "$1" ] && return 0
-  done
+  done <<< "$facts"
   return 1
 }
 
@@ -93,6 +97,43 @@ on_main() {
   local b
   b="$(current_branch)"
   [ "$b" = "main" ] || [ "$b" = "master" ]
+}
+
+# The paths this commit names for ITSELF, or nothing at all.
+#
+# PreToolUse runs BEFORE the command, so `git add -- x && git commit -m msg -- x`
+# -- the form this repo mandates on every commit -- arrives here with NOTHING
+# staged. An empty index means "the index cannot answer", not "nothing is
+# allowed", so the command is asked instead. It is asked exactly ONE question:
+# which paths does the `commit` name after a `--`? Printing nothing means the
+# question had no answer, and the caller treats that as block.
+#
+# What this deliberately does NOT do is work out what the rest of the command
+# line will have staged by the time git looks. Two review rounds tried; each
+# enumeration was measured short (first the chain's own `git add`, then nine
+# further commands that fill the index), and short in the ALLOW direction is a
+# fail-open. Reading the commit's own pathspec is a much narrower question, and
+# every path it grants is one the hook has read off the command line -- but
+# "read" is not "resolved": a path with a `..` component names a file other than
+# the one the pattern matched, so the allowlist below refuses those outright.
+#
+# A pathspec is EXCLUSIVE -- git commits those paths and leaves whatever else is
+# staged sitting in the index -- but only while nothing else on the LINE widens
+# it. The classifier withholds COMMIT_PATHSPEC unless every commit segment names
+# its own paths and none of them carries -i/--include (unrecognised on purpose),
+# -a or --amend. The three checks below are belt and braces over that: they bind
+# across the whole line rather than per segment, so they can only ever refuse
+# more, and they keep a classifier regression from becoming a fail-open here.
+# See ADR 0014.
+commit_pathspec_files() {
+  local tab
+  tab=$(printf '\t')
+  if has_fact COMMIT_PATHSPEC \
+     && ! has_fact COMMIT_ALL \
+     && ! has_fact COMMIT_AMEND \
+     && ! has_fact COMMIT_BARE_ARGS; then
+    printf '%s\n' "$facts" | grep "^COMMIT_PATH${tab}" | cut -f2-
+  fi
 }
 
 # --- Guard 2: force-push ---
@@ -109,24 +150,46 @@ fi
 
 # --- Guard 1: default-branch commit ---
 if has_fact COMMIT && on_main; then
-  staged=$(git diff --cached --name-only 2>/dev/null || echo "")
-  allowed=1
-  if [ -z "$staged" ]; then
-    allowed=0
-  else
-    while IFS= read -r f; do
-      [ -z "$f" ] && continue
-      case "$f" in
-        # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
-        # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
-        CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
-        *) allowed=0 ;;
-      esac
-    done <<< "$staged"
+  files=$(git diff --cached --name-only 2>/dev/null || echo "")
+  label="Staged files"
+
+  if [ -z "$files" ]; then
+    files=$(commit_pathspec_files)
+    label="Files this commit would contain"
+    if [ -z "$files" ]; then
+      # Nothing staged AND the commit names nothing checkable. Everything this
+      # branch relaxed is above; this is main's behaviour, unchanged, and it is
+      # what keeps the ten commands that fill an index blocked without the hook
+      # having to know a single one of them.
+      printf 'git-guard: nothing is staged yet, so this commit is judged by the paths it names -- and it names none that can be checked.\n' >&2
+      printf 'Name them after a separator: git commit -m msg -- <path>\n' >&2
+      printf '(-a, --amend, -i/--include and an unseparated path all commit more than the paths given, so none of them can stand in for one.)\n' >&2
+      exit 2
+    fi
   fi
+
+  allowed=1
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+      # A `..` COMPONENT means the string matched here and the file git will
+      # actually commit are two different things: `coding-memory/../src/app.sh`
+      # satisfies `coding-memory/*`, and `docs/../notes.md` satisfies `docs/*.md`
+      # from anywhere in the repo. The hook may only judge what it has read, so a
+      # traversing path is refused rather than resolved — resolving it would mean
+      # answering "relative to which directory?", which is Defect C's question and
+      # is not settled here. A `..` inside a file NAME (`docs/v1..v2.md`) traverses
+      # nothing and is untouched by these four patterns.
+      ..|../*|*/../*|*/..) allowed=0 ;;
+      # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
+      # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
+      CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
+      *) allowed=0 ;;
+    esac
+  done <<< "$files"
   if [ "$allowed" -ne 1 ]; then
     printf 'git-guard: commits to main/master are blocked except documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' >&2
-    printf 'Staged files:\n%s\n' "$staged" | sed 's/^/  /' >&2
+    printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2
     printf 'Create a feature branch instead, or stage only documentation.\n' >&2
     exit 2
   fi
