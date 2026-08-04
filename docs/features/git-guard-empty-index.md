@@ -182,8 +182,25 @@ Fix: add `projects/*/memory/*` to that list. One line.
         (see `## Verification`); the real write happens on `main` after the PR lands.
 - [x] 7. Run both suites plus the neighbouring hook suites and `shellcheck -x`; record pass/fail
       in `## Verification`.
-- [ ] 8. Observability judge (implementation stage), then `gh pr create`. User merges in the
+- [x] 8. Observability judge (implementation stage), then `gh pr create`. User merges in the
       GitHub UI.
+      · ✅ **RUN 4 → PR #36 is open** — https://github.com/suyatdev/.claude/pull/36. Verdict
+        `coding-memory/observability-judge/2026-08-04-fix-git-guard-empty-index.md`, pinned
+        `5154dec`, **`risk=medium confidence=high`**. It re-derived rounds 1–3's closures rather
+        than trusting this checklist, and confirmed them.
+      · **Ordering that made the gate pass, worth reusing:** the judge writes its verdict but commits
+        nothing, `gh pr create` runs while HEAD still equals the judged sha, and the verdict is
+        committed *after* the PR exists. `judge-guard` reads the store from disk, not from git, so an
+        uncommitted verdict satisfies it — while a committed one moves HEAD and invalidates itself.
+        That is what bit RUN 3 (`f182def`).
+      · ⚠️ **Defect C bit a fourth time, on `gh pr create` itself.** `cd <worktree> && gh pr create`
+        fails: PreToolUse fires before the `cd`, so the hook judged `.claude@main`. The shell's cwd
+        must already be the worktree in a *previous* call.
+      · 🟡 **RUN 4 found a fourth instance of the "a path is not the file it names" class** — a
+        pathspec naming a **directory** (`docs/sneaky.md/`) matches the `docs/*.md` allowlist and
+        commits everything under it. Measured 2 → 0. Latent (nothing under `docs/` ends in `.md`).
+        Shipped documented rather than patched — user decision, 2026-08-04 — so the class gets one
+        fix instead of a fifth round. Recorded in ADR 0014 *Known open* and in PR #36's body.
       · **RUN 1 IS IN — `risk=high`, `confidence=high`, and it did NOT clear the branch.** Verdict
         `coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md`, pinned
         `5aa220e`. Every number I claimed re-measured exact (40/0, 134/0, 55/0, 37/3 replay, 36/4
@@ -336,3 +353,19 @@ and the index read, exactly as on `main`. The deferral stands and the cost is ba
 **Also open, pre-existing and NOT widened into this diff:** `--amend` with a *populated* index
 evaluates only the staged files, not HEAD's tree as well. Unchanged by this work; recorded so it
 is not mistaken for something this branch introduced.
+
+🟡 **Open, found by RUN 4 and NEW to this diff — a pathspec can name a directory.** The allowlist
+matches by file *type*, so a **directory** named `docs/anything.md` satisfies `docs/*.md` and git
+commits everything beneath it. Measured end-to-end: exit **2** on `main`, exit **0** here, with a
+shell script in the resulting commit. **Latent, not live** — no directory under `docs/` ends in
+`.md`, no symlinks — so it needs a deliberately misleading name to reach. Shipped documented rather
+than patched (user decision, 2026-08-04): it is the third member of the "a path is not the file it
+names" family (`..` ✅ fixed, directory ❌, symlink ❌ untested), and rounds 1–3 established that
+patching the instance found is what keeps the class open. Its fix must enumerate the family and
+carry a test that a directory whose *name* ends in `.md` is refused. ADR 0014 *Known open*.
+
+**The replay harness is now committed** at `hooks/git-guard.replay.sh` (63 commands × 6 states) —
+previously it lived only in a session scratchpad, so the strongest claim in this file could not be
+re-run by a reviewer. Note its own limitation, which RUN 4 named: the matrix has missed a shape in
+three consecutive rounds, including the directory case above. It is evidence, not proof — a command
+absent from the matrix is not a command that passed.

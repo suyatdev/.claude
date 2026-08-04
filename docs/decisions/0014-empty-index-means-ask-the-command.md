@@ -125,6 +125,12 @@ must be true of every segment; a denying fact may be true of any one.** `COMMIT_
 `COMMIT_PATH` entries are therefore withheld unless *every* commit on the line names its own paths
 and none of them is widened by `-a`, `--amend`, `-i` or an unreadable token.
 
+**"Every segment" means every segment the lexer can see.** The rule is only as wide as
+`shell_segments.py`, so a commit hidden inside `bash -c "git commit -m b"` is not a segment it
+withholds against — measured 2 → 0. That is the accepted-open lexing shape from ADR 0013, unchanged
+here; it is restated because this rule's guarantee is stated in terms of segments and would otherwise
+read as stronger than it is.
+
 ### A path is not the file it names
 
 The allowlist is a `case` over the literal token, and a `..` component makes the string matched and
@@ -132,6 +138,11 @@ the file committed two different things. It now refuses any path with a `..` **c
 `../*`, `*/../*`, `*/..`) before the allowlist is consulted, rather than resolving it — resolving
 would mean answering "relative to which directory?", which is the identity-from-cwd question left
 open below. A `..` inside a file *name* (`docs/v1..v2.md`) traverses nothing and stays allowed.
+
+⚠️ **This section fixes only the `..` half of the class it names.** A path can also fail to be the
+file it names by being a **directory** — see the first entry under *Known open* below. Recorded here
+rather than only there, because a reader who takes this heading at face value will believe the class
+is closed.
 
 ### Accepted costs
 
@@ -148,6 +159,16 @@ open below. A `..` inside a file *name* (`docs/v1..v2.md`) traverses nothing and
 
 ### Known open, deliberately
 
+- **A pathspec can name a directory.** The allowlist matches the literal token by file *type*, on the
+  premise that `docs/*.md` is a markdown file — but a **directory** named `docs/anything.md` matches
+  the same pattern, and git commits everything beneath it. Measured end-to-end by the RUN 4
+  observability judge: `git commit -m m -- docs/sneaky.md` exits **2** on `main` and **0** here, and
+  the resulting commit carried a shell script. **Latent rather than live**: no directory under
+  `docs/` ends in `.md` and there are no symlinks, so it takes a deliberately misleading name to
+  reach. Not closed here because it is the third member of the "a path is not the file it names"
+  class (`..`, directory, symlink) and the two rounds before this one showed that patching the
+  instance found is what keeps the class open — it earns one fix that enumerates the family, with the
+  test that a directory whose *name* ends in `.md` is refused.
 - **Identity-from-cwd (`git-guard.sh`, `current_branch`).** It resolves from the hook's own working
   directory, not the directory the command will run in, so **work in a git worktree is judged
   against `main`**. Measured: identical payload, exit 2 from the primary checkout, exit 0 from a

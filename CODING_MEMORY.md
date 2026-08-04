@@ -802,11 +802,20 @@ how this file and its linked files should be written (plain language, major chan
   validate assertions, never the fixture's premise.** Any fix needs a case whose only `git add` is
   inside the command string. (Belongs in auto-memory as `feedback-fixture-must-not-pre-create-state`;
   **could not be written — see the phase-guard gap below.**)
-- **L1's fix — `fix/git-guard-empty-index`, three judge rounds, NOT merged as of 2026-08-03.**
+- **L1's fix — `fix/git-guard-empty-index`, four judge rounds. PR #36 OPEN 2026-08-04, awaiting
+  your merge in the GitHub UI** — https://github.com/suyatdev/.claude/pull/36. RUN 4 pinned
+  `5154dec`, `risk=medium confidence=high`.
+  ⚠️ Expect a `CODING_MEMORY.md` conflict at merge: take **this branch's** version of this region,
+  keep everything else from `main`. Verified — nothing unique to `main` is lost.
   Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
   `docs/features/git-guard-empty-index.md` `## Verification`, and
-  `coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md`. This is a pointer;
+  `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;
   do not restate them here. The arc, because only the arc is not written down anywhere else:
+  · **Round 4 shipped a known hole rather than patching it — the first time this repo chose that.**
+  A pathspec naming a *directory* (`docs/x.md/`) clears the `docs/*.md` allowlist and commits
+  everything under it (2 → 0, latent). It is the third member of the class ADR 0014 already has a
+  heading for — "a path is not the file it names" — of which only `..` was fixed. After three rounds
+  of patch-the-instance, the class earns **one** fix: `..` ✅, directory ❌, symlink ❌ untested.
   · **Rounds 1 and 2 both died the same death.** The design *enumerated the commands that fill the
   index* so the hook could ask them for a file list. Round 1 (`5aa220e`) found `git add -- x &&
   git commit` unmodelled; round 2 (`833e3eb`) found **nine more** — `git rm`, `git mv`,
