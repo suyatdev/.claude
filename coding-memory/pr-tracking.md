@@ -603,11 +603,17 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   no test suite at all, but §PR #36 reported git-guard at 77/0 — likely stale in the same way this
   PR's target was.
 
-### PR #38 — fix/shell-segments-redirects (OPEN, opened 2026-08-04)
+### PR #38 — fix/shell-segments-redirects (MERGED 2026-08-04)
 - repo: suyatdev/.claude · branch: fix/shell-segments-redirects · remote: origin
   (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/38 · status: **OPEN**. Created at HEAD `28e2053`;
-  tip now `4ecd996`. Branched from `main` @ `bc7da76`.
+- PR: https://github.com/suyatdev/.claude/pull/38 · status: **MERGED 2026-08-04T20:53:55Z** (merge
+  commit `cc035d2`, PR tip `f5c5689`; created at HEAD `28e2053`). Merged in the GitHub UI by the
+  user. Branch **DELETED 2026-08-04, local + remote** (`git branch -d`, so git confirmed the merge;
+  absence then re-checked on both sides). Branched from `main` @ `bc7da76`.
+- verified on `main` after pull, not merely reported: all four commits are ancestors of `HEAD`;
+  ADR 0015 present in `HEAD`'s tree; `rules/gates.md` and `shell_segments.py` carry the new strings
+  (read via `git show HEAD:…`, not from the worktree). Suites re-run **from main**: 492 checks,
+  0 failed.
 - session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session for every push so far.
 - scope: queue item 1, **root cause** (user's explicit choice over patching the one biting symptom).
   `hooks/lib/shell_segments.py` lumped `<`/`>` in with the control operators, so a **redirection**
@@ -640,8 +646,18 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   closed vs `main`, including `> out git push --force` — a force-push hole, not only a commit hole.
 - decision record: **ADR 0015** (amending 0013, amending 0012); `rules/gates.md:14` repointed.
 - canonical record: `docs/features/shell-segments-redirects.md`.
-- next: user merges in the GitHub UI. Then queue item 5 (marker-gate spec) is unblocked — its
-  tokenisation depended on this.
+- 🆕 **found by the post-merge verification, NOT fixed here — the falsifier self-invalidates on
+  merge.** `hooks/shell-segments-falsifier.sh:14` is `BASE="${1:-main}"`, so the "old" lexer is read
+  from `main:hooks/lib/shell_segments.py`. The moment this PR merged, *old* became *new* and the
+  four differential rows collapsed: the default invocation now reports **4 row(s) UNEXPECTED, exit
+  1, permanently**. Every `new=` column is still correct — it is the baseline that moved, not the
+  behaviour. Recoverable today: `bash hooks/shell-segments-falsifier.sh bc7da76` → all rows as
+  expected, exit 0. Fix is to pin the default base to the pre-fix commit `bc7da76`.
+  ⚠️ This is the *evidence-evaporates* class, and the noisy direction is the dangerous one: a
+  permanently-red check trains a reader to ignore it, and the ADR cites this script as the thing
+  that demonstrates the fix.
+- next: queue item 5 (marker-gate spec) is unblocked — its tokenisation depended on this. Plus the
+  falsifier base pin above.
 
 ### Branch cleanup — 2026-08-04 (authoritative; supersedes older per-entry deletion notes)
 

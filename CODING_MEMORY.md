@@ -823,8 +823,10 @@ how this file and its linked files should be written (plain language, major chan
   Fix belongs in `hooks/lib/shell_segments.py` and therefore **shares a blast radius with D1+D2**,
   which must also reuse that lexer — sequence them together. Affects `doc-guard` too (same
   classifier).
-  · ✅ **FIXED — PR #38 OPEN 2026-08-04**, https://github.com/suyatdev/.claude/pull/38, branch
-  `fix/shell-segments-redirects`. Detail: `coding-memory/pr-tracking.md` §PR #38; decision record
+  · ✅ **FIXED — PR #38 MERGED 2026-08-04** (`cc035d2`), https://github.com/suyatdev/.claude/pull/38,
+  branch `fix/shell-segments-redirects` deleted local + remote. Verified on `main` after pull, not
+  merely reported: 492 checks green **from main**, and `bash hooks/shell-segments-falsifier.sh
+  bc7da76` all rows as expected. Detail: `coding-memory/pr-tracking.md` §PR #38; decision record
   **ADR 0015**; canonical file `docs/features/shell-segments-redirects.md`. **The scope grew when
   measured**: this phantom-pathspec symptom is mode (a) of *one* misclassification, and mode (c) —
   `> out.txt git commit …` — is a genuine **fail-OPEN** in which no guard sees the commit at all.
@@ -833,6 +835,14 @@ how this file and its linked files should be written (plain language, major chan
   by the observability judge and not by the new test suite, which had no such case; and the accepted
   limit was written too narrowly **three times running** before being pinned by an assertion rather
   than described. Judge round 2 `risk=low confidence=high`.
+  · 🆕 **NEW, found by the post-merge verification — the falsifier self-invalidated on merge.**
+  `hooks/shell-segments-falsifier.sh:14` reads the "old" lexer from `main`, so merging made *old* ==
+  *new* and the default invocation is now **permanently red: 4 rows UNEXPECTED, exit 1**. Behaviour
+  is fine — every `new=` column is still correct, and `bash hooks/shell-segments-falsifier.sh
+  bc7da76` passes clean. Fix: pin the default base to `bc7da76`. **Evidence-evaporates class**, and
+  the noisy direction is the dangerous one — a permanently-red check teaches the reader to ignore
+  it, and ADR 0015 cites this script as *the* thing that demonstrates the fix. Detail in
+  `coding-memory/pr-tracking.md` §PR #38.
   Durable record lives in `docs/decisions/0014-empty-index-means-ask-the-command.md`,
   `docs/features/git-guard-empty-index.md` `## Verification`, and
   `coding-memory/observability-judge/2026-08-0{3,4}-fix-git-guard-empty-index.md`. This is a pointer;
