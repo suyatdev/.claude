@@ -1,8 +1,11 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/stale-phase-guard-rule-text
 ---
+
+> **CLOSED.** Merged to `main` 2026-08-04 as PR #37 (merge commit `beb7e33`). Finished record — do
+> not reopen. Follow-ups it deliberately did not do are on the queue, not here.
 
 # Correct the stale "phase-guard is dormant" claim in the live rule set
 

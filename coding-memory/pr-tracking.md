@@ -567,18 +567,21 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
   effect next session. The other four scanners are **deliberately opt-in**, not an oversight —
   `059e01b`: *"Designed, not installed: settings.json is deliberately untouched. hooks/README.md
   documents the exact PreToolUse JSON to opt each hook in per-repo."*
-- next: **one follow-up branch** covering (a) the corrected wording in `rules/gates.md` +
+- next: **(a) SHIPPED — PR #37, merged 2026-08-04. (b) STILL OPEN.** The follow-up was to cover
+  (a) the corrected wording in `rules/gates.md` +
   `CODING_MEMORY.md` and (b) a settings committed-vs-live drift check. ⚠️ The detector has a
   bootstrap problem — registering it means editing the very file whose edits don't propagate; the
   likely design is folding it into an already-registered hook (`doc-guard`'s SessionStart branch
   already surfaces record-vs-reality mismatches) so it needs no settings edit. Then D1+D2
   (`feature/marker-gate-recognition-rule`, ONE branch) per the register at `CODING_MEMORY.md:786`.
 
-### PR #37 — fix/stale-phase-guard-rule-text (OPEN, opened 2026-08-04)
+### PR #37 — fix/stale-phase-guard-rule-text (MERGED 2026-08-04)
 - repo: suyatdev/.claude · branch: fix/stale-phase-guard-rule-text · remote: origin
   (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/37 · status: **OPEN** (created 2026-08-04, HEAD
-  `053d59c` at creation)
+- PR: https://github.com/suyatdev/.claude/pull/37 · status: **MERGED 2026-08-04** (merge commit
+  `beb7e33`, PR tip `30e3060`; created at HEAD `053d59c`). Merged in the GitHub UI by the user.
+  Branch NOT deleted, local or remote. Verified on `main` after pull: both corrected strings present
+  in `rules/gates.md` and `CODING_MEMORY.md`, not merely reported as merged.
 - session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session for every push so far.
 - scope: **part (a) only** of the follow-up named in §PR #36's `next:` — corrected wording in
   `rules/gates.md` (2 sites) and `CODING_MEMORY.md` (1 site). Docs only, no hook/script/settings
