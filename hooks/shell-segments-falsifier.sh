@@ -67,9 +67,11 @@ echo
 # entirely) already blocks. The point is that `new` must block too -- it briefly did not.
 row "proc-subst >( ) must not hide"       2 2 'echo hi > >(git commit -m x -- src/app.js)'
 echo
-# ACCEPTED FAIL-OPEN, pinned so it cannot change silently. A file literally named `2` immediately
-# before a redirect loses its pathspec, flipping git-guard's docs-only exemption deny -> allow.
-row "ACCEPTED fail-open: file named '2'"  2 0 'git commit -m x -- docs/foo.md 2 > out'
+# ACCEPTED FAIL-OPEN, pinned so it cannot change silently. ANY trailing bare digit before a redirect
+# is dropped -- `git log -n 5 > out` loses the `5` too. This row is the one GUARD-VISIBLE case: the
+# dropped token was the pathspec, so git-guard's docs-only exemption flips deny -> allow. ADR 0015.
+# The width itself (option values, not just pathspecs) is pinned in shell_segments.test.py.
+row "ACCEPTED fail-open: bare digit pathspec"  2 0 'git commit -m x -- docs/foo.md 2 > out'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "falsifier: all rows as expected"; else echo "falsifier: $fails row(s) UNEXPECTED"; fi

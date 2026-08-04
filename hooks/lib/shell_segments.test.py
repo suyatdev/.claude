@@ -146,26 +146,46 @@ def check_heredoc():
 
 
 def check_accepted_limit():
-    """A bare digit immediately before a redirect is dropped. Stated, not discovered.
+    """ANY trailing bare digit before a redirect is dropped. Stated, not discovered.
 
     shlex discards spacing, so `cmd 2>x` and `cmd 2 >x` are indistinguishable. Dropping is still the
-    right direction -- it beats INVENTING the operand in the common 2>&1 form -- but the first
-    version of this note undersold the cost by saying "a bare digit can never be argv[0], so command
-    recognition is unaffected". True of argv[0], and beside the point: git-guard's docs-only
-    exemption is decided from the PATHSPEC, so losing a path can flip deny -> allow.
+    right direction -- it beats INVENTING the operand in the common 2>&1 form -- but this note has
+    been written too narrowly twice, so both corrections are recorded here rather than re-derived.
 
-    CONCRETE FAIL-OPEN, pinned at guard level by hooks/shell-segments-falsifier.sh:
+    (1) The COST was undersold: "a bare digit can never be argv[0], so command recognition is
+        unaffected" is true of argv[0] and beside the point. git-guard's docs-only exemption is
+        decided from the PATHSPEC, so losing a path flips deny -> allow.
+    (2) The WIDTH was undersold: it is not "a file literally named 2". It is any trailing bare digit,
+        including an option value -- `git log -n 5 > out` loses the `5`.
+
+    Both are pinned below. The pathspec case is the one guard-visible flip, and it is checked at
+    guard level by hooks/shell-segments-falsifier.sh:
       `git commit -m x -- docs/foo.md 2 > out` on main -- old BLOCKS (the file `2` is not
-      documentation), new ALLOWS. Requires a file literally named `2` immediately before a redirect.
-      Accepted as the lesser error against a false denial on the routine `2>&1` idiom, but it is a
-      fail-OPEN on a Tier-1 guard and is recorded as one, not as "unaffected".
+      documentation), new ALLOWS. Accepted as the lesser error against a false denial on the routine
+      `2>&1` idiom, but it is a fail-OPEN on a Tier-1 guard and is recorded as one -- see ADR 0015.
+
+    The other side of the trade is pinned by the CASES row `git commit -m x -- foo.sh > out.txt`:
+    an ordinary filename before a redirect must NOT be dropped. Both must hold, or the limit has
+    moved and the spec, ADR 0015 and this test are updated together.
     """
+    problems = []
+
     got = argvs("git commit -m x -- 2 > out")
     if got != [["git", "commit", "-m", "x", "--"]]:
-        return ["ACCEPTED-LIMIT CHANGED — a file literally named '2' before a redirect\n"
-                "       got {!r}\n       If this now keeps the '2', the limit is gone: update "
-                "the spec and this test together.".format(got)]
-    return []
+        problems.append(
+            "ACCEPTED-LIMIT CHANGED — a bare digit as the pathspec before a redirect\n"
+            "       got {!r}\n       If this now keeps the '2', the limit is gone: update "
+            "the spec, ADR 0015 and this test together.".format(got))
+
+    # The same rule, away from the pathspec: proves the drop is not pathspec-specific.
+    got = argvs("git log -n 5 > out")
+    if got != [["git", "log", "-n"]]:
+        problems.append(
+            "ACCEPTED-LIMIT WIDTH CHANGED — a bare digit as an option value before a redirect\n"
+            "       got {!r}\n       The limit is 'any trailing bare digit', not 'a file named 2'. "
+            "If this now keeps the '5', update the spec, ADR 0015 and this test together.".format(got))
+
+    return problems
 
 
 def main():

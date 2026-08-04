@@ -46,10 +46,18 @@ which is correct.
 `cmd 2 >x` are indistinguishable at the token level. On encountering a redirection operator, a
 trailing bare-digit token already appended to the current segment is dropped.
 
-> **Accepted limit, stated not discovered.** This loses a genuine operand in `cmd -- 2 > out`, i.e. a
-> file literally named `2` passed immediately before a redirect. That is strictly better than today,
-> which *invents* the same operand in the far more common `2>&1`, and a bare digit can never be
-> `argv[0]`, so command recognition is unaffected. Same denylist philosophy as `WRAPPERS`.
+> **Accepted limit, stated not discovered — and it is wider than "a file named `2`".** *Any* trailing
+> bare digit before a redirection is lost: `git log -n 5 > out` loses the `5` (an option value, no
+> guard impact found), and `git commit -m x -- docs/foo.md 2 > out` loses the pathspec and goes
+> **block → allow** on `main`. The pathspec case is the one guard-visible flip, because git-guard's
+> docs-only exemption is decided from the pathspec; doc-guard reads the staged index and matches
+> `Doc-Exempt:` against the raw string, neither of which a lost token can reach.
+>
+> Accepted because the alternative reinstates a *false denial* on the routine `2>&1` idiom — the
+> symptom that started this — and because a bare digit can never be `argv[0]`, so the command itself
+> is still always recognised. It is a **fail-open on a Tier-1 guard** and is recorded as one:
+> **ADR 0015**. Pinned from both sides in `shell_segments.test.py` (the digit *is* dropped, at the
+> pathspec *and* at an option value; an ordinary filename is *not*), so it cannot widen silently.
 
 **Heredocs stay out of scope and stay working.** shlex cannot see heredoc bodies — a documented limit
 (ADR 0012). The existing `\n` → `;` translation (:71) already isolates each body line into its own
@@ -144,7 +152,8 @@ Scenario I: quoted redirect characters are untouched
 - [x] 7a. Observability judge, round 1 on `64ba2fa` — **`risk=medium confidence=high`**, and it found
       a **regression the fix itself introduced**. Verdict:
       `coding-memory/observability-judge/2026-08-04-fix-shell-segments-redirects.md`.
-- [ ] 7b. Re-run the judge on the new HEAD (round 1's verdict pins `64ba2fa` and is now stale) → PR.
+- [x] 7b. Judge round 2 on `28e2053` — **`risk=low confidence=high`**, 9/10 pass. PR **#38** opened at
+      that commit. See "Judge round 2" below.
 
 ## Judge round 1 — what it caught, and the fix
 
@@ -170,9 +179,9 @@ guard** and pinned at guard level, not merely described.
 expected values per row that **fails** on regression, replacing a markdown table nobody could re-run.
 It carries the baseline and control rows, and the process-substitution and fail-open rows above.
 
-**Judge findings NOT actioned, deliberately:** amending ADR 0013 for the changed lexer semantics.
-That is a docs change to a decision record and is left for the user to direct — it does not affect
-behaviour and would move HEAD again before the re-judge.
+**Judge findings NOT actioned at the time, deliberately:** amending ADR 0013 for the changed lexer
+semantics. Left for the user to direct — it does not affect behaviour and would have moved HEAD again
+before the re-judge. **Now closed** — see round 2 below.
 
 **Note for the re-judge:** the suite that was added to prevent this defect class had no `<(`/`>(`
 case, so it could not see the defect the change introduced. Four cases now cover it (35 checks).
@@ -180,3 +189,27 @@ case, so it could not see the defect the change introduced. Four cases now cover
 **Not in scope, deliberately:** the `^git`-anchored lexer in `checkpoint-before-modify.sh:97` (dormant,
 unregistered — fixes nothing observable today); unifying the four `git commit` lexers; `env`/`timeout`
 wrapper shapes, which remain the accepted-open denylist from ADR 0012.
+
+## Judge round 2 — clean, and the two docs items it left
+
+Round 2 on `28e2053`: **`risk=low confidence=high`**, 9/10 dimensions pass, one `audit_trail`
+concern. Round 1's findings verified closed at all three levels (lexer, classifier, real
+`git-guard.sh` exit code); 9 process-substitution shapes ground-truthed by execution — round 1 blind
+to all 9, round 2 blind to none. A 44-shape end-to-end sweep found **zero unaccounted fail-opens**,
+and **five bypasses beyond the three stated modes** close versus `main`, including
+`> out git push --force` — a force-push hole, not only a commit hole. Both verdicts live in
+`coding-memory/observability-judge/2026-08-04-fix-shell-segments-redirects.md`.
+
+PR **#38** was opened at `28e2053` — the judged tree — on the user's decision, and the two
+documentation items below landed on the branch afterwards. Both are prose plus one test assertion; no
+implementation logic changed.
+
+- [x] 8. **ADR 0015** — `docs/decisions/0015-redirections-are-part-of-a-command.md`, amending 0013.
+      Records the changed operator semantics, the options weighed, and the new accepted fail-open.
+      `rules/gates.md:14` repointed at the chain.
+- [x] 9. **The accepted limit was written too narrowly a third time.** It is *any* trailing bare
+      digit, not "a file named `2`" — `git log -n 5 > out` loses the `5`. Corrected in
+      `shell_segments.py`, `shell_segments.test.py` and the spec above, and now **pinned**:
+      `check_accepted_limit()` carries a second assertion at an option value, so the width itself is
+      falsifiable rather than merely described. Both assertions confirmed able to fail by mutating
+      `argvs` — a check that cannot fail is not evidence.

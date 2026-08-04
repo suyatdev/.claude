@@ -108,11 +108,16 @@ def segments(src):
     #
     # The leading fd digit (`2` in `2>&1`) is dropped from the segment it was already appended to.
     # shlex discards spacing, so `cmd 2>x` and `cmd 2 >x` are the same token stream and no lexer can
-    # tell them apart. ACCEPTED LIMIT, stated rather than discovered: this loses a genuine operand in
-    # `cmd -- 2 > out`, i.e. a file literally named `2` immediately before a redirect. That is
-    # strictly better than the old behaviour, which INVENTED that operand in the far more common
-    # `2>&1`, and a bare digit can never be argv[0], so command recognition is unaffected. Pinned by
-    # check_accepted_limit() in the sibling test so the trade-off cannot change silently.
+    # tell them apart. ACCEPTED LIMIT, stated rather than discovered -- and the width is ANY trailing
+    # bare digit, not only a file named `2`:
+    #   `git log -n 5 > out`                       loses the `5` (an option value, no guard impact)
+    #   `git commit -m x -- docs/foo.md 2 > out`   loses the pathspec: git-guard BLOCK -> ALLOW
+    # The pathspec case is the one guard-visible flip, because git-guard's docs-only exemption is
+    # decided from the pathspec. Accepted anyway: the alternative reinstates a FALSE DENIAL on the
+    # routine `2>&1` idiom, and a bare digit can never be argv[0], so the command itself is still
+    # always recognised. It is a fail-OPEN on a Tier-1 guard, recorded as one -- see ADR 0015.
+    # Pinned from both sides by check_accepted_limit() in the sibling test (the digit IS dropped, an
+    # ordinary filename is NOT) so the trade-off cannot widen silently.
     raw = [[]]
     drop_target = False
     for t in toks:
