@@ -7,9 +7,9 @@ branch: none
 # The replay harness never says what it compared
 
 Planned on `main` @ `c461e4c`, session 10. Model-switch checkpoint 1 answered: stay on Opus 5 for
-planning. **Revision 2** — round 1 failed compliance (4 violations) and drew `risk=high` from the
-architecting read. Both were right, and one of them overturned this spec's original premise. What
-changed is recorded at the end.
+planning. **Revision 6** — rounds 1-5 all failed compliance, each on something genuinely new, and
+round 1 additionally drew `risk=high` from the architecting read. Every round was right, and one of
+them overturned this spec's original premise. What changed is recorded at the end, newest first.
 
 Queued from `docs/features/falsifier-base-pin.md:140-152`, which found this while fixing its sibling.
 
@@ -97,10 +97,24 @@ its baseline, and to annotate the existing citations with the base they were mea
 **1. Add the missing base parameter.** A third positional, `BASE_REV="${3:-main}"`, replacing the
 hard-code at lines 13-15. The default stays `main`; parts 2-4 are what make a default safe to have.
 
-**2. Validate every extraction.** **All six** `git show` calls — three for the base (lines 13-15) and
-three for a rev candidate (lines 20-22) — must succeed **and** yield a non-empty file. On failure:
-name the rev and the path that could not be read, print no matrix, exit non-zero. Closes routes 2
-and 4.
+**2. Validate every extraction.** Six `git show` calls — three for the base (lines 13-15) and three
+for a rev candidate (lines 20-22) — but they are **not all required**, and the split is load-bearing:
+
+- **`hooks/git-guard.sh` is mandatory on both sides.** It must extract successfully and be
+  non-empty. Failure: name the rev and the path, print no matrix, exit non-zero.
+- **The two `hooks/lib/*.py` helpers are required only if that side's extracted `git-guard.sh`
+  actually references `lib/`.** If it does, both must extract and be non-empty, same failure
+  contract. If it does not, their absence is *expected* — record it in the output as a
+  self-contained guard and continue.
+
+Requiring all six would reject legitimate baselines. Measured: `e3b09ba` predates the helper split
+— `git show e3b09ba:hooks/lib/classify-git-command.py` fails because the path does not exist at that
+commit, and that revision's `git-guard.sh` contains **0** occurrences of `lib/`. It is a valid,
+self-contained guard, and it is one of this spec's own reference rows (`234/82/62`). An all-six rule
+would make the spec's own measurement unrunnable.
+
+This is the same all-vs-any distinction part 3 draws for the vacuity threshold, applied to the side
+that reads the files rather than the side that compares them. Closes routes 2 and 4.
 
 The two sides fail in opposite directions, and both are covered deliberately: an empty *base* exits 0
 and "allows" everything, so `relaxed` is 0 by construction — a silent false pass. An empty *candidate*
@@ -202,8 +216,9 @@ Byte comparison uses **`cmp -s`** (POSIX, present on BSD). GNU-only spellings �
   2. **The definition of `relaxed` (line 125)** is `base = 2 && candidate = 0`, so a candidate that
      **blocks everything** can never register a single relaxation, and the harness's headline number
      is 0 by construction. Measured: a candidate missing `hooks/lib/*.py` exits **2 on every
-     command** — including `ls -la` — because `git-guard.sh:56` fails closed when it cannot resolve
-     its classifier. Result: `0 relaxed`, exit 0, a false pass dressed as legitimate hardening.
+     command** — including `ls -la` — because `git-guard.sh:74-77` fails closed when it cannot run
+     the classifier it resolved at `:44`. (Not `:56`, which is the separate python3-not-on-PATH
+     guard at `:53-57`; both exit 2, which is why the two are easy to confuse.) Result: `0 relaxed`, exit 0, a false pass dressed as legitimate hardening.
 
   Note the exit code is **inside** `{0,2}`, so limit 2 is *not* a case of limit 1 — an earlier
   revision of this bullet said it was, and that was wrong. Both are pre-existing comparison logic
@@ -286,12 +301,21 @@ concerned (not the rev string — the letter of this contract must not be satisf
 `base main`, which Scenario A forbids), and the corrected invocation. Every *successful* run: print the resolved base in both the header and the
 summary line.
 
+**The one exception, and it is the only one:** when the rev *cannot be resolved at all* (Scenario F),
+there is no SHA to name, so the error names **the rev string as typed** and says it could not be
+resolved. This is not a licence to fall back to the rev string elsewhere — every other named error
+happens *after* a successful `rev-parse`, so a SHA exists and the clause above binds unchanged.
+Concretely: an unresolvable base is the only case in which output may contain a bare rev string, and
+even then it must be visibly labelled as unresolved rather than presented as a base.
+
 ## Tasks
 
 - [ ] 1. Red — record the six measured rows above against the unfixed script, exit codes captured
       first, as the reproduction. Do not delete the probe.
 - [ ] 2. Add the `BASE_REV` third positional; replace the three hard-coded `main:` refs.
-- [ ] 3. Validate all six extractions (success + non-empty); named error on failure.
+- [ ] 3. Validate extractions: `git-guard.sh` mandatory both sides (success + non-empty); the two
+      `lib/*.py` helpers required only when that side's `git-guard.sh` references `lib/`. Named
+      error on failure; self-contained guards recorded, not rejected. Cover `e3b09ba`.
 - [ ] 4. Add the vacuity refusal, comparing executing bytes, all-three threshold.
 - [ ] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
 - [ ] 6. Print the resolved base in the header (line 134) and the summary line.
@@ -299,6 +323,28 @@ summary line.
 - [ ] 8. Confirm no dependent suite moved and no file outside the harness changed.
 - [ ] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
 - [ ] 10. Observability judge, then PR at the judged sha.
+
+## Revision 6 — round-5 compliance + third architecting read
+
+- **⚠️ Supersedes the "all six `git show` calls" rule below (revision 3).** Requiring all six would
+  reject a legitimate baseline: `e3b09ba` predates the `hooks/lib/` split, its `git-guard.sh` has
+  **0** occurrences of `lib/`, and it is one of this spec's own reference rows (`234/82/62`). Part 2
+  now makes `git-guard.sh` mandatory on both sides and the two helpers conditional on that side's
+  guard actually referencing `lib/`. Scenario E is unaffected — `286fd5a` is missing
+  `hooks/git-guard.sh` itself, so its named error still fires. Found by the architecting read.
+- **The classifier pointer corrected, `:56` → `:74-77`.** The limit-2 bullet described the right
+  behaviour (a candidate missing `hooks/lib/*.py` exits 2 on every command, `ls -la` included) and
+  cited the wrong branch: `:56` is the `exit 2` of the python3-not-on-PATH guard at `:53-57`, while
+  the classifier guard is `:74-77`, resolving `CLASSIFIER` at `:44`. Both exit 2, which is how they
+  were confused. This bullet is routed verbatim into ADR 0016 by part 6, so the wrong pointer would
+  have been permanent. Third consecutive round to find a distinct error in this one bullet;
+  escalated to the user, who directed the targeted fix after an audit showed **12 of the spec's 13
+  code pointers were already correct** and this was the only wrong one.
+- **Scenario F exempted from the resolved-SHA clause.** The refusal contract required every named
+  error to print the resolved base SHA "not the rev string", but Scenario F is the case where
+  `rev-parse` cannot produce a SHA at all — the two could not both be satisfied. The contract now
+  names the unresolvable rev as the single exception, and says why it cannot generalise: every other
+  named error occurs after a successful `rev-parse`.
 
 ## Revision 3 — round-2 compliance findings
 
