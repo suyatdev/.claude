@@ -7,9 +7,11 @@ branch: none
 # The replay harness never says what it compared
 
 Planned on `main` @ `c461e4c`, session 10. Model-switch checkpoint 1 answered: stay on Opus 5 for
-planning. **Revision 6** — rounds 1-5 all failed compliance, each on something genuinely new, and
+planning. **Revision 7** — rounds 1-6 all failed compliance, each on something genuinely new, and
 round 1 additionally drew `risk=high` from the architecting read. Every round was right, and one of
-them overturned this spec's original premise. What changed is recorded at the end, newest first.
+them overturned this spec's original premise. Revisions 3-6 each *introduced* the next round's
+finding, so revision 7 is a consolidation rather than another point fix. What changed is recorded at
+the end, newest first.
 
 Queued from `docs/features/falsifier-base-pin.md:140-152`, which found this while fixing its sibling.
 
@@ -101,7 +103,9 @@ hard-code at lines 13-15. The default stays `main`; parts 2-4 are what make a de
 for a rev candidate (lines 20-22) — but they are **not all required**, and the split is load-bearing:
 
 - **`hooks/git-guard.sh` is mandatory on both sides.** It must extract successfully and be
-  non-empty. Failure: name the rev and the path, print no matrix, exit non-zero.
+  non-empty. Failure: name the **resolved base SHA** and the path, print no matrix, exit non-zero.
+  (Extraction happens after `rev-parse` has already succeeded, so a SHA always exists here — the
+  refusal contract's rev-string exemption does *not* reach this case.)
 - **The two `hooks/lib/*.py` helpers are required only if that side's extracted `git-guard.sh`
   actually references `lib/`.** If it does, both must extract and be non-empty, same failure
   contract. If it does not, their absence is *expected* — record it in the output as a
@@ -122,19 +126,33 @@ and "allows" everything, so `relaxed` is 0 by construction — a silent false pa
 alarm. The silent one is why this spec exists; the loud one is one line further and is not worth
 leaving open.
 
-**3. Refuse a vacuous run.** Before the fixture repo is built, compare the three files byte-for-byte
-between base and candidate. If **all three** match, print the refusal, print no matrix, exit
-non-zero. Closes route 1.
+**3. Refuse a vacuous run.** Before the fixture repo is built, compare base and candidate. **Compare
+the file *sets* first, then the bytes** — part 2 makes each side's helper files conditional, so "the
+three files" is not a safe assumption and must not be written as one.
 
+The two sides are **vacuously identical** iff (i) exactly the same paths are present on both sides,
+**and** (ii) every path present on both is byte-identical. Only then: print the refusal, print no
+matrix, exit non-zero. Closes route 1.
+
+- **A path absent on *both* sides counts as agreement and is never passed to `cmp`.** This is the
+  load-bearing sentence, not a detail. Measured on this host: `cmp -s` on two non-existent paths
+  exits **2**, not 0 — so a rule phrased as "if all three match" silently fails to fire whenever a
+  side is self-contained, because two of its three comparisons return an error that is not a match.
+  Concretely, `e3b09ba` compared against itself is vacuous and must be refused; under the "all
+  three" phrasing it produced `378 identical / 0 relaxed`, exit 0 — route 1, reopened by the very
+  revision that made helpers optional.
+- **Different file sets are not vacuous — they are a real difference.** A base carrying `lib/*.py`
+  against a candidate without them proceeds to the matrix. Part 2 has already rejected the case
+  where that absence is a *broken extraction* rather than a genuine self-contained guard, so by the
+  time part 3 runs, a set difference is signal.
 - **Compare the bytes that will actually execute.** For `UNDER_TEST=worktree` the harness runs the
   on-disk file (`NEW="$WT/hooks/git-guard.sh"`), so the candidate side is read **from disk, not
   `git show HEAD:`**. The two readings diverge the moment the worktree has uncommitted edits, and
   the on-disk one is the truth. For a rev candidate, both sides are `git show`.
-- **All three, not any one.** A branch touching only `shell_segments.py` is a legitimate run — PR #38
-  was exactly that, and it is verifiable: between `bc7da76` and `c461e4c`, `git-guard.sh` and
-  `classify-git-command.py` are the same blobs (`2b74507c`, `2f8af693`) and only `shell_segments.py`
-  moved. A check keyed on "any file matches" would refuse row 2, a real run. Only "nothing differs"
-  is vacuous.
+- **"Nothing differs", not "something matches".** A branch touching only `shell_segments.py` is a
+  legitimate run — PR #38 was exactly that, and it is verifiable: between `bc7da76` and `c461e4c`,
+  `git-guard.sh` and `classify-git-command.py` are the same blobs (`2b74507c`, `2f8af693`) and only
+  `shell_segments.py` moved. A check keyed on "any file matches" would refuse row 2, a real run.
 - **Compare content, not rev strings.** `main` and the SHA it resolves to are different strings and
   the same code; a worktree with uncommitted edits is the same rev string and different code.
 
@@ -193,12 +211,20 @@ bash:    "3.2.57(1)-release"   # macOS system bash — no associative arrays, no
 git:     "2.50.1"              # Apple Git-155
 python3: "3.9.6"               # the classifier's interpreter
 jq:      "1.7.1-apple"         # /usr/bin/jq, hard-coded at line 35
-cmp:     "BSD"                 # NO --version, NO --quiet; POSIX -s only
+cmp:     "BSD"                 # NO --version; --quiet IS accepted here, see below
 shasum:  "6.02"
 ```
 
-Byte comparison uses **`cmp -s`** (POSIX, present on BSD). GNU-only spellings — `cmp --quiet`,
-`diff -q --no-dereference`, `readlink -f` — are forbidden; use `cd … && pwd -P` for path resolution.
+Byte comparison uses **`cmp -s`** — POSIX, and portable to a GNU host. Path resolution uses
+**`cd … && pwd -P`**.
+
+**These are portability choices, not capability limits, and the distinction was previously stated
+wrongly.** Re-measured on this host: `cmp --quiet` exits 0, `diff -q --no-dereference` exits 0, and
+`readlink -f /tmp` prints `/private/tmp` and exits 0. All three *work* here. They are nonetheless
+forbidden in the harness because they are not guaranteed on every BSD/macOS host the hook set is
+expected to run on, and the POSIX spellings cost nothing. An earlier revision labelled them
+"GNU-only" and annotated `cmp` as "NO --quiet"; both claims were recalled rather than measured, in a
+block whose own heading promises the opposite.
 
 ### Deliberate non-goals
 
@@ -207,6 +233,23 @@ Byte comparison uses **`cmp -s`** (POSIX, present on BSD). GNU-only spellings �
   scope. (Round 1 judge: this reasoning holds.)
 - **The 63-command matrix is unchanged** — still zero redirect shapes, a real and separate gap
   recorded in ADR 0015.
+- **Five architecting-read recommendations were reviewed and deferred, not forgotten.** Recorded
+  here because a deferral that appears nowhere is indistinguishable from an oversight, which is the
+  same failure mode this spec exists to fix. Raised across the round-3 and round-4 reads; user
+  decision 2026-08-05 was to fix only the baseline-rejection contradiction and defer these:
+  1. **A dirty-worktree scenario** — part 3's most-argued claim (on-disk bytes, not `git show HEAD:`)
+     is still untested. The strongest of the five; take it first.
+  2. **Applying the extraction check to the default `worktree` mode too**, so the candidate's own
+     helpers are validated. Now a one-line omission rather than an unavoidable one, since part 2's
+     rule reads file contents and an on-disk file reads as easily as one from git history.
+  3. **Making the `lib/` reference check ignore comments** — at HEAD, 2 of its 3 matches are comment
+     lines, so the check is weaker than it looks.
+  4. **Printing the candidate's identity** alongside the base. The six file hashes are already
+     computed, so the cost is a printf.
+  5. **An ADR 0016 sentence stating that a printed base attests *provenance, not validity*.** The
+     concern behind it is real and is worth restating here: after this fix, a false pass will print
+     a correct 40-character SHA beside it and therefore look audited. Provenance is improving faster
+     than validity.
 - **Two further limits in the comparison logic are NOT closed — queued as their own item. They are
   independent, and fixing either one does not close the other.**
 
@@ -269,14 +312,16 @@ Scenario D: a difference the matrix cannot see — still reported, not refused
 Scenario E: a base whose files do not exist — named error, not a pass
   Given 286fd5a, where all three files are absent
   When the harness runs with that base
-  Then the output names the rev and the path that could not be read
+  Then the output names the resolved base as a 40-character SHA, not the string "286fd5a"
+   And the output names the path that could not be read
    And no pair-count line is printed
    And the exit code is non-zero
   # Today this prints "0 relaxed" and exits 0 — a clean pass from three empty files.
 
 Scenario F: an unresolvable rev — named error
   When the harness runs with base 0000000
-  Then the output names the unreadable base
+  Then the output names the rev string as typed, "0000000", labelled as unresolved
+   And no 40-character SHA is printed, because rev-parse produced none
    And the exit code is non-zero
 
 Scenario G: a relative worktree path — resolved, never silently counted
@@ -288,8 +333,39 @@ Scenario G: a relative worktree path — resolved, never silently counted
   # The base MUST be non-vacuous here, or the part-3 refusal fires before route 3 is reached
   # and the scenario silently tests nothing.
 
+Scenario I: a self-contained baseline is accepted, not rejected
+  Given e3b09ba, which predates hooks/lib/ and whose git-guard.sh contains 0 occurrences of "lib/"
+  When the harness runs with that base and the worktree candidate
+  Then no extraction error is raised for the two absent lib/*.py paths
+   And the pair-count line is printed, naming the resolved SHA of e3b09ba
+   And the counts are 234 identical, 82 stricter, 62 relaxed
+  # Pins part 2's conditional-helper rule in the ACCEPTING direction. An implementation that
+  # reverts to "all six required" fails here.
+
+Scenario J: helpers absent while the guard still needs them — named error
+  Given a base whose git-guard.sh DOES reference lib/ but whose lib/*.py are absent
+  When the harness runs with that base
+  Then the output names the resolved base SHA and the path that could not be read
+   And no pair-count line is printed
+   And the exit code is non-zero
+  # Pins the same rule in the REJECTING direction. No such commit exists in history
+  # (629 checked, zero), so this base must be synthesized. An implementation that drops
+  # the helper check entirely passes I but fails here.
+
+Scenario K: a self-contained base against itself is still vacuous
+  Given e3b09ba as both base and candidate
+  When the harness runs
+  Then the refusal is printed and no pair-count line appears
+   And the exit code is non-zero
+  # Pins part 3's set-then-bytes rule. On a probe copy carrying revision 6's "all three match"
+  # phrasing, this ran to completion — 378 identical, 0 relaxed, exit 0 — instead of refusing.
+  # 378 is the matrix size (63 commands x 6 states), i.e. everything, as a self-comparison must be.
+  # Cause, verified directly on this host: cmp -s on two ABSENT paths exits 2, so "all three match"
+  # is never true for a self-contained side and the refusal never fires.
+  # An implementation phrased as "all three" fails here.
+
 Scenario H: the refusal is discriminating
-  Then A, B, E and F refuse or error; C, D and G report
+  Then A, B, E, F, J and K refuse or error; C, D, G and I report
    And no implementation hard-wired to refuse, or to pass, satisfies both halves
 ```
 
@@ -316,13 +392,49 @@ even then it must be visibly labelled as unresolved rather than presented as a b
 - [ ] 3. Validate extractions: `git-guard.sh` mandatory both sides (success + non-empty); the two
       `lib/*.py` helpers required only when that side's `git-guard.sh` references `lib/`. Named
       error on failure; self-contained guards recorded, not rejected. Cover `e3b09ba`.
-- [ ] 4. Add the vacuity refusal, comparing executing bytes, all-three threshold.
+- [ ] 4. Add the vacuity refusal: compare file *sets* first, then bytes of the paths present on
+      both; absent-on-both is agreement and never reaches `cmp`. Compare executing bytes. Synthesize
+      Scenario J's base (none exists in 629 commits).
 - [ ] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
 - [ ] 6. Print the resolved base in the header (line 134) and the summary line.
-- [ ] 7. Verify scenarios A-H by execution, `$?` captured immediately, results as a table.
+- [ ] 7. Verify scenarios A-K by execution, `$?` captured immediately, results as a table.
 - [ ] 8. Confirm no dependent suite moved and no file outside the harness changed.
 - [ ] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
 - [ ] 10. Observability judge, then PR at the judged sha.
+
+## Revision 7 — round-6 compliance + fourth architecting read (consolidation)
+
+Rounds 3, 4, 5 and 6 each found an error created by the previous revision's own fix. The user
+directed a consolidation pass rather than a fifth point fix: instead of editing the cited instance,
+enumerate every place the spec states each of the two invariants that kept breaking, and make them
+agree in one edit.
+
+- **Invariant 1 — how a base is identified in output — reconciled at every site.** The contract
+  required the resolved 40-char SHA and forbade the bare rev string, but three other places
+  contradicted it. Revision 6 fixed only Scenario F, which is why the id recurred. Now: part 2's
+  extraction-failure clause names the resolved SHA (extraction runs *after* `rev-parse`, so a SHA
+  always exists there); Scenario E names the resolved SHA rather than "the rev"; Scenario F is the
+  sole exemption and now says explicitly that no SHA is printed because `rev-parse` produced none.
+- **Invariant 2 — how many files a side has — reconciled, closing a hole revision 6 opened.**
+  Making the helpers conditional (revision 6) left part 3 still saying "compare the three files … if
+  all three match". Measured: `cmp -s` on two *absent* paths exits **2**, not 0, so "all three
+  match" is never true for a self-contained side and the vacuity refusal never fires. On a probe
+  copy carrying revision 6's phrasing, `e3b09ba` against itself ran to completion —
+  `378 identical / 0 relaxed`, exit 0 — instead of refusing. Route 1, reopened by the fix for a
+  different route. The `cmp -s` behaviour was re-verified directly on this host, not taken on
+  report. Part 3 is now **set-first, then bytes**: same paths present on both sides, and
+  every shared path byte-identical; absent-on-both is agreement and never reaches `cmp`.
+- **Scenarios I, J and K added**, because the rule changed and nothing tested it — an implementation
+  reverting to "all six required" (fails I), dropping the helper check entirely (fails J), or
+  phrasing vacuity as "all three" (fails K) would otherwise have passed every scenario. J's base
+  does not exist in 629 commits and must be synthesized. Scenario H updated to cover them.
+- **The pinned-toolchain block corrected.** It claimed "measured on this host, not recalled" while
+  asserting `cmp --quiet`, `diff -q --no-dereference` and `readlink -f` were GNU-only. Re-measured:
+  all three work here. The POSIX spellings remain mandatory, but as a portability choice, now stated
+  as one. The figures in this spec were always honest; this was prose around them that was not.
+- **The five deferred architecting recommendations are now written into the non-goals**, with the
+  round that raised them and the user decision that deferred them, so "decided against" is
+  distinguishable from "forgot".
 
 ## Revision 6 — round-5 compliance + third architecting read
 

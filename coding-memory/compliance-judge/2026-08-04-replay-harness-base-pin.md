@@ -420,3 +420,225 @@ companion, and names the falsifier's format as the trap to avoid with its reason
 None. The user chose to fix rather than waive after the round-3 escalation; no violation id has
 been waived on this spec in any round. The single round-4 finding is new — no prior id recurred, so
 nothing carries a persistence flag.
+
+---
+
+## Round 5 — 2026-08-05 · revision 4 + round-4 fix (`9774fd6`) · **FAIL** (2 violations)
+
+`repo=.claude` · `branch=main` · `head_sha=ea088b55d5871ef1632911cc44a342ee68752aac` ·
+`spec_blob_sha=30c8c3ec70b772b2ba30ddda37e0038f0fe9b59a` · confidence **high** (every figure,
+SHA, blob hash, timestamp and line reference below was re-run on this host this round; the replay
+harness itself was executed once, end to end).
+
+### Layman summary
+
+The spec is in good shape and the round-4 fix did what it set out to do: the two comparison-logic
+limits are now correctly separated, and the "resolved base" is unambiguously the 40-character SHA.
+Two things are still wrong, both small, both introduced by the last edit.
+
+First, the sentence explaining *why* a broken candidate can never register a relaxation points at
+the wrong line of code. It says `git-guard.sh:56` fails closed "when it cannot resolve its
+classifier". Line 56 is a different guard — it is the one that fires when **python3 is missing from
+the PATH**. The classifier guard is at lines 74-77. The *behaviour* the spec describes is real (I
+reproduced it: a copy of the guard with `hooks/lib/` absent exits 2 on `ls -la`, `git commit -m msg`
+and `git push` alike, printing `git-guard: cannot run …/lib/classify-git-command.py; failing
+closed.`) — only the pointer is wrong. That matters here more than usual, because this exact
+sentence is the one part 6 routes verbatim into permanent ADR 0016, and because it is the third
+consecutive revision in which this one bullet has been subtly wrong.
+
+Second, the refusal contract and Scenario F now contradict each other. Round 4 tightened the
+contract to say every refusal and every named error must state "**the resolved base SHA** it
+concerned (not the rev string)". But Scenario F is the case where the rev *cannot be resolved at
+all* — base `0000000` — so there is no SHA in existence to print, and the scenario itself demands
+the output "names the unreadable base", which can only be the string as typed. An implementer has
+to break one of the two. The fix is one clause: exempt the unresolvable-rev case, e.g. "…the
+resolved base SHA it concerned — or, where the rev could not be resolved at all, the rev string as
+typed, which is then the only identifier that exists."
+
+Everything else I checked held up exactly, including several claims that would have been easy to get
+wrong (see *What I re-measured*).
+
+### Violations
+
+| id | rule_source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/spec-code-accuracy` | `skills/writing-specs/SKILL.md:14` | "Drift causes hallucination: when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists. Keeping them aligned is not tidiness; it is correctness." | Deliberate non-goals, limit 2 of the comparison-logic bullet (spec:202-206), routed verbatim into permanent ADR 0016 by part 6 (spec:145-157) | The bullet cites `git-guard.sh:56` as the branch that "fails closed when it cannot resolve its classifier", but line 56 is the **python3-not-on-PATH** guard; the classifier guard is `if ! facts=…` at `:74` with its `exit 2` at `:77` (`CLASSIFIER` is set at `:44`) — identical at `c461e4c`, so a reader verifying the distinction between limit 1 and limit 2 lands on an unrelated branch and re-opens the argument rounds 3 and 4 already spent. **Recurrence: same id as round 4, same bullet.** |
+| `writing-specs/refusal-contract-vs-scenario-f` | `skills/writing-specs/SKILL.md:20` | "Ambiguity surfaces early: a requirement you cannot phrase as Given/When/Then is usually a requirement you have not actually decided yet." (with `:28` — enumerate the edge cases explicitly) | "Error and refusal contract" (spec:283-287) against Scenario F (spec:262-265) | The contract binds **every** named error to print "the resolved base SHA it concerned (**not** the rev string)", but Scenario F's error is precisely the case where `git rev-parse "$BASE_REV^{commit}"` cannot produce a SHA and the scenario requires the output to name the unreadable base — the typed string; as written the two cannot both be satisfied, so the implementer must guess which one governs. |
+
+Suggested replacements (evaluation only — not applied):
+
+> …because `git-guard.sh` fails closed at `:74-77` when it cannot run its classifier (resolved at
+> `:44`) — distinct from the python3-absent guard at `:53-57`.
+
+> …and state in one plain sentence what was wrong, **the resolved base SHA** it concerned — or,
+> where the rev could not be resolved to a commit at all (Scenario F), the rev string as typed,
+> which is then the only identifier that exists — and the corrected invocation.
+
+### Round-4 violation: partially closed
+
+`writing-specs/spec-code-accuracy` — the *cause* is now right. Limit 2 is correctly stated as
+`relaxed` requiring `base=2 && candidate=0` (harness `:125`, verified), and the "exit 2 is inside
+`{0,2}`, so limit 2 is not an instance of limit 1" note is sound. Only the code pointer inside that
+same sentence is wrong, which is why the id is reused rather than retired. No round-1, round-2 or
+round-3 id recurred.
+
+### What I re-measured (nothing inherited)
+
+- **Ran the harness itself**, `bash hooks/git-guard.replay.sh /Users/marksuyat/.claude` (absolute
+  path, per the caller's warning): `378 pairs: 378 identical, 0 stricter, 0 relaxed`, exit **0**,
+  header printing the literal `main`. Row 1 of the spec's table reproduces exactly, and routes 1
+  and 5 are confirmed live at `ea088b5`.
+- **Blob table** — `git-guard.sh` / `classify-git-command.py` / `shell_segments.py`:
+  `HEAD` = `c461e4c` = `f5c5689` = `2b74507c` / `2f8af693` / `b8fed461`; `bc7da76` shares the first
+  two and differs only in `shell_segments.py` (`7197eb08`) — exactly the two short hashes the spec
+  names at `:121`; `b17a666` differs in all three; `e3b09ba` has a different guard (`e8082d3c`, 112
+  lines, **zero** references to either lib → "self-contained" confirmed) with both libs absent;
+  `286fd5a` has all three absent. Every row of the measured table and Scenarios B/C/D/G hold.
+- **Timestamps**: `64ba2fa` = 2026-08-04 15:45:33, `cc035d2` (PR #38 merge) = 16:53:55 → the
+  spec's "68 minutes later" is exact.
+- **All five citation sites**: `git-guard-empty-index.md:311` (378 *pairs* — the matrix size) and
+  its table at `:314-318` (215/326/346 identical, 162/52/32 allowed-where-main-blocks — matches the
+  spec verbatim); `shell-segments-redirects.md:118` and `:140`; `falsifier-base-pin.md:145` (states
+  the tautology, as the spec says); ADR `0015:110`. The "annotation, not retraction" correction is
+  therefore correct on the evidence.
+- **ADR amend-by-new-ADR convention** verified at `0009:105`, `0011:4-6`, `0013:5`.
+- **`hooks/shell-segments-falsifier.sh:100`** prints `base=$BASE` with a pinned default of
+  `bc7da76` — the spec's "do not copy the sibling's format" note is accurate.
+- **Toolchain pins** all exact on this host: bash `3.2.57(1)-release`, git `2.50.1 (Apple Git-155)`,
+  python3 `3.9.6`, `jq-1.7.1-apple`, shasum `6.02`, `cmp` BSD (rejects `--version`).
+- **Harness line references**: `WT` `:6`, `UNDER_TEST` `:7`, base extraction `:13-15`, candidate
+  extraction `:20-22`, jq `:35`, `cd "$REPO"` in `run()` `:36`, tally `:125-131` with `relaxed`
+  defined at `:125`, literal-`main` header `:134`; `grep -cE 'BASE_REV|getopts|\$\{3'` → `0`.
+- **Missing-libs candidate**: exits **2** on `ls -la`, `git commit -m msg`, `git push` — mechanism
+  confirmed, line citation not (see violation 1).
+
+### Notes (non-blocking — carry into the branch)
+
+- **Scenario B's premise is stated against the wrong side.** It says `f5c5689`'s blobs are
+  "identical to HEAD's", but part 3 mandates comparing the **on-disk** candidate bytes. They
+  coincide today (`git status` clean, verified), so the scenario is executable as written; phrasing
+  the Given against the worktree would make it robust to a dirty tree.
+- **Part 2 vs. the contract.** Part 2 (spec:100-103) says a failed extraction should "name the rev
+  and the path that could not be read", while the contract forbids the rev string. Fixing violation
+  2 should align both sentences in the same edit.
+- **Scenarios F and H omit `Given`/`When`.** Acceptable shorthand and both are testable; noted only
+  because `writing-specs:19` asks for full State → Action → Outcome.
+- **`shasum: 6.02` is pinned but unused** — the plan's only comparator is `cmp -s`. Harmless as a
+  host record; drop it if the pin block is meant to be the *used* toolchain.
+- **The harness exits 0 unconditionally** — repeated from rounds 3 and 4, still uncited: the spec
+  now states this explicitly as a queued non-goal (spec:214-217), which is the correct disposition.
+- **Spec path, Mermaid, security skill** — unchanged from rounds 1-4: `docs/features/` wins on repo
+  precedence over `writing-specs:54`; no diagram is KISS for a ~40-line shell change;
+  `writing-secure-code` read again and still out of territory (`BASE_REV`/`WT` are local values
+  passed as quoted argv to `git`, no `eval`, no external input, secrets, data store, or model call).
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round. **Persistence flag:**
+`writing-specs/spec-code-accuracy` now recurs across rounds 4 → 5 (same bullet, same rule, different
+error each time) — the first recurrence on this spec, and grounds for escalating that single bullet
+to the user rather than looping again.
+
+---
+
+## Round 6 — 2026-08-05
+
+`spec_blob_sha` `52c605fe92d9b1a91207069bd5ad35756d835845` · repo `.claude` · branch `main` ·
+HEAD `e6bdc21ee75215476aac7cdd5c7fc747c704b3dd` · **verdict: fail** (3 violations) · confidence high
+
+### In plain English
+
+Revision 6's three edits were checked line by line, and two of the three landed cleanly. The
+classifier pointer is now correct — `git-guard.sh:74-77` really is the fail-closed branch, `:44`
+really is where `CLASSIFIER` is resolved, and `:53-57` really is the separate python3 guard whose
+`exit 2` sits at `:56`. **The caller's audit is independently confirmed:** all 13 code pointers in
+the spec and all five citation-site pointers resolve correctly at HEAD. And every number in the
+"What was measured" table was re-run from scratch on this host today — all six rows reproduce to
+the digit, as do the 0-byte-base, exit-127-candidate and exit-0 mechanisms behind them. This spec's
+measurements are honest.
+
+What is still wrong is smaller but real, and one piece of it was created by revision 6's own fix.
+
+Making the two `lib/*.py` helpers *optional* (so the `e3b09ba` baseline stays runnable) quietly
+punched a hole in the vacuity refusal. Part 3 still says "compare the three files… if all three
+match, refuse", but a self-contained baseline only *has* one file. With the spec's own mandated
+tool, `cmp -s` on two absent files returns 2 — an error, not a match — so "all three match" is
+false and the run proceeds. Measured: `base=e3b09ba, candidate=e3b09ba` — a program compared with
+itself — reports **378 identical, 0 relaxed, exit 0**. That is route 1, the exact defect this spec
+exists to close, still open in the configuration part 2 was just widened to admit.
+
+Second, the refusal contract's "print the resolved SHA, not the rev string" clause was reconciled
+with Scenario F but not with the two other places that say "name the rev" — part 2's failure clause
+and Scenario E. Round 5 flagged this and said to align both sentences in the same edit; only one
+half was done, so the same clause is unreconciled for a second round running.
+
+Third, the pinned-toolchain block advertises "Measured on this host, not recalled", but three of its
+four tool-capability claims are false on this host: `cmp --quiet`, `diff -q --no-dereference` and
+`readlink -f` all work here. The *directive* (use `cmp -s` and `cd … && pwd -P`) is still the right
+portable choice — it is the stated justification that was recalled rather than measured, in the one
+section that claims otherwise, in a spec whose whole thesis is that an unprovenanced number cannot
+be trusted.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/vacuity-check-vs-optional-helpers` | `skills/writing-specs/SKILL.md` | No requirement readable two ways; enumerate good, bad and edge cases | "The fix", parts 2 and 3 (spec:100-137) + Scenarios | Part 2 now permits a side whose `lib/*.py` helpers are legitimately absent, but part 3 still says "compare the three files… if **all three** match" and never states how absent-vs-absent compares — under the spec's own `cmp -s` that is exit 2 (not a match), so a byte-identical self-contained pair escapes the refusal. |
+| 2 | `writing-specs/refusal-contract-vs-scenario-f` | `skills/writing-specs/SKILL.md` | No requirement readable two ways | "Error and refusal contract" (spec:298-309) vs part 2 (spec:104) and Scenario E (spec:272) | The contract demands the resolved 40-char SHA and forbids the rev string for every named error after a successful `rev-parse`, yet part 2's failure clause and Scenario E both say only "name the rev" — satisfiable by printing `286fd5a`, which the contract rejects. |
+| 3 | `writing-specs/toolchain-claims-unmeasured` | `skills/writing-specs/SKILL.md` | Pin exact versions — verify what the agent proposes rather than what it remembers | "Pinned toolchain" (spec:187-201) | The section states "Measured on this host, not recalled", but `cmp --quiet` (exit 1, silent), `diff -q --no-dereference` (exit 1) and `readlink -f` (`/private/tmp`) all work on this host, so the YAML comment `NO --quiet` and the "GNU-only spellings" label are false. |
+
+**Recurrence:** violation 2 reuses round 5's id. Round 5 raised the same clause as a note with an
+explicit "align both sentences in the same edit" recommendation; revision 6 fixed the Scenario F
+half only. Second consecutive round on this clause — escalation grounds under the two-round rule.
+
+**Cleared this round:** `writing-specs/spec-code-accuracy` (rounds 4-5) is **closed**. The limit-2
+bullet's pointers are correct at HEAD, verified against `hooks/git-guard.sh` directly.
+
+### Evidence re-executed (not taken from the spec)
+
+| claim | spec says | measured today |
+|---|---|---|
+| base `main` (default), abs WT | 378 / 0 / 0 | 378 / 0 / 0 ✅ |
+| base `bc7da76` | 378 / 0 / 0 | 378 / 0 / 0 ✅ |
+| base `b17a666` | 358 / 20 / 0 | 358 / 20 / 0 ✅ |
+| base `e3b09ba` | 234 / 82 / 62 | 234 / 82 / 62 ✅ |
+| base `286fd5a` | 118 / 260 / 0 | 118 / 260 / 0 ✅ |
+| `WT` given as `.` | 378 / 0 / 0 | 378 / 0 / 0 ✅ |
+| failed `git show` → 0-byte base | 0 bytes, `bash` exits 0 | exit 128, 0 bytes; `bash <empty>` → 0 ✅ |
+| relative-path candidate | exits 127, tallied `same` | 127 ✅ (`else` arm at :129-131) |
+| harness exit on degenerate row | 0 | 0 ✅ |
+| `e3b09ba` guard `lib/` refs | 0 | 0 ✅ |
+| `bc7da76`↔`c461e4c` shared blobs | `2b74507c`, `2f8af693` | exact ✅ |
+| `f5c5689` blobs = HEAD's | identical | identical ✅ |
+| `64ba2fa` → `cc035d2` | 68 min | 68.37 min ✅ |
+| matrix size | 63 × 6 = 378 | 63 commands, 6 states ✅ |
+| pinned versions | bash 3.2.57(1), git 2.50.1, py 3.9.6, jq 1.7.1-apple, shasum 6.02 | all exact ✅ |
+| "neither harness has a test sibling" | true | true ✅ |
+
+**New, reachable failure demonstrated:** `probe.sh <abs-wt> e3b09ba e3b09ba` → `378 identical, 0
+stricter, 0 relaxed`, exit 0 — both sides self-contained, byte-identical, not refused.
+
+### Notes (non-blocking)
+
+- Scenario E's `Then` also omits the "corrected invocation" the contract requires; the contract
+  governs, but the scenario is a subset of it.
+- Part 2 does not state *how* "references `lib/`" is determined. The spec's own evidence uses an
+  occurrence count of the string `lib/`; a builder will infer a grep, which is probably right.
+- Scenario H still omits `Given`/`When` (`writing-specs:19`), unchanged from rounds 1-5 and still
+  acceptable as a deliberate cross-cutting assertion.
+- `## Verification — <Appended during review.>` is the only occurrence of that marker in
+  `docs/features/`. Not cited: it is a records section that task 7 fully specifies, not an
+  undecided requirement.
+- `hooks/shell-segments-falsifier.sh:25` is `BASE="${1:-bc7da76}"` — pinned *by default*, but
+  overridable, so "a pinned SHA by construction" (spec:156) holds for the default only. Does not
+  weaken the spec's conclusion that replay must not copy that format.
+- Spec path, Mermaid and `writing-secure-code` — unchanged from rounds 1-5. `docs/features/` wins
+  on repo precedence; no diagram is KISS here; the security skill was read again and remains out of
+  territory (`BASE_REV`/`WT` reach `git` as quoted argv, no `eval`, no secrets, data store or model
+  call, and parts 2-4 add fail-closed boundary validation).
+- The three queued comparison-logic limits and the four queued architecting recommendations were
+  treated as out of scope per the dispatch and are described accurately where the spec mentions them.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round.
