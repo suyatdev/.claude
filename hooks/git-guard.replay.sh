@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Replay: run main's git-guard and this branch's git-guard over the same command
-# matrix in the same fixture states, and report every case where main BLOCKS and
-# the branch ALLOWS. That set must be empty for "never weaker than main" to hold.
+# Replay: run a baseline git-guard (third positional, default `main`) and this
+# branch's git-guard over the same command matrix in the same fixture states, and
+# report every case where the base BLOCKS and the branch ALLOWS. Against the
+# default base, that set must be empty for "never weaker than main" to hold.
 set -u
 WT="$1"                      # worktree path (the branch under test)
 UNDER_TEST="${2:-worktree}"  # "worktree" = the fix; or a git rev to extract instead
+BASE_REV="${3:-main}"        # baseline to compare against; default keeps the stated contract
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# --- main's hook, with main's lib beside it (it resolves the classifier by $0) ---
+# --- the base hook, with its own lib beside it (it resolves the classifier by $0) ---
 BASE="$TMP/base"; mkdir -p "$BASE/lib"
-git -C "$WT" show main:hooks/git-guard.sh              > "$BASE/git-guard.sh"
-git -C "$WT" show main:hooks/lib/classify-git-command.py > "$BASE/lib/classify-git-command.py"
-git -C "$WT" show main:hooks/lib/shell_segments.py     > "$BASE/lib/shell_segments.py"
+git -C "$WT" show "${BASE_REV}:hooks/git-guard.sh"              > "$BASE/git-guard.sh"
+git -C "$WT" show "${BASE_REV}:hooks/lib/classify-git-command.py" > "$BASE/lib/classify-git-command.py"
+git -C "$WT" show "${BASE_REV}:hooks/lib/shell_segments.py"     > "$BASE/lib/shell_segments.py"
 if [ "$UNDER_TEST" = worktree ]; then
   NEW="$WT/hooks/git-guard.sh"
 else

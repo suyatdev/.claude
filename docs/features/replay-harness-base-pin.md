@@ -448,7 +448,14 @@ even then it must be visibly labelled as unresolved rather than presented as a b
       first, as the reproduction. Do not delete the probe.
       - ✅ 2026-08-05: all six rows reproduced exactly, including exit codes. Table, mechanism
         evidence, and the probe's regeneration recipe are under `## Verification`.
-- [ ] 2. Add the `BASE_REV` third positional; replace the three hard-coded `main:` refs.
+- [x] 2. Add the `BASE_REV` third positional; replace the three hard-coded `main:` refs.
+      - ✅ 2026-08-05: repo harness now differs from the Red probe in comments only; re-measured
+        rows 1/3/4 at `378/0/0`, `358/20/0`, `234/82/62` — unchanged, so the parameter is inert
+        against the default and live against a real base.
+      - The file's header comment claimed the harness "runs main's git-guard"; that became false
+        once the base was parameterized, so it was corrected here rather than left stale.
+      - `rev-parse` resolution deliberately **not** added here — it belongs with task 3, where the
+        error contract that must name a *resolved base SHA* lives.
 - [ ] 3. Validate extractions: `git-guard.sh` mandatory both sides (success + non-empty); the two
       `lib/*.py` helpers required only when that side's `git-guard.sh` references `lib/`. Named
       error on failure; self-contained guards recorded, not rejected. Cover `e3b09ba`.
