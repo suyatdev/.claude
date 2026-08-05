@@ -508,9 +508,34 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         I (`234/82/62`) all print the resolved SHA at both the header and the summary line, matching
         each other; all exit 0; no regression from task 5. E/F/J/K refuse or error before reaching
         either printf, so this change doesn't touch them.
-- [ ] 7. Verify scenarios A-L by execution — **all twelve, L included** — `$?` captured immediately,
+- [x] 7. Verify scenarios A-L by execution — **all twelve, L included** — `$?` captured immediately,
       results as a table. L is the falsifier for part 3's membership rule; a run that skips it has
       exactly revision 7's coverage.
+      - ✅ 2026-08-05, single pass under `/bin/bash` 3.2.57, `$?` captured on the line immediately
+        after each run:
+
+        | scenario | result | exit |
+        |---|---|---|
+        | A | refuses, names `56f1dfd…` (not `main`) | 1 |
+        | B | refuses under `f5c5689` (different rev, identical blobs) | 1 |
+        | C | `base=b17a666…` header+summary, `358/20/0` | 0 |
+        | D | `base=bc7da76…` header+summary, `378/0/0` | 0 |
+        | E | names `286fd5a2…` + the missing path | 1 |
+        | F | names `'0000000'` as typed, zero 40-char SHAs | 1 |
+        | G | `base=b17a666…`, `.` resolved, `358/20/0` (was vacuous `378/0/0`) | 0 |
+        | I | self-contained NOTE, `base=e3b09ba…`, `234/82/62` | 0 |
+        | J | names resolved SHA + missing `classify-git-command.py` | 1 |
+        | K | self-contained NOTE, then refuses (was `378/0/0` exit 0 pre-task-4) | 1 |
+        | L | refuses — same bytes, disk-based membership would have reported clean | 1 |
+        | H | holds: A,B,E,F,J,K,L refuse/error; C,D,G,I report — confirmed by the rows above | — |
+      - J's and L's bases don't survive `/clear` (scratchpad); regenerated per task 4's recipe.
+        **L's base and candidate must live in one clone** — the base commit only needs to exist in
+        the object database (an orphaned branch is enough), not be checked out, since `resolve_rev`
+        and `extract_required` both run `git -C "$WT" ...` against the candidate's own repo. A
+        two-clone setup (base in one clone, candidate in another) makes the base SHA unresolvable
+        from the candidate's worktree — caught by F's own error message, not a real failure of L.
+      - K's candidate is `e3b09ba` checked out standalone in its own clone; `BASE_REV=e3b09ba`
+        resolves there directly since it's the same repo's own history.
 - [ ] 8. Confirm no dependent suite moved and no file outside the harness changed.
 - [ ] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
 - [ ] 10. Observability judge, then PR at the judged sha.
