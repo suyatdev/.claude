@@ -850,12 +850,25 @@ how this file and its linked files should be written (plain language, major chan
   `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
-  · 🆕 **NEXT ITEM — the same class is live and SILENT in `git-guard.replay.sh:13-15`.** It
-  hard-codes `git show main:…` for all three files it compares and takes **no** base parameter.
-  Verified: those three files are byte-identical to `main` today, so its `378 identical, 0 relaxed`
-  is a **tautology — a false green**, and this repo has cited that 378/378 as evidence in several
-  rounds. **Quieter than the falsifier's failure and therefore worse.** Needs a different remedy:
-  assert base ≠ candidate ("this proves nothing" if they match) *plus* the missing base parameter.
+  · **IN PLANNING (session 10) — `git-guard.replay.sh`. Canonical:
+  `docs/features/replay-harness-base-pin.md`, `phase: planning`, revision 3.** Scope is **wider than
+  this entry originally said, and its premise was wrong.** Five ways the harness prints a pass that
+  could not fail — measured, absolute worktree path, `$?` first: vacuous base (`main` vs itself,
+  378/0/0 exit 0); **0-byte base** from unchecked `git show` (base `286fd5a`, all three files absent
+  → `118 identical, 260 stricter, 0 relaxed`, exit 0 — a clean pass on the only criterion that
+  matters); **relative worktree path** (`WT=.` → every candidate run exits **127**, tallied as
+  `same`, 378/0/0 — this one bit the first reproduction); unreachable rev; and **the output naming
+  no base at all** (`main` hard-coded a 4th time at `:134`).
+  · ⚠️ **The "false green cited as evidence" premise was WRONG — do not re-adopt it.** The cited
+  figures are **valid**. `git-guard-empty-index.md:314-318` reports 378 **pairs** (matrix size) with
+  **215/326/346** identical and **162/52/32** relaxed — a self-comparison cannot produce one
+  relaxation. The redirect figure was recorded at `64ba2fa` **15:45:33**, 68 min before `cc035d2`
+  merged at **16:53:55**, and `bc7da76:shell_segments.py` has **0** occurrences of `redirect` vs 11
+  at HEAD. Both judges verified this independently. Revision 1 proposed **retracting** them, which
+  would have put a false retraction into an immutable ADR. Replaced by provenance annotation.
+  · 📐 **The real finding:** those numbers were valid and it took blob-hash + timestamp archaeology
+  to prove it, *because the harness never says what it compared*. So the fix is "state the resolved
+  base on every run", not "retract". A number without its baseline cannot be audited later.
   · 📐 **The general rule, worth generalising beyond these two scripts:** a differential harness's
   baseline must be a **fixed commit, never a branch** — a branch that will eventually contain the
   change under test is not a baseline, it is the thing being tested twice. And the harness must
