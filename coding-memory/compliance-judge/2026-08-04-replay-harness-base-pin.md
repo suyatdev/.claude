@@ -963,3 +963,404 @@ None.
 ### Waiver record
 
 None. No violation id has been waived on this spec in any round of either cycle.
+
+---
+
+## Round 1 (new cycle #3 — revision 10) — 2026-08-05 — **FAIL** (2 violations)
+
+**Repo:** `.claude` · **branch:** `fix/replay-harness-base-pin` · **head:** `7bed4d0aa3493f91866105068976ac036662eea3`
+**Spec blob:** `915e331c06bd9c0de7fa23a8d3f6c3c6adc199bc` · **Confidence:** high
+**Waived coming in:** none — no violation has ever been waived on this spec in any of the three cycles.
+
+### Layman summary
+
+Revision 10 does the hard thing well. It takes a gap it had previously written down as "deferred",
+and it does not paper over the awkward parts: it re-measured the observability judge's number,
+disagreed with it, and then *refused to invent a story for the difference*. I checked that refusal
+carefully, because "declined to explain" can be a dodge — here it isn't. The new figure
+(`260 identical, 118 stricter, 0 relaxed`) is the exact arithmetic mirror of the spec's own row 5
+(`118 identical, 260 stricter`): in one run the base allows everything, in the other the candidate
+blocks everything, and both independently put the real guard at 118 allows / 260 blocks of 378
+pairs. The judge's `292/86` would require the broken candidate to allow 32 commands, and the direct
+probe shows it allows none. I also confirmed the spec quotes the judge accurately — the judge record
+really does say `292 identical, 86 stricter, 0 relaxed` at its line 196. Preferring the re-measured
+number and stopping there is exactly right; inventing a mechanism would have been the failure this
+spec exists to describe.
+
+I hunted specifically for the failure this spec has now committed six times — a rule written in two
+places that later drift apart — and on the *rules* it is clean. The on-disk-vs-`git show` rule is
+stated once (part 3) and referenced, not restated, by part 2 and task 11. The side-membership rule
+has one definition (part 2's required set) and part 3 says it reuses it. The error-identity rule
+agrees across part 2, the refusal contract, task 11, and Scenarios E, F, J and M. The scenario set,
+Scenario H's enumeration, and the task list all agree on A–M: H lists A, B, E, F, J, K, L, M as
+refuse/error and C, D, G, I as report — twelve scenarios, all accounted for — and the full A–M sweep
+is assigned to task 11. Task 7 was correctly left at A–L because it is a completed record with
+results; rewriting it would have falsified it. I also read every revision-history section: they are
+genuinely append-only, older claims carry inline supersession notes (`629 → 631 → 632`, revision 6
+superseding revision 3), and nothing live is hiding behind them.
+
+Two things block it, and both are the same shape: a statement about the repository that the
+repository does not support.
+
+**1. A code pointer that points at the wrong lines.** The spec twice cites `replay.sh:64-68` as the
+place where the default `worktree` candidate is exempted from validation, quoting the comment
+"Deliberately not validated here". That comment is at **line 74**, and the worktree branch it sits in
+runs **73–77**. Lines 64–68 are the closing brace of `extract_helpers_if_referenced`, a blank line,
+the base-hook comment, and the two `BASE_SHA` / `BASE` assignments — the *base* extraction, not the
+candidate exemption. This is not a pre-fix line number carried over from the root-cause section: the
+neighbouring `replay.sh:61` pointer (the destructive `rm -f`) is correct against the *current* file,
+and the comment being quoted only exists after task 3, so both pointers are post-fix notation and one
+of them is wrong. Verified at HEAD and again at `cdaa1c3`. This matters because `64-68` is the
+address of the exact code task 11 must change, and because this spec's own history records a wrong
+pointer (`:56` → `:74-77`) that survived three consecutive rounds and was on its way into a permanent
+ADR.
+
+**2. Task 11's blast-radius check is already false, and prescribes the wrong conclusion.** It says
+the branch's final diff "should **stay at 6 files**", and that "a 7th file means the change widened,
+which is the exact failure the last two branches in this class shipped". At the HEAD this spec was
+written on, `git diff --name-only main...HEAD` returns **8** files — the two observability-judge
+records under `coding-memory/observability-judge/` landed at `cdaa1c3`, the commit immediately before
+revision 10. Running task 10's judge and this compliance round adds more. So an implementer executing
+task 11's last step measures 8 (soon 10), compares against 6, and is instructed to conclude the
+change widened. Either the check produces a false alarm on a spec whose entire thesis is that a check
+which fires for the wrong reason is worthless, or it gets quietly fudged. The fix is one clause —
+scope the figure ("6 files outside `coding-memory/`") or re-measure it — but as written the criterion
+cannot be satisfied.
+
+Everything in Part B (what it commits to build) is clean, including the best thing in this revision:
+part 2 and task 11 both name, in advance, that reusing `extract_helpers_if_referenced` for the
+worktree side would run its `rm -f` branch against the user's real repository. Naming a destructive
+action before writing it is precisely the zero-trust invariant, and it is stated twice on purpose.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/spec-code-accuracy` | `skills/writing-specs/SKILL.md` | The spec is the source of truth and is maintained with production rigor; drift between spec and code makes the agent describe behavior that does not exist | "The fix" part 2 (`:136`) and "Revision 10 — deferred non-goal 2 taken" (`:727`) | `replay.sh:64-68` is cited twice as the site of the worktree-candidate exemption, but that comment is at line 74 and its branch spans 73–77; lines 64–68 hold the base extraction, so the pointer sends task 11's implementer to the wrong code. |
+| 2 | `writing-specs/blast-radius-figure-stale` | `skills/writing-specs/SKILL.md` | Requirements must be checkable and must not be readable two ways; a spec figure is maintained in the change that makes it wrong | Tasks, task 11, final bullet (`:716-719`) | Task 11 requires the branch diff to "stay at 6 files" and calls a 7th evidence the change widened, but the diff was already 8 files at the commit revision 10 was written on, so the check cannot pass as stated. |
+
+### Notes (non-blocking)
+
+- **The `292/86` vs `260/118` handling is exemplary, not evasive.** Re-derived independently: with
+  the base allowing everything (row 5) the healthy guard measures 118 allows / 260 blocks; with the
+  candidate blocking everything the same guard must produce `260 identical, 118 stricter, 0 relaxed`.
+  Exact mirror, no free parameters. The judge quote was verified verbatim against
+  `coding-memory/observability-judge/2026-08-05-fix-replay-harness-base-pin.md:196`. Declining to
+  reconcile is the correct call under the repo's own "measure the explanation, not just the number"
+  discipline.
+- **The root cause still says "five distinct ways to print a pass that could not have failed".**
+  Revision 10 closes a sixth (the default worktree candidate that cannot execute), which the spec
+  catalogues under non-goal limit 2 rather than as a numbered route. Not cited: the partition between
+  "routes this change closes" and "limits it does not" is explicit, cross-referenced from part 6, and
+  limit 2's ⚠️ bullet states precisely what revision 10 closed and what it did not. A one-line note in
+  the root cause would retire the ambiguity permanently.
+- **"Identity of the side" is defined for errors but not for the two-sided vacuity refusal.** The
+  contract binds "every refusal and every named error" to name "the identity of the side it
+  concerned", then defines identity per side — but a vacuity refusal concerns both. Scenario A pins
+  the base SHA and the shipped message names only that, so both readings are harmless and no scenario
+  forks on behaviour; still, this is the "both readings pass every scenario" signature that revision 8
+  was written for, and one clause ("a vacuity refusal names the base side") would close it.
+- **Part 6 still calls part 2's coverage "a failed extraction" (`:261`)** — the exact conflation
+  revision 10 retitled part 2 to kill, in the sentence that sources the permanent ADR text. Not cited:
+  part 6's own later paragraph (`:287-290`) and task 11 both say "three sides, not two" explicitly, so
+  the ADR amendment is unambiguously specified.
+- **Task 5's record says `model_tier: low` was set; the frontmatter now reads `high`.** Explicable —
+  revision 10 re-entered planning at `cdaa1c3` — but the two sit in one document without a connecting
+  word. Record-vs-repo territory; flagged for the observability judge rather than cited here.
+- **No diagram.** writing-specs asks for visual aids alongside the pinned toolchain. Revision 10
+  introduces a hard *ordering* requirement across three parts (part 4 path resolution → part 2 side
+  validation → part 3 vacuity refusal → matrix) that Scenario M exists solely to pin; a five-node
+  Mermaid flowchart would carry it better than the prose does. Not cited — nine prior rounds did not,
+  and the ordering is stated unambiguously in Scenario M and task 11.
+- **Re-verified from the repo this round:** `lib/` occurs 3 times in `git-guard.sh`, 2 of them
+  comments (deferral 3, exact); `git-guard.sh:44` / `:53-57` / `:74-77` all correct; `replay.sh:61` is
+  the `rm -f` (correct); `5bc39b9` is 632 commits (exact); ADR 0016 exists, was authored on this
+  branch at `e86ddb5`, is **not** on `main`, and its `:37-56` really is the "what this change proves"
+  section quoted; `cdaa1c3` resolves. The amend-by-new-record convention holds at `0011:4-6` and
+  `0013:5`; `0009:105` is about a *locked spec* rather than an ADR amending an ADR — the weakest of
+  the three citations, though the principle is the same. Editing an unmerged ADR 0016 rather than
+  superseding it is correctly reasoned and correctly scoped to unpublished records.
+- **Part B is clean.** YAGNI: revision 10 is a user decision (session 14) triggered by a *reproduced*
+  defect, and deferrals 1, 3, 4 and 5 stay deferred with the deciding user and date recorded. Error
+  handling: every new boundary states exit code, output suppression and message content, and the three
+  residual limits are recorded rather than swallowed. Destructive-action discipline: the `rm -f`
+  against `$WT` trap is named before it is written, twice. Versions pinned and measured on this host;
+  no new dependencies; no secrets, no absolute paths; `replay.sh` at 239 lines stays far inside the
+  file-size convention. Security territory is shell execution only, and all three inputs (`WT`,
+  `UNDER_TEST`, `BASE_REV`) are validated at the boundary and fail closed.
+- **Spec path** `docs/features/` rather than writing-specs' `docs/superpowers/specs/`: the repo layer
+  (`CLAUDE.md` → `rules/gates.md`, one-canonical-file discipline) mandates `docs/features/<name>.md`
+  for feature-scale work and takes precedence. Not cited, consistent with all prior rounds.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round of any cycle.
+
+---
+
+## Round 2 (new cycle #3 — revision 10) — 2026-08-05 — **FAIL** (1 violation, recurring id)
+
+**Repo:** `.claude` · **branch:** `fix/replay-harness-base-pin` · **head:** `e5b6f0b036d1f63701d6441d1906f23f7c3ea4cf`
+**Spec blob:** `5a7739fd822470b8659e5e8df313f20ee6f2eb5c` · **Confidence:** high
+**Waived coming in:** none. **Round-1 violations:** both fixed and re-verified (`:73-77`/`:74` is
+genuinely the worktree-exemption branch and its comment; task 11's blast radius is now a named set).
+
+### Layman summary
+
+The spec's headline claim is true, and I did not take it on report — I cloned the repo, deleted
+`hooks/lib/`, and ran the DEFAULT invocation myself. It printed **`260 identical, 118 stricter,
+0 relaxed`, exit 0**, under `base=56f1dfdf…(main)`: a clean pass from a candidate that cannot
+execute. That matches the spec to the digit, matches the arithmetic mirror of its own row 5, and does
+**not** match the round-2 observability judge's `292/86`. Preferring the measured figure and refusing
+to invent a mechanism for the other one is the right call, not a dodge — the spec says plainly that
+none was measured, and the number it carries is the one that reproduces.
+
+The three rules I was asked to attack all hold. The on-disk-vs-`git show` rule, the side-membership
+rule and the error-identity rule agree at every site I could find, including the new ones revision 10
+added. The scenario set is A–O and Scenario H, part 2, part 3 and task 11 all agree on it — no
+scenario/task drift this round, which is this spec's most-cited historical class. The revision
+history really is append-only: every superseded figure carries a forward pointer to the revision that
+corrected it, and nothing in the older sections is doing hidden work.
+
+What fails is smaller and duller, and it is the *other* half of the class this spec keeps tripping
+on. The spec's own thesis is that a number without its baseline cannot be audited without
+archaeology. Its **line numbers** are exactly that. Roughly a dozen live pointers still index
+`hooks/git-guard.replay.sh` as it stood on `main`, before tasks 2–6 changed the file — so "the
+`else → same` tally (lines 125-131)" now lands on the vacuity block *this branch added* (the tally is
+at `:227-233`), "line 134" lands in fixture setup (the header printf is `:236`), and the pinned
+toolchain's "`/usr/bin/jq`, hard-coded at line 35" lands in the middle of the command array (`:137`).
+Meanwhile revision 10's own pointers — `replay.sh:73-77`, `:61`, `:57-58` — index HEAD and are
+correct. One document, one notation, two different files, and nothing tells the reader which is
+which. The same drift has quietly broken the Red-probe regeneration recipe (it `sed`s a `show main:`
+string that no longer exists in the repo file) and left the part-6 citation table pointing two lines
+short of the figure it names, because task 9's own annotation pushed that figure from `:140` to
+`:142`. Cheap to fix, but the fix is an **enumeration**, not another point patch — round 1 corrected
+the single pointer it was handed and the class survived, which is why the id recurs.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/spec-code-accuracy` | `skills/writing-specs/SKILL.md` | The spec is the source of truth and is maintained with production rigor; drift between spec and code makes the agent describe behavior that no longer exists | Part 2 (`:109`, `:116`), part 5 (`:244`), part 6 (`:268` and the citation table `:279`), Pinned toolchain (`:305`), Deliberate non-goals limits 1–2 (`:397`, `:400`), Scenario D's comment (`:462`), Verification probe recipe (`:1101-1112`) | All of these index `hooks/git-guard.replay.sh` as it stood pre-fix on `main`, not at HEAD where tasks 2–6 already landed — `line 125`/`lines 125-131` now point at this branch's own vacuity refusal instead of the `else → same` tally (`:227-233`), `line 134` at fixture setup instead of the header printf (`:236`), `line 35` at the command array instead of `/usr/bin/jq` (`:137`) — while revision 10's pointers in the same document (`:73-77`, `:74`, `:61`, `:57-58`) index HEAD, so a reader cannot tell which file version any pointer means; the same drift makes the Red-probe regeneration recipe unrunnable against today's repo file and leaves the part-6 table's `shell-segments-redirects.md:140` two lines short of the figure it names after task 9's annotation moved it to `:142`. |
+
+**Verified, not assumed:** I read `git show main:hooks/git-guard.replay.sh` and the worktree copy
+side by side. `125-131` and `134` are *correct* against `main`'s copy — the pointers were true when
+written and went stale when the fix landed, which is why nine rounds did not catch them. That is the
+same mechanism as round 1's task-8 "6 files", and the same remedy applies: state the baseline the
+pointers index (or re-index them at HEAD), in one pass over all of them.
+
+### Notes (non-blocking)
+
+- **Reproduced independently this round:** clone with `--no-hardlinks`, local `main` from
+  `origin/main`, `rm -rf hooks/lib`, then `bash hooks/git-guard.replay.sh <clone>` → `260 identical,
+  118 stricter, 0 relaxed`, `EXIT=0`, header and summary both `base=56f1dfdf6f4a…(main)`. The spec's
+  figure is exact; `292/86` did not reproduce; the arithmetic mirror against row 5 (`118/260`) is
+  forced, not fitted. Declining to explain the judge's split is honest under this repo's own
+  "measure the explanation, not just the number" discipline.
+- **The three audited rules agree everywhere.** On-disk-vs-`git show`: part 2 (`:147`), part 3
+  (`:222-232`), task 4, task 11 and the shipped `side_members "$NEW"` all read the executing bytes.
+  Side membership: part 2, part 3 (`:184-189`), task 4, task 11, Scenarios I/J/L all say "helpers iff
+  that side's guard references `lib/`". Error identity: part 2 (`:119-124`, `:161`), the refusal
+  contract (`:603-618`), Scenarios E/J/N (SHA) and M/O (worktree path), task 11 — no drift.
+- **No scenario/task drift.** Scenario H's enumeration (A, B, E, F, J, K, L, M, N, O refuse; C, D, G,
+  I report) is exactly A–O with H itself; task 11 sweeps A–O; task 7's A–L is a completed record of
+  what existed then. Clean.
+- **Revision history is genuinely append-only and not hiding anything.** Revision 8's `631/65` and
+  revision 7's `629` each carry the forward correction inline; revision 6 flags what it supersedes in
+  revision 3; revision 9's now-obsolete "part 2 never validates the worktree candidate" is corrected
+  by the revision-10 section above it *and* by part 3's ✅ bullet. Older sections describe what was
+  true then.
+- **Scenario O's rationale is unnecessary and mildly at odds with Scenario M's ordering rule.** O says
+  its base must be non-vacuous "so part 3 cannot refuse first" — but M *requires* candidate validation
+  to fire before the vacuity comparison, and O's truncated helper makes the bytes differ anyway, so
+  part 3 could never refuse first here. Not cited: unlike the Scenario G finding it inherits the
+  phrasing from, a bad base choice in O produces a false *failure* (the error would name the base
+  side, failing O's first assertion), never a false pass. Deleting the clause would retire it.
+- **Scenario O names no specific base**, where G names `b17a666` and M names the default. Same
+  reasoning — it cannot pass for the wrong reason — so noted, not cited. N and O are otherwise
+  concretely buildable: both name their fixture construction, the discriminating assertion, and why M
+  does not cover them.
+- **Part 3's "One rule, two uses, stated in exactly one place"** sits three lines above its own
+  "⚠️ Three rules now depend on this one", and part 2 restates the substance while flagging itself as
+  a reuse. Reconcilable as written (the third dependent is named and attributed), so not cited — but
+  it is the exact drift signature this spec keeps paying for.
+- **`sed` and `perl` in the probe recipe are unpinned**, and the `7a\` insert form is BSD-specific
+  while the pinned block covers neither. Task 1 is complete, so nothing currently depends on it.
+- **Recording-but-not-taking is handled honestly.** Deferrals 3 and 5 each state the *new* evidence
+  that weakened them (a third silent dependent on `grep 'lib/'`; a false pass that survives revision
+  10), state that un-deferring is the user's call and not the implementer's, and say to raise it at
+  the gate. That is core-conduct's "architecture trade-offs stay human-owned" held correctly, and the
+  TAKEN marker on item 2 keeps a closed decision as visible as an open one.
+- **Part B is clean, re-verified.** YAGNI: revision 10 closes a defect a judge *reproduced*, on a
+  recorded user decision. Error handling: every new boundary states exit code, output suppression and
+  message content; the three residual limits are recorded, not swallowed, and limit 2's
+  closes-the-example-not-the-limit distinction is correct. Destructive action: `replay.sh:61`'s
+  `rm -f` is verified dead (its `else` branch runs only when no `lib/` is referenced, the sole writer
+  is `extract_required` at `:57-58` in the other branch, `$TMP` is a fresh `mktemp -d`) and deleted
+  rather than fenced — the right call for a line that would one day be handed `$WT`. Fail-closed on
+  every validation failure; no new dependencies; versions measured on this host; no secrets or
+  absolute paths; `replay.sh` at 239 lines is well inside the file-size convention.
+- **Spec path** `docs/features/` over writing-specs' `docs/superpowers/specs/`: the repo layer
+  (`CLAUDE.md` → `rules/gates.md` one-canonical-file discipline) mandates it and takes precedence.
+  Not cited, consistent with all prior rounds.
+- **Size**: 1113 lines / ~82K for a 239-line harness fix. Not cited — the history is deliberate and
+  demonstrably load-bearing — but it is the largest standing cost to a first-time reader.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round of any cycle.
+
+**Security pass (`skills/writing-secure-code/SKILL.md`, territory: shell execution).** Read and
+applied after the violations table was written, so recording it explicitly rather than leaving the
+`rule_sources_read` entry to stand on its own. Findings: none. All three CLI inputs are validated at
+the boundary and fail closed (`cd … && pwd -P` plus an existence check for `$WT`; `rev-parse --verify
+--quiet "<rev>^{commit}"` for both revs), every expansion is quoted, there is no `eval` and no
+string-built command. §3 (secrets) and §5 (prompt sanitization) have no territory here. §4's
+automated-guardrail clause is met as far as it can be for a test harness: no `*.test.sh` sibling is a
+reasoned non-goal that both harnesses in `hooks/` share, verification is by recorded execution, and
+the dependent suite (`git-guard.test.sh`, 77/0) is re-run. Revision 10 is net *positive* on this axis
+— it deletes the only destructive primitive in the file (`replay.sh:61`'s `rm -f`) rather than
+pointing it at `$WT`.
+
+## Round 3 (new cycle #3 — revision 10) — 2026-08-05 — **FAIL** (2 violations, both recurring ids)
+
+**Repo:** `.claude` · **branch:** `fix/replay-harness-base-pin` · **head:** `6741e410dbb666afadf20252529c33db4d436b84`
+**Spec blob:** `b09e2ac04cd06a29b395cf2f6493517678e82994` · **Confidence:** high
+**Waived coming in:** none. **Round-2 violation:** the pointer *convention* is now stated and almost
+every pointer obeys it — but two instances of the exact pointer round 2 named (`line 134`) were
+missed, so the id recurs a third time.
+
+### Layman summary
+
+The escalated decision — label every line number with which version of the file it belongs to — was
+implemented well, and I checked it the hard way rather than reading the claim. I pulled up both
+versions of the harness (`c461e4c` and HEAD) side by side and resolved **every** line-number pointer
+in the document myself: the pre-fix ones (`6`, `7`, `13-15`, `20-22`, `125-131`, `134`) all land
+exactly where the spec says, the HEAD ones (`:57-58`, `:61`, `:73-77`, `:74`, `:137`, `:227`,
+`:227-233`, `:236`) all land exactly where the spec says, and every pointer into another document
+(`falsifier-base-pin.md:140-152`/`:145`, `git-guard-empty-index.md:311`/`:314-318`,
+`shell-segments-redirects.md:118`/`:142`, `0015:110`, `0011:4-6`, `0013:5`, ADR `0016:37-56`,
+`git-guard.sh:44`/`:53-57`/`:56`/`:74-77`) is correct too. I also re-ran the Red-probe recipe from
+scratch: it regenerates from `c461e4c`, the prefix hashes to `124a85e8`, the diff is exactly the four
+edits the spec predicts (`7a8` and `13,15c14,16`), and the same probe against today's repo file
+differs by 131 lines — the spec's number, reproduced to the digit. That is a genuinely thorough
+enumeration and the convention itself is clear.
+
+**What it missed is two of them, and they are the same line number round 2 called out by name.** In
+the Root cause section, false-pass route 5 says "Line 134 prints the literal string `main`" with no
+`(pre-fix)` label; the Revision 9 history section says "left line 134's hard-coded `main` alone" the
+same way. Everywhere else in the document a bare prose line number carries its label — "line 6,
+pre-fix", "lines 13-15 (pre-fix)", "line 134 (pre-fix)" — so these two read as HEAD, where line 134
+creates a fixture test file. The convention as written binds the `` `replay.sh:N` `` form and never
+mentions the bare "line N" form the document actually uses most, which is why an otherwise careful
+sweep could walk past them. Revision 10's own record claims the Root cause section was swept; it was
+not, quite.
+
+The second finding is the blast-radius criterion again, in its new clothes. Round 1 cited it as a
+stale count; revision 10 replaced the count with a named set, which was the right move — but the set
+lists **six** paths while the same bullet's own measurement of `git diff --name-only main HEAD` is
+**eight**. The two it drops are `docs/features/git-guard-empty-index.md` and
+`docs/features/shell-segments-redirects.md`, the provenance annotations task 9 legitimately made. So
+the sentence "Any *other* path in the diff means the change widened — the exact failure the last two
+branches in this class shipped" fires falsely the day it is read. Separately, "the two judge-verdict
+paths under `coding-memory/`" is defined one sentence earlier as the *observability* judge's md and
+jsonl; this cycle's compliance-judge trail is two more paths under the same tree and is outside the
+set as written.
+
+Everything else I attacked held. The three audited rules (on-disk-is-truth, side membership, error
+identity) agree at every site including the new ones. Scenario set is A–O with H as the meta-scenario
+and no gaps; task 11 sweeps A–O; task 7's A–L is a completed record. The measured claims I could
+re-run all reproduced: `git-guard.sh` has exactly 3 `lib/` occurrences at HEAD with 2 in comments,
+`e3b09ba`'s guard has 0, `286fd5a` has no guard at all, every cited rev resolves, and the diff really
+was 8 files at both `cdaa1c3` and `7bed4d0`.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/spec-code-accuracy` | `skills/writing-specs/SKILL.md` | The spec is the source of truth, maintained with production rigor; drift between spec and code makes the agent describe behavior that no longer exists | Root cause, false-pass route 5 (`:95`); Revision 9 section, "Part 5's header half is now falsifiable" bullet (`:953`) | Both write a bare `line 134` with no `(pre-fix)` label, so under the document's own convention they resolve at HEAD, where `:134` is fixture test-file creation rather than the header printf that hard-codes `main` (pre-fix `:134`; HEAD `:236`) — the identical instance round 2 cited by name, inside the Root cause section revision 10's record claims to have swept; the convention's own wording binds only the `` `replay.sh:N` `` form and never the bare "line N" form used throughout. |
+| 2 | `writing-specs/blast-radius-figure-stale` | `skills/writing-specs/SKILL.md` | Requirements must be concrete and checkable, and must not be readable two ways — an acceptance criterion has to agree with the measurement it names | Task 11, final bullet: "Blast radius re-check, stated as a **set and not a count**" (`:802-813`) | The permitted set names six paths while the same bullet's measurement of `git diff --name-only main HEAD` is eight — `docs/features/git-guard-empty-index.md` and `docs/features/shell-segments-redirects.md` (task 9's provenance edits, named elsewhere in this spec) are in the diff and outside the set, so "any other path in the diff means the change widened" produces a false widening alarm as written; and "the two judge-verdict paths under `coding-memory/`", defined one sentence earlier as the observability pair, does not cover this cycle's `coding-memory/compliance-judge/` trail. |
+
+**Verified, not assumed (violation 1):** `git show c461e4c:hooks/git-guard.replay.sh | awk` and
+`git show HEAD:… | awk` printed with real line numbers. Pre-fix `:134` is
+`printf 'DISTINCT COMMANDS main BLOCKS and %s ALLOWS:\n'`; HEAD `:134` is
+`printf 'v1\n' > "$REPO/src/tracked.sh"; printf 'v1\n' > "$REPO/docs/tracked.md"`. Blob hashes match
+the convention exactly: `c461e4c` = `main` = `124a85e8`, HEAD = `adbbf0a7`, `git-guard.sh` =
+`2b74507c` at both.
+
+**Verified, not assumed (violation 2):** `git diff --name-only main HEAD` → `CODING_MEMORY.md`,
+`coding-memory/observability-judge/2026-08-05-fix-replay-harness-base-pin.md`,
+`coding-memory/observability-judge/verdicts.jsonl`, `docs/decisions/0016-…`,
+`docs/features/git-guard-empty-index.md`, `docs/features/replay-harness-base-pin.md`,
+`docs/features/shell-segments-redirects.md`, `hooks/git-guard.replay.sh` — 8 paths, 2 of them outside
+task 11's set. `coding-memory/compliance-judge/*` is tracked and currently modified in the working
+tree, so this cycle's verdict trail is a further two paths under the same tree.
+
+### The pointer class, enumerated (what I checked, so the next round need not redo it)
+
+| pointer | baseline claimed | resolves to | ✓ |
+|---|---|---|---|
+| `WT` line 6, `UNDER_TEST` line 7 | pre-fix | `WT="$1"`, `UNDER_TEST="${2:-worktree}"` | ✓ |
+| lines 13-15 (×3 sites) | pre-fix | the three `git show main:hooks/…` | ✓ |
+| lines 20-22 | pre-fix | the three rev-candidate `git show` | ✓ |
+| lines 125-131 | pre-fix | the `if/elif/else` comparison block | ✓ |
+| line 134 (`:54`, `:263`, `:483`, `:701`) | pre-fix | the `DISTINCT COMMANDS main …` printf | ✓ |
+| **`Line 134` (`:95`), `line 134` (`:953`)** | **unlabelled** | **HEAD `:134` = fixture setup** | ✗ |
+| `replay.sh:57-58` | HEAD | `extract_required` helper calls | ✓ |
+| `replay.sh:61` | HEAD | the `rm -f` in the `else` branch | ✓ |
+| `replay.sh:73-77`, comment `:74` | HEAD | worktree branch + "Deliberately not validated here" | ✓ |
+| `replay.sh:137` | HEAD | `payload() { /usr/bin/jq …` | ✓ |
+| `replay.sh:227`, `:227-233` | HEAD | `relaxed` test; the tally block | ✓ |
+| `replay.sh:236` | HEAD | the header printf with `base=%s (%s)` | ✓ |
+| `git-guard.sh:44`, `:53-57`, `:56`, `:74-77` | (no qualifier needed) | `CLASSIFIER=`, python3 guard, its `exit 2`, classifier fail-closed | ✓ |
+| `falsifier-base-pin.md:140-152`, `:145` | — | the queuing section; the tautology sentence | ✓ |
+| `git-guard-empty-index.md:311`, `:314-318` | — | the 378-pairs claim; the candidate table | ✓ |
+| `shell-segments-redirects.md:118`, `:142` | — | correction 2; task 5's replay line | ✓ |
+| `0015:110`, `0011:4-6`, `0013:5`, `0016:37-56` | — | replay-blindness note; both Amends headers; "what this change proves" | ✓ |
+| Red-probe recipe (`7a8`, `13,15c14,16`) | pre-fix | re-run: prefix `124a85e8`, exactly 4 edits, 131 lines vs today's file | ✓ |
+
+### Notes (non-blocking)
+
+- **The convention would be airtight with one more clause.** It defines `(pre-fix)` and an unqualified
+  `` `replay.sh:N` ``, but the document's dominant form is bare prose ("line 6, pre-fix"). Saying that
+  *any* line number, in prose or in backticks, is pre-fix only when labelled and HEAD otherwise would
+  make violation 1 structurally impossible instead of fixed one instance at a time — which is exactly
+  the enumerate-the-class remedy this spec applied everywhere else.
+- **`0009:105` is the weakest of the three amend-by-new-record citations** — it records a deviation
+  because a *spec* was blob-locked, not because an ADR was published. `0011:4-6` and `0013:5` carry
+  the claim cleanly; the convention holds either way.
+- **`sed`, `perl`, `grep`, `sort` remain unpinned** (probe recipe and harness internals), and the
+  `7a\` insert form is BSD-specific. Carried over from round 2, still not cited: the pinned block
+  covers the harness's load-bearing runtime, task 1 is complete, and the recipe now reproduces
+  verbatim on this host.
+- **Everything measurable in the spec that I could re-run, reproduced.** 3 `lib/` occurrences in
+  `git-guard.sh` at HEAD with 2 in comments (deferral 3's claim, exact); 0 in `e3b09ba`'s guard;
+  `286fd5a` has no `hooks/git-guard.sh`; all eleven cited revs resolve; `git diff --name-only main
+  <rev>` is 8 at both `cdaa1c3` and `7bed4d0`, matching the spec; the 260/118 ↔ 118/260 mirror is
+  arithmetically forced, not fitted.
+- **No scenario/task drift.** A–O plus H; H's enumeration (A, B, E, F, J, K, L, M, N, O refuse; C, D,
+  G, I report) is exactly the 14 defined scenarios; task 11 sweeps A–O and names the accepting-
+  direction corner (A, C, D, G, I) as the one most likely to be cut. Task 7's A–L is a completed
+  record of what existed then, correctly left alone.
+- **Part B is clean, re-verified.** YAGNI: task 11 closes a gap a judge *reproduced live*, on a
+  recorded user decision, and the four remaining deferrals stay deferred with their strengthened
+  evidence stated. Error handling: every new boundary states exit code, output suppression and
+  message content; three residual limits are recorded rather than swallowed, with limit 2's
+  closes-the-example-not-the-limit distinction correct. Destructive action: `replay.sh:61`'s `rm -f`
+  is verified dead and deleted rather than fenced — net security-positive. Fail-closed everywhere; no
+  new dependencies; no secrets, no absolute user paths; `replay.sh` at 239 lines is well inside the
+  file-size convention; architecture trade-offs (deferrals 1, 3, 5) explicitly left to the user at
+  the gate.
+- **Security pass (`skills/writing-secure-code/SKILL.md`, territory: shell execution).** Findings:
+  none. `BASE_REV`, `UNDER_TEST` and `WT` are all validated at the boundary and fail closed
+  (`rev-parse --verify -q "<rev>^{commit}"`, `cd … && pwd -P` plus an existence check); every
+  expansion is quoted; no `eval`, no string-built command. §2/§3/§5 have no territory here.
+- **Spec path** `docs/features/` over writing-specs' `docs/superpowers/specs/`: the repo layer
+  (`CLAUDE.md` → `rules/gates.md` one-canonical-file discipline) mandates it and takes precedence.
+  Not cited, consistent with all prior rounds. No `.claude/project-standards.md` exists in this repo.
+- **Size**: 1172 lines (was 1113 at round 2) for a 239-line harness fix. Still not cited — the
+  history is load-bearing and demonstrably prevents repeat errors — but it grows every round.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round of any cycle.
