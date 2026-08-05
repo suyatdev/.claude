@@ -843,8 +843,10 @@ how this file and its linked files should be written (plain language, major chan
   the noisy direction is the dangerous one — a permanently-red check teaches the reader to ignore
   it, and ADR 0015 cites this script as *the* thing that demonstrates the fix. Detail in
   `coding-memory/pr-tracking.md` §PR #38.
-  · ✅ **FIXED — PR #39 OPEN 2026-08-04**, https://github.com/suyatdev/.claude/pull/39, branch
-  `fix/falsifier-base-pin`, judge `risk=low confidence=high`. Two parts, not one: pin the default to
+  · ✅ **FIXED — PR #39 MERGED 2026-08-05** (`cbb9f60`), branch deleted local + remote, judge
+  `risk=low confidence=high`. Verified on `main` by the one measurement that matters: the invocation
+  that was permanently red is now exit 0 / 0 FAIL rows, and `… main` is exit 1 with the baseline
+  named. Two parts, not one: pin the default to
   `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.

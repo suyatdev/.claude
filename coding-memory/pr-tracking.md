@@ -659,11 +659,19 @@ Full detail for every repo/branch. The index (`CODING_MEMORY.md`) keeps only a o
 - next: queue item 5 (marker-gate spec) is unblocked — its tokenisation depended on this. Plus the
   falsifier base pin above.
 
-### PR #39 — fix/falsifier-base-pin (OPEN, opened 2026-08-04)
+### PR #39 — fix/falsifier-base-pin (MERGED 2026-08-05)
 - repo: suyatdev/.claude · branch: fix/falsifier-base-pin · remote: origin
   (git@github.com:suyatdev/.claude.git)
-- PR: https://github.com/suyatdev/.claude/pull/39 · status: **OPEN**. Created at HEAD `d0dac2e`
-  (single commit). Branched from `main` @ `e0d8546`.
+- PR: https://github.com/suyatdev/.claude/pull/39 · status: **MERGED 2026-08-05T02:15:16Z** (merge
+  commit `cbb9f60`, PR tip `ee652c7`; created at HEAD `d0dac2e`). Merged in the GitHub UI by the
+  user. Branch **DELETED 2026-08-05, local + remote** (`git branch -d`; absence re-checked both
+  sides). Branched from `main` @ `e0d8546`.
+- **verified on `main` by the one measurement that matters**: the invocation that was permanently red
+  (`bash hooks/shell-segments-falsifier.sh`, no args, run *from main*) is now **exit 0, 0 FAIL rows**,
+  and `… main` is **exit 1, 0 FAIL rows** with the baseline named. Suites re-run from main: 492
+  checks, 0 failed. ⚠️ A first check used `grep -c 'BASE="${1:-bc7da76}"'` and returned **0**, which
+  looks like the change is missing — that is the shell eating `${…}` in the pattern, not a missing
+  change. Use `grep -F`.
 - session_origin (created): `session_01EtbQdY17EMUfrxCzfZN3RP`; same session as #38.
 - scope: `hooks/shell-segments-falsifier.sh` only. **Its baseline defaulted to `main`**, a moving
   ref, and the branch that wrote it existed in order to merge there — so it self-invalidated at
