@@ -456,9 +456,19 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         once the base was parameterized, so it was corrected here rather than left stale.
       - `rev-parse` resolution deliberately **not** added here — it belongs with task 3, where the
         error contract that must name a *resolved base SHA* lives.
-- [ ] 3. Validate extractions: `git-guard.sh` mandatory both sides (success + non-empty); the two
+- [x] 3. Validate extractions: `git-guard.sh` mandatory both sides (success + non-empty); the two
       `lib/*.py` helpers required only when that side's `git-guard.sh` references `lib/`. Named
       error on failure; self-contained guards recorded, not rejected. Cover `e3b09ba`.
+      - ✅ 2026-08-05, all under `/bin/bash` 3.2.57 explicitly (not `env bash`): **E** names the
+        resolved SHA + path, no header, no pair-count, exit 1. **F** names `'0000000'` as typed,
+        prints **zero** 40-char SHAs, exit 1. **I** accepts `e3b09ba`, prints the self-contained
+        NOTE, `234/82/62`, exit 0. Regressions: default `378/0/0`, `b17a666` `358/20/0` with no
+        spurious NOTE — the rule fires in the accepting direction without over-firing.
+      - ⚠️ `resolve_rev` runs inside `$( )`, so a `fail` inside it exits only the **subshell** — the
+        script would continue with an empty SHA. Both call sites carry `|| exit 1`. Errors go to
+        stderr, which `$( )` does not capture, so the message still reaches the user.
+      - Scenario J (same rule, rejecting direction) exercises this code but its base must be
+        synthesized; the checklist assigns that to task 4, so it is verified there.
 - [ ] 4. Add the vacuity refusal: a side's set is part 2's required set (guard always, helpers only
       when that side's guard references `lib/`, read from the bytes that will execute); compare sets
       first, then bytes, and never `cmp` a non-member. Synthesize Scenario J's and Scenario L's

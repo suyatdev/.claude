@@ -10,18 +10,64 @@ BASE_REV="${3:-main}"        # baseline to compare against; default keeps the st
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+INVOCATION="bash hooks/git-guard.replay.sh <worktree> [worktree|<rev>] [<base-rev>]"
+
+# Every named error and every refusal: one plain sentence, no matrix, non-zero exit.
+fail() {
+  printf 'REPLAY ERROR: %s\n' "$1" >&2
+  printf 'Corrected invocation: %s\n' "$INVOCATION" >&2
+  exit 1
+}
+
+# Resolve before extracting anything, so every later error can name a real SHA. An
+# unresolvable rev is the ONE case with no SHA to name, so it names the string as typed.
+resolve_rev() {  # $1 = rev as typed, $2 = side label
+  local sha
+  sha="$(git -C "$WT" rev-parse --verify --quiet "${1}^{commit}" 2>/dev/null)"
+  if [ -z "$sha" ]; then
+    fail "the $2 rev '$1' (as typed) is unresolved — rev-parse produced no commit for it, so no SHA can be named."
+  fi
+  printf '%s\n' "$sha"
+}
+
+# $1 = resolved sha, $2 = side label, $3 = path in repo, $4 = destination
+extract_required() {
+  if ! git -C "$WT" show "${1}:${3}" > "$4" 2>/dev/null; then
+    fail "the $2 at $1 does not contain $3, so its guard cannot run; no matrix was produced."
+  fi
+  if [ ! -s "$4" ]; then
+    fail "the $2 at $1 has an empty $3 — an empty file cannot execute as intended and would manufacture a false result."
+  fi
+}
+
+# The two lib/*.py helpers are required ONLY when that side's git-guard.sh actually
+# references lib/, read from the bytes that will execute. A guard that predates the
+# helper split is self-contained: recorded, not rejected.
+extract_helpers_if_referenced() {  # $1 = resolved sha, $2 = side label, $3 = side dir
+  if grep -q 'lib/' "$3/git-guard.sh"; then
+    extract_required "$1" "$2" hooks/lib/classify-git-command.py "$3/lib/classify-git-command.py"
+    extract_required "$1" "$2" hooks/lib/shell_segments.py       "$3/lib/shell_segments.py"
+  else
+    # Must not be left on disk: they cannot execute, so they are not part of this side.
+    rm -f "$3/lib/classify-git-command.py" "$3/lib/shell_segments.py"
+    printf 'NOTE: the %s at %s is a self-contained guard (git-guard.sh references no lib/); its hooks/lib/*.py are not part of this comparison.\n' "$2" "$1"
+  fi
+}
+
 # --- the base hook, with its own lib beside it (it resolves the classifier by $0) ---
+BASE_SHA="$(resolve_rev "$BASE_REV" base)" || exit 1
 BASE="$TMP/base"; mkdir -p "$BASE/lib"
-git -C "$WT" show "${BASE_REV}:hooks/git-guard.sh"              > "$BASE/git-guard.sh"
-git -C "$WT" show "${BASE_REV}:hooks/lib/classify-git-command.py" > "$BASE/lib/classify-git-command.py"
-git -C "$WT" show "${BASE_REV}:hooks/lib/shell_segments.py"     > "$BASE/lib/shell_segments.py"
+extract_required "$BASE_SHA" base hooks/git-guard.sh "$BASE/git-guard.sh"
+extract_helpers_if_referenced "$BASE_SHA" base "$BASE"
+
 if [ "$UNDER_TEST" = worktree ]; then
+  # Deliberately not validated here: part 2 covers the base and a rev candidate only.
   NEW="$WT/hooks/git-guard.sh"
 else
+  CAND_SHA="$(resolve_rev "$UNDER_TEST" candidate)" || exit 1
   CAND="$TMP/cand"; mkdir -p "$CAND/lib"
-  git -C "$WT" show "$UNDER_TEST:hooks/git-guard.sh"              > "$CAND/git-guard.sh"
-  git -C "$WT" show "$UNDER_TEST:hooks/lib/classify-git-command.py" > "$CAND/lib/classify-git-command.py"
-  git -C "$WT" show "$UNDER_TEST:hooks/lib/shell_segments.py"     > "$CAND/lib/shell_segments.py"
+  extract_required "$CAND_SHA" candidate hooks/git-guard.sh "$CAND/git-guard.sh"
+  extract_helpers_if_referenced "$CAND_SHA" candidate "$CAND"
   NEW="$CAND/git-guard.sh"
 fi
 
