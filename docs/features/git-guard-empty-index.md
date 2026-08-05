@@ -317,6 +317,10 @@ to 63: round 3's two shapes were not in it, which is why it passed them.
 | the narrowed fix as RUN 3 received it (`4be542b`) | 326 | 0 | **52 pairs / 13 distinct commands** |
 | this fix | 346 | 0 | **32 pairs / 8 distinct commands** |
 
+*Provenance ([ADR 0016](../decisions/0016-differential-harness-must-prove-difference.md)): base was
+`main` as it stood when each row was measured — this predates `BASE_REV`, so no fixed SHA was
+recorded at the time.*
+
 All eight relaxations name **only** documentation after a `--` (`docs/*.md`, `CODING_MEMORY.md`,
 `coding-memory/*`), which is the entire intended change; one of them is the newly-legal
 `git commit -m a -- docs/x.md && git commit -m b -- docs/x.md`. The five that left the list between

@@ -541,7 +541,16 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         `CODING_MEMORY.md` changed — nothing else. `git-guard.sh` itself untouched.
       - `hooks/git-guard.test.sh` (the only test suite adjacent to either harness — spec's own
         non-goal confirms neither harness has a test sibling): **77 passed, 0 failed.**
-- [ ] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
+- [x] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
+      - `docs/decisions/0016-differential-harness-must-prove-difference.md` — the rule quote, the
+        limit it does not close (the `else → same` tally, `relaxed`'s one-sided definition, the
+        unconditional `exit 0`, all still open per the non-goals), and the full five-site provenance
+        table (restated here, not just referenced).
+      - Edited `git-guard-empty-index.md:314-318` and `shell-segments-redirects.md:117-118,140` with
+        one-line provenance annotations. `falsifier-base-pin.md:145` left untouched — it already
+        states its own provenance correctly (base = candidate = `main`, the tautology itself). ADR
+        0015 left untouched — its figure is restated with provenance inside ADR 0016 instead, per
+        this repo's amend-by-new-record convention.
 - [ ] 10. Observability judge, then PR at the judged sha.
 
 ## Revision 9 — round-1 compliance (new cycle) + sixth architecting read
