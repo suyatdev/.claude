@@ -1364,3 +1364,142 @@ tree, so this cycle's verdict trail is a further two paths under the same tree.
 ### Waiver record
 
 None. No violation id has been waived on this spec in any round of any cycle.
+
+---
+
+## Round 4 (revision 10 cycle) — 2026-08-05 — **PASS** (0 violations)
+
+**Repo:** `.claude` · **branch:** `fix/replay-harness-base-pin` · **head:** `8c53c67457f9563f0048c2c8a36fb84964e531f3`
+**Spec blob:** `4423a45172b263e1855699b79c691c1efe4fd649` · **Confidence:** high
+**Waived coming in:** none.
+
+### Layman summary
+
+Both of round 3's findings are closed, and I checked them the hard way rather than reading the
+changelog. The pointer problem — a line number that means one thing in the old file and another in
+the new one, cited three rounds running — is finally gone as a *class*: I pulled both versions of
+`hooks/git-guard.replay.sh` out of git (the 137-line pre-fix one and the 239-line current one) and
+resolved **every** line number in the document against them, including the ones buried in the
+append-only history sections that earlier sweeps skipped. All of them land where the spec says they
+land. The blast-radius list — which paths this change is allowed to touch — now names all eight
+instead of six, and every file in today's ten-file diff falls inside it, so the "anything else means
+the change grew" alarm can no longer fire on the judges' own paperwork.
+
+The interesting part was the retraction. An advisory read had told this spec that an *empty* helper
+file breaks the guard in the opposite direction from a *missing* one, and Scenario O's justification
+was written on that claim. It was false, the spec now says so, and I confirmed the correction myself
+by building all four broken shapes and running the real hook against them: a missing helper and an
+empty `shell_segments.py` both make the guard block everything (the silent, dangerous failure), while
+an empty `classify-git-command.py` or an empty `git-guard.sh` make it allow everything (the loud,
+obvious one). The spec's four measured rows are exactly right, and it says plainly that Scenario O
+happens to pin the dangerous shape *by luck* rather than by design — which is the honest version.
+Scenario O still earns its slot for a different reason it now states correctly: it is the only test of
+the "file must not be empty" check on the newest side.
+
+Nothing blocking remains. The residual items below are polish, not defects, and none of them changes
+what gets built.
+
+### Violations
+
+None.
+
+| id | rule source | where | why |
+|---|---|---|---|
+| — | — | — | — |
+
+### What I verified independently (not taken on report)
+
+- **Pointer class — enumerated in full, both blobs in hand.** Pre-fix (`c461e4c`, blob `124a85e8`):
+  `6`=`WT`, `7`=`UNDER_TEST`, `13-15`=the three `git show main:` calls, `20-22`=the candidate's three,
+  `125-131`=the tally `if/elif/else`, `134`=the header printf hard-coding `main`. HEAD (blob
+  `adbbf0a7`): `:35`=`rev-parse`, `:57-58`=`extract_required` helper calls, `:61`=the dead `rm -f`,
+  `:73-77`=the worktree branch with its "Deliberately not validated here" comment at `:74`,
+  `:137`=`/usr/bin/jq`, `:227`=`relaxed`'s definition, `:227-233`=the tally, `:236`=the header printf.
+  Every one resolves as labelled. The two round-3 stragglers (route 5, revision-9 bullet) now carry
+  `(pre-fix)`. The round-2 changelog's `lines 125-131` / `line 134` / `line 35` are *correct as bare
+  HEAD pointers* — at HEAD those are fixture setup, test-file creation and `rev-parse`, which is
+  exactly what the sentence claims. `git-guard.sh` `:44` / `:53-57` / `:56` / `:74-77` all correct
+  (blob `2b74507c` at `main` and HEAD, so no qualifier needed, as stated).
+- **Cross-document pointers.** `git-guard-empty-index.md:311` + table `:314-318` (215/326/346 and
+  162/52/32), `shell-segments-redirects.md:118` and `:142`, `falsifier-base-pin.md:140-152`/`:145`,
+  ADR `0016:37-56` ("What this change proves, and what it does not" — the section part 6 says must be
+  amended). All resolve.
+- **Blast radius.** `git diff --name-only main HEAD` is **10 files today** (8 at `cdaa1c3` and
+  `7bed4d0`, as the spec states). Every one of the ten is a member of the eight-row set; rows 7 and 8
+  are globs over the two judge trails, which is why the count moves and the set does not. The
+  criterion is now satisfiable and cannot fire falsely.
+- **The retraction, reproduced directly.** Built all four broken shapes and ran `hooks/git-guard.sh`
+  against `ls -la` and `git push` in a fixture repo: helpers missing → **2** (blocks), empty
+  `shell_segments.py` → **2** (blocks, *identical* to missing), empty `classify-git-command.py` → **0**
+  (allows), empty `git-guard.sh` → **0** (allows). That is precisely the spec's 260/118/0 ×2 and
+  118/0/260 ×2 table, and the mechanism is forced: `classify-git-command.py:68` does
+  `from shell_segments import segments`, so an empty or missing `shell_segments.py` makes the
+  classifier exit non-zero and `git-guard.sh:74-77` fails closed, while an empty classifier exits 0
+  with no facts and the guard allows.
+- **Red-probe recipe.** Re-run from scratch: `$PREFIX` hashes to `124a85e8`, the diff is exactly
+  `7a8` + `13,15c14,16` (7 `<`/`>` lines), and the same probe against today's repo file differs by
+  **131** lines. Reproduces to the digit.
+- **Everything else re-runnable.** All 17 cited revs/blobs resolve; `f5c5689`'s three blobs are
+  identical to HEAD's (Scenario B's premise); `e3b09ba`'s guard has 0 occurrences of `lib/`;
+  `286fd5a` has no `hooks/git-guard.sh`; `git-guard.sh` at HEAD has 3 `lib/` matches with 2 in
+  comments (deferral 3, exact); `git rev-list --count 5bc39b9` = **632**; `replay.sh` is 239 lines
+  (137 pre-fix, so "tasks 2-6 added ~100 lines" is +102).
+- **Scenario/task coherence.** 14 scenarios A–O plus meta-scenario H; H's split (A,B,E,F,J,K,L,M,N,O
+  refuse or error; C,D,G,I report) covers all 14. Task 11 sweeps A–O and names the accepting-direction
+  corner. Task 7's A–L is a completed historical record, correctly untouched.
+- **Part B.** YAGNI: revision 10 takes one gap a judge reproduced live, on a recorded user decision;
+  four deferrals stay deferred and are explicitly routed to the user at the gate. Error handling: every
+  boundary (unresolvable rev, missing file, empty file, unresolvable worktree path, vacuous run) states
+  exit code, output suppression and message content, and fails closed. The dead `rm -f` at
+  `replay.sh:61` is verified dead (its `else` branch runs only when no `lib/` is referenced; the sole
+  writer is `extract_required` at `:57-58` in the other branch; `$TMP` is a fresh `mktemp -d`) and is
+  deleted rather than fenced — net security-positive. No new dependencies, no secrets, no absolute user
+  paths, 239 lines well inside the file-size convention.
+- **Security pass** (`skills/writing-secure-code/SKILL.md`, territory: shell execution). No findings.
+  All three CLI inputs validated at the boundary and fail closed; every expansion quoted; no `eval`,
+  no string-built command; the one destructive call in the design is removed rather than reused.
+
+### Notes (non-blocking)
+
+- **Two bare `line 7` mentions survive, and I deliberately did not cite them** (`:933`, `:1208`). Both
+  describe the Red-probe recipe's `sed '7a\'` anchor, which operates on `$PREFIX` — the pre-fix file —
+  and both sentences name `c461e4c` in the same breath ("Regenerate from `c461e4c`, NOT from the
+  repo's working file"). Under the convention's literal token rule a bare number is HEAD, where line 7
+  is `WT_INPUT`; under the convention's *purpose* (state the baseline) they are compliant, and the
+  recipe's own first line builds `$PREFIX` from `c461e4c`, so misdirection is impossible. **The
+  convention is workable** — this is the only residue after a full enumeration, and tagging the two
+  costs four words if the author wants it airtight.
+- **Same class, non-line-number form:** the Root-cause section's `grep -cE 'BASE_REV|getopts|\$\{3'
+  hooks/git-guard.replay.sh` → `0` and "per its own header: run `main`'s `git-guard.sh`" are both true
+  of the pre-fix file only (HEAD has `BASE_REV` at `:9` and a rewritten header). They sit inside a
+  paragraph carrying three explicit `(pre-fix)` labels, and neither is a line number, so the convention
+  does not reach them. Not cited; flagged so the class is on the record in full.
+- **The round-3 advisory record still contains the retracted premise** ("empty helpers … fail in the
+  *opposite* direction", `:959`). The round-4 paragraph six lines above retracts it by name, and the
+  conclusion it supported (`292/86` cannot come from any helper-breakage shape) survives the correction
+  — all four measured shapes are 260/118/0 or 118/0/260, neither of which is 292/86. An inline
+  "(retracted above)" marker would close it; not cited because reading order puts the retraction first.
+- **Scenario O's "nothing falsified (b) on any side"** reads present-tense while Scenario N, defined
+  immediately above it, falsifies the non-empty check on the base side. The intended meaning (before N
+  and O existed) is clear from the revision-10 record and from task 11's note that N is a regression
+  lock; harmless, but "nothing *previously* falsified (b)" would be exact.
+- **8 rows ≠ 8 files, and that coincidence is fragile.** The blast-radius bullet quotes "8 files at
+  `cdaa1c3` and at `7bed4d0`" beside an 8-row set; today the same set spans 10 files. The set is the
+  criterion and it holds — which is precisely the point the bullet makes about counts — but a reader
+  could take the two eights as the same eight.
+- **Carried forward, still not cited:** `sed`, `perl`, `grep`, `sort`, `diff` unpinned (the `7a\`
+  insert form is BSD-specific) — the pinned block covers the harness's runtime and the recipe
+  reproduces verbatim here; spec path `docs/features/` over writing-specs' `docs/superpowers/specs/`,
+  mandated by the repo layer (`CLAUDE.md` → `rules/gates.md`), which takes precedence; no
+  `.claude/project-standards.md` exists in this repo.
+- **No diagram.** `writing-specs` asks for visual aids; the one place a small Mermaid flowchart would
+  earn its tokens is the ordering constraint (part 2 validation → part 3 vacuity → matrix), which is
+  currently prose plus Scenario M's comment. Observation only — the constraint is unambiguous as
+  written, and this document does not need more words.
+- **Size**: 1226 lines (1172 at round 3) for a 239-line harness fix. Still not cited — the history is
+  load-bearing and has demonstrably prevented repeat errors — but four rounds have added ~54 lines each
+  and the growth is now the largest standing cost of this process.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round of any cycle.

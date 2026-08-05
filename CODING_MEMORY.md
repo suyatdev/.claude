@@ -859,14 +859,26 @@ how this file and its linked files should be written (plain language, major chan
   invocation prints **`260 identical, 118 stricter, 0 relaxed`, exit 0** — NOT the `292/86/0` the
   round-2 judge reported; the measured split is the mirror of row 5 and was independently
   reproduced to the digit by two later judge rounds. Scenarios **M, N, O** added (H now A-O).
-  ⚠️ **Compliance rounds 1-3 all FAILED**, `writing-specs/spec-code-accuracy` cited **three
-  consecutive rounds** (stale line pointers into a file tasks 2-6 grew by ~100 lines). User decision
-  after round 2: **label each pointer with its baseline**; a pointer convention now sits at the top
-  of the Spec section. Round 3 found 2 stragglers (`:95`, `:953`) + a blast-radius set that names 6
-  paths against an 8-file diff. **Escalated — awaiting user direction, do not auto-revise.**
-  Advisory read self-corrected: empty ≠ opposite-direction — `shell_segments.py` empty behaves
-  **identically** to missing (`260/118/0`); only `classify-git-command.py`/`git-guard.sh` empty go
-  loud (`118/0/260`). Scenario O's comment still carries that invented mechanism and must be fixed.
+  ✅ **Compliance PASSED at round 4** (`8c53c67`, blob `4423a45…`, 0 violations, confidence high).
+  Rounds 1-3 failed, `writing-specs/spec-code-accuracy` cited **three consecutive rounds** (stale
+  line pointers into a file tasks 2-6 grew by ~100 lines). Escalated after round 2; **user decision:
+  label each pointer with its baseline** — a pointer convention now sits at the top of the Spec
+  section and **binds every line number including the append-only history sections**, which is what
+  finally closed it (rounds 2-3 kept missing instances because the sweep treated some regions as out
+  of scope). Round 4 verified it by resolving every pointer against both blobs (`124a85e8` pre-fix,
+  `adbbf0a7` HEAD).
+  ⚠️ **An invented mechanism reached the spec and was retracted.** The advisory read claimed empty
+  fails opposite to missing; Scenario O was written on it; round 4 measured all four shapes and it
+  was false — `shell_segments.py` empty is `260/118/0`, **identical to missing**; only
+  `classify-git-command.py`/`git-guard.sh` empty go loud (`118/0/260`). O now carries the measured
+  table and says it pins the silent shape **by luck, not reasoning**. Cause: adopted on report
+  instead of measured — this spec's own failure mode, reaching the spec.
+  📌 **Four non-blocking notes deliberately NOT applied** — any spec edit invalidates the fresh
+  pass: retracted premise still inline at `:959`; Scenario O's "nothing falsified (b)" should read
+  "nothing previously"; two pre-fix-only prose truths the convention doesn't reach; 1226 lines for a
+  239-line fix.
+  ▶️ **NEXT: the `gate confirmed` hard stop** (planning → implementation) — also a mandatory
+  model-switch checkpoint and a `/clear` point. Then task 11, then task 10's judge at the new HEAD.
   **All twelve scenarios A-L verified by execution** under `/bin/bash` 3.2.57 (task 7) — Scenario G
   (relative worktree path) was the last one open, closed by task 5's `WT` resolution (`f06d93f`).
   Task 6 (`97aef27`) prints the resolved base SHA at both the header and summary line. Task 8
