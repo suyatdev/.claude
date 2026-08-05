@@ -444,8 +444,10 @@ even then it must be visibly labelled as unresolved rather than presented as a b
 
 ## Tasks
 
-- [ ] 1. Red — record the six measured rows above against the unfixed script, exit codes captured
+- [x] 1. Red — record the six measured rows above against the unfixed script, exit codes captured
       first, as the reproduction. Do not delete the probe.
+      - ✅ 2026-08-05: all six rows reproduced exactly, including exit codes. Table, mechanism
+        evidence, and the probe's regeneration recipe are under `## Verification`.
 - [ ] 2. Add the `BASE_REV` third positional; replace the three hard-coded `main:` refs.
 - [ ] 3. Validate extractions: `git-guard.sh` mandatory both sides (success + non-empty); the two
       `lib/*.py` helpers required only when that side's `git-guard.sh` references `lib/`. Named
@@ -627,4 +629,49 @@ agree in one edit.
 
 ## Verification
 
-<Appended during review.>
+### Task 1 — Red reproduction (2026-08-05, unfixed script)
+
+**PASS — all six rows reproduce the spec's table exactly, exit codes included.** `$?` captured on the
+line immediately after each run, before any other command; no command substitution intervenes.
+
+| row | base | `WT` | identical | stricter | relaxed | exit | vs. spec |
+|---|---|---|---|---|---|---|---|
+| 1 | `main` (default, arg omitted) | absolute | 378 | 0 | 0 | 0 | ✅ |
+| 2 | `bc7da76` | absolute | 378 | 0 | 0 | 0 | ✅ |
+| 3 | `b17a666` | absolute | 358 | 20 | 0 | 0 | ✅ |
+| 4 | `e3b09ba` | absolute | 234 | 82 | 62 | 0 | ✅ |
+| 5 | `286fd5a` | absolute | 118 | 260 | 0 | 0 | ✅ |
+| 6 | `main` (default) | `.` | 378 | 0 | 0 | 0 | ✅ |
+
+Mechanisms confirmed directly, not inferred from the totals:
+
+- **Route 1 (vacuous, row 1)** — base and candidate are the same bytes: `hooks/git-guard.sh` is blob
+  `2b74507` at both `main` and `HEAD`, and `git diff main HEAD -- hooks/` is empty. Row 2 differs from
+  row 1 only in `shell_segments.py` (`b8fed46` → `7197eb0`) yet prints the identical `378/0/0`.
+- **Route 2 (degenerate, rows 4-5)** — the unchecked `git show` failures are visible on stderr: three
+  `fatal:` lines for `286fd5a`, two for `e3b09ba`. `bash <empty file>` measured at exit **0**, so the
+  base allows everything and `relaxed` is 0 by construction in row 5 — while the harness still exits 0.
+- **Route 3 (relative `WT`, row 6)** — `bash ./hooks/git-guard.sh` from a non-repo cwd measured at
+  exit **127**; `run()` swallows it (`2>&1` to `/dev/null`) and the `else` branch tallies `a=2,b=127`
+  as `same`. Row 6's 378 "identical" pairs are 378 pairs in which the candidate never executed.
+- **Route 5 (no base in output)** — every row's header printed `worktree`, never the base rev.
+
+Falsifier: rows 3-5 returned non-zero `stricter`/`relaxed`, so the probe was genuinely varying the
+base. A uniform `378/0/0` across all six would have meant the base parameter was inert.
+
+⚠️ **`main` moved during the branch's life** (`c461e4c` → `56f1dfd`, two docs-only commits), but
+`git-guard.sh`, `classify-git-command.py`, and `shell_segments.py` are **byte-identical at both** — so
+these rows remain comparable to the spec's. Re-check that before trusting any later re-run.
+
+**Probe** — `git-guard.replay.probe.sh` in the session scratchpad; tasks 2-7 re-run it. It is the
+unfixed harness plus a base parameter and nothing else (`diff` = 4 lines). **A `/clear` discards the
+scratchpad**, so regenerate it from the repo file with:
+
+```sh
+sed -e '7a\BASE_REV="${3:-main}"' -e 's|show main:hooks/|show "${BASE_REV}:hooks/|' \
+    hooks/git-guard.replay.sh > "$PROBE"
+perl -0pi -e 's{show "\$\{BASE_REV\}:(hooks/\S+)(\s+)>}{show "\${BASE_REV}:$1"$2>}g' "$PROBE"
+```
+
+Then `diff hooks/git-guard.replay.sh "$PROBE"` must show exactly those four lines and nothing else —
+if it shows more, the probe has acquired a fix and is no longer the Red baseline.
