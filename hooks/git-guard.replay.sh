@@ -233,7 +233,7 @@ for state in empty-clean empty-docs empty-src empty-both staged-docs staged-src;
     fi
   done
 done
-printf 'DISTINCT COMMANDS main BLOCKS and %s ALLOWS:\n' "$UNDER_TEST"
+printf 'DISTINCT COMMANDS base=%s (%s) BLOCKS and %s ALLOWS:\n' "$BASE_SHA" "$BASE_REV" "$UNDER_TEST"
 sort -u "$TMP/relaxed" | sed 's/^/  /'
-printf '\n%s commands x 6 states = %s pairs: %s identical, %s stricter, %s relaxed (%s distinct commands)\n' \
-  "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)"
+printf '\nbase=%s (%s) — %s commands x 6 states = %s pairs: %s identical, %s stricter, %s relaxed (%s distinct commands)\n' \
+  "$BASE_SHA" "$BASE_REV" "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)"

@@ -502,7 +502,12 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         3.2.57: Scenario G now reports 358/20/0 exit 0 (was 378/0/0 exit 0 — the candidate silently
         exiting 127 was being tallied `same`); Scenarios A, C, F re-verified unregressed; the named
         error also fires for `/tmp` (real dir, no guard) and a nonexistent path.
-- [ ] 6. Print the resolved base in the header (line 134) and the summary line.
+- [x] 6. Print the resolved base in the header (line 134) and the summary line.
+      - Both sites now print `base=$BASE_SHA ($BASE_REV)` — 40-char SHA never replaced by the rev
+        string, per part 5. Re-verified by execution: C (`358/20/0`), D (`378/0/0`), G (`358/20/0`),
+        I (`234/82/62`) all print the resolved SHA at both the header and the summary line, matching
+        each other; all exit 0; no regression from task 5. E/F/J/K refuse or error before reaching
+        either printf, so this change doesn't touch them.
 - [ ] 7. Verify scenarios A-L by execution — **all twelve, L included** — `$?` captured immediately,
       results as a table. L is the falsifier for part 3's membership rule; a run that skips it has
       exactly revision 7's coverage.
