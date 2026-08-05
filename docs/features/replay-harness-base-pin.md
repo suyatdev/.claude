@@ -26,6 +26,22 @@ Queued from `docs/features/falsifier-base-pin.md:140-152`, which found this whil
 
 ## Spec
 
+**Pointer convention — line numbers carry their baseline, exactly as figures do.** Tasks 2-6 added
+~100 lines to `hooks/git-guard.replay.sh`, so a bare line number is ambiguous between the file this
+spec was written against and the file it produced. Therefore, throughout this document:
+
+- **`(pre-fix)` means `hooks/git-guard.replay.sh` @ `c461e4c`** — the version this spec describes
+  the *defect* in. Verified byte-identical to `main`'s copy (blob `124a85e8`), so "pre-fix" and
+  "on `main`" name the same file.
+- **An unqualified `replay.sh:N`** means the file at this branch's HEAD (blob `adbbf0a7`).
+- `hooks/git-guard.sh` needs no qualifier: this branch does not touch it and it is byte-identical
+  at `main` and HEAD (blob `2b74507c`).
+
+This convention exists because compliance rounds 1 and 2 both cited stale pointers — the second
+time as a *class*, after round 1's fix patched a single instance. The remedy is the one this spec
+already prescribes for every measured number: state the baseline, don't rely on the reader knowing
+which file you meant.
+
 ### Root cause
 
 `hooks/git-guard.replay.sh` is a **differential** harness. Its job, per its own header: run `main`'s
@@ -33,8 +49,9 @@ Queued from `docs/features/falsifier-base-pin.md:140-152`, which found this whil
 report every case where main blocks and the branch allows. That set being empty is what "never weaker
 than main" means.
 
-It takes two parameters, `WT` (line 6) and `UNDER_TEST` (line 7), and hard-codes the baseline at lines
-13-15 (`git show main:…`, three times) plus **a fourth time in its own output header at line 134**.
+It takes two parameters, `WT` (line 6, pre-fix) and `UNDER_TEST` (line 7, pre-fix), and hard-codes
+the baseline at lines 13-15 (pre-fix) (`git show main:…`, three times) plus **a fourth time in its
+own output header at line 134 (pre-fix)**.
 There is no way to set the base: `grep -cE 'BASE_REV|getopts|\$\{3' hooks/git-guard.replay.sh` → `0`.
 
 The defect is not the *choice* of `main` — for the stated contract, `main` is the correct default.
@@ -63,7 +80,7 @@ The five false-pass routes:
 
 1. **Vacuous baseline.** Base and candidate are the same code (row 1). True on `main` after any
    merge, and on any branch that does not touch those three files.
-2. **Degenerate baseline.** `git show` failures at lines 13-15 are unchecked and there is no `set -e`,
+2. **Degenerate baseline.** `git show` failures at lines 13-15 (pre-fix) are unchecked and there is no `set -e`,
    so a missing file becomes a **0-byte** base script. `bash <empty file>` exits 0, so the base
    "allows" everything, so `relaxed` — the number the whole harness exists to report — is **0 by
    construction**. Row 5 is a clean `0 relaxed` pass manufactured from three empty files. **The
@@ -71,6 +88,7 @@ The five false-pass routes:
 3. **Relative worktree path.** `run()` does `cd "$REPO"` before invoking the hook, and for
    `UNDER_TEST=worktree` the candidate is `$WT/hooks/git-guard.sh`. With `WT=.` that path does not
    resolve after the `cd`, every candidate run exits **127**, and the comparison at lines 125-131
+   (pre-fix; `:227-233` at HEAD)
    counts `a=2,b=127` as neither relaxed nor stricter — it falls to the `else` branch and is tallied
    **`same`**. Row 6 is 378 "identical" pairs in which the candidate never ran at all.
 4. **Unreachable rev**, once a base parameter exists — same unchecked-`git show` path as route 2.
@@ -106,14 +124,15 @@ its baseline, and to annotate the existing citations with the base they were mea
 ### The fix
 
 **1. Add the missing base parameter.** A third positional, `BASE_REV="${3:-main}"`, replacing the
-hard-code at lines 13-15. The default stays `main`; parts 2-4 are what make a default safe to have.
+hard-code at lines 13-15 (pre-fix). The default stays `main`; parts 2-4 are what make a default safe to have.
 
 **2. Validate every side.** All three of them: the base, a rev candidate, **and the default
 `worktree` candidate**. Extraction and validation are different things, and revisions 1-9 conflated
 them — the two git-sourced sides are *extracted* by `git show` and then validated, while the
 worktree side needs no extraction because its bytes are already on disk. The validation rule is the
 same for all three; only where the bytes come from differs. Six `git show` calls — three for the
-base (lines 13-15) and three for a rev candidate (lines 20-22) — but they are **not all required**,
+base (lines 13-15, pre-fix) and three for a rev candidate (lines 20-22, pre-fix) — but they are
+**not all required**,
 and the split is load-bearing:
 
 - **`hooks/git-guard.sh` is mandatory on every side.** It must be present (extracted successfully,
@@ -241,7 +260,8 @@ them is byte-identical. Only then: print the refusal, print no matrix, exit non-
 cannot be resolved to a directory containing `hooks/git-guard.sh`. Closes route 3.
 
 **5. State the baseline in every run's output** — passing runs included. Replace the hard-coded
-`main` at line 134 with the resolved base, and repeat it on the summary line, so a figure copied into
+`main` at line 134 (pre-fix; the printf now at `replay.sh:236`) with the resolved base, and repeat
+it on the summary line, so a figure copied into
 a document carries its provenance. Closes route 5, and is the part that makes the harness's history
 auditable without archaeology.
 
@@ -265,7 +285,7 @@ default is a moving branch, so the same format would defeat this part.
 **The ADR must state the limit it does not close, in the same breath.** This change proves each side
 *loaded* only for the causes it addresses: a failed extraction (part 2) and an unresolvable worktree
 path (part 4). It does **not** make the harness robust to an arbitrary broken candidate, because the
-`else → same` tally at lines 125-131 still counts any exit code outside `{0,2}` as agreement — see
+`else → same` tally at `replay.sh:227-233` still counts any exit code outside `{0,2}` as agreement — see
 non-goals. An ADR that claimed "proves each side actually loaded" would be over-claiming, and this
 repo's ADRs are permanent.
 
@@ -276,7 +296,7 @@ figure was measured against — **annotation, not retraction**; the figures stan
 |---|---|---|
 | `docs/features/git-guard-empty-index.md` | `:311` (and the table at `:314-318`) | per-row candidates `27c5ac5` / `4be542b` / the fix, vs `main` as it then stood |
 | `docs/features/shell-segments-redirects.md` | `:118` | `main` @ `bc7da76`, 68 min pre-merge |
-| `docs/features/shell-segments-redirects.md` | `:140` | same |
+| `docs/features/shell-segments-redirects.md` | `:142` (was `:140`; task 9's annotation moved it) | same |
 | `docs/features/falsifier-base-pin.md` | `:145` | already correct — states the tautology; note that it refers to *today's* post-merge run, not the recorded figures |
 | `docs/decisions/0015-…` | `:110` | **NOT edited** — ADR 0016 carries this one |
 
@@ -302,7 +322,7 @@ Measured on this host, not recalled. The harness must keep running under exactly
 bash:    "3.2.57(1)-release"   # macOS system bash — no associative arrays, no ${x^^}, no mapfile
 git:     "2.50.1"              # Apple Git-155
 python3: "3.9.6"               # the classifier's interpreter
-jq:      "1.7.1-apple"         # /usr/bin/jq, hard-coded at line 35
+jq:      "1.7.1-apple"         # /usr/bin/jq, hard-coded at replay.sh:137
 cmp:     "BSD"                 # NO --version; --quiet IS accepted here, see below
 shasum:  "6.02"
 ```
@@ -394,10 +414,11 @@ block whose own heading promises the opposite.
 - **Two further limits in the comparison logic are NOT closed — queued as their own item. They are
   independent, and fixing either one does not close the other.**
 
-  1. **The `else → same` tally (lines 125-131)** counts any exit code outside `{0,2}` as agreement.
+  1. **The `else → same` tally (`replay.sh:227-233`)** counts any exit code outside `{0,2}` as
+     agreement.
      That is the mechanism behind route 3, where the candidate exits 127 and is tallied `same`.
      Part 4 closes only route 3's *cause* (the unresolved relative path), not the tally.
-  2. **The definition of `relaxed` (line 125)** is `base = 2 && candidate = 0`, so a candidate that
+  2. **The definition of `relaxed` (`replay.sh:227`)** is `base = 2 && candidate = 0`, so a candidate that
      **blocks everything** can never register a single relaxation, and the harness's headline number
      is 0 by construction. Measured: a candidate missing `hooks/lib/*.py` exits **2 on every
      command** — including `ls -la` — because `git-guard.sh:74-77` fails closed when it cannot run
@@ -459,7 +480,7 @@ Scenario D: a difference the matrix cannot see — still reported, not refused
    And the run's HEADER names the same resolved base as the summary line, not the literal "main"
   # Identical to Scenario A's counts. Only the named base distinguishes a real run from a vacuous one.
   # The header assertion is what makes part 5's "both the header and the summary line" testable on a
-  # SUCCESSFUL run: line 134's hard-coded "main" is a separate site from the summary, and without
+  # SUCCESSFUL run: line 134 (pre-fix)'s hard-coded "main" is a separate site from the summary, and without
   # this line an implementation that fixes only the summary passes every scenario in this file.
 
 Scenario E: a base whose files do not exist — named error, not a pass
@@ -677,7 +698,8 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         3.2.57: Scenario G now reports 358/20/0 exit 0 (was 378/0/0 exit 0 — the candidate silently
         exiting 127 was being tallied `same`); Scenarios A, C, F re-verified unregressed; the named
         error also fires for `/tmp` (real dir, no guard) and a nonexistent path.
-- [x] 6. Print the resolved base in the header (line 134) and the summary line.
+- [x] 6. Print the resolved base in the header (line 134 pre-fix; `replay.sh:236` at HEAD) and the
+      summary line.
       - Both sites now print `base=$BASE_SHA ($BASE_REV)` — 40-char SHA never replaced by the rev
         string, per part 5. Re-verified by execution: C (`358/20/0`), D (`378/0/0`), G (`358/20/0`),
         I (`234/82/62`) all print the resolved SHA at both the header and the summary line, matching
@@ -733,7 +755,8 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         unconditional `exit 0`, all still open per the non-goals), and the full five-site provenance
         table (restated here, not just referenced).
       - Edited `git-guard-empty-index.md:314-318` and `shell-segments-redirects.md:117-118,140` with
-        one-line provenance annotations. `falsifier-base-pin.md:145` left untouched — it already
+        one-line provenance annotations (the second site is now at `:142`, moved down two lines by
+        the annotation itself). `falsifier-base-pin.md:145` left untouched — it already
         states its own provenance correctly (base = candidate = `main`, the tautology itself). ADR
         0015 left untouched — its figure is restated with provenance inside ADR 0016 instead, per
         this repo's amend-by-new-record convention.
@@ -849,6 +872,30 @@ keeps catching:
   count forward from task 8 rather than running `git diff --name-only`. Task 11's criterion is now
   a **named set** — a count that every judge round invalidates cannot gate anything — and task 8's
   figure carries its baseline SHA instead of being silently overwritten.
+
+**Round-2 compliance — one violation, the same id as round 1, escalated to the user.**
+`writing-specs/spec-code-accuracy` recurred: round 1's fix corrected the single pointer it was
+handed (`64-68` → `73-77`) and left the *class* untouched. About a dozen pointers still indexed the
+harness as it stood before tasks 2-6 added ~100 lines to it, so `lines 125-131` landed in fixture
+setup, `line 134` in test-file creation, and `line 35` in `rev-parse`. All verified by reading the
+file at both revisions. Two consecutive citations of one id is the escalation trigger, so this went
+to the user rather than to a third point patch — **user decision: label each pointer with its
+baseline** rather than re-index everything or drop line numbers.
+
+- **A pointer convention is now stated once, at the top of the Spec section**, and every pointer
+  obeys it: `(pre-fix)` = `replay.sh` @ `c461e4c` (blob `124a85e8`, byte-identical to `main`), an
+  unqualified `replay.sh:N` = HEAD (blob `adbbf0a7`), and `git-guard.sh` needs no qualifier because
+  this branch never touches it (blob `2b74507c` at both).
+- **Pointers describing the *defect* keep their pre-fix indices and are now labelled** — root cause,
+  parts 1/2/5, Scenario D, task 6. **Pointers describing *open limits* are re-indexed at HEAD** —
+  the `else → same` tally is `:227-233`, `relaxed`'s definition `:227`, `jq` `:137`.
+- **The Red-probe recipe was unrunnable and is fixed.** It inserts after line 7 and rewrites
+  `show main:hooks/` — shapes today's file no longer has, because task 2 removed them. It now
+  regenerates from `git show c461e4c:` and diffs against *that*. Re-measured: `$PREFIX` hashes to
+  `124a85e8` and the diff is four edits; the same probe against today's repo file differs by **131**
+  lines, which is what the old recipe was silently comparing.
+- **One citation-table pointer was two lines short** — `shell-segments-redirects.md:140` → `:142`,
+  moved down by task 9's own annotation. Corrected in the table and in task 9's record.
 
 **Round-3 architecting read (advisory, `risk=low confidence=high`).** It reproduced the red
 independently — cloned the repo, deleted `hooks/lib/`, ran the default invocation, and got
@@ -1100,13 +1147,25 @@ these rows remain comparable to the spec's. Re-check that before trusting any la
 
 **Probe** — `git-guard.replay.probe.sh` in the session scratchpad; tasks 2-7 re-run it. It is the
 unfixed harness plus a base parameter and nothing else (`diff` = 4 lines). **A `/clear` discards the
-scratchpad**, so regenerate it from the repo file with:
+scratchpad**, so it must be regenerated.
+
+⚠️ **Regenerate from `c461e4c`, NOT from the repo's working file.** The recipe below inserts after
+line 7 and rewrites `show main:hooks/`; today's file has neither shape, because tasks 2-6 already
+parameterized the base — running this against `hooks/git-guard.replay.sh` as it now stands produces
+a corrupt probe, not the Red baseline. Recorded because the recipe was written when the two files
+were the same and silently became wrong when task 2 landed:
 
 ```sh
+git show c461e4c:hooks/git-guard.replay.sh > "$PREFIX"     # the pre-fix harness, blob 124a85e8
 sed -e '7a\BASE_REV="${3:-main}"' -e 's|show main:hooks/|show "${BASE_REV}:hooks/|' \
-    hooks/git-guard.replay.sh > "$PROBE"
+    "$PREFIX" > "$PROBE"
 perl -0pi -e 's{show "\$\{BASE_REV\}:(hooks/\S+)(\s+)>}{show "\${BASE_REV}:$1"$2>}g' "$PROBE"
 ```
 
-Then `diff hooks/git-guard.replay.sh "$PROBE"` must show exactly those four lines and nothing else —
-if it shows more, the probe has acquired a fix and is no longer the Red baseline.
+Then `diff "$PREFIX" "$PROBE"` — **not** a diff against the repo file — must show exactly **four
+edits: one inserted line (`7a8`) and three substituted (`13,15c14,16`)**, which prints as 7 `<`/`>`
+lines because each substitution counts on both sides. Measured 2026-08-05: recipe re-run from
+`c461e4c`, `$PREFIX` hashes to `124a85e8`, diff is those four edits and nothing else. The same
+probe diffed against today's repo file shows **131** changed lines — which is what the old recipe
+was silently comparing. If the count differs, the probe has acquired a fix and is no longer the
+Red baseline.
