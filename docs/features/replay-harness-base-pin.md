@@ -129,16 +129,32 @@ cannot be resolved to a directory containing `hooks/git-guard.sh`. Closes route 
 
 **5. State the baseline in every run's output** — passing runs included. Replace the hard-coded
 `main` at line 134 with the resolved base, and repeat it on the summary line, so a figure copied into
-a document carries its provenance. The sibling `hooks/shell-segments-falsifier.sh` already prints its
-base on every run; this brings replay to parity. Closes route 5, and is the part that makes the
-harness's history auditable without archaeology.
+a document carries its provenance. Closes route 5, and is the part that makes the harness's history
+auditable without archaeology.
+
+**"Resolved base" means the 40-character commit SHA that `git rev-parse "$BASE_REV^{commit}"`
+produces — not the rev string as typed.** This is the whole point of the part: `base=main` printed
+into a document is exactly route 5 still open, because `main` names a different commit every week and
+a future reader is back to archaeology. Print the SHA; the rev string may accompany it
+(`base=c461e4c… (main)`) but never replaces it.
+
+**Do not copy the sibling's format here.** `hooks/shell-segments-falsifier.sh` prints the literal
+`$BASE` string. It gets away with it because its base is a pinned SHA by construction; replay's
+default is a moving branch, so the same format would defeat this part.
 
 **6. ADR 0016 + provenance notes.** The ADR records the rule, which has now bitten twice:
 
-> A differential harness must prove its two sides differ before reporting agreement, must prove each
-> side actually loaded, and must state its resolved baseline in its output. Agreement between a
-> program and itself, or between two empty files, is not evidence — and a number that does not carry
-> its baseline cannot be audited later without archaeology.
+> A differential harness must prove its two sides differ before reporting agreement, and must state
+> its resolved baseline — as a fixed commit id — in its output. Agreement between a program and
+> itself, or between two empty files, is not evidence; and a number that does not carry its baseline
+> cannot be audited later without archaeology.
+
+**The ADR must state the limit it does not close, in the same breath.** This change proves each side
+*loaded* only for the causes it addresses: a failed extraction (part 2) and an unresolvable worktree
+path (part 4). It does **not** make the harness robust to an arbitrary broken candidate, because the
+`else → same` tally at lines 125-131 still counts any exit code outside `{0,2}` as agreement — see
+non-goals. An ADR that claimed "proves each side actually loaded" would be over-claiming, and this
+repo's ADRs are permanent.
 
 Five citation sites exist across four files. Each gets a one-line provenance note naming the base its
 figure was measured against — **annotation, not retraction**; the figures stand:
@@ -177,6 +193,28 @@ Byte comparison uses **`cmp -s`** (POSIX, present on BSD). GNU-only spellings �
   scope. (Round 1 judge: this reasoning holds.)
 - **The 63-command matrix is unchanged** — still zero redirect shapes, a real and separate gap
   recorded in ADR 0015.
+- **Two further limits in the comparison logic are NOT closed — queued as their own item. They are
+  independent, and fixing either one does not close the other.**
+
+  1. **The `else → same` tally (lines 125-131)** counts any exit code outside `{0,2}` as agreement.
+     That is the mechanism behind route 3, where the candidate exits 127 and is tallied `same`.
+     Part 4 closes only route 3's *cause* (the unresolved relative path), not the tally.
+  2. **The definition of `relaxed` (line 125)** is `base = 2 && candidate = 0`, so a candidate that
+     **blocks everything** can never register a single relaxation, and the harness's headline number
+     is 0 by construction. Measured: a candidate missing `hooks/lib/*.py` exits **2 on every
+     command** — including `ls -la` — because `git-guard.sh:56` fails closed when it cannot resolve
+     its classifier. Result: `0 relaxed`, exit 0, a false pass dressed as legitimate hardening.
+
+  Note the exit code is **inside** `{0,2}`, so limit 2 is *not* a case of limit 1 — an earlier
+  revision of this bullet said it was, and that was wrong. Both are pre-existing comparison logic
+  this spec does not otherwise modify, and the last two branches in this class shipped a second
+  defect by widening mid-flight. **User decision, session 10:** record honestly, queue separately.
+  ADR 0016 states both limits rather than leaving them implicit.
+
+- **The harness's exit code carries no signal today** and this change only partly fixes that: it
+  exits 0 unconditionally, so the `e3b09ba` row's 62 relaxations exit 0 exactly as a clean run does.
+  After parts 2-4, refusals and named errors exit non-zero, but a run that *reports relaxations*
+  still exits 0. Queue beside the two limits above.
 - **`hooks/git-guard.sh` is not touched.** Row 4's 62 relaxed rows against `e3b09ba` are genuine
   historical policy differences accumulated across the repo's life, not defects surfaced by this
   change. Investigating them is its own task.
@@ -187,9 +225,12 @@ Byte comparison uses **`cmp -s`** (POSIX, present on BSD). GNU-only spellings �
 Scenario A: base and candidate are the same code — refused
   Given the default base on main, where all three files match the worktree
   When the harness runs
-  Then the output names the resolved base and says the run proves nothing
+  Then the output names the resolved base as a 40-character SHA, not the string "main"
+   And it says the run proves nothing
    And no pair-count line is printed
    And the exit code is non-zero
+  # The SHA assertion is what makes part 5 testable on a DEFAULT-base run — the one case
+  # every other scenario passes an explicit base and therefore cannot check.
 
 Scenario B: same code under a different rev string — still refused
   Given f5c5689, a different rev whose three blobs are identical to HEAD's (verified)
@@ -240,8 +281,9 @@ Scenario H: the refusal is discriminating
 ### Error and refusal contract
 
 Every refusal and every named error: exit **non-zero**, print **no** `DISTINCT COMMANDS` header and
-**no** pair-count line, and state in one plain sentence what was wrong, which rev it concerned, and
-the corrected invocation. Every *successful* run: print the resolved base in both the header and the
+**no** pair-count line, and state in one plain sentence what was wrong, **the resolved base SHA** it
+concerned (not the rev string — the letter of this contract must not be satisfiable by printing
+`base main`, which Scenario A forbids), and the corrected invocation. Every *successful* run: print the resolved base in both the header and the
 summary line.
 
 ## Tasks
