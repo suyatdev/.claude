@@ -37,7 +37,14 @@ spec was written against and the file it produced. Therefore, throughout this do
 - `hooks/git-guard.sh` needs no qualifier: this branch does not touch it and it is byte-identical
   at `main` and HEAD (blob `2b74507c`).
 
-This convention exists because compliance rounds 1 and 2 both cited stale pointers — the second
+**The convention binds every line number in this document** — prose or backticked, in the spec
+proper, in the scenarios, in the task list, and **inside the append-only revision-history sections
+at the end**. Those sections are historical prose, not an exemption: a reader resolving a pointer
+there is reading it against today's file like any other. A bare number is HEAD; if you mean the
+pre-fix file, say `(pre-fix)`. Rounds 2 and 3 both cited instances that were missed precisely
+because the sweep treated some regions as out of scope.
+
+This convention exists because compliance rounds 1, 2 and 3 all cited stale pointers — the second
 time as a *class*, after round 1's fix patched a single instance. The remedy is the one this spec
 already prescribes for every measured number: state the baseline, don't rely on the reader knowing
 which file you meant.
@@ -92,7 +99,8 @@ The five false-pass routes:
    counts `a=2,b=127` as neither relaxed nor stricter — it falls to the `else` branch and is tallied
    **`same`**. Row 6 is 378 "identical" pairs in which the candidate never ran at all.
 4. **Unreachable rev**, once a base parameter exists — same unchecked-`git show` path as route 2.
-5. **The output names no base.** Line 134 prints the literal string `main` regardless, so a figure
+5. **The output names no base.** Line 134 (pre-fix) prints the literal string `main` regardless,
+   so a figure
    copied into a document carries no record of what produced it.
 
 Routes 1 and 3 were both live today. Route 3 is the one that caught the author of this spec: the
@@ -603,11 +611,22 @@ Scenario O: a 0-byte helper in the worktree is rejected too
   Then the output names the resolved absolute worktree path and that helper path
    And no pair-count line is printed
    And the exit code is non-zero
-  # The same rule on the side revision 10 added, where it is newest and least tested. Empty fails
-  # in the OPPOSITE direction from missing here: a missing helper makes the guard block everything
-  # (Scenario M, 0 relaxed, silent), while an empty one makes the classifier import fail in its own
-  # way — so M does not cover this by accident. The base must be non-vacuous so part 3 cannot
-  # refuse first, for the same reason Scenario G pins its base.
+  # The same rule on the side revision 10 added, where it is newest and least tested.
+  # WHY THIS IS NOT A DUPLICATE OF M: it tests a different CHECK, not a different failure direction.
+  # Part 2 requires each member to be (a) present and (b) non-empty. M falsifies (a); nothing
+  # falsified (b) on any side. An implementation that tests presence and forgets `[ -s ]` passes M
+  # and fails O.
+  # ⚠️ An earlier draft of this comment claimed empty fails in the OPPOSITE direction from missing.
+  # That was an invented mechanism, inherited from an advisory read that later retracted it, and it
+  # is exactly the sin this spec exists to punish. Measured — all four broken shapes, DEFAULT mode:
+  #   helpers missing ............... 260/118/0 exit 0   (silent)
+  #   shell_segments.py empty ....... 260/118/0 exit 0   (IDENTICAL to missing)
+  #   classify-git-command.py empty . 118/0/260 exit 0   (loud)
+  #   git-guard.sh empty ............ 118/0/260 exit 0   (loud)
+  # So O as written pins the SILENT shape, which is the one worth pinning — but by luck, not by
+  # reasoning, and the record says so.
+  # The base must be non-vacuous so part 3 cannot refuse first, for the same reason Scenario G
+  # pins its base.
 
 Scenario H: the refusal is discriminating
   Then A, B, E, F, J, K, L, M, N and O refuse or error; C, D, G and I report
@@ -792,6 +811,16 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         breaks them. ⚠️ The accepting-direction sweep is the corner most likely to get cut and is
         the only thing that catches over-firing. Then the full **A-O** sweep, `$?` captured
         immediately, results as a table. Re-run `git-guard.test.sh`.
+      - ℹ️ **N is a regression lock, not a red — say so when reporting it.** The `[ -s ]` check it
+        exercises landed in task 3, so N passes against today's harness; it is there to stop a
+        future edit removing the check, and an implementer who reports it as "already green" has
+        not found a problem. **O is the only genuine red** of the three new scenarios.
+      - ⚠️ **Knowingly accepted gap: a 0-byte `hooks/git-guard.sh` in the WORKTREE has no
+        scenario.** N covers it on the base, O covers a worktree *helper*, and part 4's existing
+        check is `-f`, which an empty file passes — so only part 2's `[ -s ]` stands between that
+        shape and a run. Not added, because it fails **loudly** (measured `118/0/260`, a flood of
+        relaxations rather than a silent pass) and the silent shapes are the ones this spec exists
+        to close. Recorded rather than left implicit, so a later reader can take it deliberately.
       - **N's and O's fixtures must be synthesized** — neither shape exists in history — and, like
         J's and L's, they do not survive a `/clear`. N: commit a 0-byte `hooks/git-guard.sh` on an
         orphan branch in the candidate's own clone (`git show` must SUCCEED and return empty, which
@@ -806,11 +835,22 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         `verdicts.jsonl`), and every later judge round appends to those again. A count that each
         judge run invalidates cannot be an acceptance criterion, which is why this one is a set:
 
-        **task 11 must touch nothing outside** `hooks/git-guard.replay.sh`,
-        `docs/decisions/0016-…`, `docs/features/replay-harness-base-pin.md`, `CODING_MEMORY.md`,
-        and the two judge-verdict paths under `coding-memory/`. Any *other* path in the diff means
-        the change widened — the exact failure the last two branches in this class shipped.
-        `hooks/git-guard.sh` in particular must stay untouched.
+        **task 11 must touch nothing outside these eight**, which is the whole of today's diff —
+        the set and the measurement now agree, and an earlier phrasing that named six against an
+        eight-file diff would have fired its own alarm falsely:
+
+        1. `hooks/git-guard.replay.sh` — the fix itself
+        2. `docs/decisions/0016-…` — the ADR amendment
+        3. `docs/features/replay-harness-base-pin.md` — this file
+        4. `CODING_MEMORY.md` — session record
+        5. `docs/features/git-guard-empty-index.md` — task 9 provenance note
+        6. `docs/features/shell-segments-redirects.md` — task 9 provenance note
+        7. `coding-memory/observability-judge/*` — judge trail (grows every round)
+        8. `coding-memory/compliance-judge/*` — judge trail (grows every round)
+
+        Any *other* path means the change widened — the exact failure the last two branches in this
+        class shipped. `hooks/git-guard.sh` in particular must stay untouched. Rows 7-8 are process
+        output, not scope: they are why a bare *count* cannot gate anything.
 
 ## Revision 10 — deferred non-goal 2 taken (user decision, session 14)
 
@@ -876,8 +916,9 @@ keeps catching:
 **Round-2 compliance — one violation, the same id as round 1, escalated to the user.**
 `writing-specs/spec-code-accuracy` recurred: round 1's fix corrected the single pointer it was
 handed (`64-68` → `73-77`) and left the *class* untouched. About a dozen pointers still indexed the
-harness as it stood before tasks 2-6 added ~100 lines to it, so `lines 125-131` landed in fixture
-setup, `line 134` in test-file creation, and `line 35` in `rev-parse`. All verified by reading the
+harness as it stood before tasks 2-6 added ~100 lines to it, so the then-unlabelled `lines 125-131`
+landed in fixture setup, `line 134` in test-file creation, and `line 35` in `rev-parse` — quoted
+here as the defect, all three now labelled `(pre-fix)` or re-indexed. All verified by reading the
 file at both revisions. Two consecutive citations of one id is the escalation trigger, so this went
 to the user rather than to a third point patch — **user decision: label each pointer with its
 baseline** rather than re-index everything or drop line numbers.
@@ -896,6 +937,19 @@ baseline** rather than re-index everything or drop line numbers.
   lines, which is what the old recipe was silently comparing.
 - **One citation-table pointer was two lines short** — `shell-segments-redirects.md:140` → `:142`,
   moved down by task 9's own annotation. Corrected in the table and in task 9's record.
+
+**Round-4 architecting read (advisory) — it retracted its own round-3 claim, and revision 10 had
+already built on it.** Round 3 told this spec that an empty helper fails in the *opposite*
+direction from a missing one; Scenario O's comment was written on that basis. Round 4 built all
+four broken shapes and measured them: `shell_segments.py` empty is **`260/118/0`, identical to
+missing**, while `classify-git-command.py` empty and `git-guard.sh` empty are `118/0/260`. The
+claim was false. **This is the spec's own failure mode reaching the spec** — an explanation
+adopted on report rather than measured — and it is corrected in place: O's comment now carries the
+four measured rows and states that it pins the silent shape *by luck, not by reasoning*. O still
+earns its place, on the honest ground that it falsifies a different **check** (part 2's `[ -s ]`)
+rather than a different direction. Two further items recorded and not taken: **N is a regression
+lock** (its check landed in task 3, so it passes today) and a **0-byte worktree `git-guard.sh`**
+has no scenario, accepted knowingly because it fails loudly.
 
 **Round-3 architecting read (advisory, `risk=low confidence=high`).** It reproduced the red
 independently — cloned the repo, deleted `hooks/lib/`, ran the default invocation, and got
@@ -950,7 +1004,8 @@ class of defect revision 8 was written to fix, and one was introduced *by* revis
   that would test it is deferral 1 (the dirty worktree), which is correspondingly stronger again.
 - **Part 5's header half is now falsifiable.** No scenario asserted the base in a *successful* run's
   header — only in refusals (A, E) and on the summary line (C, D) — so an implementation that fixed
-  the summary and left line 134's hard-coded `main` alone passed every scenario in the file. That is
+  the summary and left line 134 (pre-fix)'s hard-coded `main` alone passed every scenario in the
+  file. That is
   route 5 surviving the part written to close it. Scenario D now asserts the header too.
 - **The history counts pinned to a SHA.** `631`/`65` were already `632`/`66` by the time the judges
   measured — the spec's own commit moved them, and any commit will. They are now stated **as
