@@ -1,6 +1,6 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: fix/replay-harness-base-pin
 ---
 
@@ -792,6 +792,24 @@ even then it must be visibly labelled as unresolved rather than presented as a b
       - ⚠️ **Task 11 lands before this one.** The judge re-runs at the HEAD that includes it.
 
 - [ ] 11. Validate the default `worktree` candidate (part 2, revision 10 — was deferral 2).
+      - ⚙️ **Gate confirmed 2026-08-05 (session 15); model-switch checkpoint 2 answered: Sonnet 5
+        for all of task 11**, `model_tier: low` set at the same time. Compliance passed round 4 at
+        `8c53c67` (blob `4423a45…`), so the spec below is final — **do not edit it to make an
+        implementation easier; escalate instead.**
+      - 🚨 **Three hazards, written down because the reasoning that would re-derive them is not in
+        this session.** Each has already caused a defect on this branch or its two predecessors:
+        1. **`rm -f` on a real repo.** `replay.sh:61` deletes two helper paths. The moment that
+           function is shared with the worktree side, `$3` becomes `$WT` and it deletes the user's
+           own `hooks/lib/*.py`. **Delete the line first, in its own commit, before wiring the
+           worktree side in.** It is verified dead (see part 2), so that commit changes no
+           behaviour and is safe to make in isolation.
+        2. **Ordering.** Candidate validation must run BEFORE the vacuity comparison. If it runs
+           after, Scenario M reports a matrix instead of erroring and the whole task is a no-op —
+           the fixture insertion point is between the `UNDER_TEST` branch and the `side_members`
+           block.
+        3. **`resolve_rev`-style helpers run inside `$( )`**, so a `fail` there exits only the
+           subshell. Any new helper called that way needs `|| exit 1` at the call site, exactly as
+           the two existing ones carry.
       - **Red first:** reproduce `260 identical, 118 stricter, 0 relaxed`, exit 0 with `hooks/lib/`
         deleted from a cloned worktree, `$?` captured on the next line. Measured 2026-08-05 during
         planning at `cdaa1c3`; re-confirm against the implementation HEAD before changing anything,
