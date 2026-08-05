@@ -850,10 +850,14 @@ how this file and its linked files should be written (plain language, major chan
   `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
-  · **IN PLANNING (session 10) — `git-guard.replay.sh`. Canonical:
+  · **IN IMPLEMENTATION (session 13) — `git-guard.replay.sh`. Canonical:
   `docs/features/replay-harness-base-pin.md`, **`phase: implementation`, branch
-  `fix/replay-harness-base-pin`** @ `7bf2520`. Revision 9 — **compliance round 2 PASSED**
-  (`violations: []`, blob `ea2b820`), gate confirmed 2026-08-05, **task 1 not yet started**. Getting
+  `fix/replay-harness-base-pin`** @ `aa0420f`. Revision 9 — **compliance round 2 PASSED**
+  (`violations: []`, blob `ea2b820`), gate confirmed 2026-08-05. **Tasks 1-4 done**
+  (`85bc35c` red · `77524db` BASE_REV · `c91fba0` extraction validation · `aa0420f` vacuity
+  refusal); scenarios A, B, C, D, E, F, I, J, K, L all verified by execution under `/bin/bash`
+  3.2.57 — only **G** (relative worktree path) is outstanding, and it is task 5's fix. **Next: task
+  5, which is the `/model` switch down to Sonnet 5 + `model_tier: low`.** Getting
   there took two cycles: revision 7 passed round 7, the user then took the 5th architecting read's
   fix, that edit voided the verdict and re-entered at round 1, which failed on one violation (task 7
   still said "verify A-K" after Scenario L was added). Revision 9 answers it plus three non-blocking
