@@ -850,10 +850,23 @@ how this file and its linked files should be written (plain language, major chan
   `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
-  · 🔄 **BACK IN PLANNING for revision 10 (session 14) — `git-guard.replay.sh`. Canonical:
+  · 🔄 **BACK IN PLANNING for revision 10 (session 14-15) — `git-guard.replay.sh`. Canonical:
   `docs/features/replay-harness-base-pin.md`, **`phase: planning`, `model_tier: high`, branch
-  `fix/replay-harness-base-pin`** @ `a5ee297`. Tasks **1-9 are done and committed**; task 10 (judge +
-  PR) is **not**, and is now blocked behind revision 10.
+  `fix/replay-harness-base-pin`** @ `6741e41`. Tasks **1-9 are done and committed**; task 10 (judge +
+  PR) is **not**, and is now blocked behind revision 10 **and new task 11**.
+  **Revision 10 written (session 15)** — takes deferred non-goal 2: the default `worktree` candidate
+  is now validated like every other side. Measured red: with `hooks/lib/` deleted, the DEFAULT
+  invocation prints **`260 identical, 118 stricter, 0 relaxed`, exit 0** — NOT the `292/86/0` the
+  round-2 judge reported; the measured split is the mirror of row 5 and was independently
+  reproduced to the digit by two later judge rounds. Scenarios **M, N, O** added (H now A-O).
+  ⚠️ **Compliance rounds 1-3 all FAILED**, `writing-specs/spec-code-accuracy` cited **three
+  consecutive rounds** (stale line pointers into a file tasks 2-6 grew by ~100 lines). User decision
+  after round 2: **label each pointer with its baseline**; a pointer convention now sits at the top
+  of the Spec section. Round 3 found 2 stragglers (`:95`, `:953`) + a blast-radius set that names 6
+  paths against an 8-file diff. **Escalated — awaiting user direction, do not auto-revise.**
+  Advisory read self-corrected: empty ≠ opposite-direction — `shell_segments.py` empty behaves
+  **identically** to missing (`260/118/0`); only `classify-git-command.py`/`git-guard.sh` empty go
+  loud (`118/0/260`). Scenario O's comment still carries that invented mechanism and must be fixed.
   **All twelve scenarios A-L verified by execution** under `/bin/bash` 3.2.57 (task 7) — Scenario G
   (relative worktree path) was the last one open, closed by task 5's `WT` resolution (`f06d93f`).
   Task 6 (`97aef27`) prints the resolved base SHA at both the header and summary line. Task 8
