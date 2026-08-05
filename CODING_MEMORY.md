@@ -851,7 +851,7 @@ how this file and its linked files should be written (plain language, major chan
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
   · **IN PLANNING (session 10) — `git-guard.replay.sh`. Canonical:
-  `docs/features/replay-harness-base-pin.md`, `phase: planning`, revision 3.** Scope is **wider than
+  `docs/features/replay-harness-base-pin.md`, `phase: planning`, revision 5.** Scope is **wider than
   this entry originally said, and its premise was wrong.** Five ways the harness prints a pass that
   could not fail — measured, absolute worktree path, `$?` first: vacuous base (`main` vs itself,
   378/0/0 exit 0); **0-byte base** from unchecked `git show` (base `286fd5a`, all three files absent
@@ -859,6 +859,15 @@ how this file and its linked files should be written (plain language, major chan
   matters); **relative worktree path** (`WT=.` → every candidate run exits **127**, tallied as
   `same`, 378/0/0 — this one bit the first reproduction); unreachable rev; and **the output naming
   no base at all** (`main` hard-coded a 4th time at `:134`).
+  · **Three more comparison-logic defects, measured in session 10, deliberately OUT of scope for the
+  base-pin branch** (they are tally/reporting bugs, not baseline bugs — recorded here because the
+  handoff is not a durable record): (1) **`else → same`** (`replay.sh:125-131`) counts any exit
+  outside `{0,2}` as agreement, which is what let route 3's universal `127` print `378/0/0`.
+  (2) **The `relaxed` definition** (`:125`) is `base=2 && candidate=0`, so a candidate that blocks
+  *everything* reports `0 relaxed` **by construction** — e.g. a candidate missing `hooks/lib/*.py`
+  exits **2** on every command (`git-guard.sh:56` fails closed). **Independent of (1): exit 2 is
+  inside `{0,2}`, so fixing the `else` arm does not touch this.** (3) **The harness exits 0
+  unconditionally** — 62 relaxations exit exactly like a clean run, so no caller can gate on it.
   · ⚠️ **The "false green cited as evidence" premise was WRONG — do not re-adopt it.** The cited
   figures are **valid**. `git-guard-empty-index.md:314-318` reports 378 **pairs** (matrix size) with
   **215/326/346** identical and **162/52/32** relaxed — a self-comparison cannot produce one
