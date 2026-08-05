@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: fix/replay-harness-base-pin
 ---
 
 # The replay harness never says what it compared
@@ -456,6 +456,10 @@ even then it must be visibly labelled as unresolved rather than presented as a b
       bases — neither shape exists in history (measured at `5bc39b9`, 632 commits, zero in both
       directions).
 - [ ] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
+      - ⚙️ **Model switch happens here.** Gate answer, 2026-08-05: Opus 5 for tasks 1-4 — the red
+        reproduction and the comparison logic, where every silent false pass in this spec's history
+        actually lived — then `/model` down to Sonnet 5 for tasks 5-10, which are mechanical.
+        Set `model_tier: low` in the frontmatter at the same time.
 - [ ] 6. Print the resolved base in the header (line 134) and the summary line.
 - [ ] 7. Verify scenarios A-L by execution — **all twelve, L included** — `$?` captured immediately,
       results as a table. L is the falsifier for part 3's membership rule; a run that skips it has
