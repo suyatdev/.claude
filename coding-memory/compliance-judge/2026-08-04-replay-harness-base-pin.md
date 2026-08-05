@@ -723,3 +723,243 @@ None. The violations table is empty for the first time on this spec.
 ### Waiver record
 
 None. No violation id has been waived on this spec in any round.
+
+---
+
+## Round 1 (new cycle — revision 8) — 2026-08-05 — **FAIL** (1 violation)
+
+**Repo:** `.claude` · **branch:** `main` · **head:** `5bc39b917832d209ff4e2dca873d666c2fc9d402`
+**Spec blob:** `5577a48e5d0de742c5aebbf2bd214549b2322626` · **Confidence:** high
+**Waived coming in:** none. **Prior-round violations supplied:** none — revision 7 passed at round 7
+(blob `56cc3693`), revision 8 changed the blob and re-entered the loop at round 1 by user decision.
+
+### Layman summary
+
+Revision 8's actual change is correct, and it closes a real hole. Revision 7 said the two sides must
+have "the same paths present" without saying what makes a path count, and the two readings — files
+on disk versus files the guard actually loads — both passed all eleven scenarios. Under the disk
+reading a base carrying unreferenced helpers against a candidate without them looks "different",
+runs the matrix, and compares a program against itself while printing a valid 40-character SHA
+beside the result. Revision 8 defines membership as part 2's required set, reads it from the bytes
+that will execute, and adds Scenario L as the falsifier. That is the right fix in the right shape.
+
+I re-measured every checkable claim on this host rather than trusting any of it, because that is the
+failure this spec keeps having. **Everything checked out.** All eighteen line pointers into
+`git-guard.replay.sh` and `git-guard.sh` are exact. All six pinned toolchain versions are exact.
+`cmp -s` on two absent paths really does exit 2; `cmp --quiet`, `diff -q --no-dereference` and
+`readlink -f` really do all work here, so the "portability choice, not capability limit" framing is
+honest. 63 commands x 6 states = 378. Every blob identity holds — and usefully, HEAD's three blobs
+are still identical to `c461e4c`'s, so every row of the measurement table would reproduce today.
+The 68-minute pre-merge window is exact to the second. All five citation-site line numbers are
+exact, as are the three amend-by-new-ADR pointers, and 0016 is genuinely the next free number.
+
+**One thing blocks it, and it is a one-character fix.** Revision 8 added Scenario L and updated
+Scenario H and task 4 to match — but task 7, the verification step, still says "Verify scenarios
+**A-K** by execution". The checklist an implementer actually works from omits the single scenario
+revision 8 exists to add. That matters more here than it would elsewhere: once the phase gate flips
+to `implementation`, editing the spec or checklist is forbidden, so an omission left in now hardens
+into "Scenario L never gets verified" — and a build that skips L is byte-for-byte revision 7's
+coverage, the exact state this revision was written to leave behind.
+
+I deliberately did **not** re-cite Scenarios C/D naming their bases as abbreviated rev strings. The
+round-7 judge examined that and reasoned it non-blocking (the 40-char SHA contains each as a prefix,
+and Scenario A plus Scenario I make the weak reading unable to pass the spec as a whole). I reached
+the same conclusion independently, and revision 8 did not touch either scenario. It stays a note.
+
+### What was re-measured this round
+
+| claim | measured on this host | result |
+|---|---|---|
+| replay line refs 6, 7, 13-15, 20-22, 35, 125-131, 134 (literal `main`), no `set -e`, 63 commands | all exact; `set -u` only | OK |
+| `grep -cE 'BASE_REV\|getopts\|\$\{3'` -> 0 | 0 | OK |
+| `git-guard.sh` pointers `:44` classifier resolve, `:53-57` python3 guard, `:74-77` classifier guard | all exact, both exit 2 | OK |
+| toolchain: bash 3.2.57(1), git 2.50.1 (Apple Git-155), py 3.9.6, jq 1.7.1-apple, shasum 6.02, BSD `cmp` no `--version` | all exact | OK |
+| `cmp -s` on two absent paths exits 2 | 2 | OK |
+| `cmp --quiet` / `diff -q --no-dereference` / `readlink -f /tmp` all work here | 0 / 0 / `/private/tmp` | OK |
+| `e3b09ba`: 0 occurrences of `lib/`, both helpers absent | exact | OK |
+| `286fd5a`: all three paths absent | exact | OK |
+| `bc7da76` vs `c461e4c`: guard `2b74507c` and classifier `2f8af693` unchanged, only `shell_segments` moved | exact | OK |
+| `f5c5689` three blobs identical to HEAD's | exact (and still true at `5bc39b9`) | OK |
+| `b17a666`: all three differ | exact | OK |
+| `lib/` at HEAD: 3 matches, 2 of them comments (`:21`, `:29`) | exact | OK |
+| Scenario J shape absent from history (guard references `lib/`, helpers missing) | **0 matches across all 632 commits** | OK |
+| Scenario L shape absent from history (self-contained guard carrying helpers) | **0 matches across all 632 commits** | OK |
+| history counts "631 commits / 65" | now **632 / 66** — drifted by exactly one, the spec's own commit; substance unchanged | see notes |
+| `64ba2fa` 15:45:33 -> `cc035d2` 16:53:55 = 68 min | exact | OK |
+| citation sites `git-guard-empty-index.md:311`,`:314-318` (215/326/346, 162/52/32); `shell-segments-redirects.md:118`,`:140`; `falsifier-base-pin.md:145`; ADR `0015:110` | all exact | OK |
+| amend-by-new-ADR at `0009:105`, `0011:4-6`, `0013:5`; next ADR is 0016 | exact | OK |
+| neither harness in `hooks/` has a `.test.sh` sibling; falsifier prints literal `$BASE` (`:100`) with pinned default (`:25`) | exact | OK |
+| no absolute paths, no secrets anywhere in the spec | none | OK |
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/task-list-scenario-drift` | `~/.claude/skills/writing-specs/SKILL.md` | Good/bad/edge scenarios must be enumerated and the spec maintained with production rigor — it must not drift out of sync with itself | Tasks item 7 (`:441`), against Scenarios A-L (`:307-409`) | The verification checklist says "Verify scenarios A-K", omitting Scenario L — the sole falsifier revision 8 was written to add — so a builder working the checklist reproduces revision 7's coverage exactly and never runs the test that pins the new membership rule. |
+
+### Notes (non-blocking)
+
+- **`631` / `65` are stale by one at the current HEAD (632 / 66)** — the spec's own commit landed
+  after the measurement. The substantive claim re-verified exactly: **zero** commits in the whole
+  history hold either mixed shape, in either direction, so Scenario J's and Scenario L's bases
+  genuinely must be synthesized. Anchoring the counts to a commit ("as of `c461e4c`") the way the
+  measurement table already does would end this churn permanently rather than one revision at a time.
+- **No scenario asserts the successful-run *header*.** Part 5 and task 6 both name line 134 — the
+  fourth hard-coded `main`, called out in the root cause — but Scenarios C, D and I only assert the
+  *pair-count* line. An implementation that fixes only the summary line passes every scenario with
+  `main` still hard-coded in the header. Not ambiguous (the contract and task 6 both state it), so
+  not cited; adding "And the header names the same resolved base" to Scenario C would close it.
+- **Part 2's "part 3 reuses this rule" sentence slightly over-claims for the default mode.** Part 3's
+  `cmp`-safety argument rests on "part 2 has already proved every member of each side's set extracted
+  non-empty" — true for a rev candidate, but part 2 is not applied to the worktree candidate at all
+  (non-goal deferral 2). The failure direction is the loud one (a missing candidate helper makes
+  `cmp` return 2, so the run proceeds rather than falsely refusing) and both the gap and its
+  consequence are already recorded as deferral 2 and limit 2, so this is prose precision, not a hole.
+- **Scenarios C/D name abbreviated rev strings** rather than the resolved 40-char SHA. Carried
+  forward from round 7 as a note for the same reason the round-7 judge gave, independently
+  re-derived: Scenario A (default base) and Scenario I ("the resolved SHA of `e3b09ba`") make the
+  weak reading unable to pass the spec as a whole. Revision 8 did not touch either scenario.
+- **Scenario L does not say how its candidate is supplied.** `e3b09ba` as a rev candidate satisfies
+  its Given exactly and needs only the base synthesized, which is what task 4 already assumes.
+  Naming it removes the last piece of guesswork.
+- **Part 6's "Each gets a one-line provenance note"** is contradicted one line later by the table's
+  "NOT edited" row and by task 9's "four sites". The table and the following ADR-0015 paragraph
+  resolve it unambiguously, so not cited.
+- **Spec path.** `docs/features/` rather than writing-specs' `docs/superpowers/specs/`: the repo
+  layer (`CLAUDE.md` -> `rules/gates.md`, one-canonical-file discipline) mandates
+  `docs/features/<name>.md` for feature-scale work and takes precedence. Not cited.
+- **Part B is clean.** Every one of the six parts traces to a measured false-pass route (YAGNI);
+  error handling is explicit at every boundary the design introduces, with exit codes, output
+  suppression and message content all stated; the two unclosed comparison limits and the five
+  deferred architecting recommendations are recorded with the deciding user and date, so no deferral
+  is invisible; architecture trade-offs are attributed to user decisions rather than decided in the
+  spec; versions are pinned and measured; no secrets or absolute paths; and the ~40-line change
+  leaves a 137-line file far inside the file-size convention. No security rule's territory is
+  touched beyond shell execution, where every one of the three external inputs (`WT`, `UNDER_TEST`,
+  `BASE_REV`) is validated at its boundary and fails closed.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round of either cycle.
+
+---
+
+## Round 2 (new cycle — revision 9) — 2026-08-05 — **PASS** (0 violations)
+
+**Repo:** `.claude` · **branch:** `main` · **head:** `8634fba446edbcb5d853df392488569134f59d5e`
+**Spec blob:** `ea2b820ce2ba54827f1392fbb8d56e30b3ec1b7f` · **Confidence:** high
+**Waived coming in:** none. **Prior-round violations supplied:** one —
+`writing-specs/task-list-scenario-drift`.
+
+### Layman summary
+
+Revision 9 closes the one thing that blocked it, and closes it properly. Task 7 — the checklist step
+an implementer actually works from — now says "Verify scenarios **A-L** by execution — all twelve, L
+included", and adds why L matters: it is the falsifier for the membership rule revision 8 was written
+to add, and a run that skips it has exactly revision 7's coverage. That is the fix plus the reason
+for the fix, which is what stops the same drift recurring. There are twelve scenarios (A-L, H being
+the meta cross-check), so "all twelve" is also arithmetically right.
+
+The three non-blocking items were taken in the same pass, and all three landed:
+
+1. **The over-claim is gone.** Revision 8's `cmp` bullet said part 2 "has already proved every member
+   of each side's set extracted non-empty". It now claims only that a non-member is never an
+   operand, and states the residual out loud: in default `worktree` mode a member can be absent from
+   disk, `cmp` reports "not identical", the run proceeds, and limit 2 governs the outcome (candidate
+   exits 2 on every command, `relaxed` 0, silent pass). Recorded, not closed, and tied to deferral 2.
+   A spec that names its own soft spot is worth more than one that quietly asserts it away.
+2. **The disk-reading rule is stated exactly once.** I checked every occurrence: the only live
+   statement of "read the bytes that will actually execute — from disk, not `git show HEAD:`" is the
+   bullet at `:174-182`, covering membership *and* byte comparison; the membership paragraph at
+   `:141-143` points at it rather than restating it; every other hit is the revision log or a
+   deferral referring back to it. No third drifted pair was created.
+3. **Part 5's header half is now falsifiable.** Scenario D asserts that a *successful* run's header
+   names the same resolved base as the summary line. I confirmed this bites: line 134 really is a
+   separate `printf` carrying the literal string `main`, so an implementation that fixed only the
+   summary line now fails a scenario instead of passing the whole file.
+
+And the volatile history counts are pinned to `5bc39b9`. I re-ran that measurement across all 632
+commits myself, in both directions: **66 / 66 / zero mixed shapes**, exactly as written. That was
+the whole point of pinning — a number that carries its baseline can be re-checked a year from now,
+which is the same rule the spec is asking the harness to obey.
+
+Nothing I checked was wrong. Every line pointer, every blob identity, every toolchain version and
+every citation-site line number reproduces exactly on this host at this HEAD. Six notes below, all
+minor; none of them makes a requirement readable two ways, and none blocks the build.
+
+### What I re-measured this round (nothing taken on trust from round 1)
+
+| claim | measured at `8634fba` on this host | result |
+|---|---|---|
+| history pinned at `5bc39b9`: 632 commits; 66 with guard + ≥1 helper, all 66 reference `lib/`; 66 guards reference `lib/`, all 66 carry both helpers; zero mixed either way | full walk of all 632 commits: `total=632 · 66/66 mixedA=0 · 66/66 mixedB=0` | **exact** |
+| task 7 now reads A-L / "all twelve"; no live `A-K` remains (3 hits, all revision-log) | exact | OK |
+| exactly one live statement of the disk-reading rule (`:174-182`); membership paragraph points at it | exact | OK |
+| Scenario D asserts the successful-run header; line 134 is a distinct site printing literal `main` | `134:printf 'DISTINCT COMMANDS main BLOCKS and %s ALLOWS:\n'` | OK |
+| replay refs 6 (`WT`), 7 (`UNDER_TEST`), 13-15 (`git show main:` ×3), 20-22 (candidate), 35 (`/usr/bin/jq`), 125-131 (compare/else), 134; `set -u` only, no `set -e`; 137 lines | all exact | OK |
+| `grep -cE 'BASE_REV\|getopts\|\$\{3'` → 0 | 0 | OK |
+| guard `:44` classifier resolve, `:53-57` python3 guard (`exit 2` at `:56`), `:74-77` classifier guard (`exit 2`) | all exact | OK |
+| toolchain: bash 3.2.57(1), git 2.50.1 (Apple Git-155), python3 3.9.6, jq 1.7.1-apple, shasum 6.02, BSD `cmp` (no `--version`) | all exact | OK |
+| `cmp -s` on two absent paths exits 2 | 2 | OK |
+| `e3b09ba`: 0 occurrences of `lib/`; `286fd5a`: all three paths absent | exact | OK |
+| `b17a666`: all three blobs differ from HEAD; `bc7da76`: guard `2b74507c` and classifier `2f8af693` identical to HEAD, only `shell_segments.py` moved | exact | OK |
+| `f5c5689` and `c461e4c` three blobs identical to HEAD's (so the measurement table still reproduces) | exact | OK |
+| deferral 3: `lib/` at HEAD = 3 matches, 2 comments (`:21`, `:29`), 1 code (`:44`) | exact | OK |
+| citation sites `git-guard-empty-index.md:311` + `:314-318` (215/326/346, 162/52/32), `shell-segments-redirects.md:118`, `:140`, `falsifier-base-pin.md:145`, `0015:110`; queue pointer `falsifier-base-pin.md:140-152`; next free ADR is 0016 | all exact | OK |
+| no absolute paths, no secrets, no TBD/placeholder outside the house `Verification` stub | none | OK |
+
+### Round-1 violation: closed
+
+`writing-specs/task-list-scenario-drift` — task 7 (`:460-462`) now reads "Verify scenarios A-L by
+execution — **all twelve, L included**", with the falsifier's purpose stated inline. Task 4 already
+carried L's synthesized base; Scenario H already covered L. The checklist, the scenarios and the
+rule they pin now agree at every site. Not recurring.
+
+### Violations
+
+None.
+
+### Notes (non-blocking)
+
+- **One word left of the over-claim.** Part 2 (`:123-124`) still says "the set part 3 compares is
+  exactly the set part 2 **validated** here", while part 3 (`:138`) says "part 2's **required**
+  set" — the accurate phrasing, since part 2 validates the base and a *rev* candidate but not the
+  default `worktree` candidate. Not cited: both sites define the *same* membership rule, so no
+  implementation forks on it, and part 3's ⚠️ paragraph states the residual explicitly two
+  paragraphs later. Changing "validated" to "required" would retire this pair permanently.
+- **The refusal scenarios assert "no pair-count line" but never "no `DISTINCT COMMANDS` header"** —
+  the contract (`:432-433`) requires both. This is the mirror of the gap revision 9 just closed for
+  successful runs: an implementation that prints the header and then refuses passes A, E, J, K and
+  L. Not cited (the contract and part 5 both state it unambiguously, the same reasoning round 1 used
+  for the successful-run header); adding one `And` line to Scenario A would close it.
+- **No scenario covers a *candidate*-side extraction failure**, though part 2 (`:107-108`) and task
+  3 both require `git-guard.sh` to be mandatory "on both sides". The failure direction is the loud
+  one (an empty candidate turns every base block into a reported relaxation), and the requirement is
+  explicit rather than inferred, so this is coverage rather than ambiguity. Carried from earlier
+  rounds.
+- **Deferral 3 is the last unpinned volatile figure.** "At HEAD, 2 of its 3 matches are comment
+  lines" (`:281-282`) is exact today, but it is HEAD-relative — the same shape revision 9 just fixed
+  for `632`/`66`. Pinning it to a SHA would finish the job.
+- **Scenarios C/D still name abbreviated rev strings** as "the base". Carried forward for the third
+  time on the same reasoning, independently re-derived: Scenario A (default base), E and I demand
+  the 40-character SHA, so the weak reading cannot pass the spec as a whole.
+- **Scenario L still does not say how its candidate is supplied** — `e3b09ba` as a rev candidate
+  satisfies its Given and needs only the base synthesized, which task 4 already assumes.
+- **Part 6's "Each gets a one-line provenance note"** (`:222-223`) still reads loosely against the
+  table's `NOT edited` row, the following ADR-0015 paragraph and task 9's "four sites". Three
+  unambiguous statements against one loose word; not readable two ways in practice.
+- **Spec path** `docs/features/` rather than writing-specs' `docs/superpowers/specs/`: the repo layer
+  (`CLAUDE.md` → `rules/gates.md`, one-canonical-file discipline) mandates
+  `docs/features/<name>.md` for feature-scale work and takes precedence. Not cited.
+- **Part B remains clean.** Every one of the six parts traces to a measured false-pass route (YAGNI);
+  error handling is explicit at each boundary the design introduces, with exit code, output
+  suppression and message content stated; the two comparison limits, the exit-code gap and the five
+  deferred architecting recommendations are all recorded with the deciding user and date, so no
+  deferral is invisible; architecture trade-offs are attributed to user decisions rather than
+  decided in the spec; versions are pinned and measured on this host; no secrets, no absolute paths;
+  a ~40-line change to a 137-line script stays far inside the file-size convention. Security
+  territory touched is shell execution only, where all three external inputs (`WT`, `UNDER_TEST`,
+  `BASE_REV`) are validated at the boundary and fail closed.
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round of either cycle.
