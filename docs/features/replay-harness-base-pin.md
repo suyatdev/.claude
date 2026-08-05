@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/replay-harness-base-pin
 ---
@@ -537,8 +537,10 @@ even then it must be visibly labelled as unresolved rather than presented as a b
       - K's candidate is `e3b09ba` checked out standalone in its own clone; `BASE_REV=e3b09ba`
         resolves there directly since it's the same repo's own history.
 - [x] 8. Confirm no dependent suite moved and no file outside the harness changed.
-      - `git diff --stat main...HEAD`: only `hooks/git-guard.replay.sh`, this feature file, and
-        `CODING_MEMORY.md` changed — nothing else. `git-guard.sh` itself untouched.
+      - Measured pre-task-9, at `e5d1403`: only `hooks/git-guard.replay.sh`, this feature file, and
+        `CODING_MEMORY.md` changed. **Final diff after task 9 is 6 files** — task 9 added
+        `docs/decisions/0016-…` and one-line provenance notes to `git-guard-empty-index.md` and
+        `shell-segments-redirects.md`. `git-guard.sh` itself untouched throughout.
       - `hooks/git-guard.test.sh` (the only test suite adjacent to either harness — spec's own
         non-goal confirms neither harness has a test sibling): **77 passed, 0 failed.**
 - [x] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
