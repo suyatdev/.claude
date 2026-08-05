@@ -7,14 +7,14 @@ branch: none
 # The replay harness never says what it compared
 
 Planned on `main` @ `c461e4c`, session 10. Model-switch checkpoint 1 answered: stay on Opus 5 for
-planning. **Revision 8** — rounds 1-6 all failed compliance, each on something genuinely new, and
+planning. **Revision 9** — rounds 1-6 all failed compliance, each on something genuinely new, and
 round 1 additionally drew `risk=high` from the architecting read. Every round was right, and one of
 them overturned this spec's original premise. Revisions 3-6 each *introduced* the next round's
 finding, so revision 7 was a consolidation rather than another point fix, and it **passed round 7**.
 Revision 8 is one fix on top of that pass: the 5th architecting read found that part 3 never said
 whether an unreferenced helper counts, and both readings satisfied all 11 scenarios. Taken by user
 decision on 2026-08-05, knowing it voids the round-7 verdict and restarts compliance at round 1.
-What changed is recorded at the end, newest first.
+Revision 9 answers that round-1 fail. What changed is recorded at the end, newest first.
 
 Queued from `docs/features/falsifier-base-pin.md:140-152`, which found this while fixing its sibling.
 
@@ -138,8 +138,9 @@ three files" is not a safe assumption and must not be written as one.
 **A side's file set is part 2's required set, and nothing else:** `hooks/git-guard.sh` always, plus
 the two `hooks/lib/*.py` helpers **only if that side's `git-guard.sh` references `lib/`**. A helper
 that exists on disk but is not referenced is **not a member** of that side's set — it cannot execute,
-so it cannot change an outcome. Membership is decided by the bytes that will actually execute: for
-`UNDER_TEST=worktree` the candidate's membership is read from the on-disk guard, not `git show HEAD:`.
+so it cannot change an outcome. Membership is decided by **the bytes that will actually execute** —
+the same single rule that governs byte comparison, stated once in its own bullet below and
+deliberately not restated here.
 
 The two sides are **vacuously identical** iff (i) the two sets are equal, **and** (ii) every path in
 them is byte-identical. Only then: print the refusal, print no matrix, exit non-zero. Closes route 1.
@@ -150,9 +151,15 @@ them is byte-identical. Only then: print the refusal, print no matrix, exit non-
   three comparisons return an error that is not a match. Concretely, `e3b09ba` compared against
   itself is vacuous and must be refused; under the "all three" phrasing it produced
   `378 identical / 0 relaxed`, exit 0 — route 1, reopened by the very revision that made helpers
-  optional. Under the set rule the error cannot arise: part 2 has already proved every member of each
-  side's set extracted non-empty, and `cmp` runs only once the two sets are found equal, so it is
-  only ever called on paths present on both sides.
+  optional. Under the set rule that error cannot arise **from a non-member**: `cmp` runs only after
+  the two sets are found equal, so a path outside both sets is never an operand.
+  ⚠️ **This is not the stronger claim that `cmp` always receives two files that exist**, and revision
+  8 wrongly implied it was. Part 2 proves every member extracted non-empty for the base and for a
+  *rev* candidate, but it does not run against the default `worktree` candidate (non-goals, deferral
+  2) — so in default mode a member of the candidate's set can be absent from disk. `cmp` then
+  reports "not identical", the run is correctly judged non-vacuous, and what follows is governed by
+  limit 2: that candidate exits 2 on every command, so `relaxed` is 0 and the pass is silent.
+  Recorded, not closed — and the reason deferral 2 is the next one to take.
 - **Different *sets* are a real difference; different *files on disk* are not.** This distinction is
   the entire reason membership is defined above. A base whose guard uses the helpers, against a
   candidate whose guard is self-contained, has genuinely different sets — that is Scenario I, and it
@@ -164,10 +171,15 @@ them is byte-identical. Only then: print the refusal, print no matrix, exit non-
   are present on *both* sides but differ: bytes neither guard loads cannot make a run differential.
   Part 2 has separately rejected the case where an absence is a *broken extraction* rather than a
   genuine self-contained guard, so by the time part 3 runs, a set difference is signal.
-- **Compare the bytes that will actually execute.** For `UNDER_TEST=worktree` the harness runs the
-  on-disk file (`NEW="$WT/hooks/git-guard.sh"`), so the candidate side is read **from disk, not
-  `git show HEAD:`**. The two readings diverge the moment the worktree has uncommitted edits, and
-  the on-disk one is the truth. For a rev candidate, both sides are `git show`.
+- **Read the bytes that will actually execute — for membership and for comparison alike.** One rule,
+  two uses, stated in exactly one place: revision 8 exists because a rule stated twice drifted apart,
+  and revision 9 declines to repeat that mistake in the same section. For `UNDER_TEST=worktree` the
+  harness runs the on-disk file (`NEW="$WT/hooks/git-guard.sh"`), so the candidate side is read
+  **from disk, not `git show HEAD:`** — both when deciding whether its guard references `lib/` and
+  when comparing bytes. The two readings diverge the moment the worktree has uncommitted edits, and
+  the on-disk one is the truth. For a rev candidate, both sides are `git show`. ⚠️ **Two rules now
+  depend on this one**, and the scenario that would test it is **deferral 1** (the dirty worktree) —
+  already the strongest of the five deferred items, and more so now.
 - **"Nothing differs", not "something matches".** A branch touching only `shell_segments.py` is a
   legitimate run — PR #38 was exactly that, and it is verifiable: between `bc7da76` and `c461e4c`,
   `git-guard.sh` and `classify-git-command.py` are the same blobs (`2b74507c`, `2f8af693`) and only
@@ -331,7 +343,11 @@ Scenario D: a difference the matrix cannot see — still reported, not refused
   When the harness runs with that base
   Then the pair-count line is printed, naming bc7da76 as the base
    And the counts are 378 identical, 0 stricter, 0 relaxed
+   And the run's HEADER names the same resolved base as the summary line, not the literal "main"
   # Identical to Scenario A's counts. Only the named base distinguishes a real run from a vacuous one.
+  # The header assertion is what makes part 5's "both the header and the summary line" testable on a
+  # SUCCESSFUL run: line 134's hard-coded "main" is a separate site from the summary, and without
+  # this line an implementation that fixes only the summary passes every scenario in this file.
 
 Scenario E: a base whose files do not exist — named error, not a pass
   Given 286fd5a, where all three files are absent
@@ -372,9 +388,9 @@ Scenario J: helpers absent while the guard still needs them — named error
   Then the output names the resolved base SHA and the path that could not be read
    And no pair-count line is printed
    And the exit code is non-zero
-  # Pins the same rule in the REJECTING direction. No such commit exists in history
-  # (631 checked; all 65 whose guard references lib/ carry both helpers), so this base must be
-  # synthesized. An implementation that drops the helper check entirely passes I but fails here.
+  # Pins the same rule in the REJECTING direction. No such commit exists in history: measured at
+  # 5bc39b9 (632 commits), all 66 whose guard references lib/ carry both helpers. So this base must
+  # be synthesized. An implementation that drops the helper check entirely passes I but fails here.
 
 Scenario K: a self-contained base against itself is still vacuous
   Given e3b09ba as both base and candidate
@@ -401,8 +417,10 @@ Scenario L: an unreferenced helper is not part of the comparison
   # calls the sets different, and reports a clean "identical / 0 relaxed" under a valid SHA.
   # That is route 1, in the one shape a future run will hit: testing a revert of the helper split.
   # Both readings of revision 7 passed A-K, which is why this scenario exists.
-  # No such base exists in history (631 commits; the 65 carrying the guard alongside a helper
-  # all reference lib/), so it must be synthesized, as Scenario J's is.
+  # No such base exists in this repo's history. Measured at 5bc39b9 (632 commits): of the 66
+  # carrying the guard alongside at least one helper, all 66 reference lib/. Zero mixed-shape
+  # commits, so this base must be synthesized, as Scenario J's is.
+  # The count moves with every commit; it is pinned to a SHA for the same reason part 5 exists.
 
 Scenario H: the refusal is discriminating
   Then A, B, E, F, J, K and L refuse or error; C, D, G and I report
@@ -435,13 +453,53 @@ even then it must be visibly labelled as unresolved rather than presented as a b
 - [ ] 4. Add the vacuity refusal: a side's set is part 2's required set (guard always, helpers only
       when that side's guard references `lib/`, read from the bytes that will execute); compare sets
       first, then bytes, and never `cmp` a non-member. Synthesize Scenario J's and Scenario L's
-      bases — neither shape exists in 631 commits.
+      bases — neither shape exists in history (measured at `5bc39b9`, 632 commits, zero in both
+      directions).
 - [ ] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
 - [ ] 6. Print the resolved base in the header (line 134) and the summary line.
-- [ ] 7. Verify scenarios A-K by execution, `$?` captured immediately, results as a table.
+- [ ] 7. Verify scenarios A-L by execution — **all twelve, L included** — `$?` captured immediately,
+      results as a table. L is the falsifier for part 3's membership rule; a run that skips it has
+      exactly revision 7's coverage.
 - [ ] 8. Confirm no dependent suite moved and no file outside the harness changed.
 - [ ] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
 - [ ] 10. Observability judge, then PR at the judged sha.
+
+## Revision 9 — round-1 compliance (new cycle) + sixth architecting read
+
+Round 1 of the new cycle cited **one** violation; the architecting read (advisory, `risk=medium`)
+raised three more as non-blocking. All four are fixed here, because three of them are the same
+class of defect revision 8 was written to fix, and one was introduced *by* revision 8.
+
+- **BLOCKING — `writing-specs/task-list-scenario-drift`. Task 7 still said "verify scenarios A-K".**
+  Revision 8 added Scenario L and updated Scenario H and task 4, but not the checklist step that
+  actually runs the scenarios — so an implementer working the list would have reproduced revision
+  7's coverage exactly and never run the falsifier the whole revision exists to add. Now A-L, with
+  the count spelled out. The same drift, one document later: a rule updated in three places out of
+  four.
+- **Revision 8's own over-claim, narrowed.** Its `cmp` bullet asserted that part 2 "has already
+  proved every member of each side's set extracted non-empty". That is true for the base and for a
+  *rev* candidate, and **false for the default `worktree` candidate**, which part 2 never validates
+  (deferral 2). Both judges flagged it independently. The bullet now claims only what it can — a
+  non-member is never an operand — and states the residual: in default mode a member can be absent
+  from disk, `cmp` reports "not identical", the run proceeds, and **limit 2** governs the outcome
+  (candidate exits 2 on every command → `relaxed` 0 → a silent pass). A false safety claim is worse
+  than the gap it conceals, because it stops the next reader looking.
+- **The disk-reading rule de-duplicated.** Revision 8 fixed a drifted pair of rules and then created
+  a smaller one beside it: "read from disk, not `git show HEAD:`" was stated once for membership and
+  again for byte comparison. Now stated **once**, covering both uses, with the membership paragraph
+  pointing at it instead of restating it. Noted there: two rules now depend on it, and the scenario
+  that would test it is deferral 1 (the dirty worktree), which is correspondingly stronger again.
+- **Part 5's header half is now falsifiable.** No scenario asserted the base in a *successful* run's
+  header — only in refusals (A, E) and on the summary line (C, D) — so an implementation that fixed
+  the summary and left line 134's hard-coded `main` alone passed every scenario in the file. That is
+  route 5 surviving the part written to close it. Scenario D now asserts the header too.
+- **The history counts pinned to a SHA.** `631`/`65` were already `632`/`66` by the time the judges
+  measured — the spec's own commit moved them, and any commit will. They are now stated **as
+  measured at `5bc39b9`**, which is what the rest of this spec demands of every other number: a
+  figure that does not carry its baseline cannot be audited later. Re-measured at that commit, in
+  both directions: of 632 commits, 66 carry the guard alongside at least one helper and all 66
+  reference `lib/`; 66 guards reference `lib/` and all 66 carry both helpers. **Zero mixed-shape
+  commits either way** — the substantive claim behind Scenarios J and L is unchanged and exact.
 
 ## Revision 8 — fifth architecting read (advisory, `risk=medium`)
 
@@ -470,7 +528,9 @@ verdict deliberately, on a user decision taken with that cost stated: compliance
 - **Two history counts re-measured on 2026-08-05 and corrected `629` → `631`.** Scenario J's base and
   Scenario L's base are both absent from the full history: of 631 commits, 65 carry `git-guard.sh`
   alongside at least one helper and **all 65** reference `lib/`; symmetrically, 65 commits' guards
-  reference `lib/` and **all 65** carry both helpers. The repo holds exactly two clean populations
+  reference `lib/` and **all 65** carry both helpers. (Superseded by revision 9, which pins these to
+  a SHA: `632`/`66` as measured at `5bc39b9`. Zero mixed-shape commits either way, then and now.)
+  The repo holds exactly two clean populations
   and no mixed shape, so both bases must be synthesized. The earlier `629` was measured at an older
   HEAD; leaving it beside a fresh figure is the kind of drift rounds 3-6 kept surfacing.
 

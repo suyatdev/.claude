@@ -851,8 +851,12 @@ how this file and its linked files should be written (plain language, major chan
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
   · **IN PLANNING (session 10) — `git-guard.replay.sh`. Canonical:
-  `docs/features/replay-harness-base-pin.md`, `phase: planning`, revision 7 — **compliance PASSED
-  round 7** (blob `56cc369`, HEAD `2d865fd`), first pass in seven rounds.** Scope is **wider than
+  `docs/features/replay-harness-base-pin.md`, `phase: planning`, revision 9 — **in a NEW compliance
+  cycle, round 2 pending.** Revision 7 did pass round 7 (blob `56cc369`, HEAD `2d865fd`), the first
+  pass in seven rounds, but the user then took the 5th architecting read's fix; that edit voided the
+  verdict and re-entered at round 1, which **failed** on one violation (task 7 still said "verify
+  A-K" after Scenario L was added). Revision 9 answers it plus three non-blocking items — including
+  one revision 8 introduced. **Do not cite a passing verdict for this spec.** Scope is **wider than
   this entry originally said, and its premise was wrong.** Five ways the harness prints a pass that
   could not fail — measured, absolute worktree path, `$?` first: vacuous base (`main` vs itself,
   378/0/0 exit 0); **0-byte base** from unchecked `git show` (base `286fd5a`, all three files absent
