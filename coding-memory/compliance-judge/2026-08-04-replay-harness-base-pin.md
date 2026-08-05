@@ -642,3 +642,84 @@ stricter, 0 relaxed`, exit 0 — both sides self-contained, byte-identical, not 
 ### Waiver record
 
 None. No violation id has been waived on this spec in any round.
+
+---
+
+## Round 7 — 2026-08-05 — verdict: PASS
+
+Spec blob `56cc36934c6c2dc8b20763982844151fc96a0fe2` at HEAD `2d865fd` (revision 7, the
+consolidation commit). Judged on `main`, waived: none.
+
+### Layman summary
+
+Rounds 3–6 each caught a mistake that the previous round's fix had created, so this revision
+stopped patching one sentence at a time and instead hunted down *every* place the spec states its
+two most-broken promises — "output must name the base by its full commit id" and "don't assume a
+side always has three files" — and made them all agree at once. This round's job was to check
+whether that hunt missed a spot, and whether the rewrite itself broke something new, as four
+rewrites in a row had. It didn't, on both counts. Every place the two promises appear now says the
+same thing; the three new test scenarios (I, J, K) are internally consistent and their numbers
+reproduce exactly when re-run from scratch on this machine; the corrected toolchain claims are now
+true as measured; and the deferred recommendations are recorded as decisions, not gaps. First pass
+in seven rounds.
+
+### Verification performed (all on this host, this round — not carried from prior rounds)
+
+**Consolidation sweep — invariant 1 (base identified in output).** Every site enumerated: route-5
+description (describes the defect), part 2's failure clause (resolved SHA — correct, extraction
+post-`rev-parse`), part 5 + the resolved-base definition, the sibling-format warning, the
+error/refusal contract with Scenario F as sole exemption, Scenarios A, E, I, J (resolved SHA), F
+(rev-string, labelled unresolved). No contradicting site remains. Scenarios C/D say "naming
+b17a666/bc7da76 as the base" — weaker than the contract but not contrary to it (see notes).
+
+**Consolidation sweep — invariant 2 (file count per side).** Part 3 is now set-first-then-bytes
+with absent-on-both never reaching `cmp`; part 2 splits mandatory guard from conditional helpers;
+tasks 3–4 match. Remaining "all three" occurrences describe specific commits (row 5, Scenario E's
+`286fd5a` — verified all three genuinely absent there) or quote superseded phrasing inside the
+revision history. No live requirement assumes three files.
+
+**Revision-7 new prose, measured:**
+
+| claim | measured | result |
+|---|---|---|
+| `cmp -s` on two absent paths exits 2 | exit 2 | ✅ |
+| `cmp --quiet`, `diff -q --no-dereference`, `readlink -f` all *work* here | exits 0/0/0, `/private/tmp` | ✅ (portability framing now honest) |
+| Scenario I counts 234/82/62 for `e3b09ba` | probe rebuilt, full 378-pair run: 234/82/62 exact | ✅ |
+| Scenario C/G counts 358/20/0 for `b17a666` | probe run: 358/20/0 exact | ✅ |
+| Scenario J: no commit has guard referencing `lib/` with helpers absent | scanned **all 630** commits: 0 matches | ✅ (spec says 629 — count at measurement time, pre-revision-7 commit; property holds at 630) |
+| Scenario K attribution: figure from a probe with rev-6 phrasing, not the live harness | live harness has no base param or vacuity check (`grep -cE 'BASE_REV|getopts|\$\{3'` → 0), so it *cannot* have produced the row; mechanism (`cmp -s` → 2 on absent) verified; 378 = 63×6 all-`same` self-comparison arithmetic | ✅ attribution accurate |
+| Scenario B: `f5c5689` blobs identical to HEAD's | all three blob ids equal HEAD's and worktree's | ✅ |
+| Scenario F: `0000000` unresolvable | `rev-parse --verify -q "0000000^{commit}"` fails | ✅ |
+| blob citations `2b74507c` / `2f8af693` stable `bc7da76`→`c461e4c`, only `shell_segments` moved | exact | ✅ |
+| `e3b09ba` self-contained, 0 `lib/` occurrences; `286fd5a` all three absent | exact | ✅ |
+| limit-2 pointers: classifier guard `:74-77` resolving `:44`; python3 guard `:53-57` | exact | ✅ |
+| guard without `lib/` exits 2 on `ls -la` | exit 2 | ✅ |
+| `lib/` at HEAD: 3 matches, 2 comments (`:21`, `:29`) | exact | ✅ |
+| `64ba2fa` 15:45:33 → `cc035d2` 16:53:55 = 68 min | exact | ✅ |
+| five citation sites (`git-guard-empty-index.md:311,:314-318`; `shell-segments-redirects.md:118,:140`; `falsifier-base-pin.md:145`; ADR `0015:110`) | all as described, table candidates/figures exact | ✅ |
+| amend-by-new-ADR at `0009:105`, `0011:4-6`, `0013:5`; next ADR is 0016 | exact; 0015 is latest | ✅ |
+| falsifier prints literal `$BASE` (`:25` default `bc7da76`, `:100` `base=$BASE`) | exact | ✅ |
+| toolchain pins (bash 3.2.57(1), git 2.50.1, py 3.9.6, jq 1.7.1-apple, shasum 6.02, BSD cmp no `--version`) | all exact | ✅ |
+| replay.sh line refs (6, 7, 13-15, 20-22, 35, 36 `cd "$REPO"`, 125, 125-131, 134 literal `main`, unconditional exit 0, 63 commands) | all exact | ✅ |
+
+### Violations
+
+None. The violations table is empty for the first time on this spec.
+
+### Notes (non-blocking)
+
+- Scenarios C and D assert "naming `b17a666`/`bc7da76` as the base" — literally satisfiable by a
+  bare abbreviated rev string, which the contract forbids. Not a conflict: the full 40-char SHA
+  contains each as a prefix, so the contract-conforming output satisfies both scenarios, and
+  Scenario A + the contract make the weak reading unable to pass the spec as a whole.
+- Scenario J's "629 checked" is now 630 with revision 7's own commit; re-scanned at 630, still zero
+  matches. Accurate as measured, still true.
+- Scenario G's `.` resolves to a directory containing `hooks/git-guard.sh` only when invoked from
+  the repo root — an unstated cwd assumption, unchanged since revision 3 and never load-bearing.
+- Out-of-scope items honored per dispatch: the three queued comparison-logic defects and the five
+  deferred architecting recommendations are described accurately where the spec mentions them
+  (deferral text cross-checked; no mis-description found).
+
+### Waiver record
+
+None. No violation id has been waived on this spec in any round.
