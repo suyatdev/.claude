@@ -850,22 +850,33 @@ how this file and its linked files should be written (plain language, major chan
   `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
-  · ✅ **IMPLEMENTATION COMPLETE (session 14) — `git-guard.replay.sh`. Canonical:
-  `docs/features/replay-harness-base-pin.md`, **`phase: review`, branch
-  `fix/replay-harness-base-pin`** @ `e86ddb5` (tasks 1-9), plus this session's fixups below.
-  **All 9 implementation tasks done, all twelve scenarios A-L verified by execution** under
-  `/bin/bash` 3.2.57 (task 7) — Scenario G (relative worktree path) was the last one open, closed by
-  task 5's `WT` resolution (`f06d93f`). Task 6 (`97aef27`) prints the resolved base SHA at both the
-  header and summary line. Task 8 confirmed blast radius; task 9 added ADR 0016 + provenance notes
-  on three prior citation sites. **Observability judge round 1: `risk=low confidence=high`**
-  (`coding-memory/observability-judge/2026-08-05-fix-replay-harness-base-pin.md`). It independently
-  reproduced both the old false-pass (378/0/0 exit 0) and the fix (refuses, names the SHA), and
-  reproduced a **known, disclosed** gap live: the default `worktree` mode still prints `0 relaxed`
-  for a candidate broken in an unrelated way (deleted `hooks/lib/*.py` → `292/86/0` exit 0) — this is
-  non-goal 2, already recorded in ADR 0016 and the spec, not a new defect. It also caught two real
-  session slips, now fixed: the `phase: review` frontmatter flip was sitting uncommitted, and task
-  8's blast-radius note said 3 files when task 9 brought the final diff to 6. **Next: re-run the
-  judge at the new HEAD (freshness is strict), then open the PR.**
+  · 🔄 **BACK IN PLANNING for revision 10 (session 14) — `git-guard.replay.sh`. Canonical:
+  `docs/features/replay-harness-base-pin.md`, **`phase: planning`, `model_tier: high`, branch
+  `fix/replay-harness-base-pin`** @ `a5ee297`. Tasks **1-9 are done and committed**; task 10 (judge +
+  PR) is **not**, and is now blocked behind revision 10.
+  **All twelve scenarios A-L verified by execution** under `/bin/bash` 3.2.57 (task 7) — Scenario G
+  (relative worktree path) was the last one open, closed by task 5's `WT` resolution (`f06d93f`).
+  Task 6 (`97aef27`) prints the resolved base SHA at both the header and summary line. Task 8
+  confirmed blast radius; task 9 added ADR 0016 + provenance notes on three prior citation sites.
+  · **Observability judge ran TWICE, both `risk=low confidence=high`** — round 1 at `e86ddb5`,
+  round 2 at `a5ee297`, both in
+  `coding-memory/observability-judge/2026-08-05-fix-replay-harness-base-pin.md` (round 2 on top,
+  round 1 verbatim below). Round 1 caught two record-vs-repo slips (uncommitted `phase` flip; task
+  8's blast radius said 3 files, actual 6) — fixed in `a5ee297`. **⚠️ BOTH VERDICTS ARE NOW VOID:**
+  revision 10 adds implementation work, so the judge must re-run at the new HEAD. Do not open the PR
+  against them.
+  · 🔄 **THE DECISION THAT SENT THIS BACK TO PLANNING (user, 2026-08-05): un-defer non-goal 2** —
+  validate the **candidate's own** `hooks/lib/*.py` in the default `worktree` mode, not just the
+  base's. The judge reproduced the gap *live* rather than arguing it: clone, delete
+  `hooks/lib/*.py`, run default mode → **`292 identical, 86 stricter, 0 relaxed`, exit 0**. A
+  candidate broken unrelatedly blocks everything, so it scores zero relaxations **by construction**
+  and prints a clean pass in the one mode people actually run. Being disclosed in ADR 0016 does not
+  change the mechanic. **This voids the round-2 verdict and restarts compliance at round 1**, same
+  as revision 8 did — taken knowingly. **Next: revision 10 on Opus 5 — un-defer the bullet, write
+  the new scenario + task 11, then the compliance judge BEFORE any code.** Then the `gate confirmed`
+  hard stop before implementation resumes.
+  · 📌 Minor, for revision 10 to sweep up: task 9's headline says "four sites" while the part-6 table
+  lists five (3 annotated · 1 already correct · 1 amended via ADR 0016).
   · Getting to this point took two compliance cycles: revision 7 passed round 7, the user then took
   the 5th architecting read's fix, that edit voided the verdict and re-entered at round 1, which
   failed on one violation (task 7 still said "verify A-K" after Scenario L was added). Revision 9

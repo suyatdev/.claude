@@ -1,6 +1,6 @@
 ---
-phase: review
-model_tier: low
+phase: planning
+model_tier: high
 branch: fix/replay-harness-base-pin
 ---
 
@@ -278,6 +278,16 @@ block whose own heading promises the opposite.
      Still deferred — widening scope mid-flight is what shipped a second defect on the last two
      branches in this class — but it is the next-strongest of the five after the dirty-worktree
      scenario.
+
+     🔄 **UN-DEFERRED by user decision, 2026-08-05 (session 14). Revision 10 pending — this bullet
+     is now stale and revision 10 must move it out of the non-goals.** Trigger: the round-2
+     observability judge reproduced the gap *live* rather than arguing it — it cloned the repo,
+     deleted `hooks/lib/*.py`, ran the DEFAULT `worktree` mode, and got `292 identical, 86 stricter,
+     0 relaxed`, exit 0. A candidate broken in a way unrelated to the change under test blocks
+     everything, therefore scores zero relaxations by construction, and prints a clean pass in the
+     one mode people actually run. Disclosure in ADR 0016 does not change that mechanic. **This
+     voids the round-2 verdict and restarts compliance at round 1**, exactly as revision 8 did —
+     taken knowingly, same as then.
   3. **Making the `lib/` reference check ignore comments** — at HEAD, 2 of its 3 matches are comment
      lines, so the check is weaker than it looks.
   4. **Printing the candidate's identity** alongside the base. The six file hashes are already
@@ -554,6 +564,16 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         0015 left untouched — its figure is restated with provenance inside ADR 0016 instead, per
         this repo's amend-by-new-record convention.
 - [ ] 10. Observability judge, then PR at the judged sha.
+      - Two rounds ran and **both passed `risk=low confidence=high`** — round 1 at `e86ddb5`, round 2
+        at `a5ee297`; both preserved in
+        `coding-memory/observability-judge/2026-08-05-fix-replay-harness-base-pin.md` (round 2 on
+        top, round 1 verbatim below). ⚠️ **Both are now VOID** — revision 10 adds implementation
+        work, so the judge re-runs at the new HEAD after it lands. Do not open the PR against them.
+      - Round 1 caught two record-vs-repo slips, both fixed in `a5ee297`: the `phase` flip was
+        uncommitted, and task 8's blast-radius note said 3 files when the final diff is 6.
+      - 📌 **Open nit for revision 10:** task 9's headline says "the four sites" while the part-6
+        table lists **five** rows (3 annotated · 1 already correct · 1 amended via ADR 0016). The
+        sub-bullets are right; only the one-liner is loose. Round-2 judge, minor.
 
 ## Revision 9 — round-1 compliance (new cycle) + sixth architecting read
 
