@@ -1,6 +1,6 @@
 ---
 phase: implementation
-model_tier: high
+model_tier: low
 branch: fix/replay-harness-base-pin
 ---
 
@@ -491,11 +491,17 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         clone with `--no-hardlinks`, then from `origin/main` — **J** = `rm -rf hooks/lib` + commit;
         **L** = overwrite `hooks/git-guard.sh` with `git show e3b09ba:hooks/git-guard.sh` + commit
         (helpers stay in the tree), then `rm -rf hooks/lib` in the worktree for the candidate.
-- [ ] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
-      - ⚙️ **Model switch happens here.** Gate answer, 2026-08-05: Opus 5 for tasks 1-4 — the red
+- [x] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
+      - ⚙️ **Model switch happened here.** Gate answer, 2026-08-05: Opus 5 for tasks 1-4 — the red
         reproduction and the comparison logic, where every silent false pass in this spec's history
         actually lived — then `/model` down to Sonnet 5 for tasks 5-10, which are mechanical.
-        Set `model_tier: low` in the frontmatter at the same time.
+        `model_tier: low` set in the frontmatter at the same time.
+      - `WT_INPUT="$1"` keeps the as-typed string for the error message; `WT="$(cd "$WT_INPUT"
+        2>/dev/null && pwd -P)"` resolves it, per the pinned toolchain (not `readlink -f`). Fails if
+        empty or `$WT/hooks/git-guard.sh` doesn't exist. Verified by execution under `/bin/bash`
+        3.2.57: Scenario G now reports 358/20/0 exit 0 (was 378/0/0 exit 0 — the candidate silently
+        exiting 127 was being tallied `same`); Scenarios A, C, F re-verified unregressed; the named
+        error also fires for `/tmp` (real dir, no guard) and a nonexistent path.
 - [ ] 6. Print the resolved base in the header (line 134) and the summary line.
 - [ ] 7. Verify scenarios A-L by execution — **all twelve, L included** — `$?` captured immediately,
       results as a table. L is the falsifier for part 3's membership rule; a run that skips it has

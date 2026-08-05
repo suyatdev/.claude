@@ -4,7 +4,7 @@
 # report every case where the base BLOCKS and the branch ALLOWS. Against the
 # default base, that set must be empty for "never weaker than main" to hold.
 set -u
-WT="$1"                      # worktree path (the branch under test)
+WT_INPUT="$1"                 # worktree path (the branch under test), as typed
 UNDER_TEST="${2:-worktree}"  # "worktree" = the fix; or a git rev to extract instead
 BASE_REV="${3:-main}"        # baseline to compare against; default keeps the stated contract
 TMP="$(mktemp -d)"
@@ -18,6 +18,15 @@ fail() {
   printf 'Corrected invocation: %s\n' "$INVOCATION" >&2
   exit 1
 }
+
+# Resolve to an absolute, real path before anything else uses it — a relative
+# path like "." would otherwise be read against whatever directory a later
+# `cd` or subshell happens to be in, and route 3 (the candidate exiting 127,
+# silently tallied "same") never surfaces.
+WT="$(cd "$WT_INPUT" 2>/dev/null && pwd -P)"
+if [ -z "$WT" ] || [ ! -f "$WT/hooks/git-guard.sh" ]; then
+  fail "the worktree '$WT_INPUT' (as typed) does not resolve to a directory containing hooks/git-guard.sh."
+fi
 
 # Resolve before extracting anything, so every later error can name a real SHA. An
 # unresolvable rev is the ONE case with no SHA to name, so it names the string as typed.
