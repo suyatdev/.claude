@@ -133,7 +133,8 @@ commit, and that revision's `git-guard.sh` contains **0** occurrences of `lib/`.
 self-contained guard, and it is one of this spec's own reference rows (`234/82/62`). An all-six rule
 would make the spec's own measurement unrunnable.
 
-**The default `worktree` candidate — the case revisions 1-9 exempted (`replay.sh:64-68`).** Why it
+**The default `worktree` candidate — the case revisions 1-9 exempted (`replay.sh:73-77`, the
+comment at `:74`).** Why it
 matters is measured, not argued: with `hooks/lib/` deleted from the worktree, the DEFAULT invocation
 prints **`260 identical, 118 stricter, 0 relaxed`, exit 0** — a clean pass, in the one mode people
 actually run, from a candidate that cannot execute at all. Probed directly on this host, the broken
@@ -145,14 +146,18 @@ Three things govern this side, and each is a trap a naive implementation walks i
 
 - **Its bytes come from disk, not `git show HEAD:`** — the same on-disk-is-truth rule part 3 states
   once and this part now reuses. The worktree is what executes.
-- **Validation is READ-ONLY on `$WT`. Never remove a file from the worktree.** For an extracted side
-  the self-contained branch deletes the unreferenced helpers from its temp dir (`replay.sh:61`);
-  running that same branch against `$WT` would delete `hooks/lib/*.py` **from the user's real
-  repository**. It is also unnecessary: part 3 decides membership from the guard's bytes, so an
-  unreferenced helper sitting on disk is already excluded without touching it. The temp-dir deletion
-  is defensive only — nothing ever writes those paths when the guard is self-contained — so the
-  worktree side simply omits it. This is the one place where reusing the existing helper verbatim is
-  actively destructive rather than merely wrong.
+- **Validation is READ-ONLY on `$WT`, and the one line that could violate that is deleted rather
+  than fenced.** `replay.sh:61` does `rm -f` on the side's two helper paths; reused verbatim for
+  the worktree side it would delete `hooks/lib/*.py` **from the user's real repository**. It is
+  **dead code**, verified: it sits in the `else` branch taken only when the guard references no
+  `lib/`, the sole writer of those paths is `extract_required` in the `if` branch (`:57-58`), and
+  `$TMP` is a fresh `mktemp -d` every run — so in that branch the paths have never existed.
+  **Task 11 deletes it.** Fencing it to the temp dir, or warning three times in prose and sharing
+  the function anyway, both leave a live `rm -f` next to a path that will one day be `$WT`;
+  removing dead code removes the landmine instead of documenting it. Nothing is lost: part 3
+  decides membership from the guard's bytes, so an unreferenced helper on disk is already excluded
+  without touching it. Recorded here because a future reader who sees the gap will otherwise
+  re-add the line.
 - **Errors name the resolved absolute worktree path**, not a SHA, because no rev identifies this
   side. The refusal contract is amended accordingly below.
 
@@ -364,12 +369,28 @@ block whose own heading promises the opposite.
      pass, exit 0, from a candidate that cannot run.
   3. **Making the `lib/` reference check ignore comments** — at HEAD, 2 of its 3 matches are comment
      lines, so the check is weaker than it looks.
+
+     ⚠️ **Revision 10 gave this a third dependent, silently, and the round-3 architecting read
+     caught that.** The plain-text `grep 'lib/'` now decides membership (part 3), byte comparison
+     (part 3), *and* which files part 2 requires on all three sides. Its failure direction is the
+     quiet one: a guard that mentions `lib/` only in a comment is treated as needing helpers that
+     it never loads. This spec records when its *other* shaky rule gains a dependent; this one had
+     been gaining them without comment. **Still deferred — user's call**, but no longer cheap.
   4. **Printing the candidate's identity** alongside the base. The six file hashes are already
      computed, so the cost is a printf.
   5. **An ADR 0016 sentence stating that a printed base attests *provenance, not validity*.** The
      concern behind it is real and is worth restating here: after this fix, a false pass will print
      a correct 40-character SHA beside it and therefore look audited. Provenance is improving faster
      than validity.
+
+     ⚠️ **This deferral is materially weaker after revision 10 — flagged for the user, not taken.**
+     Task 11 already opens `docs/decisions/0016-…` to edit, so the cost has fallen to one sentence
+     in a file that is being touched anyway; the round-3 read made that point directly. It also
+     demonstrated a false pass that **survives revision 10**: a helper present and non-empty but
+     syntactically broken makes the guard block every command → `0 relaxed`, exit 0, printed under
+     a valid 40-character SHA. That is the concern made concrete rather than argued.
+     **Left deferred because un-deferring is the user's decision, not the implementer's** — the
+     same rule that governed item 2, which waited for an explicit call. Raise it at the gate.
 - **Two further limits in the comparison logic are NOT closed — queued as their own item. They are
   independent, and fixing either one does not close the other.**
 
@@ -541,8 +562,34 @@ Scenario M: the default worktree candidate's own helpers are validated
   # with healthy helpers, so a rule that over-fires breaks all five. L covers the self-contained
   # worktree candidate.
 
+Scenario N: a committed 0-byte guard is rejected — empty is not the same as missing
+  Given a synthesized base whose hooks/git-guard.sh is committed at 0 bytes
+    (git show SUCCEEDS and yields an empty file, unlike Scenario E where it fails)
+  When the harness runs with that base
+  Then the output names the resolved base SHA and hooks/git-guard.sh
+   And no pair-count line is printed
+   And the exit code is non-zero
+  # This is route 2's SILENT direction and it had no falsifier before revision 10: `bash <empty
+  # file>` exits 0, so an empty base "allows" everything and `relaxed` is 0 BY CONSTRUCTION — the
+  # precise false pass this whole spec exists to close. Scenario E covers only the case where
+  # `git show` FAILS; part 2's separate non-empty requirement was untested on every side.
+  # An implementation that checks extraction success but not `[ -s ]` passes A-M and fails here.
+
+Scenario O: a 0-byte helper in the worktree is rejected too
+  Given a worktree whose git-guard.sh references lib/ and is healthy
+    but whose hooks/lib/shell_segments.py has been truncated to 0 bytes
+  When the harness runs in the DEFAULT worktree mode against a non-vacuous base
+  Then the output names the resolved absolute worktree path and that helper path
+   And no pair-count line is printed
+   And the exit code is non-zero
+  # The same rule on the side revision 10 added, where it is newest and least tested. Empty fails
+  # in the OPPOSITE direction from missing here: a missing helper makes the guard block everything
+  # (Scenario M, 0 relaxed, silent), while an empty one makes the classifier import fail in its own
+  # way — so M does not cover this by accident. The base must be non-vacuous so part 3 cannot
+  # refuse first, for the same reason Scenario G pins its base.
+
 Scenario H: the refusal is discriminating
-  Then A, B, E, F, J, K, L and M refuse or error; C, D, G and I report
+  Then A, B, E, F, J, K, L, M, N and O refuse or error; C, D, G and I report
    And no implementation hard-wired to refuse, or to pass, satisfies both halves
 ```
 
@@ -666,9 +713,17 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         resolves there directly since it's the same repo's own history.
 - [x] 8. Confirm no dependent suite moved and no file outside the harness changed.
       - Measured pre-task-9, at `e5d1403`: only `hooks/git-guard.replay.sh`, this feature file, and
-        `CODING_MEMORY.md` changed. **Final diff after task 9 is 6 files** — task 9 added
-        `docs/decisions/0016-…` and one-line provenance notes to `git-guard-empty-index.md` and
-        `shell-segments-redirects.md`. `git-guard.sh` itself untouched throughout.
+        `CODING_MEMORY.md` changed. **Diff after task 9 was 6 files, as measured at `e86ddb5`** —
+        task 9 added `docs/decisions/0016-…` and one-line provenance notes to
+        `git-guard-empty-index.md` and `shell-segments-redirects.md`. `git-guard.sh` itself
+        untouched throughout.
+      - ⚠️ **That 6 is pinned to `e86ddb5` and is no longer the current figure: it is 8 from
+        `cdaa1c3` onward**, which committed the observability-judge trail
+        (`coding-memory/observability-judge/2026-08-05-….md`, `verdicts.jsonl`). Nothing widened;
+        judge artifacts are process output. Recorded with its baseline rather than silently
+        updated — the spec's own rule (part 5) applies to the spec's own numbers, and a bare "6"
+        sitting beside today's "8" is exactly the archaeology this branch exists to abolish.
+        Task 11 restates the criterion as a set. Caught by compliance round 1, revision 10.
       - `hooks/git-guard.test.sh` (the only test suite adjacent to either harness — spec's own
         non-goal confirms neither harness has a test sibling): **77 passed, 0 failed.**
 - [x] 9. ADR 0016; provenance notes on the **five** sites in the part-6 table — 3 annotated, 1
@@ -701,22 +756,38 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         since a red that no longer reproduces means the premise moved.
       - Extend part 2's rule to the on-disk side: `$WT/hooks/git-guard.sh` non-empty, and both
         `$WT/hooks/lib/*.py` present and non-empty **only if** that guard references `lib/`.
-      - ⚠️ **Do not reuse `extract_helpers_if_referenced` verbatim** — its `else` branch does
-        `rm -f` on the side's helper paths (`replay.sh:61`), which against `$WT` deletes files from
-        the user's real repository. The worktree side validates read-only and deletes nothing;
-        part 3 already excludes unreferenced helpers by reading the guard's bytes.
+      - **Delete `replay.sh:61`'s `rm -f`** before sharing that function with the worktree side.
+        Verified dead: its `else` branch runs only when no `lib/` is referenced, the only writer of
+        those paths is `extract_required` at `:57-58` in the other branch, and `$TMP` is a fresh
+        `mktemp -d`. Against `$WT` it would delete the user's real `hooks/lib/*.py`. Remove it
+        rather than fencing it — see part 2.
       - Must fire **before** part 3's vacuity comparison — see Scenario M's ordering note.
       - Errors name the resolved absolute worktree path, not a SHA (refusal contract, as amended).
-      - **Verify by execution:** M (the new one), plus L (self-contained worktree candidate must
-        still reach the *refusal*, not a validation error) and the accepting direction A, C, D, G, I
-        — all five run in default worktree mode, so an over-firing rule breaks them. Then the full
-        A-M sweep, `$?` captured immediately, results as a table. Re-run `git-guard.test.sh`.
+      - **Verify by execution:** M, N and O (the new ones), plus L (self-contained worktree
+        candidate must still reach the *refusal*, not a validation error) and the accepting
+        direction A, C, D, G, I — all five run in default worktree mode, so an over-firing rule
+        breaks them. ⚠️ The accepting-direction sweep is the corner most likely to get cut and is
+        the only thing that catches over-firing. Then the full **A-O** sweep, `$?` captured
+        immediately, results as a table. Re-run `git-guard.test.sh`.
+      - **N's and O's fixtures must be synthesized** — neither shape exists in history — and, like
+        J's and L's, they do not survive a `/clear`. N: commit a 0-byte `hooks/git-guard.sh` on an
+        orphan branch in the candidate's own clone (`git show` must SUCCEED and return empty, which
+        is what distinguishes N from E). O: `: > hooks/lib/shell_segments.py` in the worktree, and
+        pass a non-vacuous base.
       - Amend ADR 0016 `:37-56` per part 6: three sides, not two, and the
         closes-the-example-not-the-limit distinction on `relaxed`.
-      - Blast radius re-check: task 8's final-diff figure should **stay at 6 files** — every file
-        task 11 touches (`hooks/git-guard.replay.sh`, `docs/decisions/0016-…`, this feature file,
-        `CODING_MEMORY.md`) is already among the six. Re-measure and confirm; a 7th file means the
-        change widened, which is the exact failure the last two branches in this class shipped.
+      - Blast radius re-check, stated as a **set and not a count**, because a bare count drifts on
+        its own: measured `git diff --name-only main HEAD` is **8 files at `cdaa1c3` and at
+        `7bed4d0`**, not the 6 task 8 recorded. Nothing widened — `cdaa1c3` committed the
+        observability-judge trail (`coding-memory/observability-judge/2026-08-05-….md` and
+        `verdicts.jsonl`), and every later judge round appends to those again. A count that each
+        judge run invalidates cannot be an acceptance criterion, which is why this one is a set:
+
+        **task 11 must touch nothing outside** `hooks/git-guard.replay.sh`,
+        `docs/decisions/0016-…`, `docs/features/replay-harness-base-pin.md`, `CODING_MEMORY.md`,
+        and the two judge-verdict paths under `coding-memory/`. Any *other* path in the diff means
+        the change widened — the exact failure the last two branches in this class shipped.
+        `hooks/git-guard.sh` in particular must stay untouched.
 
 ## Revision 10 — deferred non-goal 2 taken (user decision, session 14)
 
@@ -724,7 +795,8 @@ Not a compliance finding: a user decision to close a gap the round-2 observabili
 **reproduced live** instead of arguing. Deferrals 1 and 3-5 stay deferred.
 
 - **Part 2 now covers all three sides, not two.** The default `worktree` candidate was exempt
-  (`replay.sh:64-68`, "Deliberately not validated here"), so a candidate that could not execute at
+  (`replay.sh:73-77`, the "Deliberately not validated here" comment at `:74`), so a candidate that
+  could not execute at
   all still produced a full matrix and a clean `exit 0`. Part 2 is retitled from "validate every
   extraction" to "validate every side", because conflating *extraction* with *validation* is what
   made the exemption look principled: the worktree side needs no extraction, so it appeared to fall
@@ -759,6 +831,50 @@ Not a compliance finding: a user decision to close a gap the round-2 observabili
   side *loaded*, never that it behaves sanely — the same line ADR 0016 already draws.
 - **ADR 0016 is edited rather than superseded**, with the reasoning stated in part 6: the
   amend-by-new-record convention governs *published* ADRs, and 0016 has never existed on `main`.
+
+**Round-1 compliance (revision 10's own cycle) — two violations, both fixed here.** Both were
+introduced by revision 10 itself, and both are the "asserted instead of measured" class this spec
+keeps catching:
+
+- **`writing-specs/spec-code-accuracy` — the exemption pointer was wrong.** Revision 10 cited
+  `replay.sh:64-68` at both sites; those lines are the *base* extraction block (`}`, a comment,
+  `BASE_SHA=…`, `BASE=…`). The worktree exemption is at **`:73-77`**, its comment at **`:74`**.
+  An implementer following task 11 would have been sent to the wrong block. Verified by reading
+  both ranges; the bad pointer was inherited from the previous session's handoff and propagated
+  without checking it — the same failure as citing `:56` instead of `:74-77` in round 5.
+- **`writing-specs/blast-radius-figure-stale` — the 6-file acceptance criterion was unsatisfiable.**
+  Task 11 required the diff to stay at 6 files and called a 7th evidence of widening; measured, it
+  was already **8** at `cdaa1c3`, the commit revision 10 was written on. Task 8's 6 was correct
+  when taken (`e86ddb5`) and went stale when `cdaa1c3` committed the judge trail. I reasoned the
+  count forward from task 8 rather than running `git diff --name-only`. Task 11's criterion is now
+  a **named set** — a count that every judge round invalidates cannot gate anything — and task 8's
+  figure carries its baseline SHA instead of being silently overwritten.
+
+**Round-3 architecting read (advisory, `risk=low confidence=high`).** It reproduced the red
+independently — cloned the repo, deleted `hooks/lib/`, ran the default invocation, and got
+**`260 identical, 118 stricter, 0 relaxed`, exit 0**, matching this spec to the digit. It also
+narrowed the `292/86` discrepancy by measurement without inventing a cause: partial deletion is
+ruled out (the classifier imports `shell_segments` at the top, so deleting either helper breaks
+everything), empty helpers are ruled out and fail in the *opposite* direction, and `0 relaxed`
+with `86 stricter` needs a base allowing 86 or 204 of 378 pairs where `main` allows 118 — so
+`292/86` cannot have come from `main` plus any helper-breakage shape. It declined to name what
+did produce it, having not measured that. Two of its four items are taken here:
+
+- **Scenarios N and O added — route 2's silent direction had no falsifier.** Part 2 has required
+  "present **and non-empty**" since revision 3, on every side since revision 10, and *nothing*
+  tested the non-empty half. Scenario E covers only a `git show` that **fails**; a committed
+  0-byte file makes `git show` **succeed** and return nothing, and `bash <empty file>` exits 0, so
+  the base "allows" everything and `relaxed` is 0 by construction — the exact false pass this spec
+  was written to close, untested in its own scenario set. N pins it on the base, O on the worktree
+  side where the rule is newest.
+- **The `rm -f` landmine is deleted, not fenced.** Verified dead (see part 2). Three prose warnings
+  around a live `rm -f` that will one day be handed `$WT` is worse than removing a line that never
+  executes.
+
+The other two are recorded against their deferred items rather than taken: the `grep 'lib/'` check
+has silently acquired a **third** dependent (item 3), and deferral item 5's ADR sentence is now
+one line in a file task 11 already edits, with a false pass that **survives** revision 10 to
+justify it (a present-but-broken helper). Both are the user's call and are flagged at the gate.
 
 ## Revision 9 — round-1 compliance (new cycle) + sixth architecting read
 
