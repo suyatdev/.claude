@@ -60,15 +60,60 @@ BASE="$TMP/base"; mkdir -p "$BASE/lib"
 extract_required "$BASE_SHA" base hooks/git-guard.sh "$BASE/git-guard.sh"
 extract_helpers_if_referenced "$BASE_SHA" base "$BASE"
 
+BASE_LIB="$BASE/lib"
 if [ "$UNDER_TEST" = worktree ]; then
   # Deliberately not validated here: part 2 covers the base and a rev candidate only.
+  # Read from disk, not `git show HEAD:` — the on-disk bytes are the ones that execute.
   NEW="$WT/hooks/git-guard.sh"
+  CAND_LIB="$WT/hooks/lib"
 else
   CAND_SHA="$(resolve_rev "$UNDER_TEST" candidate)" || exit 1
   CAND="$TMP/cand"; mkdir -p "$CAND/lib"
   extract_required "$CAND_SHA" candidate hooks/git-guard.sh "$CAND/git-guard.sh"
   extract_helpers_if_referenced "$CAND_SHA" candidate "$CAND"
   NEW="$CAND/git-guard.sh"
+  CAND_LIB="$CAND/lib"
+fi
+
+# --- refuse a vacuous run: a program compared with itself proves nothing ---
+# A side's set is part 2's required set and nothing else. Membership is decided by the
+# bytes that will actually execute, NOT by what sits on disk: an unreferenced helper
+# cannot run, so it cannot make a run differential. Sets are compared first, so `cmp`
+# never receives a path that is not a member of both sides.
+side_members() {  # $1 = the guard bytes that will execute
+  printf 'git-guard.sh\n'
+  if grep -q 'lib/' "$1" 2>/dev/null; then
+    printf 'lib/classify-git-command.py\n'
+    printf 'lib/shell_segments.py\n'
+  fi
+}
+
+member_path() {  # $1 = base|cand, $2 = logical member
+  case "$2" in
+    git-guard.sh)
+      if [ "$1" = base ]; then printf '%s\n' "$BASE/git-guard.sh"; else printf '%s\n' "$NEW"; fi ;;
+    lib/*)
+      if [ "$1" = base ]; then printf '%s/%s\n' "$BASE_LIB" "${2#lib/}"
+      else printf '%s/%s\n' "$CAND_LIB" "${2#lib/}"; fi ;;
+  esac
+}
+
+BASE_MEMBERS="$(side_members "$BASE/git-guard.sh")"
+CAND_MEMBERS="$(side_members "$NEW")"
+
+if [ "$BASE_MEMBERS" = "$CAND_MEMBERS" ]; then
+  VACUOUS=1
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    cmp -s "$(member_path base "$member")" "$(member_path cand "$member")" || VACUOUS=0
+  done <<MEMBERS
+$BASE_MEMBERS
+MEMBERS
+  if [ "$VACUOUS" = 1 ]; then
+    printf 'REPLAY REFUSED: base %s and the candidate are the same program — same file set, identical bytes — so this run would prove nothing.\n' "$BASE_SHA" >&2
+    printf 'Corrected invocation: %s — pass a base that predates the change under test.\n' "$INVOCATION" >&2
+    exit 1
+  fi
 fi
 
 # --- fixture repo, mirroring git-guard.test.sh ---

@@ -469,11 +469,28 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         stderr, which `$( )` does not capture, so the message still reaches the user.
       - Scenario J (same rule, rejecting direction) exercises this code but its base must be
         synthesized; the checklist assigns that to task 4, so it is verified there.
-- [ ] 4. Add the vacuity refusal: a side's set is part 2's required set (guard always, helpers only
+- [x] 4. Add the vacuity refusal: a side's set is part 2's required set (guard always, helpers only
       when that side's guard references `lib/`, read from the bytes that will execute); compare sets
       first, then bytes, and never `cmp` a non-member. Synthesize Scenario J's and Scenario L's
       bases — neither shape exists in history (measured at `5bc39b9`, 632 commits, zero in both
       directions).
+      - ✅ 2026-08-05: **A** refuses naming `56f1dfd…` (not `main`); **B** refuses under a different
+        rev string with identical blobs; **K** refuses (was `378/0/0` exit 0 under the "all three
+        match" phrasing); **J** named error citing `hooks/lib/classify-git-command.py`; **L**
+        refuses. Non-vacuous side unaffected: **C** `358/20/0`, **D** `378/0/0`, **I** `234/82/62`,
+        all exit 0, none refused — so the refusal discriminates (Scenario H).
+      - **L's falsifier actually bit:** its base tree carries both helpers while the candidate's disk
+        has none. A disk-based membership reading sees different sets, proceeds, and prints a clean
+        `identical / 0 relaxed` under a valid SHA. Reading membership off the guard's bytes refuses.
+      - ⚠️ **Synthesis gotcha:** `git clone` checks out the source repo's *current branch*, not
+        `main`, so `git checkout -B synthL main` fails and the next commit silently lands on the
+        previous synthetic branch — L's base came out with 0 helpers instead of both, which is the
+        shape that makes L pass for the wrong reason. Use `origin/main` and assert the shape
+        (`grep -c 'lib/'` on the guard, `ls-tree` for the helpers) before trusting a run.
+      - Synthetic bases live in a scratchpad clone and **do not survive a `/clear`**. Recipe:
+        clone with `--no-hardlinks`, then from `origin/main` — **J** = `rm -rf hooks/lib` + commit;
+        **L** = overwrite `hooks/git-guard.sh` with `git show e3b09ba:hooks/git-guard.sh` + commit
+        (helpers stay in the tree), then `rm -rf hooks/lib` in the worktree for the candidate.
 - [ ] 5. Resolve `WT` to an absolute path; named error if it does not contain `hooks/git-guard.sh`.
       - ⚙️ **Model switch happens here.** Gate answer, 2026-08-05: Opus 5 for tasks 1-4 — the red
         reproduction and the comparison logic, where every silent false pass in this spec's history
