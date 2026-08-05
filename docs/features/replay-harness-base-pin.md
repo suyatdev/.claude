@@ -536,7 +536,11 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         from the candidate's worktree — caught by F's own error message, not a real failure of L.
       - K's candidate is `e3b09ba` checked out standalone in its own clone; `BASE_REV=e3b09ba`
         resolves there directly since it's the same repo's own history.
-- [ ] 8. Confirm no dependent suite moved and no file outside the harness changed.
+- [x] 8. Confirm no dependent suite moved and no file outside the harness changed.
+      - `git diff --stat main...HEAD`: only `hooks/git-guard.replay.sh`, this feature file, and
+        `CODING_MEMORY.md` changed — nothing else. `git-guard.sh` itself untouched.
+      - `hooks/git-guard.test.sh` (the only test suite adjacent to either harness — spec's own
+        non-goal confirms neither harness has a test sibling): **77 passed, 0 failed.**
 - [ ] 9. ADR 0016; provenance notes on the four sites in the part-6 table (ADR 0015 untouched).
 - [ ] 10. Observability judge, then PR at the judged sha.
 
