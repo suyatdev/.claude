@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
 # End-to-end falsifier for the redirection fix in lib/shell_segments.py.
 #
-# Drives the REAL git-guard.sh through the REAL PreToolUse JSON payload, once with main's lexer and
-# once with the working tree's, and prints both verdicts side by side. Exists because the evidence
-# for this change was originally a markdown table nobody could re-run (observability judge, 2026-08-04).
+# Drives the REAL git-guard.sh through the REAL PreToolUse JSON payload, once with a PRE-FIX lexer
+# and once with the working tree's, and prints both verdicts side by side. Exists because the
+# evidence for this change was originally a markdown table nobody could re-run (observability judge,
+# 2026-08-04).
 #
 # Every row carries an expectation, so this FAILS when the fix regresses -- it is not a report.
 # Read the BASELINE and CONTROL rows first: if those ever differ between lexers, the harness is
 # broken and no other row means anything.
 #
-# Usage: bash hooks/shell-segments-falsifier.sh [base-rev]     (default: main)
+# Usage: bash hooks/shell-segments-falsifier.sh [base-rev]     (default: the pinned pre-fix commit)
 set -u
-BASE="${1:-main}"
+
+# A DIFFERENTIAL harness's baseline must be a FIXED COMMIT, never a branch. This defaulted to `main`
+# and so self-invalidated the moment the fix it demonstrates was merged there (cc035d2, ~40 minutes
+# after the script was written): `old` became `new`, all four mode rows collapsed, and the script
+# reported "4 row(s) UNEXPECTED" -- four content failures for what was purely a harness problem, in
+# the most alarming possible presentation. A branch that will eventually contain the change under
+# test is not a baseline; it is the thing being tested, twice.
+#
+# bc7da76 is the commit fix/shell-segments-redirects branched from. An unreachable pin (shallow
+# clone, rewritten history) is a NAMED error below, not a wrong answer -- that trade is the point.
+BASE="${1:-bc7da76}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/.." && pwd)"
 TMP="$(mktemp -d)"
@@ -28,6 +39,38 @@ done
 git -C "$REPO_ROOT" show "$BASE:hooks/lib/shell_segments.py" > "$TMP/old/lib/shell_segments.py" || {
   echo "falsifier: cannot read $BASE:hooks/lib/shell_segments.py"; exit 1; }
 cp "$HERE/lib/shell_segments.py" "$TMP/new/lib/shell_segments.py"
+
+# Assert the baseline actually PREDATES the fix, before running a single row. Pinning the default is
+# not enough on its own: it cures today's symptom and leaves the failure MODE -- a silently invalid
+# baseline reported as content failures -- completely intact for the next caller who passes a base by
+# hand. Ask the base lexer the defect directly: pre-fix, a LEADING redirect pushes the real command
+# out of position 0, so no segment starts with `git`. A base where one does already has the fix.
+base_state=$(cd "$TMP/old/lib" && python3 -c '
+import sys
+sys.path.insert(0, ".")
+try:
+    from shell_segments import segments
+    segs = segments("> out.txt git commit -m x -- foo.sh")
+except Exception as exc:
+    print("ERR " + type(exc).__name__ + ": " + str(exc))
+else:
+    print("FIXED" if any(argv and argv[0] == "git" for _, argv in segs) else "PRE-FIX")
+' 2>&1)
+
+case "$base_state" in
+  PRE-FIX) : ;;   # correct: the baseline still has the defect, so the rows below mean something
+  FIXED)
+    echo "falsifier: BASELINE IS NOT PRE-FIX — '$BASE' already contains the redirection fix."
+    echo "           Every row would compare the fix with itself, so no row was run."
+    echo "           This is a HARNESS problem, not a regression in lib/shell_segments.py."
+    echo "           Pass a commit from before the fix, e.g.:"
+    echo "               bash hooks/shell-segments-falsifier.sh bc7da76"
+    exit 1 ;;
+  *)
+    echo "falsifier: cannot evaluate the baseline lexer read from '$BASE'"
+    echo "           ${base_state:-(no output — is python3 on PATH?)}"
+    exit 1 ;;
+esac
 
 # Fixture: on main, HEAD exists, NOTHING staged. The empty index is required -- guard 1 consults the
 # pathspec only when the index is empty (git-guard.sh:155-157). With files staged every row returns
