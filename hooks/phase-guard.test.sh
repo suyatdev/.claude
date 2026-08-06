@@ -1090,6 +1090,46 @@ else
 fi
 chmod 755 "$UNREADABLE/.git" 2>/dev/null
 
+# --- Group A8: the spec half is not a phase card -------------------------------------------------
+# Task 11 of docs/features/memory-system-split.md. `<name>.spec.md` is the pair's long half and
+# carries no frontmatter by contract, but the glob at line 356 was `docs/features/*.md`, which
+# matches it too. Excluded by name (`case "$f" in *.spec.md) continue ;; esac`), before nfiles
+# counts it — content is never inspected, which A8.2 exists to prove.
+
+# A8.1 — alone, no frontmatter at all: the shape the contract actually specifies. Without the
+# exclusion this hits `[ -n "$parsed_fm" ] || continue` (nfiles counted, nparsed not), which trips
+# `nfiles -gt nparsed` and fires noparse EVERY session on a file that was never a card.
+A8ALONE="$TMP/a8-alone"; mkrepo "$A8ALONE"; mkdir -p "$A8ALONE/docs/features"
+printf '# just a spec\n\nsome prose, no fences at all.\n' > "$A8ALONE/docs/features/name.spec.md"
+export CLAUDE_CODE_SESSION_ID=a8-alone
+allow_silent "A8.1 a frontmatter-less .spec.md alone does not warn" "$A8ALONE" \
+  "$(payload_sid Write file_path "$A8ALONE/src/x.sh" a8-alone)"
+no_flag_for a8-alone "A8.1b ...and wrote no noparse flag, so the silence is not just suppression"
+
+# A8.2 — well-formed `phase: planning` frontmatter inside a .spec.md. A malformed pair (or a slip
+# migrating task 5) could put it there; the exclusion is by NAME, so this must still be ignored
+# rather than collected into planning_files and freeze source edits repo-wide on a card that does
+# not own the gate. Without the exclusion this is indistinguishable from a real planning card and
+# A8.2 would deny.
+A8PLANNING="$TMP/a8-planning"; mkrepo "$A8PLANNING"
+feature_file "$A8PLANNING" docs/features/name.spec.md planning ""
+export CLAUDE_CODE_SESSION_ID=a8-planning
+allow_silent "A8.2 a .spec.md carrying phase: planning is still excluded by name" "$A8PLANNING" \
+  "$(payload_sid Write file_path "$A8PLANNING/src/x.sh" a8-planning)"
+
+# A8.3 — mixed with a genuine planning card. Proves the exclusion does not swallow a real deny
+# (real.md still denies) and does not make the tally miscount around it (no noparse flag, even
+# though a deny fires on the very same run).
+A8MIXED="$TMP/a8-mixed"; mkrepo "$A8MIXED"
+feature_file "$A8MIXED" docs/features/real.md planning ""
+printf '# just a spec\n' > "$A8MIXED/docs/features/real.spec.md"
+export CLAUDE_CODE_SESSION_ID=a8-mixed
+deny    "A8.3 a real planning card still denies beside an excluded .spec.md" "$A8MIXED" \
+  "$(payload_sid Write file_path "$A8MIXED/src/x.sh" a8-mixed)"
+err_has   "A8.3b names real.md"      'docs/features/real\.md'
+err_lacks "A8.3c does not name real.spec.md" 'docs/features/real\.spec\.md'
+no_flag_for a8-mixed "A8.3d ...and the deny is the only thing that fired — no noparse flag"
+
 # --- Group D: the record — doc↔code drift tripwires ---------------------------------------------
 # RUNS 6-9 each found the explanatory record contradicting the code while every behavioural test
 # stayed green: the suite could not see the document, so a clean run certified nothing about the

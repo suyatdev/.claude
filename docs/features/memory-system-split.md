@@ -576,10 +576,13 @@ makes actively obstructive.
 
 - [x] 1 — Model-switch checkpoints — checkpoint 1 (entering planning) is moot: planning ran on
       Opus 5, which is where it routes. Checkpoint 2 asked and answered 2026-08-06.
-- [ ] 11 — Exclude `*.spec.md` from the `docs/features/*.md` glob in `phase-guard.sh:356`; extend
+- [x] 11 — Exclude `*.spec.md` from the `docs/features/*.md` glob in `phase-guard.sh:356`; extend
       `phase-guard.test.sh` to assert a `.spec.md` neither denies nor trips `noparse`. **Sequenced
       before task 5** — creating the first spec half without this fires the warning every session.
-      *(Sonnet 5)*
+      *(Sonnet 5)* — done: `case "$f" in *.spec.md) continue ;; esac` added before `nfiles` counts
+      it (excluded by name, content never inspected). Group A8 (3 cases, 7 assertions) added to
+      `phase-guard.test.sh`; mutation-checked by hand — reverting the exclusion fails 4 of them.
+      141/141 pass.
 - [ ] 2 — Write `hooks/handoff/slim-session-start.sh` + tests; register at SessionStart. Tests must
       cover the DATA envelope, the per-session tag (present in both markers, differs across two
       runs, not derived from the body), the sanitizer (a body line reading exactly

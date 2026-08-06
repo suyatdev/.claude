@@ -363,6 +363,13 @@ for f in "$root"/docs/features/*.md; do
   # `-L` is needed beside `-e`: `-e` follows the link and is FALSE for a dangling one, which is
   # exactly the entry that must still count.
   [ -e "$f" ] || [ -L "$f" ] || continue
+  # A `<name>.spec.md` is the pair's long half (docs/features/memory-system-split.md), and it
+  # carries no frontmatter by contract — `phase`/`branch` live in `<name>.md` alone. Excluded here,
+  # before nfiles counts it, not filtered after: counting it and then skipping it would still trip
+  # the noparse warning below EVERY session (nfiles > nparsed forever), and if it were ever malformed
+  # into carrying `phase: planning` it would freeze source edits repo-wide — a second card voting on
+  # a gate it does not own. A name match is enough; content is never inspected for this file.
+  case "$f" in *.spec.md) continue ;; esac
   nfiles=$((nfiles + 1))
   # awk's own stderr is discarded: an entry it cannot open (mode 000, a directory) makes it
   # write a diagnostic per invocation, which reaches the user on EVERY write and escapes the
