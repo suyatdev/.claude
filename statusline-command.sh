@@ -3,8 +3,9 @@
 # No PS1 was found in the user's shell config, so this reconstructs the look using
 # data Claude Code provides via stdin JSON.
 #
-# Target look: "➜  <user>@<host> <dir> git:(<branch>) ✗  │ <model> │ <bar> <used>
-# │ Σ <cumulative>"
+# Target look: "➜  <user>@<host> <dir> git:(<branch>) ✗  │ <model> (<effort>) │
+# <bar> <used> │ Σ <cumulative>"
+# (<effort>) is omitted when the model has no reasoning-effort field.
 # Σ is cumulative input+output tokens for this session (cache traffic excluded
 # -- see the call_tokens comment below for why).
 # The ✗ dirty marker only appears when the working tree has uncommitted changes;
@@ -174,6 +175,13 @@ fi
 # breaks the line -- it just renders fewer segments.
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
 model_name="${model_name//[[:cntrl:]]/}"
+
+# Reasoning effort ("low"/"medium"/"high"/"xhigh"/"max") is only present on
+# models that support it, so it renders next to the model name only when the
+# field exists -- absent on a non-reasoning model, it silently disappears
+# rather than showing a stale or blank level.
+effort_level=$(echo "$input" | jq -r '.effort.level // empty')
+effort_level="${effort_level//[[:cntrl:]]/}"
 
 tokens_used=$(echo "$input" | jq -r '.context_window.total_input_tokens // empty')
 tokens_used="${tokens_used//[[:cntrl:]]/}"
@@ -530,7 +538,11 @@ fi
 extras=()
 
 if [ -n "$model_name" ]; then
-  extras+=("${ORANGE}${model_name}${RESET}")
+  if [ -n "$effort_level" ]; then
+    extras+=("${ORANGE}${model_name}${RESET}${DIM} (${effort_level})${RESET}")
+  else
+    extras+=("${ORANGE}${model_name}${RESET}")
+  fi
 fi
 
 if [ -n "$tokens_used" ]; then
