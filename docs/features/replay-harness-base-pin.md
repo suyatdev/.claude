@@ -793,6 +793,23 @@ even then it must be visibly labelled as unresolved rather than presented as a b
       - ⚙️ **Model-switch checkpoint 3 (implementation → review) answered 2026-08-05 (session 16):
         Opus 5.** `phase: review`, `model_tier: high` set at the same time, at `d5151da`. Judge runs
         fresh at this HEAD — round 1 and round 2's verdicts above are historical only.
+      - ✅ **Round 5 (implementation, gating) PASSED `risk=low confidence=high` at `f6242c2`**, dated
+        2026-08-06 (UTC) so it didn't clobber the 2026-08-05 round-1–4 file. Independently reproduced
+        the red in its own `/tmp` clone (`260/118/0` exit 0 pre-fix) and the fix (named error, exit 1).
+        Verified no over-fire (healthy worktree vs. a differing base: `247/130/1`; self-contained
+        worktree candidate: `213/137/28`) and re-ran `git-guard.test.sh` (77/0) and `shellcheck`
+        (clean) itself rather than trusting the session's own numbers.
+        **Closes more than task 11 claimed:** a 0-byte worktree `hooks/git-guard.sh` — round 4's
+        flagged gap with no falsifier anywhere in A-O — is now also refused (measured pre-fix at
+        `247/0/131`), though still unpinned by a named scenario.
+        Non-blocking notes, left open rather than folded in, per this branch's own standing decision
+        not to widen mid-flight: (1) the default `worktree` mode prints no self-contained-guard NOTE
+        where the rev-candidate mode does — reporting asymmetry only, not a functional gap, on the
+        branch whose whole point is saying what was compared; (2) `require_on_disk` repeats
+        `extract_required`'s two error strings verbatim, and `grep -q 'lib/'` is now duplicated at two
+        call sites — silent-drift risk on a future message edit, not a defect today; (3) restore cost
+        keeps climbing (feature file 1112→1286 lines, `CODING_MEMORY.md` 2476) though no always-on
+        surface changed. PR opens at this SHA.
 
 - [x] 11. Validate the default `worktree` candidate (part 2, revision 10 — was deferral 2).
       - ⚙️ **Gate confirmed 2026-08-05 (session 15); model-switch checkpoint 2 answered: Sonnet 5

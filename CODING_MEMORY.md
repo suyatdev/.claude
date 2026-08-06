@@ -933,8 +933,20 @@ how this file and its linked files should be written (plain language, major chan
   and refuses; N and O (new) both refuse on a 0-byte guard/helper; L confirms the new rule does not
   over-fire on a self-contained worktree candidate. `git-guard.test.sh` unaffected, 77/0. ADR 0016
   amended (three sides, not two; closes-the-example-not-the-limit on `relaxed`). Blast radius
-  re-checked: still exactly the named 8-file set. **Next: task 10 — observability judge at the new
-  HEAD, then PR.**
+  re-checked: still exactly the named 8-file set.
+  · ✅ **TASK 10 DONE — PR #40 OPEN** (`https://github.com/suyatdev/.claude/pull/40`), session 16,
+  `origin` = `git@github.com:suyatdev/.claude.git`. Model-switch checkpoint 3 (implementation →
+  review) answered Opus 5; `phase: review`, `model_tier: high`. **Round 5 (implementation, gating)
+  PASSED `risk=low confidence=high` at `f6242c2`** — independently reproduced the red and the fix in
+  its own clone, verified no over-fire, re-ran `git-guard.test.sh` (77/0) and `shellcheck` itself.
+  Closed more than task 11 claimed: a 0-byte worktree `hooks/git-guard.sh` (round 4's flagged
+  no-falsifier gap) is now also refused, though still unpinned by a named scenario. Non-blocking
+  notes left open per this branch's standing no-mid-flight-widening decision: missing self-contained
+  NOTE on the worktree branch (reporting only); `require_on_disk` duplicates `extract_required`'s
+  error strings; restore cost keeps climbing (feature file 1286 lines, this file 2500+). PR opened
+  AT the judged SHA (`f6242c2`) per this branch's `judge-guard.sh`-strict discipline; the judge trail
+  itself committed as a follow-up push, per this repo's established pattern (`a685a1c`).
+  **▶️ NEXT: awaiting user review/merge of PR #40.**
   · ⚠️ **The "false green cited as evidence" premise was WRONG — do not re-adopt it.** The cited
   figures are **valid**. `git-guard-empty-index.md:314-318` reports 378 **pairs** (matrix size) with
   **215/326/346** identical and **162/52/32** relaxed — a self-comparison cannot produce one
