@@ -3110,3 +3110,65 @@ That number is now the reference point next to `RUN_MAX_HOURS` in the spec.
 **Next:** round 3 — re-dispatch both judges on blob `eef3aea`, reusing ids
 `core-conduct/unsurfaced-run-errors` and `writing-specs/readme-drift`. **Round 3 is the last automatic
 round**: anything outstanding when it completes escalates to the user rather than looping again.
+
+## 2026-08-06 — session 30: round 3 complete — FAIL, escalation boundary reached
+
+**Round 3 of the spec-compliance loop ran on blob `eef3aea`. Both judges dispatched in parallel to
+panes (`surface:159`, `surface:160`), both returned DONE. Compliance verdict: FAIL, 2 violations.
+The loop's escalation boundary has been reached on both of its triggers — no round 4 is automatic.**
+
+### What round 3 fixed
+
+- `core-conduct/unsurfaced-run-errors` — **closed.** The compliance judge walked it end to end
+  rather than accepting the spec's claim; the observability judge independently closed its
+  round-2 `success_masking=fail` on the same change. The degraded line is read, and task 4
+  requires the test to assert the *emitted line*, not the parsed field.
+
+### What round 3 cited
+
+1. `writing-specs/r8-missing-config-validator` — **new, blocking.** R8 directs removing
+   `CODING_MEMORY.md` from `exclude_paths`, but `load_config` raises
+   `ConfigError("exclude_paths must contain CODING_MEMORY.md")` on every call
+   (`memsearch/memsearch/config.py:56-59`). As specified, task 6 makes every `memsearch` command
+   **and** the new 6-hourly launchd job exit 1. Three tests pin the invariant
+   (`test_config.py:42,48`, `test_index.py:93`). The spec never names `config.py`, the validator,
+   or the tests.
+2. `writing-specs/readme-drift` — **persistent, round 2 → round 3, half-remediated.** The
+   `memsearch/README.md` half was fixed; the design doc half was not.
+   `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` still asserts the exclusion at
+   lines 58, 67, 135, 154, 163 (incl. the whole "What Is NOT Indexed" section and its
+   durable-vs-ephemeral rationale, which R8 reverses). That file is itself indexed under a
+   `curated_docs` root, so memsearch would serve the false rationale as an answer.
+
+### Verified independently, not taken on the judges' word
+
+- ✅ the `ConfigError` guard, at `config.py:56-59` as claimed.
+- ✅ the three pinning tests (judge cited `test_config.py:40`; actual is `:42` — substance holds).
+- ✅ all five design-doc assertion lines.
+- ➕ **Not cited by either judge, found while checking:**
+  `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19` reads "**`CODING_MEMORY.md` is never
+  indexed** (ephemeral working index). Enforced by config validation, not convention." The
+  exclusion is a *deliberate, documented, enforced* invariant — R8 reverses it silently.
+- ❌ **The spec's "1h26m" run duration is not a completed duration.** PID 30022 was *still running*
+  at 2h09m53s when checked this session. It was a stopwatch reading taken mid-race and written
+  down as a finish time, so the 6-hour "stuck" ceiling has materially less headroom than the spec
+  implies. (Same class as `feedback_no_fabricated_metrics`.)
+
+### Observability judge (advisory, non-blocking) — no dimension fails
+
+Round 2's `success_masking=fail` is closed. Open concerns it raised, none blocking:
+- **launchd skips missed ticks during sleep** — an overnight-asleep laptop misses the 4am run and
+  the 8am session gets a ⚠ stale warning on a healthy system. The spec's own argument is that a
+  warning firing on normal days is worse than none. Untested by the judge; flagged, not proven.
+- While a run is in progress the line shows "in progress" with no warning glyph, so a *previous*
+  broken run stays hidden for the 2–3h the new run takes.
+- Un-hiding `CODING_MEMORY.md` uses a plain substring match, so it would also start indexing that
+  file in the two **other** repos. Nobody decided that.
+
+**Next:** escalated to the user — both triggers fired (`readme-drift` cited twice running; round 3
+completed with violations outstanding). The real decision underneath finding 1 is whether to
+reverse the enforced exclusion at all, and if so how (delete the guard / invert it / weaken it).
+That is structural and reverses a documented rationale → **likely earns an ADR**. Note the
+rationale may genuinely have expired: `memory-system-split` retired `CODING_MEMORY.md` as a read
+target and made it an append-only archive reached by lookup, so "ephemeral working index" no
+longer describes it — but the spec must *say* that, not assume it.

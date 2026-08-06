@@ -237,3 +237,114 @@ carries the same downgrade in clause (d). That is the right way to record a weak
   every exception into `report["errors"]`; `run_index` calls `_write_status` unconditionally after
   the loops; `stats()` computes `last_indexed` as `max(indexed_at)`; `cli.py` returns 0
   unconditionally for `index`. All as the spec describes.
+
+## Round 3 — 2026-08-06T22:03:26Z
+
+- **Verdict: FAIL** (2 violations — one **new and blocking**, one **persistent from round 2**,
+  now half-fixed; round-2 violation 1 is genuinely closed)
+- head_sha: `34718d8f86ba7bcd88ca8a88135ac9f3143a07d9`
+- spec_blob_sha: `eef3aea004dc865e692205b17562f2f56cc89e26`
+- Rule sources read: `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`,
+  `skills/writing-secure-code/SKILL.md`, `rules/gates.md`, `CLAUDE.md`
+  (no `.claude/project-standards.md` exists in this repo)
+- Confidence: **high** — both findings were read out of the live source with exact line numbers,
+  not inferred from the spec's own claims.
+- Waived: none.
+
+### Layman summary
+
+The error-reporting hole from round 2 is properly closed — I walked it end to end rather than
+taking the spec's word: the field is written at run end, read by classification rule 5, rendered as
+its own warning line, asserted by a scenario that checks the *emitted line* rather than the parsed
+field, guarded by falsifier clause (f), and surfaced in `memsearch status` too. That one is done.
+
+The new finding is the serious one, and it is the same species of trap the spec itself collects in
+its "measurement traps" section. **R8 says to delete `CODING_MEMORY.md` from `exclude_paths` — but
+the code refuses to start if you do.** `memsearch/memsearch/config.py:56-60` raises `ConfigError`
+whenever `exclude_paths` does not contain `CODING_MEMORY.md`, and `cli.py` turns that into exit 1.
+So the moment task 6 lands as written, *every* memsearch command — `index`, `query`, `status` — and
+the new 6-hourly launchd job all die at config load. Three live tests pin that behaviour
+(`test_config.py:40`, `test_config.py:48`, `test_index.py:93`). The spec never mentions `config.py`,
+`ConfigError`, validation, or `test_config.py` anywhere — I grepped; zero hits. The diagnostic table
+checked that the exclusion *works* (0 chunks, no `sources` row) but not that it is *enforced*, so a
+premise that looked verified is the one that breaks. An implementing agent hitting this would have
+to invent the resolution — delete the guard, invert it, or weaken it — and that is a decision the
+spec should own, especially since the guard was deliberately built as validation rather than
+convention.
+
+The second finding is the documentation-drift one from round 2, now half-fixed. The `memsearch/README.md`
+half is genuinely closed. But I enumerated every remaining document rather than checking only the
+one I named last round, and the highest-authority one is still open: the memsearch design spec at
+`docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` asserts the exclusion in five places,
+including an entire section headed "What Is NOT Indexed" with the rationale R8 reverses. That file is
+itself indexed by memsearch (`~/.claude/docs` is a `curated_docs` root), and `golden_queries.json:4`
+routes the query "why is CODING_MEMORY.md excluded" straight to it — so after this lands, the index
+answers that question with a rationale that is no longer true. That is precisely the
+confident-answer-from-stale-memory failure this whole feature exists to eliminate.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/r8-missing-config-validator` | `skills/writing-specs/SKILL.md` | Requirements the agent can satisfy and you can check; contracts give the real interface boundaries instead of letting the agent improvise — anything left implicit, the agent infers, and inference is where the defects come from | Requirements → R8 / Tasks 6–7 / Contracts | R8 directs removing `CODING_MEMORY.md` from `exclude_paths`, but `memsearch/memsearch/config.py:56-60` raises `ConfigError("exclude_paths must contain CODING_MEMORY.md")` at every `load_config`, so the change as specified makes every `memsearch` command and the new 6-hourly launchd job exit 1; the spec never mentions `config.py`, the validator, or the three tests that pin it (`test_config.py:40`, `test_config.py:48`, `test_index.py:93`), leaving the agent to invent how to reverse a deliberately enforced invariant. |
+| 2 | `writing-specs/readme-drift` | `skills/writing-specs/SKILL.md` | Drift causes hallucination — the obligation runs down to `README.md`, updated in the change that makes it wrong, not later | Requirements → R8 / Tasks 6–7 | The `memsearch/README.md` half is now fixed, but R8 equally falsifies `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` (lines 58, 67, 70, 135 and the "What Is NOT Indexed" section at 154-163, whose "durable vs. ephemeral" rationale R8 reverses) and `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19`, and no task updates either — while `~/.claude/docs` is a `curated_docs` root, so the index will serve that false rationale as the answer to `golden_queries.json:4`. |
+
+### Round-2 violations — one fixed, one persistent
+
+| round-2 id | status | evidence checked this round |
+|---|---|---|
+| `core-conduct/unsurfaced-run-errors` | **fixed** | Walked end to end: contracts stamp `last_run_errors = len(report["errors"])` at completion and *preserve* the prior value on the entry write (closing the clobber hole); classification rule 5 reads it; R3's degraded line renders `⚠ last run had N errors`; the scenario asserts the emitted line is "not the fresh line"; falsifier (f) covers it; task 4 mandates asserting the line, not the field; `memsearch status` shows it. I also confirmed the honest edge: with Ollama down and no file changed, `_index_one` early-returns as *skipped* before embedding, so zero errors and a fresh line is truthful — and the spec's own "run that changes nothing" scenario covers it. |
+| `writing-specs/readme-drift` | **persistent (half-fixed)** | R8 now carries a dedicated README paragraph, task 6 requires the correction "in the same commit" plus documenting `bin/install-schedule`, and a scenario asserts the README no longer claims the exclusion. The design-spec and plan halves are untouched — see violation 2. |
+
+### Notes (non-blocking)
+
+- **Every spec citation I checked is accurate.** `memsearch/README.md:22`, `memsearch/config.json:16`,
+  `status.py:27`, `index.py:100` (`_write_status` after the loops), `_index_one`'s catch-and-continue,
+  `index.py:125-127`'s unchanged-hash early return, and `cli.py`'s unconditional `return 0` for
+  `index` are all exactly as described. The parent spec's Phase 2 list and its acceptance bar
+  (k=6, ≥2 hits, ≥0.30, top hit) match R9 verbatim, and parent item 1 does record the exclusion
+  rationale as falsified — so R8's *intent* is human-approved and traceable; only its mechanics are
+  incomplete.
+- **Round-2 note now closed — uninstall.** R7 makes removal first-class with `--uninstall`, a
+  no-op-success path, an explicit "never touches `memory-index/`" guarantee, and two scenarios.
+- **Task 7 is under-specified.** "Update the golden query for the changed exclusion" does not say
+  what it becomes; today's entry asks "why is CODING_MEMORY.md excluded" and expects
+  `memory-rag-index-design`. Delete, invert, or re-point are three materially different test suites —
+  and the re-point target is the document in violation 2. Held as a note because the direction is
+  clear once violation 2 is fixed.
+- **Internal consistency is good.** I counted 26 scenarios: 14 nudge, 8 install/uninstall, 4 package
+  and measurement — matching task 4's "fourteen nudge scenarios" and task 5's "eight" exactly. The
+  six classification rules are mutually consistent with R1–R3 and with every boundary scenario
+  (exactly-8h stale, `run_started == last_run`, future timestamps on both fields, first-run-after-upgrade).
+- **Round-2's first-run note is now closed.** Rule 1 explicitly reads "`last_run` absent or
+  `run_started > last_run`", and a scenario pins the first-run-after-upgrade case to in-progress.
+- **Degraded has no floor.** `last_run_errors > 0` warns forever if one source fails persistently —
+  the alert-fatigue mode decision 1 argues against for staleness, without the same reasoning applied
+  here. Design observation only; fail-loud is a defensible choice for an honesty feature.
+- **Rule 3 precedes rule 5.** A run with errors whose `last_run` is unusable reports "age unknown"
+  without naming the error count. Not cited: it never claims freshness, so nothing is swallowed.
+- **`last_run_errors` has no stated absent/non-numeric handling**, unlike the timestamps, which get an
+  explicit usability rule. Low impact — the field is always written alongside `last_run`, and the
+  hook's existing `except: print(0)` shape keeps it silent — but one clause would match the rigour
+  of the rest.
+- **Not cited — version pins.** `plutil` and the Ollama server version are named but unpinned; macOS
+  `25.5.0` covers the former and both embedding/digest models are pinned exactly. Neither can lead the
+  agent to build the wrong thing.
+- **Not cited — spec location.** Unchanged from rounds 1-2: the repo layer (`rules/gates.md`
+  one-canonical-file discipline) mandates `docs/features/<name>.md` for a file carrying `phase`
+  frontmatter and a task checklist, and the repo layer wins over `writing-specs`' default.
+- **Not cited — log file mode.** The plist mode `0644` is specified and justified (launchd refuses
+  group/world-writable); `scheduled-index.log`'s mode is not, and it appends without rotation.
+  Machine-local, single-user, and the log carries paths and exception text, not content.
+- **YAGNI still clean.** The refresh trigger is a user-registered need ("the design deferred this as
+  YAGNI and that deferral caused the 18-day drift" — parent item 4); stuck detection is justified by
+  the absent lock; `--uninstall` by the agent living outside the repo. Non-goals name the lock gap,
+  retry, exit-code contract, parent item 6 and re-measurement cadence. Scope explicitly stops at
+  parent item 5. No speculative surface.
+- **Security territory is clean.** `install-schedule` runs fixed `launchctl` argument vectors with no
+  user-supplied input; the only template substitution is `__HOME__` → `$HOME`, with a scenario
+  asserting no absolute path is committed; the scheduled job runs plain `index`, never the
+  destructive `--full` that unlinks the db; the nudge still reads a plain JSON file, never invokes
+  the CLI, and exits 0 on every path. R8 newly feeds `CODING_MEMORY.md` to a model, but that model is
+  local Ollama with no egress and the index already holds `coding-memory/`, `docs/` and transcripts —
+  no new class of data leaves the machine.
