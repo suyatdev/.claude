@@ -3172,3 +3172,61 @@ That is structural and reverses a documented rationale → **likely earns an ADR
 rationale may genuinely have expired: `memory-system-split` retired `CODING_MEMORY.md` as a read
 target and made it an append-only archive reached by lookup, so "ephemeral working index" no
 longer describes it — but the spec must *say* that, not assume it.
+
+## 2026-08-06 — session 30 (cont.): R8 dropped, round 4 PASSES the compliance gate
+
+**User decision resolving the round-3 escalation: keep the `CODING_MEMORY.md` exclusion, drop R8.**
+Spec revised (`51c5dee`, blob `50ad053`), both judges re-dispatched at round 4.
+**Compliance verdict: PASS, zero violations.** Observability (advisory): `risk=low confidence=high`,
+no failing dimension.
+
+### Why R8 was dropped rather than fixed
+
+Reversing the exclusion means deleting an enforced guard, rewriting three tests, and reversing a
+documented rationale in five places — a structural change earning its own ADR. That does not belong
+inside a freshness fix. Parent items 1 and 3 moved to Non-goals carrying the full rationale **and
+the honest counterpoint**: `memory-system-split` made `CODING_MEMORY.md` an append-only archive, so
+"ephemeral working index" no longer describes it and the original reason may have expired — recorded
+for whoever picks it up, deliberately not assumed here. R8's slot now carries the obligation that
+survived independently: documenting `bin/install-schedule` in the README that adds it.
+
+### The fabricated measurement, corrected in the spec rather than quietly
+
+The spec had cited "1h26m over 601 sources" as a run duration. It was a stopwatch glance at a run
+still going (PID 30022, still alive at **2h26m over 683 sources** at session end). The spec now
+states the number was wrong and why, that the true duration is unmeasured, that it may exceed
+`RUN_MAX_HOURS`, and defers the constant to the user once task 8 measures it. The compliance judge
+called this out positively — stated default + named measurement trigger + human owner is
+core-conduct's human-owned-tradeoff rule applied correctly, not a TBD.
+
+### The observability judge retracted its own round-3 top concern — and it was right to
+
+R3's headline worry was launchd skipping ticks during sleep → false stale warnings every morning.
+It never checked the premise. **Verified independently this session: `hw.model = Mac16,9` (Mac
+Studio desktop), `pmset sleep 0`, 18 days uptime, 0 "Entering Sleep" events.** The man-page quote
+was real; it does not apply to a machine that never sleeps. Retraction sound. Still worth one
+sentence in the spec before this plist ever reaches a laptop.
+
+### ⚠️ Open advisory items — NOT blocking, but one is flagged by BOTH judges
+
+1. **`last_run_errors` has no malformed/missing-value rule.** The obvious
+   `get("last_run_errors", 0)` reads "I don't know" as "zero errors" and prints the reassuring
+   fresh line. **This is the round-2 blocker returning through a side door**, and both judges
+   flagged it independently — the compliance judge as a carried non-blocking note, the
+   observability judge as its top remaining risk. Fix: give it the same "when in doubt, don't say
+   fresh" rule the two timestamps already have, plus a test.
+2. **A permanently-failing file pins the error count at 1 forever**, so the ⚠ fires every session
+   and re-running never clears it — reproducing exactly the "warning that fires on normal days"
+   the spec argues is worse than silence.
+3. **The error line points away from its own evidence** — it says re-run the multi-hour indexer
+   instead of reading the `scheduled-index.log` R6 creates for that purpose.
+4. Cosmetic: the data-flow diagram enumerates 4 of 6 nudge states (omits *stuck*, *degraded*);
+   task 3 names `test_cli.py` but `status_report` coverage lives in `test_rename_status.py:96`.
+
+### Gate state
+
+Compliance gate **passed** on blob `50ad053`. Verdict is fresh only while that blob matches —
+**any spec edit invalidates it, and a re-entry restarts the loop at round 1**, so items 1–4 above
+should be batched into one revision if they are taken at all.
+
+**Next:** user review gate on the spec, then **checkpoint 2** (literal `gate confirmed`) → branch.

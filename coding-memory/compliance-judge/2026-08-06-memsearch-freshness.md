@@ -348,3 +348,126 @@ confident-answer-from-stale-memory failure this whole feature exists to eliminat
   the CLI, and exits 0 on every path. R8 newly feeds `CODING_MEMORY.md` to a model, but that model is
   local Ollama with no egress and the index already holds `coding-memory/`, `docs/` and transcripts —
   no new class of data leaves the machine.
+
+## Round 4 — 2026-08-06T22:20:34Z
+
+- **Verdict: PASS** (0 violations — both round-3 violations structurally resolved, not reworded)
+- head_sha: `51c5dee8734cffd26ee8d9ab4a4cff88c32eb6b6`
+- spec_blob_sha: `50ad053a5a11402833614f54d410edcd390d18f8`
+- Rule sources read: `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`,
+  `skills/writing-secure-code/SKILL.md`, `rules/gates.md`, `CLAUDE.md`
+  (no `.claude/project-standards.md` exists in this repo)
+- Confidence: **high** — I re-verified every reachable factual claim in the spec against the live
+  machine and source tree rather than accepting the revision account, including all eight pinned
+  versions and every code line number cited.
+- Waived: none.
+
+### Layman summary
+
+Both blocking findings are gone, and gone the right way. Round 3's problem was one requirement (R8)
+that told the builder to delete `CODING_MEMORY.md` from the index's exclusion list — a change the
+code physically refuses to accept, because `config.py` raises an error at startup if that entry is
+missing. The fix was not to paper over it: the requirement was **dropped**, the exclusion kept, and
+the whole thing moved to Non-goals with the reasoning written out — including the honest counterpoint
+that the original justification may have expired, recorded for whoever picks it up rather than
+quietly assumed either way. That also dissolves the second finding, because there is no longer any
+change that falsifies the older design documents. I confirmed the exclusion's three test pins and the
+golden query are all still consistent with the spec as it now reads: `test_config.py:42` and `:48`,
+`test_index.py:93`, and `golden_queries.json:4`, which asks "why is CODING_MEMORY.md excluded" and
+still gets a true answer.
+
+The second thing worth saying plainly: the spec **caught itself lying and said so in writing.** An
+earlier draft cited "1h26m over 601 sources" as a measured run duration. It was not a duration — it
+was a stopwatch glance at a run that had not finished (the same run was still going at 2h17m over 683
+sources). The spec now states the duration is unmeasured, warns that it may exceed the 6-hour stuck
+threshold and would then fire a false alarm on a perfectly healthy first run, and hands the constant
+to the user once task 8 measures it for real. That is the correct disposal of an unknown under
+core-conduct: a stated default, a named trigger, and a human owner — not a guessed number.
+
+I checked the rest for regressions and found none. All eight pinned versions verify exactly on this
+machine (`bash` 3.2.57, `python3` 3.9.6, `uv` 0.11.28, `sqlite3` 3.51.0, darwin 25.5.0, and both
+Ollama models present); `launchctl getenv PATH` really is empty, which is what makes the plist's
+`PATH` key load-bearing rather than boilerplate; every cited line number is right
+(`status.py:27`, `db.py:156`, `index.py:100/125-127/135-137`, `cli.py:66`, `README.md:22`,
+`plans/2026-07-17-memory-rag-index.md:19`). Scenario counts match the tasks that claim them —
+fourteen nudge, eight install/uninstall. Error handling is stated at every boundary the design
+introduces, including the ugly ones: a killed run, a mid-write `status.json`, a bootstrap that
+reports success while loading nothing. Nothing is speculative, no secret or absolute path is
+committed, and the only shell execution runs fixed argument vectors with no user input.
+
+The remaining items below are polish, not blockers. None can lead the agent to build the wrong thing.
+
+### Violations
+
+None.
+
+### Round-3 violations — both fixed
+
+| round-3 id | status | evidence checked this round |
+|---|---|---|
+| `writing-specs/r8-missing-config-validator` | **fixed** | The requirement was removed, not patched. R8 now carries only the README obligation for `bin/install-schedule`. Parent items 1 and 3 sit in Non-goals citing `config.py:56-59` by name, the three pinning tests, and the plan's "enforced by config validation, not convention" line — all four of which I verified verbatim. Task 6 states affirmatively that `memsearch/config.json` and `README.md:22` are *not* touched. The diagnostic table's rows 1 and 3 now read "Real, but out of scope here" and "Falls with item 1". Nothing in the spec can now trip the validator. |
+| `writing-specs/readme-drift` | **fixed** | With the exclusion kept, `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` and `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19` stay true and need no edit — the drift had no source left. The README half stays closed: R8 requires `memsearch/README.md` to document `install-schedule` **in the same commit that adds it**, task 6 enforces it, and a scenario asserts it. A second scenario now pins the *survival* of the README:22 invariant. I confirmed `golden_queries.json:4` still resolves correctly under the kept exclusion. |
+
+### Notes (non-blocking)
+
+- **Every factual claim I could reach verifies.** Versions: `bash` 3.2.57(1) arm64-apple-darwin25,
+  `python3` 3.9.6, `uv` 0.11.28 (Homebrew, `/opt/homebrew/bin`), `sqlite3` 3.51.0, `uname -r` 25.5.0,
+  `qwen3-embedding:0.6b` and `qwen3.6:35b-mlx` both present in `ollama list`. Line numbers:
+  `config.py:56-59` (the guard), `test_config.py:42,48`, `test_index.py:93`, `status.py:27`,
+  `db.py:156`, `index.py:100,125-127,135-137`, `cli.py:66` (`return 0`), `README.md:22`,
+  `plans/…:19`, `memory-system-split.spec.md` Phase 2 list. `launchctl getenv PATH` is empty (exit 0,
+  no output), `~/.claude/memory-index/reindex.log` exists as described, ADR 0017 exists and 0018 does
+  not. After round 3's fabricated measurement I treated verification as the default, not the exception.
+- **The data-flow diagram enumerates four of six nudge states.** `OUT` reads
+  "fresh · stale · in-progress · unknown" and the edge label says "last_run vs 8h threshold", omitting
+  *stuck* and *degraded* and the `RUN_MAX_HOURS` arm. Not cited: R3 and the classification table both
+  enumerate all six explicitly with "first match wins", so the authoritative contract is unambiguous
+  and the diagram cannot mislead the build. Worth a one-word fix to the node label if the spec is
+  touched again for any other reason.
+- **Task 3 points at the wrong test file for the `status.py` half.** It names `test_index.py` and
+  `test_cli.py`, but `status_report`'s coverage lives in `test_rename_status.py:96`
+  (`test_status_report_contents`); `test_cli.py` has only `test_status_without_index`. Not cited: the
+  requirement is satisfiable either way, and I confirmed the existing assertions (`chunks: 1`,
+  `curated_doc: 1`, model/dim, no `REVISIT`) do **not** pin the `last_indexed` label, so relabelling
+  it breaks nothing.
+- **The "exclusion survives" scenario has no owning task.** Its three assertions are already pinned by
+  the existing suite (`test_config.py:42,48`, `test_index.py:93`, `golden_queries.json:4`), so it
+  holds by doing nothing — which is exactly what task 6 says to do. Recorded so a future reader does
+  not mistake it for an untested claim.
+- **`RUN_MAX_HOURS` is a stated default over an unmeasured quantity.** Deliberate and correctly
+  handled — default 6, measurement in task 8, escalation to the user if it lands higher — but it does
+  mean the stuck line may fire once on a healthy first run before task 8 closes. The spec says so in
+  those words. Not a violation; core-conduct puts that call with the human.
+- **`last_run_errors` still has no stated malformed-value rule**, unlike the timestamps, which get an
+  explicit usability clause. Carried forward from round 3 at the same low impact: R4's "silent on
+  every error path" and the hook's existing catch-all keep it from ever producing a wrong line.
+- **Not cited — `plutil` unpinned.** Named in Contracts and task 5 but absent from the toolchain
+  table; macOS `25.5.0` is pinned in the same table and `plutil` ships with it, and `-lint` is
+  unambiguous. Same disposition as rounds 1-3.
+- **Not cited — spec location.** Unchanged from rounds 1-3: the repo layer (`rules/gates.md`
+  one-canonical-file discipline, `managing-session-memory`) mandates `docs/features/<name>.md` for a
+  file carrying `phase` frontmatter and a task checklist, and the repo layer wins over
+  `writing-specs`' `docs/superpowers/specs/` default. The spec's own header also justifies staying
+  single-file against ADR 0017 decision 7.
+- **Phase discipline is intact.** Frontmatter reads `phase: planning`, `branch: none`, and task 1 is
+  the model-switch checkpoint 2 that opens implementation — no branch created, no implementation
+  work presumed, consistent with the gate.
+- **YAGNI still clean.** Every one of the six nudge states traces to a named failure mode (stuck to
+  the absent lock, degraded to the Ollama-down case decision 4 names); `--uninstall` traces to the
+  agent living outside the repo where `git revert` cannot reach it. Scope stops at parent item 5, and
+  Non-goals now names nine exclusions including the two dropped this round.
+- **Error handling covers the unpleasant paths.** A crashed or killed run leaves
+  `run_started > last_run` and surfaces as stuck with no recovery attempted (stated); a mid-write
+  `status.json` degrades to the silent malformed-JSON path; a `bootstrap` that reports success but
+  loads nothing is defined as a failed install with its own verification step and exit code. Four
+  distinct install exit codes, each printing the failing step.
+- **Security territory is clean, and smaller than last round.** `install-schedule` runs fixed
+  `launchctl` argument vectors with no user-supplied input; the only substitution is `__HOME__` →
+  `$HOME` at install time, with a scenario asserting no absolute path is committed; the plist is mode
+  `0644` and `LaunchAgents` `0755`; the scheduled job runs plain `index`, never the destructive
+  `--full` that unlinks the db; the nudge still reads a plain JSON file, never invokes the CLI, and
+  exits 0 on every path. Round 3's one new data-exposure surface — feeding `CODING_MEMORY.md` to the
+  local model — is gone with R8's old text. No new dependency is introduced.
+- **`scheduled-index.log` mode and rotation remain unspecified**, as in round 3. Machine-local,
+  single-user, and the log carries paths and exception text rather than content; the spec does
+  justify the filename's separation from `reindex.log`.
