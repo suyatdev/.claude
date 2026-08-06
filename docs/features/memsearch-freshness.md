@@ -41,9 +41,9 @@ Measured against the live index before this file was written. Two of the six Pha
 
 | Parent item | Status | Evidence |
 |---|---|---|
-| 1 — remove `CODING_MEMORY.md` from `exclude_paths` | **Real, unchanged** | 0 chunks, no `sources` row. Exclusion works. |
+| 1 — remove `CODING_MEMORY.md` from `exclude_paths` | **Real, but out of scope here** | 0 chunks, no `sources` row — the exclusion works *and* is enforced, not merely configured: `load_config` raises `ConfigError` without it (`memsearch/memsearch/config.py:56-59`), pinned by `test_config.py:42,48` and `test_index.py:93`. Deliberately deferred; see Non-goals. |
 | 2 — "add `docs/features/**` to indexed sources" | **No-op — nothing to add** | `~/.claude/docs` is *already* a `curated_docs` root. `docs/features/` read 0 only because its earliest file was created 2026-07-25, after the last index run. Confirmed by the session-28 rebuild, which picked the directory up with no config change. |
-| 3 — update the golden query | **Real, unchanged** | Follows mechanically from item 1. |
+| 3 — update the golden query | **Falls with item 1** | Follows mechanically from item 1, which is out of scope here. The golden query asserting the exclusion stays correct, so there is nothing to update. |
 | 4 — add a refresh trigger | **Root cause, not fourth priority** | Items 2 and 3's symptoms are downstream of the freeze. |
 | 5 — re-measure retrieval | **Real, unchanged** | Acceptance bar below. |
 | 6 — seeded session-start query | **Out of scope** | Parent spec makes it conditional on item 5 passing. |
@@ -129,8 +129,17 @@ fresh/stale/unknown, each with its own line and no more than one line total:
 `RUN_MAX_HOURS` defaults to **6**, matching the refresh interval and separate from `STALE_HOURS`:
 a run still going when the next is due is by definition the pathological overlap. The two constants
 answer different questions — how old a *finished* run may be, and how long a run may *take* — and
-collapsing them into one number is the conflation this whole feature exists to correct. Measured
-reference point: an incremental run over 601 sources was observed taking 1h26m on 2026-08-06.
+collapsing them into one number is the conflation this whole feature exists to correct.
+
+**The reference point is not yet known, and the number an earlier draft gave was wrong.** That
+draft cited "1h26m over 601 sources on 2026-08-06" as a measured duration. It was not a duration:
+it was a reading taken off a run that had not finished. The same run (PID 30022) was still going at
+**2h17m over 683 sources** when this was written, so 1h26m was a stopwatch glance recorded as a
+finish time — the same species of trap as the three above, and it is named here rather than quietly
+corrected. **The true full-run duration is therefore unmeasured, and may exceed `RUN_MAX_HOURS`**,
+which would make the stuck line fire on a healthy first run. Task 8 records the real figure; if it
+lands above 6h, `RUN_MAX_HOURS` must be chosen against that measurement rather than against the
+refresh interval — a call for the user, not a value to quietly widen.
 
 **R4 — the nudge's existing contract is unchanged.** At most one line; silent on every error path;
 never delays or breaks session start; never invokes the `memsearch` CLI or its venv.
@@ -158,14 +167,13 @@ outside the repo, so `git revert` does not remove it and no checkpoint covers it
 --uninstall` boots the job out and deletes the rendered plist, and is a no-op-success when nothing is
 installed.
 
-**R8 — `CODING_MEMORY.md` is indexed.** Removed from `exclude_paths` (`memsearch/config.json:16`);
-the golden query asserting its exclusion is updated to match, since it will now fail correctly.
+**R8 — `memsearch/README.md` documents the new entry point, in the change that creates it.** The
+README is the only documentation of `memsearch/bin/`, where `install-schedule` (R7) lands, so it
+gains that entry point in the same commit. A README fixed "later" is a README that lies in between.
 
-**`memsearch/README.md` is updated in the same change that falsifies it.** Line 22 states as an
-invariant that "`CODING_MEMORY.md` and `subagents/` transcripts are never indexed" — half of that
-becomes false the moment `exclude_paths` changes. The same README is the only documentation of
-`memsearch/bin/`, where `install-schedule` lands, so it gains that entry point too. A README fixed
-"later" is a README that lies in between.
+Its line 22 invariant — "`CODING_MEMORY.md` and `subagents/` transcripts are never indexed" —
+**stays true and stays put.** An earlier draft of this requirement lifted the exclusion; that is
+now a non-goal, for the reasons recorded there.
 
 **R9 — retrieval is measured against a stated bar.** Five queries are written and committed as their
 own commit before any of them is run. Acceptance, at `k=6`: each query returns **≥2 hits** belonging
@@ -438,12 +446,17 @@ Scenario: The committed template hides no absolute path
   Then no absolute path is present
   And the __HOME__ placeholder is
 
-Scenario: CODING_MEMORY.md is indexed after the exclusion is lifted
-  Given CODING_MEMORY.md is removed from exclude_paths
+Scenario: The CODING_MEMORY.md exclusion survives this change untouched
+  Given CODING_MEMORY.md is still listed in exclude_paths
   When the index runs
-  Then a sources row exists for CODING_MEMORY.md
-  And the golden query asserting its exclusion has been updated
-  And memsearch/README.md no longer claims CODING_MEMORY.md is never indexed
+  Then no sources row exists for CODING_MEMORY.md
+  And the golden query asserting its exclusion still passes
+  And memsearch/README.md still documents it as never indexed
+
+Scenario: The README documents the new entry point
+  Given bin/install-schedule has been added
+  When memsearch/README.md is read
+  Then it documents install-schedule alongside the other bin/ entry points
 
 Scenario: memsearch status reports run recency, not just content recency
   Given a completed run with errors
@@ -490,6 +503,20 @@ the index was rebuilt, because the rebuild happened first (Background, R9).
 ### Non-goals
 
 - Parent item 6, the seeded session-start query.
+- **Indexing `CODING_MEMORY.md` — parent item 1, and item 3 with it.** User decision, 2026-08-06,
+  after the compliance judge caught that the requirement as drafted was unbuildable: the exclusion
+  is not a config default but an *enforced invariant* — `load_config` raises `ConfigError` without
+  it (`memsearch/memsearch/config.py:56-59`), three tests pin it, and
+  `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19` records it as "enforced by config
+  validation, not convention". Lifting it means deleting a guard, rewriting three tests, and
+  reversing the documented rationale in
+  `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` (five places, including the whole
+  "What Is NOT Indexed" section) — a structural change that would earn its own ADR. That is its own
+  piece of work and does not belong inside a freshness fix. Kept out so this branch changes one
+  thing. **The rationale may nonetheless have expired** — `memory-system-split` retired
+  `CODING_MEMORY.md` as a read target and made it an append-only archive reached by lookup, so
+  "ephemeral working index" no longer describes the file. Whoever picks this up should argue that
+  case explicitly rather than assume it.
 - A lock or pidfile for concurrent `memsearch index` runs. R3 stops the nudge from *inviting* one —
   neither the in-progress nor the stuck line carries the remediation command — but nothing prevents a
   reader from starting one anyway. Named here so the gap is deliberate rather than overlooked.
@@ -529,18 +556,18 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
       (R6, R7), with a `plutil -lint` test, the eight install/uninstall scenarios, and an assertion
       that no absolute path is committed.
-- [ ] 6 — Remove `CODING_MEMORY.md` from `exclude_paths` in `memsearch/config.json:16` and correct
-      `memsearch/README.md:22`, which asserts the opposite, **in the same commit** (R8). Document
-      `bin/install-schedule` in that README. Record parent item 2 as a verified no-op — no config
-      change.
-- [ ] 7 — Update `memsearch/tests/golden_queries.json` for the changed exclusion (R8).
-- [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
+- [ ] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
+      it** (R8). `memsearch/config.json` and `README.md:22` are *not* touched — the
+      `CODING_MEMORY.md` exclusion stays (Non-goals). Record parent item 2 as a verified no-op — no
+      config change.
+- [ ] 7 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9).
-- [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded and that
-      `scheduled-index.log` receives output.
-- [ ] 10 — Score the five queries at `k=6` against R9's bar; record pass/fail per query under
+- [ ] 8 — Install the agent and run the first scheduled index. Confirm the job is loaded and that
+      `scheduled-index.log` receives output. **Record the run's real wall-clock duration** and, if
+      it exceeds `RUN_MAX_HOURS`, stop and put the constant back to the user (R3).
+- [ ] 9 — Score the five queries at `k=6` against R9's bar; record pass/fail per query under
       `## Verification`, including a failing result if that is the truth.
-- [ ] 11 — Observability judge (implementation stage), then PR.
+- [ ] 10 — Observability judge (implementation stage), then PR.
 
 ## Verification
 
