@@ -10,10 +10,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rtk hook claude"
-          },
-          {
-            "type": "command",
             "command": "$HOME/.claude/hooks/git-guard.sh"
           },
           {
@@ -27,6 +23,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/merge-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/feature-sync-guard.sh"
           }
         ]
       },
@@ -69,6 +69,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/memsearch-nudge.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/handoff/slim-session-start.sh"
           }
         ]
       }

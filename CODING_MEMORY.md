@@ -2544,3 +2544,339 @@ asking you to verify a hook that did not exist. Needed a `Doc-Exempt:` trailer s
 sit at the repo root and doc-guard reads them as source, and `JUDGE_EXEMPT` to open the PR. **`docs/features/verification-marker-gate.md`
 (1,166 lines) was restored, not deleted** — its last commits are spec revisions with no
 implementation merge, which is a reason to keep it, not to bin it.
+
+## 2026-08-06 — session 18: task 11 done (spec-half glob exclusion)
+
+**Feature:** `docs/features/memory-system-split.md`, still `phase: implementation`,
+`feat/memory-system-split`, gate open. Commit `40ab0ad`.
+
+Task 11: `hooks/phase-guard.sh:356`'s `docs/features/*.md` glob now excludes `*.spec.md` by name
+(`case "$f" in *.spec.md) continue ;; esac`, before `nfiles` counts it) — sequenced ahead of task 5,
+which creates the first `.spec.md`. Added Group A8 to `phase-guard.test.sh` (3 cases, 7 assertions:
+a bare `.spec.md` alone, one carrying `phase: planning` frontmatter, one mixed beside a real
+planning card). Mutation-checked by hand — reverting the exclusion fails 4 of the 7. **141/141
+pass.** Rollback point: `caf0d2f` (pre-task-11 HEAD), unneeded — no rollback occurred.
+
+**Next:** task 2 (`hooks/handoff/slim-session-start.sh`), then 3 → 4 (Opus 5) → 12 → 5 → 6 → 7 → 8 →
+9. See the feature file's `## Tasks` for detail — not restated here.
+
+## 2026-08-06 — session 19: task 2 done (slim-session-start.sh) + two settings.json fixes
+
+**Feature:** `docs/features/memory-system-split.md`, still `phase: implementation`,
+`feat/memory-system-split`, gate open. Commits `fef7487` → `f4fafe7` → `ca2c969`, all pushed.
+
+Task 2: `hooks/handoff/slim-session-start.sh` (new, SessionStart, Tier 3) emits
+`.claude/session-state.md` inside the tag+sanitizer DATA envelope the spec defines. 27 tests, all
+12 Gherkin scenarios, mutation-checked by hand (4 targeted breaks, each catches exactly the tests
+it should). `shellcheck -x` clean, full `hooks/` suite re-run clean. Registered in `settings.json`
+SessionStart alongside `doc-guard.sh`/`memsearch-nudge.sh`.
+
+**Two settings.json fixes landed getting there, both worth remembering:**
+
+- **Committed `settings.json` had a dead `rtk hook claude` PreToolUse/Bash entry** that PR #41
+  (RTK removal, merged) never actually removed — that session's "verified settings.json registers
+  no RTK hook" check ran against the *live* file, which is `skip-worktree` (`git ls-files -v` → `S`,
+  set 2026-07-22 so a stray `git commit -a` can't leak the machine-local `model` line), so
+  `git status` was structurally blind to the committed drift. Anyone cloning fresh would have hit a
+  failing `rtk hook claude` call on every Bash tool use. Fixed in `fef7487` via direct index surgery
+  (`git hash-object -w` + `git update-index --cacheinfo`), not by touching the live file.
+- **`git commit -- <pathspec>` is NOT "commit what's staged for this path"** — for a pathspec-named
+  file it implicitly re-adds the *working tree* content first (same as `git add path && git commit`),
+  discarding whatever was staged via `update-index --cacheinfo`. `fef7487`'s pathspec-restricted
+  commit silently pulled in this machine's local `"model": "sonnet"` override even though the staged
+  blob never had it — exactly the leak `skip-worktree` exists to prevent. User chose "new corrective
+  commit" over amending the unpushed commit (standing never-amend rule wins even when unpushed and
+  self-caught). Fixed in `f4fafe7`: same index-surgery technique, committed **with no pathspec at
+  all** once `git diff --cached` confirmed the index held only the intended one-line change.
+  **Rule for next time:** never `git commit -- <path>` after manually staging a custom blob for that
+  same path — stage, verify with `git diff --cached`, then commit with no pathspec.
+- Sound-diff check used throughout: `git show HEAD:settings.json | diff - settings.json`, never
+  `git status`, per `feedback_confirm_the_check_can_fail.md`. Skip-worktree bit restored
+  (`git update-index --skip-worktree settings.json`) after both fixes landed.
+
+**Next:** task 3 (`managing-session-memory` §CODING_MEMORY.md/§Restore rewrite), then task 4
+(`feature-sync-guard.sh`, **Opus 5** — model-switch checkpoint owed before starting it) → 12 → 5 →
+6 → 7 → 8 → 9. See the feature file's `## Tasks` for detail — not restated here.
+
+## 2026-08-06 — session 20: task 3 done (managing-session-memory rewrite)
+
+**Feature:** `docs/features/memory-system-split.md`, still `phase: implementation`,
+`feat/memory-system-split`, gate open.
+
+Task 3: rewrote `managing-session-memory` SKILL.md §CODING_MEMORY.md and §Restore for the new
+roles. §CODING_MEMORY.md now says plainly that it's retired as a read target — a committed,
+append-only archive (decision 1), no longer a ≤200-line index — and names
+`.claude/session-state.md` as what answers "what were we doing" (decision 2), auto-surfaced by
+`slim-session-start.sh` (task 2, done last session). §Restore now opens by reading that
+auto-surfaced envelope as data-not-instruction per the hook's tamper-evident framing, and its
+"also on restore" bullets were corrected to match what the hook actually reads —
+`session-state.md` only; the other claude-code-handoff files (`context.md`, `recent-prompts.md`,
+etc.) are named stale and explicitly not read for restore. No hook or code changes; SKILL.md prose
+only, verified against the feature file's Contracts section and the hook source directly rather
+than from memory.
+
+This entry is itself the first one written under the rule it documents: appended as a new dated
+section rather than folded into the `## Active Session` block above, which stays frozen as of this
+split.
+
+**Next:** task 4 (`feature-sync-guard.sh`, **Opus 5** — model-switch checkpoint owed before
+starting it) → 12 → 5 → 6 → 7 → 8 → 9. See the feature file's `## Tasks` for detail.
+
+## 2026-08-06 — session 20 (cont.): task 4 done (feature-sync-guard.sh)
+
+Model switched to **Opus 5** before starting, per the checkpoint-2 decision. Tier-1 blocking hook
+`hooks/feature-sync-guard.sh` + `hooks/lib/feature_tasks.py` + 28 tests, registered in
+`settings.json` PreToolUse/Bash. Full suite after: **612 checks, 0 failures** (448 shell + 164
+python). Detail in the feature file's task 4 note — not restated here. Three things worth carrying
+forward:
+
+- **A frozen spec's scenario can still be wrong about the runtime, and the fix is to correct the
+  test, not the hook.** The "chained staging" Gherkin says `git add x.spec.md && git commit` must
+  block. It cannot: this is a **PreToolUse** hook, so the `add` has not run and the index is still
+  clean. Making it block would mean predicting what a sibling command stages — the exact fail-open
+  ADR 0014 removed after two review rounds each measured the command list short. `doc-guard.test.sh:83`
+  already had the answer: stage first, then feed the chained string, so the case tests *segment
+  lexing* (is `git commit` found off position 0?) and not index prediction. The accepted limit is
+  now pinned by its own test rather than left implied.
+- **Mutation testing caught a test that could not fail — again, and the same shape as
+  `feedback_fixture_must_not_pre_create_state`.** Deleting `.lower()` from identity normalization
+  left the suite at 28/28 green. The "differs only by whitespace/case" fixture put its case
+  variation *after* the em dash, which is outside the task identity by construction — so it pinned
+  the fixture's premise, never the normalization. Rewritten to vary the identity itself; it now
+  fails against the case mutant and the whitespace mutant independently. **Six mutations run, five
+  caught on the first pass; the survivor was the one testing the thing I had just written.**
+- **settings.json index surgery, second clean run.** `git show HEAD:settings.json` → apply the jq
+  edit to *that* (keeping the committed `claude-fable-5[1m]` model line) → `hash-object -w` +
+  `update-index --cacheinfo` → verify `git diff --cached` → commit with **no pathspec**. The live
+  file got the same jq edit separately so it keeps this machine's `opus[1m]`. `jq . settings.json`
+  round-trips byte-identical, so the staged diff is only the four added lines. Skip-worktree bit
+  restored after.
+
+**Next:** task 12 (registration assertions in both new test files) → 5 → 6 → 7 → 8 → 9. Checkpoint 3
+(implementation → review) still owed before task 9.
+
+## 2026-08-06 — session 21: task 12 done (hook registration assertions)
+
+Restored from handoff `cc41c9b1` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch and working tree
+was clean, so no reconciliation was needed. Stayed on **Sonnet 5** per the checkpoint-2 answer
+(Opus 5 was task 4 only).
+
+Task 12: added a registration assertion to `slim-session-start.test.sh` and
+`feature-sync-guard.test.sh`, each resolving the real repo `settings.json` (via
+`git rev-parse --show-toplevel`, not the throwaway `$TMP`/`$REPO` fixture the rest of each suite
+uses) and running a `jq` query scoped to its own top-level hook array —
+`.hooks.SessionStart[]` for `slim-session-start.sh`, `.hooks.PreToolUse[]` for
+`feature-sync-guard.sh` — so a substring hit in an unrelated key or comment can't pass it.
+
+**Confirmed the check can fail, per the task-4 vacuous-test lesson named in the prior handoff.**
+Each test file also builds a `jq`-mutated copy of the real `settings.json` with its own hook's
+`command` entry deleted, then asserts the same query reports it missing. Both real-file assertions
+pass (already registered); both mutants correctly fail — the check is not vacuous. `shellcheck -x`
+clean on both files. Full `hooks/*.test.sh` suite re-run: 9 files, **452 checks, 0 failures**, no
+regressions. Committed `b571787`.
+
+One thing worth flagging: a session-freshness nudge fired at ~78k tokens before any task-12 work
+had started — almost entirely fixed session-start overhead (skill/agent/MCP tool listings), not
+accumulated work. Asked the user rather than guessing; they chose to continue task 12 and
+checkpoint once it was actually done, which is what happened here.
+
+**Next:** task 5 (split this feature file into the pair shape, decision 7) → 6 → 7 → 8 → 9.
+
+## 2026-08-06 — session 22: task 5 done (memory-system-split pair split)
+
+Restored from handoff `617af5d0` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, working tree was
+clean. Stayed on **Sonnet 5** per the checkpoint-2 answer.
+
+One thing flagged before starting: `git log main..HEAD` showed an extra commit (`02d5c25`,
+"feat(statusline): show reasoning effort next to model name") sitting on this branch that the prior
+handoff never mentioned — a small, self-contained, already-clean commit unrelated to this feature
+(touches `statusline-command.sh` only). Read it, confirmed it doesn't conflict with or touch
+anything task 5 needed, and proceeded; noting it here since a commit a handoff doesn't account for
+is exactly the kind of thing the restore discipline says to reconcile rather than silently carry
+forward — in this case reconciliation was "read it, it's fine," not an action.
+
+Task 5: split `docs/features/memory-system-split.md` (676 lines) into the pair shape per decision
+6/7 — `memory-system-split.md` now holds only frontmatter + a terse `## Tasks` checklist (46
+lines), and the new `memory-system-split.spec.md` (no frontmatter, 675 lines) holds
+Problem/Decisions/Design/Contracts/Scenarios/Phase 2/Open items plus the same `## Tasks` list at
+full completion-note detail. Task identity (leading text before each item's em dash) is the same
+task number in both files by construction, since both lists were split from one source in the same
+order.
+
+Also folded in while splitting: the "Out of band, before task 11" note about committing the RTK
+removal was stale (already merged to `main` via PR #41, commit `e3b939d`, before this branch even
+needed it) — dropped rather than carried into either new file. The Bootstrapping note at the top of
+the spec half was rewritten from future to past tense now that the migration it described is done.
+
+**Verified, not just asserted:** ran the real `hooks/lib/feature_tasks.py` comparator against the
+two drafted files before installing them (exit 0 — same task set) and a live `feature-sync-guard.sh`
+simulation via a fake `PreToolUse` payload after staging both files (exit 0 — allowed). Full
+`hooks/*.test.sh` suite re-run: **9 files, 452 checks, 0 failures** — no regressions from the new
+`.spec.md` touching `phase-guard.sh`'s glob or `feature-sync-guard.sh`'s pair logic. Committed
+`c821525`.
+
+**Next:** task 6 (ADR superseding ADR 0006 rows 1 and 15) → 7 (rewrite
+`preparing-pull-requests`:12) → 8 (`rules/gates.md` MAY wording) → 9 (observability judge, then
+PR). All remaining tasks are Sonnet 5; checkpoint 3 (implementation → review) still owed before
+task 9.
+Checkpoint 3 (implementation → review) still owed before task 9.
+
+## 2026-08-06 — session 23: task 6 done (ADR 0017)
+
+Restored from handoff `47b43699` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, branch up to date with `origin`. Stayed on **Sonnet 5** per the checkpoint-2 answer already
+on record — no re-ask.
+
+Task 6: wrote `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md`.
+Read ADR 0006 in full first to identify the exact superseded rows by content, not by number alone
+— row 1 ("Session-start restore: House, handoff's `session-start.sh` removed") and row 15
+("Storage & git posture: House, committed `CODING_MEMORY.md` is the single durable source of
+truth"). The new ADR records both supersessions (a SessionStart hook is registered again, but it's
+`hooks/handoff/slim-session-start.sh` — house-authored, reads only `session-state.md`, not the
+vendored handoff script; `CODING_MEMORY.md` stays committed but is retired as the "what were we
+doing" source of truth) plus decisions 6 and 7 from the spec's Decisions table (the
+one-canonical-file gate MAY be departed from for a feature file, mitigated by
+`feature-sync-guard.sh`; only `memory-system-split` migrated, permanently — the other 8 feature
+files are not a to-do). Embedded the spec's three-artifact Design mermaid diagram rather than
+redrawing one, since it already accurately depicts the tradeoff.
+
+Ticked task 6 in both halves of the pair with matching completion notes (task identity is just the
+task number, so the differing prose after each doesn't affect `feature-sync-guard.sh`). Staged all
+three files together and let the real registered hooks validate the commit live rather than
+hand-simulating — `feature-sync-guard.sh` and `doc-guard.sh` both passed it without a bypass.
+Committed `3024b3c`, pushed.
+
+One thing worth flagging: `hooks/context-handoff-watch.sh` fired its ≥75k-token nudge mid-restore,
+before any task-6 work had started — same shape session 21 saw (fixed session-start overhead, not
+accumulated work). Per the standing preference recorded in the prior handoff ("prompt for `/clear`
+at ~165k tokens, not the 75k nudge — but a just-completed task boundary is still worth offering
+regardless of tokens"), finished task 6 first rather than stopping mid-task, and this checkpoint is
+that task-boundary offer.
+
+**Next:** task 7 (rewrite `preparing-pull-requests`:12 — append-to-archive, not inherit-context)
+→ 8 (`rules/gates.md` MAY wording) → 9 (observability judge, then PR). All remaining tasks are
+Sonnet 5; checkpoint 3 (implementation → review) still owed before task 9.
+
+## 2026-08-06 — session 24: task 7 done (preparing-pull-requests rewrite)
+
+Restored from handoff `2fa22244` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, up to date with `origin`. Stayed on **Sonnet 5** per the checkpoint-2 answer already on
+record — no re-ask.
+
+Task 7: read `skills/preparing-pull-requests/SKILL.md` in full before editing. The named target,
+the "Brainstorm-then-branch" bullet (:12), claimed committing `CODING_MEMORY.md` to `main` before
+branching means "every future branch forked from `main` then inherits the full brainstorm context
+automatically" — exactly the root-cause claim the spec's Problem section (`memory-system-split.spec.md:38-41`)
+identifies as the design bug decision 1 retired. Rewrote it to the archive-append framing:
+`CODING_MEMORY.md` is no longer an auto-loaded read target, so the feature file's spec (created
+before the branch exists, during planning) is what actually carries the brainstorm forward across
+the branch boundary, not a future session reading `CODING_MEMORY.md` back.
+
+While reading the file end to end, found the very next bullet, "Branch resume" (:14), had the
+identical bug — "read its entry in `CODING_MEMORY.md` and resume from the latest checkpoint" — and
+was already inconsistent with this same file's "PR Memory Tracking" section (:45), which an earlier
+commit (`62492a8`) had correctly updated to route feature-scale branches to
+`docs/features/<name>.md`. `git log -p --follow` confirmed both stale bullets dated to the file's
+original commit (`c2ca102`), pre-dating the split. Fixed both in the same edit rather than leaving
+:14 to contradict :12 and :45 — task 7's own framing ("append-to-archive, not inherit-context") is
+a principle the whole file needs to satisfy, not a single line. Both bullets now point at
+`managing-session-memory`'s restore procedure instead of restating it, keeping one place as the
+source of truth for the restore mechanics.
+
+Ticked task 7 in both halves of the pair with matching completion notes (task identity is the task
+number; the differing prose after each doesn't affect `feature-sync-guard.sh`).
+
+**Next:** task 8 (`rules/gates.md` one-canonical-file stub — state the MAY from decision 8 in
+words that can't be read as a MUST) → 9 (observability judge, then PR). Checkpoint 3
+(implementation → review) still owed before task 9. Remaining tasks are Sonnet 5.
+
+## 2026-08-06 — session 25: task 8 done (rules/gates.md MAY wording)
+
+Restored from handoff `2fc8c9f6` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, up to date with `origin`. Stayed on **Sonnet 5** per the checkpoint-2 answer already on
+record — no re-ask.
+
+Task 8: edited the one-canonical-file bullet in `rules/gates.md`. Checked the spec's task-8 wording
+(`memory-system-split.spec.md:665-668`) and the decision-8 Gherkin scenario
+(`memory-system-split.spec.md:511-516`, "A brand-new feature is created as one file — decision 8's
+MAY") before writing, so the inserted sentence matches what the guard actually enforces (no rule,
+hook, or message requires the `.spec.md` half to exist) rather than restating task memory alone.
+Inserted one carve-out sentence between the bullet's opening clause and its existing "never open a
+separate progress doc" prohibition, instead of rewriting the bullet: states the split trigger
+(checklist file stops reading comfortably in one pass), the resulting shape (frontmatter + tasks
+stay in `.md`; spec, decisions, Gherkin move to `.spec.md`, read on demand only, never at session
+start), and says "MAY, never a MUST" in those literal words so a future reader can't round it up to
+a requirement. Left the "never a separate progress/summary/state-of-branch document" sentence
+untouched — decision 8 is about single-file-vs-pair, not about that orthogonal prohibition.
+
+Ticked task 8 in both halves of the pair with matching completion notes (task identity is the task
+number; the differing prose after each doesn't affect `feature-sync-guard.sh`).
+
+`hooks/context-handoff-watch.sh` fired its ≥75k-token nudge mid-task (after the `rules/gates.md`
+edit landed but before the pair's task-8 checkboxes were ticked) — same shape sessions 21 and 24
+saw. Finished ticking both checklist halves first per the standing preference (task-boundary
+offers win over the raw token nudge), then ran this checkpoint.
+
+**Next:** task 9 — checkpoint 3 (implementation → review) is owed first, then the observability
+judge (implementation stage) against this branch's diff, then the PR. Task 8 was the last checklist
+item that edits `rules/`; task 9 is judge + PR only, no further spec/rule edits expected.
+
+## 2026-08-06 — session 26: task 9 done (judge + PR #42), branch's last task complete
+
+Restored from handoff `53dea02f` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, up to date with `origin`. Tasks 2–8/11/12 already done and pushed per the handoff.
+
+Checkpoint 3 (implementation → review) asked and answered: user chose **Opus 5** over staying on
+Sonnet 5 for the judge + PR portion of task 9. `hooks/pane-dispatch-guard.sh` denied the first
+in-process `Agent` dispatch of `observability-judge` — judges are `redirect-agents`, always paned,
+never in-process, regardless of the session's worker pane-split policy. Re-dispatched via
+`panes/dispatch-pane-agent.sh` per `dispatching-pane-agents` (prompt written to scratchpad first);
+landed in pane `surface:148`, waited with `--timeout 540`.
+
+Verdict: `risk=low confidence=high`, all 452 hook-test assertions pass, persisted to
+`coding-memory/observability-judge/2026-08-06-feat-memory-system-split.md` and `verdicts.jsonl`
+(commit `11db576`). The judge's own first test pass showed 16/29 failures in
+`slim-session-start.test.sh` — a false alarm from `CLAUDE_PANE_AGENT` being set in its own paned
+environment (the hook exits early when that var is set); clean env reran 29/29. That investigation
+surfaced a real, separate finding: two of those tests assert *absence* (no `[STALE]` marker, no
+oversized-body output) in a way that passes identically whether the hook correctly suppressed
+output or is silently dead — an "absence" test can't distinguish the two without a matching
+positive-case fixture in the same test. Judge also ruled out one false alarm unprompted: the
+committed `claude-fable-5[1m]` model line in `settings.json` predates this branch, already on
+`main` — not introduced here.
+
+Two other non-blocking findings: neither new hook (`slim-session-start.sh`,
+`feature-sync-guard.sh` — the latter blocks commits with a `FEATURE_SYNC_EXEMPT` bypass) has a
+`rules/gates.md` bullet, unlike every other blocking hook; and the unrelated `statusline`
+reasoning-effort commit (`02d5c25`) rode along on this branch from an earlier session (already
+known, re-flagged here).
+
+Asked the user whether to fix the two real findings (vacuous tests, missing gates.md bullet) before
+opening the PR or defer them — **explicit choice: open now, defer as follow-ups**, logged in the PR
+description rather than fixed on this branch. Opened **PR #42**:
+https://github.com/suyatdev/.claude/pull/42 (`gh pr create`, no existing PR found first via
+`gh pr list --head`). `gh pr create` reported "2 uncommitted changes" — the judge subagent's own
+verdict-file writes (`coding-memory/observability-judge/verdicts.jsonl` +
+`2026-08-06-feat-memory-system-split.md`) landed in the working tree but not yet committed;
+committed them separately (`11db576`) and pushed.
+
+Ticked task 9 in both halves of the pair with matching completion notes (task identity is the task
+number). Moved frontmatter `phase: implementation` → `review`, `model_tier: low` → `high` in
+`memory-system-split.md` to match checkpoint 3's answer — the spec half carries no frontmatter, so
+nothing to sync there. Committed (`995c616`) and pushed; `feature-sync-guard.sh` accepted the pair
+edit without complaint.
+
+**Task 9 was the last task on this branch's Phase 1 scope.** Task 10 (Phase 2 — fixing memsearch,
+which currently indexes 0 entries from `docs/features/`) is explicitly out of scope here, tracked
+as a separate follow-up branch after this PR merges. This session's freshness checkpoint (past the
+75k-token nudge, at this task boundary) is this entry plus the push above.
+
+**Next (new session, after this PR merges or gets review feedback):** no in-branch work expected
+unless review comes back with requested changes. If starting Phase 2, that's a new branch from
+`main` post-merge, not a continuation of this one.

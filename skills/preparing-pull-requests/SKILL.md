@@ -9,9 +9,9 @@ description: Use when naming a branch, writing a commit message, opening or upda
 
 - **Name branches after what changed, not who or when:** `feature/short-description`, `bugfix/short-description`, or `chore/short-description` — readable as a plain-English summary of the PR's purpose (`feature/user-auth-flow`, not `feature/session-2026-07-10` or `feature/mark-changes`).
 - **Main-to-feature:** if currently on `main`/`master`, update it, do the brainstorm, then create and switch to a new feature branch before any implementation.
-- **Brainstorm-then-branch:** brainstorming and planning happen while on `main`/`master`. When the brainstorm is done, commit the updated `CODING_MEMORY.md` — and only `CODING_MEMORY.md`, no code — to `main`/`master`, then check out the feature branch. Every future branch forked from `main` then inherits the full brainstorm context automatically.
+- **Brainstorm-then-branch:** brainstorming and planning happen while on `main`/`master`. When the brainstorm is done, commit the updated `CODING_MEMORY.md` — and only `CODING_MEMORY.md`, no code — to `main`/`master`, then check out the feature branch. This is an **archive append, not a context hand-off**: `CODING_MEMORY.md` is retired as an auto-loaded read target (`managing-session-memory`), so the feature branch does not inherit the brainstorm automatically. For feature-scale work, the brainstorm's decisions carry forward in the feature file's spec, created before the branch exists; for everything else, the handoff and commit history are what the next session actually reads.
 - **Working-branch freshness:** before adding more implementation commits to an existing branch, make sure it's up to date with its tracked remote/base, while still following the PR/remote-first checks below.
-- **Branch resume:** before continuing work on an existing branch, read its entry in `CODING_MEMORY.md` and resume from the latest checkpoint.
+- **Branch resume:** before continuing work on an existing branch, follow `managing-session-memory`'s restore procedure — the live handoff and, for feature-scale branches, `docs/features/<name>.md` are the primary source, not `CODING_MEMORY.md`. Reach `CODING_MEMORY.md` only by targeted lookup (grep or `memsearch query`), never a full read, and mainly for non-feature-scale branches that have no feature file.
 
 ## Commit Messages
 
