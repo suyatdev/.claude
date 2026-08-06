@@ -1,6 +1,6 @@
 ---
-phase: implementation
-model_tier: low
+phase: review
+model_tier: high
 branch: fix/replay-harness-base-pin
 ---
 
@@ -790,6 +790,9 @@ even then it must be visibly labelled as unresolved rather than presented as a b
       - ✅ Round-2 judge's open nit ("the four sites" vs the part-6 table's five rows) fixed in
         revision 10; the sub-bullets were already right, only the one-liner was loose.
       - ⚠️ **Task 11 lands before this one.** The judge re-runs at the HEAD that includes it.
+      - ⚙️ **Model-switch checkpoint 3 (implementation → review) answered 2026-08-05 (session 16):
+        Opus 5.** `phase: review`, `model_tier: high` set at the same time, at `d5151da`. Judge runs
+        fresh at this HEAD — round 1 and round 2's verdicts above are historical only.
 
 - [x] 11. Validate the default `worktree` candidate (part 2, revision 10 — was deferral 2).
       - ⚙️ **Gate confirmed 2026-08-05 (session 15); model-switch checkpoint 2 answered: Sonnet 5
