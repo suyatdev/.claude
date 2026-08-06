@@ -2722,3 +2722,40 @@ simulation via a fake `PreToolUse` payload after staging both files (exit 0 — 
 PR). All remaining tasks are Sonnet 5; checkpoint 3 (implementation → review) still owed before
 task 9.
 Checkpoint 3 (implementation → review) still owed before task 9.
+
+## 2026-08-06 — session 23: task 6 done (ADR 0017)
+
+Restored from handoff `47b43699` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, branch up to date with `origin`. Stayed on **Sonnet 5** per the checkpoint-2 answer already
+on record — no re-ask.
+
+Task 6: wrote `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md`.
+Read ADR 0006 in full first to identify the exact superseded rows by content, not by number alone
+— row 1 ("Session-start restore: House, handoff's `session-start.sh` removed") and row 15
+("Storage & git posture: House, committed `CODING_MEMORY.md` is the single durable source of
+truth"). The new ADR records both supersessions (a SessionStart hook is registered again, but it's
+`hooks/handoff/slim-session-start.sh` — house-authored, reads only `session-state.md`, not the
+vendored handoff script; `CODING_MEMORY.md` stays committed but is retired as the "what were we
+doing" source of truth) plus decisions 6 and 7 from the spec's Decisions table (the
+one-canonical-file gate MAY be departed from for a feature file, mitigated by
+`feature-sync-guard.sh`; only `memory-system-split` migrated, permanently — the other 8 feature
+files are not a to-do). Embedded the spec's three-artifact Design mermaid diagram rather than
+redrawing one, since it already accurately depicts the tradeoff.
+
+Ticked task 6 in both halves of the pair with matching completion notes (task identity is just the
+task number, so the differing prose after each doesn't affect `feature-sync-guard.sh`). Staged all
+three files together and let the real registered hooks validate the commit live rather than
+hand-simulating — `feature-sync-guard.sh` and `doc-guard.sh` both passed it without a bypass.
+Committed `3024b3c`, pushed.
+
+One thing worth flagging: `hooks/context-handoff-watch.sh` fired its ≥75k-token nudge mid-restore,
+before any task-6 work had started — same shape session 21 saw (fixed session-start overhead, not
+accumulated work). Per the standing preference recorded in the prior handoff ("prompt for `/clear`
+at ~165k tokens, not the 75k nudge — but a just-completed task boundary is still worth offering
+regardless of tokens"), finished task 6 first rather than stopping mid-task, and this checkpoint is
+that task-boundary offer.
+
+**Next:** task 7 (rewrite `preparing-pull-requests`:12 — append-to-archive, not inherit-context)
+→ 8 (`rules/gates.md` MAY wording) → 9 (observability judge, then PR). All remaining tasks are
+Sonnet 5; checkpoint 3 (implementation → review) still owed before task 9.
