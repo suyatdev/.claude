@@ -2544,3 +2544,18 @@ asking you to verify a hook that did not exist. Needed a `Doc-Exempt:` trailer s
 sit at the repo root and doc-guard reads them as source, and `JUDGE_EXEMPT` to open the PR. **`docs/features/verification-marker-gate.md`
 (1,166 lines) was restored, not deleted** — its last commits are spec revisions with no
 implementation merge, which is a reason to keep it, not to bin it.
+
+## 2026-08-06 — session 18: task 11 done (spec-half glob exclusion)
+
+**Feature:** `docs/features/memory-system-split.md`, still `phase: implementation`,
+`feat/memory-system-split`, gate open. Commit `40ab0ad`.
+
+Task 11: `hooks/phase-guard.sh:356`'s `docs/features/*.md` glob now excludes `*.spec.md` by name
+(`case "$f" in *.spec.md) continue ;; esac`, before `nfiles` counts it) — sequenced ahead of task 5,
+which creates the first `.spec.md`. Added Group A8 to `phase-guard.test.sh` (3 cases, 7 assertions:
+a bare `.spec.md` alone, one carrying `phase: planning` frontmatter, one mixed beside a real
+planning card). Mutation-checked by hand — reverting the exclusion fails 4 of the 7. **141/141
+pass.** Rollback point: `caf0d2f` (pre-task-11 HEAD), unneeded — no rollback occurred.
+
+**Next:** task 2 (`hooks/handoff/slim-session-start.sh`), then 3 → 4 (Opus 5) → 12 → 5 → 6 → 7 → 8 →
+9. See the feature file's `## Tasks` for detail — not restated here.
