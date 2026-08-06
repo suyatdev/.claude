@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feat/memory-system-split
 ---
 
 # Split live memory from archived memory
