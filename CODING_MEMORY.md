@@ -2930,3 +2930,78 @@ edits, and the file is merged. These findings belong to the Phase 2 feature file
 
 **Next:** Phase 2 planning proper — new branch off `main`, fresh `planning` feature file. Model-switch
 checkpoint 1 asked and answered this session: **stay on Opus 5** for planning.
+
+## 2026-08-06 — session 28: spec-compliance gate run; both judges found blocking work
+
+**`main` @ `9475034`, `phase: planning`, `branch: none`.** No code written; the phase held.
+Restore verified frontmatter against reality (clean tree, nothing ahead of `main`) before any work.
+
+Ran the spec-compliance gate on `docs/features/memsearch-freshness.md`
+(blob `4e217ec323dd37701b2bc32b1c5a60e0cfefb6a7`, round 1, no waived ids). Both judges dispatched in
+parallel into cmux panes per `dispatching-pane-agents`; both returned DONE.
+
+### Compliance judge — **FAIL**, 7 violations, confidence high
+
+Verdict: `coding-memory/compliance-judge/2026-08-06-memsearch-freshness.md`.
+
+| id | Substance |
+|---|---|
+| `writing-specs/api-contracts` | Plist contract omits `Label`, `ProgramArguments`, and a PATH. **Verified mechanically: `launchctl getenv PATH` is empty, so the job sees only `/usr/bin:/bin:/usr/sbin:/sbin`; `memsearch/bin/memsearch` is `exec uv run …` and `uv` lives in `/opt/homebrew/bin`. The obvious rendering dies at exec 127 every 6h while the install reports success.** |
+| `core-conduct/explicit-error-handling` | Only `plutil -lint` failure has stated behaviour. `launchctl bootstrap` failure — the call deciding whether the scheduler exists at all — plus missing/unwritable `~/Library/LaunchAgents` and the script's own exit codes are unspecified. A failed install looks like a successful one. |
+| `writing-specs/edge-cases` | All seven Gherkin scenarios cover the nudge (R1–R3). R4–R7 have none — and that is the half with system-level side effects. |
+| `writing-specs/pinned-versions` | `uv`, the runtime the scheduled job actually executes, is absent from the pinned table; `sqlite3` says "system" with no version. |
+| `gates/adr-required` | A persistent `launchd` daemon is a structural decision, and the spec overturns two parent-spec items on new evidence. No task writes an ADR, in a repo whose 17 ADRs sit at finer granularity. |
+| `writing-specs/ambiguous-acceptance-bar` | R7 gives no membership rule for "the named feature's own documents", so task 8's pass/fail is a judgment call, not a measurement. |
+| `writing-specs/ambiguous-log-path` | Log specified only as "a log under `~/.claude/memory-index/`" — no filename, and that directory already holds an unexplained `reindex.log`. |
+
+Judge confirmed the falsifier itself passes and YAGNI is clean; held three items as notes, not
+violations (plist/log file modes, no user confirmation before task 7 installs a daemon, and the
+`docs/features/` vs `docs/superpowers/specs/` path question — repo layer wins, consistent with prior rounds).
+
+### Observability judge (architecting, advisory) — `risk=high confidence=high`
+
+Verdict: `coding-memory/observability-judge/2026-08-06-main-memsearch-freshness.md`. Advisory, blocks nothing.
+
+🚨 **The design's staleness signal reads the wrong field, and I verified this independently:**
+
+- `last_indexed` is `SELECT max(indexed_at) FROM sources` (`memsearch/memsearch/db.py:156`).
+- `indexed_at` is written only inside `replace_source` (`db.py:121,125`).
+- `_index_one` early-returns when the stored hash equals the current hash
+  (`memsearch/memsearch/index.py:125-127`), so `replace_source` never runs for unchanged files.
+
+**Therefore a successful run that finds nothing new does not advance `last_indexed` at all.** Quiet
+overnight → both scheduled runs succeed → the 8h line says `⚠ stale — run memsearch index` → running
+it changes nothing → **the warning never clears.** That is the spec's own falsifier item (b) firing
+on an ordinary Tuesday, and it is the exact failure decision 1 calls "strictly worse than silence."
+
+Note the irony the judge named: the spec documents two "proxy that looks like the thing you want but
+isn't" traps (`memory.db` mtime, SQL `_` wildcard) and then builds its core mechanism on a third.
+
+Judge's fix, which is right: **write run-completion time as its own field** (`last_run`, stamped when
+`run_index` finishes — `_write_status` already exists at `index.py:57`) and read *that* for staleness.
+Keep `last_indexed` for content recency. Two questions, two fields.
+
+Also raised: a totally failed run exits 0 (`cli.py:60-66`, Ollama down → every source errors → "success");
+no "in progress" state, no lock or pidfile; "a failed run leaves evidence" is weakened by 8KB block
+buffering (wants `PYTHONUNBUFFERED=1`); and after this lands, a fresh-but-useless index is still silent
+because R7 measures once, at landing, then never again.
+
+### 🚨 An index rebuild was found already running — the blind measurement is compromised
+
+`memsearch index` started **16:01:40 EDT** and was still running 39 min later; PID 30022/30024, **PPID 1**
+(orphaned — its starter has exited). Not a hook and not a scheduler: no crontab, no matching plist in
+`~/Library/LaunchAgents`, and `hooks/memsearch-nudge.sh` only reads `status.json` (grep for `memsearch index`
+across `hooks/` + `settings.json` returns nothing). It was started interactively and outlived its shell.
+
+Impact: `sources` is now **196 rows @ 2026-07-18 + 320 rows @ 2026-08-06**, and `reindex.log`'s first line is
+`docs/features/memsearch-freshness.md`. The handoff's explicit warning — *do not rebuild before task 6 commits
+the five queries* — has been overtaken by events. **Falsifier item (d) can no longer be proven from git alone**;
+blindness now rests on discipline (write the queries without first querying the new index), not on the index
+being physically stale. The stale-index baseline ("0 hits from `docs/features/`; the 4 that return score ~0.02")
+is already recorded in the spec and cannot be re-measured.
+
+`status.json` still reads `last_indexed: 2026-07-18T06:18:01+00:00` — it is written only at run end,
+which is itself the judge's "no in-progress state" point, observed live.
+
+**Next:** round-1 revision of the spec (7 compliance violations + the `last_run` redesign), then
+re-dispatch both judges at round 2 reusing the violation ids. No waivers so far; nothing dropped.
