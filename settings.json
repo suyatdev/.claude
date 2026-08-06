@@ -23,6 +23,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/merge-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/feature-sync-guard.sh"
           }
         ]
       },

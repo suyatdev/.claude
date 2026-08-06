@@ -2621,3 +2621,36 @@ split.
 
 **Next:** task 4 (`feature-sync-guard.sh`, **Opus 5** — model-switch checkpoint owed before
 starting it) → 12 → 5 → 6 → 7 → 8 → 9. See the feature file's `## Tasks` for detail.
+
+## 2026-08-06 — session 20 (cont.): task 4 done (feature-sync-guard.sh)
+
+Model switched to **Opus 5** before starting, per the checkpoint-2 decision. Tier-1 blocking hook
+`hooks/feature-sync-guard.sh` + `hooks/lib/feature_tasks.py` + 28 tests, registered in
+`settings.json` PreToolUse/Bash. Full suite after: **612 checks, 0 failures** (448 shell + 164
+python). Detail in the feature file's task 4 note — not restated here. Three things worth carrying
+forward:
+
+- **A frozen spec's scenario can still be wrong about the runtime, and the fix is to correct the
+  test, not the hook.** The "chained staging" Gherkin says `git add x.spec.md && git commit` must
+  block. It cannot: this is a **PreToolUse** hook, so the `add` has not run and the index is still
+  clean. Making it block would mean predicting what a sibling command stages — the exact fail-open
+  ADR 0014 removed after two review rounds each measured the command list short. `doc-guard.test.sh:83`
+  already had the answer: stage first, then feed the chained string, so the case tests *segment
+  lexing* (is `git commit` found off position 0?) and not index prediction. The accepted limit is
+  now pinned by its own test rather than left implied.
+- **Mutation testing caught a test that could not fail — again, and the same shape as
+  `feedback_fixture_must_not_pre_create_state`.** Deleting `.lower()` from identity normalization
+  left the suite at 28/28 green. The "differs only by whitespace/case" fixture put its case
+  variation *after* the em dash, which is outside the task identity by construction — so it pinned
+  the fixture's premise, never the normalization. Rewritten to vary the identity itself; it now
+  fails against the case mutant and the whitespace mutant independently. **Six mutations run, five
+  caught on the first pass; the survivor was the one testing the thing I had just written.**
+- **settings.json index surgery, second clean run.** `git show HEAD:settings.json` → apply the jq
+  edit to *that* (keeping the committed `claude-fable-5[1m]` model line) → `hash-object -w` +
+  `update-index --cacheinfo` → verify `git diff --cached` → commit with **no pathspec**. The live
+  file got the same jq edit separately so it keeps this machine's `opus[1m]`. `jq . settings.json`
+  round-trips byte-identical, so the staged diff is only the four added lines. Skip-worktree bit
+  restored after.
+
+**Next:** task 12 (registration assertions in both new test files) → 5 → 6 → 7 → 8 → 9. Checkpoint 3
+(implementation → review) still owed before task 9.

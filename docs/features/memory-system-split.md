@@ -603,8 +603,25 @@ makes actively obstructive.
       correct the file list to what the hook actually reads (`session-state.md` only — the other
       claude-code-handoff files are named stale, not read). No hook/code changes; SKILL.md prose
       only.
-- [ ] 4 — Write `hooks/feature-sync-guard.sh` + tests; register at PreToolUse Bash. Tests must cover
-      the missing-partner allow and the both-exist fail-closed as distinct cases. **Opus 5.**
+- [x] 4 — Write `hooks/feature-sync-guard.sh` + tests; register at PreToolUse Bash. Tests must cover
+      the missing-partner allow and the both-exist fail-closed as distinct cases. **Opus 5.** —
+      done: hook + `lib/feature_tasks.py` (parser/comparer) + 28 tests, registered in
+      `settings.json` PreToolUse/Bash after `merge-guard.sh`. TDD: suite written first, watched
+      RED at 27×exit-127. Both fail directions pinned — infrastructure absence fails OPEN
+      (doc-guard's shape), a parse failure inside a real pair fails CLOSED.
+      · **Chained-staging scenario needed correcting, not the hook.** The Gherkin reads "git add
+      x.spec.md && git commit → blocks", but this is a *PreToolUse* hook: the `add` has not run,
+      so the index is clean and nothing is divergent yet. Modelling what a sibling command will
+      stage is the fail-open ADR 0014 removed. Tests now stage first (as `doc-guard.test.sh:83`
+      does) to isolate the real question — is `git commit` still *found* when not at position 0 —
+      and a separate case pins the accepted limit. `commit -am` **is** caught (reads the worktree).
+      · **Mutation-checked by hand, 6 mutations; the 6th exposed a vacuous test.** Dropping
+      `.lower()` from identity normalization changed nothing, because the fixture varied case only
+      *after* the em dash — outside the identity by construction. Test rewritten to vary the
+      identity itself; it now fails against both the case and whitespace mutants independently.
+      · Parser false-positive guard: `- [ADR 0015](docs/...)` must not read as a broken checkbox,
+      so a checkbox candidate is only a bracket holding ≤1 char. Verified against all 9 real
+      feature files — 0 parse errors. `shellcheck -x` clean; full suite 612 checks, 0 failures.
 - [ ] 12 — Add a registration assertion to `slim-session-start` and `feature-sync-guard` test files:
       each greps `settings.json` for its own hook and fails if absent. Four hooks in this repo pass
       their tests while unregistered; `judge-guard.test.sh:344` already names the hazard. Decision 6
