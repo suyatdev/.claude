@@ -1,6 +1,6 @@
 ---
-phase: implementation
-model_tier: low
+phase: review
+model_tier: high
 branch: feat/memory-system-split
 ---
 
@@ -41,7 +41,11 @@ task 4 only.**
 - [x] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape (the MAY, decision 8).
       *(Sonnet 5)* — done: added a carve-out sentence; single file stays the default, the `.spec.md`
       half is a MAY not a MUST, "never a separate progress doc" prohibition untouched.
-- [ ] 9 — Observability judge (implementation stage), then PR. *(Sonnet 5)*
+- [x] 9 — Observability judge (implementation stage), then PR. *(Opus 5, checkpoint 3)* — done:
+      verdict `risk=low confidence=high`, `coding-memory/observability-judge/2026-08-06-feat-memory-system-split.md`
+      (commit `11db576`). PR: https://github.com/suyatdev/.claude/pull/42. Three non-blocking
+      follow-ups noted in the PR description (vacuous absence-tests, missing `gates.md` bullet for
+      `feature-sync-guard`, the rider `statusline` commit) — deferred, not fixed on this branch.
 - [ ] 10 — **Phase 2** memsearch work — separate branch, after Phase 1 merges.
 
 Each completed task's full rationale, gotchas, and mutation-check detail live in

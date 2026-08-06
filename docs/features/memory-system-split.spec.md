@@ -673,7 +673,19 @@ makes actively obstructive.
       in those literal words so a future reader can't round it up to a requirement. Left the
       "never a separate progress/summary/state-of-branch document" sentence untouched — that
       prohibition is orthogonal to the single-file-vs-pair question and decision 8 didn't touch it.
-- [ ] 9 — Observability judge (implementation stage), then PR *(Sonnet 5)*
+- [x] 9 — Observability judge (implementation stage), then PR *(Opus 5, checkpoint 3)* — done:
+      checkpoint 3 asked and answered (user chose Opus 5 over staying on Sonnet 5). Judge dispatched
+      via the pane guard (`observability-judge` is a redirect-agent, never in-process) against the
+      full `main...HEAD` diff — verdict `risk=low confidence=high`, all 452 hook-test assertions
+      pass, persisted to `coding-memory/observability-judge/2026-08-06-feat-memory-system-split.md`
+      and `verdicts.jsonl` (commit `11db576`). PR opened:
+      https://github.com/suyatdev/.claude/pull/42. Judge surfaced three non-blocking findings, all
+      deferred to the PR description as follow-ups rather than fixed on this branch (user's explicit
+      choice): (1) two `slim-session-start.test.sh` assertions test for *absence* and would pass
+      identically on a silently-dead hook — `CLAUDE_PANE_AGENT` leaking into the judge's own paned
+      env caused a first-pass false failure that surfaced this; (2) neither new hook has a
+      `rules/gates.md` bullet, unlike every other blocking hook; (3) the unrelated `statusline`
+      commit (`02d5c25`) rode along on this branch from an earlier session.
 - [ ] 10 — **Phase 2** memsearch work, items 1–6 above — separate branch, after Phase 1 merges
 
 ## Open items
