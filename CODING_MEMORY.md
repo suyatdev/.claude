@@ -2489,3 +2489,56 @@ to main as 2d8a416)**.
 `chore/ports-registry-snatch-8001` and `feature/diagramming-skill`) were deleted local + remote
 after verifying each tip is reachable from `main`. Repo now holds only `main` and the active
 `feature/judge-terminal-enforcement`.
+
+---
+
+## 2026-08-06 — session 17: memory-system-split gate opened
+
+**Feature:** `docs/features/memory-system-split.md` · **branch** `feat/memory-system-split` ·
+phase `planning` → `implementation`, `model_tier` high → low.
+
+**Compliance gate: 5 rounds.** Pass → edit → re-judge, because a verdict is only fresh while
+`spec_blob_sha` matches. Round 1 fail (5), round 2 fail (2), round 3 **pass**, round 4 fail (1),
+round 5 **pass** at `7915fa8`.
+
+Two things worth keeping, both about *my own* revisions failing:
+
+1. **Round 2's `core-conduct/validate-input-at-boundaries` persisted** — round 1 wrapped the
+   handoff in *fixed* `=== Handoff (DATA) ===` markers, called them load-bearing, and specified the
+   body as "verbatim". A body containing the closing marker closes the frame early. Fixed
+   delimiters around unvalidated content are a convention the content can opt out of, not a
+   boundary. Escalated to the user per the skill rather than revised a third time; user chose *both*
+   a per-session `/dev/urandom` tag and a sanitizer.
+2. **Round 4 was a defect I introduced while fixing round 3's note.** Widening `End`→`[Ee]nd` and
+   `Handoff`→`[Hh]andoff` tolerates case on **each word's first letter only**, so
+   `=== END HANDOFF ===` still missed — while the scenario I committed in the same breath asserted
+   it was caught. Contract and acceptance test could not both pass. Fix: lowercase-canonical
+   pattern + `shopt -s nocasematch` (bash 3.1+), with an explicit restore requirement since it is
+   shell-global. **Verified under the pinned `/bin/bash` 3.2.57 before committing, not after.**
+
+**Spec facts corrected against the machine** (the draft had asserted them from memory): `python3`
+is **3.9.6** at `/usr/bin/python3`, not 3.13 — no `match`, no `tomllib`, no `X | Y` annotations;
+`jq` is **1.7.1-apple**, not 1.7; `bash` 3.2.57.
+
+**`phase-guard.sh` globs `docs/features/*.md` (`:356`)**, so the planned `<name>.spec.md` half would
+be swept up by it: with frontmatter it joins `planning_files` and freezes source edits repo-wide;
+without, it increments `nfiles` but not `nparsed` (`:374`) and fires the `noparse` warning **every
+session**, destroying a real signal. Task 11 excludes `*.spec.md` and is sequenced **before** task 5.
+
+**User decisions this session** (do not re-litigate — full table in the spec's `## Decisions`):
+model routing Sonnet 5 / Opus 5 for task 4 only; **decision 7** no feature file migrates except this
+one; **decision 8** a new feature file **MAY** carry a spec half, never must — the MAY must survive
+verbatim into `rules/gates.md` via task 8.
+
+**Observability judge (architecting, advisory, risk=medium)** drove four spec additions unprompted:
+a falsifier written before the code, the token trade reframed as an insurance premium with an
+*unmeasured claim rate* (break-even ≈ 1 blow-up per 45 sessions), task 12 asserting hook
+registration in `settings.json` (four hooks here pass tests while unregistered), and Phase 2's
+acceptance gate gaining a pinned `k=6` and a 0.30 score floor — the draft's "≥2 hits" would have
+passed on today's ~0.02 noise.
+
+**Also landed:** `docs/remove-rtk-references` (3ec8504) — RTK retired; verified `settings.json`
+registers no RTK hook before removing. Needed a `Doc-Exempt:` trailer since the four paths sit at
+the repo root and doc-guard reads them as source. **`docs/features/verification-marker-gate.md`
+(1,166 lines) was restored, not deleted** — its last commits are spec revisions with no
+implementation merge, which is a reason to keep it, not to bin it.
