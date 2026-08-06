@@ -583,11 +583,18 @@ makes actively obstructive.
       it (excluded by name, content never inspected). Group A8 (3 cases, 7 assertions) added to
       `phase-guard.test.sh`; mutation-checked by hand — reverting the exclusion fails 4 of them.
       141/141 pass.
-- [ ] 2 — Write `hooks/handoff/slim-session-start.sh` + tests; register at SessionStart. Tests must
+- [x] 2 — Write `hooks/handoff/slim-session-start.sh` + tests; register at SessionStart. Tests must
       cover the DATA envelope, the per-session tag (present in both markers, differs across two
       runs, not derived from the body), the sanitizer (a body line reading exactly
       `=== End handoff (end of DATA) ===` is neutered, never dropped), the `written:`/`[STALE]`
-      header, and oversize keeping the header. *(Sonnet 5)*
+      header, and oversize keeping the header. *(Sonnet 5)* — done: registered in
+      `settings.json` SessionStart alongside `doc-guard.sh`/`memsearch-nudge.sh`. 27 tests in
+      `slim-session-start.test.sh`, all 12 Gherkin scenarios plus the reads-only-session-state.md
+      contract line; mutation-checked by hand (4 targeted mutations — empty-tag guard, sanitizer
+      prefix, oversize guard, `[STALE]` threshold — each drops exactly the tests it should and no
+      others). `shellcheck -x` clean on both files. Full `hooks/` suite re-run clean (0 regressions).
+      Registration assertion (task 12) deliberately deferred — it covers this hook and
+      `feature-sync-guard.sh` together, sequenced after task 4.
 - [ ] 3 — Rewrite `managing-session-memory` §CODING_MEMORY.md and §Restore for the new roles *(Sonnet 5)*
 - [ ] 4 — Write `hooks/feature-sync-guard.sh` + tests; register at PreToolUse Bash. Tests must cover
       the missing-partner allow and the both-exist fail-closed as distinct cases. **Opus 5.**
