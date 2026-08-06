@@ -118,6 +118,8 @@ Scenario I: quoted redirect characters are untouched
    378/378 identical, 0 relaxed — but its 63-command matrix contains **zero** redirect shapes, so
    that result is evidence of *no regression* and is **not** evidence the fix works. Recorded because
    the standing note ("has missed a shape in three consecutive rounds") applies here too.
+   *Provenance ([ADR 0016](../decisions/0016-differential-harness-must-prove-difference.md)): base
+   `main` @ `bc7da76`, ~68 minutes before this branch's own merge.*
 3. **Heredocs put `git commit` at a command position — on both lexers, identically.** A probe script
    whose heredoc body contained `git commit …` was blocked by the live doc-guard. Verified this is the
    pre-existing ADR 0012 shlex limit, unchanged by this fix, by running both lexers over the same
@@ -138,7 +140,8 @@ Scenario I: quoted redirect characters are untouched
       **134/0**, `judge-guard` **101/0**, `classify-git-command` **78/0**, `classify-pr-command`
       **51/0**. With the new 31, **488 checks passing**.
 - [x] 5. Replay: 63 × 6 = 378 pairs, 378 identical, 0 stricter, 0 relaxed. **See correction 2 — this
-      does not demonstrate the fix.**
+      does not demonstrate the fix.** *Provenance: same measurement as correction 2, base `main` @
+      `bc7da76`.*
 - [x] 6. End-to-end falsifier, old lexer vs new, driving the real `git-guard.sh`:
       | case | old | new |
       |---|---|---|

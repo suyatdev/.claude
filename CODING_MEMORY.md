@@ -850,13 +850,64 @@ how this file and its linked files should be written (plain language, major chan
   `bc7da76` **and** self-check that the base predates the fix — the pin alone cures the symptom and
   leaves the failure *mode* intact for the next caller who passes a base by hand. Detail:
   `coding-memory/pr-tracking.md` §PR #39; canonical `docs/features/falsifier-base-pin.md`.
-  · **IN PLANNING (session 10) — `git-guard.replay.sh`. Canonical:
-  `docs/features/replay-harness-base-pin.md`, `phase: planning`, revision 9 — **in a NEW compliance
-  cycle, round 2 pending.** Revision 7 did pass round 7 (blob `56cc369`, HEAD `2d865fd`), the first
-  pass in seven rounds, but the user then took the 5th architecting read's fix; that edit voided the
-  verdict and re-entered at round 1, which **failed** on one violation (task 7 still said "verify
-  A-K" after Scenario L was added). Revision 9 answers it plus three non-blocking items — including
-  one revision 8 introduced. **Do not cite a passing verdict for this spec.** Scope is **wider than
+  · 🔄 **BACK IN PLANNING for revision 10 (session 14-15) — `git-guard.replay.sh`. Canonical:
+  `docs/features/replay-harness-base-pin.md`, **`phase: planning`, `model_tier: high`, branch
+  `fix/replay-harness-base-pin`** @ `6741e41`. Tasks **1-9 are done and committed**; task 10 (judge +
+  PR) is **not**, and is now blocked behind revision 10 **and new task 11**.
+  **Revision 10 written (session 15)** — takes deferred non-goal 2: the default `worktree` candidate
+  is now validated like every other side. Measured red: with `hooks/lib/` deleted, the DEFAULT
+  invocation prints **`260 identical, 118 stricter, 0 relaxed`, exit 0** — NOT the `292/86/0` the
+  round-2 judge reported; the measured split is the mirror of row 5 and was independently
+  reproduced to the digit by two later judge rounds. Scenarios **M, N, O** added (H now A-O).
+  ✅ **Compliance PASSED at round 4** (`8c53c67`, blob `4423a45…`, 0 violations, confidence high).
+  Rounds 1-3 failed, `writing-specs/spec-code-accuracy` cited **three consecutive rounds** (stale
+  line pointers into a file tasks 2-6 grew by ~100 lines). Escalated after round 2; **user decision:
+  label each pointer with its baseline** — a pointer convention now sits at the top of the Spec
+  section and **binds every line number including the append-only history sections**, which is what
+  finally closed it (rounds 2-3 kept missing instances because the sweep treated some regions as out
+  of scope). Round 4 verified it by resolving every pointer against both blobs (`124a85e8` pre-fix,
+  `adbbf0a7` HEAD).
+  ⚠️ **An invented mechanism reached the spec and was retracted.** The advisory read claimed empty
+  fails opposite to missing; Scenario O was written on it; round 4 measured all four shapes and it
+  was false — `shell_segments.py` empty is `260/118/0`, **identical to missing**; only
+  `classify-git-command.py`/`git-guard.sh` empty go loud (`118/0/260`). O now carries the measured
+  table and says it pins the silent shape **by luck, not reasoning**. Cause: adopted on report
+  instead of measured — this spec's own failure mode, reaching the spec.
+  📌 **Four non-blocking notes deliberately NOT applied** — any spec edit invalidates the fresh
+  pass: retracted premise still inline at `:959`; Scenario O's "nothing falsified (b)" should read
+  "nothing previously"; two pre-fix-only prose truths the convention doesn't reach; 1226 lines for a
+  239-line fix.
+  ✅ **Gate confirmed 2026-08-05 (session 15) — phase implementation, Sonnet 5 for task 11.**
+  **All twelve scenarios A-L verified by execution** under `/bin/bash` 3.2.57 (task 7) — Scenario G
+  (relative worktree path) was the last one open, closed by task 5's `WT` resolution (`f06d93f`).
+  Task 6 (`97aef27`) prints the resolved base SHA at both the header and summary line. Task 8
+  confirmed blast radius; task 9 added ADR 0016 + provenance notes on three prior citation sites.
+  · **Observability judge ran TWICE, both `risk=low confidence=high`** — round 1 at `e86ddb5`,
+  round 2 at `a5ee297`, both in
+  `coding-memory/observability-judge/2026-08-05-fix-replay-harness-base-pin.md` (round 2 on top,
+  round 1 verbatim below). Round 1 caught two record-vs-repo slips (uncommitted `phase` flip; task
+  8's blast radius said 3 files, actual 6) — fixed in `a5ee297`. **⚠️ BOTH VERDICTS ARE NOW VOID:**
+  revision 10 adds implementation work, so the judge must re-run at the new HEAD. Do not open the PR
+  against them.
+  · 🔄 **THE DECISION THAT SENT THIS BACK TO PLANNING (user, 2026-08-05): un-defer non-goal 2** —
+  validate the **candidate's own** `hooks/lib/*.py` in the default `worktree` mode, not just the
+  base's. The judge reproduced the gap *live* rather than arguing it: clone, delete
+  `hooks/lib/*.py`, run default mode → **`292 identical, 86 stricter, 0 relaxed`, exit 0**. A
+  candidate broken unrelatedly blocks everything, so it scores zero relaxations **by construction**
+  and prints a clean pass in the one mode people actually run. Being disclosed in ADR 0016 does not
+  change the mechanic. **This voids the round-2 verdict and restarts compliance at round 1**, same
+  as revision 8 did — taken knowingly. **Next: revision 10 on Opus 5 — un-defer the bullet, write
+  the new scenario + task 11, then the compliance judge BEFORE any code.** Then the `gate confirmed`
+  hard stop before implementation resumes.
+  · 📌 Minor, for revision 10 to sweep up: task 9's headline says "four sites" while the part-6 table
+  lists five (3 annotated · 1 already correct · 1 amended via ADR 0016).
+  · Getting to this point took two compliance cycles: revision 7 passed round 7, the user then took
+  the 5th architecting read's fix, that edit voided the verdict and re-entered at round 1, which
+  failed on one violation (task 7 still said "verify A-K" after Scenario L was added). Revision 9
+  answered it plus three non-blocking items — one of which revision 8 itself introduced. Model plan
+  followed as recorded: Opus 5 for tasks 1-4, Sonnet 5 for 5-10 (both switches confirmed by the
+  user at their checkpoints, including the implementation→review one for task 10). Scope was **wider
+  than
   this entry originally said, and its premise was wrong.** Five ways the harness prints a pass that
   could not fail — measured, absolute worktree path, `$?` first: vacuous base (`main` vs itself,
   378/0/0 exit 0); **0-byte base** from unchecked `git show` (base `286fd5a`, all three files absent
@@ -875,6 +926,27 @@ how this file and its linked files should be written (plain language, major chan
   which is how rounds 4 and 5 confused them). **Independent of (1): exit 2 is
   inside `{0,2}`, so fixing the `else` arm does not touch this.** (3) **The harness exits 0
   unconditionally** — 62 relaxations exit exactly like a clean run, so no caller can gate on it.
+  · ✅ **TASK 11 DONE (session 16).** Dead `rm -f` deleted in its own commit (`797dbc4`, verified no
+  behaviour change); worktree candidate now validated before the vacuity check via a new
+  `require_on_disk` (reads disk, writes nothing). **All fifteen scenarios A-O + H verified by
+  execution in one pass** — the old silent `260/118/0` exit 0 red (M) now names the missing helper
+  and refuses; N and O (new) both refuse on a 0-byte guard/helper; L confirms the new rule does not
+  over-fire on a self-contained worktree candidate. `git-guard.test.sh` unaffected, 77/0. ADR 0016
+  amended (three sides, not two; closes-the-example-not-the-limit on `relaxed`). Blast radius
+  re-checked: still exactly the named 8-file set.
+  · ✅ **TASK 10 DONE — PR #40 OPEN** (`https://github.com/suyatdev/.claude/pull/40`), session 16,
+  `origin` = `git@github.com:suyatdev/.claude.git`. Model-switch checkpoint 3 (implementation →
+  review) answered Opus 5; `phase: review`, `model_tier: high`. **Round 5 (implementation, gating)
+  PASSED `risk=low confidence=high` at `f6242c2`** — independently reproduced the red and the fix in
+  its own clone, verified no over-fire, re-ran `git-guard.test.sh` (77/0) and `shellcheck` itself.
+  Closed more than task 11 claimed: a 0-byte worktree `hooks/git-guard.sh` (round 4's flagged
+  no-falsifier gap) is now also refused, though still unpinned by a named scenario. Non-blocking
+  notes left open per this branch's standing no-mid-flight-widening decision: missing self-contained
+  NOTE on the worktree branch (reporting only); `require_on_disk` duplicates `extract_required`'s
+  error strings; restore cost keeps climbing (feature file 1286 lines, this file 2500+). PR opened
+  AT the judged SHA (`f6242c2`) per this branch's `judge-guard.sh`-strict discipline; the judge trail
+  itself committed as a follow-up push, per this repo's established pattern (`a685a1c`).
+  **▶️ NEXT: awaiting user review/merge of PR #40.**
   · ⚠️ **The "false green cited as evidence" premise was WRONG — do not re-adopt it.** The cited
   figures are **valid**. `git-guard-empty-index.md:314-318` reports 378 **pairs** (matrix size) with
   **215/326/346** identical and **162/52/32** relaxed — a self-comparison cannot produce one
