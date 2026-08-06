@@ -3059,3 +3059,54 @@ already says it.
 - `extras+=` touchpoints needing a parallel width entry: `statusline-command.sh:542,544,581,586,609`;
   render/join to replace at `:613-630`. Git block to extend at `:151-169`.
 - Build order is TDD: new wrap/worktree tests first against the *unmodified* script, watch them fail, then implement.
+
+### Round 2 — all 7 round-1 violations fixed; 2 new ones, both real
+
+Spec revised (blob `4e217ec` → `ca5b5e0`), both judges re-dispatched in parallel. Compliance
+**FAIL, 2 violations, both new** — no id repeated, so the persistence tripwire did not fire and round 3
+is still an automatic round. Observability round 2: `risk=medium` (down from high).
+
+**Both judges converged independently on the same hole**, which is why it was believed and fixed:
+
+- `core-conduct/unsurfaced-run-errors` — `last_run_errors` was written to `status.json` and **nothing
+  read it**. Verified in source: `_index_one` catches every exception into `report["errors"]` and
+  continues (`index.py:135-137`), `run_index` stamps status unconditionally at the end
+  (`index.py:100`), `cli.py:66` returns 0 regardless. So a run with Ollama down that indexed *nothing*
+  completes, stamps a fresh `last_run`, and the nudge prints the cheerful line — **clearing the very
+  warning decision 4 designates as the blind scheduler's compensating control.** Same defect as the
+  one this feature exists to fix, one field over.
+- `writing-specs/readme-drift` — `memsearch/README.md:22` asserts "`CODING_MEMORY.md` and
+  `subagents/` transcripts are never indexed"; R8 deletes `CODING_MEMORY.md` from `exclude_paths`
+  (`config.json:16`, confirmed). No task updated the README, which is also the only doc for
+  `memsearch/bin/`, where `install-schedule` lands.
+
+Observability judge added four more, all verified before acting: a **future `run_started`** would pin
+the in-progress line forever (the future-timestamp guard covered `last_run` only); **`status.py:27`**
+still prints `last_indexed` as its freshness answer — the identical misreading, left on the other
+human-facing surface; **no uninstaller** (`git revert` does not remove a job from
+`~/Library/LaunchAgents`); and the **stuck-run line carried the remediation command**, i.e. "run the
+indexer" while one may still be alive — the safety valve becoming the hazard at the threshold.
+It also caught three `R7` references in my own Background text that should have read `R9`.
+
+Measured, not guessed: the orphaned run passed **1h26m** and 405/601 files while round 2 was judging.
+That number is now the reference point next to `RUN_MAX_HOURS` in the spec.
+
+### Round-3 revision (blob `ca5b5e0` → `eef3aea`)
+
+- **R3 rewritten** as "report the state of the last run, not merely its age": in-progress, **stuck**,
+  and **degraded** (`last_run_errors > 0` never renders as fresh), each with its own line. Neither
+  in-progress nor stuck carries the remediation command — `memsearch` has no lock.
+- **`RUN_MAX_HOURS` (6h) split from `STALE_HOURS` (8h).** They answer different questions — how old a
+  *finished* run may be vs. how long a run may *take* — and collapsing them is the same conflation
+  habit as the original bug.
+- Nudge classification is now a 6-row first-match-wins table; a timestamp is *usable* only if it
+  parses and is not in the future, applied to **both** fields; row 1 covers the first-run case
+  (`run_started` present, `last_run` absent) the compliance judge held as a note.
+- `status.py` brought into scope; `install-schedule --uninstall` added; README fix required **in the
+  same commit** as the `exclude_paths` change; falsifier gains item (f).
+- 26 scenarios now (14 nudge, 8 install/uninstall, 4 other). Tasks 3–6 updated; task 4 explicitly
+  requires the degraded test to **assert the emitted line, not the parsed field** — the whole point.
+
+**Next:** round 3 — re-dispatch both judges on blob `eef3aea`, reusing ids
+`core-conduct/unsurfaced-run-errors` and `writing-specs/readme-drift`. **Round 3 is the last automatic
+round**: anything outstanding when it completes escalates to the user rather than looping again.
