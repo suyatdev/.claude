@@ -2537,8 +2537,10 @@ registration in `settings.json` (four hooks here pass tests while unregistered),
 acceptance gate gaining a pinned `k=6` and a 0.30 score floor — the draft's "≥2 hits" would have
 passed on today's ~0.02 noise.
 
-**Also landed:** `docs/remove-rtk-references` (3ec8504) — RTK retired; verified `settings.json`
-registers no RTK hook before removing. Needed a `Doc-Exempt:` trailer since the four paths sit at
-the repo root and doc-guard reads them as source. **`docs/features/verification-marker-gate.md`
+**Also landed:** `docs/remove-rtk-references` (3ec8504) → **PR #41, open**
+(https://github.com/suyatdev/.claude/pull/41; detail: `coding-memory/pr-tracking.md`). RTK retired;
+verified `settings.json` registers no RTK hook before removing — the `SETUP.md` checklist had been
+asking you to verify a hook that did not exist. Needed a `Doc-Exempt:` trailer since the four paths
+sit at the repo root and doc-guard reads them as source, and `JUDGE_EXEMPT` to open the PR. **`docs/features/verification-marker-gate.md`
 (1,166 lines) was restored, not deleted** — its last commits are spec revisions with no
 implementation merge, which is a reason to keep it, not to bin it.

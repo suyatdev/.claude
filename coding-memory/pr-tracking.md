@@ -721,3 +721,32 @@ absent from both sides today.
 **Still present, all unmerged, deliberately untouched:** `backup-calibration-policy-propagation`
 (local only), `docs/verify-before-claiming` (checked out in the surviving `verify-rule` worktree),
 `feature/cmux-version-gate`, `feature/judge-terminal-enforcement`.
+
+### PR #41 — `docs/remove-rtk-references` — 2026-08-06, OPEN
+
+- repo `suyatdev/.claude` · remote `origin` (git@github.com:suyatdev/.claude.git)
+- branch `docs/remove-rtk-references` @ `3ec8504`, forked from `main` @ `0c3464a`
+- URL: https://github.com/suyatdev/.claude/pull/41 · **state: open**
+- `session_origin` created: session 17 (2026-08-06) · most recent push: same session
+- **Not feature-scale** — one chore commit, no `docs/features/` file. This entry plus the commit
+  message are the whole record.
+
+Removes RTK (retired token-optimizing CLI proxy): the `@RTK.md` import from `CLAUDE.md`, the
+`README.md` inventory rows, the `SETUP.md` install section + verification checkbox with
+renumbering, and `RTK.md` itself. `+3 / -49`, four docs files, no executable code.
+
+Two things worth remembering rather than re-deriving:
+
+- **The `SETUP.md` checklist asked you to verify a hook that did not exist.** `settings.json`
+  registers no RTK `PreToolUse` hook — checked before removing anything. An unverifiable checklist
+  item is worse than a missing one.
+- **Needed a `Doc-Exempt:` trailer.** `doc-guard.sh` treats root-level `.md` as source, so a
+  docs-only change at the repo root trips the documentation-checkpoint gate. Expect this for any
+  future `CLAUDE.md`/`README.md`/`SETUP.md`-only commit.
+- **`gh pr create` needed `JUDGE_EXEMPT`** (docs-only, no implementation surface to score).
+
+Deliberately not removed: the `rtk` wrapper-stripping in `git-guard.sh`, `judge-guard.sh` and
+`shell_segments.py` (own tests; ADRs 0012 and 0015 reason about that wrapper list), and historical
+mentions in `docs/decisions/` and `docs/superpowers/plans/` (immutable records).
+
+- next: user merges in the GitHub UI. Branch is behind `main` but the merge-base diff is clean.
