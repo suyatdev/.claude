@@ -2880,3 +2880,53 @@ as a separate follow-up branch after this PR merges. This session's freshness ch
 **Next (new session, after this PR merges or gets review feedback):** no in-branch work expected
 unless review comes back with requested changes. If starting Phase 2, that's a new branch from
 `main` post-merge, not a continuation of this one.
+
+## 2026-08-06 — session 27: Phase 1 merged, Phase 2 diagnosed (spec's item list revised)
+
+**PR #42 merged** — merge commit `a88eee8`, 2026-08-06T18:57:55Z. Closed Phase 1 out: local `main`
+fast-forwarded to the merge commit, `feat/memory-system-split` deleted local **and** remote.
+
+**Gotcha worth reusing — `skip-worktree` blocks a branch switch.** `git checkout main` aborted with
+*"Your local changes to settings.json would be overwritten"*: `settings.json` carries `S`
+(skip-worktree) so its machine-local `model` line stays uncommitted, but checkout still refuses when
+the file's content differs between the two commits. **Do not stash** — that risks the local model
+line. Fix used: `git fetch origin main:main` to fast-forward the *ref* without a checkout, then
+`git checkout main`, which is then a no-op for `settings.json`. Verified after with
+`git show HEAD:settings.json | diff - settings.json` → only the `model` line differs, as designed.
+
+### Phase 2 diagnostic — run before creating any branch or feature file
+
+Measured against the live index (`~/.claude/memory-index/memory.db`, `sqlite3`), not inferred.
+**Two of the spec's six Phase 2 items rest on a wrong premise** (`memory-system-split.spec.md:540`):
+
+1. **The index is 19 days stale, and that single fact explains almost everything.** Every one of the
+   228 rows in `sources` carries `indexed_at = 2026-07-18`; there is no newer row. The last index
+   run was 2026-07-18, nineteen days before today.
+2. **The DB file mtime lies about freshness.** `memory.db` shows `Aug 5 23:09`, which reads as
+   "indexed yesterday". It is not — `query_log` is written on every *query*, so the file mtime
+   tracks reads, not writes. **Freshness must be read from `max(indexed_at)` in `sources`**, never
+   from the file's mtime. Anything built on the mtime (a staleness nudge, a refresh trigger) would
+   silently never fire.
+3. **Spec item 2 — "add `docs/features/**` to indexed sources" — is a no-op.** `~/.claude/docs` is
+   *already* a configured `curated_docs` root in `memsearch/config.json`, and 13 sources under it
+   are indexed. `docs/features/` shows 0 chunks purely because **the earliest feature file was
+   created 2026-07-25, seven days after the last index run**. Confirmed by counting: 12 of the 46
+   `.md` files under `docs/` predate 2026-07-18, and exactly 13 sources under `.claude/docs` are
+   indexed — *the indexed set is the pre-index-run set*. Nothing needs adding to config; the
+   directory needs an index run.
+4. **Spec item 1 — remove `CODING_MEMORY.md` from `exclude_paths` — is real and still stands.**
+   Verified with an escaped LIKE: 0 chunks, and no row in `sources`. The exclusion works.
+   ⚠️ A naive `file_path LIKE '%CODING_MEMORY%'` returns 154 false hits, because `_` is a
+   single-character wildcard in SQL and matches the hyphen in `coding-memory/`. Use
+   `LIKE '%CODING\_MEMORY.md' ESCAPE '\'`. The first pass of this diagnostic got it wrong that way.
+
+**Net effect on Phase 2's shape:** item 4 (*add a refresh trigger*) is not fourth in priority — it
+is the **root cause**. The index froze on 2026-07-18 and nothing reported it for 19 days; items 2
+and 3's symptoms are downstream of that. Item 5's re-measurement gate (k=6, ≥2 hits, ≥0.30, queries
+fixed before rebuild) is unaffected and still the right acceptance bar.
+
+**Not written to the spec.** `memory-system-split` is `phase: review`, which forbids silent spec
+edits, and the file is merged. These findings belong to the Phase 2 feature file when it is created.
+
+**Next:** Phase 2 planning proper — new branch off `main`, fresh `planning` feature file. Model-switch
+checkpoint 1 asked and answered this session: **stay on Opus 5** for planning.
