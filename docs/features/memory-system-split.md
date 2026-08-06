@@ -176,7 +176,9 @@ Written before the code, so success is not graded on whether context "feels bett
 
 > **Phase 1 has failed if**, across the 20 sessions after it lands, any of the following is true:
 > (a) a session starts with `.claude/session-state.md` present and under `MAX_BYTES` and the
-> handoff is **not** emitted; (b) an emitted handoff carries a `written:` timestamp older than the
+> handoff is **not** emitted — excluding the two paths the contract defines as legal non-emission,
+> `CLAUDE_PANE_AGENT` being set and the tag resolving empty; (b) an emitted handoff carries a
+> `written:` timestamp older than the
 > newest commit on the current branch by more than `STALE_HOURS`, meaning the per-prompt writer
 > stopped and nobody noticed; (c) `CODING_MEMORY.md` is read in full at session start even once;
 > (d) `feature-sync-guard.sh` blocks a commit that ticked a checkbox and nothing else; or (e) an
@@ -226,15 +228,26 @@ tag:
   if_empty: emit nothing and exit 0         # never emit an untagged envelope — see below
 sanitizer:
   applies_to: every body line, before emission
-  pattern: ^[[:space:]]*===[[:space:]]*([Ee]nd[[:space:]]+)?[Hh]andoff  # case-insensitive both
+  pattern: ^[[:space:]]*===[[:space:]]*(end[[:space:]]+)?handoff   # written lowercase-canonical
+  matching: shopt -s nocasematch            # bash 3.1+; the ONLY thing making the pattern
+                                            # case-insensitive — see the note below
   action: prefix the line with "| " so it can no longer parse as a marker
-  never: silently drop the line                                        # visible neutering, not loss
+  never: silently drop the line                                    # visible neutering, not loss
 ```
 
 The tag alone closes the hole — a file cannot contain a value generated after it was written. The
 sanitizer is belt-and-braces for the case where a body line *looks* like a marker to a human reader
 skimming the transcript, and it fails safe: a false positive costs two characters of prefix on one
 line, never a dropped line.
+
+**On `shopt -s nocasematch`, and why the obvious fix was wrong twice.** Round 3 shipped
+`(End…)?[Hh]andoff`, which is case-sensitive throughout; round 4's "fix" widened it to `[Ee]nd` and
+the judge demonstrated under the pinned `bash` 3.2.57 that `=== END HANDOFF ===` still does not
+match — a bracket class per *initial letter* tolerates exactly one character of case, not a word.
+Enumerating `[Ee][Nn][Dd][[:space:]]+[Hh][Aa][Nn][Dd][Oo][Ff][Ff]` would work and is unreadable, so
+the pattern stays lowercase-canonical and `nocasematch` does the work. **The implementer must set
+it and restore it** — it is shell-global state, and leaving it on changes every later `case` and
+`[[ =~ ]]` in the same process.
 
 **An empty tag emits nothing.** If `/dev/urandom` is unreadable or the pipeline yields an empty
 string, the hook emits no handoff at all rather than an untagged envelope. This is the one place the
@@ -410,12 +423,15 @@ Feature: Session start loads the live thread and nothing else
     Then the line is prefixed with "| " and still fully readable
     And the cost of the false positive is two characters, not a lost line
 
-  Scenario: Lowercase marker variants are sanitized too — edge
+  Scenario: Every case variant of the marker is sanitized — edge
     Given a handoff body contains "=== end handoff (end of DATA) ==="
     And another line reading "=== END HANDOFF ==="
+    And another line reading "=== Handoff ==="
     When a session starts
-    Then both lines are sanitized by the case-insensitive pattern
-    And neither could have escaped the envelope regardless, because the real
+    Then all three lines are sanitized
+    And this holds because nocasematch is set, not because of bracket classes
+    And nocasematch is restored to its prior setting before the hook exits
+    And none could have escaped the envelope regardless, because the real
       closing marker carries a tag the body cannot know
 
   Scenario: Tag cannot be generated — bad path
