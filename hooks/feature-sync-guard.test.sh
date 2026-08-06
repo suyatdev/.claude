@@ -370,5 +370,38 @@ fi
 run_case "control: same divergent state, real hook -> block"  2 'git commit -m msg'
 
 # =============================================================================
+# Registration assertion: this hook must actually be wired into settings.json. A hook
+# can pass every case above while sitting unregistered, in which case it never runs in
+# production (judge-guard.test.sh:344 names the hazard). Checked against the REAL repo
+# settings.json, not the throwaway $REPO fixture used above — that file is what Claude
+# Code actually loads.
+# =============================================================================
+SETTINGS="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)/settings.json"
+if [ -f "$SETTINGS" ] && /usr/bin/jq -e \
+     '[.hooks.PreToolUse[]?.hooks[]?.command] | any(test("hooks/feature-sync-guard\\.sh"))' \
+     "$SETTINGS" >/dev/null 2>&1; then
+  printf 'ok   — feature-sync-guard.sh is registered under PreToolUse in settings.json\n'
+  pass=$((pass+1))
+else
+  printf 'FAIL — feature-sync-guard.sh is registered under PreToolUse in settings.json (not found in %s)\n' "$SETTINGS"
+  fail=$((fail+1))
+fi
+
+# Self-check: the assertion above must be able to fail, not just always pass — the exact
+# vacuous-test trap task 4 hit. Strip the hook from a copy of the real file and confirm
+# the same query reports it missing.
+MUTANT="$TMP/settings-mutant.json"
+/usr/bin/jq 'del(.hooks.PreToolUse[]?.hooks[]? | select(.command | test("feature-sync-guard")))' \
+  "$SETTINGS" > "$MUTANT" 2>/dev/null
+if /usr/bin/jq -e \
+     '[.hooks.PreToolUse[]?.hooks[]?.command] | any(test("hooks/feature-sync-guard\\.sh"))' \
+     "$MUTANT" >/dev/null 2>&1; then
+  printf 'FAIL — registration check can fail (hook removed from a copy): mutant still reported present\n'
+  fail=$((fail+1))
+else
+  printf 'ok   — registration check can fail (hook removed from a copy)\n'
+  pass=$((pass+1))
+fi
+
 printf '\nfeature-sync-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

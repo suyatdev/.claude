@@ -266,5 +266,33 @@ case "$OUT" in
   *) ok "only session-state.md is read (context.md/task-history.md/CODING_MEMORY.md ignored)" ;;
 esac
 
+# --- Registration assertion: this hook must actually be wired into settings.json -----
+# A hook can pass every test above while sitting unregistered in settings.json, in which
+# case it never runs in production (judge-guard.test.sh:344 names the hazard). Checked
+# against the REAL repo settings.json, not a fixture — that file is what Claude Code
+# actually loads.
+SETTINGS="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null)/settings.json"
+if [ -f "$SETTINGS" ] && /usr/bin/jq -e \
+     '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("hooks/handoff/slim-session-start\\.sh"))' \
+     "$SETTINGS" >/dev/null 2>&1; then
+  ok "slim-session-start.sh is registered under SessionStart in settings.json"
+else
+  bad "slim-session-start.sh is registered under SessionStart in settings.json" "not found in $SETTINGS"
+fi
+
+# Self-check: the assertion above must be able to fail, not just always pass — the exact
+# vacuous-test trap task 4 hit. Strip the hook from a copy of the real file and confirm
+# the same query reports it missing.
+MUTANT="$TMP/settings-mutant.json"
+/usr/bin/jq 'del(.hooks.SessionStart[]?.hooks[]? | select(.command | test("slim-session-start")))' \
+  "$SETTINGS" > "$MUTANT" 2>/dev/null
+if /usr/bin/jq -e \
+     '[.hooks.SessionStart[]?.hooks[]?.command] | any(test("hooks/handoff/slim-session-start\\.sh"))' \
+     "$MUTANT" >/dev/null 2>&1; then
+  bad "registration check can fail (hook removed from a copy)" "mutant still reported present"
+else
+  ok "registration check can fail (hook removed from a copy)"
+fi
+
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ]

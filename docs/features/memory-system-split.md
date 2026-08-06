@@ -622,11 +622,20 @@ makes actively obstructive.
       · Parser false-positive guard: `- [ADR 0015](docs/...)` must not read as a broken checkbox,
       so a checkbox candidate is only a bracket holding ≤1 char. Verified against all 9 real
       feature files — 0 parse errors. `shellcheck -x` clean; full suite 612 checks, 0 failures.
-- [ ] 12 — Add a registration assertion to `slim-session-start` and `feature-sync-guard` test files:
+- [x] 12 — Add a registration assertion to `slim-session-start` and `feature-sync-guard` test files:
       each greps `settings.json` for its own hook and fails if absent. Four hooks in this repo pass
       their tests while unregistered; `judge-guard.test.sh:344` already names the hazard. Decision 6
       trades the one-canonical-file gate *entirely* on task 4's hook firing — a dormant Tier-1 hook
-      is indistinguishable from a compliant one. *(Sonnet 5)*
+      is indistinguishable from a compliant one. *(Sonnet 5)* — done: each test file resolves the
+      real repo `settings.json` via `git rev-parse --show-toplevel` (not the throwaway `$TMP`/`$REPO`
+      fixture the rest of the suite uses) and runs a `jq` query scoped to its own top-level hook
+      array — `.hooks.SessionStart[]` for `slim-session-start.sh`, `.hooks.PreToolUse[]` for
+      `feature-sync-guard.sh` — so a substring hit in an unrelated key or comment can't pass it.
+      **Confirmed the check can fail**, per the task-4 vacuous-test lesson: each file also builds a
+      `jq`-mutated copy with its own hook's command deleted and asserts the same query reports it
+      missing. Both assertions pass against the live file (already registered); both mutants
+      correctly fail. `shellcheck -x` clean on both files; full `hooks/*.test.sh` suite re-run
+      (9 files, 452 checks, 0 failures) — no regressions.
 - [ ] 5 — Split **this file only** into the pair shape (decision 7). The other 8 feature files are
       not migrated, now or later. *(Sonnet 5)*
 - [ ] 6 — ADR: supersedes ADR 0006 rows 1 and 15; records the decision-6 departure from
