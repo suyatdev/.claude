@@ -36,7 +36,8 @@ task 4 only.**
 - [x] 6 — ADR: supersedes ADR 0006 rows 1 and 15; records the decision-6 departure from
       one-canonical-file **and** decision 7's permanent mixed-shape repo. *(Sonnet 5)* — done:
       `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md`.
-- [ ] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context). *(Sonnet 5)*
+- [x] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context). *(Sonnet 5)*
+      — done: also fixed the "Branch resume" bullet (:14), same stale assumption.
 - [ ] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape (the MAY, decision 8).
       *(Sonnet 5)*
 - [ ] 9 — Observability judge (implementation stage), then PR. *(Sonnet 5)*

@@ -649,7 +649,19 @@ makes actively obstructive.
       of truth) and both feature-file decisions (6: the one-canonical-file gate MAY be departed
       from, mitigated by `feature-sync-guard.sh`; 7: only this feature migrated, permanently).
       Embeds the spec's three-artifact Design mermaid diagram per `diagramming-technical-docs`.
-- [ ] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context) *(Sonnet 5)*
+- [x] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context) *(Sonnet 5)*
+      — done: rewrote the "Brainstorm-then-branch" bullet (:12) to drop the "inherits the full
+      brainstorm context automatically" claim, replacing it with the archive-append framing —
+      `CODING_MEMORY.md` is retired as an auto-loaded read target (decision 1), so a feature branch
+      carries the brainstorm forward via the feature file's spec (created before the branch exists),
+      not by any future session reading `CODING_MEMORY.md` back. Also fixed the "Branch resume"
+      bullet (:14), which had the identical bug — "read its entry in `CODING_MEMORY.md` and resume"
+      — and was already inconsistent with this file's own "PR Memory Tracking" section (:45, fixed
+      by an earlier commit), which correctly routes feature-scale branches to
+      `docs/features/<name>.md`. Both bullets now point at `managing-session-memory`'s restore
+      procedure instead of restating it. Both edits predate the original commit
+      (`c2ca102`, before this split); left unfixed they would have contradicted the rest of the
+      file after this task's own edit landed.
 - [ ] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape. Must state the MAY
       (decision 8) in words that cannot be read as a MUST: single file is the default, the spec
       half is optional and added only when the checklist file stops reading comfortably in one

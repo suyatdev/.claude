@@ -2759,3 +2759,37 @@ that task-boundary offer.
 **Next:** task 7 (rewrite `preparing-pull-requests`:12 — append-to-archive, not inherit-context)
 → 8 (`rules/gates.md` MAY wording) → 9 (observability judge, then PR). All remaining tasks are
 Sonnet 5; checkpoint 3 (implementation → review) still owed before task 9.
+
+## 2026-08-06 — session 24: task 7 done (preparing-pull-requests rewrite)
+
+Restored from handoff `2fa22244` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, up to date with `origin`. Stayed on **Sonnet 5** per the checkpoint-2 answer already on
+record — no re-ask.
+
+Task 7: read `skills/preparing-pull-requests/SKILL.md` in full before editing. The named target,
+the "Brainstorm-then-branch" bullet (:12), claimed committing `CODING_MEMORY.md` to `main` before
+branching means "every future branch forked from `main` then inherits the full brainstorm context
+automatically" — exactly the root-cause claim the spec's Problem section (`memory-system-split.spec.md:38-41`)
+identifies as the design bug decision 1 retired. Rewrote it to the archive-append framing:
+`CODING_MEMORY.md` is no longer an auto-loaded read target, so the feature file's spec (created
+before the branch exists, during planning) is what actually carries the brainstorm forward across
+the branch boundary, not a future session reading `CODING_MEMORY.md` back.
+
+While reading the file end to end, found the very next bullet, "Branch resume" (:14), had the
+identical bug — "read its entry in `CODING_MEMORY.md` and resume from the latest checkpoint" — and
+was already inconsistent with this same file's "PR Memory Tracking" section (:45), which an earlier
+commit (`62492a8`) had correctly updated to route feature-scale branches to
+`docs/features/<name>.md`. `git log -p --follow` confirmed both stale bullets dated to the file's
+original commit (`c2ca102`), pre-dating the split. Fixed both in the same edit rather than leaving
+:14 to contradict :12 and :45 — task 7's own framing ("append-to-archive, not inherit-context") is
+a principle the whole file needs to satisfy, not a single line. Both bullets now point at
+`managing-session-memory`'s restore procedure instead of restating it, keeping one place as the
+source of truth for the restore mechanics.
+
+Ticked task 7 in both halves of the pair with matching completion notes (task identity is the task
+number; the differing prose after each doesn't affect `feature-sync-guard.sh`).
+
+**Next:** task 8 (`rules/gates.md` one-canonical-file stub — state the MAY from decision 8 in
+words that can't be read as a MUST) → 9 (observability judge, then PR). Checkpoint 3
+(implementation → review) still owed before task 9. Remaining tasks are Sonnet 5.
