@@ -57,8 +57,6 @@ extract_helpers_if_referenced() {  # $1 = resolved sha, $2 = side label, $3 = si
     extract_required "$1" "$2" hooks/lib/classify-git-command.py "$3/lib/classify-git-command.py"
     extract_required "$1" "$2" hooks/lib/shell_segments.py       "$3/lib/shell_segments.py"
   else
-    # Must not be left on disk: they cannot execute, so they are not part of this side.
-    rm -f "$3/lib/classify-git-command.py" "$3/lib/shell_segments.py"
     printf 'NOTE: the %s at %s is a self-contained guard (git-guard.sh references no lib/); its hooks/lib/*.py are not part of this comparison.\n' "$2" "$1"
   fi
 }
