@@ -640,8 +640,15 @@ makes actively obstructive.
       order, on the same numbering. The "Out of band" RTK-removal note that used to trail this
       section is dropped: it landed on `main` via PR #41 (`e3b939d`) before this split, so it was
       dead weight, not a task.
-- [ ] 6 — ADR: supersedes ADR 0006 rows 1 and 15; records the decision-6 departure from
-      one-canonical-file **and** decision 7's permanent mixed-shape repo *(Sonnet 5)*
+- [x] 6 — ADR: supersedes ADR 0006 rows 1 and 15; records the decision-6 departure from
+      one-canonical-file **and** decision 7's permanent mixed-shape repo *(Sonnet 5)* — done:
+      `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md`. Records both
+      superseded rows (session-start restore now re-registers a SessionStart hook, but a
+      house-authored one reading only `session-state.md`, not the vendored handoff script; storage
+      posture keeps `CODING_MEMORY.md` committed but retires it as the "what were we doing" source
+      of truth) and both feature-file decisions (6: the one-canonical-file gate MAY be departed
+      from, mitigated by `feature-sync-guard.sh`; 7: only this feature migrated, permanently).
+      Embeds the spec's three-artifact Design mermaid diagram per `diagramming-technical-docs`.
 - [ ] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context) *(Sonnet 5)*
 - [ ] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape. Must state the MAY
       (decision 8) in words that cannot be read as a MUST: single file is the default, the spec

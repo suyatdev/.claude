@@ -33,8 +33,9 @@ task 4 only.**
       files. *(Sonnet 5)*
 - [x] 5 — Split **this file** into the pair shape (decision 7). The other 8 feature files are not
       migrated, now or later. *(Sonnet 5)* — done: this file plus `memory-system-split.spec.md`.
-- [ ] 6 — ADR: supersedes ADR 0006 rows 1 and 15; records the decision-6 departure from
-      one-canonical-file **and** decision 7's permanent mixed-shape repo. *(Sonnet 5)*
+- [x] 6 — ADR: supersedes ADR 0006 rows 1 and 15; records the decision-6 departure from
+      one-canonical-file **and** decision 7's permanent mixed-shape repo. *(Sonnet 5)* — done:
+      `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md`.
 - [ ] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context). *(Sonnet 5)*
 - [ ] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape (the MAY, decision 8).
       *(Sonnet 5)*
