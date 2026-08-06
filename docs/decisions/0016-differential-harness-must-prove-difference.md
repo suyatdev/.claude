@@ -38,22 +38,29 @@ instance a review-time catch instead of a third rediscovery.
 
 This change makes the harness refuse to report agreement when its two sides are provably the same
 program (same required file set, identical bytes), and makes it fail with a named error — instead of
-silently proceeding — when a side's required files cannot be read or when the worktree path cannot be
-resolved to a directory containing `hooks/git-guard.sh`. Every successful run now prints its resolved
-40-character base SHA in both the header and the summary line, not the rev string.
+silently proceeding — when a side's required files cannot be read, on **any of the three sides**
+(the base, a rev candidate, or the default `worktree` candidate — the last of these validated only as
+of this branch's revision 10, having been exempt through revisions 1-9) or when the worktree path
+cannot be resolved to a directory containing `hooks/git-guard.sh`. Every successful run now prints its
+resolved 40-character base SHA in both the header and the summary line, not the rev string.
 
 **It does not make the harness robust to an arbitrary broken candidate.** The `else → same` tally in
 the comparison loop still counts any exit code outside `{0, 2}` as agreement — a candidate that crashes
 with a segfault or exits 127 for a reason other than the now-fixed unresolved-path case is still
 tallied as matching the baseline. Separately, `relaxed` is defined as `base = 2 && candidate = 0`, so a
 candidate that blocks *everything* (exits 2 unconditionally, including on commands that don't touch
-git) registers zero relaxations by construction — a false pass dressed as hardening. Both limits are
-pre-existing in the comparison logic this change does not otherwise modify; they are queued as their
-own item, not fixed here, per the user's explicit decision to avoid widening this branch mid-flight —
-the same decision this repo made, and violated, on the two branches immediately preceding this one.
-The harness's exit code also still carries no signal about *relaxations found*: a run that reports 62
-relaxed rows exits 0, identically to a clean run. All three are recorded as open limits, not silently
-inherited.
+git) registers zero relaxations by construction — a false pass dressed as hardening. **The example
+closes; the limit does not:** revision 10 refuses the one shape of this that was reachable through
+missing or empty required files (a worktree candidate with `hooks/lib/*.py` deleted or truncated used
+to produce exactly this false `0 relaxed` — Scenario M), but a healthy-looking candidate can still
+reach the same false pass by other means the file-presence check cannot see — `python3` absent from
+`PATH`, a present-but-broken helper, or a guard that legitimately blocks every command in the matrix.
+Both limits are pre-existing in the comparison logic this change does not otherwise modify; they are
+queued as their own item, not fixed here, per the user's explicit decision to avoid widening this
+branch mid-flight — the same decision this repo made, and violated, on the two branches immediately
+preceding this one. The harness's exit code also still carries no signal about *relaxations found*: a
+run that reports 62 relaxed rows exits 0, identically to a clean run. All three are recorded as open
+limits, not silently inherited.
 
 ## Provenance of prior figures
 

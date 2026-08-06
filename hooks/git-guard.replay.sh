@@ -49,6 +49,18 @@ extract_required() {
   fi
 }
 
+# Same present-and-non-empty rule as extract_required, for a side whose bytes already
+# live on disk: nothing is extracted, nothing is written. $1 = side identity (here, the
+# resolved absolute worktree path), $2 = side label, $3 = path in repo, $4 = disk path.
+require_on_disk() {
+  if [ ! -f "$4" ]; then
+    fail "the $2 at $1 does not contain $3, so its guard cannot run; no matrix was produced."
+  fi
+  if [ ! -s "$4" ]; then
+    fail "the $2 at $1 has an empty $3 — an empty file cannot execute as intended and would manufacture a false result."
+  fi
+}
+
 # The two lib/*.py helpers are required ONLY when that side's git-guard.sh actually
 # references lib/, read from the bytes that will execute. A guard that predates the
 # helper split is self-contained: recorded, not rejected.
@@ -69,10 +81,17 @@ extract_helpers_if_referenced "$BASE_SHA" base "$BASE"
 
 BASE_LIB="$BASE/lib"
 if [ "$UNDER_TEST" = worktree ]; then
-  # Deliberately not validated here: part 2 covers the base and a rev candidate only.
   # Read from disk, not `git show HEAD:` — the on-disk bytes are the ones that execute.
   NEW="$WT/hooks/git-guard.sh"
   CAND_LIB="$WT/hooks/lib"
+  # Validated here, same as any other side (part 2, revision 10): present and non-empty,
+  # plus the two lib/*.py helpers if this guard references lib/. Read-only — no
+  # extraction, no rm -f — because $WT is the user's real repository, not a temp dir.
+  require_on_disk "$WT" candidate hooks/git-guard.sh "$NEW"
+  if grep -q 'lib/' "$NEW"; then
+    require_on_disk "$WT" candidate hooks/lib/classify-git-command.py "$CAND_LIB/classify-git-command.py"
+    require_on_disk "$WT" candidate hooks/lib/shell_segments.py       "$CAND_LIB/shell_segments.py"
+  fi
 else
   CAND_SHA="$(resolve_rev "$UNDER_TEST" candidate)" || exit 1
   CAND="$TMP/cand"; mkdir -p "$CAND/lib"

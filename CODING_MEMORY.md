@@ -877,8 +877,7 @@ how this file and its linked files should be written (plain language, major chan
   pass: retracted premise still inline at `:959`; Scenario O's "nothing falsified (b)" should read
   "nothing previously"; two pre-fix-only prose truths the convention doesn't reach; 1226 lines for a
   239-line fix.
-  ▶️ **NEXT: the `gate confirmed` hard stop** (planning → implementation) — also a mandatory
-  model-switch checkpoint and a `/clear` point. Then task 11, then task 10's judge at the new HEAD.
+  ✅ **Gate confirmed 2026-08-05 (session 15) — phase implementation, Sonnet 5 for task 11.**
   **All twelve scenarios A-L verified by execution** under `/bin/bash` 3.2.57 (task 7) — Scenario G
   (relative worktree path) was the last one open, closed by task 5's `WT` resolution (`f06d93f`).
   Task 6 (`97aef27`) prints the resolved base SHA at both the header and summary line. Task 8
@@ -927,6 +926,15 @@ how this file and its linked files should be written (plain language, major chan
   which is how rounds 4 and 5 confused them). **Independent of (1): exit 2 is
   inside `{0,2}`, so fixing the `else` arm does not touch this.** (3) **The harness exits 0
   unconditionally** — 62 relaxations exit exactly like a clean run, so no caller can gate on it.
+  · ✅ **TASK 11 DONE (session 16).** Dead `rm -f` deleted in its own commit (`797dbc4`, verified no
+  behaviour change); worktree candidate now validated before the vacuity check via a new
+  `require_on_disk` (reads disk, writes nothing). **All fifteen scenarios A-O + H verified by
+  execution in one pass** — the old silent `260/118/0` exit 0 red (M) now names the missing helper
+  and refuses; N and O (new) both refuse on a 0-byte guard/helper; L confirms the new rule does not
+  over-fire on a self-contained worktree candidate. `git-guard.test.sh` unaffected, 77/0. ADR 0016
+  amended (three sides, not two; closes-the-example-not-the-limit on `relaxed`). Blast radius
+  re-checked: still exactly the named 8-file set. **Next: task 10 — observability judge at the new
+  HEAD, then PR.**
   · ⚠️ **The "false green cited as evidence" premise was WRONG — do not re-adopt it.** The cited
   figures are **valid**. `git-guard-empty-index.md:314-318` reports 378 **pairs** (matrix size) with
   **215/326/346** identical and **162/52/32** relaxed — a self-comparison cannot produce one

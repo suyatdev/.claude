@@ -791,7 +791,7 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         revision 10; the sub-bullets were already right, only the one-liner was loose.
       - ⚠️ **Task 11 lands before this one.** The judge re-runs at the HEAD that includes it.
 
-- [ ] 11. Validate the default `worktree` candidate (part 2, revision 10 — was deferral 2).
+- [x] 11. Validate the default `worktree` candidate (part 2, revision 10 — was deferral 2).
       - ⚙️ **Gate confirmed 2026-08-05 (session 15); model-switch checkpoint 2 answered: Sonnet 5
         for all of task 11**, `model_tier: low` set at the same time. Compliance passed round 4 at
         `8c53c67` (blob `4423a45…`), so the spec below is final — **do not edit it to make an
@@ -869,6 +869,45 @@ even then it must be visibly labelled as unresolved rather than presented as a b
         Any *other* path means the change widened — the exact failure the last two branches in this
         class shipped. `hooks/git-guard.sh` in particular must stay untouched. Rows 7-8 are process
         output, not scope: they are why a bare *count* cannot gate anything.
+      - ✅ 2026-08-05: **Red reproduced first**, then fixed. Dead `rm -f` at (pre-fix) `replay.sh:61`
+        deleted in its own commit (`797dbc4`), verified no behaviour change by re-measuring the
+        `e3b09ba` self-contained-guard reference row unchanged at `234/82/62` exit 0. Then a new
+        `require_on_disk` function (mirrors `extract_required`'s two messages, no extraction — reads
+        the worktree's on-disk bytes directly, writes nothing) wired into the `UNDER_TEST = worktree`
+        branch, firing before part 3's vacuity comparison, exactly as Scenario M requires. The stale
+        "Deliberately not validated here" comment is gone.
+      - **All fifteen scenarios (A-O, H as the aggregate) verified by execution in one pass**, `$?`
+        captured immediately after each run:
+
+        | scenario | result | exit |
+        |---|---|---|
+        | A | refuses, names `56f1dfd…` (not `main`) | 1 |
+        | B | refuses under `f5c5689` (different rev, identical blobs) | 1 |
+        | C | `base=b17a666…`, `358/20/0` | 0 |
+        | D | `base=bc7da76…`, `378/0/0` | 0 |
+        | E | names `286fd5a…` + missing `hooks/git-guard.sh` | 1 |
+        | F | names `'0000000'` as typed, zero 40-char SHAs | 1 |
+        | G | `.` resolved, `base=b17a666…`, `358/20/0` | 0 |
+        | I | self-contained NOTE, `base=e3b09ba…`, `234/82/62` | 0 |
+        | J | names resolved SHA + missing `hooks/lib/classify-git-command.py` | 1 |
+        | K | self-contained NOTE, then refuses (vacuous) | 1 |
+        | L | self-contained NOTE, then **vacuity refusal, not a named error** — the worktree side's
+            own set is `{git-guard.sh}` too, so validation correctly did not fire | 1 |
+        | M | names the resolved absolute worktree path + missing `hooks/lib/classify-git-command.py`
+            — was the silent `260/118/0` exit 0 red | 1 |
+        | N | names the resolved base SHA + "has an empty `hooks/git-guard.sh`" | 1 |
+        | O | names the resolved absolute worktree path + "has an empty
+            `hooks/lib/shell_segments.py`" | 1 |
+        | H | holds: A,B,E,F,J,K,L,M,N,O refuse/error; C,D,G,I report — confirmed by the rows above | — |
+
+        J, L, N synthesized per task 4's and this task's recipes in fresh scratchpad clones (do not
+        survive `/clear`); L's base and candidate lived in one clone, base as an orphan commit not
+        checked out. `hooks/git-guard.test.sh` re-run: **77 passed, 0 failed**, unaffected.
+      - ADR 0016 `:37-56` amended: "a side's required files cannot be read" now states explicitly it
+        covers all three sides, and the `relaxed`-limit paragraph carries the closes-the-example-not-
+        the-limit distinction — Scenario M's shape is closed, `python3` off `PATH` / a broken-but-
+        present helper / a legitimately block-everything guard are not.
+      - Blast radius re-checked against the named 8-file set: unchanged, nothing outside it touched.
 
 ## Revision 10 — deferred non-goal 2 taken (user decision, session 14)
 
