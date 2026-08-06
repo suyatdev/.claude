@@ -2682,4 +2682,43 @@ accumulated work. Asked the user rather than guessing; they chose to continue ta
 checkpoint once it was actually done, which is what happened here.
 
 **Next:** task 5 (split this feature file into the pair shape, decision 7) → 6 → 7 → 8 → 9.
+
+## 2026-08-06 — session 22: task 5 done (memory-system-split pair split)
+
+Restored from handoff `617af5d0` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, working tree was
+clean. Stayed on **Sonnet 5** per the checkpoint-2 answer.
+
+One thing flagged before starting: `git log main..HEAD` showed an extra commit (`02d5c25`,
+"feat(statusline): show reasoning effort next to model name") sitting on this branch that the prior
+handoff never mentioned — a small, self-contained, already-clean commit unrelated to this feature
+(touches `statusline-command.sh` only). Read it, confirmed it doesn't conflict with or touch
+anything task 5 needed, and proceeded; noting it here since a commit a handoff doesn't account for
+is exactly the kind of thing the restore discipline says to reconcile rather than silently carry
+forward — in this case reconciliation was "read it, it's fine," not an action.
+
+Task 5: split `docs/features/memory-system-split.md` (676 lines) into the pair shape per decision
+6/7 — `memory-system-split.md` now holds only frontmatter + a terse `## Tasks` checklist (46
+lines), and the new `memory-system-split.spec.md` (no frontmatter, 675 lines) holds
+Problem/Decisions/Design/Contracts/Scenarios/Phase 2/Open items plus the same `## Tasks` list at
+full completion-note detail. Task identity (leading text before each item's em dash) is the same
+task number in both files by construction, since both lists were split from one source in the same
+order.
+
+Also folded in while splitting: the "Out of band, before task 11" note about committing the RTK
+removal was stale (already merged to `main` via PR #41, commit `e3b939d`, before this branch even
+needed it) — dropped rather than carried into either new file. The Bootstrapping note at the top of
+the spec half was rewritten from future to past tense now that the migration it described is done.
+
+**Verified, not just asserted:** ran the real `hooks/lib/feature_tasks.py` comparator against the
+two drafted files before installing them (exit 0 — same task set) and a live `feature-sync-guard.sh`
+simulation via a fake `PreToolUse` payload after staging both files (exit 0 — allowed). Full
+`hooks/*.test.sh` suite re-run: **9 files, 452 checks, 0 failures** — no regressions from the new
+`.spec.md` touching `phase-guard.sh`'s glob or `feature-sync-guard.sh`'s pair logic. Committed
+`c821525`.
+
+**Next:** task 6 (ADR superseding ADR 0006 rows 1 and 15) → 7 (rewrite
+`preparing-pull-requests`:12) → 8 (`rules/gates.md` MAY wording) → 9 (observability judge, then
+PR). All remaining tasks are Sonnet 5; checkpoint 3 (implementation → review) still owed before
+task 9.
 Checkpoint 3 (implementation → review) still owed before task 9.
