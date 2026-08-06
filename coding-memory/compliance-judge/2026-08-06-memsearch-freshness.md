@@ -471,3 +471,155 @@ None.
 - **`scheduled-index.log` mode and rotation remain unspecified**, as in round 3. Machine-local,
   single-user, and the log carries paths and exception text rather than content; the spec does
   justify the filename's separation from `reindex.log`.
+
+---
+
+## Round 1 (new loop) — 2026-08-06T23:44:03Z
+
+Fresh loop. The prior loop reached PASS at its round 4; the user then reversed a decision
+(`CODING_MEMORY.md` is now to be indexed) and the spec was materially revised, invalidating that
+verdict. Round numbering restarts; prior-loop ids are reused where the violation recurs.
+
+- **Verdict: FAIL** (2 violations)
+- head_sha: `3b793fa0df4e2d4d1f0ecb598edf6bc86cc6c567`
+- spec_blob_sha: `f8268b53126e8dacd48e4eb37b0478e4a10f83d4`
+- Rule sources read: `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`,
+  `skills/writing-secure-code/SKILL.md`, `rules/gates.md`, `CLAUDE.md`
+  (no `.claude/project-standards.md` exists in this repo)
+- Confidence: **high** — every claim R10 makes about the codebase was opened and read at HEAD;
+  the two findings are quoted from the live source tree, not inferred.
+- Waived: none.
+
+### Layman summary
+
+R10 is thorough, well-argued, and **not buildable as written**. The argument for the reversal is the
+strongest part of the spec: the original exclusion existed because `CODING_MEMORY.md`'s durable
+content was "already promoted" into indexed files, and R10 proves with dates that the promotion
+stopped three weeks ago. That reasoning holds. What does not hold is R10's map of the code it tells
+the builder to edit — three of its pointers are wrong, and one of them is wrong in a way that
+destroys something that currently works.
+
+**The golden query is at line 4, not line 2.** The spec says `golden_queries.json:2` three times —
+in the diagnostic table, in R10.4, and in task 7 — and instructs the builder to replace that line
+because its premise is false. Line 2 is a different, perfectly true query (`"why did we choose
+sqlite over qdrant…"`, a `must` query). The falsified one is on line 4. A builder following the
+instruction literally deletes a passing acceptance query and leaves the broken one in place. This is
+not a guess on my part: **this same file's round-4 entry, written yesterday, cites
+`golden_queries.json:4` correctly.** The number got worse in the revision.
+
+**The config guard is at lines 57-60, not 56-59.** Line 56 is
+`excludes = tuple(raw.get("exclude_paths", ()))` — a load-bearing assignment consumed twelve lines
+later as `exclude_paths=excludes`. R10.2 says "delete the `ConfigError` check in
+`config.py:56-59`." Deleting exactly that range removes the `excludes` assignment, leaves the
+raise's orphaned closing `)` on line 60, and yields a `SyntaxError` plus an undefined name — so
+`load_config` fails for **every** caller, which is precisely the "breaks a caller it does not name"
+risk. The spec even adds "`load_config` keeps its other validation unchanged," showing the intent is
+right; the coordinates are not.
+
+**"The three pinning tests" undercounts the blast radius to less than half.** The real number is
+seven assertions across two files. Four of them are counts that nobody has named: `test_index.py`
+asserts `report["processed"] == 4` at line 84 and again at line 135, `== 3` at line 149, and `== 2`
+at line 160. The test fixture at `test_index.py:58` writes a `CODING_MEMORY.md` into the corpus
+precisely so it can be proved *not* indexed; once the exclusion lifts, that file becomes a fifth
+indexable source and **every one of those four numbers is off by exactly one.** The spec gives no
+new values, so the builder invents them — and an agent watching `processed == 4` fail has an obvious
+wrong fix available (put the exclusion back, or edit the fixture) that would silently defeat the
+whole requirement.
+
+Separately, `test_index.py:93` is a *single compound* assertion —
+`assert not any("CODING_MEMORY" in p or "subagents" in p for p in all_paths)`. R10.3 says to flip it
+to assert inclusion while "**the `subagents/` assertions in both stay exactly as they are**." Both
+cannot be true of one line. It has to be split into two assertions, and the spec never says so.
+
+The rest of the revision is genuinely good and I want that on the record. Every *other* code
+citation verifies exactly: `config.json:16`, `README.md:22`, `status.py:27`,
+`index.py:100/125-127/135-137`, `db.py:121/125/156`, `cli.py:66`, `test_config.py:40-43` and `:46-48`,
+the design doc's lines 58, 67, 70, 135 and its 154-163 "What Is NOT Indexed" section, and the plan's
+line 19. The evidence for the reversal checks out too — `is_excluded` really is a substring match
+(`return any(pat in s for pat in cfg.exclude_paths)`), so the three-repo reach R10 names is real, and
+`digest_input_char_cap` really does apply only to `_transcript_chunks`, so the "docs are never
+truncated" aside is correct. The three measurement traps are all true of the code as it stands.
+The historical `core-conduct/unsurfaced-run-errors` violation stays closed: decision 6, R3's degraded
+line, the classification table's row 5, and task 4's "assert the emitted line, not the parsed field"
+now form a complete read path for `last_run_errors`.
+
+The second finding is small and cheap: one surviving sentence in a document the change already opens.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/r8-missing-config-validator` | `skills/writing-specs/SKILL.md` | A spec must be "precise enough that the agent has nothing left to guess at"; "anything you leave implicit, the agent infers — and inference is where the defects come from" | Requirements → R10 (parts 2, 3, 4); Diagnostic findings table rows 1 and 3; Tasks → 7 | R10's coordinates into the codebase are wrong in three places, so the reversal cannot be executed as specified: `golden_queries.json:2` is the still-true sqlite-over-qdrant query (the falsified one is line 4), `config.py:56-59` includes the `excludes` assignment whose deletion breaks every `load_config` caller (the guard is 57-60), and "the three pinning tests" omits four `report["processed"]` count assertions (`test_index.py:84,135,149,160`) that each shift by one while `test_index.py:93` is a single compound assertion that cannot both flip and leave its `subagents/` half untouched. |
+| 2 | `writing-specs/readme-drift` | `skills/writing-specs/SKILL.md` | "Drift causes hallucination… keeping them aligned is not tidiness; it is correctness" — update the doc in the change that makes it wrong, not later | Requirements → R10 part 5; Scenarios → "Every document asserting the exclusion is corrected in the same commit"; Tasks → 7 | `docs/superpowers/plans/2026-07-17-memory-rag-index.md:2828` still asserts "`CODING_MEMORY.md` and `subagents/` transcripts are never indexed" and is absent from R10.5's list, even though task 7 already edits line 19 of that same file and the file sits inside the indexed `docs/` corpus — so after the change the index itself would answer "is CODING_MEMORY.md indexed?" with the retired invariant. |
+
+### Prior-loop violation ids — recurrence record
+
+| prior id | disposition this round |
+|---|---|
+| `writing-specs/r8-missing-config-validator` | **recurs** (id reused). Different manifestation, same territory and same rule: the previous loop's R8 was unbuildable because it ignored the `ConfigError` guard entirely; R10 now enumerates that guard correctly in prose but misplaces its line range, misplaces the golden query, and under-counts the test blast radius. The class of defect — the reversal specified against a codebase it has mis-mapped — is the same, which is why the slug is preserved rather than re-minted. |
+| `writing-specs/readme-drift` | **recurs** (id reused). The primary surfaces are genuinely fixed — `README.md:22`, the design doc's five sites, and `plan:19` are all named and all verify — but one prose assertion of the retired invariant survives at `plan:2828` in a file the change already opens. |
+| `core-conduct/unsurfaced-run-errors` | **stays closed.** `last_run_errors` is written (R5), classified (Contracts row 5), rendered (R3 degraded line), falsified ((f) in the falsifier), and tested against the emitted line rather than the parsed field (task 4). |
+
+### Notes (non-blocking)
+
+- **Not cited — `last_run_errors` has no stated usability rule**, unlike the two timestamps, which
+  get an explicit "parses and is not in the future, else treated as absent" clause covering both.
+  I nearly cited this under `core-conduct`'s boundary-validation line and decided against it: the
+  classification table is first-match-wins and row 3 (`last_run` absent or unusable) fires before
+  row 5 ever evaluates `last_run_errors`, and the two fields are written by the same
+  `_write_status` call so they co-vary in practice. The residual exposure is a hand-edited or
+  partially-written `status.json`, and R4's "silent on every error path" contains it. One sentence
+  would close it, and it is the only new boundary field in the spec without a stated rule.
+- **Not cited — no scenario for stale ∧ degraded.** The Contracts section states the precedence
+  twice ("first match wins", and "Rows 4 and 5 both warn; stale wins when both hold, because its
+  remediation is the same and the older signal is the more urgent one"), so nothing is left to
+  inference — but it is the one stated precedence rule with no Gherkin behind it, while the
+  `STALE_HOURS` boundary gets its own dedicated scenario.
+- **Not cited — `RUN_MAX_HOURS` has no exact-threshold scenario.** `STALE_HOURS` has one ("The
+  threshold itself counts as stale", pinning both 8h and 7h59m). The stuck scenario uses 9h against
+  a 6h default, so the `≥` boundary is unpinned. Asymmetric with its sibling constant.
+- **Not cited — `docs/features/memory-system-split.spec.md:33`** records "memsearch sources from
+  `CODING_MEMORY.md` | **0** (excluded by config)". That is a point-in-time diagnostic measurement
+  in a table of measurements, not an invariant claim, and the same file's line 544 already lists the
+  removal as planned Phase-2 work — so it reads as anticipating this change rather than contradicting
+  it. Leaving it is defensible; a one-line "superseded by" would remove all doubt.
+- **Not cited — the plan's stale code listings.** `plans/2026-07-17-memory-rag-index.md` also
+  reproduces the config (152), the `is_excluded` test (211), the guard itself (282-284), the test
+  fixture (1484) and the golden query (2942), all of which become historically-accurate-but-current-
+  false. These are snapshots of what was built, not prose invariants, and updating them would be the
+  drive-by cleanup core-conduct warns against. Only line 2828 is a prose invariant claim, which is
+  why it alone is cited.
+- **Task 9's duration measurement is correctly ordered but arrives late.** It records the real
+  wall-clock run duration and escalates to the user if it exceeds `RUN_MAX_HOURS` — but it runs
+  *after* task 4 ships the stuck line, so a healthy first full run can fire a false stuck warning in
+  the window between them. The spec states this in R3 in those words and hands the constant to the
+  user, which is the correct disposal under core-conduct. Recorded, not charged.
+- **YAGNI remains clean and the reversal does not breach it.** R10 is user-directed, not
+  agent-invented, and its scope is explicitly bounded — Non-goals now names re-scoping *what* of the
+  file gets indexed, and defers it to R9's measurement rather than guessing. The "three repos,
+  deliberately" paragraph converts a substring-matching side effect into a stated decision, which is
+  exactly the right treatment.
+- **Architecture trade-offs stay human-owned.** `RUN_MAX_HOURS` goes back to the user if measurement
+  contradicts it; ADR 0018 covers the `launchd` daemon and the run-vs-content recency split; ADR 0019
+  covers the reversal with the options weighed (delete / invert / weaken the guard). R10's insistence
+  that the guard be **deleted rather than inverted** — "a guard pinning a retired rule is worse than
+  no guard" — is sound and correctly reasoned.
+- **Security territory is clean.** `install-schedule` runs fixed `launchctl` argument vectors with no
+  user-supplied input; the only substitution is `__HOME__` → `$HOME` at install time, with a scenario
+  asserting no absolute path is committed; the plist is mode `0644` (justified — `launchd` refuses a
+  group- or world-writable plist) and `LaunchAgents` `0755`; the scheduled job runs plain `index`,
+  never the destructive `--full`. The nudge still reads a plain JSON file, never invokes the CLI, and
+  exits 0 on every path. Indexing `CODING_MEMORY.md` does feed session narrative to the local embed
+  and digest models — but `chunk_doc`, not `_transcript_chunks`, handles docs, both models are local
+  Ollama with `:cloud` refused at config load, and the corpus never leaves the machine. No new
+  dependency is introduced.
+- **Not cited — spec location.** Unchanged from the prior loop: the repo layer (`rules/gates.md`
+  one-canonical-file discipline, `managing-session-memory`) mandates `docs/features/<name>.md` for a
+  file carrying `phase` frontmatter and a task checklist, and the repo layer wins over
+  `writing-specs`' `docs/superpowers/specs/` default.
+- **Not cited — `plutil` unpinned.** Same disposition as every prior round: macOS `25.5.0` is pinned
+  in the same table, `plutil` ships with it, and `-lint` is unambiguous.
+- **Phase discipline intact.** Frontmatter still reads `phase: planning`, `branch: none`, and task 1
+  is the model-switch checkpoint that opens implementation. Task renumbering to 7-11 is internally
+  consistent: task 8 correctly depends on task 7 ("so the queries are written against the corpus they
+  will be scored on"), and task 10 correctly forbids re-excluding the file if R9 fails.
