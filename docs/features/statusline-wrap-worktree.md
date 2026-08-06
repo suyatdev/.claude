@@ -125,13 +125,26 @@ Feature: worktree name
 
 ## Tasks
 
-- [ ] 1. Write the wrap + worktree tests against the **unmodified** script; confirm they fail.
-- [ ] 2. Pin the existing injection tests to a wide `COLUMNS` so `nl=0` stays a real assertion
+- [x] 1. Write the wrap + worktree tests against the **unmodified** script; confirm they fail.
+      Red phase: 4 failures, `widest=83>60` proving the overflow.
+- [x] 2. Pin the existing injection tests to a wide `COLUMNS` so `nl=0` stays a real assertion
       rather than being relaxed to accommodate wrapping.
-- [ ] 3. Implement worktree detection and the `wt:(name)` segment (`statusline-command.sh:151-169`).
-- [ ] 4. Implement width tracking at each `extras+=` site (`:542,544,581,586,609`).
-- [ ] 5. Replace the join/render block with greedy packing (`:613-630`).
-- [ ] 6. Update the file's header comment — the "Target look" block and the newline rationale,
-      which currently states that output can never be split across lines.
-- [ ] 7. Full suite green: 50 existing + new. Verify in a real linked worktree, not a simulated one.
+- [x] 3. Implement worktree detection and the `wt:(name)` segment.
+- [x] 4. Implement width tracking at each `extras+=` site.
+- [x] 5. Replace the join/render block with greedy packing.
+- [x] 6. Update the file's header comment — the "Target look" block and the newline rationale,
+      which stated that output can never be split across lines.
+- [x] 7. Full suite green: **66/66**, against a real linked worktree, not a simulated one.
 - [ ] 8. Observability judge, then PR.
+- [ ] 9. **`statusline-command.falsify.py` reports `FALSIFICATION BROKEN` — pre-existing.**
+      Verified at HEAD *before* any change here: `f0902ed` scores 8/50 against `want 9`, and
+      `925c310` scores 9/50 against `want 10`. The harness runs the current suite against five
+      historical script versions and asserts exact pass counts, so every added test shifts all
+      five; the counts were written when the suite held 20 cases and it held 50 by the time this
+      branch opened. This branch takes it to 66 and moves them again.
+
+      **Deliberately not "fixed" here.** Rewriting `EXPECTED` to match what is observed would
+      turn a falsification harness into a rubber stamp, and the two mismatches that predate this
+      branch are a real signal nobody has read yet. Needs its own task: decide whether the
+      harness should assert counts at all, or assert *which* named cases fail per version — the
+      latter survives adding tests, which is the whole reason it keeps going stale.
