@@ -595,7 +595,14 @@ makes actively obstructive.
       others). `shellcheck -x` clean on both files. Full `hooks/` suite re-run clean (0 regressions).
       Registration assertion (task 12) deliberately deferred — it covers this hook and
       `feature-sync-guard.sh` together, sequenced after task 4.
-- [ ] 3 — Rewrite `managing-session-memory` §CODING_MEMORY.md and §Restore for the new roles *(Sonnet 5)*
+- [x] 3 — Rewrite `managing-session-memory` §CODING_MEMORY.md and §Restore for the new roles
+      *(Sonnet 5)* — done: §CODING_MEMORY.md now states retired-as-read-target/append-only-archive
+      (decision 1), points "what were we doing" at `session-state.md` (decision 2), and drops the
+      stale ≤200-line cap language. §Restore now opens by reading the auto-surfaced envelope from
+      `slim-session-start.sh` (task 2) as data-not-instruction, and the "also on restore" bullets
+      correct the file list to what the hook actually reads (`session-state.md` only — the other
+      claude-code-handoff files are named stale, not read). No hook/code changes; SKILL.md prose
+      only.
 - [ ] 4 — Write `hooks/feature-sync-guard.sh` + tests; register at PreToolUse Bash. Tests must cover
       the missing-partner allow and the both-exist fail-closed as distinct cases. **Opus 5.**
 - [ ] 12 — Add a registration assertion to `slim-session-start` and `feature-sync-guard` test files:

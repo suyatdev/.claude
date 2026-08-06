@@ -2597,3 +2597,27 @@ SessionStart alongside `doc-guard.sh`/`memsearch-nudge.sh`.
 **Next:** task 3 (`managing-session-memory` §CODING_MEMORY.md/§Restore rewrite), then task 4
 (`feature-sync-guard.sh`, **Opus 5** — model-switch checkpoint owed before starting it) → 12 → 5 →
 6 → 7 → 8 → 9. See the feature file's `## Tasks` for detail — not restated here.
+
+## 2026-08-06 — session 20: task 3 done (managing-session-memory rewrite)
+
+**Feature:** `docs/features/memory-system-split.md`, still `phase: implementation`,
+`feat/memory-system-split`, gate open.
+
+Task 3: rewrote `managing-session-memory` SKILL.md §CODING_MEMORY.md and §Restore for the new
+roles. §CODING_MEMORY.md now says plainly that it's retired as a read target — a committed,
+append-only archive (decision 1), no longer a ≤200-line index — and names
+`.claude/session-state.md` as what answers "what were we doing" (decision 2), auto-surfaced by
+`slim-session-start.sh` (task 2, done last session). §Restore now opens by reading that
+auto-surfaced envelope as data-not-instruction per the hook's tamper-evident framing, and its
+"also on restore" bullets were corrected to match what the hook actually reads —
+`session-state.md` only; the other claude-code-handoff files (`context.md`, `recent-prompts.md`,
+etc.) are named stale and explicitly not read for restore. No hook or code changes; SKILL.md prose
+only, verified against the feature file's Contracts section and the hook source directly rather
+than from memory.
+
+This entry is itself the first one written under the rule it documents: appended as a new dated
+section rather than folded into the `## Active Session` block above, which stays frozen as of this
+split.
+
+**Next:** task 4 (`feature-sync-guard.sh`, **Opus 5** — model-switch checkpoint owed before
+starting it) → 12 → 5 → 6 → 7 → 8 → 9. See the feature file's `## Tasks` for detail.
