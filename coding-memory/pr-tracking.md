@@ -722,11 +722,14 @@ absent from both sides today.
 (local only), `docs/verify-before-claiming` (checked out in the surviving `verify-rule` worktree),
 `feature/cmux-version-gate`, `feature/judge-terminal-enforcement`.
 
-### PR #41 — `docs/remove-rtk-references` — 2026-08-06, OPEN
+### PR #41 — `docs/remove-rtk-references` — 2026-08-06, **MERGED**
 
 - repo `suyatdev/.claude` · remote `origin` (git@github.com:suyatdev/.claude.git)
 - branch `docs/remove-rtk-references` @ `3ec8504`, forked from `main` @ `0c3464a`
-- URL: https://github.com/suyatdev/.claude/pull/41 · **state: open**
+- URL: https://github.com/suyatdev/.claude/pull/41 · **state: MERGED**
+- merged 2026-08-06T06:12:00Z as **`e3b939d`** into `main`; local `main` fast-forwarded to it
+- **verified by effect, not by PR state:** `git cat-file -e origin/main:RTK.md` → deleted, and
+  `git grep '@RTK' origin/main -- CLAUDE.md` → no match. The always-on import is genuinely gone.
 - `session_origin` created: session 17 (2026-08-06) · most recent push: same session
 - **Not feature-scale** — one chore commit, no `docs/features/` file. This entry plus the commit
   message are the whole record.
@@ -749,4 +752,5 @@ Deliberately not removed: the `rtk` wrapper-stripping in `git-guard.sh`, `judge-
 `shell_segments.py` (own tests; ADRs 0012 and 0015 reason about that wrapper list), and historical
 mentions in `docs/decisions/` and `docs/superpowers/plans/` (immutable records).
 
-- next: user merges in the GitHub UI. Branch is behind `main` but the merge-base diff is clean.
+- **branch not yet deleted** (local + remote both still present). Deletion deferred to the user —
+  GitHub retains merged PR head refs, so it stays restorable from the PR page either way.
