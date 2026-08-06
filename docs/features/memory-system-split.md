@@ -38,8 +38,9 @@ task 4 only.**
       `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md`.
 - [x] 7 — Rewrite `preparing-pull-requests`:12 (append-to-archive, not inherit-context). *(Sonnet 5)*
       — done: also fixed the "Branch resume" bullet (:14), same stale assumption.
-- [ ] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape (the MAY, decision 8).
-      *(Sonnet 5)*
+- [x] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape (the MAY, decision 8).
+      *(Sonnet 5)* — done: added a carve-out sentence; single file stays the default, the `.spec.md`
+      half is a MAY not a MUST, "never a separate progress doc" prohibition untouched.
 - [ ] 9 — Observability judge (implementation stage), then PR. *(Sonnet 5)*
 - [ ] 10 — **Phase 2** memsearch work — separate branch, after Phase 1 merges.
 

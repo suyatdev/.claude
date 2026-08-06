@@ -2793,3 +2793,35 @@ number; the differing prose after each doesn't affect `feature-sync-guard.sh`).
 **Next:** task 8 (`rules/gates.md` one-canonical-file stub — state the MAY from decision 8 in
 words that can't be read as a MUST) → 9 (observability judge, then PR). Checkpoint 3
 (implementation → review) still owed before task 9. Remaining tasks are Sonnet 5.
+
+## 2026-08-06 — session 25: task 8 done (rules/gates.md MAY wording)
+
+Restored from handoff `2fc8c9f6` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, up to date with `origin`. Stayed on **Sonnet 5** per the checkpoint-2 answer already on
+record — no re-ask.
+
+Task 8: edited the one-canonical-file bullet in `rules/gates.md`. Checked the spec's task-8 wording
+(`memory-system-split.spec.md:665-668`) and the decision-8 Gherkin scenario
+(`memory-system-split.spec.md:511-516`, "A brand-new feature is created as one file — decision 8's
+MAY") before writing, so the inserted sentence matches what the guard actually enforces (no rule,
+hook, or message requires the `.spec.md` half to exist) rather than restating task memory alone.
+Inserted one carve-out sentence between the bullet's opening clause and its existing "never open a
+separate progress doc" prohibition, instead of rewriting the bullet: states the split trigger
+(checklist file stops reading comfortably in one pass), the resulting shape (frontmatter + tasks
+stay in `.md`; spec, decisions, Gherkin move to `.spec.md`, read on demand only, never at session
+start), and says "MAY, never a MUST" in those literal words so a future reader can't round it up to
+a requirement. Left the "never a separate progress/summary/state-of-branch document" sentence
+untouched — decision 8 is about single-file-vs-pair, not about that orthogonal prohibition.
+
+Ticked task 8 in both halves of the pair with matching completion notes (task identity is the task
+number; the differing prose after each doesn't affect `feature-sync-guard.sh`).
+
+`hooks/context-handoff-watch.sh` fired its ≥75k-token nudge mid-task (after the `rules/gates.md`
+edit landed but before the pair's task-8 checkboxes were ticked) — same shape sessions 21 and 24
+saw. Finished ticking both checklist halves first per the standing preference (task-boundary
+offers win over the raw token nudge), then ran this checkpoint.
+
+**Next:** task 9 — checkpoint 3 (implementation → review) is owed first, then the observability
+judge (implementation stage) against this branch's diff, then the PR. Task 8 was the last checklist
+item that edits `rules/`; task 9 is judge + PR only, no further spec/rule edits expected.

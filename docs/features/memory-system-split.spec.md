@@ -662,10 +662,17 @@ makes actively obstructive.
       procedure instead of restating it. Both edits predate the original commit
       (`c2ca102`, before this split); left unfixed they would have contradicted the rest of the
       file after this task's own edit landed.
-- [ ] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape. Must state the MAY
+- [x] 8 — Update `rules/gates.md` one-canonical-file stub for the pair shape. Must state the MAY
       (decision 8) in words that cannot be read as a MUST: single file is the default, the spec
       half is optional and added only when the checklist file stops reading comfortably in one
-      pass. *(Sonnet 5)*
+      pass. *(Sonnet 5)* — done: inserted one carve-out sentence between the existing opening
+      ("single file... the default, sufficient for nearly every feature") and the existing
+      prohibition sentence, rather than rewriting the bullet. States the split criterion (checklist
+      file stops reading comfortably in one pass), the shape (frontmatter + tasks stay in `.md`,
+      spec/decisions/Gherkin move to `.spec.md`, read on demand only), and says "MAY, never a MUST"
+      in those literal words so a future reader can't round it up to a requirement. Left the
+      "never a separate progress/summary/state-of-branch document" sentence untouched — that
+      prohibition is orthogonal to the single-file-vs-pair question and decision 8 didn't touch it.
 - [ ] 9 — Observability judge (implementation stage), then PR *(Sonnet 5)*
 - [ ] 10 — **Phase 2** memsearch work, items 1–6 above — separate branch, after Phase 1 merges
 
