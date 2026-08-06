@@ -39,11 +39,10 @@
 |---|---|
 | `CLAUDE.md` | Root entry point. Imports all rule files. |
 | `rules/` | Focused rule files loaded by Claude on every task. |
-| `RTK.md` | RTK proxy config for token-optimized CLI output. |
 | `settings.json` | Hooks, enabled plugins, and TUI preferences. |
 | `statusline-command.sh` | Status line renderer — oh-my-zsh `robbyrussell` prompt plus model and token count. Tests: `statusline-command.test.sh`; falsification harness: `statusline-command.falsify.py`. |
 | `CODING_MEMORY.md` | Running session memory — decisions, state, next steps. |
-| `SETUP.md` | New machine checklist: plugins, RTK, verification steps. |
+| `SETUP.md` | New machine checklist: plugins, verification steps. |
 
 ## Rules at a glance
 

@@ -23,30 +23,16 @@ Run each install command inside Claude Code:
 
 ---
 
-## 3. Install RTK (Token-Optimized CLI Proxy)
-
-RTK is used as a shell command wrapper to reduce token usage. Install it and verify it is on your PATH:
-
-```bash
-# Check the RTK.md in this repo for the install source and usage instructions
-cat ~/.claude/RTK.md
-```
-
-- [ ] RTK installed and available as `rtk` in terminal
-
----
-
-## 4. Verify Settings
+## 3. Verify Settings
 
 `settings.json` is tracked and will be cloned automatically. Confirm these are active:
 
-- [ ] RTK pre-tool hook is active (`settings.json` → `hooks.PreToolUse`)
 - [ ] All 5 plugins show as enabled in `settings.json` → `enabledPlugins`
 - [ ] TUI is set to `fullscreen`
 
 ---
 
-## 5. Confirm Rules Load
+## 4. Confirm Rules Load
 
 Open Claude Code and verify the rule files under `rules/` are being picked up:
 

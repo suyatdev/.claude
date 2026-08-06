@@ -11,8 +11,6 @@ Where the standards literature says AGENTS.md, this setup uses CLAUDE.md. They a
 # Tip: as this file grows, you can split sections into separate files and
 # pull them in with @imports, e.g. @rules/git-workflow.md
 
-@RTK.md
-
 ## Skills Catalog
 
 These skills load on demand, not on every turn. Read the one whose trigger matches the work in front of you.
