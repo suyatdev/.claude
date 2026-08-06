@@ -3005,3 +3005,57 @@ which is itself the judge's "no in-progress state" point, observed live.
 
 **Next:** round-1 revision of the spec (7 compliance violations + the `last_run` redesign), then
 re-dispatch both judges at round 2 reusing the violation ids. No waivers so far; nothing dropped.
+
+## Session 29 — statusline: wrap + worktree name (designed, NOT implemented)
+
+User asked to make the statusline wrap and show the worktree name. **No code written** — the work is
+blocked and correctly so. Recording the verified design so the next session executes rather than re-derives.
+
+### Blocked, twice over — this is the gate working, not a bug
+
+`phase-guard` denies `statusline-command.sh`: it sits at the repo root, so it is *not* on the exempt list
+(`CODING_MEMORY.md`, `coding-memory/*`, `docs/*`, `.claude/*`, `settings.json`, `projects/*/memory/*`),
+and `memsearch-freshness.md` is still `phase: planning`. Probed both arms rather than assuming —
+source path → rc=2 deny, `docs/` path → rc=0 allow, so the check demonstrably discriminates.
+Separately `git-guard` bars a `.sh` from landing on `main`, and branch creation is itself forbidden
+mid-planning. Sanctioned unblock: a second feature file at `phase: implementation` recording its own branch.
+
+**User chose "open a separate track" + "stay on Opus 5" via menu, but has NOT said `gate confirmed`.**
+A menu click is not the literal phrase — that is exactly the soft affirmative the hard stop exists to catch.
+Model-switch checkpoint 2 is answered (Opus 5); the gate phrase is still owed.
+
+### Verified facts (measured, not assumed)
+
+- **Multi-line output is supported** — docs: "each `echo` displays as a separate row."
+- **`COLUMNS`/`LINES` are set by Claude Code** before running the script, precisely because it captures
+  stdout so `tput cols` cannot work. Needs v2.1.153+; installed is **2.1.223**. Not yet observed live
+  from inside a real statusline invocation — the fallback must therefore be "no wrap", never "wrap to 0".
+- ⚠️ **`COLUMNS` reads `0`** in a non-interactive shell (measured in the Bash tool env). `[ -n "$COLUMNS" ]`
+  is the wrong guard — validate as a *positive integer* or every line wraps to nothing.
+- **Baseline: `statusline-command.test.sh` is 50/50 green** on the unmodified script.
+- ⚠️ **The injection tests assert `nl=0`** (zero newlines) — that is how they prove data cannot split the
+  line. Wrapping emits newlines by design. Pin those tests to a *wide* `COLUMNS` so `nl=0` stays a real
+  assertion; do **not** relax them to accommodate the feature, or a security check retires silently.
+
+### Worktree detection — first approach was wrong, caught before writing code
+
+Comparing `rev-parse --git-dir` against `--git-common-dir` **false-positives in any subdirectory of the
+main tree**: from `main-repo/sub/dir` they read `/abs/.git` vs `../../.git` — different strings, same tree.
+
+Correct test, verified against four cases plus a decoy: **`[ -f "$(git rev-parse --absolute-git-dir)/gitdir" ]`.**
+A linked worktree's git-dir contains a `gitdir` file; a main `.git` never does. Confirmed: main root → main,
+main subdir → main, linked worktree root → linked, deeply nested inside a linked worktree → linked, and a
+repo living under a directory literally named `worktrees` → main (a `*/worktrees/*` path pattern fails this one).
+Name = basename of `rev-parse --show-toplevel`. Show only for linked worktrees — in the main checkout `dir`
+already says it.
+
+### Design agreed
+
+- **Wrap**: build segments as (text, known-width) pairs, greedily pack at the ` │ ` boundaries up to
+  `COLUMNS`. Track width *while building* rather than measuring after — sidesteps counting ANSI escapes and
+  ambiguous glyph widths (`➜ ✗ █ ░ Σ ⏱ │`) entirely. Wide terminal → byte-identical to today. No valid
+  `COLUMNS` → today's single line. A single over-wide segment gets its own line, never hard-broken mid-escape.
+- **Worktree**: `wt:(name)` after `git:(branch)`, matching the robbyrussell idiom.
+- `extras+=` touchpoints needing a parallel width entry: `statusline-command.sh:542,544,581,586,609`;
+  render/join to replace at `:613-630`. Git block to extend at `:151-169`.
+- Build order is TDD: new wrap/worktree tests first against the *unmodified* script, watch them fail, then implement.
