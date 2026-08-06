@@ -2559,3 +2559,41 @@ pass.** Rollback point: `caf0d2f` (pre-task-11 HEAD), unneeded — no rollback o
 
 **Next:** task 2 (`hooks/handoff/slim-session-start.sh`), then 3 → 4 (Opus 5) → 12 → 5 → 6 → 7 → 8 →
 9. See the feature file's `## Tasks` for detail — not restated here.
+
+## 2026-08-06 — session 19: task 2 done (slim-session-start.sh) + two settings.json fixes
+
+**Feature:** `docs/features/memory-system-split.md`, still `phase: implementation`,
+`feat/memory-system-split`, gate open. Commits `fef7487` → `f4fafe7` → `ca2c969`, all pushed.
+
+Task 2: `hooks/handoff/slim-session-start.sh` (new, SessionStart, Tier 3) emits
+`.claude/session-state.md` inside the tag+sanitizer DATA envelope the spec defines. 27 tests, all
+12 Gherkin scenarios, mutation-checked by hand (4 targeted breaks, each catches exactly the tests
+it should). `shellcheck -x` clean, full `hooks/` suite re-run clean. Registered in `settings.json`
+SessionStart alongside `doc-guard.sh`/`memsearch-nudge.sh`.
+
+**Two settings.json fixes landed getting there, both worth remembering:**
+
+- **Committed `settings.json` had a dead `rtk hook claude` PreToolUse/Bash entry** that PR #41
+  (RTK removal, merged) never actually removed — that session's "verified settings.json registers
+  no RTK hook" check ran against the *live* file, which is `skip-worktree` (`git ls-files -v` → `S`,
+  set 2026-07-22 so a stray `git commit -a` can't leak the machine-local `model` line), so
+  `git status` was structurally blind to the committed drift. Anyone cloning fresh would have hit a
+  failing `rtk hook claude` call on every Bash tool use. Fixed in `fef7487` via direct index surgery
+  (`git hash-object -w` + `git update-index --cacheinfo`), not by touching the live file.
+- **`git commit -- <pathspec>` is NOT "commit what's staged for this path"** — for a pathspec-named
+  file it implicitly re-adds the *working tree* content first (same as `git add path && git commit`),
+  discarding whatever was staged via `update-index --cacheinfo`. `fef7487`'s pathspec-restricted
+  commit silently pulled in this machine's local `"model": "sonnet"` override even though the staged
+  blob never had it — exactly the leak `skip-worktree` exists to prevent. User chose "new corrective
+  commit" over amending the unpushed commit (standing never-amend rule wins even when unpushed and
+  self-caught). Fixed in `f4fafe7`: same index-surgery technique, committed **with no pathspec at
+  all** once `git diff --cached` confirmed the index held only the intended one-line change.
+  **Rule for next time:** never `git commit -- <path>` after manually staging a custom blob for that
+  same path — stage, verify with `git diff --cached`, then commit with no pathspec.
+- Sound-diff check used throughout: `git show HEAD:settings.json | diff - settings.json`, never
+  `git status`, per `feedback_confirm_the_check_can_fail.md`. Skip-worktree bit restored
+  (`git update-index --skip-worktree settings.json`) after both fixes landed.
+
+**Next:** task 3 (`managing-session-memory` §CODING_MEMORY.md/§Restore rewrite), then task 4
+(`feature-sync-guard.sh`, **Opus 5** — model-switch checkpoint owed before starting it) → 12 → 5 →
+6 → 7 → 8 → 9. See the feature file's `## Tasks` for detail — not restated here.
