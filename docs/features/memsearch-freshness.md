@@ -41,9 +41,9 @@ Measured against the live index before this file was written. Two of the six Pha
 
 | Parent item | Status | Evidence |
 |---|---|---|
-| 1 — remove `CODING_MEMORY.md` from `exclude_paths` | **Real, but out of scope here** | 0 chunks, no `sources` row — the exclusion works *and* is enforced, not merely configured: `load_config` raises `ConfigError` without it (`memsearch/memsearch/config.py:56-59`), pinned by `test_config.py:42,48` and `test_index.py:93`. Deliberately deferred; see Non-goals. |
+| 1 — remove `CODING_MEMORY.md` from `exclude_paths` | **Real, and bigger than one line** | 0 chunks, no `sources` row. The exclusion is *enforced*, not merely configured: `load_config` raises `ConfigError` without it (`memsearch/memsearch/config.py:56-59`), pinned by `test_config.py:42,48` and `test_index.py:93`. Reversing it is R10, not a config edit. |
 | 2 — "add `docs/features/**` to indexed sources" | **No-op — nothing to add** | `~/.claude/docs` is *already* a `curated_docs` root. `docs/features/` read 0 only because its earliest file was created 2026-07-25, after the last index run. Confirmed by the session-28 rebuild, which picked the directory up with no config change. |
-| 3 — update the golden query | **Falls with item 1** | Follows mechanically from item 1, which is out of scope here. The golden query asserting the exclusion stays correct, so there is nothing to update. |
+| 3 — update the golden query | **Real, and not mechanical** | `golden_queries.json:2` asks *why* the file is excluded. Item 1 falsifies the question's **premise**, not just its expected path, so the query is replaced rather than re-pointed (R10.4). |
 | 4 — add a refresh trigger | **Root cause, not fourth priority** | Items 2 and 3's symptoms are downstream of the freeze. |
 | 5 — re-measure retrieval | **Real, unchanged** | Acceptance bar below. |
 | 6 — seeded session-start query | **Out of scope** | Parent spec makes it conditional on item 5 passing. |
@@ -137,7 +137,7 @@ it was a reading taken off a run that had not finished. The same run (PID 30022)
 **2h17m over 683 sources** when this was written, so 1h26m was a stopwatch glance recorded as a
 finish time — the same species of trap as the three above, and it is named here rather than quietly
 corrected. **The true full-run duration is therefore unmeasured, and may exceed `RUN_MAX_HOURS`**,
-which would make the stuck line fire on a healthy first run. Task 8 records the real figure; if it
+which would make the stuck line fire on a healthy first run. Task 9 records the real figure; if it
 lands above 6h, `RUN_MAX_HOURS` must be chosen against that measurement rather than against the
 refresh interval — a call for the user, not a value to quietly widen.
 
@@ -172,8 +172,7 @@ README is the only documentation of `memsearch/bin/`, where `install-schedule` (
 gains that entry point in the same commit. A README fixed "later" is a README that lies in between.
 
 Its line 22 invariant — "`CODING_MEMORY.md` and `subagents/` transcripts are never indexed" —
-**stays true and stays put.** An earlier draft of this requirement lifted the exclusion; that is
-now a non-goal, for the reasons recorded there.
+is **half falsified by R10** and is corrected in that same commit. The `subagents/` half stands.
 
 **R9 — retrieval is measured against a stated bar.** Five queries are written and committed as their
 own commit before any of them is run. Acceptance, at `k=6`: each query returns **≥2 hits** belonging
@@ -192,6 +191,60 @@ Background. What remains is weaker and is stated plainly rather than dressed up:
 written without first running any query against the rebuilt index, and the guarantee rests on that
 discipline plus the single-commit ordering, not on proof from git.** A reader may discount the result
 accordingly.
+
+**R10 — `CODING_MEMORY.md` is indexed, and the invariant forbidding it is retired properly.**
+
+*Why the original reason no longer holds.* The exclusion was not arbitrary: the design doc
+(`docs/superpowers/specs/2026-07-17-memory-rag-index-design.md:154-163`) excluded the file because
+it was a *working index* "whose durable content is **already promoted** into indexed stores —
+decisions → `coding-memory/decisions.md` + `docs/decisions/` ADRs, history →
+`coding-memory/session-log.md`". **That promotion has stopped.** Measured 2026-08-06:
+`session-log.md`'s last entry is dated **2026-07-16**, `decisions.md`'s **2026-07-19**, while
+`CODING_MEMORY.md` carries sessions **24 through 30**. Three weeks of decisions and history exist
+*only* in the one file the index is configured never to read. The exclusion is no longer merely
+outdated — it is the direct cause of a three-week hole in retrieval. `memory-system-split`
+independently retired the file as a read target and made it an append-only archive, so "ephemeral
+working index" no longer describes it either.
+
+*This reverses a deliberately enforced invariant, so it is not a config edit.* Every one of the
+following moves in the **same commit**; a partial reversal leaves the tool refusing to start or the
+docs asserting the opposite of the behaviour:
+
+1. **Config** — remove `CODING_MEMORY.md` from `exclude_paths` (`memsearch/config.json`).
+2. **The guard** — delete the `ConfigError` check in `memsearch/memsearch/config.py:56-59`. It is
+   deleted, not inverted: it exists to enforce a rule that no longer exists, and a guard pinning a
+   retired rule is worse than no guard. `load_config` keeps its other validation unchanged.
+3. **The three pinning tests** — `test_config.py::test_coding_memory_exclusion_is_mandatory` is
+   removed (it asserts the guard fires); `test_config.py::test_is_excluded:48` and
+   `test_index.py:93` flip from asserting exclusion to asserting inclusion. **The `subagents/`
+   assertions in both stay exactly as they are** — that exclusion is untouched by this change.
+4. **The golden query** — `memsearch/tests/golden_queries.json:2` asks *"why is CODING_MEMORY.md
+   excluded from the memory rag index"*. Its **premise** is falsified, not just its expected path,
+   so it is replaced rather than re-pointed: the new query retrieves session history from
+   `CODING_MEMORY.md` itself, which is the behaviour this requirement adds.
+5. **The documents that assert the opposite** — `memsearch/README.md:22` (R8), and
+   `2026-07-17-memory-rag-index-design.md` at lines 58, 67, 70, 135 plus the "What Is NOT Indexed"
+   section at 154-163 whose durable-vs-ephemeral rationale this reverses, and
+   `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19`, which records the invariant as
+   "enforced by config validation, not convention".
+6. **An ADR** under `docs/decisions/`, because this is structural and reverses a documented
+   rationale — the options weighed (delete the guard / invert it / weaken it to a warning), the
+   evidence above, and the consequence in 7.
+
+*Scope is all three repos, deliberately.* `is_excluded` matches on substring, so removing the entry
+indexes `CODING_MEMORY.md` in every `repo_root`, not just `~/.claude`: `vibe-scape` (159 lines) and
+`Snatch-Bracket` (119 lines) join `~/.claude`'s 3,232. Their combined 278 lines are negligible
+against the corpus, and carving out a per-repo exception would add a special case for no measured
+benefit. Named here so the reach is deliberate rather than a side effect.
+
+*The noise risk is real and is measured, not argued.* The original rationale's surviving half — that
+indexing session narrative could "pollute semantic search" — is untested. At 285,187 characters
+`CODING_MEMORY.md` becomes the single largest source, roughly 2.5× the largest doc currently indexed
+(130 chunks). **R9 is the instrument**: it scores feature-file retrieval at `k=6`, so if narrative
+chunks crowd feature files out of the top hits, R9 fails and says so. R9 is therefore run *after*
+this change lands, and a failure is a real result, not a reason to quietly re-exclude. (The digest
+path is *not* a concern: `digest_input_char_cap` applies only to transcripts via
+`_transcript_chunks`; docs go through `chunk_doc` and are never truncated by it.)
 
 ### Data flow
 
@@ -446,12 +499,35 @@ Scenario: The committed template hides no absolute path
   Then no absolute path is present
   And the __HOME__ placeholder is
 
-Scenario: The CODING_MEMORY.md exclusion survives this change untouched
-  Given CODING_MEMORY.md is still listed in exclude_paths
+Scenario: CODING_MEMORY.md is indexed once the exclusion is lifted
+  Given CODING_MEMORY.md is absent from exclude_paths
   When the index runs
-  Then no sources row exists for CODING_MEMORY.md
-  And the golden query asserting its exclusion still passes
-  And memsearch/README.md still documents it as never indexed
+  Then a sources row exists for CODING_MEMORY.md in every repo root
+  And its chunks are retrievable by query
+
+Scenario: The config no longer refuses to start without the exclusion
+  Given a config whose exclude_paths omits CODING_MEMORY.md
+  When load_config reads it
+  Then it returns a Config without raising ConfigError
+
+Scenario: Lifting the exclusion does not un-exclude subagent transcripts
+  Given CODING_MEMORY.md has been removed from exclude_paths
+  When the index runs
+  Then no sources row exists for any path under subagents/
+
+Scenario: The golden query is replaced, not re-pointed
+  Given the golden query asking why CODING_MEMORY.md is excluded
+  When the exclusion is lifted
+  Then that query is removed because its premise is false
+  And a query retrieving session history from CODING_MEMORY.md replaces it
+
+Scenario: Every document asserting the exclusion is corrected in the same commit
+  Given the commit that removes CODING_MEMORY.md from exclude_paths
+  When that commit is inspected
+  Then memsearch/README.md no longer claims CODING_MEMORY.md is never indexed
+  And the memory-rag-index design doc no longer lists it under What Is NOT Indexed
+  And the memory-rag-index plan no longer calls the exclusion config-enforced
+  And an ADR recording the reversal is present
 
 Scenario: The README documents the new entry point
   Given bin/install-schedule has been added
@@ -503,20 +579,14 @@ the index was rebuilt, because the rebuild happened first (Background, R9).
 ### Non-goals
 
 - Parent item 6, the seeded session-start query.
-- **Indexing `CODING_MEMORY.md` — parent item 1, and item 3 with it.** User decision, 2026-08-06,
-  after the compliance judge caught that the requirement as drafted was unbuildable: the exclusion
-  is not a config default but an *enforced invariant* — `load_config` raises `ConfigError` without
-  it (`memsearch/memsearch/config.py:56-59`), three tests pin it, and
-  `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19` records it as "enforced by config
-  validation, not convention". Lifting it means deleting a guard, rewriting three tests, and
-  reversing the documented rationale in
-  `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` (five places, including the whole
-  "What Is NOT Indexed" section) — a structural change that would earn its own ADR. That is its own
-  piece of work and does not belong inside a freshness fix. Kept out so this branch changes one
-  thing. **The rationale may nonetheless have expired** — `memory-system-split` retired
-  `CODING_MEMORY.md` as a read target and made it an append-only archive reached by lookup, so
-  "ephemeral working index" no longer describes the file. Whoever picks this up should argue that
-  case explicitly rather than assume it.
+- Re-scoping *what* of `CODING_MEMORY.md` gets indexed. R10 indexes the whole file. Indexing only
+  its session headers, or weighting it below ADRs, are plausible refinements — deliberately not
+  attempted, because R9 measures whether the whole-file version actually degrades retrieval and
+  there is no point tuning against a guess. If R9 fails, that measurement is the input to the
+  refinement.
+- Restarting the promotion pipeline the design doc assumed (`session-log.md` and `decisions.md`,
+  both ~3 weeks stale — see R10). R10 makes the archive searchable; it does not revive the
+  summarisation habit that stopped. Named so the gap stays visible.
 - A lock or pidfile for concurrent `memsearch index` runs. R3 stops the nudge from *inviting* one —
   neither the in-progress nor the stuck line carries the remediation command — but nothing prevents a
   reader from starting one anyway. Named here so the gap is deliberate rather than overlooked.
@@ -557,17 +627,31 @@ was asked and answered 2026-08-06: **Opus 5**.
       (R6, R7), with a `plutil -lint` test, the eight install/uninstall scenarios, and an assertion
       that no absolute path is committed.
 - [ ] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
-      it** (R8). `memsearch/config.json` and `README.md:22` are *not* touched — the
-      `CODING_MEMORY.md` exclusion stays (Non-goals). Record parent item 2 as a verified no-op — no
-      config change.
-- [ ] 7 — Write the five measurement queries and commit them as their own commit, before running
-      any of them (R9).
-- [ ] 8 — Install the agent and run the first scheduled index. Confirm the job is loaded and that
-      `scheduled-index.log` receives output. **Record the run's real wall-clock duration** and, if
-      it exceeds `RUN_MAX_HOURS`, stop and put the constant back to the user (R3).
-- [ ] 9 — Score the five queries at `k=6` against R9's bar; record pass/fail per query under
-      `## Verification`, including a failing result if that is the truth.
-- [ ] 10 — Observability judge (implementation stage), then PR.
+      it** (R8). This is the `bin/` section only; `README.md:22`'s exclusion invariant is task 7's,
+      in task 7's commit. Record parent item 2 as a verified no-op — no config change.
+- [ ] 7 — **Lift the `CODING_MEMORY.md` exclusion (R10) — one commit, all six parts.** Remove it
+      from `exclude_paths` (`memsearch/config.json`); delete the `ConfigError` guard
+      (`config.py:56-59`); remove `test_config.py::test_coding_memory_exclusion_is_mandatory` and
+      flip `test_is_excluded:48` and `test_index.py:93` to assert inclusion, **leaving both
+      `subagents/` assertions untouched**; replace `golden_queries.json:2` (premise falsified, not
+      just its path); correct `memsearch/README.md:22`,
+      `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` (lines 58, 67, 70, 135 and the
+      "What Is NOT Indexed" section, 154-163) and
+      `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19`; and write
+      `docs/decisions/0019-*.md` recording the reversal with the measured evidence that the
+      promotion pipeline stopped. Run the full `memsearch` test suite — the guard's removal touches
+      every `load_config` caller.
+- [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
+      any of them (R9). **After task 7**, so the queries are written against the corpus they will
+      be scored on.
+- [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
+      `scheduled-index.log` receives output, and that `CODING_MEMORY.md` now has a `sources` row in
+      each repo root. **Record the run's real wall-clock duration** and, if it exceeds
+      `RUN_MAX_HOURS`, stop and put the constant back to the user (R3).
+- [ ] 10 — Score the five queries at `k=6` against R9's bar; record pass/fail per query under
+      `## Verification`, including a failing result if that is the truth. **A failure here is a
+      real result about R10's noise cost** — report it, do not silently re-exclude the file.
+- [ ] 11 — Observability judge (implementation stage), then PR.
 
 ## Verification
 
