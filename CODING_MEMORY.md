@@ -2825,3 +2825,58 @@ offers win over the raw token nudge), then ran this checkpoint.
 **Next:** task 9 — checkpoint 3 (implementation → review) is owed first, then the observability
 judge (implementation stage) against this branch's diff, then the PR. Task 8 was the last checklist
 item that edits `rules/`; task 9 is judge + PR only, no further spec/rule edits expected.
+
+## 2026-08-06 — session 26: task 9 done (judge + PR #42), branch's last task complete
+
+Restored from handoff `53dea02f` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch, `git status`
+clean, up to date with `origin`. Tasks 2–8/11/12 already done and pushed per the handoff.
+
+Checkpoint 3 (implementation → review) asked and answered: user chose **Opus 5** over staying on
+Sonnet 5 for the judge + PR portion of task 9. `hooks/pane-dispatch-guard.sh` denied the first
+in-process `Agent` dispatch of `observability-judge` — judges are `redirect-agents`, always paned,
+never in-process, regardless of the session's worker pane-split policy. Re-dispatched via
+`panes/dispatch-pane-agent.sh` per `dispatching-pane-agents` (prompt written to scratchpad first);
+landed in pane `surface:148`, waited with `--timeout 540`.
+
+Verdict: `risk=low confidence=high`, all 452 hook-test assertions pass, persisted to
+`coding-memory/observability-judge/2026-08-06-feat-memory-system-split.md` and `verdicts.jsonl`
+(commit `11db576`). The judge's own first test pass showed 16/29 failures in
+`slim-session-start.test.sh` — a false alarm from `CLAUDE_PANE_AGENT` being set in its own paned
+environment (the hook exits early when that var is set); clean env reran 29/29. That investigation
+surfaced a real, separate finding: two of those tests assert *absence* (no `[STALE]` marker, no
+oversized-body output) in a way that passes identically whether the hook correctly suppressed
+output or is silently dead — an "absence" test can't distinguish the two without a matching
+positive-case fixture in the same test. Judge also ruled out one false alarm unprompted: the
+committed `claude-fable-5[1m]` model line in `settings.json` predates this branch, already on
+`main` — not introduced here.
+
+Two other non-blocking findings: neither new hook (`slim-session-start.sh`,
+`feature-sync-guard.sh` — the latter blocks commits with a `FEATURE_SYNC_EXEMPT` bypass) has a
+`rules/gates.md` bullet, unlike every other blocking hook; and the unrelated `statusline`
+reasoning-effort commit (`02d5c25`) rode along on this branch from an earlier session (already
+known, re-flagged here).
+
+Asked the user whether to fix the two real findings (vacuous tests, missing gates.md bullet) before
+opening the PR or defer them — **explicit choice: open now, defer as follow-ups**, logged in the PR
+description rather than fixed on this branch. Opened **PR #42**:
+https://github.com/suyatdev/.claude/pull/42 (`gh pr create`, no existing PR found first via
+`gh pr list --head`). `gh pr create` reported "2 uncommitted changes" — the judge subagent's own
+verdict-file writes (`coding-memory/observability-judge/verdicts.jsonl` +
+`2026-08-06-feat-memory-system-split.md`) landed in the working tree but not yet committed;
+committed them separately (`11db576`) and pushed.
+
+Ticked task 9 in both halves of the pair with matching completion notes (task identity is the task
+number). Moved frontmatter `phase: implementation` → `review`, `model_tier: low` → `high` in
+`memory-system-split.md` to match checkpoint 3's answer — the spec half carries no frontmatter, so
+nothing to sync there. Committed (`995c616`) and pushed; `feature-sync-guard.sh` accepted the pair
+edit without complaint.
+
+**Task 9 was the last task on this branch's Phase 1 scope.** Task 10 (Phase 2 — fixing memsearch,
+which currently indexes 0 entries from `docs/features/`) is explicitly out of scope here, tracked
+as a separate follow-up branch after this PR merges. This session's freshness checkpoint (past the
+75k-token nudge, at this task boundary) is this entry plus the push above.
+
+**Next (new session, after this PR merges or gets review feedback):** no in-branch work expected
+unless review comes back with requested changes. If starting Phase 2, that's a new branch from
+`main` post-merge, not a continuation of this one.
