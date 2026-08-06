@@ -2654,3 +2654,32 @@ forward:
 
 **Next:** task 12 (registration assertions in both new test files) → 5 → 6 → 7 → 8 → 9. Checkpoint 3
 (implementation → review) still owed before task 9.
+
+## 2026-08-06 — session 21: task 12 done (hook registration assertions)
+
+Restored from handoff `cc41c9b1` after a `/clear`; frontmatter (`phase: implementation`,
+`model_tier: low`, `branch: feat/memory-system-split`) matched the actual branch and working tree
+was clean, so no reconciliation was needed. Stayed on **Sonnet 5** per the checkpoint-2 answer
+(Opus 5 was task 4 only).
+
+Task 12: added a registration assertion to `slim-session-start.test.sh` and
+`feature-sync-guard.test.sh`, each resolving the real repo `settings.json` (via
+`git rev-parse --show-toplevel`, not the throwaway `$TMP`/`$REPO` fixture the rest of each suite
+uses) and running a `jq` query scoped to its own top-level hook array —
+`.hooks.SessionStart[]` for `slim-session-start.sh`, `.hooks.PreToolUse[]` for
+`feature-sync-guard.sh` — so a substring hit in an unrelated key or comment can't pass it.
+
+**Confirmed the check can fail, per the task-4 vacuous-test lesson named in the prior handoff.**
+Each test file also builds a `jq`-mutated copy of the real `settings.json` with its own hook's
+`command` entry deleted, then asserts the same query reports it missing. Both real-file assertions
+pass (already registered); both mutants correctly fail — the check is not vacuous. `shellcheck -x`
+clean on both files. Full `hooks/*.test.sh` suite re-run: 9 files, **452 checks, 0 failures**, no
+regressions. Committed `b571787`.
+
+One thing worth flagging: a session-freshness nudge fired at ~78k tokens before any task-12 work
+had started — almost entirely fixed session-start overhead (skill/agent/MCP tool listings), not
+accumulated work. Asked the user rather than guessing; they chose to continue task 12 and
+checkpoint once it was actually done, which is what happened here.
+
+**Next:** task 5 (split this feature file into the pair shape, decision 7) → 6 → 7 → 8 → 9.
+Checkpoint 3 (implementation → review) still owed before task 9.
