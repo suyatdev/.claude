@@ -934,19 +934,22 @@ how this file and its linked files should be written (plain language, major chan
   over-fire on a self-contained worktree candidate. `git-guard.test.sh` unaffected, 77/0. ADR 0016
   amended (three sides, not two; closes-the-example-not-the-limit on `relaxed`). Blast radius
   re-checked: still exactly the named 8-file set.
-  · ✅ **TASK 10 DONE — PR #40 OPEN** (`https://github.com/suyatdev/.claude/pull/40`), session 16,
-  `origin` = `git@github.com:suyatdev/.claude.git`. Model-switch checkpoint 3 (implementation →
-  review) answered Opus 5; `phase: review`, `model_tier: high`. **Round 5 (implementation, gating)
-  PASSED `risk=low confidence=high` at `f6242c2`** — independently reproduced the red and the fix in
-  its own clone, verified no over-fire, re-ran `git-guard.test.sh` (77/0) and `shellcheck` itself.
-  Closed more than task 11 claimed: a 0-byte worktree `hooks/git-guard.sh` (round 4's flagged
-  no-falsifier gap) is now also refused, though still unpinned by a named scenario. Non-blocking
-  notes left open per this branch's standing no-mid-flight-widening decision: missing self-contained
-  NOTE on the worktree branch (reporting only); `require_on_disk` duplicates `extract_required`'s
-  error strings; restore cost keeps climbing (feature file 1286 lines, this file 2500+). PR opened
-  AT the judged SHA (`f6242c2`) per this branch's `judge-guard.sh`-strict discipline; the judge trail
-  itself committed as a follow-up push, per this repo's established pattern (`a685a1c`).
-  **▶️ NEXT: awaiting user review/merge of PR #40.**
+  · ✅ **FIXED — PR #40 MERGED 2026-08-06** (`2c09019`), branch `fix/replay-harness-base-pin` deleted
+  local + remote, judge `risk=low confidence=high` (round 5, `f6242c2`). **Verified on `main` after
+  pull, not merely reported:** `git-guard.test.sh` 77 passed / 0 failed; the replay harness itself
+  refuses a vacuous self-comparison (`base=2c09019…`) and — the fix's own point — refuses naming the
+  missing helper when run against a clone with `hooks/lib` deleted, instead of the old silent
+  `260/118/0` exit 0 pass. Detail: `docs/features/replay-harness-base-pin.md`;
+  decision record ADR 0016; judge trail `coding-memory/observability-judge/2026-08-06-….md`.
+  Round 5 **closed more than task 11 claimed**: a 0-byte worktree `hooks/git-guard.sh` (round 4's
+  flagged no-falsifier gap) is now also refused, though still unpinned by a named scenario —
+  worth carrying forward as a future scenario P if this harness is touched again. Non-blocking notes
+  left open per this branch's standing no-mid-flight-widening decision: missing self-contained NOTE
+  on the worktree branch (reporting only, not a functional gap); `require_on_disk` duplicates
+  `extract_required`'s error strings (silent-drift risk on a future message edit); restore cost keeps
+  climbing (feature file 1300+ lines, this file 2500+ — both mandatory reading on restore, still
+  unaddressed). PR opened AT the judged SHA (`f6242c2`) per `judge-guard.sh`-strict discipline; the
+  judge trail itself committed as a follow-up push, per this repo's established pattern (`a685a1c`).
   · ⚠️ **The "false green cited as evidence" premise was WRONG — do not re-adopt it.** The cited
   figures are **valid**. `git-guard-empty-index.md:314-318` reports 378 **pairs** (matrix size) with
   **215/326/346** identical and **162/52/32** relaxed — a self-comparison cannot produce one
