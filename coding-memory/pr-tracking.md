@@ -752,5 +752,8 @@ Deliberately not removed: the `rtk` wrapper-stripping in `git-guard.sh`, `judge-
 `shell_segments.py` (own tests; ADRs 0012 and 0015 reason about that wrapper list), and historical
 mentions in `docs/decisions/` and `docs/superpowers/plans/` (immutable records).
 
-- **branch not yet deleted** (local + remote both still present). Deletion deferred to the user —
-  GitHub retains merged PR head refs, so it stays restorable from the PR page either way.
+- **branch deleted local + remote 2026-08-06**, on the same convention as the 2026-08-04 cleanup
+  above: `git branch -d` (never `-D`), so git itself confirmed the merge rather than my asserting
+  it. Verified after: `git merge-base --is-ancestor 3ec8504 main` → true, so the commit survives as
+  an ancestor of `main`; and the PR page still reports `state=MERGED head=docs/remove-rtk-references`,
+  so GitHub's retained head ref makes it restorable from there.
