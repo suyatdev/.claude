@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: feat/statusline-wrap-worktree
 ---
@@ -175,7 +175,10 @@ Rationale for reversing the documented "output can never be split across lines" 
       byte-for-byte including stderr. Found the new row assertion carried two rows of slack and
       demonstrated it with a mutant emitting a spurious blank leading row — 7 rows, passing all
       68 tests. Assertion tightened to the fixture's own segment count; the mutant now fails it.
-- [ ] 8d. Observability judge, round 4 (test-tightening + docs delta), then PR. **Open the PR
+- [x] 8d. Observability judge, round 4: **risk=low, confidence=high**. Traced the segment count
+      through `bash -x` to confirm the tightened bound comes from code structure (six active
+      `push_segment` sites) rather than being fitted to observed output, and independently
+      rebuilt the mutant to confirm the assertion still fails on it. **PR #43 open.** **Open the PR
       from this worktree** — `judge-guard` matches on `repo` = `basename(show-toplevel)`, which
       is `statusline-wrap-worktree` here and `.claude` from the shared checkout, where it would
       look for the wrong verdict and block. Freshness is strict: the stored `head_sha` must
@@ -209,3 +212,11 @@ Rationale for reversing the documented "output can never be split across lines" 
       status line itself is unaffected and this is cosmetic. Written down because it has now
       survived three judge rounds as an unlogged observation, which is how cosmetic defects
       become permanent.
+- [ ] 12. **The row assertion's mutation-sensitivity is environment-dependent.** Raised by the
+      round-4 judge. Segment 0 is `➜  $(whoami)@$(hostname -s)`, built from the machine and not
+      from the fixture, so the off-by-one mutant only misbehaves when segment 0 alone exceeds
+      `wrap_at` — i.e. when `len(user) + len(host) > 18`. This machine measures 25 and the
+      canary works; a CI container running `root` with a short hostname measures ~16 and it
+      would silently stop working. The assertion still bounds rows correctly either way; it is
+      its power to *detect* a regression that varies. Fix is to pin `whoami`/`hostname` behind a
+      `PATH` shim in the fixture, as the judge did to measure both sides.
