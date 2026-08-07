@@ -3600,3 +3600,55 @@ repo that means `~/.claude/.claude/…`; a write to `~/.claude/session-state.md`
 root, matches nothing, and is denied. The hook was right — that path was wrong.
 
 **Open:** the round-10 revision (seven edits, enumerated in the handoff), then re-judge.
+
+## Sessions 35–36 — the response register: a rule that could not be written by the agent that needed it
+
+Two standing requests about how replies are written — **plain language on every reply**, and
+**every prompt carries a recommendation** — were being missed. An audit found the cause was
+*location*, not disagreement.
+
+**The plain-language rule existed, and was scoped wrong.** It lived only as auto memory, and its
+first six words read *"When asking the user a question"*. Explanations, findings, and status
+reports were never covered, so the rule read as already-followed while being routinely missed. The
+user asked for it three separate times (2026-08-02, sessions 33 and 35).
+
+**The recommendation rule did not exist at all.** `grep -riE "recommend"` over `CLAUDE.md`,
+`rules/` and `agents/` returned **zero matches**. The only adjacent guidance is
+`AskUserQuestion`'s own convention, phrased conditionally (*"**if** you recommend a specific
+option…"*), so it obligated nothing.
+
+**Why auto memory was the wrong home.** It is keyed per project — four such directories exist on
+this machine, only the current repo's loads at session start — and it is gitignored
+(`.gitignore:43`), so it never commits and never syncs. A rule about how the assistant *speaks*
+cannot be repo-specific. `triaging-new-instructions` put both at tier 2: they must hold every turn,
+and no script can judge whether prose is jargon-free or whether a recommendation was given. That is
+`rules/core-conduct.md` § Session Defaults. **ADR 0019** records the five options weighed.
+
+**The freeze, and the way past it.** The agent could not make the edit. `phase-guard.sh` is
+registered `PreToolUse` on `Edit|Write|NotebookEdit` and `rules/` is not on its exempt list, so
+every write was denied while two feature files sat at `phase: planning`. The guard was behaving
+correctly by its own contract — it matches on **path, not intent** — but the block was a false
+positive: neither planning feature has any relationship to the response register. The resolution
+was the hook's own scope: **it intercepts agent tool calls only, so the user edited the file by
+hand.** Rejected alternatives: managed policy (`sudo`, un-overridable, a third copy) and
+`autoMemoryDirectory` (merges all four repos' memories).
+
+**Then the duplicates were deleted, not synced.** Both memory files and their two `MEMORY.md` index
+lines are gone; `grep` confirms no dangling wikilinks. One fact, one home.
+
+**Handoff error caught on arrival.** The session-35 handoff claimed `docs/**` is outside
+`git-guard`'s `main` allowlist and needed a branch. It is not — `hooks/git-guard.sh:186` allows
+`CODING_MEMORY.md|coding-memory/*|docs/*.md`. Only `rules/` genuinely needed the branch. A handoff
+is data, not truth; this one was wrong on a fact that would have cost an unnecessary branch.
+
+**Also landed:** `docs/marker-gate-defect-checklist.md`, the open defects for
+`verification-marker-gate` re-verified against **revision 5**. Verified while checking: the spec
+mentions **`rtk` zero times** and names `kind: COMMIT` exactly once without defining the predicate.
+The hooks learned the rtk/chained-command lesson (`git-guard.sh:24-26`, `doc-guard.sh:119`); the
+spec did not.
+
+**Count discrepancy to settle:** the session-34 entry above says the round-10 revision is **seven**
+edits; the session-35 handoff enumerates **nine**. The nine-item list is the one that was worked
+from — treat it as authoritative and re-derive rather than trusting either number.
+
+**Open:** the round-10 revision (nine edits), then re-dispatch both judges.
