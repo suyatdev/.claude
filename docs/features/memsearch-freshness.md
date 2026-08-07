@@ -128,19 +128,48 @@ classifies; it does not hold for a run whose corpus silently vanished.
 
 #### The state table — the single source of truth
 
-**This table is authoritative. Every other surface in this spec is derived from it and must be
-re-derived when it changes:** R2's guarantee, the `OUT` node of the data-flow diagram, the Scenarios
-section, falsifier clauses **(f), (g) and (h)**, and task 4's test list. Three consecutive review
-rounds failed because a state was added here and the surfaces restating it went stale; the fix is to
-have exactly one place that defines them.
+**This table, together with the eight rendered lines beneath it, is authoritative.** The table
+defines the *conditions*; the numbered block below defines the *wording*. Together they are the only
+place either is defined.
 
-⚠️ *This list was itself out of date until round 7, which is the point.* It named "the
-classification table under Contracts" — a surface round 5 **deleted**, replacing it with a pointer —
-and named only clauses (f) and (g) where the falsifier states that (f), (g) **and (h)** are derived
-from the table. **The index of derived surfaces had itself gone stale**, the exact failure the table
-exists to prevent, one level up. A surface added to or removed from this spec must be added to or
-removed from *this sentence* in the same edit; if that feels like bookkeeping, it is the bookkeeping
-whose absence cost rounds 3, 4 and 6.
+⚠️ **Every other surface naming a state is enumerated below — mechanically, not from memory.**
+Rounds 5, 6 and 7 each patched the derived-surface list and each left instances behind; round 7's
+list was itself stale, naming a section round 5 had deleted. A hand-maintained list of duplicates
+had become one more duplicate to maintain. So the list is no longer written from memory: it is the
+output of a sweep for every state name, rendered line, and ordering claim across all 1,163 lines,
+and it is regenerated the same way whenever the table changes.
+
+**Keyed by section, never by line number.** An earlier draft of this very table cited line numbers;
+they were stale inside one editing session, because a line number is itself a copy of the document's
+structure. Sections are stable, so the index is keyed to them.
+
+| Surface | What it restates | Status |
+|---|---|---|
+| **The state table** (below) | conditions | **authoritative** |
+| **The eight rendered lines** (below the table) | wording | **authoritative** |
+| R1 | the fresh and stale lines, verbatim | derived · agrees |
+| R2 | states 1-4, the guarantee | derived · agrees |
+| The per-state rationale bullets (after the rendered lines) | all eight, by name and number | derived · agrees |
+| The threshold rationale (`STALE_HOURS`/`RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`) | states 2 and 5 | derived · agrees |
+| Data-flow diagram → `OUT` node | all eight, by name | derived · agrees |
+| Contracts → `index.py` | the stuck-run case | derived · agrees |
+| Contracts → `memsearch-nudge.sh` (the ordering bullet) | 5/6/7 warn, stale wins, 3 before 4 | derived · agrees |
+| Scenarios | all eight | derived · agrees |
+| Falsifier (a)(b)(c)(f)(g)(h) | states 1, 2, 5, 6, 7, 3 | **(a) contradicted the table — fixed round 8** |
+| Non-goal: a run that walked zero files | state 8 | derived · agrees |
+| Non-goal: concurrency | states 1, 2, 5 | derived · agrees |
+| Non-goal: log growth | states 2, 3, 6, 7 | derived · agrees |
+| Non-goal: retrying a failed run | state 7 by name (*degraded*) | derived · agrees |
+| Task 4 | states 3, 6, 7 | derived · agrees |
+
+**The `memsearch-nudge.sh` ordering bullet is worth reading twice**: it declares the state list
+*"deliberately not restated here"* and then restates its ordering properties in the next sentence.
+That is the honest shape of this defect — not carelessness, but that *ordering* feels like commentary
+rather than duplication. It is duplication.
+
+*Anything added to this spec that names a state joins this table in the same edit.* **Sixteen
+entries is the real size of the problem**; the three-entry list that preceded it is why rounds 5, 6
+and 7 each fixed the instance in front of them and left the class open.
 
 **Eight states. First match wins. One line per state, never more.** The two silent paths — absent
 `status.json`, and `chunks` absent or 0 — sit outside this table and emit nothing at all (R4).
@@ -276,16 +305,30 @@ Its line 22 invariant — "`CODING_MEMORY.md` and `subagents/` transcripts are n
 is **half falsified by R10** and is corrected in that same commit. The `subagents/` half stands.
 
 **R9 — retrieval is measured against a stated bar.** Five queries are written and committed as their
-own commit before any of them is run. Acceptance, at `k=6`, is **two rank clauses that bind now and
-one score floor that is set from measurement before it binds**:
+own commit before any of them is run. Acceptance, at `k=6`, is **two rank clauses, both binding**:
 
-1. **≥2 hits** belonging to the named feature. *Binds now.*
-2. The **top hit** belongs to that feature. *Binds now.*
-3. Each of those hits scores **at or above a floor set in task 8b** — see below. *Does not bind
-   until that floor is recorded.*
+1. **≥2 hits** belonging to the named feature.
+2. The **top hit** belongs to that feature.
 
-⚠️ ***The floor is deliberately unset here, and that is a decision, not an omission.*** Through
-round 5 this requirement read "each scoring **≥0.30**". **That bar is unreachable by construction.**
+**There is no score clause.** Both clauses are rank-based, both can genuinely fail, and both gate
+this branch. Task 8b still records every hit's raw score as a **baseline for future comparison** —
+that record is the durable value — but no pass mark is set from it.
+
+⚠️ ***The five features must span the corpus size range, and each one's chunk count is recorded
+beside its result.*** Measured 2026-08-07, the eleven indexed feature files run from **6 to 91
+chunks** — a 15× spread (`phase-guard-hook` 91, `replay-harness-base-pin` 70,
+`verification-marker-gate` 53, `memory-system-split.spec` 31, `git-guard-empty-index` 24,
+`memsearch-freshness` 14, `shell-segments-redirects` 13, `git-guard-chained-command` 13,
+`falsifier-base-pin` 9, `stale-phase-guard-rule-text` 6, `memory-system-split` 6). A file with 91
+chunks has many more chances to land two hits in a top-6 than one with 6. **Choosing five fat
+targets would pass clauses 1 and 2 while measuring nothing** — the same tuning the retired score
+floor allowed, moved from the number to the sample. At least one query must name a file in the
+bottom third and at least one in the top third, and the chunk count travels with the result so a
+soft sample is visible to a reader rather than buried.
+
+⚠️ ***A third clause existed through round 7 and is deliberately gone (user decision, 2026-08-07).
+Its history is kept because the failure is instructive.*** Through round 5 this requirement read
+"each scoring **≥0.30**". **That bar is unreachable by construction.**
 `search.py:61-64` fuses exactly two retrievers by reciprocal rank, each contributing at most
 `1/(RRF_K + 1)` with `RRF_K = 60` (`search.py:19`), and `:80` multiplies the sum by the chunk's
 weight, the largest of which is `curated_doc: 1.5`. The hard ceiling is therefore
@@ -300,28 +343,23 @@ check that reports failure while telling you nothing about the thing it claims t
 recorded here rather than silently corrected, because a number that survived five judge rounds is
 evidence about the review, not just about the number.
 
-⚠️ ***A floor set from this run cannot fail this run, and clause 3 must not be reported as though
-it could.*** Drawing the line after seeing where the runners stopped means everyone finishes. R9 is
-also measured **once, at landing, never again** (see Non-goals), so on the only day clause 3 is ever
-evaluated it is guaranteed to pass — a green light carrying no information. **Clause 3's value is as
-a recorded baseline for a future change, not as a verdict on this one.** The work of *this* branch is
-gated by clauses 1 and 2, which are rank-based, were fixed before the queries were written, and can
-genuinely fail. Anyone reading a clause-3 pass as evidence that R10's noise cost was acceptable has
-misread it; that judgement rests on clauses 1 and 2 and on the `-m golden` net.
+**Round 6 replaced that bar with a floor set from measurement. Round 7 showed why that also failed,
+and round 8 removed the clause rather than repair it a third time.** A floor drawn *after* seeing
+where the scores landed cannot fail the run that set it — draw the finish line behind the runners
+and everyone places. R9 is measured **once, at landing, never again** (see Non-goals), so there is no
+later run for the floor to grade either. The clause would have been guaranteed to pass on the only
+day it was ever evaluated: a green light carrying no information, plus a stop-and-ask step whose
+only realistic failure mode was being skipped.
 
-**A query's overall result is the conjunction of the clauses that bind.** With no recorded floor
-that is clauses 1 and 2 only, and the query is reported as
-`pass (clause 3 not yet binding)` / `fail (clause 3 not yet binding)` — **never a bare `pass`**,
-which would tell a reader the score bar was applied when it was not.
+**What survives is the part that was always doing the work.** Task 8b still records every hit's raw
+score — the raw numbers are a real baseline a future change can be compared against, and they are
+strictly more informative than a pass mark derived from them. The *verdict* rests on clauses 1 and 2,
+which were fixed before the queries were written and can genuinely fail, and on the `-m golden` net.
 
-**Why the floor is set from data instead of replaced with a guess (user decision, 2026-08-07):**
-any number written today would be judgment against the current `RUN_ABANDON_HOURS`-era weights and
-`RRF_K`, dressed as a measurement. The queries are run first, their real scores are recorded, and
-the floor is chosen against those numbers. This is a bounded, explicitly-gated open value — task 8b
-produces it, a named human decision fixes it, task 10 applies it — **not** a TBD left for an
-implementer to resolve. An implementer who reaches task 10 without a recorded floor **stops and
-asks**; they do not invent one, and they do not skip clause 3 silently. Clauses 1 and 2 are fully
-specified and gate the work on their own in the meantime.
+*Three attempts at one clause is the argument for deleting it.* Round 5 set a bar six times the
+scorer's ceiling; round 6 made it self-fulfilling; round 7 added a falsifier clause to stop it being
+skipped, which was a guard on a guard. A measurement that needs that much scaffolding to mean
+anything was not measuring anything.
 
 *Membership is mechanical, not a judgment call*: a hit belongs to feature `F` iff its source path is
 exactly `docs/features/F.md` or `docs/features/F.spec.md`. Nothing else counts — not an ADR that
@@ -330,7 +368,7 @@ mentions `F`, not a transcript discussing it.
 ***R9's bar cannot be measured by the existing golden harness, and the five queries therefore get
 their own runner.*** Verified 2026-08-07: `tests/test_golden_queries.py:37-41` asserts only
 `any(expect_path_contains in p for p in paths)` — **presence somewhere in top-k, with no score
-floor, no top-hit check, and no ≥2 count.** All three of R9's clauses are invisible to it. Worse,
+floor, no top-hit check, and no ≥2 count.** Both of R9's clauses are invisible to it. Worse,
 only the 11 `must` entries can fail at all; the 3 `stretch` and 2 `negative` entries call
 `warnings.warn` and pass unconditionally (`:47-52`, `:57-60`). Scoring R9 through that harness would
 report a pass whenever one feature file appeared anywhere in six results at any score — a bar so
@@ -924,20 +962,24 @@ Scenario: memsearch status reports run recency, not just content recency
   Then last_run and last_run_errors are shown
   And last_indexed is no longer presented as the freshness answer
 
-Scenario: Retrieval is scored against the clauses that bind
+Scenario: Retrieval is scored against the two rank clauses
   Given the five committed measurement queries
-  And a score floor has been recorded in task 8b
   When each is run at k=6
   Then the pass or fail of each is recorded under Verification
   And a failing result is recorded as a failure
+  And each query's target chunk count is recorded beside its result
 
-Scenario: Retrieval is scored before any floor has been set
+Scenario: The measurement queries span the corpus size range
   Given the five committed measurement queries
-  And no score floor has been recorded in task 8b
+  When their target feature files are ranked by chunk count
+  Then at least one target is in the bottom third of the range
+  And at least one target is in the top third
+
+Scenario: The raw scores are recorded even though no floor gates them
+  Given the five committed measurement queries
   When each is run at k=6
-  Then each result is recorded as carrying "clause 3 not yet binding"
-  And no query is recorded as a bare pass
-  And clause 3 is recorded as neither passed nor failed
+  Then every hit's raw score is recorded under Verification
+  And no pass or fail is derived from those scores
 ```
 
 ### Toolchain — pinned
@@ -958,7 +1000,8 @@ Verified on this machine 2026-08-06, not remembered.
 ### Falsifier — written before the code
 
 > This has failed if, across the 20 sessions after it lands: (a) a session starts with `last_run`
-> older than `STALE_HOURS` and no stale line is emitted; (b) a stale line is emitted while the last
+> older than `STALE_HOURS`, **no state 1, 2 or 3 line applies**, and no stale line is emitted; (b) a
+> stale line is emitted while the last
 > run finished less than `STALE_HOURS` ago — including the case where that run changed no files;
 > (c) the `launchd` agent stops running and nothing surfaces it within `STALE_HOURS`, **or surfaces
 > it only as a stuck line that never resolves into one naming the real problem**; (d) any of the
@@ -968,16 +1011,23 @@ Verified on this machine 2026-08-06, not remembered.
 > (g) an in-progress or stuck line is still emitted more than `RUN_ABANDON_HOURS` after
 > `run_started`, or a missing `last_run_errors` produces a fresh line; or (h) a first run that
 > started more than `RUN_ABANDON_HOURS` ago and never completed produces a line carrying no warning
-> marker and no pointer to the log; or **(i) this ships with R9's score floor never set** — task 8b's
-> measurement skipped, or its human decision never taken — **or with any query recorded as a bare
-> `pass` while clause 3 was non-binding.**
+> marker and no pointer to the log; or **(i) this ships without task 8b's raw scores recorded, or
+> with all five measurement queries naming targets from the same third of the chunk-count range.**
 
-(a), (b), (e), (f), (g) and (h) are hook tests. (c), (d) and (i) are observations. Clauses (f), (g)
-and (h) are **derived from R3's state table** — (f) from states 1, 2 and 7, (g) from the decay out of
-states 1 and 2 plus state 6, (h) from state 3 — and are re-derived whenever that table changes.
-**(i) exists because "not yet binding" fails nothing**, which makes skipping the measurement the
-cheapest path to a green board; naming it as a falsification is what stops silence from being a
-passing grade.
+(a), (b), (e), (f), (g) and (h) are hook tests. (c), (d) and (i) are observations. Clauses **(a), (f), (g)
+and (h)** are **derived from R3's state table** — (a) from the precedence of states 1-3 over 5, (f)
+from states 1, 2 and 7, (g) from the decay out of states 1 and 2 plus state 6, (h) from state 3 — and
+are re-derived whenever that table changes.
+
+⚠️ ***Clause (a) was unsatisfiable alongside (g) until round 8.*** It read "`last_run` older than
+`STALE_HOURS` and no stale line is emitted", with no exception for the states that outrank stale.
+**State 2 makes that a certainty, not a corner case**: stuck means `run_started` is between
+`RUN_MAX_HOURS` (6h) and `RUN_ABANDON_HOURS` (24h) old *and* newer than `last_run`, so once
+`run_started` passes `STALE_HOURS` (8h), `last_run` is **necessarily** older than 8h too. Clause (a)
+demanded a stale line for exactly the case clause (g) blesses as a stuck line. Task 4 turns both into
+hook tests, so **no correct implementation could pass both** — the spec's own falsifier would have
+condemned any faithful build. Clause (a) is now scoped to "no state 1, 2 or 3 line applies", which is
+the table's precedence stated once rather than re-derived by a reader.
 **(d) is weaker than first written**:
 it can still be checked from git history, but it no longer proves the queries were authored before
 the index was rebuilt, because the rebuild happened first (Background, R9).
@@ -1100,17 +1150,16 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9). **After task 7**, so the queries are written against the corpus they will
       be scored on.
-- [ ] 8b — **Record the observed scores, then stop for the floor decision (R9 clause 3).** Run the
+- [ ] 8b — **Record the observed scores as a baseline. No pass mark is derived from them.** Run the
       five committed queries at `k=6` and write, under `## Verification`, every hit's score
       alongside whether it belongs to the named feature — the raw numbers, unrounded, with no
       pass/fail attached. Also record the ceiling the scorer can emit
-      (`2 × 1/(RRF_K + 1) × max(weight)` — **0.04918** at `RRF_K = 60` and `curated_doc: 1.5`), so
-      the floor is read against the range it lives in rather than against intuition.
-      ⚠️ **Then stop and put the numbers in front of the user, who sets R9's floor.** Do not choose
-      it yourself and do not proceed to task 10 clause 3 without it. Once set, write the floor into
-      R9 in the same commit that records the measurement, so the bar and the evidence for it land
-      together and the frontmatter blob changes once.
-      *This is the deliberate open value R9 names; it is closed here, by a human, against data.*
+      (`2 × 1/(RRF_K + 1) × max(weight)` — **0.04918** at `RRF_K = 60` and `curated_doc: 1.5`), so a
+      future reader compares against the range rather than against intuition.
+      **Record each target feature file's chunk count beside its result** (R9), and confirm the five
+      targets are not all drawn from one third of the range.
+      *There is no floor to set and no decision to stop for — R9's score clause was removed in
+      round 8. These numbers exist to be compared against later, not to gate this branch.*
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
@@ -1144,18 +1193,20 @@ was asked and answered 2026-08-06: **Opus 5**.
       query than a transcript is, and the fix is to re-point the query, not to re-exclude the file;
       record that judgment either way.
       **(b) R9's bar.** Score the five measurement queries at `k=6` with R9's own runner and record
-      pass/fail per query, including a failing result if that is the truth:
-      **clause 1** ≥2 hits belonging to the named feature, **clause 2** top hit belonging — both
-      bind unconditionally — and **clause 3** each of those hits at or above **the floor recorded
-      in task 8b**. ⚠️ **If no floor has been recorded, clauses 1 and 2 are still scored and
-      clause 3 is reported as `not yet binding`** — never as a pass, never as a fail, and never
-      against an invented number. Reaching this task without a floor means task 8b's decision was
-      skipped: stop and ask.
-      **A failure of clause 1 or 2 is a real result about R10's noise cost** — report it, do not
+      pass/fail per query, including a failing result if that is the truth: **clause 1** ≥2 hits
+      belonging to the named feature, **clause 2** top hit belonging. Both bind; there is no third
+      clause. Record each target's chunk count beside its result.
+      **A failure of either clause is a real result about R10's noise cost** — report it, do not
       silently re-exclude the file (and see R10's exit cost: re-excluding does not remove the
-      chunks already written). *A clause-3 failure is only meaningful against a floor set from
-      measurement; before round 6 this clause read `≥0.30`, which the scorer cannot reach, so any
-      pre-existing reading of "R9 failed" that rests on it is void.*
+      chunks already written). *Any pre-existing reading of "R9 failed" that rests on the retired
+      `≥0.30` score floor is void — the scorer cannot reach 0.30 (R9).*
+- [ ] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
+      through (i), by letter, each marked held / falsified / not yet observable, with the evidence
+      or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
+      the word *falsifier* appeared nowhere in this task list, so the section that defines how this
+      feature could be proven wrong had no step that read it. A falsification test nobody runs is
+      indistinguishable from one that passes — the same defect, one level up, as the index that
+      reported freshness it never checked.
 - [ ] 11 — Observability judge (implementation stage), then PR.
 
 ## Verification

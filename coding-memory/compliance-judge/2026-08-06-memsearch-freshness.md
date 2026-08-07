@@ -1261,3 +1261,131 @@ stated mode or rotation. No repo-layer `.claude/project-standards.md` exists. Fr
 ### Waivers
 
 None. No violation has ever been waived on this spec.
+
+---
+
+## Round 7 — 2026-08-07 — FAIL (1 violation)
+
+`.claude` @ `main` · head `a7b95e77b4a51f25da5d055366b096fa6c7902e6` · spec blob
+`d0428e4d40d36372647e260657e1204a262098a6` · 1163 lines · confidence **high**
+
+### In plain English
+
+Round 6's finding is genuinely closed. R2 no longer pins a line of output; it states the guarantee
+("never fresh without proof") and hands the wording to R3's table, naming states 1-4 correctly.
+R3's list of surfaces to re-derive now names R2 and clause **(h)** and has dropped the Contracts
+table round 5 deleted. I re-derived all eight states by hand against every scenario in the spec:
+each one classifies to the state it claims, including the two future-timestamp cases and the decay
+case. No disagreement anywhere between the table and the surfaces the list names.
+
+The new failure is one list entry over. **Falsifier clause (a) says the feature has failed if a
+session starts with `last_run` older than `STALE_HOURS` and no stale line is emitted — and R3's
+table requires exactly that, twice.** First-match-wins puts *in progress* (1) and *stuck* (2)
+ahead of *stale* (5), so a run that is currently going suppresses the stale line by design. That
+is not a corner case for state 2: "stuck" means `run_started` is 6-24h ago and is *newer* than
+`last_run`, so once `run_started` passes 8h, `last_run` is necessarily older than 8h too. Every
+stuck run in that range trips clause (a). Clause **(g)** blesses precisely the same line ("an
+in-progress or stuck line is still emitted more than `RUN_ABANDON_HOURS` after `run_started`" is
+the failure, so emitting it *within* 24h is correct). Both (a) and (g) are listed as **hook
+tests** — task 4 would write two tests that cannot both pass against a correct implementation.
+
+The reason it slipped is the same reason round 6's did: clause (a) is a surface derived from the
+table's *ordering*, and it is not in R3's derived-surface list. Only (f), (g) and (h) are named
+there; (a) and (b) are declared un-derived. (b) genuinely is safe — state 5 fires only at
+`≥ STALE_HOURS`, so no stale line can appear under the threshold. (a) is not.
+
+Same rule, same territory as round 6, so the id carries forward — but it is a **different
+instance** inside that territory, not the round-6 text left unfixed. The fix is small: scope (a)
+to the states that can actually emit stale (something like "…and no stale line is emitted while no
+run is in progress or stuck"), and add (a) to R3's list in the same edit.
+
+Round 7's other three changes all check out and are not cited. R9's clause 3 is now
+*better*-specified, not worse: the conjunction-of-binding-clauses rule, the
+`pass (clause 3 not yet binding)` reporting form, falsifier **(i)** and the second scenario agree
+with each other and with task 8b and task 10(b), and (i) closes the real hole — that "not yet
+binding" fails nothing, making a skipped measurement the cheapest green board. `3,433` is gone;
+`3,484` appears three times and `wc -l` agrees. `search.py:80` is correct
+(`r["score"] = round(base_score * r.pop("weight"), 6)`), and the 0.04918 ceiling is exact
+arithmetic on `2 × 1/61 × 1.5`.
+
+### Violations
+
+| id | source | where | why |
+|---|---|---|---|
+| `writing-specs/derived-surfaces-out-of-sync` | `skills/writing-specs/SKILL.md` | Falsifier clause (a), against R3's state table (states 1-2) and falsifier clause (g); and R3's derived-surface list, which does not name (a) | Clause (a) declares the feature failed whenever `last_run` exceeds `STALE_HOURS` with no stale line, but R3's first-match-wins ordering mandates the in-progress and stuck lines instead — and a state-2 run with `run_started` 8-24h old *always* has `last_run` older than 8h — so the clause-(a) and clause-(g) hook tests contradict each other, and (a) is absent from the list of surfaces to re-derive. |
+
+Citations, re-run this round: table at spec `:148-157` ("Eight states. First match wins."), rows 1,
+2 and 5; state-2 range from `RUN_MAX_HOURS` 6 / `RUN_ABANDON_HOURS` 24 at `:216`; clause (a) at
+`:960-961`; clause (g) at `:968-969`; hook-test designation and the derived-clause list at
+`:975-977`; R3's derived-surface list at `:131-134`.
+
+### Derived surfaces that agree with the table but are not on its list — notes, not violations
+
+Every one of these is currently *correct*; naming them is about the index, not about restating the
+states. Round 5 removed duplication deliberately and none of this asks for it back.
+
+- **R1 (`:105-107`) pins two output lines verbatim** — the fresh line and the stale line. Diffed
+  character for character against table rows 8 and 5: identical today. It is the same shape as the
+  round-6 R2 defect and it is not on the derived list.
+- **Contracts → `hooks/memsearch-nudge.sh` (`:613-616`)** states ordering consequences: "states 5,
+  6 and 7 all warn, stale wins" and "state 3 is checked before state 4". Both correct against
+  first-match-wins; both would go stale if a state were inserted.
+- **Three Non-goals bullets** name states: zero-walk → "state 8, fresh" (`:993`); lock/pidfile →
+  states 1, 2 carry no remediation and decay to state 5 (`:1025-1027`); log rotation → "states 2,
+  3, 6 and 7 all point a reader at that file" (`:1034`). All three verified correct against the
+  table's remediation column.
+
+### Other notes
+
+- **Task 9's stop condition names only `RUN_MAX_HOURS`** (`:1125-1126`) while R3 says both run
+  constants are re-chosen against the measurement and calls `RUN_ABANDON_HOURS` "the stricter
+  obligation". In practice safe — any duration that threatens 24h necessarily exceeds 6h, so the
+  stop fires — but the task could name both.
+- **"Carries sessions 24 through 31"** (`:357-358`) still understates: headings run **17 → 32**
+  (24 `##` headings, 20 of them session-shaped). Carried as a note in rounds 5 and 6 for the same
+  reason — understating strengthens the argument the sentence is making.
+- **Length.** 547 → 1163 lines across seven rounds (+50 this round); 12 lines are "corrected in
+  round N" annotation. Still reads as anti-recall discipline rather than padding, but
+  `writing-specs`' tokenization constraint is real — these belong under `## Verification` once the
+  spec is approved.
+
+### Everything re-measured this round (not recalled)
+
+Live index **911** `sources` rows — **187** at `2026-07-18`, **724** at `2026-08-06`, matching the
+Background exactly. `CODING_MEMORY.md` **3,484 lines / 300,160 characters**; largest indexed `.md`
+is `vibe-scape/docs/plans/2026-07-13-live-presence-plan.md` at **184,620** characters / **121**
+chunks → **1.62×** (300160/184620 = 1.6258); the three larger-than-the-old-claim docs are
+**184,620 / 153,701 / 131,516**, and `2026-07-26-03b-deploy-design.md` is largest by *chunk* count
+(**130**) at 128,317 characters — the unit-conflation correction is right in both directions. Plan
+sweep re-run: **14** hits, partitioned exactly as stated (correct: 19, 2828, 2890, 2942; leave: 41,
+152, 205, 211, 282, 284, 318, 1484, 1519, 3067), plan is 3,079 lines. Design doc 58 / 67 / 70
+(`Z -.->|NOT indexed| S`) / 135 / 154-163 all exact. Code: `search.py:19` `RRF_K = 60`, `:61-64`
+two-retriever RRF, `:80` weight multiply; `config.py:56` `excludes = …`, `:57-60` guard;
+`db.py:16/17/103/112-120/121,125/156`; `index.py:44-51/57-67/73/74/100/125-127/135-137`;
+`chunk.py:111/140-141`; `cli.py:39/66`; `status.py:27` — every one exact. Tests: `test_index.py`
+`:58/84/93/105/106/117/135/136/148/149/160/161` and all four quoted comments verbatim;
+`test_config.py:42/48`; `test_golden_queries.py:37-41` presence-only, `:47-52` and `:57-60` warn;
+`golden_queries.json` 16 entries (11 `must` / 3 `stretch` / 2 `negative`), line 4 is the falsified
+premise and line 2 the still-correct sqlite-over-qdrant query, entry 11 at file line 12 is the
+mid-july/`episodic`/`since`/`.jsonl` case; `pyproject.toml:23` `addopts = "-m 'not golden'"`;
+`README.md:22`. Toolchain row by row: bash 3.2.57, python3 3.9.6 (rejects `Z`, parses `+00:00`), uv
+0.11.28 Homebrew at `/opt/homebrew/bin`, venv python 3.12.13, sqlite3 3.51.0, darwin 25.5.0, no
+`timeout` binary, `launchctl getenv PATH` empty. Project copies 159 and 119 lines. `config.json`
+confirms `curated_docs` omits the `~/.claude` root, so R10's "necessary but not sufficient" trap is
+real.
+
+**Part B clean, unchanged from round 6.** No new dependency (pytest 8.3.4, sqlite-vec 0.1.9,
+hatchling 1.27.0 already pinned in `pyproject.toml` + `uv.lock`); shell execution is fixed
+`launchctl` argument vectors behind a `plutil -lint` gate; `install-schedule` fails closed 1/2/3
+and never prints success on a non-zero path; plist 0644, LaunchAgents 0755, `__HOME__` only with a
+scenario asserting it; `status.json` writes atomic via `os.replace`, entry-read fallible-by-design
+and caught. No absolute paths, no secrets. YAGNI holds — eight states each carry a stated failure
+they exist to catch, and R10 is corrective.
+
+**Not re-cited (settled):** spec at `docs/features/`, `/opt/homebrew/bin` in the plist `PATH`,
+`scheduled-index.log` mode/rotation, the unset R9 floor (round 7 made it stricter, not worse), the
+zero-files-walked Non-goal. No repo-layer `.claude/project-standards.md` exists.
+
+### Waivers
+
+None. No violation has ever been waived on this spec.
