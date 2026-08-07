@@ -3851,3 +3851,54 @@ The archive's *size* figures (`317,249 characters / 3,723 lines`) are explicitly
 floor, so this session's append does not rot them: re-measured **325,079 characters / 3,787 lines**,
 both above the floor. This entry uses the date-first heading form deliberately, to keep the
 non-goal's two-forms and zero-`Session N — <date>` claims true.
+
+## 2026-08-07 — session 39: ADR 0018 (task 2), and a launchd fact the spec never had
+
+`feature/memsearch-freshness`, `phase: implementation`, `model_tier: low` (Sonnet 5, set at
+checkpoint 2 for the whole phase). Task 2 only.
+
+### `docs/decisions/0018-launchd-agent-and-run-recency-split.md`
+
+Both of the spec's structural decisions in one record — design decision 4 (a persistent `launchd`
+agent as the refresh mechanism) and decision 2 (`last_run` split from `last_indexed`) — because
+neither stands alone. The scheduler's known weakness is that it runs blind and never reports on
+itself; the compensating control is the session-start staleness warning; that warning needs
+`last_run` to exist. Choosing the scheduler without the field ships the weakness with nothing behind
+it, so they are one decision wearing two names.
+
+Rejected options are recorded per decision, with the reason: `SessionStart`-hook trigger, `cron`, a
+file watcher, and manual indexing for the scheduler; `memory.db` mtime, `status.json` mtime, and
+reusing `last_indexed` for the staleness signal. A Mermaid tradeoff mindmap carries the shape,
+validated with `skills/diagramming-technical-docs/scripts/validate-diagrams.sh` (1 block, 0 failed).
+
+### The one new fact: `StartInterval` misses a sleep, it does not defer
+
+Read from `launchd.plist(5)` rather than recalled — and it contradicted what recall would have
+supplied. **A `StartInterval` firing that lands while the machine is asleep is *missed*** ("due to
+shortcomings in `kqueue(3)`"), not queued for wake; a firing that lands while the previous run is
+still going is likewise skipped. `RunAtLoad true` covers boot and login, not sleep/wake.
+
+Consequence for this feature: a laptop closed overnight can legitimately cross the 8h threshold.
+Recorded in the ADR as **accepted, not mitigated** — the warning is *correct* in that case (the
+index genuinely is stale) and the remediation is one command. The alternative, `StartCalendarInterval`,
+does coalesce missed firings on wake but schedules against wall-clock times rather than elapsed time,
+which is a worse fit for "every 6h". The spec never claimed otherwise; it simply never said.
+
+### Citations re-verified, not restated from the spec
+
+An ADR outlives the feature file it was derived from, so every code citation carried into it was
+checked against source first: `db.py:156` (`SELECT max(indexed_at) FROM sources`), `index.py:125-127`
+(the unchanged-hash early return), `cli.py:66` (`return 0` regardless of errors), `status.py:27`
+(the `sources: N  last_indexed: …` line), and `launchctl getenv PATH` — empty on this machine, which
+is what makes the plist's explicit `PATH` load-bearing rather than boilerplate. All five held.
+
+### Archive figures
+
+Session-heading count is now **26** (21 date-first + 5 session-first) after this append; it read
+20 + 5 = 25 immediately before it. R10's non-goal still pins **20**, and the previous entry's "24
+(19 + 5)" was measured before that session's own append landed — both are stale counts, already
+queued for the deferred planning pass. The bullet's two *load-bearing* claims were re-measured today
+and both still hold: exactly **two** heading forms, and **zero** carrying the `Session N — <date>`
+shape. Size figures remain above their stated floor (`317,249 chars / 3,723 lines`): **329,097
+characters / 3,853 lines** before this append. Date-first heading form used deliberately, again, to
+keep those two claims true.
