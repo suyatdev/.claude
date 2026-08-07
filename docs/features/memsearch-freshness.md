@@ -1379,7 +1379,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         running these against the real index. Consequence for task 10a: `-m golden` now reports
         **23 deselected** rather than 16 — added tests, not a regression. Default run unchanged at
         **74 passed**.
-- [ ] 8b — **Record the observed scores as a baseline. No pass mark is derived from them.** Run the
+- [x] 8b — **Record the observed scores as a baseline. No pass mark is derived from them.** Run the
       five committed queries at `k=6` and write, under `## Verification`, every hit's score
       alongside whether it belongs to the named feature — the raw numbers, unrounded, with no
       pass/fail attached. Also record the ceiling the scorer can emit
@@ -1398,6 +1398,16 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       third** (R9's strict wording; "not all from one third" is not the rule).
       *There is no floor to set and no decision to stop for — R9's score clause was removed in
       round 8. These numbers exist to be compared against later, not to gate this branch.*
+      - **Run as the pre-R10 baseline** (user-confirmed 2026-08-07): 8b precedes task 9, so the
+        archive is configured but **not yet indexed** — zero `archive_doc` rows. This is the
+        *before* half of R10's noise measurement, mirroring how 10a's before-picture is frozen at
+        `ceadcf0`. R9's verdict is task 10b's, after the index run.
+      - Full table under `## Verification`. Two of five queries met both clauses; **that is an
+        observation, not R9's verdict**, and no pass mark is derived from it here.
+      - **The count drift the spec predicts happened inside this task.** `memsearch-freshness`
+        measured **71** chunks when targets were chosen and **72** an hour later — task 8's own
+        completion notes, appended to this file. Any count pinned in a document is wrong by the
+        next edit; the runner recomputes from source, which is why it stays right.
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
@@ -1455,4 +1465,84 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
 
 ## Verification
 
-<Appended during review: pass/fail per area and open issues only.>
+### Task 8b — R9 baseline, measured pre-R10 (2026-08-07)
+
+**Not a verdict.** The archive is configured but unindexed at this point (zero `archive_doc` rows),
+so this is the *before* half of R10's noise measurement. R9 is scored at task 10b, after task 9's
+index run. No pass mark is derived from anything below.
+
+Scorer ceiling `2 × 1/(RRF_K + 1) × max(weight)` = `2 × 1/61 × 1.5` = **0.049180**. Scores are
+recorded as `search()` returns them; it rounds to 6 dp at `search.py:80`, so 6 dp is the finest
+resolution available, not a rounding applied here.
+
+Per-feature chunk counts computed from source by the project's chunker at run time. Population
+N = **10**; ⌊N/3⌋ = 3; ranks 3–4 tie at 13, so the bottom third holds four entries.
+`*` marks a hit belonging to the named feature (`docs/features/F.md` or `F.spec.md`, nothing else).
+
+| target | chunks | third | clause 1 (≥2 hits) | clause 2 (top belongs) |
+|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | 6 | bottom | PASS (5) | PASS |
+| `falsifier-base-pin` | 9 | bottom | PASS (2) | PASS |
+| `git-guard-empty-index` | 24 | middle | FAIL (1) | PASS |
+| `verification-marker-gate` | 53 | middle | FAIL (1) | FAIL |
+| `phase-guard-hook` | 91 | top | PASS (3) | FAIL |
+
+```
+--- stale-phase-guard-rule-text (6 chunks, bottom)
+    'the rule text claimed phase-guard was dormant but it was actually registered'
+    *1. 0.048784  docs/features/stale-phase-guard-rule-text.md:1-11
+    *2. 0.048784  docs/features/stale-phase-guard-rule-text.md:61-76
+    *3. 0.047247  docs/features/stale-phase-guard-rule-text.md:12-24
+     4. 0.044643  coding-memory/pr-tracking.md:578-600
+    *5. 0.039300  docs/features/stale-phase-guard-rule-text.md:50-60
+    *6. 0.036878  docs/features/stale-phase-guard-rule-text.md:25-34
+
+--- falsifier-base-pin (9 chunks, bottom)
+    'why did the falsifier baseline move when its own fix merged'
+    *1. 0.047667  docs/features/falsifier-base-pin.md:7-17
+     2. 0.047247  coding-memory/pr-tracking.md:662-685
+     3. 0.045320  coding-memory/pr-tracking.md:686-702
+     4. 0.042727  coding-memory/pr-tracking.md:654-661
+    *5. 0.040570  docs/features/falsifier-base-pin.md:18-32
+     6. 0.040541  docs/features/replay-harness-base-pin.md:1198-1216
+
+--- git-guard-empty-index (24 chunks, middle)
+    'git-guard read an empty staging area as a denial'
+    *1. 0.048400  docs/features/git-guard-empty-index.md:14-25
+     2. 0.043910  coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:17-36
+     3. 0.042125  docs/features/replay-harness-base-pin.md:594-606
+     4. 0.042059  coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:445-471
+     5. 0.037723  coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:195-218
+     6. 0.037523  docs/features/replay-harness-base-pin.md:607-635
+
+--- verification-marker-gate (53 chunks, middle)
+    'how does the verification marker gate know the test suite really ran'
+     1. 0.046649  coding-memory/observability-judge/2026-08-02-main.md:1-12
+     2. 0.044936  coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md:1-10
+    *3. 0.044741  docs/features/verification-marker-gate.md:996-1009
+     4. 0.042727  coding-memory/observability-judge/2026-08-02-main-round4.md:1-19
+     5. 0.042009  coding-memory/observability-judge/2026-08-04-main.md:1-22
+     6. 0.041290  coding-memory/observability-judge/2026-08-02-main-round2.md:1-13
+
+--- phase-guard-hook (91 chunks, top)
+    'how does phase-guard scope write permission to the current branch'
+     1. 0.046165  coding-memory/observability-judge/2026-07-28-feature-phase-guard-hook.md:24-38
+     2. 0.046154  docs/decisions/0011-branch-scoped-write-permission.md:11-39
+    *3. 0.045826  docs/features/phase-guard-hook.md:777-809
+     4. 0.045549  docs/decisions/0011-branch-scoped-write-permission.md:1-10
+    *5. 0.045238  docs/features/phase-guard-hook.md:33-51
+    *6. 0.040548  docs/features/phase-guard-hook.md:12-21
+```
+
+**Open issue carried to task 10b — the size effect runs opposite to R9's stated worry.** R9 assumes
+a large target has *more* chances to land two hits, so five fat targets would pass while measuring
+nothing. Measured, the two **smallest** targets (6 and 9 chunks) are the only ones meeting both
+clauses, and the three larger ones are displaced — not by each other, but by the judge-verdict and
+ADR corpus written *about* them: `verification-marker-gate` loses its top two slots to
+`coding-memory/observability-judge/` and `compliance-judge/` files, `phase-guard-hook` to ADR 0011
+and a judge verdict. A small feature has little written about it and so faces no competitor; a
+mature one is outranked by its own paper trail, all of it at the same `curated_doc` 1.5 weight.
+This does **not** relax R9's anti-gaming rule — the span requirement still binds — but it means a
+failure at 10b needs reading carefully: crowding by ADRs and verdicts is a different finding from
+crowding by the archive, and only the second is R10's cost. Scores are also tightly packed near the
+ceiling (0.0366–0.0488 across every hit above), so rank is doing nearly all the work.
