@@ -107,18 +107,40 @@ a published status field. Both earn ADR 0018 (task 2).
 `memsearch: ⚠ stale — 2332 chunks, last run 19d ago; run ~/.claude/memsearch/bin/memsearch index`.
 
 **R2 — the nudge never claims freshness it cannot prove.** A missing, unparseable, or future-dated
-`last_run` yields an *unknown-age* line, never a fresh one. Fail toward doubt. Exact wording:
-`memsearch: 2332 chunks, age unknown — query with: …`.
+`last_run` **never yields a fresh line**. Fail toward doubt.
+
+⚠️ *Corrected in round 7 — R2 previously pinned one exact line for that whole condition
+(`memsearch: 2332 chunks, age unknown — query with: …`) and thereby contradicted the state table
+that governs it.* **Which** non-fresh line is emitted is decided by R3's table, not here: a missing
+`last_run` with a usable recent `run_started` is **state 1, in progress**, not unknown-age — as the
+"first run after upgrade" scenario asserts with *"And it is not the unknown-age line"* — and the
+same input at greater age is **state 2** or **state 3**. Unknown-age is **state 4** only, and only
+when 1-3 did not match. R2 states the *guarantee* (never fresh without proof); the table states the
+*wording*. Restating a specific line here is what put this requirement out of sync, so it does not
+restate one.
+
+⚠️ *R2 has one known exception, recorded rather than hidden:* a run that walks **zero files**
+completes cleanly and does render as fresh, because `status.json` carries no walked-source count.
+See the Non-goals bullet of the same name. The guarantee above holds for every condition R3's table
+classifies; it does not hold for a run whose corpus silently vanished.
 
 **R3 — the nudge reports the state of the last run, not merely its age.**
 
 #### The state table — the single source of truth
 
 **This table is authoritative. Every other surface in this spec is derived from it and must be
-re-derived when it changes:** the classification table under Contracts, the `OUT` node of the data-flow
-diagram, the Scenarios section, falsifier clauses (f) and (g), and task 4's test list. Three
-consecutive review rounds failed because a state was added here and the surfaces restating it went
-stale; the fix is to have exactly one place that defines them.
+re-derived when it changes:** R2's guarantee, the `OUT` node of the data-flow diagram, the Scenarios
+section, falsifier clauses **(f), (g) and (h)**, and task 4's test list. Three consecutive review
+rounds failed because a state was added here and the surfaces restating it went stale; the fix is to
+have exactly one place that defines them.
+
+⚠️ *This list was itself out of date until round 7, which is the point.* It named "the
+classification table under Contracts" — a surface round 5 **deleted**, replacing it with a pointer —
+and named only clauses (f) and (g) where the falsifier states that (f), (g) **and (h)** are derived
+from the table. **The index of derived surfaces had itself gone stale**, the exact failure the table
+exists to prevent, one level up. A surface added to or removed from this spec must be added to or
+removed from *this sentence* in the same edit; if that feels like bookkeeping, it is the bookkeeping
+whose absence cost rounds 3, 4 and 6.
 
 **Eight states. First match wins. One line per state, never more.** The two silent paths — absent
 `status.json`, and `chunks` absent or 0 — sit outside this table and emit nothing at all (R4).
@@ -265,7 +287,7 @@ one score floor that is set from measurement before it binds**:
 ⚠️ ***The floor is deliberately unset here, and that is a decision, not an omission.*** Through
 round 5 this requirement read "each scoring **≥0.30**". **That bar is unreachable by construction.**
 `search.py:61-64` fuses exactly two retrievers by reciprocal rank, each contributing at most
-`1/(RRF_K + 1)` with `RRF_K = 60` (`search.py:19`), and `:78` multiplies the sum by the chunk's
+`1/(RRF_K + 1)` with `RRF_K = 60` (`search.py:19`), and `:80` multiplies the sum by the chunk's
 weight, the largest of which is `curated_doc: 1.5`. The hard ceiling is therefore
 `2 × 1/61 × 1.5 =` **0.04918** — verified 2026-08-07 by a live query whose top hits scored
 **0.046514** and **0.040114**. A floor of 0.30 is **six times the maximum the scorer can emit**, so
@@ -277,6 +299,20 @@ magnitude beneath it for five rounds. **This is the same defect the feature exis
 check that reports failure while telling you nothing about the thing it claims to check — and it is
 recorded here rather than silently corrected, because a number that survived five judge rounds is
 evidence about the review, not just about the number.
+
+⚠️ ***A floor set from this run cannot fail this run, and clause 3 must not be reported as though
+it could.*** Drawing the line after seeing where the runners stopped means everyone finishes. R9 is
+also measured **once, at landing, never again** (see Non-goals), so on the only day clause 3 is ever
+evaluated it is guaranteed to pass — a green light carrying no information. **Clause 3's value is as
+a recorded baseline for a future change, not as a verdict on this one.** The work of *this* branch is
+gated by clauses 1 and 2, which are rank-based, were fixed before the queries were written, and can
+genuinely fail. Anyone reading a clause-3 pass as evidence that R10's noise cost was acceptable has
+misread it; that judgement rests on clauses 1 and 2 and on the `-m golden` net.
+
+**A query's overall result is the conjunction of the clauses that bind.** With no recorded floor
+that is clauses 1 and 2 only, and the query is reported as
+`pass (clause 3 not yet binding)` / `fail (clause 3 not yet binding)` — **never a bare `pass`**,
+which would tell a reader the score bar was applied when it was not.
 
 **Why the floor is set from data instead of replaced with a guess (user decision, 2026-08-07):**
 any number written today would be judgment against the current `RUN_ABANDON_HOURS`-era weights and
@@ -341,7 +377,7 @@ record. The file must **join the walked route**, not merely be un-banned.
 *It gets its own weight tier* (user decision, 2026-08-06). `_iter_docs` (`index.py:44-51`) hardcodes
 `source_type` per bucket — everything from `curated_docs` becomes `curated_doc` (weight **1.5**,
 tied with ADRs and design docs), everything under a `repo_root` becomes `repo_doc` (**1.2**). Adding
-the file to `curated_docs` alone would rank 3,433 lines of session narrative *equal to the decision
+the file to `curated_docs` alone would rank 3,484 lines of session narrative *equal to the decision
 records it narrates* — amplifying the exact pollution the original exclusion feared. A new
 `archive_doc` tier at **1.0** keeps it fully retrievable while never outranking a real decision
 record. 1.0 matches `transcript_digest` because it is the same kind of content — narrative — and is
@@ -888,11 +924,20 @@ Scenario: memsearch status reports run recency, not just content recency
   Then last_run and last_run_errors are shown
   And last_indexed is no longer presented as the freshness answer
 
-Scenario: Retrieval is scored against the stated bar
+Scenario: Retrieval is scored against the clauses that bind
   Given the five committed measurement queries
+  And a score floor has been recorded in task 8b
   When each is run at k=6
   Then the pass or fail of each is recorded under Verification
   And a failing result is recorded as a failure
+
+Scenario: Retrieval is scored before any floor has been set
+  Given the five committed measurement queries
+  And no score floor has been recorded in task 8b
+  When each is run at k=6
+  Then each result is recorded as carrying "clause 3 not yet binding"
+  And no query is recorded as a bare pass
+  And clause 3 is recorded as neither passed nor failed
 ```
 
 ### Toolchain — pinned
@@ -923,11 +968,16 @@ Verified on this machine 2026-08-06, not remembered.
 > (g) an in-progress or stuck line is still emitted more than `RUN_ABANDON_HOURS` after
 > `run_started`, or a missing `last_run_errors` produces a fresh line; or (h) a first run that
 > started more than `RUN_ABANDON_HOURS` ago and never completed produces a line carrying no warning
-> marker and no pointer to the log.
+> marker and no pointer to the log; or **(i) this ships with R9's score floor never set** — task 8b's
+> measurement skipped, or its human decision never taken — **or with any query recorded as a bare
+> `pass` while clause 3 was non-binding.**
 
-(a), (b), (e), (f), (g) and (h) are hook tests. (c) and (d) are observations. Clauses (f), (g) and
-(h) are **derived from R3's state table** — (f) from states 1, 2 and 7, (g) from the decay out of
+(a), (b), (e), (f), (g) and (h) are hook tests. (c), (d) and (i) are observations. Clauses (f), (g)
+and (h) are **derived from R3's state table** — (f) from states 1, 2 and 7, (g) from the decay out of
 states 1 and 2 plus state 6, (h) from state 3 — and are re-derived whenever that table changes.
+**(i) exists because "not yet binding" fails nothing**, which makes skipping the measurement the
+cheapest path to a green board; naming it as a falsification is what stops silence from being a
+passing grade.
 **(d) is weaker than first written**:
 it can still be checked from git history, but it no longer proves the queries were authored before
 the index was rebuilt, because the rebuild happened first (Background, R9).
@@ -1064,7 +1114,7 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
-      copies (159 and 119 lines) would satisfy on their own while the 3,433-line archive stayed
+      copies (159 and 119 lines) would satisfy on their own while the 3,484-line archive stayed
       unreachable. Confirm
       its chunks carry `source_type = archive_doc`. **Record wall-clock duration for the worst
       case, not the convenient one.** `RUN_MAX_HOURS` has to survive the longest run the scheduler

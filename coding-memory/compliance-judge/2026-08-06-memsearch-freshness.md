@@ -1120,3 +1120,144 @@ used only in `digest.py`/`eval.py`, never in `chunk_doc`.
 ### Waivers
 
 None. No violation has ever been waived on this spec.
+
+## Round 6 — 2026-08-07T05:33:10Z — **FAIL** (1 violation)
+
+Blob `948f332606dba0a5f909bd662dd4e4d8a1a7e839` · commit `dd3004988e038b9b5b6ee4d2304c0b6db9f7619d` · branch `main` · 1113 lines.
+
+### In layman's terms
+
+Round 5's one finding is genuinely fixed — I re-measured every number in that paragraph from
+scratch and they are all exact. The noise multiplier is now `1.62×` against the file that really is
+the biggest indexed document, and the old wrong figure survives only inside the note explaining why
+it was wrong. The R9 score-floor discovery is real too: I re-derived the scorer's ceiling from
+source and it is `0.04918`, so the old `≥0.30` bar could never have been met by anything. Staging
+the replacement floor for a human to set from measured data reads as a decision, not a blank — task
+8b produces the numbers, a person picks the bar, and task 10 refuses to invent one. I am not citing
+that.
+
+What is still wrong is small but it is the spec's own house rule. R3 says its eight-state table is
+the final word and every other part of the document is derived from it. Two parts have not been
+re-derived. R1–R2 promise, in pinned exact wording, that a missing "when did the last run finish"
+timestamp always prints `age unknown` — but the table prints `index run in progress` instead when a
+run has just started, which is exactly what the spec's own "first run after upgrade" scenario
+demands. And the table's own list of places to update when it changes still points at a section
+that round 5 deleted, and still omits falsifier clause (h), which the falsifier itself says comes
+from state 3. Both are one-sentence fixes. They matter because this is the precise defect —
+a surface restating the states going stale — that rounds 1–4 kept failing on and that round 5's
+rewrite was built to end.
+
+### Violations
+
+| id | rule source | where | why |
+|---|---|---|---|
+| `writing-specs/derived-surfaces-out-of-sync` | `skills/writing-specs/SKILL.md` | R2, and R3 → "The state table — the single source of truth" (the derived-surface list) | R3 declares its table authoritative over "every other surface in this spec", but two surfaces have not been re-derived from it. (1) R2 pins the exact wording `memsearch: 2332 chunks, age unknown — query with: …` for a "missing, unparseable, or future-dated `last_run`" — states 1, 2 and 3 contradict that, since a missing `last_run` with a usable recent `run_started` emits the in-progress line, which the spec's own scenario "The first run after upgrade has no last_run yet" asserts explicitly ("And it is not the unknown-age line"). (2) R3's own enumeration of surfaces to re-derive names "the classification table under Contracts", which round 5 deliberately deleted (Contracts now says the states are "deliberately *not* restated here"), and names "falsifier clauses (f) and (g)" while the falsifier itself says "(f), (g) and (h) are **derived from R3's state table** — … (h) from state 3". |
+
+Both halves are pre-existing (the round-5 blob `748b108` carries the same list at its line 119 and
+the same falsifier text at its line 879) and were not cited in round 5. They are newly cited here,
+not persistent — `writing-specs/derived-surfaces-out-of-sync` is a fresh id.
+
+### Round 5's violation — verified closed, re-measured from zero
+
+`core-conduct/noise-risk-largest-doc` is **closed**. Every figure re-derived this round rather than
+read back:
+
+| claim in the spec | measured | verdict |
+|---|---|---|
+| `CODING_MEMORY.md` 300,160 characters | `wc -m` = 300,160 | exact |
+| largest indexed doc = `vibe-scape/docs/plans/2026-07-13-live-presence-plan.md`, 184,620 chars | ranked all 367 non-transcript `sources` rows by on-disk character count; it is #1 at 184,620 | exact |
+| that file has 121 chunks | `count(chunks)` = 121 | exact |
+| three indexed docs larger than the previously-named file | 184,620 · 153,701 · 131,516 all exceed `2026-07-26-03b-deploy-design.md` at 128,317 | exact |
+| the old file is largest by **chunk count**, not size | 130 chunks, the corpus maximum | exact |
+| multiplier `1.62×` | 300,160 / 184,620 = 1.62572 | truncated, not rounded (1.63 rounds); conservative direction |
+
+`grep` over the spec finds `2.3` and `03b-deploy-design` only inside the correction note that
+explains them. No other surface still carries the old number.
+
+### R9's ceiling — re-derived from source, not accepted
+
+`search.py:19` is `RRF_K = 60`. `:64` accumulates `1.0 / (RRF_K + rank + 1)` over exactly two id
+lists (`vec_ids`, `fts_ids`), so the fusion maximum is `2 × 1/61 = 0.0327869`. The weight multiply
+is `r["score"] = round(base_score * r.pop("weight"), 6)` and `config.json` weights top out at
+`curated_doc: 1.5`. Ceiling `= 0.0491803` → **0.04918**, exactly as the spec and task 8b state, and
+the old `≥0.30` bar was **6.1×** that ceiling. The ceiling survives R10 unchanged, because
+`archive_doc` enters at 1.0 and does not raise `max(weight)`. The two live scores (0.046514,
+0.040114) were not re-run — that needs Ollama and a model load — but both sit under the ceiling and
+are consistent with it. One citation slip: the weight multiply is `search.py:80`, not `:78`; the
+`:61-64` fusion range and `:19` are right.
+
+### The staged floor, the three corrections, and the new Non-goal — all judged, none cited
+
+- **Staged R9 floor.** Not a TBD. Clauses 1 and 2 bind unconditionally; clause 3 is explicitly
+  non-binding until recorded; task 8b runs the queries, records raw unrounded scores plus the
+  ceiling, and stops for a named human decision; task 10 reports `not yet binding` rather than
+  passing, failing, or inventing a number, and says "stop and ask". Every state of the world has a
+  defined behaviour, so the spec is unambiguous and checkable. Unusual, not deficient.
+- **R3 state-3 prose.** Now says the stamp "stops being *believed*, though it remains **usable** in
+  the table's sense", with the prior wording quoted and disowned. Agrees with the definition above
+  it. Round 5's note 3 is closed.
+- **Decay scenario.** `last_run` 40h / `run_started` 30h is satisfiable (30h ago is later than 40h
+  ago) and, walked through first-match-wins: rows 1–2 fail on age ≥ `RUN_ABANDON_HOURS`, row 3
+  fails on `last_run` present, row 4 fails on `last_run` usable, row 5 fires at 40h ≥ 8h — "stale,
+  not stuck", carrying the index command, exactly as the scenario claims.
+- **Non-goals heading claim.** Re-counted: `^## ` session headings number **20** — 17 date-first
+  (`## 2026-08-06 — session N: …`) and 3 session-first (`## Session 29 — …`) — and **zero** carry
+  the `Session N — <date>` shape. Matches the corrected text figure for figure.
+- **New Non-goal, the zero-walk run.** Honest and sufficient. Verified the mechanism: `chunks` in
+  `status.json` comes from `dbmod.stats(conn)` over the whole `chunks` table, so it does survive a
+  run that walked nothing, and R4's "`chunks` absent or 0" escape hatch genuinely cannot catch it.
+  The bullet names the gap, the mechanism, why it is the same species as the Background failure,
+  the cost of closing it (a new field, a ninth state, its scenarios and tests), and the pointer to
+  use if it recurs. Naming a bounded limitation is what core-conduct asks for; closing it here
+  would be the scope creep.
+
+### Everything else re-measured this round
+
+Live index: 911 `sources` rows, 367 docs + 544 transcripts. `status.json` carries exactly the six
+keys the Contracts section promises to preserve, with `last_indexed` `2026-08-06T23:56:46+00:00`.
+`coding-memory/session-log.md` frozen at 2026-07-16, `decisions.md` at 2026-07-19 — both as stated.
+The plan sweep re-run returns **14** hits at 19, 41, 152, 205, 211, 282, 284, 318, 1484, 1519,
+2828, 2890, 2942, 3067; the four-to-correct / ten-to-leave partition matches hit for hit, and the
+plan is 3,079 lines. `test_index.py` line by line: `:58` fixture writes `CODING_MEMORY.md` into the
+curated dir; `:84 processed == 4  # 2 docs + 2 transcripts`; `:93` compound; `:105 == 0`;
+`:106 skipped == 4`; `:117 processed == 1`; `:135 == 4  # … all reprocessed`; `:136 skipped == 0`;
+`:148` comment; `:149 == 3`; `:160 == 2  # the two docs still landed`; `:161 len(errors) == 2` —
+the movers/non-movers table and all four quoted comments are correct. `test_config.py:40-43` is the
+mandatory-exclusion test and `:48` the inclusion assertion. `config.py:56` is the `excludes = …`
+line that must survive, `:57-60` the guard. `db.py:16/17/103/112/120/121,125/156`,
+`index.py:44-51/57/67/73/74/100/125-127/135-137`, `chunk.py:111/140-141`, `cli.py:39/66`,
+`status.py:27`, `pyproject.toml:23` (`addopts = "-m 'not golden'"`), `README.md:22`, design doc
+58/67/70/135/154-163, `memory-system-split.spec.md:540` — all exact. `golden_queries.json` holds 16
+entries (11 `must`, 3 `stretch`, 2 `negative`); entry 11 at file line 12 is the mid-july /
+`episodic` / `since: 2026-07-01` / `.jsonl` case; `test_golden_queries.py:37-41` asserts presence
+only, `:47-52` and `:57-60` warn. ADRs top out at 0017 so 0018/0019 are free. Project copies 159
+and 119 lines. Toolchain row by row: bash 3.2.57, python3 3.9.6, uv 0.11.28 (Homebrew), venv python
+3.12.13, sqlite3 3.51.0, darwin 25.5.0; `launchctl getenv PATH` empty, so the plist `PATH` key is
+load-bearing; `bin/memsearch` is the one-line `exec uv run --project` wrapper.
+
+**Part B clean.** No new dependency. The only shell execution is fixed `launchctl` argument vectors
+plus a `plutil -lint` gate that must pass before anything is bootstrapped; no external input
+reaches a command line; `install-schedule` fails closed on 1/2/3 and never prints success on a
+non-zero path; rendered plist 0644, LaunchAgents 0755; the committed template carries `__HOME__`
+only, with a scenario asserting it. `status.json` writes are atomic via `os.replace` into
+`db_path.parent`, and the entry write's fallible read is caught (`OSError`, `JSONDecodeError`),
+reported once on stderr, never raised. On `writing-secure-code` §5: R10 adds the archive to the
+embedded corpus, but `ollama_url` is `http://localhost:11434` and `_refuse_cloud` rejects cloud
+models, so nothing new leaves the machine.
+
+**Benign drift, carried as notes not violations.** R10 says "3,433 lines" at two places while the
+dated re-measurement says 3,484 (`wc -l` agrees with 3,484); the file grows every session and the
+spec calls its figures a floor. "Carries sessions 24 through 31" still understates — the headings
+run 17 → 32 — but understating strengthens its own argument, as round 5 also concluded. The spec is
+1113 lines and carries inline "corrected in round N" annotations; that is deliberate anti-recall
+discipline rather than bloat, though those annotations would read better relocated to
+`## Verification` once the spec is approved.
+
+**Unchanged dispositions, not re-cited:** spec at `docs/features/` rather than
+`docs/superpowers/specs/`, `/opt/homebrew/bin` in the plist `PATH`, `scheduled-index.log` with no
+stated mode or rotation. No repo-layer `.claude/project-standards.md` exists. Frontmatter remains
+`phase: planning`, `branch: none`.
+
+### Waivers
+
+None. No violation has ever been waived on this spec.
