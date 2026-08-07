@@ -3431,3 +3431,54 @@ the spec quotes rather than recalling it.
 **Next:** escalated to the user after round 4 (second consecutive escalation; the id
 `writing-specs/edge-cases-r10-test-counts` also repeated across rounds 3 and 4, though the judge
 records round 3's instance as genuinely closed). Awaiting direction on method before round 5.
+
+## Session 32 — loop-2 round 5: the state-table rewrite, and what re-measuring found
+
+Round 4 escalated with four violations, all introduced by the round-4 edit itself — the third
+consecutive round where fixing a spec defect spawned a same-species one. User said "continue";
+taken as approval of the recommended method rather than a fifth patch round.
+
+**Method change.** Stopped patching cited lines. Built one authoritative **state table** in R3 and
+derived every restating surface from it: the Contracts classification table (now a pointer, not a
+second copy), the data-flow diagram's `OUT` node, the Scenarios, falsifier clauses (f)(g)(h), and
+task 4's test list. Then re-ran every command whose output the spec quotes instead of trusting the
+written number. Ground truth persisted to the scratchpad (`ground-truth-r5.md`) so round 6 cites a
+file, not recall.
+
+**The four round-4 violations, closed.**
+1. `:117` was mislabelled "limit-scoped"; it is the *changed-file* test. `:149` is limit-scoped and
+   does move. Replaced the prose list with a verified 10-row assertion table. Five move
+   (84, 106, 135, 149, 160), four must not (105, 117, 136, 161) — the *lists* were always right,
+   only the labels wrong. Four stale inline comments now named (84, 135, 148, 160); prior drafts
+   named two.
+2. Three fresh-asserting scenarios never pinned `last_run_errors`, which the new unreadable-count
+   rule forbids. Four now pinned (a fourth was found beyond the three cited).
+3. "Three states beyond fresh/stale/unknown" listing four → the state table replaces the framing
+   entirely. **Eight states**, numbered, one line each.
+4. Plan sweep returns **14**, not 11. The four cited lines (19, 2828, 2890, 2942) were correct; the
+   other ten are now enumerated as deliberate historical listings.
+
+**What the state table surfaced that no judge round had caught.**
+- The unreadable-error-count example line was missing its `⚠` while the prose said rows 4–6 all warn.
+- **New state 3, "abandoned first run".** A killed first run fell through to plain "unknown age" —
+  no marker, no log pointer. That is this feature's own defect one field over.
+- **The decay rule falsified the concurrency non-goal.** Past `RUN_ABANDON_HOURS` a still-alive run
+  decays to *stale*, which does carry the index command. Named as a bounded trade, and
+  `RUN_ABANDON_HOURS` must now clear task 9's cold-run duration by a margin — a stricter obligation
+  than `RUN_MAX_HOURS`, which only mislabels.
+- **Task 10 was measuring the wrong thing.** `test_golden_queries.py:37-41` asserts only presence in
+  top-k — no score floor, no top-hit check, no ≥2 count — so **R9's bar is not expressible in that
+  harness**. Only 11 of 16 golden cases can fail; stretch and negative merely `warnings.warn`. Task
+  10 split into (a) the regression net and (b) R9's own runner.
+- **Golden entry 11 = file line 12** (not "query 12" — 12 is its line) is the predicted R10 casualty,
+  now named in the spec before the run: `must`, `rtype: episodic`, `since: 2026-07-01`, expects
+  `.jsonl`; R10 makes the archive episodic, weight 1.0 tied with transcripts, dated today, largest
+  source. If it fails, re-point the query — do not re-exclude.
+
+**Numeric drift, re-measured 2026-08-07.** Archive 3,433 lines / 299,422 chars (was 3,232/285,187);
+2.3× the largest indexed doc, not 2.5×; sessions 24–**31**; `sources` **911 rows** (187 @ 07-18,
+724 @ 08-06), run finished and no longer growing. Every toolchain row and timestamp claim re-verified
+and holds exactly; `launchctl getenv PATH` still empty.
+
+Spec: 895 → **1,021 lines**, blob `748b108b`. Still `phase: planning`, `branch: none`.
+**Round-5 compliance + observability judging is owed and not yet run.**

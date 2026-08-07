@@ -28,8 +28,9 @@ the scheduling half honest**, and is why it is built first.
 
 **Premise refresh (session 28).** Those counts are the diagnosis-time state and are no longer live:
 a manual `memsearch index` run, started outside any session and orphaned from its shell, was found
-already in progress on 2026-08-06 and rebuilt most of the index. `sources` is now 196 rows at
-2026-07-18 plus a growing set at 2026-08-06. The defect and its diagnosis are unaffected — the freeze
+already in progress on 2026-08-06 and rebuilt most of the index. That run has since finished:
+re-measured 2026-08-07, `sources` holds **911 rows — 187 still at 2026-07-18 and 724 at
+2026-08-06**. The defect and its diagnosis are unaffected — the freeze
 happened, and nothing reported it — but two consequences follow, both recorded rather than smoothed
 over: the stale-index baseline in R9 can never be re-measured, and the blindness ordering R9 relied
 on is gone (see R9 and the falsifier).
@@ -109,55 +110,96 @@ a published status field. Both earn ADR 0018 (task 2).
 `last_run` yields an *unknown-age* line, never a fresh one. Fail toward doubt. Exact wording:
 `memsearch: 2332 chunks, age unknown — query with: …`.
 
-**R3 — the nudge reports the state of the last run, not merely its age.** Three states beyond
-fresh/stale/unknown, each with its own line and no more than one line total:
+**R3 — the nudge reports the state of the last run, not merely its age.**
 
-- *In progress* — `run_started` is present and either later than `last_run` or `last_run` is absent
-  (the first-run case), and the run began less than `RUN_MAX_HOURS` ago:
-  `memsearch: index run in progress (started 12m ago) — 2332 chunks; query with: …`
-  **No remediation command**, because `memsearch` has no lock and the command would start a second
-  concurrent indexer. A `run_started` in the future is treated as absent, never as in-progress —
-  otherwise clock skew pins this line forever.
-- *Stuck* — an in-progress run that began between `RUN_MAX_HOURS` and `RUN_ABANDON_HOURS` ago:
-  `memsearch: ⚠ index run stuck (started 9h ago) — 2332 chunks; see ~/.claude/memory-index/scheduled-index.log`.
-  An in-progress claim is not a licence to stay silent forever, but the remediation still may not be
-  "run it again" while the old process may be alive — so it points at the log, which holds the
-  evidence, rather than at a command that would start a second indexer.
-- ***The stuck line decays; it is not a terminal state.*** Past `RUN_ABANDON_HOURS` the
-  `run_started` stamp becomes **unusable — treated exactly as a future one is** — and
-  classification falls through to the `last_run` rows, so a dead scheduler surfaces as *stale*,
-  with remediation that works. Without this decay the feature keeps a hole shaped like the bug it
-  exists to fix: a run killed mid-flight leaves the in-progress stamp behind, only the *next* run
-  clears it, and if the scheduler is dead there is no next run — so the reader gets "⚠ index run
-  stuck" every session, checks for a running indexer, finds none, and is **never told the scheduler
-  died**. The falsifier's clause (c) would read as *passed* in that state, because something did
-  surface; it merely said the wrong thing. That is the failure this whole feature was written
-  against, one label over.
-- *Degraded* — the last completed run reported errors (`last_run_errors > 0`), whatever its age:
-  `memsearch: ⚠ last run had 47 errors — 2332 chunks, last run 2h ago; see ~/.claude/memory-index/scheduled-index.log`.
-  This is the Ollama-down case, and it is the one decision 4 names as the scheduler's failure mode.
-  **The remediation is the log, not the indexer.** Re-running a multi-hour index is not a diagnosis,
-  and R6 sets `PYTHONUNBUFFERED` precisely so this log survives a hard kill — pointing anywhere else
-  discards the evidence the scheduling half exists to preserve. One consequence is named rather than
-  smoothed over: a single permanently-failing source pins the count at 1, so this ⚠ fires every
+#### The state table — the single source of truth
+
+**This table is authoritative. Every other surface in this spec is derived from it and must be
+re-derived when it changes:** the classification table under Contracts, the `OUT` node of the data-flow
+diagram, the Scenarios section, falsifier clauses (f) and (g), and task 4's test list. Three
+consecutive review rounds failed because a state was added here and the surfaces restating it went
+stale; the fix is to have exactly one place that defines them.
+
+**Eight states. First match wins. One line per state, never more.** The two silent paths — absent
+`status.json`, and `chunks` absent or 0 — sit outside this table and emit nothing at all (R4).
+
+| # | State | Condition | ⚠ | Remediation |
+|---|---|---|---|---|
+| 1 | in progress | `run_started` usable · (`last_run` absent or `run_started` > `last_run`) · age < `RUN_MAX_HOURS` | — | none |
+| 2 | stuck | as 1, but `RUN_MAX_HOURS` ≤ age < `RUN_ABANDON_HOURS` | ⚠ | the log |
+| 3 | abandoned first run | `last_run` absent · `run_started` present, in the past, age ≥ `RUN_ABANDON_HOURS` | ⚠ | the log |
+| 4 | unknown age | `last_run` absent or unusable (and 3 did not match) | — | none |
+| 5 | stale | `now − last_run` ≥ `STALE_HOURS` | ⚠ | the index command |
+| 6 | error count unreadable | `last_run_errors` absent, non-integer, or negative | ⚠ | the log |
+| 7 | degraded | `last_run_errors` > 0 | ⚠ | the log |
+| 8 | fresh | otherwise | — | none |
+
+A timestamp is **usable** only if it parses and is not in the future; an unusable one is treated
+exactly as absent, for both fields. "The log" is always
+`~/.claude/memory-index/scheduled-index.log`; "the index command" is always
+`~/.claude/memsearch/bin/memsearch index`.
+
+The emitted lines, one per state, in the same order:
+
+1. `memsearch: index run in progress (started 12m ago) — 2332 chunks; query with: …`
+2. `memsearch: ⚠ index run stuck (started 9h ago) — 2332 chunks; see ~/.claude/memory-index/scheduled-index.log`
+3. `memsearch: ⚠ 2332 chunks — first index run never completed (started 2d ago); see ~/.claude/memory-index/scheduled-index.log`
+4. `memsearch: 2332 chunks, age unknown — query with: …`
+5. `memsearch: ⚠ stale — 2332 chunks, last run 19d ago; run ~/.claude/memsearch/bin/memsearch index`
+6. `memsearch: ⚠ 2332 chunks, last run 2h ago (error count unreadable) — see ~/.claude/memory-index/scheduled-index.log`
+7. `memsearch: ⚠ last run had 47 errors — 2332 chunks, last run 2h ago; see ~/.claude/memory-index/scheduled-index.log`
+8. `memsearch: 2332 chunks, last run 3h ago — query with: …`
+
+#### Why each state exists
+
+- **1, in progress** carries **no remediation command**, because `memsearch` has no lock and the
+  command would start a second concurrent indexer. A `run_started` in the future is unusable, never
+  in-progress — otherwise clock skew pins this line forever. Row 1 also covers the first run after
+  upgrade, when `run_started` exists and `last_run` does not yet.
+- **2, stuck** — an in-progress claim is not a licence to stay silent forever, but the remediation
+  still may not be "run it again" while the old process may be alive, so it points at the log, which
+  holds the evidence.
+- **3, abandoned first run** exists because states 1 and 2 *decay* — past `RUN_ABANDON_HOURS` the
+  `run_started` stamp becomes unusable, exactly as a future one is. Without a state to catch it, the
+  first-ever run being killed falls through to **4, unknown age**: no marker, no log pointer, and a
+  reader told only "age unknown" about a scheduler that died on its first attempt. That is this
+  feature's own defect one field over — a surface that reports something while vouching for nothing.
+  Where a *prior* `last_run` exists, decay instead falls through to **5, stale**, whose remediation
+  works. Without decay the feature keeps a hole shaped like the bug it exists to fix: a run killed
+  mid-flight leaves the in-progress stamp behind, only the *next* run clears it, and if the scheduler
+  is dead there is no next run — so the reader gets "⚠ index run stuck" every session, checks for a
+  running indexer, finds none, and is **never told the scheduler died**. The falsifier's clause (c)
+  would read as *passed* in that state, because something did surface; it merely said the wrong thing.
+- **6, error count unreadable** — **unknown is not zero.** R2's "fail toward doubt" rule is scoped to
+  *timestamps*, and a plain `get("last_run_errors", 0)` reads a missing field as a clean run —
+  vouching for precisely what it cannot see. The age is known and stays reported; only the claim of
+  cleanliness is withheld. It carries `⚠` because it is a warning state, like every other row that
+  withholds a clean bill of health.
+- **7, degraded** is the Ollama-down case decision 4 names as the scheduler's failure mode. **The
+  remediation is the log, not the indexer.** Re-running a multi-hour index is not a diagnosis, and R6
+  sets `PYTHONUNBUFFERED` precisely so this log survives a hard kill. One consequence is named rather
+  than smoothed over: a single permanently-failing source pins the count at 1, so this ⚠ fires every
   session until a human fixes that source. That is decision 1's alert-fatigue risk, accepted here
-  because the count is *specific* (it says how many) and the log makes it actionable in one step —
-  and it is exactly why the line must point at evidence instead of at a retry.
-- *Unreadable error count* — `last_run_errors` absent, non-integer, or negative:
-  `memsearch: 2332 chunks, last run 2h ago (error count unreadable) — see ~/.claude/memory-index/scheduled-index.log`.
-  **Unknown is not zero.** R2's "fail toward doubt" rule is scoped to *timestamps*, and a plain
-  `get("last_run_errors", 0)` reads a missing field as a clean run — vouching for precisely what it
-  cannot see, which is this feature's original defect in miniature. The age is known and stays
-  reported; only the claim of cleanliness is withheld.
+  because the count is *specific* and the log makes it actionable in one step.
 
-`RUN_MAX_HOURS` defaults to **6**, matching the refresh interval and separate from `STALE_HOURS`:
-a run still going when the next is due is by definition the pathological overlap.
-`RUN_ABANDON_HOURS` defaults to **24** — four missed refresh cycles, and far past any plausible
-run. The three constants answer three different questions — how old a *finished* run may be (8),
-how long a run may *take* before it is suspect (6), and how long an in-progress claim may stand
-before it is no longer believed at all (24) — and collapsing any of them into one number is the
-conflation this whole feature exists to correct. `RUN_ABANDON_HOURS`, like `RUN_MAX_HOURS`, is
-re-chosen against task 9's measured cold-run duration if that figure lands anywhere near it.
+#### The three constants
+
+`STALE_HOURS` **8** · `RUN_MAX_HOURS` **6** · `RUN_ABANDON_HOURS` **24**.
+
+`RUN_MAX_HOURS` matches the refresh interval: a run still going when the next is due is by definition
+the pathological overlap. `RUN_ABANDON_HOURS` is four missed refresh cycles. The three answer three
+different questions — how old a *finished* run may be (8), how long a run may *take* before it is
+suspect (6), and how long an in-progress claim may stand before it is no longer believed at all (24)
+— and collapsing any of them into one number is the conflation this whole feature exists to correct.
+
+**Both run constants are re-chosen against task 9's measured cold-run duration, and
+`RUN_ABANDON_HOURS` is the stricter obligation of the two.** A cold run that exceeds `RUN_MAX_HOURS`
+merely mislabels a healthy run as stuck; a cold run approaching `RUN_ABANDON_HOURS` makes state 5
+fire — **with the index command — while the first run is still alive**, which is precisely the second
+concurrent indexer states 1 and 2 exist to prevent. `RUN_ABANDON_HOURS` must therefore exceed the
+measured cold-run duration by a clear margin, and that margin is a call for the user, not a value to
+quietly widen. The trade is named rather than hidden: decay buys the dead-scheduler signal at the cost
+of the concurrency guarantee holding only up to `RUN_ABANDON_HOURS` (see Non-goals).
 
 **The reference point is not yet known, and the number an earlier draft gave was wrong.** That
 draft cited "1h26m over 601 sources on 2026-08-06" as a measured duration. It was not a duration:
@@ -212,6 +254,18 @@ to the named feature, **each scoring ≥0.30**, with the **top hit** belonging t
 exactly `docs/features/F.md` or `docs/features/F.spec.md`. Nothing else counts — not an ADR that
 mentions `F`, not a transcript discussing it.
 
+***R9's bar cannot be measured by the existing golden harness, and the five queries therefore get
+their own runner.*** Verified 2026-08-07: `tests/test_golden_queries.py:37-41` asserts only
+`any(expect_path_contains in p for p in paths)` — **presence somewhere in top-k, with no score
+floor, no top-hit check, and no ≥2 count.** All three of R9's clauses are invisible to it. Worse,
+only the 11 `must` entries can fail at all; the 3 `stretch` and 2 `negative` entries call
+`warnings.warn` and pass unconditionally (`:47-52`, `:57-60`). Scoring R9 through that harness would
+report a pass whenever one feature file appeared anywhere in six results at any score — a bar so
+much weaker than the stated one that it would answer a different question while looking like an
+answer to this one. The five queries live in their own file with a runner that reads the scores
+`search()` already returns, and the two measurements stay distinct: **`-m golden` is the
+noise-regression net over the pre-existing 16; R9's runner is the retrieval bar.** Task 10 runs both.
+
 *Baseline*: 0 hits from `docs/features/`; the 4 hits that did return scored ~0.02. **This baseline is
 frozen and cannot be re-measured** — the session-28 rebuild overwrote the index it was taken from.
 
@@ -229,8 +283,9 @@ accordingly.
 it was a *working index* "whose durable content is **already promoted** into indexed stores —
 decisions → `coding-memory/decisions.md` + `docs/decisions/` ADRs, history →
 `coding-memory/session-log.md`". **That promotion has stopped.** Measured 2026-08-06:
-`session-log.md`'s last entry is dated **2026-07-16**, `decisions.md`'s **2026-07-19**, while
-`CODING_MEMORY.md` carries sessions **24 through 30**. Three weeks of decisions and history exist
+`session-log.md`'s last entry is dated **2026-07-16**, `decisions.md`'s **2026-07-19** — both
+re-verified 2026-08-07 and both still frozen — while `CODING_MEMORY.md` carries sessions
+**24 through 31**. Three weeks of decisions and history exist
 *only* in the one file the index is configured never to read. The exclusion is no longer merely
 outdated — it is the direct cause of a three-week hole in retrieval. `memory-system-split`
 independently retired the file as a read target and made it an append-only archive, so "ephemeral
@@ -249,7 +304,7 @@ record. The file must **join the walked route**, not merely be un-banned.
 *It gets its own weight tier* (user decision, 2026-08-06). `_iter_docs` (`index.py:44-51`) hardcodes
 `source_type` per bucket — everything from `curated_docs` becomes `curated_doc` (weight **1.5**,
 tied with ADRs and design docs), everything under a `repo_root` becomes `repo_doc` (**1.2**). Adding
-the file to `curated_docs` alone would rank 3,232 lines of session narrative *equal to the decision
+the file to `curated_docs` alone would rank 3,433 lines of session narrative *equal to the decision
 records it narrates* — amplifying the exact pollution the original exclusion feared. A new
 `archive_doc` tier at **1.0** keeps it fully retrievable while never outranking a real decision
 record. 1.0 matches `transcript_digest` because it is the same kind of content — narrative — and is
@@ -281,7 +336,7 @@ behaviour:
    — indexing the archive while leaving it unreachable by the obvious filter is the same
    written-but-unread defect decision 6 names, one field over. `chunk_doc` already receives
    `source_type`, so the fix is one line at `chunk.py:111`: `archive_doc` yields `episodic`, the
-   bucket transcript digests already use (`chunk.py:141`), because it is the same kind of content.
+   bucket transcript digests already use (`chunk.py:140-141`), because it is the same kind of content.
    `RECALL_TYPES` (`db.py:17`) already contains `episodic` and the column carries no `CHECK`, so
    **no migration is needed**. R10.5's replacement golden query is written with the `episodic`
    filter, so the suite pins this rather than trusting it.
@@ -294,17 +349,43 @@ behaviour:
      p`). It must be **split in two**: the `subagents/` half stays as-is, the `CODING_MEMORY` half
      flips. It cannot both flip and stay unchanged as written.
    - **The fixture's `CODING_MEMORY.md` becomes a fifth indexable source, and every count
-     assertion over that corpus moves with it.** The *rule* is given rather than a list of line
-     numbers, because a list has now missed a line twice: **`processed` rises by one on any run
-     that indexes the file; `skipped` rises by one on any run that re-scans it.** Applied
-     mechanically that is **five** assertions in `test_index.py` — `processed` at **`:84`**
-     (whose comment becomes "3 docs + 2 transcripts"), **`:135`**, **`:149`**, **`:160`** (comment
-     becomes "the three docs"), and **`skipped` at `:106`**, which every earlier draft of this list
-     omitted. Four assertions legitimately do *not* move, named so an implementer does not "fix"
-     them: `:105` (`processed == 0` on a no-change run), `:117` (limit-scoped), `:136`
-     (`skipped == 0` on a full reprocess), and `:161` (error count). With `test_config.py`'s two
-     changes above, a correct implementation sees **seven failures suite-wide** — an implementer
-     who counts seven has the whole list, not a surprise.
+     assertion over that corpus moves with it.** The governing *rule* is: **`processed` rises by one
+     on any run that indexes the file; `skipped` rises by one on any run that re-scans it.** The
+     table below applies that rule to every assertion in the file — re-measured 2026-08-07, not
+     recalled, because earlier drafts got the *labels* wrong even when the line numbers were right.
+
+     | line | assertion | now | after | moves |
+     |---|---|---|---|---|
+     | `:84` | `processed == 4` | 4 | **5** | ✓ |
+     | `:93` | compound `CODING_MEMORY`/`subagents` | — | split | ✓ |
+     | `:105` | `processed == 0`, no-change run | 0 | 0 | — |
+     | `:106` | `skipped == 4` | 4 | **5** | ✓ |
+     | `:117` | `processed == 1`, **changed-file** test | 1 | 1 | — |
+     | `:135` | `processed == 4`, `--full` | 4 | **5** | ✓ |
+     | `:136` | `skipped == 0`, full reprocess | 0 | 0 | — |
+     | `:149` | `processed == 3`, **limit-scoped** | 3 | **4** | ✓ |
+     | `:160` | `processed == 2`, digester fails | 2 | **3** | ✓ |
+     | `:161` | `len(errors) == 2` | 2 | 2 | — |
+
+     **Five move** (`:84`, `:106`, `:135`, `:149`, `:160`); **four must not** (`:105`, `:117`,
+     `:136`, `:161`), named so an implementer does not "fix" them. ⚠️ **`:117` is the changed-file
+     test, not the limit-scoped one** — an earlier draft mislabelled it, and the limit-scoped
+     assertion is `:149`, which *does* move. Confusing the two either freezes a count that must rise
+     or raises one that must not.
+
+   - **Four inline comments go stale and are corrected in the same edit** — they are not decoration;
+     each states the corpus composition that the assertion above it encodes, and a comment that
+     still says "2 docs" over an assertion reading 5 is the next round's finding:
+     `:84` `# 2 docs + 2 transcripts` → `# 3 docs + 2 transcripts`;
+     `:135` `# 2 docs + 2 transcripts, all reprocessed` → `# 3 docs + 2 transcripts, all reprocessed`;
+     `:148` `# 2 docs + 1 transcript (the newest)` → `# 3 docs + 1 transcript (the newest)`;
+     `:160` `# the two docs still landed` → `# the three docs still landed`.
+
+   - **A correct implementation sees seven failing test _functions_, from eight failing assertions.**
+     The two counts differ and the distinction matters when an implementer is checking their work:
+     `test_config.py` contributes 2 assertions in 2 functions (`:42`, `:48`); `test_index.py`
+     contributes 6 assertions (`:84`, `:93`, `:106`, `:135`, `:149`, `:160`) across only 5 functions,
+     because `:84` and `:93` sit in the same test. Seven red tests, not eight.
    - The fixture at `test_index.py:58` writes `CODING_MEMORY.md` **into the curated directory**,
      which is a path the walker already visits. That is why the old exclusion test passed while
      production was unreachable — **the fixture pre-created the condition under test.** The
@@ -327,14 +408,16 @@ behaviour:
    section at 154-163 whose durable-vs-ephemeral rationale this reverses; and
    `docs/superpowers/plans/2026-07-17-memory-rag-index.md`. **That plan is swept with
    `grep -n CODING_MEMORY`, not corrected against a line list.** It is 3,079 lines, sits inside the
-   indexed `docs/` corpus, and a hand-written list has already been wrong twice: the sweep on
-   2026-08-06 returns eleven hits, of which **four** assert the retired rule as current — line 19
-   ("enforced by config validation, not convention"), **2828** (the invariant restated), **2890** (a
-   worked `--type decision` query example built on the false premise), and **2942** (the golden-query
-   definition this change replaces). The rest are historical code and test listings that record what
-   was built at the time and are correct as history — they are deliberately left alone. Run the
-   sweep at implementation time rather than trusting these four, since any edit shifts them; a
-   missed line becomes a retired rule the index serves as current.
+   indexed `docs/` corpus, and a hand-written list has already been wrong twice. Re-run 2026-08-07,
+   the sweep returns **fourteen** hits — an earlier draft said eleven, which was itself a recalled
+   number rather than a re-run one. Of the fourteen, **four** assert the retired rule as current and
+   must be corrected: line **19** ("enforced by config validation, not convention"), **2828** (the
+   invariant restated), **2890** (a worked `--type decision` query example built on the false
+   premise), and **2942** (the golden-query definition this change replaces). The other ten — 41,
+   152, 205, 211, 282, 284, 318, 1484, 1519, 3067 — are historical code, config and test listings
+   that record what was built at the time and are correct as history; they are deliberately left
+   alone. Run the sweep at implementation time rather than trusting any of these numbers, since any
+   edit shifts them; a missed line becomes a retired rule the index serves as current.
 7. **An ADR** under `docs/decisions/` — structural, and it reverses a documented rationale. Record
    the options weighed (delete the guard / invert it / weaken it to a warning; `curated_doc` 1.5 vs
    a new `archive_doc` tier), the dated evidence that promotion stopped, and the consequence in the
@@ -342,9 +425,11 @@ behaviour:
    so what the exclusion loses is the *narrative log*, not the decision record.
 
 *The noise risk is real and is measured, not argued.* The original rationale's surviving half — that
-indexing session narrative could "pollute semantic search" — is untested. At 285,187 characters
-`CODING_MEMORY.md` becomes the single largest source, roughly 2.5× the largest doc currently indexed
-(130 chunks). **R9 is the instrument**: it scores feature-file retrieval at `k=6`, so if narrative
+indexing session narrative could "pollute semantic search" — is untested. At **299,422 characters /
+3,433 lines** (re-measured 2026-08-07; it grows every session, so treat any figure here as a floor)
+`CODING_MEMORY.md` becomes the single largest source, **2.3×** the largest doc currently indexed
+(`coding-memory/compliance-judge/2026-07-26-03b-deploy-design.md`, 129,880 characters / 130 chunks).
+**R9 is the instrument**: it scores feature-file retrieval at `k=6`, so if narrative
 chunks crowd feature files out of the top hits, R9 fails and says so. R9 is therefore run *after*
 this change lands, and a failure is a real result, not a reason to quietly re-exclude. (The digest
 path is *not* a concern: `digest_input_char_cap` applies only to transcripts via
@@ -368,8 +453,8 @@ flowchart LR
   IDX -->|writes| DB[("memory.db")]
   IDX -->|"run_started at entry<br/>last_run at exit"| SJ["status.json"]
   SS(["Session start"]) -->|reads, never CLI| SJ
-  SJ --> NG["memsearch-nudge.sh<br/>last_run vs 8h threshold"]
-  NG -->|one line| OUT["fresh · stale · in-progress · unknown"]
+  SJ --> NG["memsearch-nudge.sh<br/>R3 state table, first match wins"]
+  NG -->|one line| OUT["1 in progress · 2 stuck · 3 abandoned first run · 4 unknown age<br/>5 stale · 6 error count unreadable · 7 degraded · 8 fresh"]
   IDX -.->|run fails: Ollama down,<br/>agent unloaded| SJ
   OUT -.->|"age crosses 8h =<br/>the only failure signal"| LD
   classDef warn fill:#fff4e5,stroke:#d97706,color:#7c2d12;
@@ -435,25 +520,14 @@ staleness line **is** its monitor.
 - `STALE_HOURS` defaults to **8**, `RUN_MAX_HOURS` to **6**, and `RUN_ABANDON_HOURS` to **24**, all
   overridable by env for tests.
 - Emits **at most one line**. Exit 0 on every path, including every failure.
-- Classification, first match wins. A timestamp is *usable* only if it parses and is not in the
-  future; an unusable one is treated exactly as absent, for both fields.
-
-  | # | Condition | Line |
-  |---|---|---|
-  | 1 | `run_started` usable, and (`last_run` absent or `run_started > last_run`), and `now − run_started < RUN_MAX_HOURS` | in progress |
-  | 2 | same as 1 but `RUN_MAX_HOURS ≤ now − run_started < RUN_ABANDON_HOURS` | stuck ⚠ |
-  | 3 | `last_run` absent or unusable | unknown age |
-  | 4 | `now − last_run ≥ STALE_HOURS` | stale ⚠ |
-  | 5 | `last_run_errors` absent, non-integer, or negative | unreadable error count ⚠ |
-  | 6 | `last_run_errors > 0` | degraded ⚠ |
-  | 7 | otherwise | fresh |
-
-- Row 1 covers the first run after upgrade, when `run_started` exists and `last_run` does not yet.
-- **A `run_started` older than `RUN_ABANDON_HOURS` is unusable**, so rows 1 and 2 stop matching and
-  classification continues at row 3 — the decay described in R3. A dead scheduler therefore reads
-  as stale rather than as permanently stuck.
-- Rows 4, 5 and 6 all warn; stale wins when several hold, because the older signal is the more
-  urgent one and its remediation subsumes the others.
+- **Classification is R3's state table, applied verbatim — states 1–8, first match wins.** It is
+  deliberately *not* restated here. Two copies of the state list is exactly what went stale in three
+  consecutive review rounds; the hook implements those eight rows and nothing else.
+- Ordering consequences worth stating once, because they are properties of that table rather than new
+  rules: states 5, 6 and 7 all warn, and **stale wins** when several hold, since the older signal is
+  the more urgent one and its remediation subsumes the others. **State 3 is checked before state 4** —
+  both require an absent `last_run`, and without that ordering an abandoned first run degrades into a
+  bare unknown-age line carrying no marker and no log pointer.
 - Age rendered `Nm` under an hour, `Nh` under a day, else `Nd`, on every line that names an age.
 - Unchanged: absent `status.json` → exit 0 silently; `chunks` absent or 0 → exit 0 silently.
 
@@ -507,9 +581,10 @@ staleness line **is** its monitor.
 ```gherkin
 Scenario: Fresh index reports its age
   Given status.json has last_run 3 hours ago and chunks 2332
+  And last_run_errors is 0
   When the SessionStart nudge runs
-  Then one line is emitted naming the age
-  And it carries no stale marker
+  Then the line is state 8, fresh, naming the age
+  And it carries no warning marker
 
 Scenario: Stale index is flagged with remediation
   Given status.json has last_run 19 days ago
@@ -518,6 +593,7 @@ Scenario: Stale index is flagged with remediation
 
 Scenario: The threshold itself counts as stale
   Given last_run is exactly 8 hours ago
+  And last_run_errors is 0
   When the nudge runs
   Then the line is stale
   But at 7 hours 59 minutes it is fresh
@@ -525,6 +601,7 @@ Scenario: The threshold itself counts as stale
 Scenario: A successful run that changes nothing keeps the line fresh
   Given last_indexed is 19 days old because no watched file has changed
   And last_run is 1 hour ago
+  And last_run_errors is 0
   When the nudge runs
   Then the line is fresh
   And it does not tell the reader to run the indexer
@@ -568,6 +645,15 @@ Scenario: The first run after upgrade has no last_run yet
   Then the line reports a run in progress
   And it is not the unknown-age line
 
+Scenario: A first run that died is not reported as a bare unknown age
+  Given run_started is 30 hours ago and last_run is absent
+  When the nudge runs
+  Then the line is state 3, reporting that the first run never completed
+  And it carries a warning marker
+  And it names the scheduled-index log
+  And it is not the unknown-age line
+  And it does not report a run in progress
+
 Scenario: A run that failed on every file is never reported as fresh
   Given last_run is 2 hours ago and last_run_errors is 47
   When the nudge runs
@@ -581,6 +667,7 @@ Scenario: A clean recent run is fresh
 
 Scenario: A future run_started is not a run in progress
   Given run_started is 3 hours in the future and last_run is 2 hours ago
+  And last_run_errors is 0
   When the nudge runs
   Then the line is fresh
   And it does not report a run in progress
@@ -782,11 +869,16 @@ Verified on this machine 2026-08-06, not remembered.
 > it only as a stuck line that never resolves into one naming the real problem**; (d) any of the
 > five measurement queries is modified after the commit that introduced them; (e) the nudge emits
 > more than one line, or a non-zero exit, on any path; (f) a run that errored on every source is
-> reported as fresh, or an in-progress or stuck line arrives carrying the remediation command; or
+> reported as fresh, or an in-progress or stuck line arrives carrying the remediation command;
 > (g) an in-progress or stuck line is still emitted more than `RUN_ABANDON_HOURS` after
-> `run_started`, or a missing `last_run_errors` produces a fresh line.
+> `run_started`, or a missing `last_run_errors` produces a fresh line; or (h) a first run that
+> started more than `RUN_ABANDON_HOURS` ago and never completed produces a line carrying no warning
+> marker and no pointer to the log.
 
-(a), (b), (e), (f) and (g) are hook tests. (c) and (d) are observations. **(d) is weaker than first written**:
+(a), (b), (e), (f), (g) and (h) are hook tests. (c) and (d) are observations. Clauses (f), (g) and
+(h) are **derived from R3's state table** — (f) from states 1, 2 and 7, (g) from the decay out of
+states 1 and 2 plus state 6, (h) from state 3 — and are re-derived whenever that table changes.
+**(d) is weaker than first written**:
 it can still be checked from git history, but it no longer proves the queries were authored before
 the index was rebuilt, because the rebuild happened first (Background, R9).
 
@@ -806,9 +898,21 @@ the index was rebuilt, because the rebuild happened first (Background, R9).
 - Restarting the promotion pipeline the design doc assumed (`session-log.md` and `decisions.md`,
   both ~3 weeks stale — see R10). R10 makes the archive searchable; it does not revive the
   summarisation habit that stopped. Named so the gap stays visible.
-- A lock or pidfile for concurrent `memsearch index` runs. R3 stops the nudge from *inviting* one —
-  neither the in-progress nor the stuck line carries the remediation command — but nothing prevents a
-  reader from starting one anyway. Named here so the gap is deliberate rather than overlooked.
+- A lock or pidfile for concurrent `memsearch index` runs. R3 stops the nudge from *inviting* one for
+  the first `RUN_ABANDON_HOURS` — neither state 1 nor state 2 carries the remediation command — but
+  nothing prevents a reader from starting one anyway. **And the guarantee is bounded, not absolute:
+  past `RUN_ABANDON_HOURS` the decay deliberately reclassifies a run as state 5, stale, which *does*
+  carry the index command. A genuinely alive run that outlives the constant will therefore be handed
+  a "run the indexer" line.** That is a conscious trade — a bounded concurrency risk bought in
+  exchange for the dead-scheduler signal, which is the failure this feature exists to surface — and
+  it is why R3 requires `RUN_ABANDON_HOURS` to clear task 9's measured cold-run duration by a margin.
+  Named here so the gap is deliberate rather than overlooked.
+- Rotating or capping `scheduled-index.log`. R6 appends stdout and stderr from four runs a day, for
+  the life of the agent, with nothing trimming it — and states 2, 3, 6 and 7 all point a reader at
+  that file, so it is load-bearing evidence rather than incidental output. Deliberately unbounded for
+  now: truncating per run would destroy the cross-run history that makes a repeated failure legible,
+  and a real rotation policy needs a size figure that only task 9's first `--full` run can supply.
+  Named so the growth is a known cost, not a later surprise.
 - Retrying or recovering a failed run. R3's degraded line reports that one happened; the scheduler
   simply tries again in 6h.
 - Re-measuring retrieval on any cadence after this lands. R9 measures once, at landing — an index
@@ -838,11 +942,15 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 3 — Add `run_started`, `last_run`, `last_run_errors` to `status.json` (R5), written at both
       ends of `run_index`, and surface the two new fields in `memsearch status` (`status.py:27`);
       extend `memsearch/tests/test_index.py` and `test_cli.py`. Existing keys unchanged.
-- [ ] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4; extend `hooks/memsearch-nudge.test.sh` to
-      cover **every nudge scenario in this spec** (count them from the Scenarios section rather
-      than from a number written here, which drifts) plus the registration assertion. **The degraded-line test
-      must assert the emitted line, not the parsed field** — a field nobody reads is the defect this
-      task exists to close. Hand-run a mutation check.
+- [ ] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4, implementing **R3's state table verbatim**.
+      Extend `hooks/memsearch-nudge.test.sh` to cover **every one of its eight states plus both
+      silent paths**, and **every nudge scenario in the Scenarios section** — derive both lists by
+      reading those two places, never from a count written here, which is precisely the number that
+      drifts. **Every test asserts the emitted line, not the parsed field** — a field nobody reads is
+      the defect this task exists to close, and it is why the degraded and unreadable states in
+      particular must be checked at the output. Include the state-3 case (an abandoned first run must
+      not degrade into a bare unknown-age line) and the registration assertion. Hand-run a mutation
+      check.
 - [ ] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
       (R6, R7), with a `plutil -lint` test, the eight install/uninstall scenarios, and an assertion
       that no absolute path is committed.
@@ -872,7 +980,8 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
-      copies would satisfy on their own while the 3,232-line archive stayed unreachable. Confirm
+      copies (159 and 119 lines) would satisfy on their own while the 3,433-line archive stayed
+      unreachable. Confirm
       its chunks carry `source_type = archive_doc`. **Record wall-clock duration for the worst
       case, not the convenient one.** `RUN_MAX_HOURS` has to survive the longest run the scheduler
       can start, which is a cold one — an `index --full`, or the first run after an embed-model
@@ -881,13 +990,30 @@ was asked and answered 2026-08-06: **Opus 5**.
       and record that figure; note the incremental figure too as the ordinary case, but choose the
       constant against the cold one. If it exceeds `RUN_MAX_HOURS`, stop and put the constant back
       to the user (R3).
-- [ ] 10 — Score the five queries at `k=6` against R9's bar; record pass/fail per query under
-      `## Verification`, including a failing result if that is the truth. **Run them with
-      `-m golden`** — `pyproject.toml:23` sets `addopts = "-m 'not golden'"`, so a bare `pytest`
-      deselects all sixteen golden tests, and those are the noise-regression net R10 is being
-      measured against; scoring R10 with the instrument switched off is worse than not scoring it.
-      **A failure here is a real result about R10's noise cost** — report it, do not silently
-      re-exclude the file (and see R10's exit cost: re-excluding does not remove the chunks).
+- [ ] 10 — **Two distinct measurements, both recorded under `## Verification`.** They are not the
+      same instrument and neither substitutes for the other (R9).
+      **(a) The noise-regression net.** Run the pre-existing suite with `-m golden` —
+      `pyproject.toml:23` sets `addopts = "-m 'not golden'"`, so a bare `pytest` deselects all
+      sixteen golden cases, and those are what detect R10 crowding the corpus; running R10's
+      measurement with that net switched off is worse than not measuring. Note when reading the
+      result that **only the 11 `must` cases can fail**; the 3 `stretch` and 2 `negative` cases warn
+      and pass regardless, so a green run is not by itself evidence of no regression — read the
+      warnings.
+      ⚠️ **Golden entry 11 (file line 12) is a predicted casualty, named here before the run so a
+      failure is a confirmed prediction rather than a surprise to be explained away.** It is
+      `"what were we working on in mid july 2026"`, `kind: must`, filtered
+      `{rtype: episodic, since: 2026-07-01}`, expecting a `.jsonl` path. R10 makes
+      `CODING_MEMORY.md` **episodic** (part 3), weight **1.0 — tied with `transcript_digest`**,
+      dated by mtime to *today* so it passes the `since` filter, and the largest source in the
+      corpus — competing directly with transcript digests on a query whose answer it literally
+      contains. If it fails, the honest reading is that the archive is a *better* answer to that
+      query than a transcript is, and the fix is to re-point the query, not to re-exclude the file;
+      record that judgment either way.
+      **(b) R9's bar.** Score the five measurement queries at `k=6` with R9's own runner — ≥2 hits
+      belonging to the named feature, each ≥0.30, top hit belonging — and record pass/fail per
+      query, including a failing result if that is the truth. **A failure here is a real result
+      about R10's noise cost** — report it, do not silently re-exclude the file (and see R10's exit
+      cost: re-excluding does not remove the chunks already written).
 - [ ] 11 — Observability judge (implementation stage), then PR.
 
 ## Verification
