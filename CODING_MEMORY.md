@@ -3651,4 +3651,28 @@ spec did not.
 edits; the session-35 handoff enumerates **nine**. The nine-item list is the one that was worked
 from — treat it as authoritative and re-derive rather than trusting either number.
 
-**Open:** the round-10 revision (nine edits), then re-dispatch both judges.
+**Closed:** PR #44 **MERGED** 2026-08-07T16:46:01Z; branch deleted local + remote via `git branch -d`.
+The rule is on `main` — verified `1` where the pre-merge falsifier on `main` returned `0`.
+
+**Open: the round-10 revision, then re-dispatch both judges.** The nine edits are recorded here
+rather than only in the handoff, because the session-35 handoff that held them was overwritten and
+they briefly existed in no durable place at all — the same staleness failure this spec exists to fix:
+
+1. Delete R3's 17-entry derived-surface inventory (~`:162`–`:186`).
+2. Delete R9's seven-entry "Surfaces derived from R9" (~`:339`–`:353`).
+3. Replace both with a task step regenerating the sweep **at implementation time**; keep the sweep
+   *method* (~`:144`–`:147`). Every stored copy went stale, twice inside the anti-staleness section.
+4. Scenario "A failed scheduled run becomes visible": 9h-uncompleted is **state 2 (stuck)**, not
+   stale (`6 ≤ 9 < 24`, stuck outranks stale). Emit the stuck line; copy R8's falsifier-(a) scoping.
+   Task 4 makes this scenario a hook test, so the wrong version is the one that ships.
+5. Move "all five queries must pass" into task 10(b) — it appears once in 1,270 lines and not in the
+   step that records the measurement, so four-of-five would be written down as a pass.
+6. Task 10(a) baseline: `uv run pytest -m golden -q` → 16 passed, 63 deselected, 2.53s @ `ceadcf0`.
+   Verified; do not re-measure, and do not let a later commit become the "before".
+7. Delete the pinned counts `121` and `130` from R10's noise paragraph — both read from `memory.db`.
+8. State the counting unit as **per-feature** in three places identically: R9's spread rule, task 8b,
+   falsifier (i).
+9. Add a falsifier clause for task 9's stop-and-ask — flagged three rounds running, still ungraded.
+
+Then re-hash the blob and re-dispatch both judges in panes with R9's two violation ids, `waived: []`,
+and the fact that edits 1–3 are a **user-directed structural change**, not a judge finding.

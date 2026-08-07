@@ -758,10 +758,15 @@ mentions in `docs/decisions/` and `docs/superpowers/plans/` (immutable records).
   an ancestor of `main`; and the PR page still reports `state=MERGED head=docs/remove-rtk-references`,
   so GitHub's retained head ref makes it restorable from there.
 
-### PR #44 — `chore/response-register-rule` — 2026-08-07, **OPEN**
+### PR #44 — `chore/response-register-rule` — 2026-08-07, **MERGED**
 
 - **Repo:** `suyatdev/.claude` · **Remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
-- **PR:** https://github.com/suyatdev/.claude/pull/44 · **Base:** `main` · **State:** OPEN
+- **PR:** https://github.com/suyatdev/.claude/pull/44 · **Base:** `main` ·
+  **State: MERGED 2026-08-07T16:46:01Z** (merged in the GitHub UI)
+- **Branch deleted local + remote 2026-08-07**, same convention as the 2026-08-04 and 2026-08-06
+  cleanups: `git branch -d` (never `-D`), so git confirmed the merge rather than my asserting it.
+  Verified after merge: `grep -c "Always give a recommendation" rules/core-conduct.md` on `main`
+  → `1`, where the pre-merge falsifier on `main` returned `0`.
 - **session_origin (created):** session 36 · **session_origin (last push):** session 36
 - **Not feature-scale** — no `docs/features/` file. The commit history and ADR 0019 are the record.
 
