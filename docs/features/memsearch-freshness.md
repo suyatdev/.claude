@@ -1534,6 +1534,57 @@ N = **10**; ⌊N/3⌋ = 3; ranks 3–4 tie at 13, so the bottom third holds four
     *6. 0.040548  docs/features/phase-guard-hook.md:12-21
 ```
 
+### Task 9 — install and first run (2026-08-07). Correctness confirmed; timings PENDING
+
+Installed `2026-08-07T19:04:10-0400`, exit 0. `launchctl print` reports `state = running`,
+`runs = 1`, `last exit code = (never exited)`. Rendered plist is mode `0644`; the committed
+template holds 3 `__HOME__` placeholders and **0** absolute paths.
+
+**R5's two-write protocol worked in production on its first real run**, exactly as the contract
+specifies. The entry write stamped `run_started` and **carried the six prior keys over rather than
+recomputing them** — `chunks` stayed `7631` instead of reading a freshly-emptied DB and stamping
+`0`, which is the failure that would have deleted the session line for the whole rebuild:
+
+```
+{"chunks": 7631, "sources": 911, "last_indexed": "2026-08-06T23:56:46+00:00",
+ "db_bytes": 48959488, "embed_model": "qwen3-embedding:0.6b", "embed_dim": 1024,
+ "run_started": "2026-08-07T23:04:10+00:00"}          <- last_run absent: first run under new code
+```
+
+The nudge classified that live state correctly as **state 1** and, per the table, carried no
+remediation command:
+
+```
+memsearch: index run in progress (started 0m ago) — 7631 chunks; query with: …
+```
+
+(The `SessionStart` line earlier in the same session was **state 4**, unknown age — so the
+transition 4 → 1 was observed live, not simulated.) `scheduled-index.log` filled during the run,
+confirming `PYTHONUNBUFFERED`.
+
+**R10 confirmed end-to-end in the real index** — `sources` rows by exact path, `ESCAPE` used so `_`
+is literal:
+
+| path | `source_type` | `recall_type` | chunks | weight |
+|---|---|---|---|---|
+| `~/.claude/CODING_MEMORY.md` | `archive_doc` | `episodic` | 229 | 1.0 |
+| `…/vibe-scape/CODING_MEMORY.md` | `archive_doc` | `episodic` | 13 | 1.0 |
+| `…/Snatch-Bracket/CODING_MEMORY.md` | `archive_doc` | `episodic` | 8 | 1.0 |
+
+Zero `archive_doc` rows carry a non-`episodic` `recall_type`. The exact-path check matters: the two
+project copies alone would satisfy a loose "a row in each repo root" test while the archive itself
+stayed unreachable. Filename classification is working in **both** branches, so the project copies
+sit at 1.0 rather than `repo_doc` 1.2, where they would outrank their own repos' decision records.
+At 229 chunks the archive is the single largest source, as R10 predicted.
+
+**PENDING — the timing half, and the constants that depend on it.** A chained background job waits
+for the incremental run, snapshots its `status.json`, **boots the agent out** so `StartInterval`
+cannot fire a second indexer mid-rebuild (`memsearch` has no lock), then times a cold `--full` run
+into `~/.claude/memory-index/task9-timing.txt`. Until that lands, `RUN_MAX_HOURS` and
+`RUN_ABANDON_HOURS` keep their provisional 6/24 and task 9 stays open.
+⚠️ **The agent is booted out for the duration and must be re-installed** with
+`memsearch/bin/install-schedule` once the full run finishes.
+
 **Open issue carried to task 10b — the size effect runs opposite to R9's stated worry.** R9 assumes
 a large target has *more* chances to land two hits, so five fat targets would pass while measuring
 nothing. Measured, the two **smallest** targets (6 and 9 chunks) are the only ones meeting both
