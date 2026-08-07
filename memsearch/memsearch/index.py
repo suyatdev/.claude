@@ -43,15 +43,30 @@ def _iter_transcripts(cfg: Config) -> list[Path]:
     return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
+ARCHIVE_FILENAME = "CODING_MEMORY.md"
+
+
+def _doc_source_type(path: Path, default: str) -> str:
+    """Classify the session archive by filename, not by which bucket found it.
+
+    The archive has three copies — the ~/.claude one reached via curated_docs
+    and one inside each repo_root — and bucket-based typing would tier them
+    differently (1.5 vs 1.2), ranking session narrative at or above the
+    decision records it narrates. archive_doc (1.0) keeps all three
+    retrievable without ever outranking a real decision record.
+    """
+    return "archive_doc" if path.name == ARCHIVE_FILENAME else default
+
+
 def _iter_docs(cfg: Config) -> list[tuple[Path, str, str, str]]:
     """Yields (path, repo_id, repo_name, source_type)."""
     out: list[tuple[Path, str, str, str]] = []
     for entry in cfg.curated_docs:
         files = [entry] if entry.is_file() else sorted(entry.rglob("*.md"))
-        out.extend((f, *CLAUDE_REPO, "curated_doc")
+        out.extend((f, *CLAUDE_REPO, _doc_source_type(f, "curated_doc"))
                    for f in files if not is_excluded(f, cfg))
     for r in cfg.repo_roots:
-        out.extend((f, r.id, r.name, "repo_doc")
+        out.extend((f, r.id, r.name, _doc_source_type(f, "repo_doc"))
                    for f in sorted(r.root.rglob("*.md"))
                    if not is_excluded(f, cfg))
     return out

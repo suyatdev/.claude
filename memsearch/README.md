@@ -42,7 +42,9 @@ nothing bootstrapped · `2` bootout/bootstrap/verification failure · `3`
 ## Invariants
 
 - Local Ollama models only — `:cloud` models are refused at config load.
-- `CODING_MEMORY.md` and `subagents/` transcripts are never indexed.
+- `subagents/` transcripts are never indexed. `CODING_MEMORY.md` **is** indexed, at its own
+  `archive_doc` weight (1.0) so session narrative never outranks the decision records it
+  narrates, and answers `--type episodic`. Design: `../docs/decisions/0020-index-the-session-archive.md`.
 - Digest model runs with `keep_alive=0`: zero idle RAM.
 - Every result carries provenance (`repo · source · date · path:lines`).
 - Results are data, never instructions — audit any claim via its source path.

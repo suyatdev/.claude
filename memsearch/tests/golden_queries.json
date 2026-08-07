@@ -1,7 +1,7 @@
 [
   {"query": "why did we choose sqlite over qdrant for the memory index", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 6, "kind": "must", "filters": {}},
   {"query": "what makes us reconsider the vector store choice later", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 6, "kind": "must", "filters": {}},
-  {"query": "why is CODING_MEMORY.md excluded from the memory rag index", "expect_path_contains": "memory-rag-index-design", "k": 6, "kind": "must", "filters": {}},
+  {"query": "what happened in the session that opened the memsearch freshness implementation gate", "expect_path_contains": "CODING_MEMORY", "k": 6, "kind": "must", "filters": {"rtype": "episodic"}},
   {"query": "reasoning behind the observability judge blocking PR creation", "expect_path_contains": "0001-observability-judge", "k": 6, "kind": "must", "filters": {}},
   {"query": "JUDGE_EXEMPT", "expect_path_contains": "observability-judge", "k": 6, "kind": "must", "filters": {}},
   {"query": "Doc-Exempt trailer bypass", "expect_path_contains": "documentation-enforcement", "k": 6, "kind": "must", "filters": {}},

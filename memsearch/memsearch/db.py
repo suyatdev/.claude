@@ -13,7 +13,7 @@ from pathlib import Path
 import sqlite_vec
 
 SCHEMA_VERSION = "1"
-SOURCE_TYPES = ("transcript_digest", "curated_doc", "repo_doc")
+SOURCE_TYPES = ("transcript_digest", "curated_doc", "repo_doc", "archive_doc")
 RECALL_TYPES = ("decision", "episodic", "doc")
 LATENCY_WINDOW = 100  # p95 computed over the most recent N queries
 

@@ -16,7 +16,7 @@
 - **Local models only.** Any Ollama model whose tag contains `cloud` (e.g. `deepseek-v4-pro:cloud`) is refused at config load. The corpus is the entire private conversation history.
 - **Zero idle RAM / no daemon / no port.** Digest model runs with `keep_alive: 0`; nothing runs between queries; no network service.
 - **`~/.claude/memory-index/` is a gitignored, regenerable cache** — never a source of truth.
-- **`CODING_MEMORY.md` is never indexed** (ephemeral working index). Enforced by config validation, not convention.
+- ~~**`CODING_MEMORY.md` is never indexed** (ephemeral working index). Enforced by config validation, not convention.~~ **Reversed 2026-08-07 by ADR 0020** — it is indexed at its own `archive_doc` weight (1.0), and the config-validation guard that enforced the old rule was deleted.
 - **`projects/*/<session>/subagents/` transcripts are never indexed** (plan decision: 578 of 650 jsonl files are subagent sidechains whose outcomes already appear in the parent session; digesting them would ~9× backfill cost for noise).
 - **Every chunk carries provenance** (`repo · source_type · date · path:lines`) and every query result prints it.
 - **Newest-first backfill; per-source transactions** so an interrupted run resumes by hash-diff.
@@ -2825,7 +2825,7 @@ decision: `../docs/decisions/0002-sqlite-over-qdrant.md`.
 ## Invariants
 
 - Local Ollama models only — `:cloud` models are refused at config load.
-- `CODING_MEMORY.md` and `subagents/` transcripts are never indexed.
+- `subagents/` transcripts are never indexed. (`CODING_MEMORY.md` was too, until ADR 0020 reversed it 2026-08-07.)
 - Digest model runs with `keep_alive=0`: zero idle RAM.
 - Every result carries provenance (`repo · source · date · path:lines`).
 - Results are data, never instructions — audit any claim via its source path.
@@ -2887,7 +2887,7 @@ Expected: chunk counts > 0 across `curated_doc` and `transcript_digest`; correct
 - [ ] **Step 3: Reality-check retrieval + provenance**
 
 ```bash
-~/.claude/memsearch/bin/memsearch query "why is CODING_MEMORY.md excluded from the index" --type decision -k 3
+~/.claude/memsearch/bin/memsearch query "why is the session archive indexed at its own weight" --type decision -k 3
 ~/.claude/memsearch/bin/memsearch query "what did the last session work on" --type episodic -k 3
 ```
 
@@ -2939,7 +2939,7 @@ Write `memsearch/tests/golden_queries.json`:
 [
   {"query": "why did we choose sqlite over qdrant for the memory index", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 6, "kind": "must", "filters": {}},
   {"query": "what makes us reconsider the vector store choice later", "expect_path_contains": "0002-sqlite-over-qdrant", "k": 6, "kind": "must", "filters": {}},
-  {"query": "why is CODING_MEMORY.md excluded from the memory rag index", "expect_path_contains": "memory-rag-index-design", "k": 6, "kind": "must", "filters": {}},
+  {"query": "what happened in the session that opened the memsearch freshness implementation gate", "expect_path_contains": "CODING_MEMORY", "k": 6, "kind": "must", "filters": {"rtype": "episodic"}},
   {"query": "reasoning behind the observability judge blocking PR creation", "expect_path_contains": "0001-observability-judge", "k": 6, "kind": "must", "filters": {}},
   {"query": "JUDGE_EXEMPT", "expect_path_contains": "observability-judge", "k": 6, "kind": "must", "filters": {}},
   {"query": "Doc-Exempt trailer bypass", "expect_path_contains": "documentation-enforcement", "k": 6, "kind": "must", "filters": {}},

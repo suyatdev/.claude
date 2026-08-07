@@ -54,10 +54,6 @@ def load_config(path: Path | None = None) -> Config:
         if raw.get(key):
             _refuse_cloud(raw[key])
     excludes = tuple(raw.get("exclude_paths", ()))
-    if not any("CODING_MEMORY.md" in e for e in excludes):
-        raise ConfigError(
-            "exclude_paths must contain CODING_MEMORY.md (ephemeral working index)"
-        )
     return Config(
         ollama_url=raw["ollama_url"],
         embed_model=raw["embed_model"],

@@ -1313,7 +1313,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       feature branch, and the commit was two minutes old with no PR open. Recorded because the
       *reason* the split happened is that the checklist numbers them as two tasks while R8 requires
       one commit; a future reader splitting them again would repeat it.
-- [ ] 7 — **Index `CODING_MEMORY.md` (R10) — one commit, all seven parts.** Config: drop it from
+- [x] 7 — **Index `CODING_MEMORY.md` (R10) — one commit, all seven parts.** Config: drop it from
       `exclude_paths`, **add `~/.claude/CODING_MEMORY.md` to `curated_docs`** (without this the
       change is a no-op for the file it targets), add `"archive_doc": 1.0` to `weights`. Delete
       `config.py:57-60` — **line 56's `excludes = …` assignment must survive**. Add `archive_doc` to
@@ -1330,6 +1330,21 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       assert the retired rule and the historical listings to leave alone. Write
       `docs/decisions/0019-*.md`. Run the full suite — removing the guard touches every
       `load_config` caller.
+      - **Landed as ADR `0020-index-the-session-archive.md`, not `0019`.** `0019` was already taken
+        by `0019-response-register-belongs-in-core-conduct.md` (sessions 35–36), so the task text
+        was stale and the number is forced by the directory. ⚠️ Knock-on: the deferred
+        planning-pass ADR is now **0021**, not the 0020 the session-39 handoff reserved.
+      - **Every `test_index.py` line number in R10.4 was +11 stale** — task 3's commit `483c44e`
+        inserted lines above them. Mapped by test *function* and semantic role instead, per R10.4's
+        governing rule; the same drift had moved `README.md:22` to `:45` (task 6's insert).
+        R10.6's plan sweep, by contrast, re-ran to **fourteen** hits exactly as written.
+      - **The predicted failure set was observed before any test was edited:** 7 failed / 65 passed
+        — precisely the seven functions R10.4 names, from eight assertions. The two new
+        production-pinning tests were then mutation-checked (revert `chunk.py`'s episodic branch and
+        `_doc_source_type` → both fail; restore → 74 pass). A new test that has never been seen red
+        pins nothing.
+      - **R10.6 widened by one line, same defect class:** the design doc's `source_type` enum was a
+        three-value list (`transcript_digest | curated_doc | repo_doc`) that is now four.
 - [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9). **After task 7**, so the queries are written against the corpus they will
       be scored on.

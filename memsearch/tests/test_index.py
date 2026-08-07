@@ -43,7 +43,8 @@ def stub_digester(extract):
 
 def setup_corpus(tmp_path: Path) -> Path:
     """A miniature ~/.claude layout: 2 transcripts (one older), 1 curated doc,
-    1 repo doc, plus excluded files that must never be indexed."""
+    1 archive doc, 1 repo doc, plus excluded files that must never be
+    indexed."""
     proj = tmp_path / "projects" / "-x-repo"
     proj.mkdir(parents=True)
     old = proj / "old-session.jsonl"
@@ -66,7 +67,12 @@ def setup_corpus(tmp_path: Path) -> Path:
     curated = tmp_path / "coding-memory"
     curated.mkdir()
     (curated / "decisions.md").write_text("# Decisions\n\nWe decided things.\n")
-    (curated / "CODING_MEMORY.md").write_text("# Ephemeral\n\nNever index.\n")
+    # Deliberately *inside* the curated directory, a path the walker already
+    # visits. The ~/.claude-root position — where the real archive lives, and
+    # which no bucket reaches — is covered by its own cfg variant in
+    # test_root_position_archive_is_reached_only_via_curated_docs.
+    (curated / "CODING_MEMORY.md").write_text(
+        "# Coding Memory\n\n## 2026-08-07 — session 40\n\nWhat happened.\n")
     repo = tmp_path / "myrepo"
     (repo / "docs").mkdir(parents=True)
     (repo / "docs" / "arch.md").write_text("# Arch\n\nRepo doc content.\n")
@@ -92,7 +98,7 @@ def test_full_run_indexes_all_sources_newest_first(tmp_path):
     report = run_index(cfg, embedder=stub_embedder, digester=stub_digester,
                        progress=order.append)
     assert report["errors"] == []
-    assert report["processed"] == 4  # 2 docs + 2 transcripts
+    assert report["processed"] == 5  # 3 docs + 2 transcripts
     t_lines = [ln for ln in order if "session.jsonl" in ln]
     assert "new-session" in t_lines[0] and "old-session" in t_lines[1]
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
@@ -101,7 +107,8 @@ def test_full_run_indexes_all_sources_newest_first(tmp_path):
     assert s["by_source_type"]["curated_doc"] >= 1
     assert s["by_source_type"]["repo_doc"] >= 1
     all_paths = [r[0] for r in conn.execute("SELECT file_path FROM chunks")]
-    assert not any("CODING_MEMORY" in p or "subagents" in p for p in all_paths)
+    assert not any("subagents" in p for p in all_paths)
+    assert any("CODING_MEMORY" in p for p in all_paths)
     status = json.loads((cfg.db_path.parent / "status.json").read_text())
     assert status["chunks"] == s["chunks"]
     assert status["embed_model"] == "test-embed"
@@ -114,7 +121,7 @@ def test_second_run_is_idempotent(tmp_path):
     report2 = run_index(cfg, embedder=stub_embedder, digester=stub_digester,
                         progress=lambda _: None)
     assert report2["processed"] == 0
-    assert report2["skipped"] == 4
+    assert report2["skipped"] == 5
 
 
 def test_changed_file_reindexes_only_itself(tmp_path):
@@ -143,7 +150,7 @@ def test_full_rebuild_reprocesses_and_dedupes(tmp_path):
 
     report = run_index(cfg, full=True, embedder=stub_embedder,
                        digester=stub_digester, progress=lambda _: None)
-    assert report["processed"] == 4  # 2 docs + 2 transcripts, all reprocessed
+    assert report["processed"] == 5  # 3 docs + 2 transcripts, all reprocessed
     assert report["skipped"] == 0
 
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
@@ -156,8 +163,8 @@ def test_limit_caps_transcripts(tmp_path):
     cfg = make_cfg(tmp_path)
     report = run_index(cfg, limit=1, embedder=stub_embedder,
                        digester=stub_digester, progress=lambda _: None)
-    # 2 docs + 1 transcript (the newest)
-    assert report["processed"] == 3
+    # 3 docs + 1 transcript (the newest)
+    assert report["processed"] == 4
 
 
 def test_digest_error_is_recorded_not_fatal(tmp_path):
@@ -168,8 +175,73 @@ def test_digest_error_is_recorded_not_fatal(tmp_path):
 
     report = run_index(cfg, embedder=stub_embedder, digester=bad_digester,
                        progress=lambda _: None)
-    assert report["processed"] == 2  # the two docs still landed
+    assert report["processed"] == 3  # the three docs still landed
     assert len(report["errors"]) == 2
+
+
+def archive_rows(cfg, column: str) -> list:
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    rows = [r[0] for r in conn.execute(
+        f"SELECT DISTINCT {column} FROM chunks "
+        "WHERE file_path LIKE '%CODING_MEMORY.md'")]
+    conn.close()
+    return rows
+
+
+def test_archive_doc_gets_its_own_weight_tier(tmp_path):
+    """1.0, not curated_doc's 1.5: session narrative must stay retrievable
+    without ever outranking the decision records it narrates."""
+    cfg = make_cfg(tmp_path)
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    assert archive_rows(cfg, "source_type") == ["archive_doc"]
+    assert archive_rows(cfg, "weight") == [1.0]
+    assert cfg.weights["archive_doc"] < cfg.weights["curated_doc"]
+
+
+def test_archive_chunks_answer_the_episodic_filter(tmp_path):
+    """`--type episodic` is what a reader asking "what happened in session 27"
+    reaches for. chunk_doc derives recall_type from a path substring, which
+    would bucket the archive as generic `doc` — indexed but silently
+    unreachable by the obvious filter."""
+    cfg = make_cfg(tmp_path)
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    assert archive_rows(cfg, "recall_type") == ["episodic"]
+
+
+def test_root_position_archive_is_reached_only_via_curated_docs(tmp_path):
+    """The archive's zero rows had TWO sufficient causes, not one: the
+    exclusion, and ~/.claude/CODING_MEMORY.md sitting off every walked path
+    (curated_docs names ~/.claude/coding-memory, ~/.claude/docs and
+    ~/.claude/PORTS.md — never the ~/.claude root). Both halves are asserted,
+    because lifting the exclusion alone changes nothing for the file it
+    targets, and a suite that checks only the first half rubber-stamps it."""
+    corpus = setup_corpus(tmp_path)
+    archive = corpus / "CODING_MEMORY.md"
+    archive.write_text(
+        "# Coding Memory\n\n## 2026-08-07 — session 40\n\nRoot position.\n")
+
+    def sources_for(curated_docs, db_name):
+        p = write_cfg(tmp_path, **{
+            "embed_model": "test-embed", "embed_dim": DIM,
+            "db_path": str(corpus / db_name / "memory.db"),
+            "transcripts_glob": str(corpus / "projects" / "*" / "*.jsonl"),
+            "curated_docs": curated_docs,
+            "repo_roots": [],
+        })
+        cfg = load_config(p)
+        run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+                  progress=lambda _: None)
+        conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+        rows = [r[0] for r in conn.execute("SELECT path FROM sources")]
+        conn.close()
+        return rows
+
+    curated = str(corpus / "coding-memory")
+    assert str(archive) in sources_for([curated, str(archive)], "db-named")
+    # Exclusion lifted, but curated_docs omits it: still unreachable.
+    assert str(archive) not in sources_for([curated], "db-omitted")
 
 
 def read_status(cfg) -> dict:
