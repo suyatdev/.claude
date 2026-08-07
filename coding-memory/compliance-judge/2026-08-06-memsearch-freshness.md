@@ -1389,3 +1389,153 @@ zero-files-walked Non-goal. No repo-layer `.claude/project-standards.md` exists.
 ### Waivers
 
 None. No violation has ever been waived on this spec.
+
+---
+
+## Round 8 — 2026-08-07 · `main` @ `1a15a77` · blob `eff35fbf` · **FAIL** (1 violation)
+
+### In plain English
+
+Round 8 did the right thing about the wrong-shaped problem: instead of patching one more
+out-of-sync sentence, it built a sixteen-row index of every place in the spec that names one of the
+eight nudge states, and declared the state table the only place a state is defined. That is the
+correct fix for a defect that had survived three rounds. The index is genuinely good — I checked
+every row against the table and none of them contradicts it, and I re-measured every number the
+spec's conclusions rest on (chunk counts, the scorer's ceiling, the archive's size, thirty-odd
+file:line citations) and every single one held.
+
+But the index is not complete. The **Design decisions** section — decisions 1, 2, 5 and 6 — names
+states and asserts their order, and no row for it exists in the table. Decision 5 is the sharp
+instance: it says flatly that *"the nudge reports an in-progress run rather than a stale one"* and
+calls that a safety behaviour, because telling a reader to run the indexer while one is already
+running invites a second one. The state table does not actually promise that. Past
+`RUN_ABANDON_HOURS` the decay deliberately reclassifies exactly that run as **state 5, stale** —
+which *does* carry the index command. The spec knows this and says so in the concurrency Non-goal
+("the guarantee is bounded, not absolute"), and that Non-goal *is* in the index. Decision 5, which
+a reader hits four hundred lines earlier, states the unbounded version and is not.
+
+So this is the same class the last three rounds fixed one instance at a time, and the same class
+round 8's inventory exists to close — one surface the sweep missed. It is a small edit (add a
+Design-decisions row; bound decision 5's sentence the way the Non-goal already does), and it is
+cited rather than noted because the spec's own rule is explicit: *"Anything added to this spec that
+names a state joins this table in the same edit."*
+
+Supporting evidence that the sweep was not run against the round-8 document: the header says it
+covered *"all 1,163 lines"*. This file is **1,214** lines. 1,163 is exactly the line count of the
+round-7 blob (`a7b95e7`), the revision this table replaced.
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/derived-surfaces-out-of-sync` | `skills/writing-specs/SKILL.md` | The spec is the source of truth — maintain it with production rigor; drift between a source of truth and its derived surfaces causes the agent to describe behavior that does not exist | Design decisions (decisions 1, 2, 5 and 6), against R3's sixteen-entry derived-surface inventory and the state table's rows 1 and 5 | Decisions 5 and 6 name states and assert their precedence yet no Design-decisions row exists in the inventory the spec's own rule requires ("anything added to this spec that names a state joins this table in the same edit"), and decision 5 states its concurrency guarantee unconditionally where the table reclassifies the same run as state 5, stale — carrying the index command — past `RUN_ABANDON_HOURS` |
+
+Recurrence: cited in rounds 6 and 7 under the same id, in different territory each time
+(round 6: R2's pinned line vs. the table; round 7: falsifier clause (a) vs. clauses (g)/(a)'s
+precedence). Round 8 fixed both cited instances and replaced the three-entry list with a sixteen-entry
+inventory; the class narrowed sharply but did not close.
+
+### The sweep I ran, section by section
+
+Every section of the spec, checked for a state name, a rendered line, or an ordering claim:
+
+| Section | Names a state / line / ordering? | In the inventory? |
+|---|---|---|
+| Header, Background, Diagnostic findings | no (the quoted *"2332 chunks…"* is today's line, not a new one) | n/a |
+| **Design decisions 1, 2, 5, 6** | **yes — 1/5/7/8 by name, plus decision 5's precedence claim** | **NO — violation** |
+| R1, R2 | yes | yes |
+| State table, eight rendered lines | authoritative | yes |
+| Why each state exists | yes | yes (description overstated — see notes) |
+| The three constants | yes (1, 2, 5) | yes (row says 2 and 5) |
+| R4 ("at most one line", silent paths) | silent paths sit outside the table by the spec's own words | out of scope, defensible |
+| R5 (`last_run_errors` … "unknown, never zero") | restates row 6's *condition* without naming the state | borderline — see notes |
+| R6-R10 | no | n/a |
+| Data flow (OUT node + the monitor sentence) | yes, all eight in table order | yes |
+| Contracts → `index.py` | yes (stuck **and** in-progress) | yes (row names only stuck) |
+| Contracts → `status.py`, plist, `install-schedule` | no | n/a |
+| Contracts → `memsearch-nudge.sh` | yes (1-8, 5/6/7 warn, stale wins, 3 before 4) | yes |
+| Scenarios | yes — all eight states plus both silent paths, verified individually | yes |
+| Falsifier (a)-(i) | yes (1, 2, 3, 5, 6, 7, 8) | yes (row omits 8) |
+| Non-goals: zero files / concurrency / log growth / retrying | yes | yes, all four, all agreeing |
+| Non-goals: dating, re-scoping, promotion, re-measuring, exit code, misc | no | n/a |
+| What success means | "reliably fresh index" — generic usage, not the state | out of scope |
+| Task 4 | yes (3, 4, 6, 7 + 3-before-4 ordering) | yes (row names 3, 6, 7) |
+| Tasks 9, 10, 10c, 11 | constants and falsifier letters only, no states | n/a |
+
+### Everything re-measured this round (not recalled)
+
+**Chunk-count range, mechanically re-counted** — `SELECT s.path, count(c.id) … WHERE s.path LIKE
+'%/docs/features/%'` returns exactly eleven files in exactly the spec's order and values:
+`phase-guard-hook` **91**, `replay-harness-base-pin` **70**, `verification-marker-gate` **53**,
+`memory-system-split.spec` **31**, `git-guard-empty-index` **24**, `memsearch-freshness` **14**,
+`shell-segments-redirects` **13**, `git-guard-chained-command` **13**, `falsifier-base-pin` **9**,
+`stale-phase-guard-rule-text` **6**, `memory-system-split` **6**. Spread 91/6 = **15.17×** ✓.
+
+**Scorer ceiling, re-derived from source** — `search.py:19` `RRF_K = 60`; `:64`
+`rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (RRF_K + rank + 1)` over exactly two id lists (`vec_ids`,
+`fts_ids`); `:80` `round(base_score * r.pop("weight"), 6)`; `config.json` weights
+`{curated_doc: 1.5, repo_doc: 1.2, transcript_digest: 1.0}`. Ceiling `2 × 1/61 × 1.5 =`
+**0.0491803…** → **0.04918** ✓. R9's removal of the score clause leaves two rank clauses that can
+genuinely fail, and the chunk-count-span requirement is the right guard against tuning the sample
+instead of the number.
+
+**Archive and corpus** — `CODING_MEMORY.md` **300,160 characters / 3,484 lines** ✓;
+**24** `## ` headings of which **17** date-first and **3** session-first = **20** session-shaped in
+two forms ✓; largest indexed doc `2026-07-13-live-presence-plan.md` **184,620** chars / **121**
+chunks → 300160/184620 = **1.6258** → 1.62× ✓; the three docs larger than the old claim are
+**184,620 / 153,701 / 131,516** ✓ and `2026-07-26-03b-deploy-design.md` is 128,317 chars but
+**130** chunks ✓; only `PORTS.md` is indexed from the `~/.claude` root (no `CLAUDE.md`,
+`MEMORY.md`, `CODING_MEMORY.md` row) ✓; `curated_docs` = coding-memory, docs, PORTS.md ✓;
+`session-log.md` last date **2026-07-16**, `decisions.md` last decision **2026-07-19** ✓.
+
+**Citations** — `config.py:56` `excludes = tuple(...)` and `:57-60` the `raise ConfigError`;
+`db.py:16` `SOURCE_TYPES`, `:17` `RECALL_TYPES` containing `episodic`; `chunk.py:111`
+`recall = "decision" if "decisions" in str(path) else "doc"`; `test_index.py` `:58` (fixture writes
+into the *curated* dir), `:84`=4, `:93` compound, `:105`=0, `:106`=4, `:117`=1, `:135`=4, `:136`=0,
+`:148` comment, `:149`=3, `:160`=2, `:161`=2 — and all four quoted inline comments verbatim;
+`test_config.py:40/42/48`; `golden_queries.json` line 4 = the falsified-premise query, line 2 = the
+still-correct sqlite-over-qdrant one, file line 12 = golden entry 11 (`mid july`, `must`,
+`{rtype: episodic, since: 2026-07-01}`, `.jsonl`); 16 entries = 11 `must` / 3 `stretch` /
+2 `negative`; `test_golden_queries.py:37-41` asserts presence only, stretch/negative `warnings.warn`;
+`pyproject.toml:23` `addopts = "-m 'not golden'"`; `README.md:22`. Every one exact.
+
+**Part B clean.** No YAGNI overreach against the stated need (eight states each catch a named
+failure; R10 is corrective; item 6 excluded). Error paths explicit at every boundary the design
+introduces — entry write fallible-by-design and caught, atomic `os.replace`, nudge exit 0 on every
+path, `install-schedule` exit 0/1/2/3 each naming the failing step and never printing success on a
+non-zero path. `__HOME__` placeholder only, with a scenario asserting no committed absolute path;
+plist 0644, LaunchAgents 0755. No injection surface: `launchctl` is called with fixed argument
+vectors and `$(id -u)`, no user-supplied input reaches a shell or a SQL string. `CODING_MEMORY.md`
+is already git-tracked, so indexing it into a local `memory.db` adds no exposure that did not
+already exist. `RUN_MAX_HOURS` is escalated to the user against task 9's measurement rather than
+silently chosen — architecture trade-off correctly left human-owned.
+
+**Round-7 violation resolved.** Clause (a) is now scoped to *"no state 1, 2 or 3 line applies"*,
+which removes the (a)/(g) contradiction: a state-2 run whose `run_started` is 8-24h old no longer
+demands a stale line, and the two hook tests task 4 creates can now both pass.
+
+### Notes (non-blocking)
+
+1. The inventory header says the sweep covered *"all 1,163 lines"*; the file is **1,214**. 1,163 is
+   exactly the round-7 blob's line count — the sweep describes the revision this table replaced.
+2. Five inventory rows under-describe their surface. **"Per-state rationale bullets | all eight, by
+   name and number"** — the section has **five** bullets (1, 2, 3, 6, 7); states 4 and 5 appear only
+   inside bullet 3's prose and state 8 is not named at all. **"Threshold rationale | states 2 and
+   5"** also names 1 and 2 ("states 1 and 2 exist to prevent"). **"Contracts → `index.py` | the
+   stuck-run case"** also names the in-progress line twice. **"Task 4 | states 3, 6, 7"** also names
+   state 4 and the 3-before-4 ordering. **"Falsifier | 1, 2, 5, 6, 7, 3"** — clauses (f) and (g)
+   also name the fresh line, state 8. None contradicts the table; they are descriptions written
+   loosely in a table whose header claims mechanical derivation.
+3. R5's parenthetical (*"any other value, or its absence, is unknown, never zero, per R3"*) restates
+   row 6's condition in substance without naming the state — borderline against the sweep's own
+   stated criteria, and worth a decision either way.
+4. *"a cold run approaching `RUN_ABANDON_HOURS` makes state 5 fire … while the first run is still
+   alive"* reads two ways. The *"second concurrent indexer"* contrast makes "first" mean "the one
+   already running", which agrees with the table; a reader could take it as state 3's *first run*,
+   for which `last_run` is absent and the remediation is the log, not the index command.
+5. The scenario coverage is genuinely complete — all eight states and both silent paths each have a
+   scenario, and the OUT node lists all eight names in table order.
+
+### Waivers
+
+None. No violation has ever been waived on this spec.

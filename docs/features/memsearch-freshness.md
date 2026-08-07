@@ -81,10 +81,15 @@ Three measurement traps, recorded because each produced a confidently wrong answ
 4. **`launchd`, not a session hook.** The scheduler stays decoupled from session activity. Its known
    weakness is that it runs blind (a run with Ollama down just fails); decision 1's warning is
    exactly the compensating control, which is why neither half ships alone.
-5. **The nudge reports an in-progress run rather than a stale one.** `memsearch` has no lock or
-   pidfile, so telling a reader to `run memsearch index` while a run is already going invites a
-   second concurrent indexer. This is a safety behaviour, not a nicety, and it is why `run_started`
-   exists alongside `last_run`.
+5. **The nudge reports an in-progress run rather than a stale one — for the first
+   `RUN_ABANDON_HOURS`.** `memsearch` has no lock or pidfile, so telling a reader to
+   `run memsearch index` while a run is already going invites a second concurrent indexer. This is a
+   safety behaviour, not a nicety, and it is why `run_started` exists alongside `last_run`.
+   ⚠️ *Bounded, not absolute — corrected in round 9.* Past `RUN_ABANDON_HOURS` R3's table
+   deliberately reclassifies the same run as **state 5, stale**, which *does* carry the index
+   command; the guarantee holds up to that threshold and no further. Stated unconditionally here
+   through round 8, contradicting both the table and the concurrency Non-goal, which had the bounded
+   version right. R3's table is authoritative; see the Non-goal for the trade.
 6. **A run's error count is reported through `status.json` and read by the nudge — not through the
    exit code.** `_index_one` catches every exception into `report["errors"]` and continues
    (`index.py:135-137`), `run_index` stamps status unconditionally at the end (`index.py:100`), and
@@ -136,8 +141,14 @@ place either is defined.
 Rounds 5, 6 and 7 each patched the derived-surface list and each left instances behind; round 7's
 list was itself stale, naming a section round 5 had deleted. A hand-maintained list of duplicates
 had become one more duplicate to maintain. So the list is no longer written from memory: it is the
-output of a sweep for every state name, rendered line, and ordering claim across all 1,163 lines,
-and it is regenerated the same way whenever the table changes.
+output of a sweep for every state name, rendered line, and ordering claim across the whole document,
+regenerated the same way whenever the table changes.
+
+⚠️ *Round 8's version of this paragraph claimed the sweep covered "all 1,163 lines" — the line count
+of the **previous** round's file, not the one the table indexes.* **The enumeration meant to end
+stale copies shipped carrying a stale copy of the document's own size**, which is why no line count
+appears here now and why the table below is keyed by section. A number that describes the document
+inside the document is a duplicate like any other.
 
 **Keyed by section, never by line number.** An earlier draft of this very table cited line numbers;
 they were stale inside one editing session, because a line number is itself a copy of the document's
@@ -147,9 +158,10 @@ structure. Sections are stable, so the index is keyed to them.
 |---|---|---|
 | **The state table** (below) | conditions | **authoritative** |
 | **The eight rendered lines** (below the table) | wording | **authoritative** |
+| Design decisions 1, 2, 5 and 6 | states 1, 5, 6, 7; decision 5 asserts precedence | **5 was unconditional — bounded in round 9** |
 | R1 | the fresh and stale lines, verbatim | derived · agrees |
 | R2 | states 1-4, the guarantee | derived · agrees |
-| The per-state rationale bullets (after the rendered lines) | all eight, by name and number | derived · agrees |
+| The per-state rationale bullets (after the rendered lines) | **five** bullets — 1, 2, 3, 6, 7 by name and number; 4 and 5 in prose only; 8 never named | derived · agrees |
 | The threshold rationale (`STALE_HOURS`/`RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`) | states 2 and 5 | derived · agrees |
 | Data-flow diagram → `OUT` node | all eight, by name | derived · agrees |
 | Contracts → `index.py` | the stuck-run case | derived · agrees |
@@ -167,9 +179,11 @@ structure. Sections are stable, so the index is keyed to them.
 That is the honest shape of this defect — not carelessness, but that *ordering* feels like commentary
 rather than duplication. It is duplication.
 
-*Anything added to this spec that names a state joins this table in the same edit.* **Sixteen
+*Anything added to this spec that names a state joins this table in the same edit.* **Seventeen
 entries is the real size of the problem**; the three-entry list that preceded it is why rounds 5, 6
-and 7 each fixed the instance in front of them and left the class open.
+and 7 each fixed the instance in front of them and left the class open. Round 8's sixteen-entry
+version still missed the Design decisions — a section that both names states *and* asserts their
+precedence — which is why the sweep, not a reading, is what regenerates this table.
 
 **Eight states. First match wins. One line per state, never more.** The two silent paths — absent
 `status.json`, and `chunks` absent or 0 — sit outside this table and emit nothing at all (R4).
@@ -314,17 +328,53 @@ own commit before any of them is run. Acceptance, at `k=6`, is **two rank clause
 this branch. Task 8b still records every hit's raw score as a **baseline for future comparison** —
 that record is the durable value — but no pass mark is set from it.
 
-⚠️ ***The five features must span the corpus size range, and each one's chunk count is recorded
-beside its result.*** Measured 2026-08-07, the eleven indexed feature files run from **6 to 91
-chunks** — a 15× spread (`phase-guard-hook` 91, `replay-harness-base-pin` 70,
-`verification-marker-gate` 53, `memory-system-split.spec` 31, `git-guard-empty-index` 24,
-`memsearch-freshness` 14, `shell-segments-redirects` 13, `git-guard-chained-command` 13,
-`falsifier-base-pin` 9, `stale-phase-guard-rule-text` 6, `memory-system-split` 6). A file with 91
-chunks has many more chances to land two hits in a top-6 than one with 6. **Choosing five fat
-targets would pass clauses 1 and 2 while measuring nothing** — the same tuning the retired score
-floor allowed, moved from the number to the sample. At least one query must name a file in the
-bottom third and at least one in the top third, and the chunk count travels with the result so a
-soft sample is visible to a reader rather than buried.
+⚠️ ***R9 passes iff all five queries satisfy both clauses. Four of five is a failure.*** Round 8
+said "both clauses gate this branch" and never said how many queries had to clear them, which made
+one-of-five a literal satisfaction of every sentence in the requirement — a recording step wearing a
+gate's clothing. **This is not in tension with R10's "a failing R9 is a legitimate outcome":** that
+sentence governs what a failure *means* (evidence about the archive's noise cost, to be reported and
+judged, not silently reverted), not whether the bar is lenient. R9 is strict; the response to a
+failure is deliberation, not automatic rollback.
+
+#### Surfaces derived from R9
+
+R9 governs six places. Same rule as R3's state table: **this requirement is authoritative, these
+restate it, and any surface added or removed joins this list in the same edit.** Round 8's drift
+landed here precisely because R9 had no such list while R3 did.
+
+| Surface | What it restates | Status |
+|---|---|---|
+| **R9** (this section) | the two clauses, the spread rule, the pass mark | **authoritative** |
+| Task 8 | the commit-before-running rule | derived · agrees |
+| Task 8b | the raw-score record, the chunk counts, the spread rule | derived · agrees |
+| Task 10(b) | both clauses, the pass mark | derived · agrees |
+| Falsifier (d) | the queries-unmodified rule | derived · agrees |
+| Falsifier (i) | the raw-score record, the spread rule | derived · agrees |
+| Scenarios: the three R9 scenarios | both clauses, the spread, the raw-score record | derived · agrees |
+
+⚠️ ***The five features must span the corpus size range: at least one target in the bottom third
+and at least one in the top third, by chunk count.*** A large file has many more chances to land two
+hits in a top-6 than a small one, so **choosing five fat targets would pass both clauses while
+measuring nothing** — the same tuning the retired score floor allowed, moved from the number to the
+sample. Each target's chunk count is recorded beside its result, so a soft sample is visible rather
+than buried. **This exact wording is the rule; task 8b and falsifier (i) restate it and are listed
+under "Surfaces derived from R9" below.**
+
+⚠️ ***The counts are computed from the source files at task-8 time, never read from the index, and
+no count is pinned in this document.*** Round 8 pinned eleven counts here (`6` to `91`) taken from
+`memory.db`. **Ten were right and the eleventh was this spec's own file**, listed at 14 chunks
+because the index last read it on `2026-08-06T20:01:42Z` at roughly 250 lines — it is now over a
+thousand, so the indexed figure covered about a fifth of the document and understated it several-fold.
+Being in the "bottom third" was an artifact of the stale index, which would have let this very file
+qualify as the small target while actually being one of the large ones — **satisfying the
+anti-gaming rule by doing the thing it forbids.**
+
+**A spec whose thesis is "the index lies about its freshness" calibrated its anti-gaming guard by
+asking the index instead of the files.** That is this feature's own defect, committed inside the
+requirement meant to prevent gaming, and it is recorded rather than quietly corrected because it is
+the sharpest available evidence for why R9 measures the corpus rather than trusting a stored
+number. Ranking by any figure written here is forbidden for the same reason: this file grows every
+round, so a count pinned today is wrong by task 8 whatever its source.
 
 ⚠️ ***A third clause existed through round 7 and is deliberately gone (user decision, 2026-08-07).
 Its history is kept because the failure is instructive.*** Through round 5 this requirement read
@@ -1012,7 +1062,10 @@ Verified on this machine 2026-08-06, not remembered.
 > `run_started`, or a missing `last_run_errors` produces a fresh line; or (h) a first run that
 > started more than `RUN_ABANDON_HOURS` ago and never completed produces a line carrying no warning
 > marker and no pointer to the log; or **(i) this ships without task 8b's raw scores recorded, or
-> with all five measurement queries naming targets from the same third of the chunk-count range.**
+> without at least one measurement query naming a target in the bottom third of the chunk-count
+> range and at least one naming a target in the top third** — the strict wording, identical to R9;
+> "not all from one third" is *not* the rule, and four large targets plus one medium is a
+> falsification.
 
 (a), (b), (e), (f), (g) and (h) are hook tests. (c), (d) and (i) are observations. Clauses **(a), (f), (g)
 and (h)** are **derived from R3's state table** — (a) from the precedence of states 1-3 over 5, (f)
@@ -1156,8 +1209,11 @@ was asked and answered 2026-08-06: **Opus 5**.
       pass/fail attached. Also record the ceiling the scorer can emit
       (`2 × 1/(RRF_K + 1) × max(weight)` — **0.04918** at `RRF_K = 60` and `curated_doc: 1.5`), so a
       future reader compares against the range rather than against intuition.
-      **Record each target feature file's chunk count beside its result** (R9), and confirm the five
-      targets are not all drawn from one third of the range.
+      **Compute each target feature file's chunk count from the source file, not from `memory.db`**
+      — the index may not have re-read a file since it was last edited, which is the failure this
+      whole feature exists to fix — and record it beside that target's result (R9). ⚠️ **Confirm at
+      least one target is in the bottom third of the range and at least one is in the top third**
+      (R9's strict wording; "not all from one third" is not the rule).
       *There is no floor to set and no decision to stop for — R9's score clause was removed in
       round 8. These numbers exist to be compared against later, not to gate this branch.*
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
