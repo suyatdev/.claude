@@ -4005,3 +4005,58 @@ Nothing is installed yet; `launchctl print` still returns 113 (task 9). The arch
 to be indexed but has not been indexed — no `memsearch index` run has happened, so `memory.db` holds
 zero `archive_doc` rows and the new golden query cannot pass until task 9. That is expected, not a
 regression.
+
+## 2026-08-07 — session 41: task 8, and a tie called before the coin landed
+
+Task 8 only: the five R9 measurement queries and their own runner, committed **unrun** (`8a10f61`)
+— `memsearch/tests/measurement_queries.json`, `tests/test_measurement_queries.py`, plus an
+`addopts` change. Restore was clean; frontmatter matched reality on every field.
+
+### The pre-declared tie rule, and why declaring it early was the whole point
+
+R9 ranks every feature under `docs/features/` by chunk count and demands a target in the bottom
+third and one in the top. `⌊N/3⌋` is silent on a tie spanning the boundary, so the rule was fixed
+**before any count was computed**: *tied entries all belong to that third* — a tie is
+indistinguishable by the metric, so ranking either side of it is arbitrary, and a tied entry has an
+identical count to a bona fide bottom-third entry rather than merely a nearby one.
+
+The tie then actually happened: ranks 3 and 4 came out **both at 13 chunks**
+(`git-guard-chained-command`, `shell-segments-redirects`), widening the bottom third to four
+entries. Declared afterwards, that rule could not have failed — it would have been read off the
+result it was meant to constrain. This is the same shape as the score floor R9 deleted in round 8
+(*a finish line drawn behind the runners*), caught one layer earlier.
+
+**N = 10, not 11.** `memory-system-split` spans `.md` + `.spec.md` and counts once — R9's
+per-feature unit, which is the rule the spec warns is *different and weaker* when read per-file.
+
+### The spec predicted its own miscount, and the prediction was right
+
+`memsearch-freshness.md` measures **71 chunks — rank 9, top third**. The round-8 draft pinned it at
+**14** from `memory.db` and called it bottom-third; the index had last read it at ~250 lines against
+1,400+ today, understating it roughly 5×. Ranking on that figure would have let this file serve as
+the *small* target while being one of the largest — **satisfying the anti-gaming rule by doing the
+thing it forbids**. So the runner computes counts from source with the project's own chunker at run
+time, and no count is pinned anywhere, including in the notes about it.
+
+### Two traps worth carrying
+
+**A marker alone does not deselect.** `addopts` read `-m 'not golden'`, so registering a
+`measurement` marker without extending it would have left a bare `pytest` firing five real queries
+at the live index — the opposite of "committed unrun". Now `-m 'not golden and not measurement'`.
+Knock-on for task 10a: `-m golden` reports **23 deselected**, not 16. Added tests, not a regression;
+default run still **74 passed**.
+
+**The span guard was mutation-checked, both arms.** A sample whose smallest target is
+`git-guard-empty-index` (24 chunks) is the exact discriminator between R9's rank-tertile rule and
+the value-span reading the spec calls weaker — value-span puts 24 inside the "bottom third"
+(6 + (91−6)/3 = 34.3), rank tertiles put it in the middle. It fails. Dropping the top target fails
+the other arm. Original restored byte-identical after both. A guard never seen red pins nothing,
+and this one guards the anti-gaming rule itself.
+
+### Not done
+
+8b (run the five, record raw scores + per-feature counts as a baseline), 9 (install the agent, time
+a **cold** `--full` run, re-choose `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS` against it — a user call),
+10a/10b, 10c (falsifier clauses a–j), 11 (judge, PR). Still nothing installed and **still nothing
+indexed** — `memory.db` holds zero `archive_doc` rows, so the new golden query cannot pass until
+task 9 runs. Expected, not a regression.
