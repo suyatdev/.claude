@@ -335,6 +335,14 @@ failure, for the same reason, as the R3 inventory it was modelled on.
 ⚠️ ***The five features must span the corpus size range: at least one target in the bottom third
 and at least one in the top third, by chunk count.***
 
+⚠️ ***The range is the population of every feature under `docs/features/`, per-feature summed — not
+the range of the five chosen.*** Measured against the five, the rule cannot fail: the smallest of any
+five sits in its own bottom third by construction and the largest in its own top third, so every
+possible sample passes and the guard measures nothing. The falsifier calls four large targets plus
+one medium a falsification — which is true only under the fixed-population reading, so that is the
+reading that holds. A rule that no sample can violate is not a weaker guard than intended; it is
+the absence of one.
+
 ⚠️ ***The counting unit is the feature, not the file: a target's chunk count is the sum over every
 file belonging to that feature.*** A feature that spans several files counts as a small target when
 read off its largest file alone and a mid-range one when summed — enough slack to move a sample out
@@ -344,8 +352,13 @@ this rule; it is a different and weaker rule.
 A large target has many more chances to land two hits in a top-6 than a small one, so **choosing
 five fat targets would pass both clauses while measuring nothing** — the same tuning the retired
 score floor allowed, moved from the number to the sample. Each target's per-feature chunk count is
-recorded beside its result, so a soft sample is visible rather than buried. **This exact wording is
-the rule; task 8b and falsifier (i) restate it verbatim.**
+recorded beside its result, so a soft sample is visible rather than buried.
+
+**This wording is the rule.** Every restatement of it — tasks, falsifier clauses, scenarios — is a
+derived surface that task 1b's sweep must find. ⚠️ *No list of those surfaces appears here, and the
+reason is round 10:* it fixed the three restatements an enumerated list named and missed a fourth,
+the Gherkin scenario, which was the one that would have become an executable check encoding the
+weaker per-file rule. The list was the failure mode, not the fix.
 
 ⚠️ ***The counts are computed from the source files at task-8 time, never read from the index, and
 no count is pinned in this document.*** Round 8 pinned eleven counts here (`6` to `91`) taken from
@@ -452,8 +465,8 @@ record. The file must **join the walked route**, not merely be un-banned.
 *It gets its own weight tier* (user decision, 2026-08-06). `_iter_docs` (`index.py:44-51`) hardcodes
 `source_type` per bucket — everything from `curated_docs` becomes `curated_doc` (weight **1.5**,
 tied with ADRs and design docs), everything under a `repo_root` becomes `repo_doc` (**1.2**). Adding
-the file to `curated_docs` alone would rank 3,484 lines of session narrative *equal to the decision
-records it narrates* — amplifying the exact pollution the original exclusion feared. A new
+the file to `curated_docs` alone would rank the whole archive of session narrative *equal to the
+decision records it narrates* — amplifying the exact pollution the original exclusion feared. A new
 `archive_doc` tier at **1.0** keeps it fully retrievable while never outranking a real decision
 record. 1.0 matches `transcript_digest` because it is the same kind of content — narrative — and is
 a distinct key so it can be tuned independently once R9 measures it.
@@ -573,10 +586,15 @@ behaviour:
    so what the exclusion loses is the *narrative log*, not the decision record.
 
 *The noise risk is real and is measured, not argued.* The original rationale's surviving half — that
-indexing session narrative could "pollute semantic search" — is untested. At **300,160 characters /
-3,484 lines** (re-measured 2026-08-07; it grows every session, so treat any figure here as a floor)
-`CODING_MEMORY.md` becomes the single largest source, **1.62×** the largest doc currently indexed
+indexing session narrative could "pollute semantic search" — is untested. At **317,249 characters /
+3,723 lines** (re-measured 2026-08-07; it grows every session, so treat any figure here as a floor)
+`CODING_MEMORY.md` becomes the single largest source, **1.72×** the largest doc currently indexed
 (`vibe-scape/docs/plans/2026-07-13-live-presence-plan.md`, 184,620 characters).
+
+⚠️ *This is now the **only** place the archive's size is pinned, and the caveat above is what makes
+it safe.* Round 10 stated it flat in two further places, and both went stale **inside that same
+round** — 3,484 → 3,723 lines, from a single session's append — while the paragraph arguing that
+stored numbers rot sat between them. The other two now describe the archive without a figure.
 
 ⚠️ *Two units were conflated here through round 5 and the correction is recorded rather than
 quietly applied.* Earlier drafts called this **2.3×** and named
@@ -584,16 +602,19 @@ quietly applied.* Earlier drafts called this **2.3×** and named
 file is the largest by **chunk count**, not by size; the multiplier beside it was
 **character**-based, and it was computed against that file's byte count rather than its character
 count. Ranked by the same unit the arithmetic uses, three indexed docs are larger — 184,620,
-153,701 and 131,516 characters — and the true multiplier is **1.62×**. Every figure in this
-paragraph is now an on-disk character count, compared like with like.
+153,701 and 131,516 characters — which is where the multiplier stated above comes from. Every
+figure in this paragraph is now an on-disk character count, compared like with like. ⚠️ *The
+multiplier itself is deliberately **not** restated here:* it moves every time the archive grows,
+and a second copy of a moving number is the defect this section is about — round 10 re-measured
+the archive and left this sentence asserting the superseded **1.62×**.
 
 ⚠️ *No chunk count is quoted in this paragraph, here or above.* Round 10 pinned two — one beside
 each file named — and **both were read from `memory.db`**, the derived store whose going stale is
 the reason this feature exists. Character counts are read from the files on disk and stay; chunk
 counts are computed from source at task-8 time or not at all (R9). The corrected number is
-*less* alarming than the one it replaces, which is the direction that matters: the risk this
-paragraph exists to size was overstated by ~40%, and R9 — not this paragraph — remains the
-instrument that decides it.
+*less* alarming than the **2.3×** it replaces — the direction that matters, since the risk this
+paragraph exists to size was overstated. R9, not this paragraph, remains the instrument that
+decides it.
 
 **R9 is the instrument**: it scores feature-file retrieval at `k=6`, so if narrative
 chunks crowd feature files out of the top hits, R9 fails and says so. R9 is therefore run *after*
@@ -1013,13 +1034,15 @@ Scenario: Retrieval is scored against the two rank clauses
   When each is run at k=6
   Then the pass or fail of each is recorded under Verification
   And a failing result is recorded as a failure
-  And each query's target chunk count is recorded beside its result
+  And each query's target per-feature chunk count is recorded beside its result
 
 Scenario: The measurement queries span the corpus size range
   Given the five committed measurement queries
-  When their target feature files are ranked by chunk count
-  Then at least one target is in the bottom third of the range
-  And at least one target is in the top third
+  And the ranking population is every feature under docs/features/
+  When their target features are ranked by per-feature chunk count
+  Then at least one target is in the bottom third of that population
+  And at least one target is in the top third of that population
+  And the population is not the five chosen targets
 
 Scenario: The raw scores are recorded even though no floor gates them
   Given the five committed measurement queries
@@ -1060,9 +1083,10 @@ Verified on this machine 2026-08-06, not remembered.
 > marker and no pointer to the log; or **(i) this ships without task 8b's raw scores recorded, or
 > without at least one measurement query naming a target in the bottom third of the chunk-count
 > range and at least one naming a target in the top third, counted per feature — every file
-> belonging to it, summed** — the strict wording, identical to R9; "not all from one third" is
-> *not* the rule, a per-file count is *not* the unit, and four large targets plus one medium is a
-> falsification; or **(j) task 9's cold-run duration is recorded from a warm incremental run rather
+> belonging to it, summed — where the range is every feature under `docs/features/` and *not* the
+> five chosen** — the strict wording, identical to R9; "not all from one third" is *not* the rule,
+> a per-file count is *not* the unit, the five themselves are *not* the population, and four large
+> targets plus one medium is a falsification; or **(j) task 9's cold-run duration is recorded from a warm incremental run rather
 > than an explicit `--full` one, or it reaches `RUN_MAX_HOURS` and the branch proceeds anyway
 > without the constant being put back to the user.**
 
@@ -1166,7 +1190,9 @@ was asked and answered 2026-08-06: **Opus 5**.
       ordering claim (R3's method), and for every restatement of R9's two clauses and its spread
       rule. Key the result by **section, never by line number**, and record it **in this task's
       commit message, not in the spec** — every stored copy of this sweep went stale, twice inside
-      the anti-staleness section itself. For each surface found, confirm it agrees with its
+      the anti-staleness section itself. ⚠️ **The sweep changes no files, so it has no commit of its
+      own to carry that message: use `git commit --allow-empty`.** (Round 10 wrote this step without
+      noticing the sweep had nothing to attach a message to.) For each surface found, confirm it agrees with its
       authority: R3's state table for states, R9 for the measurement bar.
       ⚠️ **A disagreement is not fixed here.** The phase is `implementation` by this point, so a
       surface that contradicts its authority is a spec defect, not a typo: stop and announce
@@ -1224,15 +1250,17 @@ was asked and answered 2026-08-06: **Opus 5**.
       may not have re-read a file since it was last edited, which is the failure this whole feature
       exists to fix — and record it beside that target's result (R9).
       ⚠️ **The counting unit is the feature, not the file: sum every file belonging to that
-      feature** (R9's exact rule — per-file is a different and weaker one). ⚠️ **Confirm at least
-      one target is in the bottom third of the range and at least one is in the top third**
+      feature** (R9's exact rule — per-file is a different and weaker one). ⚠️ **Rank against every
+      feature under `docs/features/`, per-feature summed — not against the five chosen** (R9: the
+      five as their own population makes the rule unfalsifiable). ⚠️ **Confirm at least one target
+      is in the bottom third of that population and at least one is in the top third**
       (R9's strict wording; "not all from one third" is not the rule).
       *There is no floor to set and no decision to stop for — R9's score clause was removed in
       round 8. These numbers exist to be compared against later, not to gate this branch.*
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
-      copies (159 and 119 lines) would satisfy on their own while the 3,484-line archive stayed
+      copies (159 and 119 lines) would satisfy on their own while the archive itself stayed
       unreachable. Confirm
       its chunks carry `source_type = archive_doc`. **Record wall-clock duration for the worst
       case, not the convenient one.** `RUN_MAX_HOURS` has to survive the longest run the scheduler

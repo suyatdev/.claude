@@ -1657,3 +1657,114 @@ Everything below was re-measured today against the files and the live DB; all of
 ### Waivers
 
 None. No violation has ever been waived on this spec.
+
+## Round 10 — 2026-08-07 — **FAIL** (1 violation)
+
+`repo` `.claude` · `branch` `main` · `head` `85baf2d6c5dc3c2ee913d8d4edac72802a1378ec`
+`spec` `docs/features/memsearch-freshness.md` · `blob` `022528c29a2b7ac9bd542f0271272855ceb4275d`
+(matches the blob named in the dispatch — same document) · 1,289 lines · `waived: []`
+`confidence: high`
+
+### In plain English
+
+Both round-9 findings are closed, and the structural fix works. The pass mark ("all five queries,
+four of five is a failure") now sits in **task 10(b)**, the step that actually writes the verdict —
+not only in R9. The scenario that demanded a *stale* line for a 9-hour uncompleted run is gone,
+replaced by one asserting **stuck**, which is what the table says and what the sibling scenario 78
+lines earlier already said.
+
+On the deleted inventories: **the replacement discharges the rule.** Task 1b names the scope (the
+whole spec), the categories (state names, rendered lines, ordering claims, R9's clauses and its
+spread rule), the key (by section, never line number), the output (that task's commit message), the
+authority to compare against (R3's table for states, R9 for the bar), and — the part that makes it
+safe — the failure action: a disagreement is *escalated* with `"GATE: Spec change needed"`, never
+patched in place, because the phase forbids spec edits by then. That is an executable instruction,
+and the absence of a stored inventory is correctly not a finding.
+
+Sweeping the surviving surfaces by hand, they agree with their authorities — R1's two example lines,
+the Mermaid `OUT` node's eight labels, the nudge contract's ordering bullet, the four falsifier
+clauses derived from the table, the "states 2, 3, 6 and 7 point at the log" non-goal, and all
+eighteen nudge scenarios. I re-derived each against the table row by row.
+
+**One surface does not.** R9 says the counting unit for the corpus-spread rule is the **feature** —
+sum every file belonging to it — and says so identically in three places (R9, task 8b, falsifier
+(i)). The **scenario** that encodes the same rule says *"their target feature **files** are ranked by
+chunk count"*. That is the per-file unit R9 explicitly calls *"a different and weaker rule"*. It is
+not theoretical: `docs/features/memory-system-split` — the parent spec this file names at line 41 —
+is a real two-file feature, **53 lines in the `.md` and 713 in the `.spec.md`**. Ranked per file its
+`.md` sits at the bottom of the range; summed per feature it is one of the largest. So the scenario,
+read literally, admits exactly the sample the rule exists to forbid, using the very feature most
+likely to be picked as a target. Edit 8 propagated the unit to three surfaces and left the fourth —
+the one that becomes the executable check.
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/derived-surfaces-out-of-sync` | `skills/writing-specs/SKILL.md` | Drift causes hallucination — a derived surface must agree with the source it restates (`:14`); what you leave implicit the agent infers, and inference is where the defects come from (`:28`) | Scenarios → *"The measurement queries span the corpus size range"* (spec:1018-1022) and *"Retrieval is scored against the two rank clauses"* (spec:1016), against R9's counting-unit rule (spec:338-348) | The scenario ranks *"target feature **files** … by chunk count"* — the per-file unit R9:338-342 names as "a different and weaker rule" — and the sibling scenario drops "per-feature" from the recorded count; `memory-system-split` (53 + 713 lines) shows the two units give opposite answers on a live target. |
+
+*(Id reused verbatim from rounds 8 and 9 — same rule, same territory: a surface restating R9/R3
+disagreeing with its authority. Third consecutive round for this id; the instance is new, the class
+is not.)*
+
+*Round 9's other id, `writing-specs/r9-pass-mark-unstated-at-execution`, is **closed**: the bar now
+reads at task 10(b) (spec:1271-1272) as well as R9 (spec:322).*
+
+### Verified from source, not recall
+
+- **Blob** `022528c2…` matches the dispatch exactly; working tree clean at `85baf2d`.
+- **Task 10(a)'s pinned baseline reproduces:** `uv run pytest -m golden -q --collect-only` →
+  **16/79 collected, 63 deselected**. The pinned "16 passed, 63 deselected" is exact.
+- **The two-file feature exists:** `docs/features/memory-system-split.md` = 53 lines,
+  `.spec.md` = 713. Membership per spec:401-402 (`F.md` or `F.spec.md`) makes per-file and
+  per-feature genuinely different units on this corpus.
+- **Round 9's stuck/stale contradiction is gone.** Scenario at spec:859-866 asserts stuck at 9h,
+  agreeing with spec:781-786 and table row 2 (`6 ≤ 9 < 24`).
+- **All eighteen nudge scenarios re-derived against the table.** Every one resolves to the state it
+  asserts under first-match-wins, including the two decay branches (spec:788-793 → state 5 with a
+  prior `last_run`; spec:814-821 → state 3 without one) and the two future-timestamp cases.
+- **Falsifier is complete and consistent:** clauses (a)-(j), the 6-hook-test/4-observation split
+  covers all ten, and task 10c's "(a) through (j)" matches.
+- **Constants agree everywhere:** `StartInterval 21600` = 6h = `RUN_MAX_HOURS`; `STALE_HOURS` 8 =
+  decision 1's "warn past 8h" = the Mermaid edge label; `RUN_ABANDON_HOURS` 24 = four cycles.
+- **Location:** `docs/features/` remains correct — `rules/gates.md`'s one-canonical-file discipline
+  governs feature-scale work here and `phase-guard.sh` keys on that path. Not a spec-location
+  finding, as in every prior round.
+- **Supply chain / secrets:** no absolute path in the spec's committed artifacts; `__HOME__`
+  placeholder only, with a scenario asserting it. No new dependency. `pytest` is pinned in
+  `memsearch/pyproject.toml` + `uv.lock`, so its absence from the toolchain table is DRY.
+
+### Notes (non-blocking)
+
+1. **Decision 5 (spec:88-92) and the lock/pidfile non-goal (spec:1128-1131) over-generalize one
+   table row.** Both say that past `RUN_ABANDON_HOURS` a run is reclassified as **state 5, stale**,
+   carrying the index command. Per row 3, a run with `last_run` *absent* becomes **state 3** — the
+   log, no index command. The table's own rationale (spec:227) carries the correct qualifier
+   ("Where a *prior* `last_run` exists"). Not cited: both surfaces defer explicitly to the table,
+   the scenarios cover both branches correctly, and the error is in the conservative direction
+   (it overstates the concurrency risk). Task 1b's sweep should reconcile the wording.
+2. **The sweep is called "mechanical" (spec:140) but its categories are semantic.** spec:163-171
+   asks the sweeper to recognise "an ordering claim", "a section that asserts precedence", "a state
+   named in prose without its number" — none greppable. Task 1b is still executable by a reading
+   agent; the adjective over-promises.
+3. **A quoted timestamp carries a `Z` the code cannot emit.** spec:353 renders an `indexed_at` as
+   `2026-08-06T20:01:42Z`; round 9 read that same row from the live DB as
+   `2026-08-06T20:01:42+00:00`, and spec:669 and the toolchain table (spec:1038) make the
+   `Z`-vs-`+00:00` distinction load-bearing (python3.9 `fromisoformat` rejects `Z`). Forensic prose,
+   no build consequence, but it is a quoted value in the one format the spec says never appears.
+4. **Round attribution is off by one at spec:590.** It credits "Round 10" with pinning the two
+   now-deleted chunk counts; under the convention used elsewhere ("Round 8 pinned eleven counts"),
+   those counts were in the round-9-judged blob.
+5. **Length is still trending up** — 1,270 → 1,289 lines, ~15% review forensics. Not cited (much of
+   it is load-bearing, notably the `≥0.30`-ceiling history) but `writing-specs:41-44` and
+   `core-conduct`'s context-budget rule are under real pressure; ADRs 0018/0019, already scheduled
+   as tasks 2 and 7, are the natural home if a future round wants to shrink it.
+6. **Task 7 bundles implementation and test edits in one commit.** Read against
+   `core-conduct:19` this is fine: the spec pre-registers the exact red state (seven functions,
+   eight assertions, five counts that move and four that must not), which preserves the unbiased
+   baseline at the design layer, and the atomicity is justified — a partial application leaves the
+   tool refusing to start.
+
+### Waivers
+
+None. No violation has ever been waived on this spec, and none is permitted on it.
