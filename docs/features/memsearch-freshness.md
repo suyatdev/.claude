@@ -1250,7 +1250,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         in the same second the previous one ended yields `run_started == last_run`, which R3's
         state 1 (strict `>`) does not match, so it reads fresh rather than in-progress. Unreachable
         at a 6h interval with multi-second runs.
-- [ ] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4, implementing **R3's state table verbatim**.
+- [x] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4, implementing **R3's state table verbatim**.
       Extend `hooks/memsearch-nudge.test.sh` to cover **every one of its eight states plus both
       silent paths**, and **every nudge scenario in the Scenarios section** — derive both lists by
       reading those two places, never from a count written here, which is precisely the number that
@@ -1259,6 +1259,24 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       particular must be checked at the output. Include the state-3 case (an abandoned first run must
       not degrade into a bare unknown-age line) and the registration assertion. Hand-run a mutation
       check.
+      Both lists derived by reading the Scenarios section and the state table, not from any count.
+      27/27 pass; every case asserts the emitted line. Written first, watched fail (22 of 27 red;
+      the 5 green were the pre-existing silent paths and the registration check).
+      - **Classification is bash; only age arithmetic is Python.** One interpreter start returns
+        `chunks`, both stamps as ages in seconds, and the error count — an unusable stamp (unparsable
+        or future) and an unusable count (absent, non-integer, negative) both come back `-`, so the
+        table's "treated exactly as absent" needs no second rule in the hook.
+      - **Found while writing the harness, not the hook:** `check()` set `RC` inside a command
+        substitution, so under `set -u` the first case died on an unbound variable. A test harness
+        that cannot report is worth less than no harness — fixed before any hook change.
+      - Mutation check: 8 mutations, 7 caught (state 3/4 ordering, future-stamp usability, missing
+        count read as zero, `-ge`→`-gt` at the stale threshold, comparison direction, day rendering,
+        the stale ⚠). The 8th was cosmetic — it reworded "see" to "run" while still naming the log —
+        and the behavioural version of it, pointing state 7 at the index command, **is** caught;
+        verified separately rather than assumed.
+      - Live smoke against the real 7,631-chunk index: freeze, dead scheduler, Ollama-down and
+        wedged-run all render their intended state. The live file has no run stamps yet, so the
+        real nudge now says `age unknown` — correct, and it stops claiming freshness it cannot prove.
 - [ ] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
       (R6, R7), with a `plutil -lint` test, the eight install/uninstall scenarios, and an assertion
       that no absolute path is committed.
