@@ -343,6 +343,20 @@ one medium a falsification — which is true only under the fixed-population rea
 reading that holds. A rule that no sample can violate is not a weaker guard than intended; it is
 the absence of one.
 
+⚠️ ***"Third" means a rank tertile of that population, not a slice of its value span.*** Rank the
+population ascending by per-feature chunk count: the bottom third is the lowest ⌊N/3⌋ entries, the
+top third the highest ⌊N/3⌋. **N is counted at task-8 time and is deliberately not pinned here** —
+and it is counted per feature exactly as the targets are, so a feature spanning two files
+contributes one entry, not two.
+
+*Why this needed saying:* under the value-span reading one outsized feature stretches the span far
+enough that a **mid-ranked** target falls inside the "bottom third" — admitting precisely the
+four-large-plus-one-medium sample falsifier (i) calls a falsification. Round 11 fixed the population
+and left the tertile undefined, so all four surfaces stayed silent in the same way and agreed with
+each other while the rule underneath them was still underdetermined. **Surfaces agreeing is not the
+same as a rule being defined**, which is why this one was found by reading the rule rather than by
+comparing its copies.
+
 ⚠️ ***The counting unit is the feature, not the file: a target's chunk count is the sum over every
 file belonging to that feature.*** A feature that spans several files counts as a small target when
 read off its largest file alone and a mid-range one when summed — enough slack to move a sample out
@@ -1040,9 +1054,11 @@ Scenario: The measurement queries span the corpus size range
   Given the five committed measurement queries
   And the ranking population is every feature under docs/features/
   When their target features are ranked by per-feature chunk count
+  And thirds are rank tertiles of that population, not slices of its value span
   Then at least one target is in the bottom third of that population
   And at least one target is in the top third of that population
   And the population is not the five chosen targets
+  And a mid-ranked target does not satisfy either third
 
 Scenario: The raw scores are recorded even though no floor gates them
   Given the five committed measurement queries
@@ -1084,9 +1100,10 @@ Verified on this machine 2026-08-06, not remembered.
 > without at least one measurement query naming a target in the bottom third of the chunk-count
 > range and at least one naming a target in the top third, counted per feature — every file
 > belonging to it, summed — where the range is every feature under `docs/features/` and *not* the
-> five chosen** — the strict wording, identical to R9; "not all from one third" is *not* the rule,
-> a per-file count is *not* the unit, the five themselves are *not* the population, and four large
-> targets plus one medium is a falsification; or **(j) task 9's cold-run duration is recorded from a warm incremental run rather
+> five chosen, and the thirds are **rank tertiles** of that population rather than slices of its
+> value span** — the strict wording, identical to R9; "not all from one third" is *not* the rule,
+> a per-file count is *not* the unit, the five themselves are *not* the population, a mid-ranked
+> target is *not* in either third, and four large targets plus one medium is a falsification; or **(j) task 9's cold-run duration is recorded from a warm incremental run rather
 > than an explicit `--full` one, or it reaches `RUN_MAX_HOURS` and the branch proceeds anyway
 > without the constant being put back to the user.**
 
@@ -1252,9 +1269,11 @@ was asked and answered 2026-08-06: **Opus 5**.
       ⚠️ **The counting unit is the feature, not the file: sum every file belonging to that
       feature** (R9's exact rule — per-file is a different and weaker one). ⚠️ **Rank against every
       feature under `docs/features/`, per-feature summed — not against the five chosen** (R9: the
-      five as their own population makes the rule unfalsifiable). ⚠️ **Confirm at least one target
-      is in the bottom third of that population and at least one is in the top third**
-      (R9's strict wording; "not all from one third" is not the rule).
+      five as their own population makes the rule unfalsifiable). ⚠️ **Thirds are rank tertiles of
+      that population — lowest ⌊N/3⌋ and highest ⌊N/3⌋ by rank — not slices of its value span**
+      (R9: the value-span reading lets a mid-ranked target count as the small one). ⚠️ **Confirm at
+      least one target is in the bottom third of that population and at least one is in the top
+      third** (R9's strict wording; "not all from one third" is not the rule).
       *There is no floor to set and no decision to stop for — R9's score clause was removed in
       round 8. These numbers exist to be compared against later, not to gate this branch.*
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
