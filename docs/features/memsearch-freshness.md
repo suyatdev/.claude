@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feature/memsearch-freshness
 ---
 
 # memsearch freshness — refresh trigger and staleness reporting
@@ -1197,11 +1197,14 @@ result is reportable rather than embarrassing.
 
 ## Tasks
 
-Model per task set at checkpoint 2, which is **not yet asked**. Checkpoint 1 (entering planning)
-was asked and answered 2026-08-06: **Opus 5**.
+Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**. Checkpoint 1
+(entering planning) was asked and answered 2026-08-06: **Opus 5**.
 
-- [ ] 1 — Model-switch checkpoint 2 (planning → implementation); record the answer here, create
-      the branch, set `phase: implementation`.
+- [x] 1 — Model-switch checkpoint 2 (planning → implementation); record the answer here, create
+      the branch, set `phase: implementation`. Asked fresh at the gate 2026-08-07 (an earlier
+      session's answer never satisfies it) — answered **Sonnet 5**, for the whole implementation
+      phase including 1b, so the sweep is exercised by the tier that runs the rest of the work.
+      Branch `feature/memsearch-freshness`.
 - [ ] 1b — **Regenerate the derived-surface sweep and reconcile it — first task after the gate,
       before any code.** Sweep the whole spec for every state name, every rendered line and every
       ordering claim (R3's method), and for every restatement of R9's two clauses and its spread
