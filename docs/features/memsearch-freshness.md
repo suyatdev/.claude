@@ -41,9 +41,9 @@ Measured against the live index before this file was written. Two of the six Pha
 
 | Parent item | Status | Evidence |
 |---|---|---|
-| 1 — remove `CODING_MEMORY.md` from `exclude_paths` | **Real, and bigger than one line** | 0 chunks, no `sources` row. The exclusion is *enforced*, not merely configured: `load_config` raises `ConfigError` without it (`memsearch/memsearch/config.py:56-59`), pinned by `test_config.py:42,48` and `test_index.py:93`. Reversing it is R10, not a config edit. |
+| 1 — remove `CODING_MEMORY.md` from `exclude_paths` | **Real, but insufficient on its own** | 0 chunks and no `sources` row — which has **two** sufficient causes, not one. The exclusion is *enforced* (`load_config` raises `ConfigError` without it, `config.py:57-60`, pinned by `test_config.py:42,48` and `test_index.py:93`) **and** `~/.claude/CODING_MEMORY.md` is not on any walked path (`CLAUDE.md`, `MEMORY.md` also 0 rows). Removing the entry alone changes nothing for it. See R10. |
 | 2 — "add `docs/features/**` to indexed sources" | **No-op — nothing to add** | `~/.claude/docs` is *already* a `curated_docs` root. `docs/features/` read 0 only because its earliest file was created 2026-07-25, after the last index run. Confirmed by the session-28 rebuild, which picked the directory up with no config change. |
-| 3 — update the golden query | **Real, and not mechanical** | `golden_queries.json:2` asks *why* the file is excluded. Item 1 falsifies the question's **premise**, not just its expected path, so the query is replaced rather than re-pointed (R10.4). |
+| 3 — update the golden query | **Real, and not mechanical** | `golden_queries.json` **line 4** (line 2 is a different, still-correct query) asks *why* the file is excluded. Item 1 falsifies the question's **premise**, not just its expected path, so it is replaced rather than re-pointed (R10.5). |
 | 4 — add a refresh trigger | **Root cause, not fourth priority** | Items 2 and 3's symptoms are downstream of the freeze. |
 | 5 — re-measure retrieval | **Real, unchanged** | Acceptance bar below. |
 | 6 — seeded session-start query | **Out of scope** | Parent spec makes it conditional on item 5 passing. |
@@ -206,36 +206,74 @@ outdated — it is the direct cause of a three-week hole in retrieval. `memory-s
 independently retired the file as a read target and made it an append-only archive, so "ephemeral
 working index" no longer describes it either.
 
-*This reverses a deliberately enforced invariant, so it is not a config edit.* Every one of the
-following moves in the **same commit**; a partial reversal leaves the tool refusing to start or the
-docs asserting the opposite of the behaviour:
+**⚠️ Lifting the exclusion is necessary but NOT sufficient, and this is the trap.** An earlier draft
+of R10 specified only the exclusion removal. That would have changed nothing for the file it
+targets: **`~/.claude/CODING_MEMORY.md` is not on any indexed path to begin with.** `curated_docs`
+is `~/.claude/coding-memory`, `~/.claude/docs`, `~/.claude/PORTS.md` — *not* the `~/.claude` root.
+Measured 2026-08-06: `~/.claude/CLAUDE.md` and `~/.claude/MEMORY.md` are **0 rows each**;
+`PORTS.md` is indexed solely because `curated_docs` names that one file. The diagnostic table's
+"0 chunks, no `sources` row" for `CODING_MEMORY.md` therefore had **two** sufficient causes, and the
+exclusion was only one of them — the same confounded-proxy error the three measurement traps above
+record. The file must **join the walked route**, not merely be un-banned.
 
-1. **Config** — remove `CODING_MEMORY.md` from `exclude_paths` (`memsearch/config.json`).
-2. **The guard** — delete the `ConfigError` check in `memsearch/memsearch/config.py:56-59`. It is
-   deleted, not inverted: it exists to enforce a rule that no longer exists, and a guard pinning a
-   retired rule is worse than no guard. `load_config` keeps its other validation unchanged.
-3. **The three pinning tests** — `test_config.py::test_coding_memory_exclusion_is_mandatory` is
-   removed (it asserts the guard fires); `test_config.py::test_is_excluded:48` and
-   `test_index.py:93` flip from asserting exclusion to asserting inclusion. **The `subagents/`
-   assertions in both stay exactly as they are** — that exclusion is untouched by this change.
-4. **The golden query** — `memsearch/tests/golden_queries.json:2` asks *"why is CODING_MEMORY.md
-   excluded from the memory rag index"*. Its **premise** is falsified, not just its expected path,
-   so it is replaced rather than re-pointed: the new query retrieves session history from
-   `CODING_MEMORY.md` itself, which is the behaviour this requirement adds.
-5. **The documents that assert the opposite** — `memsearch/README.md:22` (R8), and
+*It gets its own weight tier* (user decision, 2026-08-06). `_iter_docs` (`index.py:44-51`) hardcodes
+`source_type` per bucket — everything from `curated_docs` becomes `curated_doc` (weight **1.5**,
+tied with ADRs and design docs), everything under a `repo_root` becomes `repo_doc` (**1.2**). Adding
+the file to `curated_docs` alone would rank 3,232 lines of session narrative *equal to the decision
+records it narrates* — amplifying the exact pollution the original exclusion feared. A new
+`archive_doc` tier at **1.0** keeps it fully retrievable while never outranking a real decision
+record. 1.0 matches `transcript_digest` because it is the same kind of content — narrative — and is
+a distinct key so it can be tuned independently once R9 measures it.
+
+Every one of the following moves in the **same commit**; a partial application leaves the tool
+refusing to start, or silently indexing nothing, or the docs asserting the opposite of the
+behaviour:
+
+1. **Config** (`memsearch/config.json`) — remove `CODING_MEMORY.md` from `exclude_paths`; **add
+   `~/.claude/CODING_MEMORY.md` to `curated_docs`** (this is the part that makes it reachable);
+   add `"archive_doc": 1.0` to `weights`.
+2. **The guard** — delete `memsearch/memsearch/config.py:57-60` (the `if not any(...)` and its
+   `raise ConfigError(...)`). **Line 56 is `excludes = tuple(raw.get("exclude_paths", ()))` and must
+   survive** — deleting it breaks every `load_config` caller. Deleted, not inverted: it enforces a
+   rule that no longer exists, and a guard pinning a retired rule is worse than no guard.
+3. **The new tier** — add `"archive_doc"` to `SOURCE_TYPES` (`db.py:16`), and classify in
+   `_iter_docs` so that a file named `CODING_MEMORY.md` yields `archive_doc` **in both branches**
+   (curated and repo). Classifying by filename rather than by bucket keeps the three copies
+   consistent; the two project copies (`vibe-scape` 159 lines, `Snatch-Bracket` 119) would otherwise
+   land at `repo_doc` 1.2 and outrank their own repos' decision records.
+4. **The tests** — six changes, not three:
+   - `test_config.py::test_coding_memory_exclusion_is_mandatory` is **removed** (it asserts the
+     guard fires).
+   - `test_config.py::test_is_excluded:48` flips to assert inclusion. Its `subagents/` and
+     vendored-path assertions stay untouched.
+   - `test_index.py:93` is a **single compound assertion** (`"CODING_MEMORY" in p or "subagents" in
+     p`). It must be **split in two**: the `subagents/` half stays as-is, the `CODING_MEMORY` half
+     flips. It cannot both flip and stay unchanged as written.
+   - **`report["processed"]` count assertions at `test_index.py:84,135,149,160` each rise by one**
+     once the fixture's `CODING_MEMORY.md` becomes indexable. Named because a literal implementer
+     will otherwise see four unexplained failures.
+   - The fixture at `test_index.py:58` writes `CODING_MEMORY.md` **into the curated directory**,
+     which is a path the walker already visits. That is why the old exclusion test passed while
+     production was unreachable — **the fixture pre-created the condition under test.** It must
+     additionally cover a file at the `~/.claude` root position, or the suite keeps
+     rubber-stamping.
+   - A new test asserting the `archive_doc` weight is applied.
+5. **The golden query** — `memsearch/tests/golden_queries.json` **line 4** (*not* line 2, which is
+   the still-correct sqlite-over-qdrant query) asks *"why is CODING_MEMORY.md excluded from the
+   memory rag index"*. Its **premise** is falsified, not just its expected path, so it is replaced
+   rather than re-pointed: the new query retrieves session history from `CODING_MEMORY.md` itself.
+6. **The documents that assert the opposite** — `memsearch/README.md:22` (R8);
    `2026-07-17-memory-rag-index-design.md` at lines 58, 67, 70, 135 plus the "What Is NOT Indexed"
-   section at 154-163 whose durable-vs-ephemeral rationale this reverses, and
-   `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19`, which records the invariant as
-   "enforced by config validation, not convention".
-6. **An ADR** under `docs/decisions/`, because this is structural and reverses a documented
-   rationale — the options weighed (delete the guard / invert it / weaken it to a warning), the
-   evidence above, and the consequence in 7.
-
-*Scope is all three repos, deliberately.* `is_excluded` matches on substring, so removing the entry
-indexes `CODING_MEMORY.md` in every `repo_root`, not just `~/.claude`: `vibe-scape` (159 lines) and
-`Snatch-Bracket` (119 lines) join `~/.claude`'s 3,232. Their combined 278 lines are negligible
-against the corpus, and carving out a per-repo exception would add a special case for no measured
-benefit. Named here so the reach is deliberate rather than a side effect.
+   section at 154-163 whose durable-vs-ephemeral rationale this reverses; and
+   `docs/superpowers/plans/2026-07-17-memory-rag-index.md` at **both** line 19 ("enforced by config
+   validation, not convention") **and line 2828**, which repeats the invariant. That plan file is
+   3,079 lines and sits inside the indexed `docs/` corpus, so a missed line becomes a retired rule
+   the index will serve as current.
+7. **An ADR** under `docs/decisions/` — structural, and it reverses a documented rationale. Record
+   the options weighed (delete the guard / invert it / weaken it to a warning; `curated_doc` 1.5 vs
+   a new `archive_doc` tier), the dated evidence that promotion stopped, and the consequence in the
+   paragraph below. One nuance belongs in it: ADRs and `pr-tracking.md` **are** current and indexed,
+   so what the exclusion loses is the *narrative log*, not the decision record.
 
 *The noise risk is real and is measured, not argued.* The original rationale's surviving half — that
 indexing session narrative could "pollute semantic search" — is untested. At 285,187 characters
@@ -499,11 +537,29 @@ Scenario: The committed template hides no absolute path
   Then no absolute path is present
   And the __HOME__ placeholder is
 
-Scenario: CODING_MEMORY.md is indexed once the exclusion is lifted
+Scenario: The ~/.claude archive itself is indexed, not just the project copies
   Given CODING_MEMORY.md is absent from exclude_paths
+  And ~/.claude/CODING_MEMORY.md is listed in curated_docs
   When the index runs
-  Then a sources row exists for CODING_MEMORY.md in every repo root
+  Then a sources row exists for the path ~/.claude/CODING_MEMORY.md
   And its chunks are retrievable by query
+
+Scenario: Lifting the exclusion alone does not reach the archive
+  Given CODING_MEMORY.md is absent from exclude_paths
+  And ~/.claude/CODING_MEMORY.md is NOT listed in curated_docs
+  When the index runs
+  Then no sources row exists for the path ~/.claude/CODING_MEMORY.md
+
+Scenario: The project copies are indexed too
+  Given the exclusion has been lifted
+  When the index runs
+  Then a sources row exists for CODING_MEMORY.md in each repo root
+
+Scenario: Session narrative never outranks a decision record
+  Given CODING_MEMORY.md is indexed in every location
+  When its chunks are stored
+  Then their source_type is archive_doc
+  And the weight applied is below the repo_doc and curated_doc weights
 
 Scenario: The config no longer refuses to start without the exclusion
   Given a config whose exclude_paths omits CODING_MEMORY.md
@@ -629,25 +685,28 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
       it** (R8). This is the `bin/` section only; `README.md:22`'s exclusion invariant is task 7's,
       in task 7's commit. Record parent item 2 as a verified no-op — no config change.
-- [ ] 7 — **Lift the `CODING_MEMORY.md` exclusion (R10) — one commit, all six parts.** Remove it
-      from `exclude_paths` (`memsearch/config.json`); delete the `ConfigError` guard
-      (`config.py:56-59`); remove `test_config.py::test_coding_memory_exclusion_is_mandatory` and
-      flip `test_is_excluded:48` and `test_index.py:93` to assert inclusion, **leaving both
-      `subagents/` assertions untouched**; replace `golden_queries.json:2` (premise falsified, not
-      just its path); correct `memsearch/README.md:22`,
-      `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` (lines 58, 67, 70, 135 and the
-      "What Is NOT Indexed" section, 154-163) and
-      `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19`; and write
-      `docs/decisions/0019-*.md` recording the reversal with the measured evidence that the
-      promotion pipeline stopped. Run the full `memsearch` test suite — the guard's removal touches
-      every `load_config` caller.
+- [ ] 7 — **Index `CODING_MEMORY.md` (R10) — one commit, all seven parts.** Config: drop it from
+      `exclude_paths`, **add `~/.claude/CODING_MEMORY.md` to `curated_docs`** (without this the
+      change is a no-op for the file it targets), add `"archive_doc": 1.0` to `weights`. Delete
+      `config.py:57-60` — **line 56's `excludes = …` assignment must survive**. Add `archive_doc` to
+      `SOURCE_TYPES` (`db.py:16`) and classify by filename in `_iter_docs` so all three copies get
+      it. Tests: remove `test_coding_memory_exclusion_is_mandatory`; flip `test_is_excluded:48`;
+      **split** the compound assertion at `test_index.py:93`; **update the four `processed` counts
+      at `test_index.py:84,135,149,160`** (+1 each); extend the fixture at `test_index.py:58` to
+      cover the `~/.claude`-root position; add a weight-tier test. Replace
+      `golden_queries.json` **line 4**. Correct `memsearch/README.md:22`, the design doc (58, 67,
+      70, 135, 154-163) and the plan at **both** line 19 and line 2828. Write
+      `docs/decisions/0019-*.md`. Run the full suite — removing the guard touches every
+      `load_config` caller.
 - [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9). **After task 7**, so the queries are written against the corpus they will
       be scored on.
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
-      `scheduled-index.log` receives output, and that `CODING_MEMORY.md` now has a `sources` row in
-      each repo root. **Record the run's real wall-clock duration** and, if it exceeds
-      `RUN_MAX_HOURS`, stop and put the constant back to the user (R3).
+      `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
+      `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
+      copies would satisfy on their own while the 3,232-line archive stayed unreachable. Confirm
+      its chunks carry `source_type = archive_doc`. **Record the run's real wall-clock duration**
+      and, if it exceeds `RUN_MAX_HOURS`, stop and put the constant back to the user (R3).
 - [ ] 10 — Score the five queries at `k=6` against R9's bar; record pass/fail per query under
       `## Verification`, including a failing result if that is the truth. **A failure here is a
       real result about R10's noise cost** — report it, do not silently re-exclude the file.
