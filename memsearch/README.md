@@ -16,6 +16,29 @@ decision: `../docs/decisions/0002-sqlite-over-qdrant.md`.
     ~/.claude/memsearch/bin/memsearch status             # health + revisit triggers
     ~/.claude/memsearch/bin/memsearch eval-digests       # digest accuracy audit
 
+## Scheduled refresh
+
+The index does not refresh itself. A `launchd` agent runs the incremental index
+every 6h and is installed from this repo:
+
+    ~/.claude/memsearch/bin/install-schedule              # install (idempotent)
+    ~/.claude/memsearch/bin/install-schedule --uninstall  # remove job + plist
+
+The rendered plist lands in `~/Library/LaunchAgents/local.memsearch-index.plist`
+— **outside the repo, so no commit, checkpoint or `git revert` removes it.**
+`--uninstall` is the only way back; it never touches `memory-index/`.
+
+Runs append to `~/.claude/memory-index/scheduled-index.log`. The scheduler has
+no self-report, so the `SessionStart` nudge's staleness line is its only
+monitor: `hooks/memsearch-nudge.sh` reads `status.json` and reports how long ago
+the indexer last *finished* (`last_run`), never how current the content is
+(`last_indexed`) — a run that finds nothing new never advances the latter.
+Design: `../docs/decisions/0018-launchd-agent-and-run-recency-split.md`.
+
+Exit codes: `0` installed and verified · `1` render or `plutil -lint` failure,
+nothing bootstrapped · `2` bootout/bootstrap/verification failure · `3`
+`~/Library/LaunchAgents` missing or unwritable · `64` usage.
+
 ## Invariants
 
 - Local Ollama models only — `:cloud` models are refused at config load.
@@ -29,3 +52,5 @@ decision: `../docs/decisions/0002-sqlite-over-qdrant.md`.
     cd ~/.claude/memsearch && uv run pytest              # unit suite
     uv run pytest -m golden                              # retrieval acceptance
                                                           # (needs a built index)
+    bash bin/install-schedule.test.sh                    # installer (bash; not
+                                                          # reached by pytest)

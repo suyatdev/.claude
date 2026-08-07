@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# install-schedule — install or remove the launchd agent that refreshes the
+# memory index every 6h.
+#
+# Removal is a first-class path, not a footnote: the rendered plist lands in
+# ~/Library/LaunchAgents, OUTSIDE the repo, so no commit, checkpoint or revert
+# removes it. --uninstall is the only way back, and it never touches
+# memory-index/ — removing a schedule must not destroy an index.
+#
+# Fails closed throughout. Every non-zero path names the failing step on stderr
+# and prints no success message; an installer that reports success for a
+# scheduler that is not loaded is the failure mode this whole feature exists to
+# surface, one layer down.
+#
+#   0  installed (or removed) and verified
+#   1  render or `plutil -lint` failure — nothing bootstrapped
+#   2  bootout / bootstrap / verification failure
+#   3  ~/Library/LaunchAgents missing and uncreatable, or not writable
+#  64  usage
+set -u
+
+LABEL="local.memsearch-index"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+TEMPLATE="$HERE/../launchd/$LABEL.plist.template"
+AGENTS="$HOME/Library/LaunchAgents"
+PLIST="$AGENTS/$LABEL.plist"
+DOMAIN="gui/$(id -u)"
+SVC="$DOMAIN/$LABEL"
+
+die() { printf 'install-schedule: %s\n' "$2" >&2; exit "$1"; }
+
+# The loaded-service set is the authority, not an exit code: `bootout` returns
+# 3 for "No such process", but asserting the OUTCOME needs no magic number and
+# survives launchctl changing its mind about which code it returns.
+is_loaded() { launchctl print "$SVC" >/dev/null 2>&1; }
+
+uninstall() {
+  if is_loaded; then
+    launchctl bootout "$SVC" >/dev/null 2>&1
+    if is_loaded; then die 2 "bootout failed — $LABEL is still loaded"; fi
+  fi
+  rm -f "$PLIST"
+  printf 'install-schedule: %s removed (memory-index/ untouched)\n' "$LABEL"
+  exit 0
+}
+
+case "${1:-}" in
+  "") ;;
+  --uninstall) uninstall ;;
+  *) die 64 "usage: install-schedule [--uninstall]" ;;
+esac
+
+mkdir -p -m 0755 "$AGENTS" 2>/dev/null
+[ -d "$AGENTS" ] || die 3 "$AGENTS is missing and could not be created"
+[ -w "$AGENTS" ] || die 3 "$AGENTS is not writable"
+[ -f "$TEMPLATE" ] || die 1 "template not found: $TEMPLATE"
+
+RENDERED="$(mktemp "${TMPDIR:-/tmp}/memsearch-plist.XXXXXX")" ||
+  die 1 "could not create a temporary file to render into"
+trap 'rm -f "$RENDERED"' EXIT
+
+# $HOME is expanded here so the committed template carries no absolute path.
+sed "s|__HOME__|$HOME|g" "$TEMPLATE" > "$RENDERED" ||
+  die 1 "render failed for $TEMPLATE"
+
+# Linted BEFORE it is installed or bootstrapped: a malformed plist that reached
+# launchd would be a loaded job that never runs.
+plutil -lint "$RENDERED" >/dev/null 2>&1 ||
+  die 1 "rendered plist fails plutil -lint — nothing bootstrapped"
+
+# launchd refuses a group- or world-writable plist.
+cp "$RENDERED" "$PLIST" || die 1 "could not write $PLIST"
+chmod 0644 "$PLIST" || die 1 "could not set mode 0644 on $PLIST"
+
+if is_loaded; then
+  launchctl bootout "$SVC" >/dev/null 2>&1
+  if is_loaded; then die 2 "bootout failed — $LABEL is still loaded"; fi
+fi
+
+launchctl bootstrap "$DOMAIN" "$PLIST" >/dev/null 2>&1 ||
+  die 2 "bootstrap failed for $PLIST"
+
+# A bootstrap that reports success but leaves nothing loaded is a failed install.
+is_loaded || die 2 "bootstrap reported success but $LABEL is not loaded"
+
+printf 'install-schedule: %s installed and loaded — index refreshes every 6h\n' "$LABEL"
+printf '  plist: %s\n  log:   %s/.claude/memory-index/scheduled-index.log\n' \
+  "$PLIST" "$HOME"
+exit 0

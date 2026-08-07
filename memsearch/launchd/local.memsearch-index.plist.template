@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.memsearch-index</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.claude/memsearch/bin/memsearch</string>
+    <string>index</string>
+  </array>
+
+  <!-- PATH is load-bearing, not boilerplate: `launchctl getenv PATH` is empty,
+       so a job inherits only /usr/bin:/bin:/usr/sbin:/sbin. bin/memsearch is an
+       `exec uv run` wrapper and uv lives in /opt/homebrew/bin — without this
+       key the job dies at exec every 6h while the installer reports success.
+       PYTHONUNBUFFERED because the log block-buffers at 8KB otherwise, losing
+       the tail of a run killed hard, which is the run whose evidence matters. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>21600</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <!-- Deliberately distinct from memory-index/reindex.log, which is the
+       artifact of a manual run and is not written by this agent. -->
+  <key>StandardOutPath</key>
+  <string>__HOME__/.claude/memory-index/scheduled-index.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.claude/memory-index/scheduled-index.log</string>
+</dict>
+</plist>

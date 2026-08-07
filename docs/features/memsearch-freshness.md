@@ -1277,12 +1277,42 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       - Live smoke against the real 7,631-chunk index: freeze, dead scheduler, Ollama-down and
         wedged-run all render their intended state. The live file has no run stamps yet, so the
         real nudge now says `age unknown` — correct, and it stops claiming freshness it cannot prove.
-- [ ] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
+- [x] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
       (R6, R7), with a `plutil -lint` test, the eight install/uninstall scenarios, and an assertion
       that no absolute path is committed.
-- [ ] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
+      `memsearch/bin/install-schedule.test.sh`, 19/19. All eight scenarios plus three the contract
+      implies. Written first; 16 of 18 red (two passed vacuously with no script to run — both are
+      live now that one exists).
+      - **No test-only seam in the production script.** Isolation is `HOME` redirected to a temp tree
+        plus a stub `launchctl` prepended to `PATH`. An override variable existing only for tests
+        would mean the tested path is never the real one.
+      - **The loaded-service set is the authority, not an exit code.** Real `launchctl bootout`
+        returns 3 for "No such process" and `print` returns 113 when absent (both probed, not
+        recalled) — but the script asserts the *outcome* via `is_loaded`, so no magic number is
+        pinned and a lying bootstrap is caught. The malformed-plist case uses a genuinely broken
+        template, not a mocked `plutil`.
+      - Exit `64` added for a usage error; the spec enumerates the install flow's failures (0/1/2/3)
+        and is silent on argument parsing, so this extends rather than contradicts it.
+      - Mutation check: 6 run, 5 caught. The 6th — swallowing `bootstrap`'s failure — is masked by
+        the post-bootstrap verification, which still exits 2 naming the step. Redundant guard, not a
+        test hole: the observable contract is identical either way.
+      - Real render verified against the live `$HOME`: valid plist, and `uv` is at
+        `/opt/homebrew/bin/uv` exactly where the pinned `PATH` expects it. **Nothing installed** —
+        `launchctl print` still returns 113. Installing is task 9, deliberately.
+      - `install-schedule.test.sh` is a bash suite; `uv run pytest` does not reach it. Task 6's
+        README entry names it.
+- [x] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
       it** (R8). This is the `bin/` section only; `README.md:22`'s exclusion invariant is task 7's,
       in task 7's commit. Record parent item 2 as a verified no-op — no config change.
+      **Parent item 2 confirmed a no-op by measurement, not recall:** `~/.claude/docs` is already a
+      `curated_docs` root (`memsearch/config.json`), and the live index holds **11** `sources` rows
+      under `docs/features/`. Nothing to add.
+      ⚠️ **R8 was briefly broken and then repaired.** Task 5 was committed without the README, which
+      R8 forbids ("in the change that creates it"). Rather than leave a commit whose README lies,
+      `69f3f5d` was amended to carry both and force-pushed with `--force-with-lease` — allowed on a
+      feature branch, and the commit was two minutes old with no PR open. Recorded because the
+      *reason* the split happened is that the checklist numbers them as two tasks while R8 requires
+      one commit; a future reader splitting them again would repeat it.
 - [ ] 7 — **Index `CODING_MEMORY.md` (R10) — one commit, all seven parts.** Config: drop it from
       `exclude_paths`, **add `~/.claude/CODING_MEMORY.md` to `curated_docs`** (without this the
       change is a no-op for the file it targets), add `"archive_doc": 1.0` to `weights`. Delete
