@@ -1539,3 +1539,121 @@ demands a stale line, and the two hook tests task 4 creates can now both pass.
 ### Waivers
 
 None. No violation has ever been waived on this spec.
+
+---
+
+## Round 9 — 2026-08-07 — **FAIL** (2 violations)
+
+`repo` `.claude` · `branch` `main` · `head` `ceadcf060ba8ea7fd50cb6ace14448ef6db22a43`
+`spec` `docs/features/memsearch-freshness.md` · `blob` `60199bd97edddf6e50e99c047a2a3573b34ffb40`
+(matches the blob named in the dispatch — same document) · 1,270 lines · `waived: []`
+`confidence: high`
+
+### In plain English
+
+Round 9 did what it said it did. Decision 5 is now bounded to `RUN_ABANDON_HOURS` and agrees with
+the state table; every pinned chunk count that mattered is gone; the spread rule now reads the same
+way in R9, task 8b and falsifier (i); R9 finally has a pass mark and its own derived-surface list;
+the Design-decisions row that failed round 8 is in the inventory. **Round 8's violation is closed.**
+
+Two things are still wrong, and both are the same shape as everything this spec has been failing on
+for six rounds — a list that vouches for a section it did not actually read.
+
+1. **The brand-new R9 list has a false row in it.** It says task 10(b) restates *"both clauses, the
+   pass mark"* and marks it *agrees*. Task 10(b) does not contain the pass mark. The words "all
+   five" appear exactly once in the whole document — in R9 itself. So the one step that actually
+   runs the measurement and writes the verdict says only "record pass/fail per query," and an
+   implementer who gets four of five can record that and move on, which R9 calls a failure. That is
+   round 8's *"a recording step wearing a gate's clothing"* finding, unfixed one level down — and
+   the list created to prevent exactly this drift is the thing asserting it is fine.
+
+2. **One scenario contradicts state 2, in precisely the way falsifier clause (a) did before round 8
+   fixed it.** *"A failed scheduled run becomes visible"* says: agent has not completed a run for
+   9 hours → the stale line is emitted. But a run started 9h ago and never finished is **state 2,
+   stuck**, not state 5 — 6 ≤ 9 < 24 — and stuck outranks stale. Round 8 found this exact
+   proposition unsatisfiable in the falsifier and scoped it to *"no state 1, 2 or 3 line applies"*;
+   the scenario carrying the same proposition was never scoped. Task 4 turns every scenario into a
+   hook test, so this ships as a test no correct implementation can pass.
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `writing-specs/r9-pass-mark-unstated-at-execution` | `skills/writing-specs/SKILL.md` | Requirements the agent can satisfy and you can check; no requirement readable two ways | R9 → *Surfaces derived from R9*, the `Task 10(b)` row, against Tasks → 10(b) | The row claims task 10(b) restates the pass mark and *agrees*, but "all five" appears only in R9 (line 331) — the executing step records per-query pass/fail and never states the branch-level bar, so four-of-five is recordable as a pass. |
+| `writing-specs/derived-surfaces-out-of-sync` | `skills/writing-specs/SKILL.md` | Drift causes hallucination — a derived surface must agree with the source it restates | R3 → the state table's derived-surface inventory, `Scenarios` row (*all eight · derived · agrees*), against Scenarios → *"A failed scheduled run becomes visible"* | A run uncompleted for 9h with `run_started` 9h old is state 2 (stuck), which outranks state 5, so "the stale line is emitted" is false — the same proposition round 8 scoped out of falsifier (a) and left unscoped here. |
+
+*(Second id reused verbatim from round 8 — same rule, same territory, R3's inventory. First id is
+new: R9's inventory did not exist before round 9.)*
+
+### Verified from source, not recall
+
+Everything below was re-measured today against the files and the live DB; all of it holds.
+
+- **Blob** `60199bd9…` matches the dispatch. **Index state:** `sources` = 911 rows, 187 at
+  2026-07-18 and 724 at 2026-08-06 — exact.
+- **Scorer ceiling** `2 × 1/61 × 1.5 = 0.04918…` — `RRF_K = 60` at `search.py:19`, two-retriever
+  fusion at `:61-64`, weight multiply at `:80`. Exact.
+- **Golden harness:** 16 entries, **11 must / 3 stretch / 2 negative**; line 4 is the
+  `CODING_MEMORY` query and line 2 the sqlite-over-qdrant one; entry 11 is file line 12 with
+  `{rtype: episodic, since: 2026-07-01}` expecting `.jsonl`. `test_golden_queries.py:37-41` asserts
+  presence only; `:47-52` and `:57-60` warn. `pyproject.toml:23` = `addopts = "-m 'not golden'"`.
+- **Every `test_index.py` citation** — `:58` (fixture writes `CODING_MEMORY.md` into the *curated*
+  dir), `:84 :93 :105 :106 :117 :135 :136 :148 :149 :160 :161` — and all four inline comments.
+  `:117` **is** the changed-file test and `:149` **is** the limit-scoped one, exactly as the
+  ⚠️ warns. `test_config.py:42, :48` correct. Seven functions / eight assertions arithmetic checks.
+- **Package citations:** `config.py:56` (the `excludes = …` line that must survive) and `:57-60`
+  (the guard); `db.py:16, 17, 103, 112-125, 156`; `index.py:44-51, 57-67, 73-74, 100, 125-127,
+  135-137`; `chunk.py:111, 140-141`; `cli.py:39, 66`; `status.py:27`. All correct.
+- **The plan sweep:** `grep -n CODING_MEMORY` returns **exactly fourteen** hits, at exactly the
+  fourteen line numbers listed; 19 / 2828 / 2890 / 2942 do assert the retired rule as current; the
+  plan is 3,079 lines.
+- **The design doc:** 58, 67, 70, 135 and 154-163 all genuinely assert the exclusion. **Line 70
+  carries no literal `CODING_MEMORY`** — it is the Mermaid `Z -.->|NOT indexed| S` edge, which a
+  grep would have missed and the spec caught. The four other mentions (11, 25, 32, 201) are about
+  the *restore*, correctly excluded. `README.md:22` correct.
+- **Corpus ranking:** 184,620 / 153,701 / 131,516 characters — exact, in that order. Live-presence
+  plan = 121 chunks; 03b-deploy-design = 130 chunks and 128,317 chars vs 129,880 **bytes**, which
+  confirms the round-5 byte-vs-character diagnosis.
+- **The round-9 self-indictment is true:** this spec's own row reads `indexed_at =
+  2026-08-06T20:01:42+00:00`, **14 chunks** — the stale figure that would have qualified the
+  largest file as the small target.
+- `session-log.md` last entry 2026-07-16, `decisions.md` 2026-07-19 — both still frozen. **Zero**
+  `## Session N — <date>` headings. vibe-scape 159 / Snatch-Bracket 119 lines. `config.json`
+  `curated_docs`, `weights` and `exclude_paths` as described. `bin/memsearch` is a one-line
+  `exec uv run` wrapper; `launchctl getenv PATH` is empty.
+- **Toolchain:** bash 3.2.57, python3 3.9.6 (parses `+00:00`, rejects `Z` — confirmed by running
+  it), uv 0.11.28 Homebrew, venv python 3.12.13, sqlite3 3.51.0, darwin 25.5.0, no `timeout` on
+  PATH. `status.json`'s `last_indexed` is `2026-08-06T23:56:46+00:00`, the exact string quoted.
+- **Supply chain:** no `/Users/…` path anywhere in the committed spec; `pytest==8.3.4` is pinned in
+  `memsearch/pyproject.toml` and `uv.lock`, so not repeating it in the toolchain table is correct
+  DRY, not a missing pin. No new dependency is introduced.
+- **Location:** `docs/features/` is right here — `rules/gates.md`'s one-canonical-file discipline
+  governs feature-scale work in this repo and `phase-guard.sh` keys on that path. Not a
+  `writing-specs/spec-location` finding.
+
+### Notes (non-blocking)
+
+1. **R9's "no count is pinned in this document" is false as written.** Two chunk counts survive,
+   both read from `memory.db`: **121** (line 592) and **130** (line 598). Both are correct today
+   and neither names an R9 target, and line 376's *"ranking by any figure written here is
+   forbidden"* already covers them — but the absolute is the kind of claim this round removed
+   elsewhere.
+2. **Five R3-inventory rows still under-describe their surface** (round 8 noted this; round 9 fixed
+   only the per-state-rationale row). Design decisions omits state 8, which decision 6 names as
+   *"a plain fresh line"*; R2 omits the fresh line in its zero-files exception; the threshold
+   rationale also names states 1 and 2; Contracts → `index.py` also names the in-progress line
+   twice; task 4 also says *"every one of its eight states"*. None contradicts the table.
+3. **Two dated diagnostic figures drifted with normal growth.** The non-goal says 20 session
+   headings, 17 date-first and 3 session-first; it is now **21 / 17 / 4** (Session 33 was appended).
+   R10 says the archive carries sessions 24-31; it now carries **24-33**, and measures **3,535
+   lines / 303,925 characters** against the stated 3,484 / 300,160. The *"treat any figure here as
+   a floor"* hedge covers the size numbers but not the heading count or the session range. Every
+   load-bearing claim still holds.
+4. **The document grew again** — 1,163 → 1,214 → 1,270 lines, with roughly 180 lines of
+   round-by-round review narration. Each block has a stated anti-regression purpose, so this is not
+   cited; but `writing-specs`' *"small enough for a human to actually read end to end"* is under
+   real pressure, and the trend is one more round of growth per round of judging.
+
+### Waivers
+
+None. No violation has ever been waived on this spec.

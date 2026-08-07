@@ -3533,3 +3533,70 @@ are 188/1,214 lines (15.5%), mid-pack against sibling specs.
 
 **Open:** round-9 judging owed. Checkpoint 2 (planning → implementation) still owed — literal
 `gate confirmed` only.
+
+## Session 34 — round-9 judging: the enumeration that drifted on arrival
+
+`main` @ `ceadcf0`. Spec unchanged at **1,270 lines**, blob `60199bd9`, still `phase: planning`,
+`branch: none`. No code exists.
+
+**The session opened on a two-rounds-stale handoff.** Session 33 ended without writing one, so
+`SessionStart` surfaced session 32's — claiming 1,021 lines, blob `748b108b`, "round-5 judging
+owed". Git said otherwise: four spec commits past it. Caught by the restore step that checks
+frontmatter against reality *before* acting. **A handoff's age header does not tell you it is
+current** — it timestamps the file, not the state it describes.
+
+**The user opened with `gate confirmed` and the gate did not open.** Round-9 judging was owed and
+the last verdict on record was round 8 = **fail**. Asked rather than treating the phrase as
+covering both; user chose to judge first. Checkpoint 2 answered in the same breath: **Sonnet 5**
+for implementation. The `gate confirmed` phrase is therefore already spent — when judging passes,
+open the gate without re-asking.
+
+**Round 9 judged: compliance `fail` (2 violations), observability advisory `risk=medium`.**
+Round 8's violation is verifiably closed — decision 5 bounded, the Design-decisions row present in
+the 17-entry inventory, the stale "1,163 lines" header gone, the spread rule identical in all
+three places.
+
+The two new ones:
+
+1. **The pass mark was not where the work happens.** R9's own new checklist claimed task 10(b)
+   restates the "all five queries must pass" bar. `grep "all five"` returns **exactly one hit in
+   1,270 lines** — in R9 itself. The step that runs and records the measurement states only
+   per-query pass/fail, so four-of-five would be recorded as a pass.
+2. **A scenario contradicted the state table.** "A failed scheduled run becomes visible" put a
+   9-hour-uncompleted run on the *stale* line; the table makes it state 2 (*stuck*), which
+   outranks stale. The identical proposition round 8 scoped out of falsifier (a) and left live in
+   the scenario **task 4 turns into a hook test** — so the wrong version is the one that ships.
+
+**The persistence rule tripped and the finding was escalated, not patched.** Id
+`writing-specs/derived-surfaces-out-of-sync` cited in rounds 8 and 9 consecutively. Substantively
+it is a new instance in the same territory, but it is the **fifth consecutive round** the class has
+appeared (5, 6, 7, 8, 9). Both judges found it independently this round: the advisory one caught
+that **R9's new seven-entry inventory was written by reading, not by the sweep the spec mandates**,
+and misses four surfaces. *The enumeration written to end the drift drifted on arrival* — which is
+what finally made the mechanism, not the instance, the thing to fix.
+
+**User decision: stop hand-maintaining the inventories.** Both lists come out of the document; the
+sweep becomes a step executed at implementation time, generated from what is actually there. A
+list that lives in the document is a copy, and every copy in this spec has gone stale — rounds 7
+and 9 shipped stale ones inside the very section meant to prevent staleness.
+
+**Also accepted (all four advisory items):** record the golden baseline; delete the two surviving
+pinned counts; state the counting unit as per-feature; add a falsifier clause for task 9's
+stop-and-ask (flagged three rounds running).
+
+**Baseline captured before any edit, re-run rather than trusted:** `uv run pytest -m golden -q` →
+**16 passed, 63 deselected, 2.53s** @ `ceadcf0`. Matches the advisory judge's figure. This is the
+before-picture task 10 lacked — without it the R10 measurement runs once, after the change, with
+nothing to compare against.
+
+**Two document self-contradictions worth keeping:** R9 states flatly that no count is pinned
+anywhere while **121 and 130 survive** in R10's noise paragraph, both read from `memory.db` — the
+exact failure mode round 9 existed to fix, one section over. And chunk counting is per-file while
+competition is per-feature, so one feature reads as 6 or 37 depending on the unit — enough slack to
+move a sample from the bottom third to mid-range while still complying with the anti-gaming rule.
+
+**Gotcha found the hard way:** `phase-guard`'s `.claude/*` exemption is **repo-relative**. In this
+repo that means `~/.claude/.claude/…`; a write to `~/.claude/session-state.md` sits at the repo
+root, matches nothing, and is denied. The hook was right — that path was wrong.
+
+**Open:** the round-10 revision (seven edits, enumerated in the handoff), then re-judge.
