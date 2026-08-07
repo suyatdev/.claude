@@ -60,8 +60,13 @@ feature — the failure mode ADR 0016 exists to forbid.
   cells overflowed. The count needs no cap because it is already bounded — a segment starts a
   new row only when it does not fit, so rows can never exceed segments, at most eight.
 - **A single segment wider than the terminal still overflows**, intentionally. Breaking it is
-  what the escape-sequence guarantee forbids. Measured: at 38 cells and above nothing
-  overflows; below that, only an atomic segment ever does.
+  what the escape-sequence guarantee forbids.
+
+  The general bound is therefore **the width of the widest single segment**, which depends on
+  the branch name, the directory name and `user@host` — it is not a constant. Measured against
+  the worktree this was developed in, nothing overflows at 38 cells and above; a longer branch
+  name pushes that to 44. Quote the rule, not the number: below the widest segment, that
+  segment overflows, and nothing else does.
 - Widths are **tracked as segments are built, not measured afterwards**. Measuring would mean
   stripping colour codes back out and then deciding how many cells a glyph like `⏱` occupies —
   unanswerable without a character-width table, in a script that re-renders on every message.
@@ -70,6 +75,15 @@ feature — the failure mode ADR 0016 exists to forbid.
   therefore reads a pipe. It is not trustworthy alone — a non-interactive shell reports `0`,
   measured — so anything that is not a positive integer disables wrapping and restores the
   previous single-line output. A bad width costs the feature, never the line.
+
+## `wt:()` is an indicator, not a safety mechanism
+
+Its **absence must never be relied on.** Absence is *defined* as "this is the main checkout",
+so a detector that silently broke would be indistinguishable from the state the segment exists
+to warn about — and the motivating incident was a session switching the shared checkout's
+branch while another session worked in it. Read the segment as a convenience when present;
+never read its absence as a guarantee that you are somewhere safe to act. Giving absence a
+distinguishable "unknown" rendering is open work (feature file, task 10).
 
 ## Alternatives rejected
 

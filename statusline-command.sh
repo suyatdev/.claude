@@ -751,7 +751,6 @@ esac
 # start with an empty line and treat every segment identically.
 line=""
 line_width=0
-lines_emitted=1
 i=0
 while [ $i -lt ${#seg_text[@]} ]; do
   if [ $i -gt 0 ] && [ "$wrap_at" -gt 0 ] &&
@@ -761,7 +760,6 @@ while [ $i -lt ${#seg_text[@]} ]; do
     printf '%s\n' "$line"
     line="${seg_text[$i]}"
     line_width=${seg_width[$i]}
-    lines_emitted=$((lines_emitted + 1))
   else
     line="${line}${seg_sep[$i]}${seg_text[$i]}"
     line_width=$((line_width + seg_sep_width[i] + seg_width[i]))

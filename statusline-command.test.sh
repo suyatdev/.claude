@@ -791,6 +791,17 @@ else
   bad "the head overflows COLUMNS and never breaks (widest=$W>60)"
 fi
 
+# Removing the row cap left "rows can never exceed the segment count" stated in a
+# comment and checked nowhere. A bound that is only claimed is not a bound, so it
+# is asserted here at a width narrow enough to force the maximum number of breaks.
+# Eight is the ceiling: four git-prompt segments plus four Claude ones.
+ROWS="$(line_count "$(render_cols 24 "$WIDE_HEAD_PAYLOAD")")"
+if [ "$ROWS" -le 8 ]; then
+  ok "row count stays inside the segment-count bound (rows=$ROWS<=8)"
+else
+  bad "row count exceeded the segment-count bound (rows=$ROWS>8)"
+fi
+
 # $cwd is stripped of control bytes BEFORE any git command runs, so a path
 # carrying one no longer resolves and the whole git block is skipped -- no
 # branch, no worktree, no dirty marker. That is the behaviour asserted here,
