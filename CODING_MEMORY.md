@@ -3952,3 +3952,56 @@ the *outcome* via `is_loaded` rather than pinning either number. All five code c
 ADR 0018 were re-checked against source first.
 
 Nothing is installed: `launchctl print` still returns 113. That is task 9.
+
+## 2026-08-07 — session 40: task 7, and the archive starts indexing itself
+
+`53a6b42` on `feature/memsearch-freshness`, pushed, tree clean. 13 files, all seven R10 parts in
+one commit as R8 requires. **74 pytest green** (72 before: −1 removed test, +3 new). The corpus this
+file belongs to now includes this file.
+
+### What landed
+
+`CODING_MEMORY.md` is indexed. The exclusion is gone from `exclude_paths`, the `ConfigError` guard
+that enforced it is deleted, and — the part that actually does the work — `~/.claude/CODING_MEMORY.md`
+is now named in `curated_docs`. It carries a new `archive_doc` weight tier at **1.0**, classified by
+filename so all three copies land there rather than outranking their own repos' decision records,
+and yields `recall_type == "episodic"` so `--type episodic` reaches it. ADR **0020**.
+
+### Three things worth carrying that are not in the diff
+
+**The ADR number in the spec was wrong, and the fix has a knock-on.** Task 7 said write `0019-*.md`;
+`0019-response-register-belongs-in-core-conduct.md` has existed since sessions 35–36. Landed as
+**0020**. ⚠️ The session-39 handoff had reserved 0020 for the deferred planning pass — that pass now
+needs **0021**. A spec naming a number in a monotonic sequence will rot whenever an unrelated
+session spends one; the number should have been "the next free ADR".
+
+**Spec line numbers rot inside their own implementation phase.** Every `test_index.py` line in R10.4
+was **+11** stale — task 3's own commit `483c44e`, on this branch, inserted lines above them.
+`README.md:22` had likewise become `:45` via task 6. R10.4 survived this only because it also stated
+a governing *rule* and named each assertion by semantic role, so mapping by test function was
+unambiguous. R10.6's plan sweep, written as "re-run `grep -n`, do not trust the list", re-ran to
+**fourteen** hits exactly. **The instruction that told the implementer how to re-derive beat every
+instruction that stored a number.**
+
+**Falsifier-first, twice, and it was not ceremony.** The suite was run *before* any test was edited:
+**7 failed / 65 passed**, precisely the seven functions R10.4 predicted, from eight assertions. Then
+the two new production-pinning tests were mutation-checked — revert `chunk.py`'s episodic branch and
+`_doc_source_type`, both go red; restore, 74 green. This mattered here specifically: the old
+exclusion test had passed for weeks while production was unreachable, because **the fixture wrote
+`CODING_MEMORY.md` inside the curated directory — a path the walker already visits.** The
+replacement test builds its own config for the root position and asserts both halves, including the
+one that fails if `curated_docs` omits the file.
+
+### One design choice made against future drift
+
+The replacement golden query uses `expect_path_contains: "CODING_MEMORY"`, not a session-specific
+path, and asks a question the archive answers in *many* sections. The archive grows every session —
+a query pinned to one session's heading would have rotted on the next append, which is the same
+class of defect as the two above.
+
+### Not done
+
+Nothing is installed yet; `launchctl print` still returns 113 (task 9). The archive is **configured**
+to be indexed but has not been indexed — no `memsearch index` run has happened, so `memory.db` holds
+zero `archive_doc` rows and the new golden query cannot pass until task 9. That is expected, not a
+regression.
