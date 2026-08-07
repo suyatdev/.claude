@@ -3721,3 +3721,67 @@ table; a state named in prose without its number is still a surface). Falsifier 
 passing R9's two violation ids, `waived: []`, and that **edits 1–3 are a user-directed structural
 change**, not a judge finding. `gate confirmed` was already given in session 34, so round 10 passing
 **opens the gate — do not re-ask**; checkpoint-2 answer to record in task 1 is **Sonnet 5**.
+
+## 2026-08-07 — session 37 (cont.): rounds 11 and 12 both PASS; the gate is unblocked
+
+`docs/features/memsearch-freshness.md` · `phase: planning` throughout · pushed through `b229ef3`.
+Blob trail: `60199bd9` (r10 in) → `022528c2` (r10 out) → `b71672c3` (r11) → `c148cda8` (r12).
+1,270 → 1,289 → 1,317 → 1,336 lines.
+
+**Round 10 failed on one violation, and the failure was mine.** Edit 8 said "fix the counting unit
+in three places"; I fixed exactly those three and did not sweep for a fourth. There was one — the
+Gherkin scenario, i.e. *the* surface that becomes an executable check. Verified: `memory-system-split`
+is 53 + 713 lines, so per-file it ranks bottom-third and per-feature top-third. **This is the
+"enumerate the class, don't patch the instances" rule failing inside the edit meant to enforce it.**
+Round 11 fixed it by sweeping *and* deleting the two-entry mini-inventory that caused the miss.
+
+**Round 11: compliance PASS** (zero violations). `derived-surfaces-out-of-sync`, open rounds 8–10,
+closed — all seven surviving surfaces agree on unit and population.
+
+**Round 12 exists because the observability judge found the hole one level down.** R11 defined *which
+population*; it never defined what a **third** was. All four surfaces were silent *identically*, so
+they agreed with each other while the rule underneath was underdetermined. **Surfaces agreeing is not
+the same as a rule being defined** — no cross-surface comparison could ever have found this; it took
+reading the rule. Fixed as a **rank tertile** (lowest ⌊N/3⌋ by rank, N counted at task-8 time, never
+pinned, counted per feature — `docs/features/` is 11 files but **10 features**).
+
+**The judge then measured it with the project's own chunker rather than taking the fix on trust:**
+
+```
+ 1   6 stale-phase-guard-rule-text    6  37 memory-system-split
+ 2   9 falsifier-base-pin             7  53 verification-marker-gate
+ 3  13 git-guard-chained-command      8  66 memsearch-freshness
+ 4  13 shell-segments-redirects       9  70 replay-harness-base-pin
+ 5  24 git-guard-empty-index         10  91 phase-guard-hook
+```
+
+Value-span reading: bottom third = ≤34.3, so `git-guard-empty-index` (24) qualifies and the
+four-large-plus-one-medium sample **passes** — and *half the pool* sits in its own "bottom third".
+Rank-tertile: bottom third = `{6,9,13}`, it is rank 5, sample **fails**. Counterexample dead under
+every convention tried (⌈N/3⌉, percentile interpolation). Bottom third shrank 50% → 30% of the pool.
+Bonus: this spec is **66 chunks, rank 8 — its own top third**; round 8 listed it at 14 (bottom third)
+off the stale index. Its self-criticism was right.
+
+**Round 12: compliance PASS. Observability on the gate question: "No. Open it."**
+
+**Both judges corrected themselves against measurement, which is the point of running them:** the
+observability judge withdrew its round-11 `≥1.73×` (it had divided bytes by characters — the spec's
+**1.72×** stands, re-measured independently by both), and **reversed its round-11 demand for a
+pre-gate reorganization** — re-cutting the document would churn all four spread-rule surfaces
+immediately before task 1b's sweep must verify they agree, and after the gate it is phase-illegal.
+
+**Carried into implementation, none blocking:** (1) a live tie at the boundary — `git-guard-chained-command`
+and `shell-segments-redirects` are both 13 chunks, ranks 3/4, and "lowest ⌊N/3⌋" doesn't say which is
+third; not exploitable, but not reproducible — recommended rule: *a tie spanning the boundary puts
+both in the third*. (2) R9 names no command for computing chunk counts; use the project's chunker at
+task 8b, not a `wc` proxy. (3) **Deliberate canary:** falsifier (i) still says "chunk-count *range*"
+where R9 says "population", and `⌊N/3⌋` reached only 2 of 4 surfaces. Meaning is pinned everywhere,
+so it is cosmetic — **left in place on the judge's suggestion as a live test of whether task 1b's
+sweep actually works**, since that sweep is what replaced the deleted inventories and has never been
+exercised. If task 1b misses both, that is evidence about the mechanism, not about the wording.
+(4) The zero-files gap still renders a vanished corpus as fresh, by prior user decision.
+
+**Process finding — the "exit 2 ≠ dead" gotcha fired for real at round 11.** The compliance pane hit
+the 540s `wait` timeout and never wrote its result file, but the verdict was already complete and
+well-formed in `verdicts.jsonl`. Re-dispatching on the exit code would have burned a full round
+re-judging an already-passing spec. **Always read `verdicts.jsonl` before believing a timeout.**
