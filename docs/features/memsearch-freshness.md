@@ -1205,7 +1205,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       session's answer never satisfies it) — answered **Sonnet 5**, for the whole implementation
       phase including 1b, so the sweep is exercised by the tier that runs the rest of the work.
       Branch `feature/memsearch-freshness`.
-- [ ] 1b — **Regenerate the derived-surface sweep and reconcile it — first task after the gate,
+- [x] 1b — **Regenerate the derived-surface sweep and reconcile it — first task after the gate,
       before any code.** Sweep the whole spec for every state name, every rendered line and every
       ordering claim (R3's method), and for every restatement of R9's two clauses and its spread
       rule. Key the result by **section, never by line number**, and record it **in this task's

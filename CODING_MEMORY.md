@@ -3785,3 +3785,69 @@ exercised. If task 1b misses both, that is evidence about the mechanism, not abo
 the 540s `wait` timeout and never wrote its result file, but the verdict was already complete and
 well-formed in `verdicts.jsonl`. Re-dispatching on the exit code would have burned a full round
 re-judging an already-passing spec. **Always read `verdicts.jsonl` before believing a timeout.**
+
+## 2026-08-07 — session 38: the gate opens, and task 1b's sweep catches its canary
+
+**Branch `feature/memsearch-freshness`** created off `main` @ `b78eae8`. Feature file
+`docs/features/memsearch-freshness.md` moved to `phase: implementation`, `model_tier: low`.
+
+### The gate
+
+The user gave the literal phrase `gate confirmed` in this session — not the session-34 claim the
+handoff carried, which was correctly treated as data and ignored. State was verified against reality
+before opening: blob `c148cda8` at 1,336 lines (byte-identical to the revision both round-12 judges
+passed), clean tree, frontmatter genuinely still `planning`.
+
+**Model-switch checkpoint 2 was asked fresh** rather than inherited from the handoff, which had
+pre-supplied "Sonnet 5". Answered **Sonnet 5**, for the whole implementation phase *including task
+1b* — deliberately, so the sweep is exercised by the tier that runs the remaining tasks rather than
+by a frontier model that would have measured the wrong thing. Commit `4cb0a3c`.
+
+### Task 1b — the derived-surface sweep
+
+Commit `ef436e7`, **empty by design** (`--allow-empty`): the sweep changes no files, so the commit
+exists only to carry its output. The full section-keyed inventory lives in that commit message and
+is deliberately **not** reproduced here or in the spec — every stored copy of this sweep has gone
+stale, twice inside the anti-staleness section itself.
+
+Twenty-one R3 surfaces and eight R9 surfaces found, each checked against its authority. Verified
+mechanically by grep, not by recall.
+
+**Verdict: no surface contradicts its authority. No `GATE: Spec change needed` escalation.**
+
+**The canary worked, and the honest result is subtler than "it escalated."** Both planted defects
+were *found*:
+
+1. Falsifier (i) says "chunk-count **range**" where R9's tertile paragraph reasons over the
+   "population".
+2. `⌊N/3⌋` reaches only **2 of the spread rule's 4 surfaces** — R9 itself and task 8b. The Gherkin
+   scenario and falsifier (i) both stop at "rank tertiles".
+
+Both were then judged **cosmetic against task 1b's stated bar, which is *contradiction*, not
+imprecision** — R9's own heading sentence reads "The range **is** the population of every feature
+under `docs/features/`", so clause (i) is using the authority's own vocabulary, and "rank tertiles"
+carries the operative distinction even without the formula. Escalating on these would have been
+following the handoff's *prediction* rather than the rule. That the prediction went unfulfilled is
+itself the useful signal: **the sweep's detection worked; the escalation threshold simply wasn't
+met.**
+
+Two watch items recorded and left alone (decision 5's "in-progress ... for the first
+`RUN_ABANDON_HOURS`", which round 9 already adjudicated; and the three constants' "while the first
+run is still alive", which collides with row 3's name but reads correctly in context).
+
+### Found incidentally — a stale figure, outside 1b's scope
+
+R10's per-session-dating non-goal pins "**20** headings ... 17 date-first and 3 session-first",
+measured 2026-08-07. **Re-measured the same day: 24 (19 date-first, 5 session-first)** — it drifted
+across sessions 34–37. The non-goal's *load-bearing* claims both hold: still exactly two forms, and
+still **zero** carrying the `Session N — <date>` shape, so the argument the bullet makes is intact
+and only the count is wrong.
+
+Not fixable now — a spec edit during `implementation` is phase-illegal — and out of scope for task
+1b, whose sweep covers R3 state surfaces and R9 clause surfaces only. **Queued for the deferred
+planning pass** already carried for ADR 0019 and the missing headings.
+
+The archive's *size* figures (`317,249 characters / 3,723 lines`) are explicitly caveated as a
+floor, so this session's append does not rot them: re-measured **325,079 characters / 3,787 lines**,
+both above the floor. This entry uses the date-first heading form deliberately, to keep the
+non-goal's two-forms and zero-`Session N — <date>` claims true.
