@@ -4113,3 +4113,48 @@ re-installed** with `memsearch/bin/install-schedule`.
 
 Task 9's timing half (cold `--full` duration, then re-choose `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`
 **with the user**), 10a/10b, 10c, 11.
+
+## 2026-08-07 — session 42: the incremental figure lands, and two rate bases disagree
+
+### The ordinary-case number
+
+The scheduled incremental run finished cleanly: **23:04:10 → 23:36:45 UTC, 32m35s**, `processed=87
+skipped=900 chunks_added=1176 errors=0`, leaving 989 sources / 8607 chunks. `last_run_errors: 0`.
+This is task 9's *ordinary case* figure, snapshotted to `memory-index/status.incremental.json`
+before `--full` could overwrite it. The agent then booted out (`launchctl print` → **113**, as
+designed) and the cold `--full` run started **23:36:50**.
+
+R5's two-write protocol held across a second run, and the `--full` run is now exercising it against
+a genuinely emptied DB — the case the carry-forward exists for.
+
+### A short window is not a rate — the estimate was wrong by 4x
+
+Mid-run, extrapolating from a **83-second** sample (4 `.jsonl` files) gave 2.8 files/min and a
+projected **1.5–2h** remaining. The run actually finished in **~24 more minutes**. The sample landed
+inside a stretch of uniformly tiny transcripts and carried none of the run's variance.
+
+Worse, the two bases for projecting the *cold* run disagree, and the disagreement is not noise —
+it is which cost model is right:
+
+| basis | incremental rate | → 989 sources / 8607 chunks |
+|---|---|---|
+| files | 87 / 32.6min = **2.67/min** | **6.2h** |
+| chunks | 1176 / 32.6min = **36.1/min** | **4.0h** |
+
+The file basis is skewed high: those 87 included `CODING_MEMORY.md` (229 chunks), a compliance
+verdict (160) and a plan (91), so per-file cost is unrepresentative. Embedding cost tracks chunks,
+so **4.0h is the better guess** — but it is a guess, and no figure goes under `## Verification`
+except the measured one. Recorded here because the *spread itself* is the finding.
+
+### Why that spread matters now, not at hour six
+
+4.0–6.2h straddles **`RUN_MAX_HOURS` = 6**. Falsifier clause **(j)** falsifies this feature if the
+cold run reaches that constant and the branch proceeds anyway without putting it back to the user.
+So the constant is live and the decision is the user's — flagged early rather than at the boundary.
+Not widened, not pre-emptively touched.
+
+### Correction to session 41's handoff
+
+It stated the agent was "deliberately booted out". At session start it was still **loaded** —
+bootout is step 3 of the timing script and step 1 was still running. Harmless (`StartInterval` 6h,
+last fired 23:04, next ~05:04), but the handoff described an intended end state as a current one.
