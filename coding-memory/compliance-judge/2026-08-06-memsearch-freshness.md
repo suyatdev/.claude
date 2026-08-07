@@ -769,3 +769,274 @@ named), plus a scenario or two.
   stay human-owned" invariant handled exactly right.
 - **Phase discipline intact.** Frontmatter still `phase: planning`, `branch: none`; task 1 is the
   model-switch checkpoint that opens implementation.
+
+## Round 3 (new loop) — 2026-08-07T02:52:54Z
+
+- **Verdict: FAIL** (3 violations)
+- head_sha: `24e6e29e0a37ccfcf484f85518787c9fecf02b67`
+- spec_blob_sha: `391c4cba3bda6f6203e6187eece8b620431e74b3` (re-hashed; matches the caller's value)
+- Rule sources read: `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`,
+  `skills/writing-secure-code/SKILL.md`, `rules/gates.md`, `CLAUDE.md`
+  (still no `.claude/project-standards.md` in this repo — repo layer is `CLAUDE.md` + `rules/`)
+- Confidence: **high** — every finding was verified against the tree, and the headline one was
+  proved by *applying* R10 to a throwaway copy of the package in `/tmp` and running the suite.
+- Waived: none.
+
+### Layman summary
+
+Both of last round's findings are properly closed, and the six edits are good ones — the atomic
+`os.replace` addition in particular fixes the cause of the very torn file the new rule has to absorb,
+which is the right instinct. I re-checked every coordinate again and they all hold: `config.py:56` is
+the assignment that must survive and `57-60` is the guard, `golden_queries.json` line 4 really is the
+falsified-premise query and line 2 the still-true one, `index.py:73` really unlinks before `:74`
+connects, `db.py:112-120` really is the only delete path, and `pyproject.toml:23` really does hide the
+golden tests — I confirmed it by running the suite and watching **16 deselected**, exactly matching
+task 10's "sixteen golden tests".
+
+Three things are still wrong, and the first two are in the same small area the revision just touched.
+
+**One.** R10 tells the implementer, in bold, that four test assertions will each shift by one and
+names them so the implementer doesn't hit "four unexplained failures". I copied `memsearch` to `/tmp`,
+made exactly the change R10 describes (dropped the exclusion, added the weight, deleted the guard,
+classified by filename), and ran the suite. It produced **seven** failures, not six — the extra one is
+`test_index.py:106`, `assert report2["skipped"] == 4`, which becomes 5 for precisely the same reason
+the four `processed` counts do. That line is unnamed, and last round's writeup specifically checked
+its neighbours 105 and 117 and cleared them, so the miss has now survived two reviews. The class of
+finding — "when review rounds keep finding new instances of one class, stop patching and enumerate" —
+is exactly the one that warrants a mechanical check rather than another reading.
+
+**Two.** Edit 3 fixed R10.4 to say the root-position test must live in its own config variant, *not*
+by extending the shared fixture — with the correct reason, that a second file in the shared fixture
+shifts the counts by two rather than one. But task 7, the list an implementer actually works from,
+still says "extend the fixture at `test_index.py:58` to cover the `~/.claude`-root position", in the
+same sentence as the +1 counts. Two instructions, opposite directions; the one in the task list is
+the one that gets followed, and following it breaks the counts the same task states.
+
+**Three.** The contract pins the timestamp expression as `datetime.now(timezone.utc).isoformat()` and
+shows `2026-08-06T20:01:40+00:00` as its output, claiming it matches the existing `last_indexed`.
+Run on this machine's `python3` it emits `2026-08-07T02:56:16.979370+00:00` — microseconds. The
+existing format has none, because `db.py:103` uses `isoformat(timespec="seconds")`, and the live
+`status.json` reads `2026-08-06T23:56:46+00:00`. Parsing still works, so nothing breaks at runtime,
+but R5's "matching the existing `last_indexed` format" is false as written and a test built from the
+documented example would assert a shape the pinned expression never emits. One word (`timespec=
+"seconds"`) settles it.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/edge-cases-r10-test-counts` | `skills/writing-specs/SKILL.md` | Good, bad, and edge-case scenarios: state what correct looks like, what wrong looks like, and enumerate the edges — anything left implicit the agent infers, and inference is where the defects come from | R10.4 (the `report["processed"]` count bullet); Tasks → task 7 | The enumeration asserts its own completeness ("six changes, not three"; "Named because a literal implementer will otherwise see four unexplained failures") but omits `test_index.py:106`'s `assert report2["skipped"] == 4`, which rises to 5 for the identical reason the four `processed` counts do — applying R10 to a scratch copy of the package yields five failures in `test_index.py` and seven suite-wide, so the implementer meets one unexplained failure in the file the spec promised to have fully mapped. |
+| 2 | `writing-specs/contradictory-requirement` | `skills/writing-specs/SKILL.md` | Requirements must be precise enough that the agent has nothing left to guess at; ambiguity the structure exposes is a decision not yet made | R10.4 (fixture bullet) vs Tasks → task 7 | R10.4 now requires the root-position case "in its own `cfg` variant, **not by extending the shared fixture**" and gives the reason (extending it shifts each `processed` count by two, not one), while task 7 still instructs "extend the fixture at `test_index.py:58` to cover the `~/.claude`-root position" in the same sentence as the +1 counts — so the task list, which is what an implementer executes, prescribes exactly the action R10.4 was revised to forbid and would break the counts it states. |
+| 3 | `writing-specs/timestamp-format-contract` | `skills/writing-specs/SKILL.md` | Database schemas and API contracts give the agent the real data structures and interface boundaries to build against, instead of letting it improvise shapes other components then fail to match | Contracts → `memsearch/memsearch/index.py` (Timestamps bullet); R5 | The pinned expression `datetime.now(timezone.utc).isoformat()` emits microseconds (verified: `2026-08-07T02:56:16.979370+00:00`), so it produces neither the second-precision example the same bullet gives nor R5's promised match with the existing `last_indexed` — which comes from `db.py:103`'s `isoformat(timespec="seconds")` and reads `2026-08-06T23:56:46+00:00` in the live `status.json` — leaving the format of the two fields the whole staleness math parses stated three mutually inconsistent ways. |
+
+### Round-2 violations — both fixed, verified against the tree
+
+- `core-conduct/explicit-error-handling` — **fixed.** The Contracts section now states the entry
+  write's read of the prior file is "fallible by design and never aborts the run": `OSError` and
+  `JSONDecodeError` are caught, a bad file is treated as an empty object, the condition is reported
+  as one line on stderr (landing in `scheduled-index.log`, R6) and never raised. It goes further than
+  the finding asked by making **both** writes atomic (temp file + `os.replace` in `db_path.parent`),
+  which closes the hole that produces the torn file rather than only absorbing it — `index.py:67` is
+  indeed a single non-atomic `write_text` today, so the diagnosis is correct. The downstream
+  consequence is stated rather than smoothed over ("with `chunks` absent the nudge stays silent for
+  that run"), and Scenarios "An unreadable status.json does not abort the run" and "A status.json
+  write survives a kill mid-write" cover both paths. Not re-cited.
+- `writing-specs/edge-cases` — **fixed.** The spec now says explicitly that the entry write "carries
+  those six keys over from the prior file; it does not recompute them", with the correct mechanism:
+  verified in the tree that `_write_status` derives all six from `dbmod.stats(conn)`
+  (`index.py:57-67`) and that `--full` unlinks at `index.py:73` *before* the connect at `:74`, so a
+  recompute would have stamped `chunks: 0`. Scenario "A full rebuild's entry write does not zero the
+  chunk count" pins it. **Note for persistence detection:** this round's violation 1 is also an
+  enumeration finding, but it is a *different* territory (R10's test-change list, not the entry
+  write) and is therefore filed under a new id — it must not be read as `writing-specs/edge-cases`
+  recurring.
+
+### Notes — what was checked and held
+
+- **Every file:line citation re-verified, and all of them are exact.** `config.py:56` /`57-60`;
+  `index.py:44-51`, `57-67`, `:67`, `:73`, `:74`, `:100`, `:125-127`, `:135-137`; `db.py:16`,
+  `112-120`, `121,125`, `:156`; `status.py:27`; `cli.py:66`; `pyproject.toml:23`;
+  `golden_queries.json` lines 2 and 4; `test_config.py:42,48`; `test_index.py:58,84,93,135,149,160`;
+  `memsearch/README.md:22`; the design doc at 58, 67, 70, 135 and 154-163; the plan at both 19 and
+  2828 with 3,079 lines total; `memory-system-split.spec.md:540`. `docs/decisions/` tops out at 0017,
+  so 0018/0019 are free.
+- **Task 10's premise confirmed by execution.** A bare `uv run pytest` reports "16 deselected",
+  matching the spec's "sixteen golden tests" exactly — the `-m golden` instruction is load-bearing
+  and correctly stated.
+- **The scenario counts in tasks 4 and 5 are right.** Fourteen nudge-facing scenarios and eight
+  install/uninstall scenarios, counted in the Scenarios block.
+- **R10.3's mechanism is sound, not just plausible.** `index.py:88` looks the weight up as
+  `cfg.weights[st]` where `st` comes straight from `_iter_docs`, so classifying by filename really
+  does apply `archive_doc: 1.0` — no second edit needed. Confirmed by the scratch-copy run, in which
+  the classification took effect without touching `chunk_doc`.
+- **Toolchain table re-verified live, every row.** `bash` 3.2.57 with no `timeout` binary on PATH,
+  `python3` 3.9.6 which parses `+00:00` and rejects `Z` (both confirmed by execution), `uv` 0.11.28
+  at `/opt/homebrew/bin`, `sqlite3` 3.51.0, macOS 25.5.0, `bin/memsearch` a one-line
+  `exec uv run --project`. `launchctl getenv PATH` returns empty, so the plist `PATH` key is as
+  load-bearing as claimed.
+- **Measurement drift, expected and harmless.** `CODING_MEMORY.md` now reads 3,364 lines / 294,558
+  characters against the spec's dated 3,232 / 285,187, and `sources` at `2026-07-18` is now 187 rows
+  against the stated 196 (the rebuild keeps migrating rows to today, 724 of them). Both are moving
+  targets the spec labels as such, and neither disturbs a conclusion.
+- **One understatement, not a violation.** R10 says the file "carries sessions **24 through 30**";
+  it actually carries session-numbered entries from session 20 (line 2601) onward, so the
+  three-week retrieval hole is larger than claimed, not smaller.
+- **Security territory clean.** No new dependency; the template commits `__HOME__` only and has a
+  scenario asserting it; `install-schedule` runs fixed `launchctl` argument vectors; plist `0644`,
+  `LaunchAgents` `0755`; the nudge still reads a plain JSON file, never the CLI, and exits 0 on every
+  path. The new atomic write lands in `db_path.parent`, not a shared tmp — no symlink-swap surface.
+- **Not cited, unchanged dispositions from prior rounds.** `/opt/homebrew/bin` in the plist `PATH`;
+  `scheduled-index.log` having no stated mode or rotation; the spec living at `docs/features/` rather
+  than `docs/superpowers/specs/` (gates.md's one-canonical-file discipline governs a file carrying
+  `phase` frontmatter and a checklist, and the repo layer wins).
+- **YAGNI, scope, and phase discipline still exemplary.** Scope ends at parent item 5; eight
+  non-goals named; `RUN_MAX_HOURS` correctly escalated to the user (task 9, now timing the cold
+  `--full` run — the right worst case, since `RUN_MAX_HOURS` must survive the longest run the
+  scheduler can start); R10's exit cost (no prune path, verified: `db.py` deletes only at 117 and 120
+  inside `replace_source`) now stated up front. Frontmatter remains `phase: planning`, `branch: none`.
+
+## Round 4 (new loop) — 2026-08-07T03:40:45Z
+
+- **Verdict: FAIL** (4 violations — all **new**; all three round-3 violations verified **closed**
+  against the live tree, none re-cited)
+- head_sha: `24e6e29e0a37ccfcf484f85518787c9fecf02b67`
+- spec_blob_sha: `7266fea3231dc030095ae43957e63cfded9fd489` (re-hashed; matches the invocation)
+- Rule sources read: `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`,
+  `skills/writing-secure-code/SKILL.md`, `rules/gates.md`, `CLAUDE.md`
+  (no `.claude/project-standards.md` exists in this repo)
+- Confidence: **high** — every finding was read out of the live source or reproduced by running the
+  command the spec names, not inferred from the spec's own account of itself.
+- Waived: none.
+
+### Layman summary
+
+**The three things you directed be fixed are genuinely fixed, and I checked each by hand rather
+than by reading the revision notes.** The missing `skipped` count is now derived from a stated rule
+instead of a list, and I applied that rule to all nine count assertions in `test_index.py`: the five
+the spec says move do move, the four it says stay do stay, and "seven failures suite-wide" is exactly
+right (five test functions in `test_index.py`, two in `test_config.py`). The fixture contradiction is
+gone — task 7 and R10.4 now both say the same thing. The timestamp is right, and I proved it by
+running Python 3.9.6 on this machine: a bare `isoformat()` really does emit microseconds, the pinned
+`timespec="seconds"` form matches `db.py:103`, and it matches the live `status.json`
+(`2026-08-06T23:56:46+00:00`) character for character.
+
+**The three design gaps you folded in are well built.** The decay rule closes a real hole — a dead
+scheduler now reads as *stale* with working remediation instead of "stuck" forever — and it is
+carried through the table, the falsifier and a scenario. The error-count robustness rule is right,
+and the archive-retrieval fix is the sharpest catch in the revision: I confirmed at `chunk.py:111`
+that archive chunks really would have landed in the generic `doc` bucket and been invisible to
+`--type episodic`, and that `RECALL_TYPES` already contains `episodic` with no `CHECK` on the
+column, so "no migration needed" is true.
+
+**What blocks: two of them can make the builder do the wrong thing; two are wrong numbers.**
+
+The first blocker is a **swapped label** in the same paragraph that has now been wrong three rounds
+running. The spec names `test_index.py:117` as "limit-scoped" and puts it in the *do-not-move* list.
+Line 117 is not the limit test — it is `test_changed_file_reindexes_only_itself`. The limit-scoped
+assertion is at `:149`, which the very same paragraph lists as one that **must** move. So the spec
+says both "the limit-scoped assertion moves" and "the limit-scoped assertion doesn't move", in a
+paragraph whose stated purpose is to stop an implementer touching the wrong line. The same list also
+names the stale comments at `:84` and `:160` but misses the equally stale ones at `:135` and `:148`.
+
+The second blocker is a **contradiction the new rule introduced and nobody swept for**. Adding the
+"unreadable error count" state means an absent `last_run_errors` must render a ⚠ line, never a fresh
+one — correct, and the spec argues it well. But three existing scenarios still say the line is
+*fresh* from a starting state that never mentions `last_run_errors` at all: the run-that-changed-
+nothing scenario, the "7 hours 59 minutes" branch, and the future-`run_started` scenario. Task 4
+tells the builder to write one test per scenario, so they will write a test that the classification
+table says must fail. One word per scenario fixes it.
+
+The two remaining findings are wrong numbers that cannot misdirect the build but should not go to
+you uncorrected. R3 still says "**Three** states beyond fresh/stale/unknown" and then lists four.
+And R10.6 says the plan sweep "returns **eleven** hits" — I ran the exact command the spec
+prescribes on the unmodified file and got **14** (10 if you match `CODING_MEMORY.md` with the
+extension). The four lines it names as asserting the retired rule are all correct; only the total
+is wrong.
+
+Worth saying plainly: this is now the third consecutive round where a *counted enumeration* in this
+spec fails to reproduce, while every *line-number citation* I checked was right. The pattern points
+at the counts, not at the analysis. Rather than patch these two numbers, the cheap fix is one
+mechanical sweep — recount the states, recount the sweep hits, and grep the Scenarios block for
+every "fresh" and pin `last_run_errors` in each.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/edge-cases-r10-test-counts` | `skills/writing-specs/SKILL.md` | Good, bad and edge cases stated explicitly and enumerated — anything left implicit the agent infers, and inference is where the defects come from | R10 → part 4 (The tests) / Task 7 | Round 3's omitted `skipped` assertion is closed, but the same enumeration now mislabels `test_index.py:117` as "limit-scoped" when it is `test_changed_file_reindexes_only_itself`'s `processed == 1` — the limit-scoped assertion is `:149`, which the same paragraph lists as one that *must* move — so the do-move and do-not-move lists assert opposite things about "the limit-scoped assertion", and the list of stale inline comments names `:84` and `:160` while omitting the equally stale ones at `:135` and `:148`. |
+| 2 | `writing-specs/fresh-scenarios-error-count` | `skills/writing-specs/SKILL.md` | Force State → Action → Outcome; a requirement you cannot phrase unambiguously as Given/When/Then is one you have not decided — and no requirement may be readable two ways | Scenarios ("A successful run that changes nothing…", "The threshold itself counts as stale", "A future run_started is not a run in progress") vs. R3 / Contracts classification row 5 | The new *unreadable error count* rule makes an absent `last_run_errors` render a ⚠ line and explicitly "not the fresh line", yet three scenarios assert `Then the line is fresh` from a Given that never pins `last_run_errors`, so the Scenarios block and the classification table demand opposite outcomes for the same input — and task 4 requires a hook test per scenario, forcing the implementer to guess which one wins. |
+| 3 | `writing-specs/r3-state-count` | `skills/writing-specs/SKILL.md` | Maintain the spec with production rigor; requirements the agent can satisfy and you can check (with `rules/core-conduct.md` — verify your own outputs before calling something done) | Requirements → R3 (lead sentence) | R3 announces "Three states beyond fresh/stale/unknown, each with its own line" and then enumerates four such states — in progress, stuck, degraded, and the newly added unreadable error count — so the requirement's own count contradicts the list beneath it, in a spec that elsewhere (task 4) warns that "a number written here … drifts". |
+| 4 | `writing-specs/plan-sweep-hit-count` | `rules/core-conduct.md` | Verify your own outputs before calling something done; debug from evidence, not symptoms | R10 → part 6 (The documents that assert the opposite) | R10.6 states as a dated measurement that "the sweep on 2026-08-06 returns eleven hits", but running the exact command it prescribes — `grep -n CODING_MEMORY docs/superpowers/plans/2026-07-17-memory-rag-index.md` — returns **14** on a file unmodified since 2026-07-17 (10 if matched as `CODING_MEMORY.md`), so the figure the paragraph's own "hand lists have been wrong twice" argument rests on is itself wrong, leaving the implementer three untriaged hits beyond the seven the spec accounts for. |
+
+### Round-3 violations — all three fixed, verified against the tree
+
+| round-3 id | status | evidence checked this round |
+|---|---|---|
+| `writing-specs/edge-cases-r10-test-counts` | **fixed as cited** (new defects in the same paragraph — see violation 1) | The generative rule is stated and I applied it independently to every count assertion in `test_index.py`. The five named as moving are correct: `:84` (4→5), `:106` `skipped` (4→5, the round-3 omission, now present), `:135` (4→5), `:149` (3→4), `:160` (2→3). The four named as static are correct: `:105` (`processed == 0` on a no-change run), `:117` (only the changed file reprocesses), `:136` (`skipped == 0` under `--full`), `:161` (error count). "Seven failures suite-wide" is exact — those five assertions live in five distinct test functions, plus `test_config.py`'s two. I also confirmed the mechanism: `make_cfg` (`test_index.py:65-74`) overrides `curated_docs` but inherits `exclude_paths` and `weights` from the real `config.json`, so lifting the exclusion really does make the fixture's `curated/CODING_MEMORY.md` a fifth source and `archive_doc: 1.0` really must land in the real config. |
+| `writing-specs/contradictory-requirement` | **fixed** | Task 7 now reads "cover the `~/.claude`-root position in **its own `cfg` variant, leaving the shared fixture at `test_index.py:58` untouched**", matching R10.4 word for word. The prescription that contradicted R10.4 is gone; the two-sided assertion (a `sources` row when `curated_docs` names it, none when it does not) survives in both places and in two scenarios. |
+| `writing-specs/timestamp-format-contract` | **fixed, proven by execution** | Ran on this machine's `python3` 3.9.6: bare `isoformat()` → `2026-08-07T03:45:43.454967+00:00` (microseconds, as the spec now warns); `fromisoformat('2026-08-06T20:01:40+00:00')` parses; `…Z` raises. `db.py:103` is `datetime.now(timezone.utc).isoformat(timespec="seconds")`, and the live `memory-index/status.json` carries `"last_indexed": "2026-08-06T23:56:46+00:00"` — so the pinned form, R5's "second precision" wording, and the existing field now agree exactly. |
+
+### Notes (non-blocking)
+
+- **The archive-retrieval catch is correct at the source level, not merely plausible.**
+  `chunk.py:111` is verbatim `recall = "decision" if "decisions" in str(path) else "doc"`;
+  `chunk_doc`'s signature already takes `source_type`; `chunk.py:141` is the digest path's
+  `else "episodic"`; `RECALL_TYPES` at `db.py:17` is `("decision", "episodic", "doc")`; and the
+  schema line (`db.py:72`) declares `recall_type TEXT NOT NULL` with **no** `CHECK`. Every clause of
+  R10.3's one-line-fix claim holds, including "no migration is needed".
+- **The decay rule is carried all the way through.** R3's decay bullet, the table's rows 1–2 bound
+  by `RUN_ABANDON_HOURS`, the "unusable" note under the table, falsifier clauses (c) and (g), and a
+  dedicated scenario all agree. Traced the 30-hour case by hand: `run_started` unusable → rows 1–2
+  skip → `last_run` usable and 30h old → row 4 stale with working remediation. Correct.
+- **The data-flow diagram was not swept.** Its outcome node still reads
+  `fresh · stale · in-progress · unknown` — missing stuck, degraded, and unreadable-count. Same root
+  as violations 2 and 3 (a new state added to the bullets, table, R5 and falsifier but not to the
+  summary surfaces). Fold it into the one sweep rather than treating it separately.
+- **`:135` and `:149` also carry stale inline comments.** `:135`'s reads
+  `# 2 docs + 2 transcripts, all reprocessed` and line 148 reads `# 2 docs + 1 transcript (the
+  newest)`. Both become wrong for exactly the reason `:84`'s and `:160`'s do. Cited inside
+  violation 1; repeated here so the fix list is complete.
+- **Line 3067 of the plan is not a "historical listing".** It reads "Update `CODING_MEMORY.md`
+  (active session + next steps)…" — a workflow instruction unrelated to indexing. It is correctly
+  left alone, but R10.6's blanket characterisation of "the rest" as historical code and test
+  listings does not describe it.
+- **Every line-number citation I checked is right**, including several the spec added this round:
+  `config.py:56` (`excludes = …`, must survive) and `:57-60` (the guard); `db.py:16`, `:17`, `:72`,
+  `:103`, `:112-120`, `:121,125`, `:156`; `index.py:43-54` (`_iter_docs`, both `source_type`
+  hardcodes inside the cited 44-51), `:57-67`, `:67`, `:73`, `:74`, `:100`, `:125-127`, `:135-137`;
+  `chunk.py:111`, `:141`; `cli.py:39` (`choices=["decision","episodic","doc"]`), `:66`;
+  `status.py:27`; `pyproject.toml:23`; `golden_queries.json` lines 2 (sqlite-over-qdrant, still
+  correct) and 4 (the falsified-premise query); `test_config.py:42,48`;
+  `test_index.py:58,84,93,105,106,117,135,136,149,160,161`; `memsearch/README.md:22`; the design doc
+  at 58, 67, **70** (`Z -.->|NOT indexed| S` — asserts the rule without containing the string, a
+  good catch) and 135, plus 154-163; the plan at 19, 2828, 2890, 2942 and 3,079 lines total;
+  `memory-system-split.spec.md:540`. 16 golden queries confirmed. `docs/decisions/` tops out at
+  0017, so 0018 and 0019 are free.
+- **Toolchain table re-verified live, every row**: `bash` 3.2.57, `python3` 3.9.6, `uv` 0.11.28 at
+  `/opt/homebrew/bin`, `sqlite3` 3.51.0, darwin 25.5.0. `launchctl getenv PATH` returns empty, so
+  the plist `PATH` key is load-bearing as claimed; `bin/memsearch` is the one-line
+  `exec uv run --project` wrapper; `memory-index/reindex.log` exists (Aug 6 19:56), distinct from
+  the new `scheduled-index.log`. `config.json` matches the spec exactly: `curated_docs` is
+  `["~/.claude/coding-memory", "~/.claude/docs", "~/.claude/PORTS.md"]` (no `~/.claude` root) and
+  `weights` is `curated_doc 1.5 / repo_doc 1.2 / transcript_digest 1.0`.
+- **Expected measurement drift, not a finding.** `CODING_MEMORY.md` now reads 3,364 lines /
+  294,558 bytes against the spec's dated 3,232 / 285,187 — an append-only file that grew during the
+  session. No conclusion depends on the exact figure.
+- **The nudge's existing contract (R4) is stated accurately.** `hooks/memsearch-nudge.sh` reads
+  `${MEMSEARCH_STATUS:-…}`, makes a single `python3` call, exits 0 silently when the file is absent
+  or `chunks` is 0 or non-numeric, prints one line, and is registered at `settings.json:71`. Every
+  "Unchanged" claim in the Contracts section checks out.
+- **Part B (core-conduct + security) clean, again.** No new dependency; the plist template commits
+  `__HOME__` only, with a scenario asserting no absolute path; `install-schedule` fails closed with
+  distinct exit codes per step and `plutil -lint` before bootstrap; rendered plist `0644`,
+  `LaunchAgents` `0755`; the only shell execution is fixed `launchctl` argument vectors with no
+  external input; the atomic status write renders into `db_path.parent`, not a shared tmp. Error
+  handling is stated at every boundary the design introduces, including the unpleasant ones (killed
+  run, truncated `status.json`, bootstrap that reports success while loading nothing). YAGNI holds:
+  every added constant and the new weight tier carries a named failure mode, scope still ends at
+  parent item 5, and `RUN_MAX_HOURS` is explicitly handed back to the user rather than widened.
+- **Unchanged dispositions from prior rounds** (not cited): the spec living at `docs/features/`
+  rather than `docs/superpowers/specs/` — gates.md's one-canonical-file discipline governs a file
+  carrying `phase` frontmatter and a checklist, and the repo layer wins; `/opt/homebrew/bin` in the
+  plist `PATH`; `scheduled-index.log` having no stated mode or rotation. Frontmatter remains
+  `phase: planning`, `branch: none`.
