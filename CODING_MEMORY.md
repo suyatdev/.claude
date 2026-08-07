@@ -3482,3 +3482,54 @@ and holds exactly; `launchctl getenv PATH` still empty.
 
 Spec: 895 → **1,021 lines**, blob `748b108b`. Still `phase: planning`, `branch: none`.
 **Round-5 compliance + observability judging is owed and not yet run.**
+
+## Session 33 — loop-2 rounds 5 through 9: two bars that could not fail, and one guard that blessed what it forbade
+
+Five judge rounds (5–9), ten pane dispatches, four spec commits. `main` @ `254cb98`.
+Spec 1,021 → 1,270 lines, still `phase: planning`, `branch: none`.
+
+**Round 5's state-table rewrite held.** Both judges confirmed independently: all four round-4
+violations closed, all 44 scenarios resolve to the state they claim, all eight states covered.
+Compliance went 4 → 1 violations.
+
+**R9's acceptance bar could never pass, for three rounds running.** The advisory judge found it;
+verified from source: `search.py:61-64` fuses two retrievers at `RRF_K=60`, `:80` multiplies by
+weight (max `curated_doc: 1.5`) — hard ceiling `2 × 1/61 × 1.5 = 0.04918`. The bar read `≥0.30`,
+six times the maximum emittable. A live query scored 0.046514. **The disproof was already in the
+document** — the Baseline two paragraphs below recorded the returning hits at ~0.02, and sat there
+for five rounds. Round 6 replaced it with a floor set from the same run it grades (cannot fail);
+round 7 added a falsifier clause to stop that step being skipped (a guard on a guard); round 8
+deleted the clause on user decision. *A measurement needing that much scaffolding was not measuring
+anything.*
+
+**The drift class was enumerated, not patched again (user decision).** Rounds 5, 6 and 7 each fixed
+the cited instance and left the class open; round 7's own derived-surface list was stale, naming a
+section round 5 had deleted. Replaced with a mechanically-swept inventory — **seventeen** surfaces,
+not the three the old list named — keyed by section name, never line number. The first draft cited
+line numbers and they were stale inside one editing session.
+
+**The worst defect of the session was mine.** Round 8's anti-gaming rule ("the five queries must
+span the corpus size range") pinned eleven chunk counts read from `memory.db`. Ten were right; the
+eleventh was this spec's own file, listed at 14 chunks because the index last read it at
+`2026-08-06T20:01:42Z` at ~250 lines against a 1,214-line file (`MAX(line_end)` = 250). It would
+have qualified as the "small target" while being one of the largest — **the rule satisfied by doing
+what it forbids.** A spec whose thesis is *"the index lies about its freshness"* calibrated its
+guard by asking the index instead of the files. No count is pinned anywhere now; they are computed
+from source at task-8 time. → memory `feedback_measure_from_source_not_the_derived_store`.
+
+**Also closed:** falsifier (a) demanded a stale line whenever `last_run` exceeded `STALE_HOURS`
+with no exception for the states outranking stale — and state 2 guarantees `last_run` is older than
+8h once `run_started` passes 8h, so (a) and (g) could not both pass as hook tests; any faithful
+build would have been condemned by the spec's own falsifier. R9's spread rule was written strictly
+in one place and loosely in the two that graded it. R9 had no pass mark (one-of-five satisfied every
+sentence) — now all five. `falsifier` appeared **zero** times in the task list, so the section
+defining how the feature could be proven wrong had no step that read it → new task 10c.
+
+**Judge-verified figures** (all re-run, not recalled): archive 300,160 chars / 3,484 lines; **1.62×**
+the largest indexed doc (`vibe-scape/.../live-presence-plan.md`, 184,620 chars) — round 5's "2.3×"
+ranked by chunk count while the arithmetic was character-based and compared bytes to chars; plan
+sweep 14 hits; 20 session headings in two forms, zero of the shape the spec named; history blocks
+are 188/1,214 lines (15.5%), mid-pack against sibling specs.
+
+**Open:** round-9 judging owed. Checkpoint 2 (planning → implementation) still owed — literal
+`gate confirmed` only.
