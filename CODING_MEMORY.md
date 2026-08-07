@@ -4060,3 +4060,56 @@ a **cold** `--full` run, re-choose `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS` against i
 10a/10b, 10c (falsifier clauses a–j), 11 (judge, PR). Still nothing installed and **still nothing
 indexed** — `memory.db` holds zero `archive_doc` rows, so the new golden query cannot pass until
 task 9 runs. Expected, not a regression.
+
+## 2026-08-07 — session 41 (continued): task 8b's baseline, and task 9 goes live
+
+### Task 8b — the baseline said something R9 did not expect
+
+Ran the five committed queries pre-R10 (archive configured, **not yet indexed**), user-confirmed as
+the *before* half of R10's noise measurement. Two of five met both clauses — recorded as an
+observation, **not** R9's verdict, which is task 10b's after the index run.
+
+**The size effect runs opposite to R9's stated worry.** R9 assumes a fat target has *more* chances
+to land two hits, so five fat targets would pass while measuring nothing. Measured, the two
+**smallest** targets (6 and 9 chunks) were the only clean passes; the larger ones were displaced not
+by each other but by the **judge verdicts and ADRs written about them** — `verification-marker-gate`
+lost its top two slots to `coding-memory/observability-judge/` and `compliance-judge/` files,
+`phase-guard-hook` to ADR 0011 and a judge verdict, all at the same `curated_doc` 1.5 weight. A
+small feature has no paper trail and so faces no competitor; a mature one is outranked by its own.
+**Consequence for 10b: crowding by ADRs and verdicts is a different finding from crowding by the
+archive, and only the second is R10's cost.** Without this baseline that distinction was unavailable
+and a 10b failure would have been blamed on the archive wholesale.
+
+Scores clustered 0.0366–0.0488 against a 0.049180 ceiling — rank does nearly all the work, more
+evidence the retired 0.30 floor was unreachable rather than merely strict.
+
+### Task 9 — the feature watched itself work
+
+Installed at 19:04, `state = running`, `runs = 1`, plist `0644`, template still 0 absolute paths.
+
+**R5's two-write protocol worked on its first production run.** The entry write stamped
+`run_started` and *carried* the six prior keys instead of recomputing them, so `chunks` stayed
+**7631** rather than reading a freshly-emptied DB as `0` — the failure that would have blanked the
+session line for an entire multi-hour rebuild. The nudge then classified that live state as
+**state 1**, with no remediation command. The `SessionStart` line earlier in the very same session
+had been **state 4**, unknown age: the 4 → 1 transition was observed live, not simulated.
+
+**R10 confirmed in the real index**: `~/.claude/CODING_MEMORY.md` → **229 chunks**, the largest
+single source, `archive_doc` / `episodic` / weight **1.0**; both project copies likewise, with zero
+`archive_doc` rows carrying a non-`episodic` recall type. The **exact-path** check earned its
+wording — the two project copies alone would have satisfied a loose "a row in each repo root" test
+while the archive stayed unreachable.
+
+### The concurrency hazard task 9 had to route around
+
+`RunAtLoad` starts a run at bootstrap and `StartInterval` fires again 6h later, and `memsearch` has
+**no lock** — so a cold `--full` run started manually would be a *second* indexer if it overran the
+next firing. Sequenced instead: wait for the incremental run, snapshot its `status.json` before
+`--full` overwrites `run_started`/`last_run`, **bootout the agent**, then time the cold run into
+`memory-index/task9-timing.txt`. ⚠️ **The agent is booted out for the duration and must be
+re-installed** with `memsearch/bin/install-schedule`.
+
+### Not done
+
+Task 9's timing half (cold `--full` duration, then re-choose `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`
+**with the user**), 10a/10b, 10c, 11.
