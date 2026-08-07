@@ -1768,3 +1768,184 @@ reads at task 10(b) (spec:1271-1272) as well as R9 (spec:322).*
 ### Waivers
 
 None. No violation has ever been waived on this spec, and none is permitted on it.
+
+---
+
+## Round 11 — 2026-08-07 · `main` @ `e707767` · blob `b71672c3` · **PASS** (0 violations)
+
+Judged against `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`, and
+`skills/writing-secure-code/SKILL.md` (territory touched: shell execution, scheduled background
+job, file reads at a boundary). No `.claude/project-standards.md` exists in this repo; the repo
+layer is `CLAUDE.md` + `rules/gates.md`. Blob sha verified as `b71672c3082aa6b495c10dee328532134810b4e0`
+before judging — it matched the one supplied.
+
+### In plain English
+
+The thing under test this round was whether the spec's *anti-gaming rule* — the one that stops
+someone from picking five conveniently fat targets and calling the retrieval measurement a pass —
+now says the same thing everywhere it appears. Two details have to match across every copy: **what
+you count** (a whole feature, summing all its files — not one file) and **what you rank it
+against** (every feature in `docs/features/`, not just the five you chose). Round 10 fixed three
+copies and missed a fourth, and the missed one was the Gherkin scenario, i.e. the copy that turns
+into a real automated check. A wrong test is worse than no test, which is why that missed copy was
+a blocking finding.
+
+This round the author stopped patching named instances and swept for the class instead. I checked
+every surface in the document that restates either detail — seven of them — and they all agree.
+The Gherkin scenario now names the population explicitly and even asserts the negative case
+(`And the population is not the five chosen targets`), so the executable check encodes the strict
+rule rather than the weak one. Just as important, the little two-item list that caused the round-10
+miss was **deleted** rather than extended; the spec now says "every restatement is a surface the
+sweep must find" and explains why no list appears. That is the right fix — the list was the failure
+mode.
+
+Two smaller repairs also hold up. Task 1b now says `git commit --allow-empty`, which closes a real
+hole: the sweep changes no files, so round 10's instruction to "record the output in the commit
+message" had no commit to attach to. And the archive's size figure — which rotted mid-round-10 from
+its own session's writing — is now pinned in exactly one caveated place. I re-measured it on disk:
+**317,249 characters, 3,723 lines**, and 317,249 ÷ 184,620 = **1.72×**. All three numbers match the
+spec exactly.
+
+I did not take the spec's word for anything. I re-measured every stored inventory in it against its
+real authority — the ten-row `test_index.py` table, the seven-functions/eight-assertions split, the
+fourteen-hit plan sweep with its four-current/ten-historical division, the golden suite's 11/3/2
+composition, the live `config.json`, and eight pinned tool versions. Every single one was correct.
+That is unusual, and it is the reason this passes with high confidence rather than grudgingly.
+
+**Verdict: pass.** The gate is clear; the spec may go to the user review gate and then to
+`superpowers:writing-plans`.
+
+### Violations
+
+None.
+
+| id | rule_source | rule | where | why |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+`writing-specs/derived-surfaces-out-of-sync` — cited in rounds 8, 9 and 10 — is **closed**. All
+seven surviving surfaces agree with R9, the authority. `writing-specs/r9-pass-mark-unstated-at-execution`,
+closed in round 10, **stays closed** (task 10b, spec:1299-1300, still carries the "iff all five" verdict).
+
+### The class under test, surface by surface
+
+Keyed by section, never by line number alone (R3's own method). Population = *every feature under
+`docs/features/`, per-feature summed, not the five chosen*; unit = *the feature, summing every file
+belonging to it*.
+
+| # | Surface | Section | Unit | Population | Agrees |
+|---|---|---|---|---|---|
+| 1 | R9 authority | R9 → spread rule (spec:335-350) | per-feature | every feature under `docs/features/` | authority |
+| 2 | Gherkin — "The measurement queries span the corpus size range" | Scenarios (spec:1039-1045) | `per-feature chunk count` | `every feature under docs/features/` + negative assertion | ✓ |
+| 3 | Gherkin — "Retrieval is scored against the two rank clauses" | Scenarios (spec:1037) | `per-feature chunk count` | n/a (recording only) | ✓ |
+| 4 | Falsifier clause (i) | Falsifier (spec:1084-1088) | "counted per feature — every file belonging to it, summed" | "every feature under `docs/features/` and *not* the five chosen" | ✓ |
+| 5 | Task 8b | Tasks (spec:1252-1257) | "the feature, not the file: sum every file" | "every feature under `docs/features/`, per-feature summed — not against the five chosen" | ✓ |
+| 6 | Task 10(b) | Tasks (spec:1300-1301) | "per-feature chunk count" | n/a (recording only) | ✓ |
+| 7 | Task 1b sweep scope | Tasks (spec:1190) | names "R9's two clauses and its spread rule" as in-scope | — | ✓ |
+
+The round-10 miss is structurally prevented, not merely patched: spec:357-361 states the rule is
+authoritative, declares every restatement a swept surface, and records *why no list appears*
+("The list was the failure mode, not the fix"). The two-entry mini-inventory that caused the miss
+is gone.
+
+R3's half of the same class re-swept independently — all eight state names, the eight rendered
+lines, the Mermaid node (spec:644), the hook-contract ordering claims (spec:714-717), decisions 5
+and 6, the R2 correction block (spec:119-125), falsifier clauses (a)/(f)/(g)/(h) and their
+derivation note (spec:1094-1095), the four Non-goals that name states, and all 22 nudge scenarios
+traced through the table by hand. Every one resolves to the state the table assigns. No disagreement.
+
+### Everything re-measured from source this round (not recalled)
+
+| Claim in spec | Where | Re-measured | Result |
+|---|---|---|---|
+| archive 317,249 chars | spec:589 | `wc -m ~/.claude/CODING_MEMORY.md` | **317249** ✓ |
+| archive 3,723 lines | spec:590 | `wc -l` | **3723** ✓ |
+| largest indexed doc 184,620 chars | spec:592 | `wc -m` on the vibe-scape plan | **184620** ✓ |
+| multiplier 1.72× | spec:591 | 317249 ÷ 184620 = 1.7184 | ✓ |
+| only one pinned size figure | spec:594-597 | grep for `317,249\|3,723\|1.72` | 1 occurrence each ✓ |
+| multiplier not restated below | spec:606-609 | grep `1.62` → only the historical mention | ✓ |
+| `curated_docs` = 3 entries, not `~/.claude` root | spec:458 | `memsearch/config.json` | ✓ exact |
+| weights 1.5 / 1.2 / 1.0 | spec:466-471 | `config.json` | ✓ exact |
+| repo_roots = vibe-scape, Snatch-Bracket | spec:488 | `config.json` | ✓ only two |
+| project copies 159 / 119 lines | spec:488, 1263 | `wc -l` both | **159**, **119** ✓ (agree with each other) |
+| "the three copies" | spec:487 | find all `CODING_MEMORY.md` | 3 on indexed paths (mtg-wizard exists but is not a repo_root) ✓ |
+| `config.py:56` `excludes =` survives; `:57-60` is the guard | spec:481-484 | read | ✓ exact |
+| `db.py:16` SOURCE_TYPES, `:17` RECALL_TYPES has `episodic` | spec:485, 501 | read | ✓ exact |
+| `chunk.py:111` recall ternary; `:140-141` episodic | spec:492-500 | read | ✓ exact |
+| `index.py:44-51`, `:57-67`, `:73-74`, `:100`, `:125-127`, `:135-137` | Contracts, decision 6 | read all six | ✓ exact |
+| `search.py:19` RRF_K=60, `:61-64` two retrievers, `:80` weight | spec:381-387 | read | ✓ exact; ceiling 2×(1/61)×1.5 = 0.04918 ✓ |
+| `status.py:27` prints `last_indexed` | spec:284, 698 | read | ✓ exact |
+| `cli.py:39` three choices, `:66` returns 0 | spec:494-496, 96 | read | ✓ exact |
+| `test_index.py` 10-row table (`:84`→`:161`) | spec:519-529 | read every cited line | **10/10 exact**, incl. labels |
+| `:117` is the changed-file test, `:149` limit-scoped | spec:531-535 | function boundaries | ✓ both correct |
+| 4 inline comments to fix | spec:540-543 | read `:84`,`:135`,`:148`,`:160` | ✓ all four verbatim |
+| 7 failing functions from 8 assertions | spec:546-549 | mapped assertions→functions | ✓ exactly 7 / 8 |
+| `test_index.py:58` fixture writes into curated dir | spec:550-552 | read | ✓ exact |
+| `test_config.py:42`, `:48` | spec:45, 506-508 | read | ✓ exact |
+| `golden_queries.json` line 4 is the doomed query, line 2 still correct | spec:47, 561-563 | read both | ✓ exact |
+| golden entry 11 = file line 12, `must`, episodic+since, `.jsonl` | spec:1288-1290 | read | ✓ exact, and it is the 11th entry |
+| suite = 16 = 11 must + 3 stretch + 2 negative | spec:422-428, 1283 | counted | ✓ 11/3/2 |
+| `test_golden_queries.py:37-41` presence-only; `:47-52`, `:57-60` warn | spec:419-425 | read | ✓ exact |
+| `pyproject.toml:23` `addopts = "-m 'not golden'"` | spec:1276 | read | ✓ line 23 exactly |
+| `README.md:22` invariant text | spec:306 | read | ✓ verbatim |
+| design doc 58, 67, 70, 135, 154-163 | spec:568-569 | read all | ✓ exact, incl. the promotion rationale |
+| plan is 3,079 lines | spec:571 | `wc -l` | **3079** ✓ |
+| sweep returns 14 hits | spec:572-573 | `grep -n CODING_MEMORY` | **14** ✓ |
+| 4 current (19, 2828, 2890, 2942) / 10 historical | spec:574-579 | line numbers + content | ✓ **all 14 match exactly**, and the 4 do assert the retired rule |
+| promotion stopped: session-log 2026-07-16, decisions 2026-07-19 | spec:447-448 | last dates in both | ✓ both |
+| `launchctl getenv PATH` is empty | spec:735-737 | ran it | ✓ empty |
+| `reindex.log` exists, distinct from `scheduled-index.log` | spec:742-744 | `ls memory-index/` | ✓ |
+| bash 3.2.57 · python3 3.9.6 · uv 0.11.28 at `/opt/homebrew/bin` | Toolchain | ran each | ✓ all three exact |
+| Darwin 25.5.0 | Toolchain | `uname -r` | ✓ 25.5.0 (see note 4) |
+
+### Notes (non-blocking)
+
+1. **Task 8 chooses the five targets; task 8b confirms the spread rule — and falsifier (d) freezes
+   the queries in between.** Task 8 (spec:1240-1242) says only "(R9)" and states no selection
+   constraint; task 8b (spec:1255-1257) says "Confirm at least one target is in the bottom third".
+   If the confirmation fails, the remedy — re-pointing a query — is itself falsifier (d)
+   (spec:1076-1077). Not cited: no surface *disagrees* with another, and R9:363 already places the
+   count computation "at task-8 time", which licenses ranking the population *before* the queries
+   are run so a bad sample is caught while it is still free to fix. Worth one clause in task 8 all
+   the same: choose against the ranking, then commit.
+2. **A third instance of round 10's note 1 now exists.** spec:257-259 ("a cold run approaching
+   `RUN_ABANDON_HOURS` makes state 5 fire — with the index command — while the first run is still
+   alive") joins decision 5 (spec:88-92) and the lock/pidfile Non-goal (spec:1152-1155). Read as
+   *first-ever* run (`last_run` absent) the table gives **state 3** — the log, no index command —
+   not state 5. The contrast with "the second concurrent indexer" in the same sentence makes
+   "the originally-started run" the intended reading, under which the table agrees. Still a note,
+   for the reasons round 10 gave: all three defer explicitly to the table, both branches are
+   correctly covered by scenarios (spec:809-814 and spec:835-842), no executable check derives from
+   the prose, and the error is conservative. Task 1b's sweep should reconcile the wording.
+3. **`pytest` is named as a tool but is not in the pinned toolchain table.** spec:1276-1281 and
+   spec:1280 invoke `uv run pytest -m golden -q`. Not cited: `writing-specs:30-33` targets the
+   agent proposing a remembered version; pytest is a pre-existing locked dev dependency of
+   `memsearch`, not something this spec introduces or selects.
+4. **The toolchain table labels `25.5.0` as "macOS".** It is the Darwin kernel release (`uname -r`);
+   `sw_vers -productVersion` reports **26.5.2**. The number is real and re-measured — only the label
+   names the wrong version series.
+5. **Length is up again: 1,289 → 1,318 lines.** Round-by-round forensics remain a large share.
+   `writing-specs:41-44` (tokenization) and `core-conduct:33-35` (context budget) stay under real
+   pressure. Not cited, and less so than in prior rounds: this round *deleted* two enumerations and
+   a duplicated multiplier, so the growth is now design content rather than accumulated meta. ADRs
+   0018/0019 (tasks 2 and 7) remain the natural home if a future round wants to shrink it.
+6. **The spec lives at `docs/features/`, not `writing-specs`' default `docs/superpowers/specs/`.**
+   Correct and not a finding: `rules/gates.md`'s one-canonical-file discipline governs feature-scale
+   work, the repo layer takes precedence on conflict, and spec:12-13 records the single-file choice
+   against ADR 0017.
+7. **Security territory is clean.** `writing-secure-code` fires on the shell-execution and
+   external-input surfaces (launchctl, the install script, `status.json` parsing). No secrets; no
+   absolute path committed (`__HOME__` placeholder, pinned by spec:961-965 and task 5); `plutil
+   -lint` validates before bootstrap; the plist is mode `0644` and `LaunchAgents` `0755`; every
+   install path fails closed with a distinct exit code naming the failing step; timestamps are
+   validated (parses **and** not in the future) before use; the entry-time status read catches
+   `OSError`/`JSONDecodeError` explicitly rather than swallowing. No user-controlled data reaches a
+   shell.
+8. **Human-owned trade-offs are handed back, not decided.** `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`
+   against task 9's measured cold run (spec:255-272, task 9), the retired score clause
+   (spec:379-380, user decision), and the `archive_doc` weight tier (spec:465, user decision) are
+   all recorded as user calls, satisfying `core-conduct:23`.
+
+### Waivers
+
+None. No violation has ever been waived on this spec, and none is permitted on it.
