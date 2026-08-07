@@ -3230,3 +3230,62 @@ Compliance gate **passed** on blob `50ad053`. Verdict is fresh only while that b
 should be batched into one revision if they are taken at all.
 
 **Next:** user review gate on the spec, then **checkpoint 2** (literal `gate confirmed`) → branch.
+
+## 2026-08-06 — session 30 (cont.): user reverses course; R10's mechanism found broken
+
+**User decision reversed the earlier call: INDEX `CODING_MEMORY.md`.** First attempt (`3b793fa`)
+specified only lifting the exclusion. **Loop 2 round 1: both judges FAIL.** Corrected in `84bf220`,
+blob `68bb8fb2`. Round 2 not yet dispatched.
+
+### The finding that matters — lifting the exclusion would have done nothing
+
+**`~/.claude/CODING_MEMORY.md` is not on any indexed path.** `curated_docs` is
+`~/.claude/coding-memory`, `~/.claude/docs`, `~/.claude/PORTS.md` — **not the `~/.claude` root**.
+Verified: `CLAUDE.md` and `MEMORY.md` are **0 rows each**; `PORTS.md` is indexed only because it is
+named individually. So the diagnostic's "0 chunks, no `sources` row" had **two sufficient causes**
+and the spec credited one — the identical confounded-proxy error its own measurement-traps section
+records. Un-banning a file the walker never visits changes nothing.
+
+**And every check would have passed vacuously:**
+- The fixture at `test_index.py:58` writes `CODING_MEMORY.md` *into the curated directory* — a
+  walked path production does not have. **The fixture pre-created the condition under test**
+  (cf. `feedback_fixture_must_not_pre_create_state`).
+- The scenario and task 9 said "in every repo root"; `~/.claude` is not one, so the two small
+  project copies (278 lines) satisfied them while the 3,232-line archive stayed unreachable.
+- **R9 — the designated noise instrument — would have measured a corpus grown by 17k chars instead
+  of 285k, come back clean, and "cleared" an untested risk.** A green measurement of a change that
+  never happened. Exactly the failure mode this whole feature exists to kill.
+
+### Compliance judge: three wrong coordinates, all verified, one destructive
+
+- Guard is **`config.py:57-60`**, not 56-59. **Line 56 is `excludes = tuple(...)`** — the stated
+  range would delete it and break every `load_config` caller.
+- Golden query is **line 4**, not 2. Line 2 is the still-correct sqlite-over-qdrant query, so a
+  literal builder would have deleted a passing test and left the broken one.
+- `plans/2026-07-17-memory-rag-index.md` asserts the invariant at **both line 19 and line 2828**;
+  only 19 was named. That file is 3,079 lines and sits in the indexed `docs/` corpus.
+- Test work is **six changes, not three**: four `report["processed"]` counts at
+  `test_index.py:84,135,149,160` each shift by one, and `:93` is a compound assertion that cannot
+  both flip and stay unchanged — it must be split.
+
+The judge noted these coordinates were **correct in the round-4 entry and regressed** — the revision
+was written from the prior draft rather than re-read against the tree. Accurate; corrected by
+re-reading every one.
+
+### ✅ User decision — the weight tier
+
+`_iter_docs` (`index.py:44-51`) hardcodes `source_type` per bucket: `curated_docs` → `curated_doc`
+(**1.5**, tied with ADRs), repo roots → `repo_doc` (**1.2**). Adding the file to `curated_docs`
+alone would rank narrative equal to the decisions it narrates. **User chose a new `archive_doc`
+tier at 1.0**, classified **by filename** so all three copies are consistent. `db.py:16` validates a
+fixed `SOURCE_TYPES` tuple, so this is a four-file change.
+
+### Motivation still verifies — the reasoning was never the problem
+
+Promotion stopped (`session-log.md` 2026-07-16, `decisions.md` 2026-07-19, sessions 24-30 only in
+`CODING_MEMORY.md`); `is_excluded` is a substring match; `digest_input_char_cap` is transcript-only.
+Observability judge adds one nuance for ADR 0019: **ADRs and `pr-tracking.md` are current and
+indexed**, so what the exclusion loses is the *narrative log*, not the decision record.
+
+**Next:** dispatch loop-2 round 2, both judges, blob `68bb8fb2`. Reuse ids
+`writing-specs/r8-missing-config-validator` and `writing-specs/readme-drift`. No waivers.
