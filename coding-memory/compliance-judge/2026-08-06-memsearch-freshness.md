@@ -1949,3 +1949,131 @@ traced through the table by hand. Every one resolves to the state the table assi
 ### Waivers
 
 None. No violation has ever been waived on this spec, and none is permitted on it.
+
+---
+
+## Round 12 — 2026-08-07 · `main` @ `937a919` · blob `c148cda8` · **PASS** (0 violations)
+
+Judged against `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`, and
+`skills/writing-secure-code/SKILL.md` (territory touched: shell execution via `install-schedule`/
+`launchctl`, a scheduled background job, and parsing an untrusted-on-disk `status.json` at a
+boundary). No `.claude/project-standards.md` exists in this repo; the repo layer is `CLAUDE.md` +
+`rules/gates.md`. Blob sha verified as `c148cda8875e9610674ce4f66decc0a21bd9ee92` before judging —
+it matched the one supplied.
+
+Scope: a single-issue delta on an already-passing spec, raised by the advisory observability judge.
+The two deleted derived-surface inventories are a settled, user-directed structural change and were
+not re-litigated; their absence is not treated as a finding.
+
+### In plain English
+
+The rule under test decides how the retrieval measurement picks its five test queries. It says the
+targets have to be spread across sizes — at least one small, at least one large — so nobody can
+quietly pick five fat targets and call an easy pass a real one. Round 11 nailed down *what you
+measure against* (every feature in `docs/features/`, counted per feature). What it never said was
+what a "third" actually **is**.
+
+That mattered more than it sounds. If a "third" meant a slice of the *value range* — smallest count
+to largest, cut in three — then one unusually huge feature stretches the range so far that a
+perfectly ordinary mid-sized feature lands inside the "bottom third". You could then pick four big
+targets plus one middling one and satisfy the letter of the rule, which is the exact sample the
+spec's own falsifier calls a failure. The rule and its falsifier disagreed, and nothing in the
+document could reveal it, because all four copies of the rule were vague in *identical* ways. They
+agreed with each other perfectly while the thing underneath them was undecided. That is the useful
+lesson of this round: **copies agreeing is not the same as a rule being defined.**
+
+The fix says a third is a **rank tertile** — sort every feature by size, the bottom third is the
+lowest ⌊N/3⌋ of them and the top third the highest ⌊N/3⌋ — so position in the queue decides, not
+distance along a rubber ruler that one outlier can stretch. I checked the arithmetic across
+population sizes (N = 3, 4, 9, 10, 11): the two thirds never overlap, and there is always at least
+one genuinely middle entry belonging to neither, so the scenario's new line `And a mid-ranked target
+does not satisfy either third` is *derivable* from the definition rather than a fifth independent
+rule that could drift away from it. Under the new reading the four-large-plus-one-medium sample is
+now unambiguously a falsification, which is what the falsifier always claimed.
+
+I then swept the document mechanically for every occurrence of `third`, `tertile`, `span`, `rank`,
+`population`, and `per-feature` rather than trusting the claim that there are four surfaces. There
+are four, and they are the four named: R9 itself (the authority), the Gherkin scenario, falsifier
+clause (i), and task 8b. All four now state the same three things — the population, the counting
+unit, and the tertile definition. Two of them (R9, task 8b) spell out `⌊N/3⌋`; the other two say
+"rank tertiles ... not slices of its value span" and point at R9 as authoritative, which is
+consistent, not a disagreement.
+
+Leaving **N** unpinned is correct here, not a gap: it is computed at task-8 time by the same
+per-feature rule as the targets, and the document's whole thesis is that a number stored today is
+wrong by the time it is read. I verified the population is well-formed independently —
+`docs/features/` currently holds **11 files but 10 features**, which is exactly the `.md` +
+`.spec.md` collapse the rule describes, and N = 10 gives thirds of 3 / 4 / 3.
+
+**Verdict: pass.** The spread rule is fully determined — population, counting unit, and tertile
+definition — and consistently stated on all four surfaces. The gate is clear.
+
+### Violations
+
+None.
+
+| id | rule_source | rule | where | why |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+`writing-specs/derived-surfaces-out-of-sync` (open rounds 8, 9, 10) and
+`writing-specs/r9-pass-mark-unstated-at-execution` both **stay closed** — this round's edit landed on
+all four surfaces at once, and the mechanical sweep found no fifth.
+
+### The rule, surface by surface
+
+Keyed by section, never by line number alone (R3's own method); line numbers given only as a
+reading aid against blob `c148cda8`.
+
+| surface | population | counting unit | tertile |
+|---|---|---|---|
+| R9 — *derived surfaces are swept, not listed* (authority), spec:335-364 | every feature under `docs/features/`, per-feature summed, not the five | the feature, summing every file belonging to it | rank tertile; lowest/highest ⌊N/3⌋; N counted at task-8 time, unpinned |
+| Gherkin *The measurement queries span the corpus size range*, spec:1053-1061 | stated, plus the explicit negative `And the population is not the five chosen targets` | `ranked by per-feature chunk count` | `thirds are rank tertiles of that population, not slices of its value span` + `a mid-ranked target does not satisfy either third` |
+| Falsifier clause (i), spec:1099-1106 | "every feature under `docs/features/` and *not* the five chosen" | "counted per feature — every file belonging to it, summed" | "the thirds are **rank tertiles** of that population rather than slices of its value span" |
+| Task 8b, spec:1270-1276 | "Rank against every feature under `docs/features/`, per-feature summed — not against the five chosen" | "the feature, not the file: sum every file belonging to that feature" | "lowest ⌊N/3⌋ and highest ⌊N/3⌋ by rank — not slices of its value span" |
+
+Task 1b (spec:1207) references "its spread rule" as a sweep target — a pointer, not a restatement,
+so it is not a fifth surface to keep in sync.
+
+### Checks I ran rather than accepted
+
+1. **Blob verified** before reading (`git hash-object` = `c148cda8875e9610674ce4f66decc0a21bd9ee92`).
+2. **Mechanical sweep** for `third|tertile|span|N/3|rank` and `chunk count|per-feature|population` —
+   four surfaces, no fifth, no stragglers on the old wording.
+3. **Tertile arithmetic** at N = 3, 4, 9, 10, 11: `2·⌊N/3⌋ < N` always, so the thirds are disjoint
+   and a non-empty middle band always exists; the scenario's mid-ranked assertion follows.
+4. **Population well-formedness** re-measured on disk: `docs/features/` = 11 files, 10 features.
+5. **Falsifier coherence**: four-large-plus-one-medium is a falsification under rank tertiles, and
+   R9's "any five as their own population makes the rule unfalsifiable" argument (spec:338-344)
+   still holds under the new definition (⌊5/3⌋ = 1 → smallest and largest always qualify).
+6. **Security territory** re-checked for the delta: none touched. The surrounding design remains
+   clean — `__HOME__` placeholder with a scenario asserting no committed absolute path, fail-closed
+   install exit codes, explicit `OSError`/`JSONDecodeError` handling, no user data reaching a shell.
+
+### Notes (advisory, non-blocking)
+
+1. **Tie-handling at the tertile boundary is undefined.** "The lowest ⌊N/3⌋ entries" is not a unique
+   set when features tie on chunk count at the boundary. It is benign — a target tied with a
+   bottom-third member is by value indistinguishable from one, so no reading weakens the guard the
+   way the value-span reading did — but task 8b should record the tie-break it used alongside the
+   counts.
+2. **N < 3 would make both thirds empty** (⌊N/3⌋ = 0) and the rule unsatisfiable. Unreachable in
+   practice — the population is already 10 and includes this spec's own file — so it does not earn
+   spec text; noted only in case the population definition is ever narrowed.
+3. **R9's headline sentence (spec:335-336) still says "span the corpus size range."** Read in order
+   the section is determinate, because spec:338 and spec:346 override both loose readings of
+   "range". Flagged only because a sweep that quotes the headline alone would quote the weaker
+   phrasing.
+4. **"all four surfaces stayed silent in the same way" (spec:355) is a count of derived surfaces
+   stored inside the anti-inventory section.** It is accurate today — I verified the four — and it
+   is past-tense-scoped to round 11, so it does not rot the way the round-8 line count and round-9
+   inventory did. Same species, though: if a fifth surface is ever added, that sentence must stay
+   scoped to round 11 rather than be "updated".
+5. **Document size continues to grow** (1,336 lines, against the 1,163 the round-8 text cites).
+   The round-history annotations are load-bearing evidence and have repeatedly paid for themselves,
+   but `writing-specs` treats tokenization as a hard constraint; worth a compaction pass once the
+   branch lands and the history stops accumulating.
+
+### Waivers
+
+None. No violation has ever been waived on this spec, and none is permitted on it.
