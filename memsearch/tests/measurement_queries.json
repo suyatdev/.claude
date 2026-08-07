@@ -1,0 +1,7 @@
+[
+  {"query": "the rule text claimed phase-guard was dormant but it was actually registered", "target_feature": "stale-phase-guard-rule-text", "k": 6},
+  {"query": "why did the falsifier baseline move when its own fix merged", "target_feature": "falsifier-base-pin", "k": 6},
+  {"query": "git-guard read an empty staging area as a denial", "target_feature": "git-guard-empty-index", "k": 6},
+  {"query": "how does the verification marker gate know the test suite really ran", "target_feature": "verification-marker-gate", "k": 6},
+  {"query": "how does phase-guard scope write permission to the current branch", "target_feature": "phase-guard-hook", "k": 6}
+]

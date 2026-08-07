@@ -19,5 +19,8 @@ build-backend = "hatchling.build"
 packages = ["memsearch"]
 
 [tool.pytest.ini_options]
-markers = ["golden: retrieval-quality acceptance tests against the real index"]
-addopts = "-m 'not golden'"
+markers = [
+    "golden: retrieval-quality acceptance tests against the real index",
+    "measurement: R9's retrieval bar over the five measurement queries, against the real index",
+]
+addopts = "-m 'not golden and not measurement'"

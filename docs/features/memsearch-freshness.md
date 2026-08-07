@@ -1345,9 +1345,40 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         pins nothing.
       - **R10.6 widened by one line, same defect class:** the design doc's `source_type` enum was a
         three-value list (`transcript_digest | curated_doc | repo_doc`) that is now four.
-- [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
+- [x] 8 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9). **After task 7**, so the queries are written against the corpus they will
       be scored on.
+      - **Committed unrun.** Only the two non-retrieval tests were executed before the commit
+        (`test_there_are_five_distinct_targets`, `test_targets_span_the_corpus_size_range`); no
+        `search()` call was made against the index. That is the whole of the blindness guarantee
+        this task can still offer — the git-history proof was lost to the orphaned rebuild (R9,
+        *On blindness*).
+      - **The tertile boundary tie was decided before ranking, and it then materialized.** Rule
+        declared first: *entries tied in chunk count across a boundary all belong to that third* —
+        a tie is indistinguishable by the metric, so ranking either side of it is arbitrary, and a
+        tied entry has an **identical** count to a bona fide bottom-third entry, not merely a
+        nearby one. Ranks 3 and 4 then came out tied at **13** chunks
+        (`git-guard-chained-command`, `shell-segments-redirects`), widening the bottom third to
+        four entries. Had the rule been chosen after seeing that, it would have been unfalsifiable.
+      - **N = 10, not 11** — `memory-system-split` spans two files and counts once (R9's
+        per-feature unit). ⌊10/3⌋ = 3.
+      - **`memsearch-freshness` measures 71 chunks — rank 9, top third.** R9 predicted this: the
+        round-8 draft pinned it at 14 chunks from the stale index and called it bottom-third. The
+        indexed figure understated it ~5×, and ranking on it would have let this file serve as the
+        *small* target while being one of the largest — satisfying the anti-gaming rule by doing
+        the thing it forbids. Counts are therefore computed by the runner at run time from source,
+        and **no count is pinned in any file**, this note included.
+      - **The span guard was mutation-checked in both arms**, because a guard never seen red pins
+        nothing. A sample whose smallest target is `git-guard-empty-index` (24) is the exact
+        discriminator between the rank-tertile rule and the weaker value-span reading — value-span
+        puts 24 inside the "bottom third" (6 + (91−6)/3 = 34.3), rank tertiles put it in the
+        middle. It fails, so the implemented rule is the strict one. Dropping the top target fails
+        the other arm. Original restored byte-identical after both.
+      - **`addopts` was extended to `-m 'not golden and not measurement'`.** It previously
+        deselected `golden` only, so registering a new marker alone would have left a bare `pytest`
+        running these against the real index. Consequence for task 10a: `-m golden` now reports
+        **23 deselected** rather than 16 — added tests, not a regression. Default run unchanged at
+        **74 passed**.
 - [ ] 8b — **Record the observed scores as a baseline. No pass mark is derived from them.** Run the
       five committed queries at `k=6` and write, under `## Verification`, every hit's score
       alongside whether it belongs to the named feature — the raw numbers, unrounded, with no
