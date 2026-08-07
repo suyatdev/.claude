@@ -162,13 +162,24 @@ Rationale for reversing the documented "output can never be split across lines" 
 - [x] 5. Replace the join/render block with greedy packing.
 - [x] 6. Update the file's header comment — the "Target look" block and the newline rationale,
       which stated that output can never be split across lines.
-- [x] 7. Full suite green: **66/66**, against a real linked worktree, not a simulated one.
+- [x] 7. Full suite green: **68/68**, against a real linked worktree, not a simulated one.
 - [x] 8a. Observability judge, round 1: **risk=low, confidence=high**, with one real defect —
       the head never wrapped and the width test could not catch it. Both fixed above.
-- [ ] 8b. Observability judge, round 2 (a fresh verdict must match HEAD or `judge-guard`
-      blocks the PR), then PR. **Open it from this worktree** — `judge-guard` derives the repo
-      as `basename(show-toplevel)`, which is `statusline-wrap-worktree` here and `.claude`
-      from the shared checkout, where it would look for the wrong verdict and block.
+- [x] 8b. Observability judge, round 2: **risk=low, confidence=high**. Verified the round-1
+      fix with its own long-branch fixtures, widths fuzzed 1–200, and 176 injection
+      combinations at wrapping widths the suite does not reach — zero leaks. Follow-ups
+      applied: dead `lines_emitted` removed, row bound asserted, ADR's "38 cells" qualified as
+      fixture-specific, `wt:()`-is-not-a-safety-mechanism recorded.
+- [x] 8c. Observability judge, round 3 (delta): **risk=low, confidence=high**, all dimensions
+      pass. Proved the counter deletion behaviour-neutral across 154 paired runs compared
+      byte-for-byte including stderr. Found the new row assertion carried two rows of slack and
+      demonstrated it with a mutant emitting a spurious blank leading row — 7 rows, passing all
+      68 tests. Assertion tightened to the fixture's own segment count; the mutant now fails it.
+- [ ] 8d. Observability judge, round 4 (test-tightening + docs delta), then PR. **Open the PR
+      from this worktree** — `judge-guard` matches on `repo` = `basename(show-toplevel)`, which
+      is `statusline-wrap-worktree` here and `.claude` from the shared checkout, where it would
+      look for the wrong verdict and block. Freshness is strict: the stored `head_sha` must
+      equal current HEAD, so any commit after judging forces another round.
 - [ ] 9. **`statusline-command.falsify.py` reports `FALSIFICATION BROKEN` — pre-existing.**
       Verified at HEAD *before* any change here: `f0902ed` scores 8/50 against `want 9`, and
       `925c310` scores 9/50 against `want 10`. The harness runs the current suite against five
@@ -193,3 +204,8 @@ Rationale for reversing the documented "output can never be split across lines" 
       fix is a design question, not a patch: it needs a distinguishable "unknown" rendering,
       which is a change to what the segment *means*, and that was an explicit non-goal of this
       branch.
+- [ ] 11. **Absurd `COLUMNS` values print bash arithmetic noise to stderr.** A value longer
+      than 19 digits overflows int64; the script still correctly declines to wrap, so the
+      status line itself is unaffected and this is cosmetic. Written down because it has now
+      survived three judge rounds as an unlogged observation, which is how cosmetic defects
+      become permanent.

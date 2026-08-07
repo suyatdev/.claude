@@ -794,12 +794,20 @@ fi
 # Removing the row cap left "rows can never exceed the segment count" stated in a
 # comment and checked nowhere. A bound that is only claimed is not a bound, so it
 # is asserted here at a width narrow enough to force the maximum number of breaks.
-# Eight is the ceiling: four git-prompt segments plus four Claude ones.
+#
+# The bound is the count THIS payload produces (arrow+user@host, dir, git:(),
+# wt:(), model, bar = 6), not the global ceiling of 8. Asserting the ceiling left
+# two rows of slack, and that slack was not theoretical: dropping the `[ $i -gt 0 ]`
+# guard in the packing loop makes the first segment trigger a break and emit a
+# spurious blank leading row -- 7 rows, which passed the loose form of this very
+# assertion along with the rest of the suite. A bound with slack in it is a bound
+# that admits the off-by-one it exists to catch.
+EXPECTED_ROWS=6
 ROWS="$(line_count "$(render_cols 24 "$WIDE_HEAD_PAYLOAD")")"
-if [ "$ROWS" -le 8 ]; then
-  ok "row count stays inside the segment-count bound (rows=$ROWS<=8)"
+if [ "$ROWS" -le "$EXPECTED_ROWS" ]; then
+  ok "row count stays inside the segment-count bound (rows=$ROWS<=$EXPECTED_ROWS)"
 else
-  bad "row count exceeded the segment-count bound (rows=$ROWS>8)"
+  bad "row count exceeded this payload's segment count (rows=$ROWS>$EXPECTED_ROWS)"
 fi
 
 # $cwd is stripped of control bytes BEFORE any git command runs, so a path
