@@ -137,53 +137,41 @@ classifies; it does not hold for a run whose corpus silently vanished.
 defines the *conditions*; the numbered block below defines the *wording*. Together they are the only
 place either is defined.
 
-⚠️ **Every other surface naming a state is enumerated below — mechanically, not from memory.**
-Rounds 5, 6 and 7 each patched the derived-surface list and each left instances behind; round 7's
-list was itself stale, naming a section round 5 had deleted. A hand-maintained list of duplicates
-had become one more duplicate to maintain. So the list is no longer written from memory: it is the
-output of a sweep for every state name, rendered line, and ordering claim across the whole document,
-regenerated the same way whenever the table changes.
+⚠️ **Every other surface naming a state is found by a sweep, mechanically — and the sweep's output is
+never stored in this document.** Rounds 5, 6 and 7 each patched a hand-maintained derived-surface
+list and each left instances behind; round 7's list was itself stale, naming a section round 5 had
+deleted. A hand-maintained list of duplicates had become one more duplicate to maintain.
 
-⚠️ *Round 8's version of this paragraph claimed the sweep covered "all 1,163 lines" — the line count
-of the **previous** round's file, not the one the table indexes.* **The enumeration meant to end
-stale copies shipped carrying a stale copy of the document's own size**, which is why no line count
-appears here now and why the table below is keyed by section. A number that describes the document
-inside the document is a duplicate like any other.
+⚠️ **Storing the sweep's *output* then failed the same way the hand-written list had.** Round 8's
+version of this paragraph claimed the sweep covered "all 1,163 lines" — the line count of the
+**previous** round's file. Round 9 added a second stored inventory, for R9. **Both shipped a stale
+copy inside the anti-staleness section itself**, which is why neither a line count nor an inventory
+appears here now: a description of the document, stored inside the document, is a duplicate like any
+other.
 
-**Keyed by section, never by line number.** An earlier draft of this very table cited line numbers;
-they were stale inside one editing session, because a line number is itself a copy of the document's
-structure. Sections are stable, so the index is keyed to them.
+So what this section defines is the **method**, and the method is the deliverable:
 
-| Surface | What it restates | Status |
-|---|---|---|
-| **The state table** (below) | conditions | **authoritative** |
-| **The eight rendered lines** (below the table) | wording | **authoritative** |
-| Design decisions 1, 2, 5 and 6 | states 1, 5, 6, 7; decision 5 asserts precedence | **5 was unconditional — bounded in round 9** |
-| R1 | the fresh and stale lines, verbatim | derived · agrees |
-| R2 | states 1-4, the guarantee | derived · agrees |
-| The per-state rationale bullets (after the rendered lines) | **five** bullets — 1, 2, 3, 6, 7 by name and number; 4 and 5 in prose only; 8 never named | derived · agrees |
-| The threshold rationale (`STALE_HOURS`/`RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`) | states 2 and 5 | derived · agrees |
-| Data-flow diagram → `OUT` node | all eight, by name | derived · agrees |
-| Contracts → `index.py` | the stuck-run case | derived · agrees |
-| Contracts → `memsearch-nudge.sh` (the ordering bullet) | 5/6/7 warn, stale wins, 3 before 4 | derived · agrees |
-| Scenarios | all eight | derived · agrees |
-| Falsifier (a)(b)(c)(f)(g)(h) | states 1, 2, 5, 6, 7, 3 | **(a) contradicted the table — fixed round 8** |
-| Non-goal: a run that walked zero files | state 8 | derived · agrees |
-| Non-goal: concurrency | states 1, 2, 5 | derived · agrees |
-| Non-goal: log growth | states 2, 3, 6, 7 | derived · agrees |
-| Non-goal: retrying a failed run | state 7 by name (*degraded*) | derived · agrees |
-| Task 4 | states 3, 6, 7 | derived · agrees |
+> Sweep the whole document for every state name, every rendered line, and every ordering claim.
+> Key the result by **section, never by line number** — a line number is itself a copy of the
+> document's structure, and an earlier draft's line numbers were stale inside a single editing
+> session. The result lives in the sweep's output, not in this file.
 
-**The `memsearch-nudge.sh` ordering bullet is worth reading twice**: it declares the state list
-*"deliberately not restated here"* and then restates its ordering properties in the next sentence.
-That is the honest shape of this defect — not carelessness, but that *ordering* feels like commentary
-rather than duplication. It is duplication.
+**Task 1b runs this sweep at implementation time**, against the document as it then exists, and
+re-runs it whenever the state table changes.
 
-*Anything added to this spec that names a state joins this table in the same edit.* **Seventeen
-entries is the real size of the problem**; the three-entry list that preceded it is why rounds 5, 6
-and 7 each fixed the instance in front of them and left the class open. Round 8's sixteen-entry
-version still missed the Design decisions — a section that both names states *and* asserts their
-precedence — which is why the sweep, not a reading, is what regenerates this table.
+**What the sweep must count as a derived surface** — the part a careful reading keeps missing:
+
+- *An ordering claim is duplication.* The `memsearch-nudge.sh` contract bullet declares the state
+  list *"deliberately not restated here"* and then restates its ordering properties in the next
+  sentence. That is the honest shape of this defect — not carelessness, but that *ordering* feels
+  like commentary rather than duplication. It is duplication.
+- *A section that asserts precedence is restating the table*, not merely pointing at it. Every
+  hand-written list missed the Design decisions for exactly this reason.
+- *A state named in prose, without its number, is still a surface.*
+
+*Anything added to this spec that names a state is a surface the next sweep must find.* Each
+hand-maintained version under-counted the same way: it fixed the instance in front of it and left
+the class open.
 
 **Eight states. First match wins. One line per state, never more.** The two silent paths — absent
 `status.json`, and `chunks` absent or 0 — sit outside this table and emit nothing at all (R4).
@@ -336,29 +324,28 @@ sentence governs what a failure *means* (evidence about the archive's noise cost
 judged, not silently reverted), not whether the bar is lenient. R9 is strict; the response to a
 failure is deliberation, not automatic rollback.
 
-#### Surfaces derived from R9
+#### R9's derived surfaces are swept, not listed
 
-R9 governs six places. Same rule as R3's state table: **this requirement is authoritative, these
-restate it, and any surface added or removed joins this list in the same edit.** Round 8's drift
-landed here precisely because R9 had no such list while R3 did.
-
-| Surface | What it restates | Status |
-|---|---|---|
-| **R9** (this section) | the two clauses, the spread rule, the pass mark | **authoritative** |
-| Task 8 | the commit-before-running rule | derived · agrees |
-| Task 8b | the raw-score record, the chunk counts, the spread rule | derived · agrees |
-| Task 10(b) | both clauses, the pass mark | derived · agrees |
-| Falsifier (d) | the queries-unmodified rule | derived · agrees |
-| Falsifier (i) | the raw-score record, the spread rule | derived · agrees |
-| Scenarios: the three R9 scenarios | both clauses, the spread, the raw-score record | derived · agrees |
+R9 is restated in several places — tasks, falsifier clauses, scenarios — and **this section is the
+authoritative one.** Round 8's drift landed in those restatements precisely because R9 had no
+enumeration while R3 did, which is why **task 1b's sweep covers R9's clauses as well as R3's state
+names.** No inventory is stored here: round 9 stored one, and it was stale by round 10 — the same
+failure, for the same reason, as the R3 inventory it was modelled on.
 
 ⚠️ ***The five features must span the corpus size range: at least one target in the bottom third
-and at least one in the top third, by chunk count.*** A large file has many more chances to land two
-hits in a top-6 than a small one, so **choosing five fat targets would pass both clauses while
-measuring nothing** — the same tuning the retired score floor allowed, moved from the number to the
-sample. Each target's chunk count is recorded beside its result, so a soft sample is visible rather
-than buried. **This exact wording is the rule; task 8b and falsifier (i) restate it and are listed
-under "Surfaces derived from R9" below.**
+and at least one in the top third, by chunk count.***
+
+⚠️ ***The counting unit is the feature, not the file: a target's chunk count is the sum over every
+file belonging to that feature.*** A feature that spans several files counts as a small target when
+read off its largest file alone and a mid-range one when summed — enough slack to move a sample out
+of the bottom third while still reading as compliant. Per-file is therefore not a lenient reading of
+this rule; it is a different and weaker rule.
+
+A large target has many more chances to land two hits in a top-6 than a small one, so **choosing
+five fat targets would pass both clauses while measuring nothing** — the same tuning the retired
+score floor allowed, moved from the number to the sample. Each target's per-feature chunk count is
+recorded beside its result, so a soft sample is visible rather than buried. **This exact wording is
+the rule; task 8b and falsifier (i) restate it verbatim.**
 
 ⚠️ ***The counts are computed from the source files at task-8 time, never read from the index, and
 no count is pinned in this document.*** Round 8 pinned eleven counts here (`6` to `91`) taken from
@@ -589,16 +576,21 @@ behaviour:
 indexing session narrative could "pollute semantic search" — is untested. At **300,160 characters /
 3,484 lines** (re-measured 2026-08-07; it grows every session, so treat any figure here as a floor)
 `CODING_MEMORY.md` becomes the single largest source, **1.62×** the largest doc currently indexed
-(`vibe-scape/docs/plans/2026-07-13-live-presence-plan.md`, 184,620 characters / 121 chunks).
+(`vibe-scape/docs/plans/2026-07-13-live-presence-plan.md`, 184,620 characters).
 
 ⚠️ *Two units were conflated here through round 5 and the correction is recorded rather than
 quietly applied.* Earlier drafts called this **2.3×** and named
 `coding-memory/compliance-judge/2026-07-26-03b-deploy-design.md` as the largest indexed doc. That
-file is the largest by **chunk count** (130), not by size; the multiplier beside it was
+file is the largest by **chunk count**, not by size; the multiplier beside it was
 **character**-based, and it was computed against that file's byte count rather than its character
 count. Ranked by the same unit the arithmetic uses, three indexed docs are larger — 184,620,
 153,701 and 131,516 characters — and the true multiplier is **1.62×**. Every figure in this
-paragraph is now an on-disk character count, compared like with like. The corrected number is
+paragraph is now an on-disk character count, compared like with like.
+
+⚠️ *No chunk count is quoted in this paragraph, here or above.* Round 10 pinned two — one beside
+each file named — and **both were read from `memory.db`**, the derived store whose going stale is
+the reason this feature exists. Character counts are read from the files on disk and stay; chunk
+counts are computed from source at task-8 time or not at all (R9). The corrected number is
 *less* alarming than the one it replaces, which is the direction that matters: the risk this
 paragraph exists to size was overstated by ~40%, and R9 — not this paragraph — remains the
 instrument that decides it.
@@ -864,10 +856,14 @@ Scenario: last_run absent from an otherwise valid file
   Then the line reports unknown age
   And chunks is still reported
 
-Scenario: A failed scheduled run becomes visible
-  Given the launchd agent has not completed a run for 9 hours
+Scenario: A wedged scheduled run surfaces as stuck, not as stale
+  Given the launchd agent started a run 9 hours ago and it never completed
+  And run_started is later than last_run
+  And last_run is older than STALE_HOURS
   When a session starts
-  Then the stale line is emitted
+  Then the line reports the run as stuck
+  And it names the scheduled-index log
+  And no stale line is emitted
 
 Scenario: A completed run stamps its own completion
   Given an index run finishes with 2 errors
@@ -1063,11 +1059,14 @@ Verified on this machine 2026-08-06, not remembered.
 > started more than `RUN_ABANDON_HOURS` ago and never completed produces a line carrying no warning
 > marker and no pointer to the log; or **(i) this ships without task 8b's raw scores recorded, or
 > without at least one measurement query naming a target in the bottom third of the chunk-count
-> range and at least one naming a target in the top third** — the strict wording, identical to R9;
-> "not all from one third" is *not* the rule, and four large targets plus one medium is a
-> falsification.
+> range and at least one naming a target in the top third, counted per feature — every file
+> belonging to it, summed** — the strict wording, identical to R9; "not all from one third" is
+> *not* the rule, a per-file count is *not* the unit, and four large targets plus one medium is a
+> falsification; or **(j) task 9's cold-run duration is recorded from a warm incremental run rather
+> than an explicit `--full` one, or it reaches `RUN_MAX_HOURS` and the branch proceeds anyway
+> without the constant being put back to the user.**
 
-(a), (b), (e), (f), (g) and (h) are hook tests. (c), (d) and (i) are observations. Clauses **(a), (f), (g)
+(a), (b), (e), (f), (g) and (h) are hook tests. (c), (d), (i) and (j) are observations. Clauses **(a), (f), (g)
 and (h)** are **derived from R3's state table** — (a) from the precedence of states 1-3 over 5, (f)
 from states 1, 2 and 7, (g) from the decay out of states 1 and 2 plus state 6, (h) from state 3 — and
 are re-derived whenever that table changes.
@@ -1162,6 +1161,18 @@ was asked and answered 2026-08-06: **Opus 5**.
 
 - [ ] 1 — Model-switch checkpoint 2 (planning → implementation); record the answer here, create
       the branch, set `phase: implementation`.
+- [ ] 1b — **Regenerate the derived-surface sweep and reconcile it — first task after the gate,
+      before any code.** Sweep the whole spec for every state name, every rendered line and every
+      ordering claim (R3's method), and for every restatement of R9's two clauses and its spread
+      rule. Key the result by **section, never by line number**, and record it **in this task's
+      commit message, not in the spec** — every stored copy of this sweep went stale, twice inside
+      the anti-staleness section itself. For each surface found, confirm it agrees with its
+      authority: R3's state table for states, R9 for the measurement bar.
+      ⚠️ **A disagreement is not fixed here.** The phase is `implementation` by this point, so a
+      surface that contradicts its authority is a spec defect, not a typo: stop and announce
+      **"GATE: Spec change needed — switch back to the high-tier model to revise."** Fixing it in
+      place would be an out-of-phase spec edit; leaving it silently is what rounds 5 through 9 each
+      did.
 - [ ] 2 — Write `docs/decisions/0018-*.md`: adopting a persistent `launchd` agent as the refresh
       mechanism, and splitting run recency (`last_run`) from content recency (`last_indexed`).
       Options weighed, why these won, consequences.
@@ -1209,10 +1220,12 @@ was asked and answered 2026-08-06: **Opus 5**.
       pass/fail attached. Also record the ceiling the scorer can emit
       (`2 × 1/(RRF_K + 1) × max(weight)` — **0.04918** at `RRF_K = 60` and `curated_doc: 1.5`), so a
       future reader compares against the range rather than against intuition.
-      **Compute each target feature file's chunk count from the source file, not from `memory.db`**
-      — the index may not have re-read a file since it was last edited, which is the failure this
-      whole feature exists to fix — and record it beside that target's result (R9). ⚠️ **Confirm at
-      least one target is in the bottom third of the range and at least one is in the top third**
+      **Compute each target's chunk count from the source files, not from `memory.db`** — the index
+      may not have re-read a file since it was last edited, which is the failure this whole feature
+      exists to fix — and record it beside that target's result (R9).
+      ⚠️ **The counting unit is the feature, not the file: sum every file belonging to that
+      feature** (R9's exact rule — per-file is a different and weaker one). ⚠️ **Confirm at least
+      one target is in the bottom third of the range and at least one is in the top third**
       (R9's strict wording; "not all from one third" is not the rule).
       *There is no floor to set and no decision to stop for — R9's score clause was removed in
       round 8. These numbers exist to be compared against later, not to gate this branch.*
@@ -1234,7 +1247,11 @@ was asked and answered 2026-08-06: **Opus 5**.
       **(a) The noise-regression net.** Run the pre-existing suite with `-m golden` —
       `pyproject.toml:23` sets `addopts = "-m 'not golden'"`, so a bare `pytest` deselects all
       sixteen golden cases, and those are what detect R10 crowding the corpus; running R10's
-      measurement with that net switched off is worse than not measuring. Note when reading the
+      measurement with that net switched off is worse than not measuring.
+      ⚠️ **The "before" picture is already measured — do not re-measure it, and do not let a later
+      commit stand in for it.** `uv run pytest -m golden -q` at `ceadcf0`, pre-R10:
+      **16 passed, 63 deselected, 2.53s**. Compare the post-R10 run against exactly that, since a
+      baseline taken after task 7 would already contain the change it exists to measure. Note when reading the
       result that **only the 11 `must` cases can fail**; the 3 `stretch` and 2 `negative` cases warn
       and pass regardless, so a green run is not by itself evidence of no regression — read the
       warnings.
@@ -1251,13 +1268,15 @@ was asked and answered 2026-08-06: **Opus 5**.
       **(b) R9's bar.** Score the five measurement queries at `k=6` with R9's own runner and record
       pass/fail per query, including a failing result if that is the truth: **clause 1** ≥2 hits
       belonging to the named feature, **clause 2** top hit belonging. Both bind; there is no third
-      clause. Record each target's chunk count beside its result.
+      clause. ⚠️ **R9 passes iff all five queries satisfy both clauses — four of five is a failure,
+      and this step is where that verdict gets written down.** Record each target's per-feature
+      chunk count beside its result.
       **A failure of either clause is a real result about R10's noise cost** — report it, do not
       silently re-exclude the file (and see R10's exit cost: re-excluding does not remove the
       chunks already written). *Any pre-existing reading of "R9 failed" that rests on the retired
       `≥0.30` score floor is void — the scorer cannot reach 0.30 (R9).*
 - [ ] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
-      through (i), by letter, each marked held / falsified / not yet observable, with the evidence
+      through (j), by letter, each marked held / falsified / not yet observable, with the evidence
       or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
       the word *falsifier* appeared nowhere in this task list, so the section that defines how this
       feature could be proven wrong had no step that read it. A falsification test nobody runs is

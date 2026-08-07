@@ -3676,3 +3676,48 @@ they briefly existed in no durable place at all — the same staleness failure t
 
 Then re-hash the blob and re-dispatch both judges in panes with R9's two violation ids, `waived: []`,
 and the fact that edits 1–3 are a **user-directed structural change**, not a judge finding.
+
+## 2026-08-07 — session 37: the round-10 revision lands (nine edits, all nine applied)
+
+Spec `docs/features/memsearch-freshness.md` · `phase: planning` throughout · no branch · committed
+to `main` as docs (`git-guard.sh:186` allows `docs/*.md` there).
+
+**Blob `60199bd97edddf6e50e99c047a2a3573b34ffb40` → `022528c29a2b7ac9bd542f0271272855ceb4275d`**
+(1,270 → 1,289 lines). The pre-edit hash matched the handoff exactly, so no drift had occurred
+between sessions.
+
+All nine edits from the list above are applied. Three of them are worth recording beyond "done":
+
+- **Edit 4 was not a judgement call — the spec contradicted itself.** The scenario at `:867`
+  ("A failed scheduled run becomes visible") asserted a **stale** line for a 9-hour uncompleted run,
+  while the scenario 78 lines earlier at `:789` asserted **stuck** for the same 9 hours. Two hook
+  tests generated from one spec, mutually unsatisfiable — the identical defect clause (a) had in
+  round 8. Renamed to *"A wedged scheduled run surfaces as stuck, not as stale"* and scoped with
+  `run_started` later than `last_run`, `last_run` older than `STALE_HOURS`, and an explicit
+  `And no stale line is emitted` — so it now tests the *precedence*, which is what makes it
+  distinct from `:789` (that one tests the no-second-indexer guarantee) rather than a duplicate.
+
+- **Edit 3's task 1b had a phase collision that had to be designed around.** The sweep regenerates
+  "at implementation time", but `phase: implementation` **forbids spec edits** — so a task that
+  reconciles spec surfaces mid-implementation is out-of-phase by construction. Resolved by making
+  1b **detect-and-escalate, never fix**: a surface contradicting its authority triggers the
+  documented `"GATE: Spec change needed — switch back to the high-tier model to revise."` Fixing in
+  place would be the out-of-phase edit; staying silent is what rounds 5–9 each did.
+
+- **Edit 8 was applied without pinning the 6-vs-37 figure.** The handoff cited per-file-vs-per-feature
+  as worth 6 vs 37 chunks on one feature. Those are chunk counts, and the spec's own rule two
+  paragraphs down says **no chunk count is pinned in this document** — so the point is made in prose
+  ("counts as a small target read off its largest file alone, mid-range when summed") with no
+  numbers. Pinning them would have re-committed edit 7's exact sin in the act of fixing edit 8.
+
+Edits 1–3 removed both stored inventories; what survives is the sweep **method** plus a new
+"What the sweep must count as a derived surface" list preserving the three lessons the deleted
+tables encoded (an ordering claim is duplication; a section asserting precedence is restating the
+table; a state named in prose without its number is still a surface). Falsifier gained clause **(j)**
+(task 9's cold-run stop-and-ask), is now classed as an observation, and task 10c reads "(a) through
+(j)".
+
+**Open — next session:** re-dispatch **both** judges at round 10 in panes (`dispatching-pane-agents`),
+passing R9's two violation ids, `waived: []`, and that **edits 1–3 are a user-directed structural
+change**, not a judge finding. `gate confirmed` was already given in session 34, so round 10 passing
+**opens the gate — do not re-ask**; checkpoint-2 answer to record in task 1 is **Sonnet 5**.
