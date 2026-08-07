@@ -99,7 +99,10 @@ def model_mismatch(conn: sqlite3.Connection, embed_model: str,
             f"{embed_model}/{embed_dim}-dim — run `memsearch index --full` to rebuild")
 
 
-def _now() -> str:
+def now_iso() -> str:
+    """The one timestamp format the index publishes. `timespec="seconds"` is
+    required, not cosmetic: a bare isoformat() emits microseconds, and
+    status.json's run stamps must match `last_indexed`'s shape exactly."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
@@ -119,11 +122,11 @@ def replace_source(conn: sqlite3.Connection, path: str, kind: str,
                              "VALUES('delete', ?, ?)", (cid, content))
             conn.execute("DELETE FROM chunks WHERE source_id=?", (sid,))
             conn.execute("UPDATE sources SET content_hash=?, indexed_at=?, kind=? "
-                         "WHERE id=?", (content_hash, _now(), kind, sid))
+                         "WHERE id=?", (content_hash, now_iso(), kind, sid))
         else:
             sid = conn.execute(
                 "INSERT INTO sources(path, kind, content_hash, indexed_at) "
-                "VALUES(?,?,?,?)", (path, kind, content_hash, _now())).lastrowid
+                "VALUES(?,?,?,?)", (path, kind, content_hash, now_iso())).lastrowid
         for chunk, emb in zip(chunks, embeddings):
             cid = conn.execute(
                 "INSERT INTO chunks(source_id, content, repo_id, repo_name,"
@@ -166,7 +169,7 @@ def stats(conn: sqlite3.Connection) -> dict:
 
 def log_query(conn: sqlite3.Connection, ms: float) -> None:
     with conn:
-        conn.execute("INSERT INTO query_log VALUES(?,?)", (_now(), ms))
+        conn.execute("INSERT INTO query_log VALUES(?,?)", (now_iso(), ms))
 
 
 def p95_latency(conn: sqlite3.Connection) -> float | None:

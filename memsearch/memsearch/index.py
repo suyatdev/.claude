@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import glob as globmod
 import json
+import os
+import sys
+import tempfile
 from functools import partial
 from pathlib import Path
 
@@ -54,17 +57,75 @@ def _iter_docs(cfg: Config) -> list[tuple[Path, str, str, str]]:
     return out
 
 
-def _write_status(cfg: Config, conn) -> None:
-    s = dbmod.stats(conn)
-    status = {
-        "chunks": s["chunks"],
-        "sources": s["sources"],
-        "last_indexed": s["last_indexed"],
-        "db_bytes": cfg.db_path.stat().st_size if cfg.db_path.exists() else 0,
-        "embed_model": s["meta"].get("embed_model"),
-        "embed_dim": int(s["meta"].get("embed_dim", 0)),
-    }
-    (cfg.db_path.parent / "status.json").write_text(json.dumps(status, indent=1))
+CARRIED_KEYS = ("chunks", "sources", "last_indexed", "db_bytes",
+                "embed_model", "embed_dim")
+
+
+def _status_path(cfg: Config) -> Path:
+    return cfg.db_path.parent / "status.json"
+
+
+def _read_prior_status(cfg: Config) -> dict:
+    """Fallible by design, and never fatal: a missing, empty, truncated or
+    unparseable status file must not abort a scheduled run. The alternative is
+    this feature's own failure mode one field over — an unreadable status file
+    killing every run while the nudge, silent on malformed input by contract,
+    reports nothing at all. Reported on stderr so it lands in the run log."""
+    try:
+        prior = json.loads(_status_path(cfg).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"memsearch: no usable prior status.json ({e}) — "
+              "stamping run_started alone", file=sys.stderr)
+        return {}
+    return prior if isinstance(prior, dict) else {}
+
+
+def _write_status_file(cfg: Config, status: dict) -> None:
+    """Atomic: render to a temp file alongside the target, then rename onto it.
+    This spec twice expects the writing process to be hard-killed, and a kill
+    mid-write is what produces the truncated file _read_prior_status absorbs."""
+    path = _status_path(cfg)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".status-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(json.dumps(status, indent=1))
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _write_status(cfg: Config, conn, *, phase: str, run_started: str,
+                  errors: int = 0) -> None:
+    """Written twice per run.
+
+    `phase="start"` stamps run_started and carries the prior file's keys over
+    verbatim. It must not recompute: --full unlinks the DB before connecting,
+    so a recompute would stamp `chunks: 0`, and the nudge exits silently on an
+    absent-or-zero chunk count — deleting the session line for the whole
+    multi-hour rebuild, which is exactly the window the in-progress line covers.
+
+    `phase="end"` recomputes all six from the DB, precisely as before."""
+    if phase == "start":
+        prior = _read_prior_status(cfg)
+        status = {k: prior[k]
+                  for k in (*CARRIED_KEYS, "last_run", "last_run_errors")
+                  if k in prior}
+        status["run_started"] = run_started
+    else:
+        s = dbmod.stats(conn)
+        status = {
+            "chunks": s["chunks"],
+            "sources": s["sources"],
+            "last_indexed": s["last_indexed"],
+            "db_bytes": cfg.db_path.stat().st_size if cfg.db_path.exists() else 0,
+            "embed_model": s["meta"].get("embed_model"),
+            "embed_dim": int(s["meta"].get("embed_dim", 0)),
+            "run_started": run_started,
+            "last_run": dbmod.now_iso(),
+            "last_run_errors": errors,
+        }
+    _write_status_file(cfg, status)
 
 
 def run_index(cfg: Config, full: bool = False, limit: int | None = None,
@@ -79,6 +140,11 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
         ollama.embed, model=cfg.embed_model, base_url=cfg.ollama_url)
     digester = digester or partial(digestmod.digest_session, cfg=cfg)
     report = {"processed": 0, "skipped": 0, "chunks_added": 0, "errors": []}
+    # After the mismatch check on purpose: a config error that indexes nothing
+    # must not leave a phantom in-progress marker for the nudge to decay into a
+    # stuck run. A genuinely killed run does leave run_started > last_run.
+    run_started = dbmod.now_iso()
+    _write_status(cfg, conn, phase="start", run_started=run_started)
 
     for path, repo_id, repo_name, source_type in _iter_docs(cfg):
         _index_one(conn, cfg, report, path, progress, kind="doc",
@@ -97,7 +163,8 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
                    make_chunks=partial(_transcript_chunks, path, cfg, digester),
                    embedder=embedder)
 
-    _write_status(cfg, conn)
+    _write_status(cfg, conn, phase="end", run_started=run_started,
+                  errors=len(report["errors"]))
     conn.close()
     return report
 

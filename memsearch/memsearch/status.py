@@ -2,11 +2,27 @@
 revisit triggers (chunks > 500k or p95 > 500 ms -> reconsider Qdrant)."""
 from __future__ import annotations
 
+import json
+
 from memsearch import db as dbmod
 from memsearch.config import Config
 
 REVISIT_CHUNKS = 500_000
 REVISIT_P95_MS = 500.0
+
+
+def _run_recency(cfg: Config) -> str:
+    """Run recency lives in status.json, not the DB — `last_indexed` answers a
+    different question (how current the *content* is) and a run that finds
+    nothing new never advances it. Unknown is reported as unknown."""
+    try:
+        st = json.loads((cfg.db_path.parent / "status.json").read_text())
+        last_run = st["last_run"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return "last run: unknown"
+    errors = st.get("last_run_errors")
+    tally = f"{errors} errors" if isinstance(errors, int) else "errors unknown"
+    return f"last run: {last_run} ({tally})"
 
 
 def status_report(cfg: Config) -> str:
@@ -24,7 +40,8 @@ def status_report(cfg: Config) -> str:
             f"{k}: {v}" for k, v in sorted(s["by_source_type"].items())),
         "by repo: " + ", ".join(
             f"{k}: {v}" for k, v in sorted(s["by_repo"].items())),
-        f"sources: {s['sources']}  last_indexed: {s['last_indexed']}",
+        f"sources: {s['sources']}  content indexed through: "
+        f"{s['last_indexed']}  {_run_recency(cfg)}",
         f"db size: {cfg.db_path.stat().st_size / 1_048_576:.1f} MB",
         f"embed model: {s['meta'].get('embed_model')} "
         f"({s['meta'].get('embed_dim')}-dim)",

@@ -1229,9 +1229,27 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       accepted consequence, not a mitigated one. The spec never claimed otherwise; it simply did not
       say. Citations re-verified against source before restating (`db.py:156`, `index.py:125-127`,
       `cli.py:66`, `status.py:27`, and `launchctl getenv PATH` empty).
-- [ ] 3 — Add `run_started`, `last_run`, `last_run_errors` to `status.json` (R5), written at both
+- [x] 3 — Add `run_started`, `last_run`, `last_run_errors` to `status.json` (R5), written at both
       ends of `run_index`, and surface the two new fields in `memsearch status` (`status.py:27`);
       extend `memsearch/tests/test_index.py` and `test_cli.py`. Existing keys unchanged.
+      TDD: 8 tests written first, all 8 watched fail for the right reason, then implemented.
+      72 pass. Mutation round of 6 — every one caught (including the temp-file test, which could
+      not fail before the atomic write existed).
+      - **`status_report` tests live in `test_rename_status.py`, not `test_cli.py`** — that is where
+        the existing `status_report` tests are. `test_cli.py` covers argv routing only and needed no
+        change; the task named it before that split was checked.
+      - **The entry write is placed after the model-mismatch check, not at the literal top of
+        `run_index`.** A config error that indexes nothing must not leave a phantom `run_started`
+        for the nudge to decay into a stuck run. A genuinely killed run still leaves
+        `run_started > last_run`, exactly as the contract says.
+      - **`db._now` promoted to `db.now_iso`** so one function owns the published timestamp format;
+        reaching into a private for a format the spec requires to match exactly would invite drift.
+      - **`memsearch status` reads `status.json`** — the two new fields have no other home, and the
+        DB cannot answer "did a run finish". Unreadable or absent renders `last run: unknown`.
+      - Edge, harmless here, noted rather than silently absorbed: at second precision a run starting
+        in the same second the previous one ended yields `run_started == last_run`, which R3's
+        state 1 (strict `>`) does not match, so it reads fresh rather than in-progress. Unreachable
+        at a 6h interval with multi-second runs.
 - [ ] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4, implementing **R3's state table verbatim**.
       Extend `hooks/memsearch-nudge.test.sh` to cover **every one of its eight states plus both
       silent paths**, and **every nudge scenario in the Scenarios section** — derive both lists by

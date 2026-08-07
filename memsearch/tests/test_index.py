@@ -1,5 +1,9 @@
 import json
+import os
+import re
 from pathlib import Path
+
+import pytest
 
 from memsearch import db as dbmod
 from memsearch.config import load_config
@@ -7,6 +11,13 @@ from memsearch.index import repo_for_cwd, run_index
 from tests.conftest import DIM
 from tests.test_config import write_cfg
 from tests.test_extract import BASE, jl
+
+# ISO-8601 UTC at second precision — the shape `last_indexed` already promises.
+# A bare isoformat() emits microseconds and would break that promise.
+STAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
+
+STATUS_KEYS = {"chunks", "sources", "last_indexed", "db_bytes", "embed_model",
+               "embed_dim", "run_started", "last_run", "last_run_errors"}
 
 CANNED_DIGEST = """## Summary
 Fixed the login bug.
@@ -159,6 +170,117 @@ def test_digest_error_is_recorded_not_fatal(tmp_path):
                        progress=lambda _: None)
     assert report["processed"] == 2  # the two docs still landed
     assert len(report["errors"]) == 2
+
+
+def read_status(cfg) -> dict:
+    return json.loads((cfg.db_path.parent / "status.json").read_text())
+
+
+def status_dir_temp_files(cfg) -> list[str]:
+    d = cfg.db_path.parent
+    return [p.name for p in d.iterdir()
+            if p.name != "status.json" and (
+                p.name.endswith(".tmp") or p.name.startswith(".status"))]
+
+
+def run(cfg, **kw):
+    kw.setdefault("progress", lambda _: None)
+    return run_index(cfg, embedder=stub_embedder, digester=stub_digester, **kw)
+
+
+def test_completed_run_stamps_run_timestamps_and_error_count(tmp_path):
+    cfg = make_cfg(tmp_path)
+    run(cfg)
+    st = read_status(cfg)
+    assert set(st) == STATUS_KEYS  # six existing keys keep their names
+    assert STAMP.match(st["run_started"]), st["run_started"]
+    assert STAMP.match(st["last_run"]), st["last_run"]
+    assert st["last_run"] >= st["run_started"]
+    assert st["last_run_errors"] == 0
+
+
+def test_last_run_errors_counts_the_runs_errors(tmp_path):
+    """A run with the embedding backend down completes, exits 0, and looks
+    identical to a clean one — the count is the only thing that distinguishes
+    them, so it is what the nudge reads."""
+    cfg = make_cfg(tmp_path)
+
+    def bad_digester(extract):
+        raise RuntimeError("model down")
+
+    report = run_index(cfg, embedder=stub_embedder, digester=bad_digester,
+                       progress=lambda _: None)
+    assert len(report["errors"]) == 2
+    assert read_status(cfg)["last_run_errors"] == 2
+
+
+def test_run_started_is_written_before_the_run_finishes(tmp_path):
+    cfg = make_cfg(tmp_path)
+    seen: list[dict] = []
+    run(cfg, progress=lambda _: seen.append(read_status(cfg)))
+    assert STAMP.match(seen[0]["run_started"])
+    assert "last_run" not in seen[0]  # first ever run: nothing has finished
+
+
+def test_full_rebuild_keeps_the_prior_chunk_count_visible_mid_run(tmp_path):
+    """--full unlinks the DB before connecting, so an entry write that
+    recomputed from it would stamp chunks: 0 — and the nudge exits silently on
+    an absent-or-zero chunk count, deleting the session line for the whole
+    multi-hour rebuild. The entry write must carry the prior file over."""
+    cfg = make_cfg(tmp_path)
+    run(cfg)
+    before = read_status(cfg)
+    assert before["chunks"] > 0
+
+    seen: list[dict] = []
+    run(cfg, full=True, progress=lambda _: seen.append(read_status(cfg)))
+    assert seen[0]["chunks"] == before["chunks"]
+    assert seen[0]["last_run"] == before["last_run"]
+    assert seen[0]["last_run_errors"] == before["last_run_errors"]
+    assert seen[0]["run_started"] >= before["last_run"]
+
+
+def test_unreadable_prior_status_never_aborts_the_run(tmp_path, capsys):
+    """The alternative is this feature's own failure mode one field over: an
+    unreadable status file aborting every scheduled run while the nudge, silent
+    on malformed input by contract, reports nothing at all."""
+    cfg = make_cfg(tmp_path)
+    run(cfg)
+    (cfg.db_path.parent / "status.json").write_text('{"chunks": 12')  # truncated
+
+    seen: list[dict] = []
+    report = run(cfg, full=True, progress=lambda _: seen.append(read_status(cfg)))
+
+    assert report["errors"] == []
+    assert "status.json" in capsys.readouterr().err
+    assert set(seen[0]) == {"run_started"}  # stamped alone, nothing carried
+    assert read_status(cfg)["chunks"] > 0  # completion write repairs the file
+
+
+def test_status_write_leaves_no_temp_file_behind(tmp_path):
+    cfg = make_cfg(tmp_path)
+    run(cfg)
+    assert status_dir_temp_files(cfg) == []
+
+
+def test_failed_status_write_leaves_the_previous_file_intact(tmp_path,
+                                                             monkeypatch):
+    """This spec twice expects the writing process to be hard-killed, so the
+    write renders to a temp file and renames onto status.json — a half-written
+    file is exactly what the unreadable-prior rule above has to absorb."""
+    cfg = make_cfg(tmp_path)
+    run(cfg)
+    before = (cfg.db_path.parent / "status.json").read_text()
+
+    def boom(src, dst):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        run(cfg)
+
+    assert (cfg.db_path.parent / "status.json").read_text() == before
+    assert status_dir_temp_files(cfg) == []
 
 
 def test_repo_for_cwd(tmp_path):

@@ -103,6 +103,33 @@ def test_status_report_contents(tmp_path):
     assert "REVISIT" not in out
 
 
+def write_status_json(cfg, **fields):
+    import json
+    cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
+    (cfg.db_path.parent / "status.json").write_text(json.dumps(fields))
+
+
+def test_status_report_shows_run_recency_beside_content_recency(tmp_path):
+    """`last_indexed` answering "is the index fresh" is the misreading this
+    whole feature corrects; fixing the nudge and leaving the CLI showing the
+    misleading number would not be a fix."""
+    cfg = make_cfg(tmp_path)
+    seed(cfg)
+    write_status_json(cfg, last_run="2026-08-07T12:00:00+00:00",
+                      last_run_errors=3)
+    out = status_report(cfg)
+    assert "last run: 2026-08-07T12:00:00+00:00" in out
+    assert "3 errors" in out
+    assert "last_indexed:" not in out  # relabelled as content recency
+
+
+def test_status_report_without_a_status_file_says_unknown(tmp_path):
+    cfg = make_cfg(tmp_path)
+    seed(cfg)
+    out = status_report(cfg)
+    assert "last run: unknown" in out
+
+
 def test_status_flags_model_mismatch(tmp_path):
     cfg = make_cfg(tmp_path)
     seed(cfg)
