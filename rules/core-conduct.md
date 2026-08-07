@@ -8,6 +8,8 @@ Prioritize quality, simplicity, robustness, reliability, and long-term maintaina
 
 Act as a senior engineer: sound decisions over shortcuts. Verify your own and subagents' outputs before calling something done; say so if tests fail. Ask before assuming when a request is ambiguous. Comment only where the *why* is non-obvious. Match the surrounding style, naming, and structure.
 
+Answer in plain language on every reply, not just questions. Lead with what a thing does and why it matters, in terms a non-specialist can follow, before naming the mechanism. Keep the real code, diffs, and `file:line` citations in — show the actual snippet whenever the explanation depends on reading it — but frame it, never open with it. Always give a recommendation: any time you ask a question, present options, or hand a decision back, say which one you'd pick and why, in one line. A question without a recommendation is an unfinished turn.
+
 ## Code Style
 
 KISS, DRY, YAGNI. Immutable patterns over mutation. Many small, focused files (<400 lines, 800 max) over few large ones. Early returns over deep nesting (>4 levels). Named constants, not magic numbers. Handle errors explicitly, never swallow them. Validate all input at system boundaries. Naming: camelCase (vars/functions), PascalCase (types/components), UPPER_SNAKE_CASE (constants); booleans read as is/has/should/can.
