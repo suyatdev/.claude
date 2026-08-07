@@ -3902,3 +3902,53 @@ and both still hold: exactly **two** heading forms, and **zero** carrying the `S
 shape. Size figures remain above their stated floor (`317,249 chars / 3,723 lines`): **329,097
 characters / 3,853 lines** before this append. Date-first heading form used deliberately, again, to
 keep those two claims true.
+
+## 2026-08-07 — session 39 (continued): tasks 3-6, the implementation core
+
+`feature/memsearch-freshness` @ `d7a03fc`, 8 commits ahead of `main`. Suites: **72** pytest +
+**27** nudge + **19** installer, all green, tree clean.
+
+### What landed
+
+**Task 3** — `status.json` gains `run_started` / `last_run` / `last_run_errors`, written at both ends
+of `run_index`; `memsearch status` relabels `last_indexed` as content recency and shows run recency
+beside it. **Task 4** — `memsearch-nudge.sh` implements the eight-state table; classification in
+bash, only the parse and age arithmetic in the one Python call it already made. **Task 5+6** — the
+`launchd` template, `install-schedule`, and the README entry.
+
+### Three things worth carrying that are not in the diff
+
+**`launchd.plist(5)` contradicted recall.** A `StartInterval` firing across a machine sleep is
+*missed*, not deferred to wake (`kqueue(3)`); a firing during a still-running job is skipped too.
+Recorded in ADR 0018 as accepted, not mitigated — the warning that follows is *correct*. Matters for
+task 9: a post-sleep gap is not an install bug.
+
+**Every test asserts the emitted line, never a parsed field.** A field nobody reads is the defect
+this feature exists to close, so a suite that inspected the parse would test the wrong end of it.
+Same reasoning drove the installer's isolation: `HOME` redirected plus a stub `launchctl` on `PATH`,
+**no test-only seam in the production script** — an override that exists only for tests means the
+tested path is never the real one. The malformed-plist case breaks a real template rather than
+mocking `plutil`.
+
+**Mutation rounds are the acceptance, not the green bar.** 6 + 8 + 6 mutations run by hand. Two
+survived, and both were examined rather than waved through: one reworded "see" to "run" while still
+naming the log (cosmetic — the behavioural version, pointing state 7 at the index command, *is*
+caught, verified separately); one swallowed `bootstrap`'s failure but is masked by the
+post-bootstrap verification, which still exits 2 naming the step. A redundant guard, not a hole.
+
+### R8 was broken and repaired, and the reason is structural
+
+Task 5 was committed without the README, which R8 forbids. `69f3f5d` was amended to carry both and
+force-pushed with `--force-with-lease` (feature branch, two minutes old, no PR). The cause is worth
+more than the fix: **the checklist numbers 5 and 6 as separate tasks while R8 requires one commit.**
+A future reader following the numbering will split them again.
+
+### Verified, not recalled
+
+Parent item 2 is a confirmed no-op — `~/.claude/docs` is already a `curated_docs` root and the live
+index holds **11** `sources` rows under `docs/features/`. `launchctl bootout` returns **3** for "No
+such process" and `print` returns **113** when absent, both probed; the installer nonetheless asserts
+the *outcome* via `is_loaded` rather than pinning either number. All five code citations carried into
+ADR 0018 were re-checked against source first.
+
+Nothing is installed: `launchctl print` still returns 113. That is task 9.
