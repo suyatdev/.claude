@@ -1219,9 +1219,16 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       **"GATE: Spec change needed — switch back to the high-tier model to revise."** Fixing it in
       place would be an out-of-phase spec edit; leaving it silently is what rounds 5 through 9 each
       did.
-- [ ] 2 — Write `docs/decisions/0018-*.md`: adopting a persistent `launchd` agent as the refresh
+- [x] 2 — Write `docs/decisions/0018-*.md`: adopting a persistent `launchd` agent as the refresh
       mechanism, and splitting run recency (`last_run`) from content recency (`last_indexed`).
       Options weighed, why these won, consequences.
+      `0018-launchd-agent-and-run-recency-split.md`. One record for both decisions — the scheduler's
+      known weakness (runs blind) is compensated by the warning, which needs decision 2's field.
+      ⚠️ **New fact, from `launchd.plist(5)` rather than recall:** a `StartInterval` firing across a
+      sleep is **missed**, not deferred to wake (`kqueue(3)` limitation) — the ADR records it as an
+      accepted consequence, not a mitigated one. The spec never claimed otherwise; it simply did not
+      say. Citations re-verified against source before restating (`db.py:156`, `index.py:125-127`,
+      `cli.py:66`, `status.py:27`, and `launchctl getenv PATH` empty).
 - [ ] 3 — Add `run_started`, `last_run`, `last_run_errors` to `status.json` (R5), written at both
       ends of `run_index`, and surface the two new fields in `memsearch status` (`status.py:27`);
       extend `memsearch/tests/test_index.py` and `test_cli.py`. Existing keys unchanged.
