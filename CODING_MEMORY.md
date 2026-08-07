@@ -3362,3 +3362,72 @@ means inspect, not dead** — this judge simply verifies more coordinates than t
 **Next:** revise the spec for the two cited violations (both about the *entry* status write), then
 dispatch **round 3 — the escalation boundary**. Pass round 2's ids
 `core-conduct/explicit-error-handling` and `writing-specs/edge-cases` forward. Still no waivers.
+
+## Session 31 — loop-2 rounds 3 and 4: both closed their citations, both introduced new ones
+
+`main` @ `52ff3f6`, pushed. `docs/features/memsearch-freshness.md` still `phase: planning`,
+`branch: none`. Spec is now 895 lines. Checkpoint 2 remains owed — literal `gate confirmed` only.
+
+### Round 3 — FAIL, 3 new ids (round 2's pair verified closed)
+
+Six revisions landed first: the entry `status.json` write **carries the six existing keys over**
+rather than recomputing (`--full` unlinks the DB at `index.py:73` *before* connect at `:74`, so a
+recompute stamps `chunks: 0` and the "0 chunks → silent" rule erases the session line for the whole
+rebuild); that write's read is fallible by contract (`OSError`/`JSONDecodeError` → empty object, one
+stderr line, never aborts); both writes atomic; R10.4's fixture moved to its own `cfg` variant; an
+R10 exit-cost paragraph (**no prune path** — `db.py:112-120` deletes only inside `replace_source`,
+so re-excluding after a failed R9 leaves every chunk in `memory.db` until a full rebuild); task 9
+times the cold run; task 10 runs `-m golden` (`pyproject.toml:23` deselects 16 by default).
+
+Round 3 then cited three new: a missed `skipped` count, a contradiction I created between R10.4 and
+task 7, and a timestamp emitting microseconds against a second-precision promise.
+
+### Round 4 — FAIL, 4 new ids (all three round-3 ids verified closed)
+
+User directed (do not re-ask): fix all three **and** fold in all three deferred design gaps. Nine
+revisions. The three design gaps are now in the spec:
+
+- **Stuck decays into stale** past new `RUN_ABANDON_HOURS` (24). Without it, a killed run plus a
+  dead scheduler shows "⚠ stuck" forever, the reader checks, finds nothing, and is never told the
+  scheduler died — and **falsifier clause (c) would score that as passed**, because something
+  surfaced. Third constant, deliberately: 8 / 6 / 24 answer three different questions.
+- **`last_run_errors` unknown is never zero.** New table row; degraded and stuck lines now point at
+  `scheduled-index.log`, not at a multi-hour retry.
+- **`archive_doc` → `recall_type` `episodic`** (one line at `chunk.py:111`, which already receives
+  `source_type`; `RECALL_TYPES` at `db.py:17` already has it, no migration). Without it `--type
+  episodic` silently misses all session history.
+
+### ⚠️ The real finding: I am patching cited lines, not sweeping surfaces
+
+All four round-4 violations were introduced **by the round-4 edit itself**, and the judge names the
+shared root: *a new state was added to the bullets and the table without propagating to the summary
+surfaces.* Concretely — R3's lead still says "three states" while listing four; three scenarios
+still assert `fresh` from a Given that never pins `last_run_errors`; the data-flow diagram is
+un-swept. Plus two unverified factual claims of mine: `:117` labelled "limit-scoped" when it is the
+changed-file test (`:149` is the limit-scoped one, which the same paragraph says *must* move), and
+"the sweep returns eleven hits" when `grep -n CODING_MEMORY` on that plan returns **14**.
+
+This is `feedback_audit_the_surface_after_repeat_findings` firing for real: three rounds running,
+each fix has spawned a same-species defect. **The method has to change before round 5** — build one
+explicit state table as the single source of truth, derive every surface from it (R3 lead, bullets,
+classification table, scenarios, diagram, falsifier, task 4), and re-run every command whose output
+the spec quotes rather than recalling it.
+
+### Observability judge (advisory) — findings not yet in the spec
+
+- **Golden query 12 is a likely casualty and unwarned.** It is a `must` query filtering `episodic`
+  and expecting a `.jsonl` path; R10 makes the archive episodic, dated today, weight 1.0 tied with
+  transcripts, and the largest file in the corpus. Name it as an expected casualty *before* task 10
+  runs, or a red result gets "fixed" instead of recorded.
+- **The decayed stale line prints the remediation decision 5 banned** while a run may be alive, and
+  the non-goal at ~809-811 still asserts the nudge never invites a concurrent run. That sentence is
+  now false.
+- **First-run-killed lands on "unknown age"** — no warning marker, no log pointer. The original
+  bug's silhouette in the window the decay creates.
+- `-m golden` asserts presence in top-k, not top hit, with no score floor — a weaker net than task
+  10 assumes. R9's five queries are the strict instrument.
+- `scheduled-index.log` is unbounded, no rotation, 4 runs/day (`reindex.log` is 63KB from one run).
+
+**Next:** escalated to the user after round 4 (second consecutive escalation; the id
+`writing-specs/edge-cases-r10-test-counts` also repeated across rounds 3 and 4, though the judge
+records round 3's instance as genuinely closed). Awaiting direction on method before round 5.
