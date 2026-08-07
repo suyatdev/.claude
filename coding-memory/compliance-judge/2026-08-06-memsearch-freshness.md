@@ -623,3 +623,149 @@ The second finding is small and cheap: one surviving sentence in a document the 
   is the model-switch checkpoint that opens implementation. Task renumbering to 7-11 is internally
   consistent: task 8 correctly depends on task 7 ("so the queries are written against the corpus they
   will be scored on"), and task 10 correctly forbids re-excluding the file if R9 fails.
+
+---
+
+## Round 2 (new loop) — 2026-08-07T02:22:37Z
+
+- **Verdict: FAIL** (2 violations)
+- head_sha: `d48513d3f9de0d94b0ab29c1da0815262649c1af`
+- spec_blob_sha: `68bb8fb23c507b0a24b0790e440a561753cb83d5`
+- Rule sources read: `rules/core-conduct.md`, `skills/writing-specs/SKILL.md`,
+  `skills/writing-secure-code/SKILL.md`, `rules/gates.md`, `CLAUDE.md`
+  (still no `.claude/project-standards.md` in this repo — repo layer is `CLAUDE.md` + `rules/`)
+- Confidence: **high** — every coordinate in R10 was opened and read; the R10 mechanism claim was
+  re-measured against `memory.db` directly.
+- Waived: none.
+
+### Layman summary
+
+Both of last round's findings are genuinely fixed, and the revision went further than the finding
+required. I checked every number in R10 against the actual files rather than trusting the spec:
+`config.py` line 56 really is the `excludes = ...` assignment that must survive and the guard really
+is 57–60; the golden query about the exclusion really is line 4 and line 2 really is the still-true
+sqlite-over-qdrant query; the four `processed` counts at `test_index.py` 84/135/149/160 really would
+each shift by one; line 93 really is a single compound assertion that cannot both flip and stay put;
+and the plan really does assert the retired invariant at both line 19 and line 2828, both of which
+are now listed. The extra defect the main agent found on its own is real and important — I ran the
+database query myself: `~/.claude/CODING_MEMORY.md`, `CLAUDE.md` and `MEMORY.md` all have **zero**
+rows while `PORTS.md` has one, which proves the `~/.claude` root is not walked and that deleting the
+exclusion alone would have changed nothing. Other spot checks all held: the two project copies are
+exactly 159 and 119 lines, the largest currently indexed doc is exactly 130 chunks, `launchctl getenv
+PATH` really is empty, there really is no lock or pidfile anywhere in the package, and ADR numbers
+0018/0019 are free (0017 is the highest).
+
+What is still open is one small area the revision did not touch: the **new write to `status.json` at
+the start of a run**. In plain terms, the indexer is now being asked to open its own status file
+before it starts work, keep two fields out of it, and write it back — but the spec never says what to
+do when that file is damaged, and never says what the other six fields should say at that moment.
+Two concrete consequences. First, `status.json` is written in one non-atomic shot, and this spec
+expects runs to get hard-killed (it says so twice), so a truncated file is a realistic state; if the
+indexer just parses it, every scheduled run dies at the first line, and the session nudge is
+contractually silent about a malformed file — the index would freeze again with nobody saying so,
+which is the exact defect this feature exists to end. Second, on a `memsearch index --full` the
+database is deleted *before* the connection is opened, so if the start-of-run write recomputes its
+numbers from the database (which is what "`_write_status` gains a parameter distinguishing the two
+calls" implies), it will record `chunks: 0`, and the nudge's untouched "0 chunks means stay quiet"
+rule then removes the memsearch line entirely for the whole rebuild — precisely when the
+"index run in progress" line was supposed to appear.
+
+Neither is hard to close: one paragraph in the `index.py` contract saying an unreadable prior
+`status.json` is treated as absent and never aborts the run, and saying whether the entry write
+carries the six existing keys over from the prior file or recomputes them (with the `--full` case
+named), plus a scenario or two.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `core-conduct/explicit-error-handling` | `rules/core-conduct.md` | Handle errors explicitly, never swallow them; validate all input at system boundaries and fail closed on any validation failure | Contracts → `memsearch/memsearch/index.py` — `_write_status` / `run_index` (the entry write); R5 | The entry write must "preserve the prior `last_run` and `last_run_errors`", which forces `run_index` to read back a `status.json` this same spec elsewhere treats as possibly malformed (R2; Scenario "Malformed status.json stays silent") and which is written in one non-atomic `write_text` by a process the spec twice expects to be hard-killed, yet the behaviour on an unreadable or truncated prior file is nowhere stated — so one torn write can abort every scheduled run at entry while the nudge stays silent by contract. |
+| 2 | `writing-specs/edge-cases` | `skills/writing-specs/SKILL.md` | State what correct looks like, what wrong looks like, and enumerate the edges — anything left implicit the agent infers, and inference is where the defects come from | Contracts → `memsearch/memsearch/index.py` — `_write_status` / `run_index`; R5; Scenarios | The spec never says whether the entry write recomputes the six existing keys from the just-connected DB or carries them over from the prior file, and under the reading its own wording favours (`_write_status` "gains a parameter distinguishing the two calls", so `dbmod.stats` runs again) an `index --full` — which unlinks the DB at `index.py:73` *before* `connect` at `:74` — stamps `chunks: 0`, whereupon the nudge's unchanged "`chunks` absent or 0 → exit 0 silently" rule deletes the session line for the entire multi-hour rebuild, contradicting both R3's in-progress line and the claim that `chunks` is "unchanged in name, meaning, and format". |
+
+### Round-1 violations — both fixed, verified line by line
+
+- `writing-specs/r8-missing-config-validator` — **fixed, and over-delivered.** Verified in the tree:
+  `config.py:56` is `excludes = tuple(raw.get("exclude_paths", ()))` and `57-60` is the `if not
+  any(...)` / `raise ConfigError(...)` guard — R10.2 and task 7 now state both, including "line 56
+  must survive". `golden_queries.json:4` is the `"why is CODING_MEMORY.md excluded..."` query and
+  `:2` is `"why did we choose sqlite over qdrant..."` — R10.5 now names line 4 and explicitly warns
+  off line 2. `test_index.py` `processed` assertions exist at 84 (`== 4`), 135 (`== 4`), 149 (`== 3`)
+  and 160 (`== 2`), each of which rises by one once the fixture's curated `CODING_MEMORY.md` becomes
+  indexable (the fixture writes it at `:58` into `coding-memory/`, which `make_cfg` lists as the sole
+  `curated_docs` entry); `:105` (`== 0`) and `:117` (`== 1`) correctly stay put and are not listed.
+  `test_index.py:93` is indeed the single compound `assert not any("CODING_MEMORY" in p or "subagents"
+  in p ...)`, and R10.4 now requires it split. The revision's own extra finding is confirmed
+  independently: `sqlite3` over `memory.db` returns 0 sources rows for `~/.claude/CLAUDE.md`,
+  `~/.claude/MEMORY.md` and any `CODING_MEMORY.md`, and 1 for `PORTS.md` — the `~/.claude` root is
+  not walked, so R10's `curated_docs` addition is genuinely load-bearing, and the "Lifting the
+  exclusion alone does not reach the archive" scenario is the right guard for it. Also checked: the
+  test helper `write_cfg` derives from the real `config.json`, so R10.1's `"archive_doc": 1.0` weight
+  automatically reaches every fixture and `index.py:88`'s `cfg.weights[st]` cannot `KeyError`.
+- `writing-specs/readme-drift` — **fixed.** `docs/superpowers/plans/2026-07-17-memory-rag-index.md`
+  asserts the invariant at `:19` ("Enforced by config validation, not convention") and `:2828`
+  ("`CODING_MEMORY.md` and `subagents/` transcripts are never indexed", inside the plan's embedded
+  README block); R10.6 now names **both**, with the reason. Design-doc coordinates re-verified: `:58`
+  (ASCII architecture diagram), `:67` and `:70` (the excluded Mermaid node and its `NOT indexed`
+  edge), `:135`, and the `154-163` "What Is NOT Indexed" block — all five present and all listed.
+  `memsearch/README.md:22` verified and covered by R8.
+
+### Notes (non-blocking)
+
+- **R10.4's fixture instruction is resolvable but not self-evident.** "The fixture at
+  `test_index.py:58` ... must additionally cover a file at the `~/.claude` root position" reads as an
+  edit to the shared `setup_corpus`/`make_cfg` pair used by all four counted tests; if the root file
+  were also added to that shared `curated_docs`, the four `processed` counts would rise by **two**,
+  not the "+1 each" R10.4 and task 7 both state. It is resolvable inside the document — the "+1 each"
+  arithmetic and the paired scenarios (one *with* the `curated_docs` entry, one *without*) together
+  force a separate cfg variant for the root-position test — so this is recorded as residual
+  imprecision rather than cited. A half-sentence ("in its own cfg variant; the shared fixture's
+  counts move by one") would remove the last guess.
+- **R9's five measurement queries have no stated home.** Task 8 commits them "as their own commit"
+  and falsifier (d) depends on them being a diffable committed artifact, but no path or format is
+  given, and the R9 bar (≥2 hits, each ≥0.30, top hit) is not expressible in the existing
+  `golden_queries.json` schema. Low defect risk (any committed file satisfies it), so not cited.
+- **R3's "whatever its age" reads unconditionally**, while the classification table makes stale
+  (row 4) beat degraded (row 5). The table plus its explanatory note is authoritative and explicit,
+  so an implementer has a definite answer; the R3 prose is just looser than the contract.
+- **Plan-file residue is historical, not live.** Beyond lines 19 and 2828, the plan still mentions
+  `CODING_MEMORY` at 41, 152, 205, 211, 282-284, 318, 1484, 1519 and 2890 — but those are code and
+  test listings and a completed verification step inside a finished implementation plan, i.e. a
+  record of what was built, not an assertion of a current rule. Line 2890 (a sample query "why is
+  `CODING_MEMORY.md` excluded from the index") is the closest call and would be worth a look during
+  task 7, but rewriting a historical plan's code blocks is not what the drift rule asks for.
+- **Every remaining factual claim I could check held.** No lock/pidfile anywhere in
+  `memsearch/memsearch/` (decision 5 stands); `digest_input_char_cap` is used only in `digest.py:51`
+  and `eval.py:57`, both transcript paths, so R10's "docs are never truncated by it" is right;
+  largest indexed doc is exactly 130 chunks; project copies are exactly 159 and 119 lines;
+  `launchctl getenv PATH` returns empty; `bin/memsearch` is the one-line `exec uv run --project`
+  wrapper, so the plist's `PATH` key really is load-bearing; `status.json` carries exactly the six
+  keys the spec lists, with `+00:00` offsets; `session-log.md` ends 2026-07-16 and `decisions.md`
+  2026-07-19, confirming promotion stopped; `docs/decisions/` tops out at 0017, so 0018/0019 are
+  free; the plan is 3,079 lines as stated; the nudge is registered under `SessionStart` at
+  `settings.json:71`. `docs/features/` now returns 11 sources rows, independently confirming
+  diagnostic row 2's "no-op — nothing to add".
+- **Measurement drift, expected and harmless.** `CODING_MEMORY.md` now reads 3,291 lines / 289,075
+  characters against the spec's 3,232 / 285,187 "measured 2026-08-06". That is one day of appends to
+  an append-only archive, and the spec dates its measurement; the "single largest source, ~2.5× the
+  largest indexed doc" conclusion is unaffected.
+- **Security territory still clean.** No new dependency; `install-schedule` runs fixed `launchctl`
+  argument vectors with only `__HOME__` → `$HOME` substituted; the plist is mode `0644` (justified)
+  and `LaunchAgents` `0755`; the scheduled job runs plain `index`, never `--full`; the nudge still
+  reads a plain JSON file, never the CLI, and exits 0 on every path. Indexing `CODING_MEMORY.md`
+  creates no new exposure — the file is already committed, `chunk_doc` (not the digest model) handles
+  docs, and both models are local Ollama with `:cloud` refused at config load.
+- **Not cited — `/opt/homebrew/bin` in the plist `PATH`.** It is an absolute, Apple-Silicon-specific
+  path in a committed template, but `launchd` execs without a shell, the spec pins macOS 25.5.0 and
+  `uv` 0.11.28 (Homebrew) in the same table, and the path is not user-identifying. The supply-chain
+  invariant's target — a hard-coded `$HOME` — is correctly placeholdered and has its own scenario.
+- **Not cited — log hygiene.** `scheduled-index.log` has no stated mode or rotation and appends
+  forever; same disposition as prior rounds.
+- **Not cited — spec location.** Unchanged: `rules/gates.md`'s one-canonical-file discipline mandates
+  `docs/features/<name>.md` for a file carrying `phase` frontmatter and a checklist, and the repo
+  layer wins over `writing-specs`' `docs/superpowers/specs/` default.
+- **YAGNI and scope discipline remain exemplary.** Scope still ends at parent item 5 with item 6
+  excluded for a stated reason, eight non-goals are named, and the `RUN_MAX_HOURS` reference point is
+  correctly escalated to the user (task 9) rather than quietly widened — the "architecture trade-offs
+  stay human-owned" invariant handled exactly right.
+- **Phase discipline intact.** Frontmatter still `phase: planning`, `branch: none`; task 1 is the
+  model-switch checkpoint that opens implementation.

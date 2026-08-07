@@ -3289,3 +3289,76 @@ indexed**, so what the exclusion loses is the *narrative log*, not the decision 
 
 **Next:** dispatch loop-2 round 2, both judges, blob `68bb8fb2`. Reuse ids
 `writing-specs/r8-missing-config-validator` and `writing-specs/readme-drift`. No waivers.
+
+## 2026-08-06 — session 30 (cont.): loop-2 round 2 — FAIL, but the round-1 pair is genuinely closed
+
+**Round 2 ran on blob `68bb8fb2`. Both judges dispatched to panes (`surface:160`, `surface:161`),
+both returned DONE. Compliance: FAIL, 2 violations — both NEW ids. Observability (advisory):
+`risk=medium confidence=high`, no dimension fails. No persistence trigger fired; round 3 is
+available, and it is the escalation boundary.**
+
+### The round-1 pair is fixed — verified by the judge against the tree, not taken on our word
+
+`writing-specs/r8-missing-config-validator` and `writing-specs/readme-drift` both closed. The judge
+re-opened every coordinate: `config.py:56` is the `excludes` assignment with the guard at 57-60;
+`golden_queries.json:4` is the exclusion query and `:2` the still-true one; the four `processed`
+counts at `test_index.py` 84/135/149/160 each shift by one while **`:105`/`:117` correctly do not**;
+`:93` is the compound assertion; the plan asserts at both `:19` and `:2828`, both now listed. It
+independently confirmed the mechanism finding — `memory.db` holds **0** `sources` rows for
+`~/.claude/CLAUDE.md`, `MEMORY.md` and every `CODING_MEMORY.md`, against **1** for `PORTS.md`. The
+`curated_docs` addition really is the load-bearing half.
+
+### Round 2's two violations — both land on the *entry* status write, not on R10
+
+1. `core-conduct/explicit-error-handling` — the entry write must "preserve the prior `last_run` and
+   `last_run_errors`", which forces `run_index` to **read back** a `status.json` that this same spec
+   elsewhere treats as possibly malformed (R2, the "malformed stays silent" scenario), written in one
+   non-atomic `write_text` by a process the spec twice expects to be **hard-killed**. Behaviour on a
+   truncated prior file is nowhere stated → one torn write aborts every scheduled run at its first
+   line while the nudge is contractually silent. The freeze returns, unreported.
+2. `writing-specs/edge-cases` — the spec never says whether the entry write **recomputes** the six
+   existing keys from the DB or **carries them over**. Under the reading its own wording favours
+   (`_write_status` "gains a parameter distinguishing the two calls" → `dbmod.stats` runs again), an
+   `index --full` — which **unlinks the DB at `index.py:73` before connect at `:74`** — stamps
+   `chunks: 0`, and the *unchanged* "chunks absent or 0 → exit silently" rule then deletes the
+   session line for the whole multi-hour rebuild. That contradicts R3's in-progress line and the
+   claim that `chunks` is "unchanged in name, meaning, and format".
+
+Uncited note worth folding in: R10.4's "the fixture at `test_index.py:58` must additionally cover a
+file at the `~/.claude` root position" reads as an edit to the **shared** fixture, under which the
+four counts rise by **two**, not the stated +1 each. Half a sentence ("in its own cfg variant") fixes it.
+
+### Observability judge — four new findings, all advisory, two are sharp
+
+- **The archive lands in the wrong retrieval bucket.** `chunk.py:111` picks `recall_type` by path
+  substring, so every archive chunk becomes `doc`. The SessionStart line itself advertises
+  `--type decision|episodic|doc`, so after R10 asking for session history with `--type episodic`
+  **still misses it**. The hole is narrowed, not closed — and a golden query written with the
+  natural `episodic` filter would fail, unwarned.
+- **"Run the full suite" runs none of the retrieval tests.** `addopts = -m 'not golden'`; those 16
+  deselected tests *are* R9's noise-regression net. Nothing in tasks 7-10 runs them, so the golden
+  query R10.5 writes is never executed by the plan that writes it. Fix: `-m golden` in task 10.
+- **R10 has no way back** — there is no prune in the indexer, so if R9 fails and the file is
+  re-excluded the chunks stay in `memory.db` until a multi-hour `index --full`. The spec plans for
+  R9 failing and never states that exit cost. R7's launchd uninstall is first-class by contrast.
+- Task 9 measures a **warm incremental** run against a threshold that must cover a full backfill.
+- Bonus, verified: `archive_doc` needs **no DB migration** — there is no `CHECK` on `source_type`.
+- Suite runs **63 passed, 16 deselected**, under `uv` (system `python3` has no pytest).
+
+### The three carried advisory items — judge says the current text does not change its read
+
+`last_run_errors` still has no usability rule (the "when in doubt" rule is scoped to *timestamps*),
+so a missing value defaults to 0 and prints the reassuring line; a permanently-failing source still
+pins the warning forever, and **R10 makes that likelier** by adding the corpus's largest file; the
+degraded line still points at re-running the indexer, never at `scheduled-index.log` — the evidence
+R6 sets `PYTHONUNBUFFERED` specifically to preserve.
+
+### Process note — the wait timed out but the judge was fine
+
+First `wait --timeout 540` returned exit 2. The pane was inspected before any retry: process alive at
+9m32s, child `claude` at 0.1% CPU (normal for an API wait). Re-running `wait` returned DONE. **Exit 2
+means inspect, not dead** — this judge simply verifies more coordinates than the sibling (~6m).
+
+**Next:** revise the spec for the two cited violations (both about the *entry* status write), then
+dispatch **round 3 — the escalation boundary**. Pass round 2's ids
+`core-conduct/explicit-error-handling` and `writing-specs/edge-cases` forward. Still no waivers.
