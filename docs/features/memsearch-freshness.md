@@ -159,8 +159,15 @@ The emitted lines, one per state, in the same order:
 - **2, stuck** — an in-progress claim is not a licence to stay silent forever, but the remediation
   still may not be "run it again" while the old process may be alive, so it points at the log, which
   holds the evidence.
-- **3, abandoned first run** exists because states 1 and 2 *decay* — past `RUN_ABANDON_HOURS` the
-  `run_started` stamp becomes unusable, exactly as a future one is. Without a state to catch it, the
+- **3, abandoned first run** exists because states 1 and 2 *decay* — past `RUN_ABANDON_HOURS` a
+  `run_started` stamp stops being *believed*, though it remains **usable** in the table's sense.
+  ⚠️ *Wording corrected in round 6:* this sentence previously read that the stamp "becomes
+  unusable, exactly as a future one is", which contradicts the definition above it — a timestamp is
+  usable iff it **parses and is not in the future**, and an old stamp satisfies both. Two different
+  meanings of one defined term is precisely the duplication round 5's state table was built to
+  remove, so the term keeps its single definition and only the age threshold moves a run between
+  states. State 3 matches exactly as row 3 states it: `last_run` absent, `run_started` present, in
+  the past, age ≥ `RUN_ABANDON_HOURS`. Without a state to catch it, the
   first-ever run being killed falls through to **4, unknown age**: no marker, no log pointer, and a
   reader told only "age unknown" about a scheduler that died on its first attempt. That is this
   feature's own defect one field over — a surface that reports something while vouching for nothing.
@@ -247,8 +254,38 @@ Its line 22 invariant — "`CODING_MEMORY.md` and `subagents/` transcripts are n
 is **half falsified by R10** and is corrected in that same commit. The `subagents/` half stands.
 
 **R9 — retrieval is measured against a stated bar.** Five queries are written and committed as their
-own commit before any of them is run. Acceptance, at `k=6`: each query returns **≥2 hits** belonging
-to the named feature, **each scoring ≥0.30**, with the **top hit** belonging to that feature.
+own commit before any of them is run. Acceptance, at `k=6`, is **two rank clauses that bind now and
+one score floor that is set from measurement before it binds**:
+
+1. **≥2 hits** belonging to the named feature. *Binds now.*
+2. The **top hit** belongs to that feature. *Binds now.*
+3. Each of those hits scores **at or above a floor set in task 8b** — see below. *Does not bind
+   until that floor is recorded.*
+
+⚠️ ***The floor is deliberately unset here, and that is a decision, not an omission.*** Through
+round 5 this requirement read "each scoring **≥0.30**". **That bar is unreachable by construction.**
+`search.py:61-64` fuses exactly two retrievers by reciprocal rank, each contributing at most
+`1/(RRF_K + 1)` with `RRF_K = 60` (`search.py:19`), and `:78` multiplies the sum by the chunk's
+weight, the largest of which is `curated_doc: 1.5`. The hard ceiling is therefore
+`2 × 1/61 × 1.5 =` **0.04918** — verified 2026-08-07 by a live query whose top hits scored
+**0.046514** and **0.040114**. A floor of 0.30 is **six times the maximum the scorer can emit**, so
+clause 3 as written could only ever fail, for every query, no matter how good retrieval was.
+
+The disproof was already in this document: the *Baseline* two paragraphs below records the hits that
+did return as scoring **~0.02**. A bar of 0.30 sat directly above a measurement an order of
+magnitude beneath it for five rounds. **This is the same defect the feature exists to fix** — a
+check that reports failure while telling you nothing about the thing it claims to check — and it is
+recorded here rather than silently corrected, because a number that survived five judge rounds is
+evidence about the review, not just about the number.
+
+**Why the floor is set from data instead of replaced with a guess (user decision, 2026-08-07):**
+any number written today would be judgment against the current `RUN_ABANDON_HOURS`-era weights and
+`RRF_K`, dressed as a measurement. The queries are run first, their real scores are recorded, and
+the floor is chosen against those numbers. This is a bounded, explicitly-gated open value — task 8b
+produces it, a named human decision fixes it, task 10 applies it — **not** a TBD left for an
+implementer to resolve. An implementer who reaches task 10 without a recorded floor **stops and
+asks**; they do not invent one, and they do not skip clause 3 silently. Clauses 1 and 2 are fully
+specified and gate the work on their own in the meantime.
 
 *Membership is mechanical, not a judgment call*: a hit belongs to feature `F` iff its source path is
 exactly `docs/features/F.md` or `docs/features/F.spec.md`. Nothing else counts — not an ADR that
@@ -425,10 +462,23 @@ behaviour:
    so what the exclusion loses is the *narrative log*, not the decision record.
 
 *The noise risk is real and is measured, not argued.* The original rationale's surviving half — that
-indexing session narrative could "pollute semantic search" — is untested. At **299,422 characters /
-3,433 lines** (re-measured 2026-08-07; it grows every session, so treat any figure here as a floor)
-`CODING_MEMORY.md` becomes the single largest source, **2.3×** the largest doc currently indexed
-(`coding-memory/compliance-judge/2026-07-26-03b-deploy-design.md`, 129,880 characters / 130 chunks).
+indexing session narrative could "pollute semantic search" — is untested. At **300,160 characters /
+3,484 lines** (re-measured 2026-08-07; it grows every session, so treat any figure here as a floor)
+`CODING_MEMORY.md` becomes the single largest source, **1.62×** the largest doc currently indexed
+(`vibe-scape/docs/plans/2026-07-13-live-presence-plan.md`, 184,620 characters / 121 chunks).
+
+⚠️ *Two units were conflated here through round 5 and the correction is recorded rather than
+quietly applied.* Earlier drafts called this **2.3×** and named
+`coding-memory/compliance-judge/2026-07-26-03b-deploy-design.md` as the largest indexed doc. That
+file is the largest by **chunk count** (130), not by size; the multiplier beside it was
+**character**-based, and it was computed against that file's byte count rather than its character
+count. Ranked by the same unit the arithmetic uses, three indexed docs are larger — 184,620,
+153,701 and 131,516 characters — and the true multiplier is **1.62×**. Every figure in this
+paragraph is now an on-disk character count, compared like with like. The corrected number is
+*less* alarming than the one it replaces, which is the direction that matters: the risk this
+paragraph exists to size was overstated by ~40%, and R9 — not this paragraph — remains the
+instrument that decides it.
+
 **R9 is the instrument**: it scores feature-file retrieval at `k=6`, so if narrative
 chunks crowd feature files out of the top hits, R9 fails and says so. R9 is therefore run *after*
 this change lands, and a failure is a real result, not a reason to quietly re-exclude. (The digest
@@ -620,8 +670,8 @@ Scenario: A stuck run is flagged without inviting a second indexer
   And it names the scheduled-index log
 
 Scenario: A stuck marker decays rather than hiding a dead scheduler
-  Given run_started is 30 hours ago and is later than last_run
-  And last_run is 30 hours ago
+  Given last_run is 40 hours ago
+  And run_started is 30 hours ago, later than last_run and older than RUN_ABANDON_HOURS
   When the nudge runs
   Then the line is stale, not stuck
   And it carries the index command as remediation
@@ -885,11 +935,34 @@ the index was rebuilt, because the rebuild happened first (Background, R9).
 ### Non-goals
 
 - Parent item 6, the seeded session-start query.
+- **Detecting a run that walked zero files.** ⚠️ *Named in round 6 as a deliberate, bounded gap —
+  user decision, 2026-08-07.* `status.json` records `run_started`, `last_run`, `last_run_errors`
+  and a `chunks` total; **it does not record how many sources the run actually walked.** So a run
+  whose corpus vanished — a moved directory, a typo'd `curated_docs` entry, an over-broad
+  `exclude_paths` — completes with no errors, stamps `last_run` at now, leaves `chunks` at its
+  prior non-zero value, and therefore renders as **state 8, fresh**, indefinitely. R4's
+  "`chunks` absent or 0" escape hatch does not catch it, because `chunks` is a database total and
+  survives a run that indexed nothing.
+  **This is the same species as the failure in the Background** — the indexer ran "successfully"
+  for 19 days while never walking `CODING_MEMORY.md` — and it is stated plainly rather than left
+  for a reader to find. R10 fixes *that instance* by correcting the config; nothing here detects
+  the general case. Closing it would mean a new status field, a ninth state, and its scenarios and
+  tests; that is deliberately out of this branch's scope, not overlooked.
+  *If this recurs, this bullet is the pointer: the fix is to record the walked-source count and add
+  the state, not to widen `chunks`.*
 - Per-session dating of the archive's chunks. `session_date` for a doc comes from the file's
-  mtime, so all ~30 sessions inside `CODING_MEMORY.md` are stamped with one date — the day the file
+  mtime, so every session inside `CODING_MEMORY.md` is stamped with one date — the day the file
   was last appended to. R10 makes the archive retrievable and correctly bucketed; it does not teach
-  the chunker to read the `## Session N — <date>` headings. Named because date-filtered recall over
-  the archive will therefore be wrong, not merely coarse.
+  the chunker to recover per-session dates from the headings. Named because date-filtered recall
+  over the archive will therefore be wrong, not merely coarse.
+  ⚠️ *Corrected in round 6 — the load-bearing claim above (mtime-derived `session_date`) holds; the
+  supporting detail did not.* This bullet previously said "~30 sessions" and named
+  `## Session N — <date>` as the heading the chunker would have to read. Measured 2026-08-07:
+  **20** headings match a session pattern, in **two** forms — 17 date-first (`## 2026-08-06 — …`)
+  and 3 session-first (`## Session 29 — …`) — and **zero** carry the `Session N — <date>` shape the
+  sentence named. So per-session dating is harder than "read the heading" implied: an implementer
+  tempted to close this non-goal would have to parse two formats, one of which carries no date at
+  all. That makes the non-goal *more* justified, not less, which is why it stays a non-goal.
 - Re-scoping *what* of `CODING_MEMORY.md` gets indexed. R10 indexes the whole file. Indexing only
   its session headers, or weighting it below ADRs, are plausible refinements — deliberately not
   attempted, because R9 measures whether the whole-file version actually degrades retrieval and
@@ -977,6 +1050,17 @@ was asked and answered 2026-08-06: **Opus 5**.
 - [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9). **After task 7**, so the queries are written against the corpus they will
       be scored on.
+- [ ] 8b — **Record the observed scores, then stop for the floor decision (R9 clause 3).** Run the
+      five committed queries at `k=6` and write, under `## Verification`, every hit's score
+      alongside whether it belongs to the named feature — the raw numbers, unrounded, with no
+      pass/fail attached. Also record the ceiling the scorer can emit
+      (`2 × 1/(RRF_K + 1) × max(weight)` — **0.04918** at `RRF_K = 60` and `curated_doc: 1.5`), so
+      the floor is read against the range it lives in rather than against intuition.
+      ⚠️ **Then stop and put the numbers in front of the user, who sets R9's floor.** Do not choose
+      it yourself and do not proceed to task 10 clause 3 without it. Once set, write the floor into
+      R9 in the same commit that records the measurement, so the bar and the evidence for it land
+      together and the frontmatter blob changes once.
+      *This is the deliberate open value R9 names; it is closed here, by a human, against data.*
 - [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
@@ -1009,11 +1093,19 @@ was asked and answered 2026-08-06: **Opus 5**.
       contains. If it fails, the honest reading is that the archive is a *better* answer to that
       query than a transcript is, and the fix is to re-point the query, not to re-exclude the file;
       record that judgment either way.
-      **(b) R9's bar.** Score the five measurement queries at `k=6` with R9's own runner — ≥2 hits
-      belonging to the named feature, each ≥0.30, top hit belonging — and record pass/fail per
-      query, including a failing result if that is the truth. **A failure here is a real result
-      about R10's noise cost** — report it, do not silently re-exclude the file (and see R10's exit
-      cost: re-excluding does not remove the chunks already written).
+      **(b) R9's bar.** Score the five measurement queries at `k=6` with R9's own runner and record
+      pass/fail per query, including a failing result if that is the truth:
+      **clause 1** ≥2 hits belonging to the named feature, **clause 2** top hit belonging — both
+      bind unconditionally — and **clause 3** each of those hits at or above **the floor recorded
+      in task 8b**. ⚠️ **If no floor has been recorded, clauses 1 and 2 are still scored and
+      clause 3 is reported as `not yet binding`** — never as a pass, never as a fail, and never
+      against an invented number. Reaching this task without a floor means task 8b's decision was
+      skipped: stop and ask.
+      **A failure of clause 1 or 2 is a real result about R10's noise cost** — report it, do not
+      silently re-exclude the file (and see R10's exit cost: re-excluding does not remove the
+      chunks already written). *A clause-3 failure is only meaningful against a floor set from
+      measurement; before round 6 this clause read `≥0.30`, which the scorer cannot reach, so any
+      pre-existing reading of "R9 failed" that rests on it is void.*
 - [ ] 11 — Observability judge (implementation stage), then PR.
 
 ## Verification

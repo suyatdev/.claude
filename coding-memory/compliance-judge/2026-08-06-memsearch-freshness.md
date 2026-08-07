@@ -1040,3 +1040,83 @@ every "fresh" and pin `last_run_errors` in each.
   carrying `phase` frontmatter and a checklist, and the repo layer wins; `/opt/homebrew/bin` in the
   plist `PATH`; `scheduled-index.log` having no stated mode or rotation. Frontmatter remains
   `phase: planning`, `branch: none`.
+
+---
+
+## Round 5 — 2026-08-07T04:27:00Z — **FAIL** (1 violation)
+
+`main` @ `9ad77809` · spec blob `748b108ba85fe519997136a918be9ee660a0367b` · confidence **high**
+
+### In layman's terms
+
+The spec was restructured this round rather than patched again. It now has **one** table of the
+eight freshness states, and every other part of the document points at that table instead of
+copying it. That fixed the root cause of rounds 3 and 4: a state got added in one place and the
+half-dozen places that repeated it went stale. All four of round 4's findings are genuinely
+closed — I re-ran every command they rested on rather than trusting the spec's word for it.
+
+One thing still does not survive re-measurement, and it is the same species as before: a number
+recalled instead of re-run. The spec argues that adding `CODING_MEMORY.md` to the index could
+drown out other results, and sizes that risk as "**2.3× the largest doc currently indexed**",
+naming a compliance-judge design doc as that largest doc. It isn't the largest. Three documents
+already in the index are bigger — a vibe-scape plan at 185,097 characters, another at 154,330,
+and `docs/features/phase-guard-hook.md` at 132,469 — against the true largest the archive is
+**1.6×**, not 2.3×. The named doc is only the largest by *chunk count*, while the spec's own
+arithmetic is character-based. This does not misdirect anyone building the feature (R9 is still
+the real instrument), but it sits inside the one paragraph whose whole claim is "measured, not
+argued", and it makes the risk read ~40% scarier than the corpus actually supports.
+
+### Violations
+
+| id | rule source | where | why |
+|---|---|---|---|
+| `core-conduct/noise-risk-largest-doc` | `rules/core-conduct.md` | R10 → *The noise risk is real and is measured, not argued* | `coding-memory/compliance-judge/2026-07-26-03b-deploy-design.md` (129,880 chars) is **not** the largest indexed doc — `vibe-scape/docs/plans/2026-07-13-live-presence-plan.md` (185,097), `…/2026-07-13-ar-portal-client-plan.md` (154,330) and `~/.claude/docs/features/phase-guard-hook.md` (132,469, same `curated_doc` bucket) are all larger and all carry `sources` rows, so the stated **2.3×** is really **1.6×** and the superlative names the wrong file. |
+
+### Round 4's four findings — all verified closed, none re-cited
+
+- `writing-specs/edge-cases-r10-test-counts` — **closed.** The R10.4 table now labels `:117` as
+  the *changed-file* test (`test_changed_file_reindexes_only_itself`, `processed == 1`) and
+  `:149` as the *limit-scoped* one (`processed == 3` → 4), matching `test_index.py` exactly, and
+  explicitly flags the earlier mislabel. All four stale inline comments are now named —
+  `:84`, `:135`, `:148`, `:160` — and each quoted comment text is verbatim correct. The five
+  movers (`:84,:106,:135,:149,:160`) and four non-movers (`:105,:117,:136,:161`) are each right
+  under the +1 rule; "seven failing functions from eight failing assertions" is exact
+  (`:84`/`:93` share `test_full_run_indexes_all_sources_newest_first`).
+- `writing-specs/fresh-scenarios-error-count` — **closed.** Every scenario asserting a fresh line
+  now pins `last_run_errors is 0`: *Fresh index reports its age*, *The threshold itself counts as
+  stale*, *A successful run that changes nothing*, *A clean recent run is fresh*, *A future
+  run_started is not a run in progress*. I walked all 44 scenarios against the state table's
+  first-match-wins ordering; every one resolves to exactly the state it claims.
+- `writing-specs/r3-state-count` — **closed.** R3 says "Eight states", the table has rows 1–8, the
+  emitted-line list has 8 entries in the same order, and the diagram's `OUT` node names all eight.
+- `writing-specs/plan-sweep-hit-count` — **closed and correct.**
+  `grep -n CODING_MEMORY docs/superpowers/plans/2026-07-17-memory-rag-index.md` returns exactly
+  **14**, at lines 19, 41, 152, 205, 211, 282, 284, 318, 1484, 1519, 2828, 2890, 2942, 3067 — the
+  spec's four-to-correct (19, 2828, 2890, 2942) and ten-to-leave (41, 152, 205, 211, 282, 284,
+  318, 1484, 1519, 3067) partition matches hit for hit. Plan is 3,079 lines.
+
+### Everything else re-measured this round
+
+Live, not recalled: `sources` = **911** rows, **187** at `2026-07-18` and **724** at `2026-08-06`
+— exactly as R9's premise-refresh states. `session-log.md` last date `2026-07-16`,
+`decisions.md` `2026-07-19`, both still frozen. Project copies 159 / 119 lines. Deploy-design doc
+129,880 chars / 130 chunks (both figures right; only the superlative around them is wrong).
+`~/.claude/CLAUDE.md`, `MEMORY.md` and `CODING_MEMORY.md` all 0 `sources` rows; `PORTS.md`
+indexed. `golden_queries.json` holds 16 entries — 11 `must`, 3 `stretch`, 2 `negative` — line 4 is
+the CODING_MEMORY exclusion query, line 2 the still-correct sqlite-over-qdrant one, and entry 11
+at file line 12 is the mid-july/`episodic`/`since`/`.jsonl` case task 10 predicts as a casualty.
+`test_golden_queries.py:37-41` asserts presence only, `:47-52` and `:57-60` warn — R9's claim that
+its bar is invisible to that harness is correct. Toolchain verified row by row: bash 3.2.57,
+python3 3.9.6 (bare `isoformat()` emits microseconds; `timespec='seconds'` matches `db.py:103` and
+the live `status.json`; `Z` is rejected), uv 0.11.28 at `/opt/homebrew/bin`, venv python 3.12.13,
+sqlite3 3.51.0, darwin 25.5.0, `launchctl getenv PATH` empty. Every source citation checked out:
+`config.py:56`/`57-60`, `db.py:16,17,72,103,112-120,121,125,156`, `index.py:43-54,57-67,67,73,74,
+100,125-127,135-137`, `chunk.py:109-111,140-141`, `cli.py:39,66`, `status.py:27`,
+`pyproject.toml:23`, `README.md:22`, design doc 58/67/70/135/154-163,
+`memory-system-split.spec.md:540`. `docs/decisions/` tops out at 0017, so 0018/0019 are free. No
+lock or pidfile exists in `memsearch/` (decision 5's premise holds); `digest_input_char_cap` is
+used only in `digest.py`/`eval.py`, never in `chunk_doc`.
+
+### Waivers
+
+None. No violation has ever been waived on this spec.
