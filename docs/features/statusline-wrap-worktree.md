@@ -121,7 +121,35 @@ Feature: worktree name
 
 - No change to what the existing segments mean or how they are computed.
 - No hard character-level wrapping. Segment granularity only.
-- No `LINES`-based vertical clamping beyond a fixed maximum line count.
+- No `LINES`-based vertical clamping.
+
+### Revised after the observability judge (round 1)
+
+The judge found the design's own Gherkin unmet: **the head never wrapped.** It was one
+indivisible string, so in this worktree at `COLUMNS=60` it measured 120 cells — and the width
+assertion could not catch it, because that case rendered `/tmp`, which is not a repo and
+produced a stubby 33-cell head with no branch and no `wt:()`.
+
+Both were fixed rather than exempted. Exempting the head would have defeated the feature: the
+head is the longest part of the line and therefore the part that overflows.
+
+- The git prompt's parts are now **separate segments** (`user@host`, directory, `git:(branch)`,
+  `wt:(name)`), each carrying its own preceding separator, so one packing loop handles the
+  whole line uniformly.
+- The **4-row cap was removed.** With the head split, six segments could not fit in four rows,
+  and every width from 24 to 52 cells overflowed by sharing the remainder onto the last row.
+  No cap is needed: a segment starts a new row only when it does not fit, so rows are already
+  bounded by segment count (at most eight).
+- The width assertion is **re-pointed at the real linked-worktree fixture**, which produces the
+  long head. It was confirmed to fail first (`widest=79>60`).
+- Measured after the fix, fuzzing every width from 12 to 200: **at 38 cells and above nothing
+  overflows.** Below that only an atomic segment ever does, which is the documented
+  never-break-mid-segment case. Below 12, wrapping is off by design.
+- `push_segment` takes text and width in **one call**, so the judge's "a segment pushed without
+  its width would mis-measure silently" concern is now structurally impossible.
+
+Rationale for reversing the documented "output can never be split across lines" invariant:
+**ADR 0018**.
 
 ## Tasks
 
@@ -135,7 +163,12 @@ Feature: worktree name
 - [x] 6. Update the file's header comment — the "Target look" block and the newline rationale,
       which stated that output can never be split across lines.
 - [x] 7. Full suite green: **66/66**, against a real linked worktree, not a simulated one.
-- [ ] 8. Observability judge, then PR.
+- [x] 8a. Observability judge, round 1: **risk=low, confidence=high**, with one real defect —
+      the head never wrapped and the width test could not catch it. Both fixed above.
+- [ ] 8b. Observability judge, round 2 (a fresh verdict must match HEAD or `judge-guard`
+      blocks the PR), then PR. **Open it from this worktree** — `judge-guard` derives the repo
+      as `basename(show-toplevel)`, which is `statusline-wrap-worktree` here and `.claude`
+      from the shared checkout, where it would look for the wrong verdict and block.
 - [ ] 9. **`statusline-command.falsify.py` reports `FALSIFICATION BROKEN` — pre-existing.**
       Verified at HEAD *before* any change here: `f0902ed` scores 8/50 against `want 9`, and
       `925c310` scores 9/50 against `want 10`. The harness runs the current suite against five
@@ -148,3 +181,15 @@ Feature: worktree name
       branch are a real signal nobody has read yet. Needs its own task: decide whether the
       harness should assert counts at all, or assert *which* named cases fail per version — the
       latter survives adding tests, which is the whole reason it keeps going stale.
+
+      **Owed by 2026-08-20.** A permanently-broken harness stops being read, which is the
+      failure mode ADR 0016 was written about. The cost of leaving it: this diff merges with
+      no differential coverage at all.
+- [ ] 10. **A missed worktree fails into the dangerous reading.** Absence of `wt:()` is
+      *defined* as "you are in the main checkout", so a detector that silently broke would look
+      identical to the state this feature exists to warn about — and given the motivating
+      incident (a session switching the shared checkout's branch while another worked in it),
+      that is the worst direction to fail in. Raised by the judge; not fixed here because the
+      fix is a design question, not a patch: it needs a distinguishable "unknown" rendering,
+      which is a change to what the segment *means*, and that was an explicit non-goal of this
+      branch.

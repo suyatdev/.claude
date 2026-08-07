@@ -774,6 +774,23 @@ case "$(plain "$(render "$(wt_payload "$WT_ROOT/mainrepo/nested/deep")")")" in
   *) ok "a subdirectory of the main tree is not misreported as a worktree" ;;
 esac
 
+# The width case up in the wrapping group renders /tmp, which is not a repo: no
+# branch, no wt:(), and a head barely a third of the terminal. It therefore
+# could not fail for the one shape that actually overflows -- a LONG head, which
+# is exactly what a linked worktree produces, since it carries the branch and
+# the worktree name on top of user@host and the directory.
+#
+# This re-runs the same assertion against that shape. It is placed here rather
+# than beside its sibling because it needs the worktree fixture built above.
+WIDE_HEAD_PAYLOAD="$(printf '{"workspace":{"current_dir":"%s"},"model":{"display_name":"Opus 5 (1M context)"},"effort":{"level":"xhigh"},"context_window":{"total_input_tokens":87000}}' "$WT_ROOT/feature-alpha")"
+OUT="$(render_cols 60 "$WIDE_HEAD_PAYLOAD")"
+W="$(widest_line "$OUT")"
+if [ "$W" -le 60 ]; then
+  ok "a long head wraps too (widest=$W<=60)"
+else
+  bad "the head overflows COLUMNS and never breaks (widest=$W>60)"
+fi
+
 # $cwd is stripped of control bytes BEFORE any git command runs, so a path
 # carrying one no longer resolves and the whole git block is skipped -- no
 # branch, no worktree, no dirty marker. That is the behaviour asserted here,

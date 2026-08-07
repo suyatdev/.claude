@@ -199,21 +199,59 @@ if git -C "$cwd" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 
   fi
 fi
 
-# Visible width is accumulated alongside the string it describes -- see the
-# packing section at the foot of this file for why it is tracked rather than
-# measured. ARROW plus the two spaces robbyrussell puts after it is 3 cells.
-head_width=$((3 + ${#user} + 1 + ${#host} + 1 + ${#dir}))
-out="${GREEN}${ARROW}${RESET}  ${WHITE}${user}@${host}${RESET} ${CYAN}${dir}${RESET}"
+# --- Segments -----------------------------------------------------------------
+# Everything on the status line is a segment: the git prompt's parts as much as
+# the Claude ones. They differ only in the separator that precedes them (a space
+# within the git prompt, a divider before the Claude segments), so carrying the
+# separator ON the segment lets one packing loop handle both.
+#
+# The git prompt was originally one indivisible string. That made it the one
+# thing that could not wrap, and it is the longest part of the line -- in a
+# worktree it carries user@host, the directory, the branch AND the worktree name,
+# which measured 120 cells against a 60-cell terminal. Splitting it here is what
+# makes "no line exceeds the terminal width" true rather than nearly true.
+#
+# Visible width travels with the text rather than being measured afterwards --
+# see the packing section at the foot of this file for why. push_segment takes
+# both in one call precisely so a segment cannot be added without its width.
+seg_text=()
+seg_width=()
+seg_sep=()
+seg_sep_width=()
+
+push_segment() { # $1 text  $2 visible width  $3 preceding separator  $4 its width
+  seg_text+=("$1")
+  seg_width+=("$2")
+  seg_sep+=("$3")
+  seg_sep_width+=("$4")
+}
+
+# ARROW plus the two spaces robbyrussell puts after it is 3 cells.
+push_segment "${GREEN}${ARROW}${RESET}  ${WHITE}${user}@${host}${RESET}" \
+             $((3 + ${#user} + 1 + ${#host})) "" 0
+push_segment "${CYAN}${dir}${RESET}" "${#dir}" " " 1
 if [ -n "$branch" ]; then
-  out="${out} ${BLUE}git:(${RESET}${RED}${branch}${RESET}${BLUE})${RESET}${dirty}"
-  # " git:(" + ")" is 7 cells.
-  head_width=$((head_width + 7 + ${#branch} + dirty_width))
+  # "git:(" + ")" is 6 cells; the leading space now lives in the separator.
+  push_segment "${BLUE}git:(${RESET}${RED}${branch}${RESET}${BLUE})${RESET}${dirty}" \
+               $((6 + ${#branch} + dirty_width)) " " 1
 fi
 if [ -n "$worktree" ]; then
-  out="${out} ${BLUE}wt:(${RESET}${YELLOW}${worktree}${RESET}${BLUE})${RESET}"
-  # " wt:(" + ")" is 6 cells.
-  head_width=$((head_width + 6 + ${#worktree}))
+  # "wt:(" + ")" is 5 cells.
+  push_segment "${BLUE}wt:(${RESET}${YELLOW}${worktree}${RESET}${BLUE})${RESET}" \
+               $((5 + ${#worktree})) " " 1
 fi
+
+# The Claude segments are separated from the git prompt by the wider divider and
+# from each other by the narrower one (see the "Target look" comment at the top).
+claude_segment_count=0
+push_claude_segment() { # $1 text  $2 visible width
+  if [ "$claude_segment_count" -eq 0 ]; then
+    push_segment "$1" "$2" "  ${DIM}│ ${RESET}" 4
+  else
+    push_segment "$1" "$2" "${DIM} │ ${RESET}" 3
+  fi
+  claude_segment_count=$((claude_segment_count + 1))
+}
 
 # --- Claude-specific segments (secondary to the git prompt) -------------
 # Model name, context-window progress bar, and session-cumulative tokens.
@@ -582,20 +620,13 @@ if [ -n "$session_id_safe" ] && [ -d "$STATE_DIR" ]; then
   fi
 fi
 
-# extras and extras_width are appended in lockstep: every push to one pushes to
-# the other in the same branch. They are indexed together by the packing loop, so
-# a segment added without its width would silently mis-measure the line it lands on.
-extras=()
-extras_width=()
-
 if [ -n "$model_name" ]; then
   if [ -n "$effort_level" ]; then
-    extras+=("${ORANGE}${model_name}${RESET}${DIM} (${effort_level})${RESET}")
     # " (" + ")" is 3 cells.
-    extras_width+=($((${#model_name} + 3 + ${#effort_level})))
+    push_claude_segment "${ORANGE}${model_name}${RESET}${DIM} (${effort_level})${RESET}" \
+                        $((${#model_name} + 3 + ${#effort_level}))
   else
-    extras+=("${ORANGE}${model_name}${RESET}")
-    extras_width+=(${#model_name})
+    push_claude_segment "${ORANGE}${model_name}${RESET}" "${#model_name}"
   fi
 fi
 
@@ -632,15 +663,14 @@ if [ -n "$tokens_used" ]; then
     i=$((i + 1))
   done
   tokens_fmt=$(format_k "$tokens_used")
-  extras+=("${bar_color}${bar} ${tokens_fmt}${RESET}")
   # The bar is exactly BAR_WIDTH glyphs regardless of fill, plus a space.
-  extras_width+=($((BAR_WIDTH + 1 + ${#tokens_fmt})))
+  push_claude_segment "${bar_color}${bar} ${tokens_fmt}${RESET}" \
+                      $((BAR_WIDTH + 1 + ${#tokens_fmt}))
 fi
 
 if [ -n "$session_id_safe" ]; then
   cum_fmt=$(format_k "$cum_tokens")
-  extras+=("${CYAN}${SIGMA} ${cum_fmt}${RESET}")
-  extras_width+=($((2 + ${#cum_fmt})))
+  push_claude_segment "${CYAN}${SIGMA} ${cum_fmt}${RESET}" $((2 + ${#cum_fmt}))
 fi
 
 # Weekly quota: "⏱ 63% used · resets 2d 4h". The countdown is appended only
@@ -670,8 +700,7 @@ if [ -n "$week_used_pct" ]; then
         fi
       fi
     fi
-    extras+=("${PURPLE}${week_text}${RESET}")
-    extras_width+=("$week_width")
+    push_claude_segment "${PURPLE}${week_text}${RESET}" "$week_width"
   fi
 fi
 
@@ -695,10 +724,16 @@ fi
 # anything that is not a positive integer disables wrapping and restores the
 # previous single-line behaviour. A bad width costs the feature, never the line.
 WRAP_SAFETY_MARGIN=2
-WRAP_MIN_WIDTH=20
-# Past this many lines the status bar is eating the screen, which is worse than
-# one line running long, so the remainder shares the final line.
-WRAP_MAX_LINES=4
+# Below this there is no width worth packing into, and wrapping is skipped.
+WRAP_MIN_WIDTH=12
+
+# There is deliberately no maximum line count. An earlier version capped it at 4
+# and that cap was the only thing reintroducing overflow: once the git prompt was
+# split into its own segments, six segments could not fit in four rows, and every
+# width from 24 to 52 cells overflowed by sharing the remainder onto the last
+# row. The count needs no cap because it is already bounded -- a segment starts a
+# new row only when it does not fit on the current one, so the row count can
+# never exceed the number of segments, which is at most eight.
 
 wrap_at=0
 case "${COLUMNS:-}" in
@@ -707,37 +742,29 @@ case "${COLUMNS:-}" in
 esac
 [ "$wrap_at" -lt "$WRAP_MIN_WIDTH" ] && wrap_at=0
 
-# Each extra already carries its own colour + reset (see above), so the
-# separator gets its own dim colour rather than wrapping the whole line --
-# nesting DIM outside a segment's own RESET would just get cancelled by
-# that inner RESET and stop applying to anything after the first segment.
-# The first separator carries the wider divider between the git prompt and the
-# Claude segments (see the "Target look" comment at the top of the file).
-line="$out"
-line_width=$head_width
+# Each segment already carries its own colour + reset, so a separator gets its
+# own dim colour rather than wrapping the whole line -- nesting DIM outside a
+# segment's own RESET would just get cancelled by that inner RESET and stop
+# applying to anything after the first segment.
+#
+# Segment 0 has no separator and always opens the first line, so the loop can
+# start with an empty line and treat every segment identically.
+line=""
+line_width=0
 lines_emitted=1
 i=0
-while [ $i -lt ${#extras[@]} ]; do
-  if [ $i -eq 0 ]; then
-    sep="  ${DIM}│ ${RESET}"
-    sep_width=4
-  else
-    sep="${DIM} │ ${RESET}"
-    sep_width=3
-  fi
-  seg_width=${extras_width[$i]}
-  if [ "$wrap_at" -gt 0 ] &&
-     [ $((line_width + sep_width + seg_width)) -gt "$wrap_at" ] &&
-     [ "$lines_emitted" -lt "$WRAP_MAX_LINES" ]; then
+while [ $i -lt ${#seg_text[@]} ]; do
+  if [ $i -gt 0 ] && [ "$wrap_at" -gt 0 ] &&
+     [ $((line_width + seg_sep_width[i] + seg_width[i])) -gt "$wrap_at" ]; then
     # A segment wider than the whole terminal still starts its own line and is
     # emitted intact -- breaking it is what the escape-sequence guarantee forbids.
     printf '%s\n' "$line"
-    line="${extras[$i]}"
-    line_width=$seg_width
+    line="${seg_text[$i]}"
+    line_width=${seg_width[$i]}
     lines_emitted=$((lines_emitted + 1))
   else
-    line="${line}${sep}${extras[$i]}"
-    line_width=$((line_width + sep_width + seg_width))
+    line="${line}${seg_sep[$i]}${seg_text[$i]}"
+    line_width=$((line_width + seg_sep_width[i] + seg_width[i]))
   fi
   i=$((i + 1))
 done
