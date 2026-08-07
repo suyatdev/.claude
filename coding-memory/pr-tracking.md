@@ -757,3 +757,27 @@ mentions in `docs/decisions/` and `docs/superpowers/plans/` (immutable records).
   it. Verified after: `git merge-base --is-ancestor 3ec8504 main` → true, so the commit survives as
   an ancestor of `main`; and the PR page still reports `state=MERGED head=docs/remove-rtk-references`,
   so GitHub's retained head ref makes it restorable from there.
+
+### PR #44 — `chore/response-register-rule` — 2026-08-07, **OPEN**
+
+- **Repo:** `suyatdev/.claude` · **Remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
+- **PR:** https://github.com/suyatdev/.claude/pull/44 · **Base:** `main` · **State:** OPEN
+- **session_origin (created):** session 36 · **session_origin (last push):** session 36
+- **Not feature-scale** — no `docs/features/` file. The commit history and ADR 0019 are the record.
+
+Promotes the response register (plain language on every reply; always state a recommendation) into
+`rules/core-conduct.md` § Session Defaults and deletes the two auto-memory copies.
+
+Three things worth remembering rather than re-deriving:
+
+- **`gh pr create` needed `JUDGE_EXEMPT`** again — prose-only, no implementation surface to score.
+  That is now the second consecutive docs/rules PR to need it; if a third appears, the judge gate's
+  scope is worth revisiting rather than bypassing a fourth time.
+- **The agent cannot edit `rules/` at all** while any feature file sits at `phase: planning`.
+  `phase-guard.sh` matches `Edit|Write|NotebookEdit` on **path, not intent**, and `rules/` is not on
+  its exempt list. It intercepts agent tool calls only, so the resolution was a **hand edit by the
+  user** — no hook was modified or bypassed. Expect this for every future `rules/` change.
+- **`rules/` is outside `git-guard`'s `main` allowlist**, so the rule exists only on this branch
+  until merge. Verified: `git show main:rules/core-conduct.md | grep -c "Always give a
+  recommendation"` → `0`, and checking out `main` removes the paragraph from disk. A session started
+  on `main` before merge does not load the rule — **merge promptly.**
