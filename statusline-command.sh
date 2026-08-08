@@ -3,9 +3,14 @@
 # No PS1 was found in the user's shell config, so this reconstructs the look using
 # data Claude Code provides via stdin JSON.
 #
-# Target look: "➜  <user>@<host> <dir> git:(<branch>) ✗  │ <model> (<effort>) │
-# <bar> <used> │ Σ <cumulative>"
+# Target look: "➜  <user>@<host> <dir> git:(<branch>) ✗ wt:(<worktree>)  │
+# <model> (<effort>) │ <bar> <used> │ Σ <cumulative>"
 # (<effort>) is omitted when the model has no reasoning-effort field.
+# wt:(<worktree>) appears only in a LINKED git worktree -- in the main checkout
+# the <dir> segment already names it. Parallel agents run in worktrees by
+# design, and the directory name alone does not say which checkout is which.
+# The line is packed to the terminal width and may occupy more than one row;
+# see the packing section at the foot of this file.
 # Σ is cumulative input+output tokens for this session (cache traffic excluded
 # -- see the call_tokens comment below for why).
 # The ✗ dirty marker only appears when the working tree has uncommitted changes;
@@ -59,6 +64,15 @@ cwd="${cwd//[[:cntrl:]]/}"
 # name containing a literal \x1b or \n would inject a live terminal escape or
 # split the status line across two lines. Git forbids backslashes in ref names,
 # but directory names have no such restriction.
+#
+# The status line DOES now span multiple rows, but every one of those newlines
+# is emitted by the packing loop at the foot of this file, at a separator it
+# chose. That distinction is the whole point: a structural break is decided by
+# this script, a data-borne one is decided by whoever controls a directory name.
+# The stripping below is what keeps the second category empty, so "data cannot
+# split the line" remains exactly as true as it was before wrapping existed --
+# which is why the injection tests still assert zero newlines, pinned to a wide
+# terminal so no structural break can mask a missing strip.
 GREEN=$'\033[0;32m'
 CYAN=$'\033[0;36m'
 BLUE=$'\033[0;34m'
@@ -150,6 +164,8 @@ host="${host//[[:cntrl:]]/}"
 
 branch=""
 dirty=""
+dirty_width=0
+worktree=""
 # --no-optional-locks avoids contending with other concurrent git operations
 # (e.g. parallel agents in worktrees).
 if git -C "$cwd" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -160,13 +176,82 @@ if git -C "$cwd" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 
   branch="${branch//[[:cntrl:]]/}"
   if [ -n "$(git -C "$cwd" --no-optional-locks status --porcelain 2>/dev/null)" ]; then
     dirty=" ${RED}✗${RESET}"
+    dirty_width=2
+  fi
+  # Which checkout this session is in, shown because parallel agents run in
+  # worktrees by design and the directory name alone does not say which.
+  #
+  # A LINKED worktree's git-dir contains a `gitdir` file pointing back at the
+  # checkout; a main worktree's .git never does. Two tests that look equivalent
+  # are not, and both were tried first:
+  #   - comparing --git-dir against --git-common-dir reports a worktree from any
+  #     SUBDIRECTORY of the main tree, where they read /abs/.git and ../../.git --
+  #     different strings, same tree.
+  #   - matching the git-dir path against */worktrees/* fires on any ordinary
+  #     repo that merely lives under a directory of that name.
+  # The file test is a fact about git's own layout and survives both.
+  git_dir=$(git -C "$cwd" --no-optional-locks rev-parse --absolute-git-dir 2>/dev/null)
+  if [ -n "$git_dir" ] && [ -f "$git_dir/gitdir" ]; then
+    worktree=$(basename "$(git -C "$cwd" --no-optional-locks rev-parse --show-toplevel 2>/dev/null)")
+    # A directory name is externally sourced, exactly like $cwd above, and is
+    # stripped at its source for the same reason.
+    worktree="${worktree//[[:cntrl:]]/}"
   fi
 fi
 
-out="${GREEN}${ARROW}${RESET}  ${WHITE}${user}@${host}${RESET} ${CYAN}${dir}${RESET}"
+# --- Segments -----------------------------------------------------------------
+# Everything on the status line is a segment: the git prompt's parts as much as
+# the Claude ones. They differ only in the separator that precedes them (a space
+# within the git prompt, a divider before the Claude segments), so carrying the
+# separator ON the segment lets one packing loop handle both.
+#
+# The git prompt was originally one indivisible string. That made it the one
+# thing that could not wrap, and it is the longest part of the line -- in a
+# worktree it carries user@host, the directory, the branch AND the worktree name,
+# which measured 120 cells against a 60-cell terminal. Splitting it here is what
+# makes "no line exceeds the terminal width" true rather than nearly true.
+#
+# Visible width travels with the text rather than being measured afterwards --
+# see the packing section at the foot of this file for why. push_segment takes
+# both in one call precisely so a segment cannot be added without its width.
+seg_text=()
+seg_width=()
+seg_sep=()
+seg_sep_width=()
+
+push_segment() { # $1 text  $2 visible width  $3 preceding separator  $4 its width
+  seg_text+=("$1")
+  seg_width+=("$2")
+  seg_sep+=("$3")
+  seg_sep_width+=("$4")
+}
+
+# ARROW plus the two spaces robbyrussell puts after it is 3 cells.
+push_segment "${GREEN}${ARROW}${RESET}  ${WHITE}${user}@${host}${RESET}" \
+             $((3 + ${#user} + 1 + ${#host})) "" 0
+push_segment "${CYAN}${dir}${RESET}" "${#dir}" " " 1
 if [ -n "$branch" ]; then
-  out="${out} ${BLUE}git:(${RESET}${RED}${branch}${RESET}${BLUE})${RESET}${dirty}"
+  # "git:(" + ")" is 6 cells; the leading space now lives in the separator.
+  push_segment "${BLUE}git:(${RESET}${RED}${branch}${RESET}${BLUE})${RESET}${dirty}" \
+               $((6 + ${#branch} + dirty_width)) " " 1
 fi
+if [ -n "$worktree" ]; then
+  # "wt:(" + ")" is 5 cells.
+  push_segment "${BLUE}wt:(${RESET}${YELLOW}${worktree}${RESET}${BLUE})${RESET}" \
+               $((5 + ${#worktree})) " " 1
+fi
+
+# The Claude segments are separated from the git prompt by the wider divider and
+# from each other by the narrower one (see the "Target look" comment at the top).
+claude_segment_count=0
+push_claude_segment() { # $1 text  $2 visible width
+  if [ "$claude_segment_count" -eq 0 ]; then
+    push_segment "$1" "$2" "  ${DIM}│ ${RESET}" 4
+  else
+    push_segment "$1" "$2" "${DIM} │ ${RESET}" 3
+  fi
+  claude_segment_count=$((claude_segment_count + 1))
+}
 
 # --- Claude-specific segments (secondary to the git prompt) -------------
 # Model name, context-window progress bar, and session-cumulative tokens.
@@ -535,13 +620,13 @@ if [ -n "$session_id_safe" ] && [ -d "$STATE_DIR" ]; then
   fi
 fi
 
-extras=()
-
 if [ -n "$model_name" ]; then
   if [ -n "$effort_level" ]; then
-    extras+=("${ORANGE}${model_name}${RESET}${DIM} (${effort_level})${RESET}")
+    # " (" + ")" is 3 cells.
+    push_claude_segment "${ORANGE}${model_name}${RESET}${DIM} (${effort_level})${RESET}" \
+                        $((${#model_name} + 3 + ${#effort_level}))
   else
-    extras+=("${ORANGE}${model_name}${RESET}")
+    push_claude_segment "${ORANGE}${model_name}${RESET}" "${#model_name}"
   fi
 fi
 
@@ -578,12 +663,14 @@ if [ -n "$tokens_used" ]; then
     i=$((i + 1))
   done
   tokens_fmt=$(format_k "$tokens_used")
-  extras+=("${bar_color}${bar} ${tokens_fmt}${RESET}")
+  # The bar is exactly BAR_WIDTH glyphs regardless of fill, plus a space.
+  push_claude_segment "${bar_color}${bar} ${tokens_fmt}${RESET}" \
+                      $((BAR_WIDTH + 1 + ${#tokens_fmt}))
 fi
 
 if [ -n "$session_id_safe" ]; then
   cum_fmt=$(format_k "$cum_tokens")
-  extras+=("${CYAN}${SIGMA} ${cum_fmt}${RESET}")
+  push_claude_segment "${CYAN}${SIGMA} ${cum_fmt}${RESET}" $((2 + ${#cum_fmt}))
 fi
 
 # Weekly quota: "⏱ 63% used · resets 2d 4h". The countdown is appended only
@@ -595,6 +682,8 @@ if [ -n "$week_used_pct" ]; then
   case "$week_pct_fmt" in ''|*[!0-9]*) week_pct_fmt="" ;; esac
   if [ -n "$week_pct_fmt" ]; then
     week_text="${CLOCK_ICON} ${week_pct_fmt}% used"
+    # CLOCK_ICON + space + "% used" is 8 cells around the percentage itself.
+    week_width=$((8 + ${#week_pct_fmt}))
     if [ -n "$week_resets_at" ]; then
       reset_epoch=$(to_epoch "$week_resets_at")
       case "$reset_epoch" in ''|*[!0-9]*) reset_epoch="" ;; esac
@@ -602,29 +691,80 @@ if [ -n "$week_used_pct" ]; then
         now_epoch=$(date -u '+%s' 2>/dev/null)
         case "$now_epoch" in ''|*[!0-9]*) now_epoch="" ;; esac
         if [ -n "$now_epoch" ] && [ "$reset_epoch" -gt "$now_epoch" ]; then
-          week_text="${week_text} · resets $(format_duration $((reset_epoch - now_epoch)))"
+          # Bound to a variable rather than inlined so its width can be counted;
+          # format_duration is not re-run, which would risk a different answer.
+          week_duration=$(format_duration $((reset_epoch - now_epoch)))
+          week_text="${week_text} · resets ${week_duration}"
+          # " · resets " is 10 cells.
+          week_width=$((week_width + 10 + ${#week_duration}))
         fi
       fi
     fi
-    extras+=("${PURPLE}${week_text}${RESET}")
+    push_claude_segment "${PURPLE}${week_text}${RESET}" "$week_width"
   fi
 fi
 
-if [ ${#extras[@]} -gt 0 ]; then
-  # Each extra already carries its own colour + reset (see above), so the
-  # separator gets its own dim colour rather than wrapping the whole line --
-  # nesting DIM outside a segment's own RESET would just get cancelled by
-  # that inner RESET and stop applying to anything after the first segment.
-  sep="${DIM} │ ${RESET}"
-  joined="${extras[0]}"
-  i=1
-  while [ $i -lt ${#extras[@]} ]; do
-    joined="${joined}${sep}${extras[$i]}"
-    i=$((i + 1))
-  done
-  # Leading "│" matches the original divider between the git prompt and the
-  # Claude segments (see the "Target look" comment at the top of the file).
-  out="${out}  ${DIM}│ ${RESET}${joined}"
-fi
+# --- Packing the segments onto lines ------------------------------------------
+# Segments are packed greedily up to the terminal width, and a break is only
+# ever taken AT a separator. That is what keeps a line from ending in the middle
+# of an escape sequence: the loop never inspects or splits a segment's interior,
+# so there is no index at which it could cut one.
+#
+# Width is TRACKED as each segment is built rather than measured here. Measuring
+# would mean stripping the colour codes back out and then deciding how many
+# cells a glyph like the stopwatch or the box-drawing bar occupies -- a question
+# with no correct answer without a character-width table, in a script that
+# re-renders on every message. Every glyph is instead counted as one cell; a
+# terminal that draws one wider overflows by exactly that much, which is the
+# accepted cost. WRAP_SAFETY_MARGIN absorbs the interface's own padding.
+#
+# COLUMNS is the only usable width signal: Claude Code captures stdout, so tput
+# and every language-level probe read a pipe rather than a terminal. It is not
+# trustworthy on its own either -- a non-interactive shell reports 0 -- so
+# anything that is not a positive integer disables wrapping and restores the
+# previous single-line behaviour. A bad width costs the feature, never the line.
+WRAP_SAFETY_MARGIN=2
+# Below this there is no width worth packing into, and wrapping is skipped.
+WRAP_MIN_WIDTH=12
 
-printf '%s' "$out"
+# There is deliberately no maximum line count. An earlier version capped it at 4
+# and that cap was the only thing reintroducing overflow: once the git prompt was
+# split into its own segments, six segments could not fit in four rows, and every
+# width from 24 to 52 cells overflowed by sharing the remainder onto the last
+# row. The count needs no cap because it is already bounded -- a segment starts a
+# new row only when it does not fit on the current one, so the row count can
+# never exceed the number of segments, which is at most eight.
+
+wrap_at=0
+case "${COLUMNS:-}" in
+  ''|*[!0-9]*) ;;
+  *) [ "$COLUMNS" -gt 0 ] && wrap_at=$((COLUMNS - WRAP_SAFETY_MARGIN)) ;;
+esac
+[ "$wrap_at" -lt "$WRAP_MIN_WIDTH" ] && wrap_at=0
+
+# Each segment already carries its own colour + reset, so a separator gets its
+# own dim colour rather than wrapping the whole line -- nesting DIM outside a
+# segment's own RESET would just get cancelled by that inner RESET and stop
+# applying to anything after the first segment.
+#
+# Segment 0 has no separator and always opens the first line, so the loop can
+# start with an empty line and treat every segment identically.
+line=""
+line_width=0
+i=0
+while [ $i -lt ${#seg_text[@]} ]; do
+  if [ $i -gt 0 ] && [ "$wrap_at" -gt 0 ] &&
+     [ $((line_width + seg_sep_width[i] + seg_width[i])) -gt "$wrap_at" ]; then
+    # A segment wider than the whole terminal still starts its own line and is
+    # emitted intact -- breaking it is what the escape-sequence guarantee forbids.
+    printf '%s\n' "$line"
+    line="${seg_text[$i]}"
+    line_width=${seg_width[$i]}
+  else
+    line="${line}${seg_sep[$i]}${seg_text[$i]}"
+    line_width=$((line_width + seg_sep_width[i] + seg_width[i]))
+  fi
+  i=$((i + 1))
+done
+
+printf '%s' "$line"
