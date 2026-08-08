@@ -1746,7 +1746,8 @@ exact rot this feature exists to fix. Rebuild it in ~40 lines; the monitor above
 2. For each branch, walk the ids in order, skip any chunk the variant drops, and stop at
    `CANDIDATES=200` — **truncate after the skip, never before**, or "minus X" measures a smaller pool
    instead of X's absence.
-3. Fuse the survivors exactly as `search.py:60-66` does — `1/(RRF_K + rank + 1)` summed per branch,
+3. Fuse the survivors exactly as `search.py:60-66` does, then apply the weight multiply at
+   `search.py:80` — `1/(RRF_K + rank + 1)` summed per branch,
    then `× weight`, then sort descending, then take `k=6`.
 4. Score R9's two clauses with the measurement suite's own `belongs()`
    (`test_measurement_queries.py:56`), so both instruments share one membership rule and cannot drift.
@@ -1761,11 +1762,26 @@ Variants used: `as-is` (drop nothing), `minus archive` (`source_type == "archive
 `memsearch/tests/counterfactual.py`: the guard authorizes source writes only when a feature file
 records this branch at `phase: implementation`, and this file has advanced to `review`, so the branch
 no longer holds that authorization while `docs/features/verification-marker-gate.md` still sits at
-`phase: planning`. Two findings, neither fixed here: **(1)** that `planning` file is stale — its
-feature shipped (it is one of R9's own measurement targets, with a compliance verdict dated
-2026-08-01) — and **(2)** the guard has no `review` arm, so a branch in review cannot write source at
-all. Advancing or deleting another feature's file is not this branch's call; both belong to the
-planning pass.
+`phase: planning`.
+
+⚠️ **Corrected (round 4): an earlier draft here called that `planning` file "stale — its feature
+shipped". It has not shipped; it has not started.** Checkable, and checked: `phase: planning`,
+`branch: none`, **15 of 15 checklist items unchecked**, no `hooks/test-marker-guard.sh`, and no
+implementation commit for it on any branch. The two things cited as evidence prove nothing — being one
+of R9's measurement targets only means a *document* exists to retrieve (`belongs()` matches
+`docs/features/F.md`, nothing more), and the 2026-08-01 compliance verdict says `Spec:` in its own
+header: it judged the spec, on `main`.
+
+**That flips the conclusion.** The card is **correctly active**, so phase-guard denying the write was
+the guard working, not a false alarm. Leaving "stale" in place was the dangerous part: a later planning
+session could read it as licence to clear the one card currently guarding that feature — and
+`rules/gates.md` already documents four hooks that exist, pass their tests, and never run, so
+"written ≠ active" is a known trap in this repo and this nearly repeated it.
+
+So the single finding worth carrying is **(2): `phase-guard.sh` has no `review` arm** — a branch whose
+feature file has advanced to `review` cannot write source at all, because the guard authorizes only on
+`phase: implementation`. That belongs to the planning pass. Advancing or deleting another feature's
+file was never this branch's call, and remains not.
 
 | query | as-is | minus `archive_doc` | minus this file |
 |---|---|---|---|
