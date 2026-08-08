@@ -103,7 +103,7 @@ Three measurement traps, recorded because each produced a confidently wrong answ
    measurement passing, and building on a result not yet obtained is how the last premise broke.
 
 Decisions 2 and 4 are structural — a new persistent background daemon, and a change to the meaning of
-a published status field. Both earn ADR 0018 (task 2).
+a published status field. Both earn ADR 0021 (task 2) — written as 0018, renumbered before merge.
 
 ### Requirements
 
@@ -1219,10 +1219,14 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       **"GATE: Spec change needed — switch back to the high-tier model to revise."** Fixing it in
       place would be an out-of-phase spec edit; leaving it silently is what rounds 5 through 9 each
       did.
-- [x] 2 — Write `docs/decisions/0018-*.md`: adopting a persistent `launchd` agent as the refresh
+- [x] 2 — Write `docs/decisions/0021-*.md`: adopting a persistent `launchd` agent as the refresh
       mechanism, and splitting run recency (`last_run`) from content recency (`last_indexed`).
       Options weighed, why these won, consequences.
-      `0018-launchd-agent-and-run-recency-split.md`. One record for both decisions — the scheduler's
+      `0021-launchd-agent-and-run-recency-split.md` — **written as 0018 and renumbered on 2026-08-08**,
+      because `main` had already landed a different ADR 0018 (the status-line one, PR #43) and a merged
+      decision record does not get renamed. Provenance is recorded in the ADR's own header; the
+      append-only archive still says 0018 and was deliberately left alone. One record for both
+      decisions — the scheduler's
       known weakness (runs blind) is compensated by the warning, which needs decision 2's field.
       ⚠️ **New fact, from `launchd.plist(5)` rather than recall:** a `StartInterval` firing across a
       sleep is **missed**, not deferred to wake (`kqueue(3)` limitation) — the ADR records it as an

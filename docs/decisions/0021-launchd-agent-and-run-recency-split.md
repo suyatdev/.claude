@@ -1,9 +1,18 @@
-# 0018 — The index refreshes from a persistent `launchd` agent, and run recency is a field of its own
+# 0021 — The index refreshes from a persistent `launchd` agent, and run recency is a field of its own
 
 - **Status:** accepted
 - **Date:** 2026-08-07
 - **Context:** `docs/features/memsearch-freshness.md` design decisions 2 and 4; `memsearch/memsearch/index.py`,
   `memsearch/memsearch/status.py`, `hooks/memsearch-nudge.sh`. Standalone — does not amend a prior ADR.
+- **Renumbered 0018 → 0021 on 2026-08-08, before merge.** This decision was written as **0018** on
+  `feature/memsearch-freshness` (`e4cb4ec`, 2026-08-07). `0019-response-register-belongs-in-core-conduct.md:6`
+  reserved 0018 for it in writing, but `0018-the-status-line-may-span-multiple-rows.md` had already
+  taken the number and landed on `main` via PR #43 — two different filenames, so the merge saw no
+  conflict and accepted both. The merged ADR keeps 0018 because an accepted, landed decision record is
+  immutable; this one was still unmerged, so it yields. **Anywhere dated 2026-08-06 to 2026-08-08 that
+  says "ADR 0018" in a memsearch-freshness context means this file** — specifically `CODING_MEMORY.md`
+  and `coding-memory/observability-judge/*memsearch-freshness*.md`, which are append-only and were
+  deliberately not rewritten. 0019's reservation note is likewise left standing as history.
 
 Two decisions, one record, because neither survives alone: the scheduler runs blind, and the field is
 what makes its silence visible.
