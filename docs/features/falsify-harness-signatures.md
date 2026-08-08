@@ -66,7 +66,82 @@ cases, and `a control character in a path never reaches the output`. They are "c
 These are the safety-critical tests. Neither the old harness nor revision 1 of this spec measured
 this, which is why §5 exists.
 
+## Measured against the real suite (2026-08-08)
+
+Revisions 1-3 were reasoned from a mental model of the suite rather than the suite, and the
+round-3 advisory caught three artifacts that do not exist in it. Everything below is measured
+first-hand, reproducibly: copy `statusline-command.test.sh` and a candidate script into a temp
+directory, run the suite, and match results by **ordinal** — every run emits exactly 68 results in
+a stable order, which is what makes cross-run comparison valid before ids exist.
+
+### Baselines
+
+| run | passes /68 |
+|---|---|
+| working tree | 68 |
+| silent stub, `#!/bin/bash` + `exit 0` | **24** |
+| silent stub, `#!/bin/bash` only | **23** |
+| one-line stub, `printf 'x'` + `exit 0` | **31** |
+| one-line stub, `printf 'x'` only | **30** |
+| `f0902ed` | **19** |
+| `925c310` | **20** |
+| `29d6131` | 28 |
+| `4d63b09` | 33 |
+| `e882659` | 32 |
+
+**Vacuous against either stub: 31 of 68**, not the 24 revision 2 quoted. The 23-vs-24 and 30-vs-31
+pairs are the same effect — a redundant `exit 0` changes the result — which is why §6 must pin stub
+**bytes**, not prose.
+
+**`f0902ed` (19) and `925c310` (20) pass fewer assertions than a script that does nothing (24).**
+They are already failing wholesale, which is precisely what §3's `must_pass` was added to detect.
+
+### `must_pass` is a liveness check, not a defect anchor
+
+The pool of assertions that pass on a version *and* fail against both stubs is **3 for `f0902ed`
+and `925c310`, 5 for the others, and the same 3 across all five**:
+
+- `git repo -> git segment names the branch`
+- `uncommitted changes -> dirty marker`
+- `an over-wide segment survives intact on its own line`
+
+Those say "this is still a working script", not "this version failed for its own defect". §3 must
+claim only that.
+
+### Non-vacuity is not sufficient — signatures must be DIFFERENTIAL
+
+The strongest-looking candidates ("fails here and is not vacuous") are **identical across all five
+versions** — `baseline renders model and context-bar segments`, `sub-1000 tokens render raw`, and
+so on. They fail everywhere because every historical script predates the token bar. A signature
+drawn from them is satisfied by every version and proves nothing about any defect.
+
+The only shape that proves an assertion detects *that* defect is **differential**: it fails on the
+version and **passes on the version that fixed it**.
+
+| transition | discriminating | of which non-vacuous |
+|---|---|---|
+| `f0902ed` → `925c310` (route-1 fix) | **1** | **0** |
+| `925c310` → `29d6131` (route-2 fix) | 9 | **2** |
+| `29d6131` → `4d63b09` ($PWD ordering) | 5 | **0** |
+| `4d63b09` → `e882659` (regression) | **1** | **0** |
+
+The two non-vacuous ones are `surrounding text survives stripping` and `path with a stripped
+newline is joined, not truncated`.
+
+### The finding that reframes this feature
+
+**For three of the four transitions, every discriminating assertion is vacuous.** The suite's
+ability to prove those three defects detectable rests entirely on assertions that a no-output
+script also satisfies. Vacuity is not a side problem to ratchet alongside the signatures — it sits
+directly on top of the falsification evidence.
+
+This invalidates revision 3's framing of §6 as secondary, and its worked examples throughout.
+**Revision 4 must be designed from this table.** Open for that revision: whether signatures become
+differential by definition, and whether "fix the vacuous assertions" can still be a non-goal when
+three of four signatures would consist entirely of them.
+
 ## Design
+
 
 ### 1. Stable case ids — the identity contract
 
