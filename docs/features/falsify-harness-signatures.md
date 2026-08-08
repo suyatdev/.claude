@@ -10,10 +10,11 @@ Planned session 29 (2026-08-08) on `main` @ `5fa766f`. Closes task 9 of
 `docs/features/statusline-wrap-worktree.md`, which shipped as PR #43 while this harness was
 broken — so the statusline script currently has 68 tests and no proof any of them can fail.
 
-**Revision 2** after compliance round 1 (`fail`, 4 violations) and the observability architecting
-read (`risk=medium`, `success_masking: fail`). Scope grew by explicit user decision, 2026-08-08:
-the vacuity ratchet (§5) was added after the advisory judge measured that a third of the suite
-passes against a script that produces no output.
+**Revision 3** after compliance rounds 1-2 (`fail`/`fail`) and two observability architecting reads
+(both `risk=medium`). Scope grew by explicit user decision, 2026-08-08: the vacuity ratchet (§5)
+was added after the advisory judge measured that a third of the suite passes against a script that
+produces no output. Revision 3 adds per-iteration ids (§1), `must_pass` anchors (§3), a second stub
+and the overlap rule (§5), and states real coverage (§9).
 
 **Location note.** `writing-specs` defers to `docs/superpowers/specs/`, but this repo's
 `one-canonical-file` discipline (`rules/gates.md`) puts feature-scale work in a single
@@ -44,9 +45,16 @@ the suite held 50 before PR #43 and 68 after. Measured against the 50-case suite
 | `4d63b09` | 20 | 20 | ok |
 | `e882659` | 19 | 19 | ok |
 
-Three versions were unaffected by 30 new tests, so every added case already failed on them. But
-`f0902ed` and `925c310` each **lost exactly one pass**, which growth alone cannot cause. That is a
-real unread signal, and §"Risk" binds how it is resolved.
+Three versions were unaffected by 30 new tests, so every added case already failed on them.
+
+**The `f0902ed`/`925c310` discrepancy is resolved, not open.** Revision 1 called it "a real unread
+signal" that "growth alone cannot cause". That was wrong, and the round-1 architecting judge
+disproved it: against the era-appropriate 20-case suites the recorded counts reproduce `EXPECTED`
+**exactly** (9/10/15/20/19), so the counts were correct when written and the harness was broken *by*
+growth rather than born broken. The flip is three token-bar baseline assertions tightened when the
+context bar landed, benign; "lost exactly one pass" was a **net** figure masking 3 losses against 2
+gains. No label is wrong and no test is broken. It is recorded here so tasks 3 and 5 do not
+re-investigate a settled question.
 
 ### Defect 2 — a third of the suite is satisfied by silence
 
@@ -88,8 +96,28 @@ FAIL [pwd-fallthrough-stripped] — all-control cwd leaked via the $PWD fallthro
 - `ok()` and `bad()` take the id as their first argument, so a call site cannot emit one without it.
 - The harness parses `^(ok|FAIL)\s+\[([a-z0-9-]+)\]` and ignores everything after.
 
-This is the API contract the compliance judge required. It is the only change this feature makes
-to `statusline-command.test.sh` beyond §5's ratchet list.
+**Loop-generated assertions.** Eleven of the assertions are emitted from inside `for` loops
+(`statusline-command.test.sh:524-535, 606-617, 710-717`), so one call site yields three or four
+results. Passing a single id would give them all the same id, breaking uniqueness and — worse —
+leaving the ratchet unable to say *which* of the four `$PWD fallback` safety cases was fixed. The
+loop values (`{}`, `garbage`, `{"cwd":null}`, `0`, the empty string, `abc`, `-1`) cannot be ids:
+they do not match `[a-z0-9-]+`.
+
+**Rule:** a loop iterates over explicit `id-suffix:value` pairs, and the id is
+`<family>-<suffix>`. Suffixes are authored, never derived from the value and never positional, so
+reordering or adding a case cannot silently rename an existing one.
+
+```bash
+for case in "empty-object:{}" "garbage:garbage" "null-cwd:{\"cwd\":null}" "empty-workspace:{\"workspace\":{}}"; do
+  id="pwd-fallback-${case%%:*}"; payload="${case#*:}"
+```
+
+**Duplicate ids are a harness error (exit 2).** If the same id is emitted twice in one run, the
+harness cannot attribute a result and must not guess. This is the check that catches the most
+likely authoring mistake — see §Risk.
+
+This is the API contract the compliance judge required. With §5's ratchet list, these are the only
+changes this feature makes to `statusline-command.test.sh`.
 
 ### 2. Signatures replace counts
 
@@ -109,7 +137,33 @@ Stated cost: the harness no longer notices a version failing *more* than expecte
 right trade, because "fails more on an old buggy version" is the normal consequence of writing
 better tests, and treating it as an error is exactly what broke this harness.
 
-### 3. An empty signature is a hard error
+### 3. `must_pass` anchors — proving a version failed for its *own* defect
+
+Measured by the round-1 architecting judge: **~31 of the ~40-50 failures per version are era
+noise.** The historical scripts predate the token bar, the sigma counter, the lock recovery, the
+quota segment, worktrees and wrapping, so most of what fails on them fails because the feature did
+not exist yet — not because of the defect under test.
+
+"Extra failures allowed" (§2) therefore removes something the old count check provided implicitly:
+evidence that a version is *not* simply failing wholesale. A signature can be satisfied by a
+version that fails everything, including for reasons unrelated to its defect.
+
+Each version therefore also declares a small **named** `must_pass` list — assertions that must
+still pass on it:
+
+```python
+"f0902ed": {
+    "label": "original: printf '%b', no stripping",
+    "must_fail": ["esc-literal-inert", "esc-real-stripped"],
+    "must_pass": ["baseline-user-host", "dir-basename"],
+},
+```
+
+A named list costs zero treadmill: like `must_fail`, it does not grow when the suite grows. A
+`must_pass` id that fails exits `1` — the version is failing wholesale and its signature proves
+nothing.
+
+### 4. An empty signature is a hard error
 
 `4d63b09` fails nothing today (`falsify.py:54` scores it 20/20), so its `must_fail` would be empty
 — and an empty list is satisfied by **any** input: the right blob, the wrong blob, a truncated
@@ -124,7 +178,7 @@ specifically is task 4, which forces one of two explicit outcomes, both recorded
 
 Silently keeping it with an empty signature is neither.
 
-### 4. Three states, three exit codes
+### 5. Three states, three exit codes
 
 ```mermaid
 flowchart TD
@@ -144,7 +198,7 @@ flowchart TD
 An `ERROR` must never exit `0`. The current file returns a binary `0`/`1` (`falsify.py:120-121`),
 so a third outcome added without its own code would read as green to whatever runs it.
 
-### 5. The vacuity ratchet
+### 6. The vacuity ratchet
 
 The harness additionally runs the suite against a **stub**: a script that is executable, exits
 `0`, and writes nothing to stdout. It records **by id** which assertions still pass.
@@ -155,10 +209,44 @@ The harness additionally runs the suite against a **stub**: a script that is exe
 KNOWN_VACUOUS = ["esc-literal-inert", "pwd-fallthrough-stripped", ...]
 ```
 
-- **Assertion:** the set passing against the stub must be a **subset** of `KNOWN_VACUOUS`.
+- **Assertion:** the set passing against a stub must be a **subset** of that stub's list.
 - Shrinking is always allowed and needs no edit — fixing a test just works.
-- Growing fails the harness, so a newly-written vacuous assertion is caught the first time it runs.
-- Adding an id to `KNOWN_VACUOUS` requires a deliberate edit, which is visible in review.
+- Growing fails the harness (exit `1`), so a newly-written vacuous assertion is caught first run.
+- Adding an id requires a deliberate edit, which is visible in review.
+
+**Two stubs, not one.** Silence is the weakest possible broken script. Measured: a stub printing a
+single harmless line passes **30** of 68 — seven more than the silent stub, and those seven are
+"output exists" / "output is one line" assertions, the flimsiest shape in the suite. A silence-only
+ratchet would bless them forever. Both stubs are run, each with its own list:
+
+| stub | definition | measured |
+|---|---|---|
+| `STUB_SILENT` | executable, exits `0`, writes nothing | **24** of 68 pass |
+| `STUB_ONE_LINE` | executable, exits `0`, writes one plain ASCII line | **30** of 68 pass |
+
+**The seeded number is 24, not 23.** The advisory judge's 23 came from a slightly different stub
+(`exit 1`); the stub *this spec defines* yields 24. Recorded here so task 7 seeds from the defined
+stub and the discrepancy is not rediscovered as a defect. Note this is the one place seeding from
+measurement is correct — §Risk's "never re-baseline" governs **signatures and labels**, which
+encode a belief about a defect. A vacuity list encodes no belief; it is a starting position for a
+ratchet whose only permitted direction is down.
+
+**A subset check is satisfied by the empty set.** If a stub run breaks and yields fewer results,
+"subset" reads that as progress — the same shape as the empty-signature bug §4 fixes. The harness
+therefore also asserts each stub run produced the **full case count**, and exits `2` if not.
+Stated honestly: this is hardening, not a proven bug — silence, NUL bytes and 200KB of junk all
+held the count at 68, so it could not be triggered.
+
+**Overlap between a signature and a vacuity list is reported, and ratcheted.** An id can legitimately
+be in both: `esc-literal-inert` fails on `f0902ed` (which leaks escapes, exceeding the limit) *and*
+passes against a silent stub (zero escapes is under the limit). Those are not contradictory — the
+assertion does detect that defect. But it detects it by a measure silence also satisfies, so the
+signature rests on weaker evidence than it appears to. Every overlapping id must appear in a
+declared `SIGNATURE_RESTS_ON_VACUOUS` list, which may only shrink, exactly like the stub lists.
+
+*(The round-2 advisory called this a contradiction — "both lights green, saying opposite things".
+It is not, for the reason above, and treating it as one would forbid a legitimate state. It is a
+real weakness, and is handled as one.)*
 
 This is a ratchet, not a count: it cannot go stale as the suite grows, which is the failure this
 whole feature exists to end. It starts at the measured 23 and is expected to fall. **Driving it to
@@ -166,14 +254,14 @@ zero is explicitly not this feature's job** — those are 23 separate assertion 
 them in would mean neither half got reviewed properly. This feature makes them visible and stops
 new ones.
 
-### 6. The working-tree floor is preserved
+### 7. The working-tree floor is preserved
 
 `falsify.py:99-107` asserts the working tree passes **all** cases before any historical version is
 scored. That is a count check, but not a version-relative one — it means "the suite is green right
 now", without which every downstream comparison is meaningless. It stays, unchanged, and failing it
 exits `1`.
 
-### 7. Signatures are reasoned before they are run
+### 8. Signatures are reasoned before they are run
 
 For each commit, in this order: read what it got wrong → write down which ids *should* catch it →
 run → compare. Agreement is evidence; disagreement is a finding either way, and is recorded.
@@ -182,10 +270,18 @@ Deriving signatures from observed output would fit the assertion to reality — 
 produced three of four defects in PR #43. A test describing what happened can never disagree with
 what happens.
 
-### 8. It runs at PR time
+### 9. It runs at PR time, and states its own coverage
 
 Documented in the harness docstring and referenced from the script header, alongside the
-observability judge. **Residual risk, stated not hidden:** this is a human remembering, the
+observability judge.
+
+**The harness states its own coverage.** Roughly **11 of 68** assertions gain falsification
+coverage — the ones named in signatures — and one of five versions may contribute none once
+`4d63b09` is resolved. "falsification intact" must therefore print the coverage alongside it, so
+the line cannot be read as a claim about the whole suite. Over-claiming here would be the same
+class of defect as the vacuous assertions themselves.
+
+**Residual risk, stated not hidden:** this is a human remembering, the
 mechanism that already failed. A commit hook on the two files that can invalidate it would cost
 ~50s about 21 times per quarter and could not rot. Deferred by user decision (2026-08-08); revisit
 if it rots again.
@@ -275,26 +371,39 @@ as a finding and corrected **with evidence** — never re-baselined to whatever 
 Re-baselining turns a falsification harness into a rubber stamp, which is the thing this document
 exists to prevent.
 
-**Adding ids touches every assertion site.** ~68 mechanical edits to `statusline-command.test.sh`.
-The risk is a typo silently renaming a case; §4's exit-2 path is what catches it, because every
-signature id must resolve.
+**Adding ids touches 91 call sites, not 68.** Measured: 45 `ok` and 46 `bad` calls, roughly 45 of
+them `if`/`else` pairs where the *same* id is typed twice — the classic setup for a copy-pasted
+duplicate or a swapped pair. The stated safety net ("a bad id won't resolve → exit 2") catches
+neither, and covers only the ~11 ids named in signatures. Two checks close it: **duplicate ids are
+exit 2** (§1), and **task 2 requires the two vacuity lists to be byte-identical before and after
+the id edits** — adding ids is purely additive, so any movement is a bug, and this catches a
+swapped `ok`/`bad` pair that "68/68 still green" cannot.
 
 ## Tasks
 
-- [ ] 1. Add stable ids to every assertion in `statusline-command.test.sh`; `ok()`/`bad()` take the
-      id as their first argument so a call site cannot omit one.
-- [ ] 2. Verify ids are unique and that the suite still reports 68/68.
-- [ ] 3. Reason out all five signatures from the commits alone; record predictions **before**
-      running. Then run, compare, and record every disagreement as a finding.
-- [ ] 4. Resolve `4d63b09`'s empty signature — add a detecting assertion, or remove the version
-      with written rationale. No third option.
+- [ ] 1. Measure and record both stub baselines **before** any edit, by id — this is the reference
+      task 2 checks against.
+- [ ] 2. Add stable ids to all 91 call sites; `ok()`/`bad()` take the id first so a site cannot omit
+      one. Loop sites use authored `id-suffix:value` pairs (§1). Then verify: ids unique, suite still
+      68/68, and **both vacuity lists byte-identical to task 1's baseline** — ids are additive, so
+      any movement is a bug.
+- [ ] 3. Reason out all five `must_fail` signatures **and** `must_pass` anchors from the commits
+      alone; record predictions **before** running. Then run, compare, record every disagreement.
+- [ ] 4. Resolve `4d63b09`'s empty signature — add a detecting assertion, or remove the version with
+      written rationale. No third option.
 - [ ] 5. Resolve any label disagreement from task 3 with evidence. Never re-baseline.
-- [ ] 6. Rewrite `EXPECTED` to the signature shape; implement the three-state check and the three
-      exit codes; preserve the working-tree floor.
-- [ ] 7. Implement the vacuity ratchet against a no-output stub; seed `KNOWN_VACUOUS` from measurement.
+      (The `f0902ed`/`925c310` count discrepancy is **already resolved** — see §Background. Do not
+      re-investigate it.)
+- [ ] 6. Rewrite `EXPECTED` to the signature shape; implement the three-state check, the three exit
+      codes, duplicate-id detection, and the `must_pass` anchors; preserve the working-tree floor.
+- [ ] 7. Implement the vacuity ratchet against **both** stubs; seed each list from task 1's
+      measurement; assert each stub run produced the full case count; implement the
+      `SIGNATURE_RESTS_ON_VACUOUS` overlap list.
 - [ ] 8. Prove the harness can fail, one falsifier per path: weaken a named assertion (expect 1),
-      rename an id (expect 2), empty a signature (expect 2), add a vacuous assertion (expect 1).
+      break a `must_pass` (expect 1), rename an id (expect 2), duplicate an id (expect 2), empty a
+      signature (expect 2), add a vacuous assertion (expect 1), truncate a stub run (expect 2).
 - [ ] 9. Confirm the treadmill is gone: add a throwaway non-vacuous passing test, confirm exit 0
       with no harness edit.
-- [ ] 10. Document the PR-time run in the docstring and the script header.
+- [ ] 10. Print coverage (~11 of 68) alongside the verdict; document the PR-time run in the
+      docstring and the script header.
 - [ ] 11. Compliance + observability judges, then PR.
