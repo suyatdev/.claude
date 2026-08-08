@@ -4292,3 +4292,52 @@ the bar is red.
 (??) appeared mid-session from **another session** working a different feature. The judge advised
 stashing them; declined — parallel-agent invariants forbid touching another agent's domain. Every
 commit stayed pathspec-scoped instead.
+
+## 2026-08-08 — session 43 (continued): the correction needed correcting
+
+Judge round 2 (`coding-memory/observability-judge/2026-08-08-feature-memsearch-freshness-round2.md`,
+risk=medium confidence=high, no dimension `fail`) re-scored the retraction and found a second error
+**inside the correction itself**.
+
+### "Removing this file flips none" was wrong — it flips one
+
+The control table printed `git-guard-empty-index` as PASS(2) as-is and **FAIL(1)** with this feature
+file removed. That is a flip. I wrote "flips none — passenger, not driver" in the prose *next to that
+table*. Re-ran the control to confirm: **one flip.** The round-2 verdict notes it originated the
+"flips 0" phrasing in its own round-1 text and I inherited it — but my own output was on screen, and
+copying a reviewer's summary over reading my own table is the whole failure.
+
+Corrected reading:
+
+- **The archive drives both moves against 8b** — that stands, on three agreeing sources (my control,
+  the judge's independent control, and 8b's baseline taken when the archive was genuinely unindexed).
+- **This file is load-bearing for one of the two currently-passing queries.**
+  `git-guard-empty-index` passes only while **both** populations are present; drop either and it
+  fails. Without this file R9 scores **1 of 5**, not 2.
+- On the other three it is a visible occupant with no verdict effect — the top hit renames, the
+  replacement still does not belong.
+
+### Consequence for the accepted-cost decision: kept, but bounded worse than it read
+
+The "2 before, 2 after" symmetry that justified accepting `falsifier-base-pin`'s regression includes an
+*after* pass propped up by the measurement write-up itself. The decision stands (the bar was never
+green; two of three failures are archive-independent) but the cost is **less bounded** than the counts
+suggest, so it now carries a monitor rather than a note: owner = the planning pass / ADR 0021; trigger
+= re-run `-m measurement` after the first scheduled index run containing these commits; threshold =
+**below 2 of 5 reopens the decision.** Also carried: consider R9 in CI as reported-not-blocking, since
+`pyproject.toml:26` deselects it and a plain `pytest -q` prints all-green while the bar is red.
+
+### Two process facts worth keeping
+
+- **The decision was taken against a stale index** — `last_run` predates both correction commits, so
+  the numbers will move before anyone re-reads them. That is why the trigger is tied to the next
+  scheduled run rather than to a date.
+- **The judge withdrew its own item 5.** It had advised stashing the stray `compliance-judge` files;
+  on being told they belong to another session working a different feature, it agreed the pathspec-
+  scoped approach was correct — with the added warning: never `git commit -a` here.
+
+### Lesson recorded to memory
+
+Absence from a ranked frame says nothing about effect — run the leave-one-population-out control
+before attributing any ranking change. And check the resulting claim against **your own** table, even
+when the phrasing came from a reviewer whose control you just reproduced.

@@ -1741,14 +1741,29 @@ with nothing dropped it must reproduce `search()` exactly — it does, on all fi
 |---|---|---|---|
 | `stale-phase-guard-rule-text` | PASS | PASS | PASS (hits 4 → 5) |
 | `falsifier-base-pin` | FAIL (1) | **PASS (2) — flipped** | FAIL (1) |
-| `git-guard-empty-index` | PASS (2) | **FAIL (1) — flipped** | FAIL (1) |
+| `git-guard-empty-index` | PASS (2) | **FAIL (1) — flipped** | **FAIL (1) — flipped** |
 | `verification-marker-gate` | FAIL | FAIL | FAIL (top renames only) |
 | `phase-guard-hook` | FAIL | FAIL | FAIL (top renames only) |
 
-**Removing the archive flips two outcomes — precisely the two that moved against 8b. Removing this
-file flips none.** It is a real occupant (dropping it changes the top hit on two queries, to
-`2026-08-02-main.md` and ADR `0011`) but the replacement does not belong either, so no clause turns.
-**Passenger, not driver.**
+**Removing the archive flips two outcomes — precisely the two that moved against 8b.**
+
+⚠️ **Second correction, same section: "removing this file flips none" was also wrong.** It flips
+**one** — `git-guard-empty-index` goes PASS (2) → FAIL (1) without this file, which the table above
+has said all along while the prose next to it said zero. Caught by the round-2 verdict, which notes it
+originated the "flips 0" phrasing in its own round-1 text; the table was in front of me either way.
+Re-ran the control to confirm: one flip, not zero.
+
+So the honest reading is narrower than "passenger, not driver":
+
+- **The archive is the driver of both moves against 8b** — that part stands, on three agreeing
+  sources: this control, the judge's independent control, and 8b's baseline taken when the archive
+  genuinely was not in the index.
+- **This file is load-bearing for one of the two queries that currently pass.**
+  `git-guard-empty-index` passes only with **both** populations present — dropping either breaks it.
+  Without this file R9 scores **1 of 5**, not 2.
+- On the other three queries it is a visible occupant with no effect on the verdict: dropping it
+  renames the top hit (to `2026-08-02-main.md` and ADR `0011`) but the replacement does not belong
+  either, so no clause turns.
 
 ⇒ **R10 caused both the regression and the improvement.** `falsifier-base-pin` lost its second hit
 *because* the archive entered; `git-guard-empty-index` gained its second *because* the archive
@@ -1767,10 +1782,31 @@ R10's doing at all. Against that, one target trading its second hit for another 
 is a **weight-tuning** question, not a correctness defect — and the archive being reachable is the
 whole point of the feature, since the original defect was that it never got indexed.
 
+⚠️ **The symmetry is weaker than "2 before, 2 after" reads, and the decision stands anyway.** The
+*after* 2 includes `git-guard-empty-index`, which the control above shows passes only while this
+file's own `## Verification` section is in the corpus — remove it and R9 is **1 of 5**. So one of the
+two current passes is propped up by the measurement write-up. This does not reverse the decision (the
+bar was never green, and two of the three failures are archive-independent), but it does mean the
+accepted cost is **less bounded** than the bare counts suggest, and it is recorded here rather than
+left for a reader to discover in the table.
+
+**Re-check trigger — the accepted cost gets a monitor, not just a note.** Accepted-with-no-alarm is
+how a known cost becomes an unknown one, and R9 is the *only* instrument that sees this drift while
+`pyproject.toml:26` deselects it from a default run.
+
+- **Owner:** the deferred planning pass (ADR 0021), which inherits **this** attribution — not the
+  retracted one, and not the "flips none" phrasing.
+- **Trigger:** re-run `-m measurement` after the **first scheduled index run that includes these
+  commits** and record the delta. The decision above was taken against an index whose `last_run`
+  predates them, so today's numbers will move.
+- **Threshold:** if R9 drops **below 2 of 5**, the accepted cost has changed shape and the decision is
+  reopened rather than re-accepted by default.
+- **Carried from the round-2 verdict:** consider running R9 in CI as *reported-not-blocking* instead
+  of deselected, so a red bar is visible without gating every run.
+
 Deliberately **not** doing now: lowering `archive_doc` below 1.0, or re-pointing the query. Both are
-retunings, and retuning without a control is exactly the error this section already had to retract.
-The counterfactual harness now exists to do it properly. The deferred planning pass and ADR 0021
-inherit **this** attribution, not the retracted one.
+retunings, and retuning without a control is exactly the error this section already had to retract
+twice. The counterfactual harness now exists to do it properly.
 
 **Still true, and still not the fix:** re-excluding `CODING_MEMORY.md` would not remove chunks
 already written, and this file's `## Verification` section really does occupy rank 1 on two queries —
