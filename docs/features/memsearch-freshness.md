@@ -1737,6 +1737,36 @@ candidate pool and the ranks re-enumerated. The pool is drawn at 1000 and trunca
 removal, so a dropped population lets later chunks in rather than shrinking the pool. Harness guard:
 with nothing dropped it must reproduce `search()` exactly — it does, on all five queries.
 
+**The harness is recorded as a derivation, not kept as a file** — it was written in a session
+scratchpad, which does not survive a session clear, and a pointer to a path that will not exist is the
+exact rot this feature exists to fix. Rebuild it in ~40 lines; the monitor above needs it:
+
+1. Copy `search()`'s two retriever branches (`search.py:44-58`) but with `LIMIT 1000` in place of
+   `CANDIDATES`, giving the raw KNN and FTS id lists at pool depth, ranks unfused.
+2. For each branch, walk the ids in order, skip any chunk the variant drops, and stop at
+   `CANDIDATES=200` — **truncate after the skip, never before**, or "minus X" measures a smaller pool
+   instead of X's absence.
+3. Fuse the survivors exactly as `search.py:60-66` does — `1/(RRF_K + rank + 1)` summed per branch,
+   then `× weight`, then sort descending, then take `k=6`.
+4. Score R9's two clauses with the measurement suite's own `belongs()`
+   (`test_measurement_queries.py:56`), so both instruments share one membership rule and cannot drift.
+5. **Guard, non-optional:** the no-op variant must equal `search(CFG, query, k=6)` path-for-path on
+   every query. If it does not, the harness models something other than the real scorer and every
+   column it prints is void.
+
+Variants used: `as-is` (drop nothing), `minus archive` (`source_type == "archive_doc"`),
+`minus this doc` (`file_path` ends with `docs/features/memsearch-freshness.md`).
+
+⚠️ **A committed version was attempted and correctly blocked.** `hooks/phase-guard.sh` denied
+`memsearch/tests/counterfactual.py`: the guard authorizes source writes only when a feature file
+records this branch at `phase: implementation`, and this file has advanced to `review`, so the branch
+no longer holds that authorization while `docs/features/verification-marker-gate.md` still sits at
+`phase: planning`. Two findings, neither fixed here: **(1)** that `planning` file is stale — its
+feature shipped (it is one of R9's own measurement targets, with a compliance verdict dated
+2026-08-01) — and **(2)** the guard has no `review` arm, so a branch in review cannot write source at
+all. Advancing or deleting another feature's file is not this branch's call; both belong to the
+planning pass.
+
 | query | as-is | minus `archive_doc` | minus this file |
 |---|---|---|---|
 | `stale-phase-guard-rule-text` | PASS | PASS | PASS (hits 4 → 5) |
@@ -1799,8 +1829,12 @@ how a known cost becomes an unknown one, and R9 is the *only* instrument that se
 - **Trigger:** re-run `-m measurement` after the **first scheduled index run that includes these
   commits** and record the delta. The decision above was taken against an index whose `last_run`
   predates them, so today's numbers will move.
-- **Threshold:** if R9 drops **below 2 of 5**, the accepted cost has changed shape and the decision is
-  reopened rather than re-accepted by default.
+- **Threshold:** if R9 drops **below 2 of 5**, *or if the same 2 of 5 is reached by a different set of
+  queries*, the accepted cost has changed shape and the decision is reopened rather than re-accepted
+  by default. The count alone is not a sufficient trip-wire, and this section is the proof: 8b→10b held
+  at 2 of 5 while `falsifier-base-pin` regressed and `git-guard-empty-index` improved, two opposite R10
+  effects cancelling. A monitor watching only the count would have watched that happen and stayed
+  silent. **Record which queries pass, not how many.**
 - **Carried from the round-2 verdict:** consider running R9 in CI as *reported-not-blocking* instead
   of deselected, so a red bar is visible without gating every run.
 

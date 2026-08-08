@@ -4341,3 +4341,37 @@ suggest, so it now carries a monitor rather than a note: owner = the planning pa
 Absence from a ranked frame says nothing about effect — run the leave-one-population-out control
 before attributing any ranking change. And check the resulting claim against **your own** table, even
 when the phrasing came from a reviewer whose control you just reproduced.
+
+## 2026-08-08 — session 44: the monitor was watching a blind gauge
+
+Judge round 3 (`coding-memory/observability-judge/2026-08-08-feature-memsearch-freshness-round3.md`,
+risk=medium confidence=high, **no dimension `fail`** — six pass, four concern, all four carried).
+It independently reimplemented the ranking from `search.py`, self-checked that its no-op variant
+reproduces `search()` on all five queries, and got the doc's control table cell-for-cell:
+`as-is=2/5 · minus-archive=2/5 · minus-thisfile=1/5`. Ten checkable claims, ten correct. All four
+test commands matched their declarations (74 · 16 · 3-fail-4-pass · 27/27).
+
+### The one real finding: a trip-wire tuned to the thing it can't detect
+
+The monitor attached in `1be05b5` said *reopen if R9 drops below 2 of 5*. Ninety lines above it, the
+same section's founding insight says a steady 2 of 5 is exactly what a hidden regression looks like —
+8b→10b held at 2 while `falsifier-base-pin` regressed and `git-guard-empty-index` improved, two
+opposite R10 effects cancelling. **The alarm was calibrated to the one smoke the document had already
+proved it cannot smell.** Widened: the trigger now fires on a drop below 2 of 5 *or on the same count
+reached by a different set of queries*. Record which queries pass, not how many.
+
+### What round 3 credited, and it is the right thing to have credited
+
+It did not overcorrect. The tempting move after "you got the blame wrong" twice is to swing into
+blaming yourself; the archive attribution survived on its three agreeing sources and only the one
+wrong sentence narrowed. The correction also made the accepted cost look *worse*, not better.
+
+Its explicit non-finding: the "on the other three queries" wording is a readability wrinkle, **not**
+a prose-vs-table contradiction like the two before it. Marked non-blocking; the PR did not wait on it.
+
+### Lesson recorded to memory
+
+Both real errors on this branch were caught by review, never by self-check, and both were the same
+species — **a summary sentence outrunning the table printed directly beneath it.** A derived count is
+not a monitor: when a section's own evidence shows a metric can hold steady while its composition
+moves, any threshold set on that metric inherits the blindness. Watch composition, not the scalar.
