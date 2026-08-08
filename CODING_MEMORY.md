@@ -4227,3 +4227,68 @@ re-excluding would not remove chunks already written.
 
 `-m golden` deselected-count instability; the 20-heading non-goal drift; the zero-files freshness
 gap; the deferred planning pass (~85 lines → ADR 0021); the block-buffered `full-run.log` caveat.
+
+## 2026-08-08 — session 43 (continued): task 10c, and the judge overturning my attribution
+
+Tasks 10c and 11 (`46c9906` → judge run). Phase moved to `review`; model-switch checkpoint 3 asked as
+its own gate and answered **stay low**.
+
+### Task 10c — ten falsifier clauses, none falsified
+
+(d), (i), (j) held as observations; (a), (b), (c), (e), (f), (g), (h) held *in test* via the 27-case
+nudge suite. **The falsifier's window never opened** — its own wording is "across the 20 sessions
+after it lands" and the branch has not landed, so every verdict is held-on-evidence, not observed.
+Recorded rather than dropped.
+
+Verified clause (e) from source rather than from the test file's comment: the comment claims "always
+exit 0", but only `nudge.test.sh:43` capturing `rc=$?` and `:45` asserting it makes that true. Clause
+(c) held only literally — spec `:231-232` already records that with no prior `last_run` a dead
+scheduler surfaces as state 3, warning without naming the cause.
+
+R9's 10b failure falsifies nothing: clause (i) conditions on 8b's scores being recorded and on target
+span, never on R9 passing.
+
+### ⚠️ The correction — I attributed R9's regression to the wrong cause
+
+Session 43's earlier entry (above) states R10's noise cost measured **zero** and blamed this feature
+file's own `## Verification` section. **That is retracted.** The observability judge overturned it;
+I re-derived its counterfactual independently and it holds.
+
+**What I got wrong, and why it was tempting.** No `archive_doc` row appears in any of the five
+queries' 30 visible hits, and `memsearch-freshness.md` genuinely does hold rank 1 at the score ceiling
+on the two worst queries. I read cause off those two facts. Both are true; the inference is invalid.
+
+**The mechanism.** RRF scores by **rank inside a 200-candidate pool** (`search.py:63`), and the pool
+is built from raw KNN/FTS lists *before* the weight multiply. An `archive_doc` chunk at candidate
+rank 8 depresses every chunk below it, then at weight 1.0 against `curated_doc` 1.5 never surfaces in
+the frame. **Invisible displacement is this scorer's normal mode.** The architecting-stage verdict
+(2026-08-07) had already warned R9 had no control and that attribution was pre-committed. It was right
+and I proceeded anyway.
+
+**The control.** Re-fuse with one population dropped, ranks re-enumerated, pool drawn at 1000 and cut
+to 200 *after* removal so dropping lets later chunks in. Guard: the no-op variant reproduces
+`search()` exactly on all five queries.
+
+- **minus `archive_doc`** → flips **two** outcomes: `falsifier-base-pin` FAIL→PASS,
+  `git-guard-empty-index` PASS→FAIL. Exactly the two that moved against 8b.
+- **minus this file** → flips **zero**. Top hit renames on two queries (to `2026-08-02-main.md` and
+  ADR `0011`) but the replacement does not belong either. Passenger, not driver.
+
+⇒ **R10 caused both the regression and the improvement**; the unchanged 2-of-5 was two opposite R10
+effects cancelling in the count, not an absence of effect. Whether `falsifier-base-pin`'s regression
+is an *accepted* cost is now an open decision, and ADR 0021 must inherit this attribution.
+
+**The transferable lesson**, saved to memory: absence from a ranked frame says nothing about effect;
+run the leave-one-population-out control before attributing any ranking change, and re-derive a
+reviewer's counterfactual yourself rather than deferring or dismissing.
+
+Also fixed: "FAIL, 2 of 5" was ambiguous — 2 is the *passing* count, 3 fail. A commit subject read
+"fails 2/5". Noted: `addopts` deselects `measurement`, so a plain `pytest -q` reports all-green while
+the bar is red.
+
+### Left alone deliberately
+
+`coding-memory/compliance-judge/verdicts.jsonl` (M) and `2026-08-08-falsify-harness-signatures.md`
+(??) appeared mid-session from **another session** working a different feature. The judge advised
+stashing them; declined — parallel-agent invariants forbid touching another agent's domain. Every
+commit stayed pathspec-scoped instead.

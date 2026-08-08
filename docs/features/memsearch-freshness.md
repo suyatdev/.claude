@@ -1462,13 +1462,19 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         archive did enter the result set (2 of 6 slots) but a `transcript_digest` still holds ranks
         1–2, and the assert needs `.jsonl` only *somewhere* in top-6. Two-slot margin; re-check as
         the archive grows. Falsifier run: unfiltered, the same query returns zero `.jsonl`.
-      - **(b) R9 FAILS, 2 of 5** — the verdict, written down. Same count as 8b, *different two*:
-        `falsifier-base-pin` regressed, `git-guard-empty-index` improved. The net 2-of-5 is a
-        coincidence, and reporting the count alone would have hidden both moves.
-      - **R10's noise cost here measures zero — no `archive_doc` in any of the 30 hits.** The
-        displacer is **this file's own 8b baseline record**, now rank 1 at the score ceiling for the
-        two worst queries. Recording a retrieval measurement inside an indexed document perturbs the
-        next run of it. Do not re-exclude `CODING_MEMORY.md` for a failure it did not cause.
+      - **(b) R9 FAILS — 2 of 5 pass, 3 fail** (the "2" is the passing count). Same count as 8b,
+        *different two*: `falsifier-base-pin` regressed, `git-guard-empty-index` improved. Reporting
+        the count alone would have hidden both moves.
+      - ⚠️ **CORRECTION — R10 caused both moves; my first attribution was wrong.** I concluded R10's
+        cost was zero (no `archive_doc` in the 30 visible hits) and blamed this file's own
+        `## Verification` section (rank 1 on the two worst queries). The observability judge
+        overturned it; I re-derived its counterfactual independently and it holds. RRF scores by rank
+        in a 200-candidate pool built *before* the weight multiply (`search.py:63`), so an archive
+        chunk depresses everything below it while never surfacing at weight 1.0 — **absence from the
+        frame is not absence of effect.** Dropping the archive flips both moved queries; dropping
+        this file flips none. Full control table under `## Verification`.
+      - **Whether `falsifier-base-pin`'s regression is an accepted cost of R10 is now an open
+        decision**, not a recorded fact. ADR 0021 must inherit the corrected attribution.
 - [x] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
       through (j), by letter, each marked held / falsified / not yet observable, with the evidence
       or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
@@ -1684,7 +1690,10 @@ not the pass itself.
 returns six `curated_doc` hits and **zero** `.jsonl` paths, so `any('.jsonl' in p …)` demonstrably
 evaluates false. The `rtype`/`since` filter is what surfaces the episodic corpus at all.
 
-#### (b) R9's bar — **FAIL, 2 of 5**
+#### (b) R9's bar — **FAILS: only 2 of 5 queries pass, 3 fail**
+
+⚠️ *Phrasing note: "2 of 5" is the number that **passed**. An earlier commit subject read "fails 2/5",
+which invites reading it as two failures. Three fail.*
 
 `uv run pytest -m measurement -q` → **3 failed, 4 passed, 90 deselected** (4 passed = the 2 clean
 queries + the 2 structural guards). R9 passes iff all five satisfy both clauses, so **the verdict is
@@ -1703,34 +1712,57 @@ at run time, never read from the DB:
 same as before" would have reported no change where two queries in fact moved in opposite
 directions. One target regressed and a different one improved; the net is a coincidence.
 
-#### R10's measured noise cost on R9's bar: **zero. The regression is self-inflicted.**
+#### R10's noise cost on R9's bar: **it caused both moves. ⚠️ Corrected — the first reading here was wrong.**
 
-**No `archive_doc` hit appears in any of the five queries' top-6** — every one of the 30 rows is
-`curated_doc`. R10 did not displace anything here, for or against.
+⚠️ **This section originally concluded R10's cost was zero and blamed this file's own
+`## Verification` section. That was wrong, and the error is left visible rather than quietly
+rewritten.** The observability judge (verdict `2026-08-08-feature-memsearch-freshness.md`) overturned
+it, and its counterfactual was then re-derived independently before being accepted.
 
-What *did* move in is **this file's own `## Verification` section**. The 8b baseline blocks — which
-contain each target's query string and its target file paths verbatim — are now indexed chunks that
-compete in the very queries they record:
+**The wrong inference and why it was tempting.** No `archive_doc` row appears in any of the five
+queries' 30 visible hits, and `docs/features/memsearch-freshness.md` *does* hold rank 1 at the score
+ceiling on the two worst queries. Reading cause off those two facts gives "the archive is innocent,
+the measurement record is guilty". Both facts are true; the inference does not follow.
 
-- `phase-guard-hook`: **rank 1 is `docs/features/memsearch-freshness.md`**, at the exact score
-  ceiling 0.04918, ahead of the target's own file. This is what fails clause 2.
-- `verification-marker-gate`: same, rank 1 at the ceiling.
-- `falsifier-base-pin`: the 8b chunk enters at rank 4 and pushes the target's *second* hit out of
-  top-6 — precisely the clause-1 regression above.
+**The mechanism that breaks it.** RRF scores by **rank inside a 200-candidate pool**
+(`search.py:63`, `CANDIDATES=200`), and that pool is built from the raw KNN/FTS lists *before* the
+weight multiply. So an `archive_doc` chunk at candidate rank 8 pushes every chunk below it down one
+rank, depressing their scores — and then, at weight 1.0 against `curated_doc`'s 1.5, never surfaces
+in the visible top-6 itself. **Invisible displacement is this scorer's normal mode; absence from the
+frame is not absence of effect.** The architecting-stage verdict (2026-08-07) had already flagged
+that R9 had no control and that attribution was being pre-committed. It was right.
 
-So carried gotcha 2's distinction resolves cleanly: the displacement is **neither** the archive
-(R10's cost, measured zero) **nor** only the ADR/verdict paper trail, but the measurement record
-itself. **Recording a retrieval measurement inside an indexed document perturbs the next run of that
-measurement** — the same species of defect as an index that reported freshness it never checked, one
-level up. Locating the contaminating chunks by line range is deliberately avoided here: those
-numbers rot, and appending this very section moves them.
+**The control, re-derived independently.** Re-fuse each query with one population dropped from the
+candidate pool and the ranks re-enumerated. The pool is drawn at 1000 and truncated to 200 *after*
+removal, so a dropped population lets later chunks in rather than shrinking the pool. Harness guard:
+with nothing dropped it must reproduce `search()` exactly — it does, on all five queries.
 
-⚠️ **Appending this table makes the next run worse, not better.** Recording under `## Verification`
-is what the task mandates, so it is recorded — but the cost is now visible and belongs to the
-deferred planning pass: either exclude this file's `## Verification` from indexing, or hold
-measurement records outside the indexed corpus. Not fixable in this phase; do not re-exclude
-`CODING_MEMORY.md` in response to a failure it did not cause (and re-excluding would not remove
-chunks already written).
+| query | as-is | minus `archive_doc` | minus this file |
+|---|---|---|---|
+| `stale-phase-guard-rule-text` | PASS | PASS | PASS (hits 4 → 5) |
+| `falsifier-base-pin` | FAIL (1) | **PASS (2) — flipped** | FAIL (1) |
+| `git-guard-empty-index` | PASS (2) | **FAIL (1) — flipped** | FAIL (1) |
+| `verification-marker-gate` | FAIL | FAIL | FAIL (top renames only) |
+| `phase-guard-hook` | FAIL | FAIL | FAIL (top renames only) |
+
+**Removing the archive flips two outcomes — precisely the two that moved against 8b. Removing this
+file flips none.** It is a real occupant (dropping it changes the top hit on two queries, to
+`2026-08-02-main.md` and ADR `0011`) but the replacement does not belong either, so no clause turns.
+**Passenger, not driver.**
+
+⇒ **R10 caused both the regression and the improvement.** `falsifier-base-pin` lost its second hit
+*because* the archive entered; `git-guard-empty-index` gained its second *because* the archive
+entered. The net 2-of-5 was never "no effect" — it was two opposite R10 effects cancelling in the
+count. Carried gotcha 2's question ("crowding by ADRs or by the archive?") answers: **by the
+archive**, and only a counterfactual could show it, because the archive is invisible in the frame.
+
+⚠️ **Open decision for review, not settled here:** `falsifier-base-pin`'s regression now has a known
+cause, so whether it is an *accepted* cost of R10 is a judgment owed rather than a fact recorded. The
+deferred planning pass and ADR 0021 must inherit **this** attribution, not the retracted one.
+
+**Still true, and still not the fix:** re-excluding `CODING_MEMORY.md` would not remove chunks
+already written, and this file's `## Verification` section really does occupy rank 1 on two queries —
+it is simply not what fails them.
 
 ### Task 10c — every falsifier clause, evaluated (2026-08-08)
 
