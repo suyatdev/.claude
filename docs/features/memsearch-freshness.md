@@ -1756,9 +1756,21 @@ entered. The net 2-of-5 was never "no effect" — it was two opposite R10 effect
 count. Carried gotcha 2's question ("crowding by ADRs or by the archive?") answers: **by the
 archive**, and only a counterfactual could show it, because the archive is invisible in the frame.
 
-⚠️ **Open decision for review, not settled here:** `falsifier-base-pin`'s regression now has a known
-cause, so whether it is an *accepted* cost of R10 is a judgment owed rather than a fact recorded. The
-deferred planning pass and ADR 0021 must inherit **this** attribution, not the retracted one.
+**Decision — `falsifier-base-pin`'s regression is an ACCEPTED cost of R10.** *User decision,
+2026-08-08, taken with the corrected attribution in hand.*
+
+The deciding frame: **R9's bar has never passed.** It was 2 of 5 pre-R10 (task 8b) and is 2 of 5
+post-R10 — R10 swapped *which* two, it did not break a green bar. Two of the three failures
+(`verification-marker-gate`, `phase-guard-hook`) fail in **every** variant of the control above,
+including with the archive removed, so they are the pre-existing ADR/judge-verdict crowding and not
+R10's doing at all. Against that, one target trading its second hit for another target's second hit
+is a **weight-tuning** question, not a correctness defect — and the archive being reachable is the
+whole point of the feature, since the original defect was that it never got indexed.
+
+Deliberately **not** doing now: lowering `archive_doc` below 1.0, or re-pointing the query. Both are
+retunings, and retuning without a control is exactly the error this section already had to retract.
+The counterfactual harness now exists to do it properly. The deferred planning pass and ADR 0021
+inherit **this** attribution, not the retracted one.
 
 **Still true, and still not the fix:** re-excluding `CODING_MEMORY.md` would not remove chunks
 already written, and this file's `## Verification` section really does occupy rank 1 on two queries —
