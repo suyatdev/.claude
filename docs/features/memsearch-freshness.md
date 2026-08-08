@@ -1492,7 +1492,13 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         reads as passed because *something* surfaced. Held literally; noted as thin.
       - **R9's 10b failure falsifies nothing.** Clause (i) conditions on 8b's scores being recorded
         and on target span, never on R9 passing. Stated so no later reader invents that link.
-- [ ] 11 — Observability judge (implementation stage), then PR.
+- [x] 11 — Observability judge (implementation stage), then PR.
+      - Five review-phase rounds, `coding-memory/observability-judge/2026-08-08-feature-memsearch-freshness*.md`;
+        the last verdict is at `5ff613d` (medium risk, high confidence). PR #45 opened at that SHA.
+      - `08b779d` merged `origin/main` in afterwards, so the verdict SHA trails HEAD by one merge
+        commit. `judge-guard.sh` gates `gh pr create`, not an already-open PR, so nothing re-runs.
+      - The checkbox was left unticked when the PR was opened; ticked here in the review phase to stop
+        the record claiming the judge round never ran.
 
 ## Verification
 
