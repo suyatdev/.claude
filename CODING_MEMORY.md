@@ -4485,4 +4485,56 @@ Round 5 declined the offer to compress the retractions (~40 lines of ~1,900 — 
 the skill-required Roadmap entry **could not be written by the agent**. Same shape as the earlier
 `rules/` case; resolution is a hand edit, no hook touched. The exact line is in the PR thread and in
 `pr-tracking.md`.
-||||||| b78eae8
+
+## 2026-08-08 — session 45: the rename that wasn't, and a conflict marker that balanced the books
+
+Review phase, `feature/memsearch-freshness`, PR #45 open throughout. No code changed; three record
+defects found and fixed. Design detail is in `docs/features/memsearch-freshness.md` and ADR 0021.
+
+### The duplicate ADR 0018, resolved
+
+`08b779d` merged `origin/main` and silently accepted **two** ADRs numbered 0018 — ours
+(`launchd-agent-and-run-recency-split`, unmerged) and main's (`the-status-line-may-span-multiple-rows`,
+merged via PR #43). Different filenames, so git saw no conflict. User chose: **ours yields → 0021**,
+because an accepted, landed decision record does not get renamed.
+
+The transferable part is the citation split, which the prior session's "~10 citations to update"
+framing hid. Counted precisely, ours had **3 live, editable** sites (`memsearch/README.md:36`, feature
+doc `:106`/`:1225`) and **14 append-only** ones (`CODING_MEMORY.md` ×4, 10 judge verdicts). Main's had
+1 live and 2 append-only. **A renumber can only ever fix the live half** — so the archive gets a
+*provenance header in the renamed ADR* ("anywhere dated 2026-08-06..08 saying ADR 0018 in a
+memsearch-freshness context means this file"), never an edit. Ambiguity is retired going forward, not
+retroactively; pretending otherwise would mean rewriting an append-only record.
+
+### `git mv` + a scoped commit produces a copy, not a rename
+
+`git mv` stages **two** index entries — a delete of the old path and an add of the new one.
+`git commit -- <new-path> <other>` committed only the add, so `fea2423` shipped **both** ADR files and
+the delete sat staged. Caught by `git ls-tree HEAD docs/decisions/`, not by the commit's own `--stat`,
+which looked correct because every path it named was present. Fixed by amend + `--force-with-lease`.
+**The pathspec on a rename must name the OLD path too.** This is the third instance of the
+scoped-commit family and the first where the scoping *silently duplicated* rather than omitted.
+
+### A verified merge still shipped a conflict marker
+
+`CODING_MEMORY.md` ended with a bare `||||||| b78eae8` — committed in `08b779d`, whose resolution note
+claimed "exactly 3 marker lines removed". There were four.
+
+It survived a line-count audit **because the arithmetic balanced**: base 3787 + ours 637 + main 64 =
+4488 = the merged count. It balanced only by coincidence — one of main's 64 added lines is a blank that
+diff matches against an existing blank, freeing exactly one slot for the marker. *Counting lines is not
+checking content.* The check that actually works, and that found the answer in one command:
+
+    diff <(git show <parent>:FILE) <(git show HEAD:FILE) | grep -c '^<'   # must be 0, for BOTH parents
+
+Zero deletions in both directions proves the merged file contains each parent in full, independent of
+any count. Content confirmed intact; only the stray line was removed.
+
+### Also
+
+- Task 11 was still unticked while five review-phase judge rounds sat on disk and PR #45 had been open
+  for hours. The checklist claimed the judge stage never ran.
+- `memsearch/README.md:36` still links the old ADR filename — a **broken path**, not merely a stale
+  number. `phase-guard.sh` denies it (not under `docs/`; no feature file claims this branch at
+  `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
+  root README Roadmap line.
