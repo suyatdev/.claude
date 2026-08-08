@@ -25,6 +25,19 @@ set -u
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/statusline-command.sh"
 
+# Every case below this line renders at a deliberately WIDE terminal, so nothing
+# wraps and each assertion sees the single line it was written against. This is
+# load-bearing for the injection group in particular: those cases prove a hostile
+# payload cannot split the status line by asserting the output holds ZERO
+# newlines, and wrapping emits newlines by design. Pinning the width keeps that
+# assertion exact rather than relaxing it to tolerate the feature -- a relaxed
+# version would still pass against a script that had lost the stripping entirely.
+# The wrapping cases below opt out explicitly via render_cols.
+#
+# Exported, not just set: render() runs the script in a child bash, which
+# inherits the environment but not shell variables.
+export COLUMNS=400
+
 pass=0; fail=0
 
 ok()   { printf 'ok   — %s\n' "$1"; pass=$((pass+1)); }
@@ -54,7 +67,8 @@ LOCK_HOME="$(mktemp -d)"  # lock-recovery cases, which plant hand-built lock dir
 BREAK_HOME="$(mktemp -d)" # stale-lock breaking UNDER concurrency
 UNIT_HOME="$(mktemp -d)"  # direct lock-helper calls, created here so the trap owns it
 JSON_HOME="$(mktemp -d)"  # legacy-state-format migration case
-trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME" "$UNIT_HOME"' EXIT
+WT_ROOT="$(mktemp -d)"    # real git repo + real linked worktree, for the wt:() cases
+trap 'rm -rf "$TMP" "$NONGIT" "$STATE_HOME" "$RACE_HOME" "$LOCK_HOME" "$JSON_HOME" "$BREAK_HOME" "$UNIT_HOME" "$WT_ROOT"' EXIT
 
 BASE_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 4.8"},"context_window":{"total_input_tokens":100}}'
 BASE_OUT="$(render "$BASE_PAYLOAD")"
@@ -630,6 +644,201 @@ OUT="$(render '{"cwd":"/tmp/aa\u000abb"}')"
 case "$OUT" in
   *aabb*) ok "path with a stripped newline is joined, not truncated" ;;
   *) bad "path truncated at the control byte: $OUT" ;;
+esac
+
+# --- Width-aware wrapping -----------------------------------------------------
+# COLUMNS is the only width signal available: Claude Code captures the script's
+# stdout, so tput and every language-level width probe read a pipe, not a
+# terminal. It is also NOT reliably a sane number -- a non-interactive shell
+# reports 0, measured -- so the cases below pin down the whole degenerate range,
+# not just "absent". Every one of them must fall back to a single line, because
+# a bad width must cost the feature, never the status line.
+render_cols() { # $1 COLUMNS value (possibly degenerate), $2 payload
+  printf '%s' "$2" | COLUMNS="$1" bash "$SCRIPT"
+}
+render_no_cols() { # $1 payload -- COLUMNS absent from the environment entirely
+  printf '%s' "$1" | env -u COLUMNS bash "$SCRIPT"
+}
+line_count() { printf '%s' "$1" | awk 'END { print NR }'; }
+
+# Widest visible line, in cells, ignoring colour codes. Ambiguous-width glyphs
+# are counted as ONE cell, which is the same assumption the script makes; a
+# terminal that draws them wider will overflow by exactly that much. That is a
+# documented limitation of the approach, not something a test can adjudicate,
+# so this measures the model rather than pretending to measure the terminal.
+widest_line() { # $1 rendered output
+  printf '%s' "$1" | python3 -c 'import re,sys
+strip = re.compile("\x1b\\[[0-9;]*m").sub
+print(max((len(strip("", l)) for l in sys.stdin.read().split("\n")), default=0))'
+}
+
+# Long enough that it cannot fit in 60 cells, built only from segments whose
+# JSON paths are exercised elsewhere in this file.
+WRAP_PAYLOAD='{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus 5 (1M context)"},"effort":{"level":"xhigh"},"context_window":{"total_input_tokens":87000}}'
+
+OUT="$(render_cols 200 "$WRAP_PAYLOAD")"
+if [ "$(line_count "$OUT")" -eq 1 ]; then
+  ok "wide terminal renders a single line"
+else
+  bad "wide terminal split into $(line_count "$OUT") lines"
+fi
+
+OUT="$(render_cols 60 "$WRAP_PAYLOAD")"
+if [ "$(line_count "$OUT")" -gt 1 ]; then
+  ok "narrow terminal wraps onto more than one line"
+else
+  bad "narrow terminal did not wrap (still $(line_count "$OUT") line)"
+fi
+
+W="$(widest_line "$OUT")"
+if [ "$W" -le 60 ]; then
+  ok "no wrapped line exceeds COLUMNS (widest=$W<=60)"
+else
+  bad "wrapped line overflows COLUMNS (widest=$W>60)"
+fi
+
+# A break landing inside an escape sequence would leave a line ending mid-CSI,
+# which renders as garbage and cannot be caught by a width assertion alone.
+case "$OUT" in
+  *$'\033'[0-9\;]*$'\n'*)
+    printf '%s' "$OUT" | awk -F'\033' 'NF>1 && $NF !~ /^\[[0-9;]*m/ { bad=1 } END { exit bad+0 }' \
+      && ok "no line breaks inside an ANSI escape" \
+      || bad "a line break landed inside an ANSI escape sequence" ;;
+  *) ok "no line breaks inside an ANSI escape" ;;
+esac
+
+for degenerate in "0" "" "abc" "-1"; do
+  OUT="$(render_cols "$degenerate" "$WRAP_PAYLOAD")"
+  if [ "$(line_count "$OUT")" -eq 1 ]; then
+    ok "degenerate COLUMNS '$degenerate' falls back to one line"
+  else
+    bad "degenerate COLUMNS '$degenerate' wrapped into $(line_count "$OUT") lines"
+  fi
+done
+
+OUT="$(render_no_cols "$WRAP_PAYLOAD")"
+if [ "$(line_count "$OUT")" -eq 1 ]; then
+  ok "absent COLUMNS falls back to one line"
+else
+  bad "absent COLUMNS wrapped into $(line_count "$OUT") lines"
+fi
+
+# A segment wider than the whole terminal cannot be honoured. It must still
+# arrive intact on its own line rather than being chopped mid-escape.
+LONG_NAME="$(printf 'M%.0s' $(seq 1 120))"
+OUT="$(render_cols 40 "{\"workspace\":{\"current_dir\":\"/tmp\"},\"model\":{\"display_name\":\"$LONG_NAME\"}}")"
+case "$OUT" in
+  *"$LONG_NAME"*) ok "an over-wide segment survives intact on its own line" ;;
+  *) bad "an over-wide segment was broken up: $OUT" ;;
+esac
+
+# --- Worktree name ------------------------------------------------------------
+# Built against a REAL linked worktree, not a simulated one: the distinction
+# being tested is a filesystem fact about git's own layout, so a fixture that
+# faked it would be asserting against its own premise.
+git init -q "$WT_ROOT/mainrepo"
+git -C "$WT_ROOT/mainrepo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git -C "$WT_ROOT/mainrepo" worktree add -q "$WT_ROOT/feature-alpha" -b feat/alpha
+mkdir -p "$WT_ROOT/mainrepo/nested/deep" "$WT_ROOT/feature-alpha/nested/deep"
+
+wt_payload() { printf '{"workspace":{"current_dir":"%s"},"model":{"display_name":"M"}}' "$1"; }
+
+# Each segment carries its own colour codes, so "wt:(" and the name it wraps are
+# NOT adjacent in the raw output -- a reset and a colour sit between them. These
+# cases are about the text, not the colouring, so they match against the stripped
+# form; asserting on the raw string would fail for a reason unrelated to what is
+# being tested.
+plain() { printf '%s' "$1" | python3 -c 'import re,sys
+sys.stdout.write(re.compile("\x1b\\[[0-9;]*m").sub("", sys.stdin.read()))'; }
+
+case "$(plain "$(render "$(wt_payload "$WT_ROOT/feature-alpha")")")" in
+  *"wt:(feature-alpha)"*) ok "a linked worktree shows its name" ;;
+  *) bad "linked worktree name missing" ;;
+esac
+
+case "$(plain "$(render "$(wt_payload "$WT_ROOT/feature-alpha/nested/deep")")")" in
+  *"wt:(feature-alpha)"*) ok "a nested directory inside a linked worktree still shows it" ;;
+  *) bad "worktree name lost from a nested directory" ;;
+esac
+
+case "$(plain "$(render "$(wt_payload "$WT_ROOT/mainrepo")")")" in
+  *"wt:("*) bad "main worktree wrongly rendered a wt:() segment" ;;
+  *) ok "the main worktree shows no wt:() segment" ;;
+esac
+
+# The regression this exists for: comparing --git-dir against --git-common-dir
+# reports a worktree here, because from a subdirectory they read /abs/.git and
+# ../../.git -- different strings, same tree.
+case "$(plain "$(render "$(wt_payload "$WT_ROOT/mainrepo/nested/deep")")")" in
+  *"wt:("*) bad "a subdirectory of the MAIN tree was misreported as a worktree" ;;
+  *) ok "a subdirectory of the main tree is not misreported as a worktree" ;;
+esac
+
+# The width case up in the wrapping group renders /tmp, which is not a repo: no
+# branch, no wt:(), and a head barely a third of the terminal. It therefore
+# could not fail for the one shape that actually overflows -- a LONG head, which
+# is exactly what a linked worktree produces, since it carries the branch and
+# the worktree name on top of user@host and the directory.
+#
+# This re-runs the same assertion against that shape. It is placed here rather
+# than beside its sibling because it needs the worktree fixture built above.
+WIDE_HEAD_PAYLOAD="$(printf '{"workspace":{"current_dir":"%s"},"model":{"display_name":"Opus 5 (1M context)"},"effort":{"level":"xhigh"},"context_window":{"total_input_tokens":87000}}' "$WT_ROOT/feature-alpha")"
+OUT="$(render_cols 60 "$WIDE_HEAD_PAYLOAD")"
+W="$(widest_line "$OUT")"
+if [ "$W" -le 60 ]; then
+  ok "a long head wraps too (widest=$W<=60)"
+else
+  bad "the head overflows COLUMNS and never breaks (widest=$W>60)"
+fi
+
+# Removing the row cap left "rows can never exceed the segment count" stated in a
+# comment and checked nowhere. A bound that is only claimed is not a bound, so it
+# is asserted here at a width narrow enough to force the maximum number of breaks.
+#
+# The bound is the count THIS payload produces (arrow+user@host, dir, git:(),
+# wt:(), model, bar = 6), not the global ceiling of 8. Asserting the ceiling left
+# two rows of slack, and that slack was not theoretical: dropping the `[ $i -gt 0 ]`
+# guard in the packing loop makes the first segment trigger a break and emit a
+# spurious blank leading row -- 7 rows, which passed the loose form of this very
+# assertion along with the rest of the suite. A bound with slack in it is a bound
+# that admits the off-by-one it exists to catch.
+EXPECTED_ROWS=6
+ROWS="$(line_count "$(render_cols 24 "$WIDE_HEAD_PAYLOAD")")"
+if [ "$ROWS" -le "$EXPECTED_ROWS" ]; then
+  ok "row count stays inside the segment-count bound (rows=$ROWS<=$EXPECTED_ROWS)"
+else
+  bad "row count exceeded this payload's segment count (rows=$ROWS>$EXPECTED_ROWS)"
+fi
+
+# $cwd is stripped of control bytes BEFORE any git command runs, so a path
+# carrying one no longer resolves and the whole git block is skipped -- no
+# branch, no worktree, no dirty marker. That is the behaviour asserted here,
+# because it is the one that actually occurs.
+#
+# An earlier version of this case asserted "the worktree name is stripped" and
+# passed -- but vacuously, against output that contained no worktree segment at
+# all. Confirmed by falsifier: with the $cwd strip removed the same payload
+# renders "wt\tname git:(feat/ctrl) wt:(wtname)", so both halves below flip.
+# The worktree name's own strip is genuinely belt-and-braces, exactly like
+# $branch's: reachable only if a path could resolve while still holding a
+# control byte, which the earlier strip prevents.
+#
+# The payload is hand-built rather than going through wt_payload: JSON cannot
+# carry a raw control byte, so the tab is written as the two-character escape
+# \t and decoded by jq into a real one -- the same route the injection cases
+# above use. Interpolating the raw path produces invalid JSON, which jq rejects
+# outright, and the case then passes vacuously against $PWD instead.
+CTRL_WT="$WT_ROOT/$(printf 'wt\tname')"
+git -C "$WT_ROOT/mainrepo" worktree add -q "$CTRL_WT" -b feat/ctrl
+OUT="$(render "{\"workspace\":{\"current_dir\":\"$WT_ROOT/wt\\tname\"},\"model\":{\"display_name\":\"M\"}}")"
+if [ "$(count_byte "$OUT" '\011')" -eq 0 ]; then
+  ok "a control character in a path never reaches the output"
+else
+  bad "a control character survived into the output"
+fi
+case "$(plain "$OUT")" in
+  *"git:("*) bad "a control-character path still resolved to a repo" ;;
+  *) ok "a control-character path resolves to no repo, so no git or wt segment" ;;
 esac
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
