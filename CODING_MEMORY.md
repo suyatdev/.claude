@@ -3785,3 +3785,67 @@ exercised. If task 1b misses both, that is evidence about the mechanism, not abo
 the 540s `wait` timeout and never wrote its result file, but the verdict was already complete and
 well-formed in `verdicts.jsonl`. Re-dispatching on the exit code would have burned a full round
 re-judging an already-passing spec. **Always read `verdicts.jsonl` before believing a timeout.**
+
+## Session 29 (cont.) — statusline wrap + worktree name: MERGED as PR #43
+
+Closes the "designed, NOT implemented" entry above. Merged `f38de2c`; feature file
+`docs/features/statusline-wrap-worktree.md` is at `phase: review` with tasks 9-12 open.
+Design detail lives there and in ADR 0018 — only the transferable lessons are below.
+
+### Three of the four judge findings were defects in the TESTS, not the feature
+
+Worth internalising, because the suite was green each time:
+
+- **Round 1:** the width assertion could not fail on the shape that overflowed. Its payload was
+  `/tmp` — not a repo, so no branch and no `wt:()`, giving a 33-cell head. The real head measured
+  **120 cells against a 60-cell terminal.** Green suite, untested defect.
+- **Round 3:** the row assertion allowed the global ceiling (8) while the fixture only produced 6.
+  The judge built the off-by-one that slack admits — a spurious blank leading row, **7 rows,
+  passing all 68 tests.**
+- **Round 4:** that assertion's power to *detect* a regression depends on
+  `len(user) + len(host) > 18`, because segment 0 is built from `whoami`/`hostname` — the machine,
+  not the fixture. 25 here, ~16 in a CI container running `root`, where the canary silently stops
+  working. **A test whose ability to fail depends on where it runs is not a test everywhere it runs.**
+
+The generalisation: when a fixture is *convenient* (`/tmp`, the local hostname) rather than
+*representative*, the assertion tends to describe the fixture, not the behaviour.
+
+### judge-guard is circular by construction — only one commit order terminates
+
+`judge-guard` requires a verdict whose `head_sha` equals current HEAD, but judging **writes files
+into the repo** (`verdicts.jsonl`, the verdict markdown). Committing them moves HEAD and
+invalidates the verdict that authorised the PR. The only order that ends:
+
+**judge → `gh pr create` → commit the verdict artifacts → push.**
+
+`gh pr create` warns "N uncommitted changes" at that point. That warning is expected, not a mistake.
+
+### `phase: review` withdraws your own authority to edit source
+
+Setting the feature file to `review` at PR time means no feature file records the branch as
+`implementation` any more, so `phase-guard` denies further source edits on it. This fired for real:
+after opening #43 I tried to apply one more judge follow-up and was correctly blocked. The gate was
+right — implementation had been declared finished. Follow-ups belong to a new cycle, not to momentum.
+
+### `verdicts.jsonl` guarantees a merge conflict between parallel sessions
+
+It is a shared append-only log, so any two concurrent branches that both run a judge conflict there.
+It is also the benign kind: resolve as the **union** of both sides' new lines, never a winner.
+Measured here: 103 base + 15 theirs + 4 ours = 122, every line re-parsed as JSON, count asserted so
+a silent drop could not pass. Do not hand-edit the conflict markers.
+
+### A merge does not reach the live status line
+
+`settings.json` runs `$HOME/.claude/statusline-command.sh` — the **shared checkout's working file**.
+That checkout was on `feature/memsearch-freshness`, not `main`, so #43 was invisible there: verified
+by `grep -c push_segment` = 0 and a live render still giving 1 row at 120 cells. Switching a shared
+checkout's branch to fix this is the exact hazard `wt:()` exists to warn about — it is what happened
+earlier in this same session — so it was left alone.
+
+### Housekeeping observed, not fixed
+
+- **`CODING_MEMORY.md` says "index only, at or under 200 lines" and is 3,787 lines.** The stated
+  convention and actual practice have fully diverged.
+- `statusline-command.falsify.py` still reports `FALSIFICATION BROKEN` (**pre-existing**, verified
+  before this branch). #43 therefore merged with **no differential coverage** — feature file task 9.
+- **Nobody has seen the wrapped status line on a real narrow pane.** Every check was programmatic.
