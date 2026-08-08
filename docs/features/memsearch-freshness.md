@@ -1469,13 +1469,23 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         displacer is **this file's own 8b baseline record**, now rank 1 at the score ceiling for the
         two worst queries. Recording a retrieval measurement inside an indexed document perturbs the
         next run of it. Do not re-exclude `CODING_MEMORY.md` for a failure it did not cause.
-- [ ] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
+- [x] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
       through (j), by letter, each marked held / falsified / not yet observable, with the evidence
       or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
       the word *falsifier* appeared nowhere in this task list, so the section that defines how this
       feature could be proven wrong had no step that read it. A falsification test nobody runs is
       indistinguishable from one that passes — the same defect, one level up, as the index that
       reported freshness it never checked.
+      - **No clause falsified.** (d), (i), (j) held as observations; (a), (b), (c), (e), (f), (g),
+        (h) held *in test* via the 27-case nudge suite. Full table under `## Verification`.
+      - ⚠️ **The window has not opened.** The falsifier reads "across the 20 sessions after it
+        lands" and this branch has not landed, so every verdict is held-on-available-evidence, not
+        observed in production. The post-landing re-check is owed; recorded, not quietly dropped.
+      - **(c) is weak by its own record** (spec `:231-232`): with no prior `last_run`, a dead
+        scheduler surfaces as state 3, which warns without ever naming the real cause — the clause
+        reads as passed because *something* surfaced. Held literally; noted as thin.
+      - **R9's 10b failure falsifies nothing.** Clause (i) conditions on 8b's scores being recorded
+        and on target span, never on R9 passing. Stated so no later reader invents that link.
 - [ ] 11 — Observability judge (implementation stage), then PR.
 
 ## Verification
@@ -1721,3 +1731,38 @@ deferred planning pass: either exclude this file's `## Verification` from indexi
 measurement records outside the indexed corpus. Not fixable in this phase; do not re-exclude
 `CODING_MEMORY.md` in response to a failure it did not cause (and re-excluding would not remove
 chunks already written).
+
+### Task 10c — every falsifier clause, evaluated (2026-08-08)
+
+**No clause is falsified.** Ten clauses, by letter, each with its evidence.
+
+⚠️ **First, the framing the clauses themselves impose:** the falsifier is scoped *"across the 20
+sessions after it lands"*, and **this branch has not landed** — 19 commits ahead of `main`, contained
+in no other branch. So the production observation window **has not opened for any clause**. Six
+clauses are hook tests and are discharged *in test* here; four are observations judgeable now. A
+"held" below means held on the evidence available, never "survived 20 sessions".
+
+| clause | verdict | evidence |
+|---|---|---|
+| **(a)** stale line owed but not emitted | **held (in test)** | 4 stale paths pass incl. the exact `STALE_HOURS` boundary and the override; *"2 wedged run: stuck wins over stale"* exercises the state 1/2/3 precedence carve-out the clause depends on |
+| **(b)** stale line emitted while the run is recent | **held (in test)** | *"8 at 7h59m it is still fresh"*; *"8 quiet night: stale content, fresh run"* — that second case **is** the clause's "changed no files" wording |
+| **(c)** dead agent unsurfaced, or a stuck line that never resolves | **held (in test), clause weak by its own record** | *"5 decay: stale, not stuck, once the claim is too old to believe"* is the resolve path. But spec `:231-232` already records that with **no prior `last_run`**, decay falls to state 3, which warns and names the log yet never says the scheduler died — and that clause (c) *"would read as passed in that state … it merely said the wrong thing."* Held literally; the literal text is the weakness |
+| **(d)** measurement queries modified after their introducing commit | **held** | introduced in `8a10f61`; `git log --follow` shows that single commit; `git diff 8a10f61 HEAD` on the file is empty. (Already recorded weaker than written, spec `:1124-1126`: the rebuild preceded authorship) |
+| **(e)** more than one line, or a non-zero exit, on any path | **held (in test)** | `memsearch-nudge.test.sh:43` captures `rc=$?` immediately, `:45` asserts `rc -eq 0`, `:46` asserts an exact line count — and all 23 emitting/silent cases funnel through that one helper. Guarded across 8 states + 2 silent paths + 3 overrides, **not** proven exhaustively over arbitrary input (malformed JSON is covered) |
+| **(f)** all-errors run read as fresh, or remediation on an in-progress/stuck line | **held (in test)** | *"7 degraded: names the count, points at the log not the indexer"*; *"1 in progress: … no remediation"*; *"2 stuck: … never invites a second indexer"* |
+| **(g)** in-progress/stuck past `RUN_ABANDON_HOURS`, or missing `last_run_errors` reading fresh | **held (in test)** | *"5 decay …"*; *"RUN_ABANDON_HOURS override keeps the 30h run merely stuck"*; *"6 errors absent: age reported, cleanliness withheld"* |
+| **(h)** abandoned first run with no warning marker and no log pointer | **held (in test)** | *"3 abandoned first run: warns, names the log, not unknown-age"* |
+| **(i)** ships without 8b's raw scores, or without the bottom/top-third span | **held** | 8b's raw per-hit scores are recorded above; `test_targets_span_the_corpus_size_range` passes; measured population is the whole of `docs/features/`, N=10, ⌊N/3⌋=3, and the sample is **6 / 9 / 24 / 53 / 91** — `stale-phase-guard-rule-text` in the bottom third, `phase-guard-hook` in the top. Explicitly not the "four large plus one medium" shape the clause names as a falsification |
+| **(j)** cold duration taken from a warm run, or `RUN_MAX_HOURS` reached and the branch proceeds anyway | **held** | timed from an explicit `--full`, which unlinks the DB (`index.py:148-149`) so the run is genuinely cold; **17494s = 81.0%** of the 21600s constant, so it did **not** reach it and no stop-and-ask was owed. The incremental figure is recorded separately and labelled the ordinary case, never used as the basis |
+
+**R9's failure at 10b does not falsify this feature, and that is the clauses' doing, not a
+concession.** Clause (i) conditions on 8b's scores being *recorded* and on the *span* of the chosen
+targets — it never made R9's pass a ship condition. Task 10 asks for the failure to be reported as a
+real result, which it is; no clause converts it into a falsification. Recorded explicitly so a later
+reader does not supply that link themselves.
+
+⚠️ **Carried to review: the falsifier cannot be discharged on this branch.** Its window is 20
+sessions of production behaviour after landing, and the six hook-test clauses are guarded rather than
+observed. This is not a gap to close before the PR — it is what the clause wording asks for — but it
+does mean "all clauses held" here means *held in test, window not yet open*, and the observational
+re-check after landing is owed.
