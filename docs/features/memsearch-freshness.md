@@ -1408,7 +1408,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         measured **71** chunks when targets were chosen and **72** an hour later — task 8's own
         completion notes, appended to this file. Any count pinned in a document is wrong by the
         next edit; the runner recomputes from source, which is why it stays right.
-- [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
+- [x] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
       copies (159 and 119 lines) would satisfy on their own while the archive itself stayed
@@ -1534,7 +1534,7 @@ N = **10**; ⌊N/3⌋ = 3; ranks 3–4 tie at 13, so the bottom third holds four
     *6. 0.040548  docs/features/phase-guard-hook.md:12-21
 ```
 
-### Task 9 — install and first run (2026-08-07). Correctness confirmed; timings PENDING
+### Task 9 — install and first run (2026-08-07), timings measured (2026-08-08). Complete.
 
 Installed `2026-08-07T19:04:10-0400`, exit 0. `launchctl print` reports `state = running`,
 `runs = 1`, `last exit code = (never exited)`. Rendered plist is mode `0644`; the committed
@@ -1577,13 +1577,31 @@ stayed unreachable. Filename classification is working in **both** branches, so 
 sit at 1.0 rather than `repo_doc` 1.2, where they would outrank their own repos' decision records.
 At 229 chunks the archive is the single largest source, as R10 predicted.
 
-**PENDING — the timing half, and the constants that depend on it.** A chained background job waits
-for the incremental run, snapshots its `status.json`, **boots the agent out** so `StartInterval`
-cannot fire a second indexer mid-rebuild (`memsearch` has no lock), then times a cold `--full` run
-into `~/.claude/memory-index/task9-timing.txt`. Until that lands, `RUN_MAX_HOURS` and
-`RUN_ABANDON_HOURS` keep their provisional 6/24 and task 9 stays open.
-⚠️ **The agent is booted out for the duration and must be re-installed** with
-`memsearch/bin/install-schedule` once the full run finishes.
+**The timing half — measured 2026-08-08.** Both runs recorded, cold chosen as the constant's basis
+per the task. The agent was booted out for the cold run's duration (`memsearch` has no lock, and
+`StartInterval` would otherwise have started a second indexer mid-rebuild) and **re-installed
+afterwards** — verified `state = running`, `runs = 1`.
+
+| run | wall clock | report | basis |
+|---|---|---|---|
+| **cold `--full`** (23:36:50 → 04:28:24 UTC) | **17494s = 4h 51m 34s** | `processed=988 skipped=0 chunks_added=8615 errors=0`, exit 0 | **the constant** |
+| incremental (23:04:10 → 23:36:45 UTC) | 1955s = 32m 35s | `processed=87 skipped=900 chunks_added=1176 errors=0` | ordinary case |
+
+**`RUN_MAX_HOURS` = 6 holds, but on 19% headroom.** 17494s is **81.0%** of the 21600s threshold —
+a margin of 1h 8m 26s. The cold run did **not** exceed the constant, so the task's stop-and-ask
+trigger did not fire and 6/24 stand as measured rather than provisional. ⚠️ **This margin is not
+durable.** `skipped=0` means a cold run re-digests *every* session transcript, so its cost scales
+with **session count**, which this feature's own archive grows on every session. The next embed-model
+change re-runs this at a larger corpus. Re-measure before assuming 6 still fits.
+
+⚠️ **Instrumentation caveat — the cold run's `full-run.log` is block-buffered and its intra-run
+progress cannot be timed.** `PYTHONUNBUFFERED` is set by the **plist** (hence the scheduled log
+filling live, above), not by `bin/memsearch`, so a manual run redirected to a file buffers at 8KB:
+lines land in bursts of ~40 with silent gaps between. The total above is unaffected — the timing
+script brackets the command with `date +%s` in the shell — but no rate, and no doc-phase /
+transcript-phase split, can be derived from that log. Carried as an observation, not fixed here:
+`bin/memsearch` setting `PYTHONUNBUFFERED` itself would make a manual run's tail survive a hard
+kill, which is the same rationale the plist already documents.
 
 **Open issue carried to task 10b — the size effect runs opposite to R9's stated worry.** R9 assumes
 a large target has *more* chances to land two hits, so five fat targets would pass while measuring
