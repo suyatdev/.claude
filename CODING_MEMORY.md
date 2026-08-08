@@ -3059,3 +3059,729 @@ already says it.
 - `extras+=` touchpoints needing a parallel width entry: `statusline-command.sh:542,544,581,586,609`;
   render/join to replace at `:613-630`. Git block to extend at `:151-169`.
 - Build order is TDD: new wrap/worktree tests first against the *unmodified* script, watch them fail, then implement.
+
+### Round 2 — all 7 round-1 violations fixed; 2 new ones, both real
+
+Spec revised (blob `4e217ec` → `ca5b5e0`), both judges re-dispatched in parallel. Compliance
+**FAIL, 2 violations, both new** — no id repeated, so the persistence tripwire did not fire and round 3
+is still an automatic round. Observability round 2: `risk=medium` (down from high).
+
+**Both judges converged independently on the same hole**, which is why it was believed and fixed:
+
+- `core-conduct/unsurfaced-run-errors` — `last_run_errors` was written to `status.json` and **nothing
+  read it**. Verified in source: `_index_one` catches every exception into `report["errors"]` and
+  continues (`index.py:135-137`), `run_index` stamps status unconditionally at the end
+  (`index.py:100`), `cli.py:66` returns 0 regardless. So a run with Ollama down that indexed *nothing*
+  completes, stamps a fresh `last_run`, and the nudge prints the cheerful line — **clearing the very
+  warning decision 4 designates as the blind scheduler's compensating control.** Same defect as the
+  one this feature exists to fix, one field over.
+- `writing-specs/readme-drift` — `memsearch/README.md:22` asserts "`CODING_MEMORY.md` and
+  `subagents/` transcripts are never indexed"; R8 deletes `CODING_MEMORY.md` from `exclude_paths`
+  (`config.json:16`, confirmed). No task updated the README, which is also the only doc for
+  `memsearch/bin/`, where `install-schedule` lands.
+
+Observability judge added four more, all verified before acting: a **future `run_started`** would pin
+the in-progress line forever (the future-timestamp guard covered `last_run` only); **`status.py:27`**
+still prints `last_indexed` as its freshness answer — the identical misreading, left on the other
+human-facing surface; **no uninstaller** (`git revert` does not remove a job from
+`~/Library/LaunchAgents`); and the **stuck-run line carried the remediation command**, i.e. "run the
+indexer" while one may still be alive — the safety valve becoming the hazard at the threshold.
+It also caught three `R7` references in my own Background text that should have read `R9`.
+
+Measured, not guessed: the orphaned run passed **1h26m** and 405/601 files while round 2 was judging.
+That number is now the reference point next to `RUN_MAX_HOURS` in the spec.
+
+### Round-3 revision (blob `ca5b5e0` → `eef3aea`)
+
+- **R3 rewritten** as "report the state of the last run, not merely its age": in-progress, **stuck**,
+  and **degraded** (`last_run_errors > 0` never renders as fresh), each with its own line. Neither
+  in-progress nor stuck carries the remediation command — `memsearch` has no lock.
+- **`RUN_MAX_HOURS` (6h) split from `STALE_HOURS` (8h).** They answer different questions — how old a
+  *finished* run may be vs. how long a run may *take* — and collapsing them is the same conflation
+  habit as the original bug.
+- Nudge classification is now a 6-row first-match-wins table; a timestamp is *usable* only if it
+  parses and is not in the future, applied to **both** fields; row 1 covers the first-run case
+  (`run_started` present, `last_run` absent) the compliance judge held as a note.
+- `status.py` brought into scope; `install-schedule --uninstall` added; README fix required **in the
+  same commit** as the `exclude_paths` change; falsifier gains item (f).
+- 26 scenarios now (14 nudge, 8 install/uninstall, 4 other). Tasks 3–6 updated; task 4 explicitly
+  requires the degraded test to **assert the emitted line, not the parsed field** — the whole point.
+
+**Next:** round 3 — re-dispatch both judges on blob `eef3aea`, reusing ids
+`core-conduct/unsurfaced-run-errors` and `writing-specs/readme-drift`. **Round 3 is the last automatic
+round**: anything outstanding when it completes escalates to the user rather than looping again.
+
+## 2026-08-06 — session 30: round 3 complete — FAIL, escalation boundary reached
+
+**Round 3 of the spec-compliance loop ran on blob `eef3aea`. Both judges dispatched in parallel to
+panes (`surface:159`, `surface:160`), both returned DONE. Compliance verdict: FAIL, 2 violations.
+The loop's escalation boundary has been reached on both of its triggers — no round 4 is automatic.**
+
+### What round 3 fixed
+
+- `core-conduct/unsurfaced-run-errors` — **closed.** The compliance judge walked it end to end
+  rather than accepting the spec's claim; the observability judge independently closed its
+  round-2 `success_masking=fail` on the same change. The degraded line is read, and task 4
+  requires the test to assert the *emitted line*, not the parsed field.
+
+### What round 3 cited
+
+1. `writing-specs/r8-missing-config-validator` — **new, blocking.** R8 directs removing
+   `CODING_MEMORY.md` from `exclude_paths`, but `load_config` raises
+   `ConfigError("exclude_paths must contain CODING_MEMORY.md")` on every call
+   (`memsearch/memsearch/config.py:56-59`). As specified, task 6 makes every `memsearch` command
+   **and** the new 6-hourly launchd job exit 1. Three tests pin the invariant
+   (`test_config.py:42,48`, `test_index.py:93`). The spec never names `config.py`, the validator,
+   or the tests.
+2. `writing-specs/readme-drift` — **persistent, round 2 → round 3, half-remediated.** The
+   `memsearch/README.md` half was fixed; the design doc half was not.
+   `docs/superpowers/specs/2026-07-17-memory-rag-index-design.md` still asserts the exclusion at
+   lines 58, 67, 135, 154, 163 (incl. the whole "What Is NOT Indexed" section and its
+   durable-vs-ephemeral rationale, which R8 reverses). That file is itself indexed under a
+   `curated_docs` root, so memsearch would serve the false rationale as an answer.
+
+### Verified independently, not taken on the judges' word
+
+- ✅ the `ConfigError` guard, at `config.py:56-59` as claimed.
+- ✅ the three pinning tests (judge cited `test_config.py:40`; actual is `:42` — substance holds).
+- ✅ all five design-doc assertion lines.
+- ➕ **Not cited by either judge, found while checking:**
+  `docs/superpowers/plans/2026-07-17-memory-rag-index.md:19` reads "**`CODING_MEMORY.md` is never
+  indexed** (ephemeral working index). Enforced by config validation, not convention." The
+  exclusion is a *deliberate, documented, enforced* invariant — R8 reverses it silently.
+- ❌ **The spec's "1h26m" run duration is not a completed duration.** PID 30022 was *still running*
+  at 2h09m53s when checked this session. It was a stopwatch reading taken mid-race and written
+  down as a finish time, so the 6-hour "stuck" ceiling has materially less headroom than the spec
+  implies. (Same class as `feedback_no_fabricated_metrics`.)
+
+### Observability judge (advisory, non-blocking) — no dimension fails
+
+Round 2's `success_masking=fail` is closed. Open concerns it raised, none blocking:
+- **launchd skips missed ticks during sleep** — an overnight-asleep laptop misses the 4am run and
+  the 8am session gets a ⚠ stale warning on a healthy system. The spec's own argument is that a
+  warning firing on normal days is worse than none. Untested by the judge; flagged, not proven.
+- While a run is in progress the line shows "in progress" with no warning glyph, so a *previous*
+  broken run stays hidden for the 2–3h the new run takes.
+- Un-hiding `CODING_MEMORY.md` uses a plain substring match, so it would also start indexing that
+  file in the two **other** repos. Nobody decided that.
+
+**Next:** escalated to the user — both triggers fired (`readme-drift` cited twice running; round 3
+completed with violations outstanding). The real decision underneath finding 1 is whether to
+reverse the enforced exclusion at all, and if so how (delete the guard / invert it / weaken it).
+That is structural and reverses a documented rationale → **likely earns an ADR**. Note the
+rationale may genuinely have expired: `memory-system-split` retired `CODING_MEMORY.md` as a read
+target and made it an append-only archive reached by lookup, so "ephemeral working index" no
+longer describes it — but the spec must *say* that, not assume it.
+
+## 2026-08-06 — session 30 (cont.): R8 dropped, round 4 PASSES the compliance gate
+
+**User decision resolving the round-3 escalation: keep the `CODING_MEMORY.md` exclusion, drop R8.**
+Spec revised (`51c5dee`, blob `50ad053`), both judges re-dispatched at round 4.
+**Compliance verdict: PASS, zero violations.** Observability (advisory): `risk=low confidence=high`,
+no failing dimension.
+
+### Why R8 was dropped rather than fixed
+
+Reversing the exclusion means deleting an enforced guard, rewriting three tests, and reversing a
+documented rationale in five places — a structural change earning its own ADR. That does not belong
+inside a freshness fix. Parent items 1 and 3 moved to Non-goals carrying the full rationale **and
+the honest counterpoint**: `memory-system-split` made `CODING_MEMORY.md` an append-only archive, so
+"ephemeral working index" no longer describes it and the original reason may have expired — recorded
+for whoever picks it up, deliberately not assumed here. R8's slot now carries the obligation that
+survived independently: documenting `bin/install-schedule` in the README that adds it.
+
+### The fabricated measurement, corrected in the spec rather than quietly
+
+The spec had cited "1h26m over 601 sources" as a run duration. It was a stopwatch glance at a run
+still going (PID 30022, still alive at **2h26m over 683 sources** at session end). The spec now
+states the number was wrong and why, that the true duration is unmeasured, that it may exceed
+`RUN_MAX_HOURS`, and defers the constant to the user once task 8 measures it. The compliance judge
+called this out positively — stated default + named measurement trigger + human owner is
+core-conduct's human-owned-tradeoff rule applied correctly, not a TBD.
+
+### The observability judge retracted its own round-3 top concern — and it was right to
+
+R3's headline worry was launchd skipping ticks during sleep → false stale warnings every morning.
+It never checked the premise. **Verified independently this session: `hw.model = Mac16,9` (Mac
+Studio desktop), `pmset sleep 0`, 18 days uptime, 0 "Entering Sleep" events.** The man-page quote
+was real; it does not apply to a machine that never sleeps. Retraction sound. Still worth one
+sentence in the spec before this plist ever reaches a laptop.
+
+### ⚠️ Open advisory items — NOT blocking, but one is flagged by BOTH judges
+
+1. **`last_run_errors` has no malformed/missing-value rule.** The obvious
+   `get("last_run_errors", 0)` reads "I don't know" as "zero errors" and prints the reassuring
+   fresh line. **This is the round-2 blocker returning through a side door**, and both judges
+   flagged it independently — the compliance judge as a carried non-blocking note, the
+   observability judge as its top remaining risk. Fix: give it the same "when in doubt, don't say
+   fresh" rule the two timestamps already have, plus a test.
+2. **A permanently-failing file pins the error count at 1 forever**, so the ⚠ fires every session
+   and re-running never clears it — reproducing exactly the "warning that fires on normal days"
+   the spec argues is worse than silence.
+3. **The error line points away from its own evidence** — it says re-run the multi-hour indexer
+   instead of reading the `scheduled-index.log` R6 creates for that purpose.
+4. Cosmetic: the data-flow diagram enumerates 4 of 6 nudge states (omits *stuck*, *degraded*);
+   task 3 names `test_cli.py` but `status_report` coverage lives in `test_rename_status.py:96`.
+
+### Gate state
+
+Compliance gate **passed** on blob `50ad053`. Verdict is fresh only while that blob matches —
+**any spec edit invalidates it, and a re-entry restarts the loop at round 1**, so items 1–4 above
+should be batched into one revision if they are taken at all.
+
+**Next:** user review gate on the spec, then **checkpoint 2** (literal `gate confirmed`) → branch.
+
+## 2026-08-06 — session 30 (cont.): user reverses course; R10's mechanism found broken
+
+**User decision reversed the earlier call: INDEX `CODING_MEMORY.md`.** First attempt (`3b793fa`)
+specified only lifting the exclusion. **Loop 2 round 1: both judges FAIL.** Corrected in `84bf220`,
+blob `68bb8fb2`. Round 2 not yet dispatched.
+
+### The finding that matters — lifting the exclusion would have done nothing
+
+**`~/.claude/CODING_MEMORY.md` is not on any indexed path.** `curated_docs` is
+`~/.claude/coding-memory`, `~/.claude/docs`, `~/.claude/PORTS.md` — **not the `~/.claude` root**.
+Verified: `CLAUDE.md` and `MEMORY.md` are **0 rows each**; `PORTS.md` is indexed only because it is
+named individually. So the diagnostic's "0 chunks, no `sources` row" had **two sufficient causes**
+and the spec credited one — the identical confounded-proxy error its own measurement-traps section
+records. Un-banning a file the walker never visits changes nothing.
+
+**And every check would have passed vacuously:**
+- The fixture at `test_index.py:58` writes `CODING_MEMORY.md` *into the curated directory* — a
+  walked path production does not have. **The fixture pre-created the condition under test**
+  (cf. `feedback_fixture_must_not_pre_create_state`).
+- The scenario and task 9 said "in every repo root"; `~/.claude` is not one, so the two small
+  project copies (278 lines) satisfied them while the 3,232-line archive stayed unreachable.
+- **R9 — the designated noise instrument — would have measured a corpus grown by 17k chars instead
+  of 285k, come back clean, and "cleared" an untested risk.** A green measurement of a change that
+  never happened. Exactly the failure mode this whole feature exists to kill.
+
+### Compliance judge: three wrong coordinates, all verified, one destructive
+
+- Guard is **`config.py:57-60`**, not 56-59. **Line 56 is `excludes = tuple(...)`** — the stated
+  range would delete it and break every `load_config` caller.
+- Golden query is **line 4**, not 2. Line 2 is the still-correct sqlite-over-qdrant query, so a
+  literal builder would have deleted a passing test and left the broken one.
+- `plans/2026-07-17-memory-rag-index.md` asserts the invariant at **both line 19 and line 2828**;
+  only 19 was named. That file is 3,079 lines and sits in the indexed `docs/` corpus.
+- Test work is **six changes, not three**: four `report["processed"]` counts at
+  `test_index.py:84,135,149,160` each shift by one, and `:93` is a compound assertion that cannot
+  both flip and stay unchanged — it must be split.
+
+The judge noted these coordinates were **correct in the round-4 entry and regressed** — the revision
+was written from the prior draft rather than re-read against the tree. Accurate; corrected by
+re-reading every one.
+
+### ✅ User decision — the weight tier
+
+`_iter_docs` (`index.py:44-51`) hardcodes `source_type` per bucket: `curated_docs` → `curated_doc`
+(**1.5**, tied with ADRs), repo roots → `repo_doc` (**1.2**). Adding the file to `curated_docs`
+alone would rank narrative equal to the decisions it narrates. **User chose a new `archive_doc`
+tier at 1.0**, classified **by filename** so all three copies are consistent. `db.py:16` validates a
+fixed `SOURCE_TYPES` tuple, so this is a four-file change.
+
+### Motivation still verifies — the reasoning was never the problem
+
+Promotion stopped (`session-log.md` 2026-07-16, `decisions.md` 2026-07-19, sessions 24-30 only in
+`CODING_MEMORY.md`); `is_excluded` is a substring match; `digest_input_char_cap` is transcript-only.
+Observability judge adds one nuance for ADR 0019: **ADRs and `pr-tracking.md` are current and
+indexed**, so what the exclusion loses is the *narrative log*, not the decision record.
+
+**Next:** dispatch loop-2 round 2, both judges, blob `68bb8fb2`. Reuse ids
+`writing-specs/r8-missing-config-validator` and `writing-specs/readme-drift`. No waivers.
+
+## 2026-08-06 — session 30 (cont.): loop-2 round 2 — FAIL, but the round-1 pair is genuinely closed
+
+**Round 2 ran on blob `68bb8fb2`. Both judges dispatched to panes (`surface:160`, `surface:161`),
+both returned DONE. Compliance: FAIL, 2 violations — both NEW ids. Observability (advisory):
+`risk=medium confidence=high`, no dimension fails. No persistence trigger fired; round 3 is
+available, and it is the escalation boundary.**
+
+### The round-1 pair is fixed — verified by the judge against the tree, not taken on our word
+
+`writing-specs/r8-missing-config-validator` and `writing-specs/readme-drift` both closed. The judge
+re-opened every coordinate: `config.py:56` is the `excludes` assignment with the guard at 57-60;
+`golden_queries.json:4` is the exclusion query and `:2` the still-true one; the four `processed`
+counts at `test_index.py` 84/135/149/160 each shift by one while **`:105`/`:117` correctly do not**;
+`:93` is the compound assertion; the plan asserts at both `:19` and `:2828`, both now listed. It
+independently confirmed the mechanism finding — `memory.db` holds **0** `sources` rows for
+`~/.claude/CLAUDE.md`, `MEMORY.md` and every `CODING_MEMORY.md`, against **1** for `PORTS.md`. The
+`curated_docs` addition really is the load-bearing half.
+
+### Round 2's two violations — both land on the *entry* status write, not on R10
+
+1. `core-conduct/explicit-error-handling` — the entry write must "preserve the prior `last_run` and
+   `last_run_errors`", which forces `run_index` to **read back** a `status.json` that this same spec
+   elsewhere treats as possibly malformed (R2, the "malformed stays silent" scenario), written in one
+   non-atomic `write_text` by a process the spec twice expects to be **hard-killed**. Behaviour on a
+   truncated prior file is nowhere stated → one torn write aborts every scheduled run at its first
+   line while the nudge is contractually silent. The freeze returns, unreported.
+2. `writing-specs/edge-cases` — the spec never says whether the entry write **recomputes** the six
+   existing keys from the DB or **carries them over**. Under the reading its own wording favours
+   (`_write_status` "gains a parameter distinguishing the two calls" → `dbmod.stats` runs again), an
+   `index --full` — which **unlinks the DB at `index.py:73` before connect at `:74`** — stamps
+   `chunks: 0`, and the *unchanged* "chunks absent or 0 → exit silently" rule then deletes the
+   session line for the whole multi-hour rebuild. That contradicts R3's in-progress line and the
+   claim that `chunks` is "unchanged in name, meaning, and format".
+
+Uncited note worth folding in: R10.4's "the fixture at `test_index.py:58` must additionally cover a
+file at the `~/.claude` root position" reads as an edit to the **shared** fixture, under which the
+four counts rise by **two**, not the stated +1 each. Half a sentence ("in its own cfg variant") fixes it.
+
+### Observability judge — four new findings, all advisory, two are sharp
+
+- **The archive lands in the wrong retrieval bucket.** `chunk.py:111` picks `recall_type` by path
+  substring, so every archive chunk becomes `doc`. The SessionStart line itself advertises
+  `--type decision|episodic|doc`, so after R10 asking for session history with `--type episodic`
+  **still misses it**. The hole is narrowed, not closed — and a golden query written with the
+  natural `episodic` filter would fail, unwarned.
+- **"Run the full suite" runs none of the retrieval tests.** `addopts = -m 'not golden'`; those 16
+  deselected tests *are* R9's noise-regression net. Nothing in tasks 7-10 runs them, so the golden
+  query R10.5 writes is never executed by the plan that writes it. Fix: `-m golden` in task 10.
+- **R10 has no way back** — there is no prune in the indexer, so if R9 fails and the file is
+  re-excluded the chunks stay in `memory.db` until a multi-hour `index --full`. The spec plans for
+  R9 failing and never states that exit cost. R7's launchd uninstall is first-class by contrast.
+- Task 9 measures a **warm incremental** run against a threshold that must cover a full backfill.
+- Bonus, verified: `archive_doc` needs **no DB migration** — there is no `CHECK` on `source_type`.
+- Suite runs **63 passed, 16 deselected**, under `uv` (system `python3` has no pytest).
+
+### The three carried advisory items — judge says the current text does not change its read
+
+`last_run_errors` still has no usability rule (the "when in doubt" rule is scoped to *timestamps*),
+so a missing value defaults to 0 and prints the reassuring line; a permanently-failing source still
+pins the warning forever, and **R10 makes that likelier** by adding the corpus's largest file; the
+degraded line still points at re-running the indexer, never at `scheduled-index.log` — the evidence
+R6 sets `PYTHONUNBUFFERED` specifically to preserve.
+
+### Process note — the wait timed out but the judge was fine
+
+First `wait --timeout 540` returned exit 2. The pane was inspected before any retry: process alive at
+9m32s, child `claude` at 0.1% CPU (normal for an API wait). Re-running `wait` returned DONE. **Exit 2
+means inspect, not dead** — this judge simply verifies more coordinates than the sibling (~6m).
+
+**Next:** revise the spec for the two cited violations (both about the *entry* status write), then
+dispatch **round 3 — the escalation boundary**. Pass round 2's ids
+`core-conduct/explicit-error-handling` and `writing-specs/edge-cases` forward. Still no waivers.
+
+## Session 31 — loop-2 rounds 3 and 4: both closed their citations, both introduced new ones
+
+`main` @ `52ff3f6`, pushed. `docs/features/memsearch-freshness.md` still `phase: planning`,
+`branch: none`. Spec is now 895 lines. Checkpoint 2 remains owed — literal `gate confirmed` only.
+
+### Round 3 — FAIL, 3 new ids (round 2's pair verified closed)
+
+Six revisions landed first: the entry `status.json` write **carries the six existing keys over**
+rather than recomputing (`--full` unlinks the DB at `index.py:73` *before* connect at `:74`, so a
+recompute stamps `chunks: 0` and the "0 chunks → silent" rule erases the session line for the whole
+rebuild); that write's read is fallible by contract (`OSError`/`JSONDecodeError` → empty object, one
+stderr line, never aborts); both writes atomic; R10.4's fixture moved to its own `cfg` variant; an
+R10 exit-cost paragraph (**no prune path** — `db.py:112-120` deletes only inside `replace_source`,
+so re-excluding after a failed R9 leaves every chunk in `memory.db` until a full rebuild); task 9
+times the cold run; task 10 runs `-m golden` (`pyproject.toml:23` deselects 16 by default).
+
+Round 3 then cited three new: a missed `skipped` count, a contradiction I created between R10.4 and
+task 7, and a timestamp emitting microseconds against a second-precision promise.
+
+### Round 4 — FAIL, 4 new ids (all three round-3 ids verified closed)
+
+User directed (do not re-ask): fix all three **and** fold in all three deferred design gaps. Nine
+revisions. The three design gaps are now in the spec:
+
+- **Stuck decays into stale** past new `RUN_ABANDON_HOURS` (24). Without it, a killed run plus a
+  dead scheduler shows "⚠ stuck" forever, the reader checks, finds nothing, and is never told the
+  scheduler died — and **falsifier clause (c) would score that as passed**, because something
+  surfaced. Third constant, deliberately: 8 / 6 / 24 answer three different questions.
+- **`last_run_errors` unknown is never zero.** New table row; degraded and stuck lines now point at
+  `scheduled-index.log`, not at a multi-hour retry.
+- **`archive_doc` → `recall_type` `episodic`** (one line at `chunk.py:111`, which already receives
+  `source_type`; `RECALL_TYPES` at `db.py:17` already has it, no migration). Without it `--type
+  episodic` silently misses all session history.
+
+### ⚠️ The real finding: I am patching cited lines, not sweeping surfaces
+
+All four round-4 violations were introduced **by the round-4 edit itself**, and the judge names the
+shared root: *a new state was added to the bullets and the table without propagating to the summary
+surfaces.* Concretely — R3's lead still says "three states" while listing four; three scenarios
+still assert `fresh` from a Given that never pins `last_run_errors`; the data-flow diagram is
+un-swept. Plus two unverified factual claims of mine: `:117` labelled "limit-scoped" when it is the
+changed-file test (`:149` is the limit-scoped one, which the same paragraph says *must* move), and
+"the sweep returns eleven hits" when `grep -n CODING_MEMORY` on that plan returns **14**.
+
+This is `feedback_audit_the_surface_after_repeat_findings` firing for real: three rounds running,
+each fix has spawned a same-species defect. **The method has to change before round 5** — build one
+explicit state table as the single source of truth, derive every surface from it (R3 lead, bullets,
+classification table, scenarios, diagram, falsifier, task 4), and re-run every command whose output
+the spec quotes rather than recalling it.
+
+### Observability judge (advisory) — findings not yet in the spec
+
+- **Golden query 12 is a likely casualty and unwarned.** It is a `must` query filtering `episodic`
+  and expecting a `.jsonl` path; R10 makes the archive episodic, dated today, weight 1.0 tied with
+  transcripts, and the largest file in the corpus. Name it as an expected casualty *before* task 10
+  runs, or a red result gets "fixed" instead of recorded.
+- **The decayed stale line prints the remediation decision 5 banned** while a run may be alive, and
+  the non-goal at ~809-811 still asserts the nudge never invites a concurrent run. That sentence is
+  now false.
+- **First-run-killed lands on "unknown age"** — no warning marker, no log pointer. The original
+  bug's silhouette in the window the decay creates.
+- `-m golden` asserts presence in top-k, not top hit, with no score floor — a weaker net than task
+  10 assumes. R9's five queries are the strict instrument.
+- `scheduled-index.log` is unbounded, no rotation, 4 runs/day (`reindex.log` is 63KB from one run).
+
+**Next:** escalated to the user after round 4 (second consecutive escalation; the id
+`writing-specs/edge-cases-r10-test-counts` also repeated across rounds 3 and 4, though the judge
+records round 3's instance as genuinely closed). Awaiting direction on method before round 5.
+
+## Session 32 — loop-2 round 5: the state-table rewrite, and what re-measuring found
+
+Round 4 escalated with four violations, all introduced by the round-4 edit itself — the third
+consecutive round where fixing a spec defect spawned a same-species one. User said "continue";
+taken as approval of the recommended method rather than a fifth patch round.
+
+**Method change.** Stopped patching cited lines. Built one authoritative **state table** in R3 and
+derived every restating surface from it: the Contracts classification table (now a pointer, not a
+second copy), the data-flow diagram's `OUT` node, the Scenarios, falsifier clauses (f)(g)(h), and
+task 4's test list. Then re-ran every command whose output the spec quotes instead of trusting the
+written number. Ground truth persisted to the scratchpad (`ground-truth-r5.md`) so round 6 cites a
+file, not recall.
+
+**The four round-4 violations, closed.**
+1. `:117` was mislabelled "limit-scoped"; it is the *changed-file* test. `:149` is limit-scoped and
+   does move. Replaced the prose list with a verified 10-row assertion table. Five move
+   (84, 106, 135, 149, 160), four must not (105, 117, 136, 161) — the *lists* were always right,
+   only the labels wrong. Four stale inline comments now named (84, 135, 148, 160); prior drafts
+   named two.
+2. Three fresh-asserting scenarios never pinned `last_run_errors`, which the new unreadable-count
+   rule forbids. Four now pinned (a fourth was found beyond the three cited).
+3. "Three states beyond fresh/stale/unknown" listing four → the state table replaces the framing
+   entirely. **Eight states**, numbered, one line each.
+4. Plan sweep returns **14**, not 11. The four cited lines (19, 2828, 2890, 2942) were correct; the
+   other ten are now enumerated as deliberate historical listings.
+
+**What the state table surfaced that no judge round had caught.**
+- The unreadable-error-count example line was missing its `⚠` while the prose said rows 4–6 all warn.
+- **New state 3, "abandoned first run".** A killed first run fell through to plain "unknown age" —
+  no marker, no log pointer. That is this feature's own defect one field over.
+- **The decay rule falsified the concurrency non-goal.** Past `RUN_ABANDON_HOURS` a still-alive run
+  decays to *stale*, which does carry the index command. Named as a bounded trade, and
+  `RUN_ABANDON_HOURS` must now clear task 9's cold-run duration by a margin — a stricter obligation
+  than `RUN_MAX_HOURS`, which only mislabels.
+- **Task 10 was measuring the wrong thing.** `test_golden_queries.py:37-41` asserts only presence in
+  top-k — no score floor, no top-hit check, no ≥2 count — so **R9's bar is not expressible in that
+  harness**. Only 11 of 16 golden cases can fail; stretch and negative merely `warnings.warn`. Task
+  10 split into (a) the regression net and (b) R9's own runner.
+- **Golden entry 11 = file line 12** (not "query 12" — 12 is its line) is the predicted R10 casualty,
+  now named in the spec before the run: `must`, `rtype: episodic`, `since: 2026-07-01`, expects
+  `.jsonl`; R10 makes the archive episodic, weight 1.0 tied with transcripts, dated today, largest
+  source. If it fails, re-point the query — do not re-exclude.
+
+**Numeric drift, re-measured 2026-08-07.** Archive 3,433 lines / 299,422 chars (was 3,232/285,187);
+2.3× the largest indexed doc, not 2.5×; sessions 24–**31**; `sources` **911 rows** (187 @ 07-18,
+724 @ 08-06), run finished and no longer growing. Every toolchain row and timestamp claim re-verified
+and holds exactly; `launchctl getenv PATH` still empty.
+
+Spec: 895 → **1,021 lines**, blob `748b108b`. Still `phase: planning`, `branch: none`.
+**Round-5 compliance + observability judging is owed and not yet run.**
+
+## Session 33 — loop-2 rounds 5 through 9: two bars that could not fail, and one guard that blessed what it forbade
+
+Five judge rounds (5–9), ten pane dispatches, four spec commits. `main` @ `254cb98`.
+Spec 1,021 → 1,270 lines, still `phase: planning`, `branch: none`.
+
+**Round 5's state-table rewrite held.** Both judges confirmed independently: all four round-4
+violations closed, all 44 scenarios resolve to the state they claim, all eight states covered.
+Compliance went 4 → 1 violations.
+
+**R9's acceptance bar could never pass, for three rounds running.** The advisory judge found it;
+verified from source: `search.py:61-64` fuses two retrievers at `RRF_K=60`, `:80` multiplies by
+weight (max `curated_doc: 1.5`) — hard ceiling `2 × 1/61 × 1.5 = 0.04918`. The bar read `≥0.30`,
+six times the maximum emittable. A live query scored 0.046514. **The disproof was already in the
+document** — the Baseline two paragraphs below recorded the returning hits at ~0.02, and sat there
+for five rounds. Round 6 replaced it with a floor set from the same run it grades (cannot fail);
+round 7 added a falsifier clause to stop that step being skipped (a guard on a guard); round 8
+deleted the clause on user decision. *A measurement needing that much scaffolding was not measuring
+anything.*
+
+**The drift class was enumerated, not patched again (user decision).** Rounds 5, 6 and 7 each fixed
+the cited instance and left the class open; round 7's own derived-surface list was stale, naming a
+section round 5 had deleted. Replaced with a mechanically-swept inventory — **seventeen** surfaces,
+not the three the old list named — keyed by section name, never line number. The first draft cited
+line numbers and they were stale inside one editing session.
+
+**The worst defect of the session was mine.** Round 8's anti-gaming rule ("the five queries must
+span the corpus size range") pinned eleven chunk counts read from `memory.db`. Ten were right; the
+eleventh was this spec's own file, listed at 14 chunks because the index last read it at
+`2026-08-06T20:01:42Z` at ~250 lines against a 1,214-line file (`MAX(line_end)` = 250). It would
+have qualified as the "small target" while being one of the largest — **the rule satisfied by doing
+what it forbids.** A spec whose thesis is *"the index lies about its freshness"* calibrated its
+guard by asking the index instead of the files. No count is pinned anywhere now; they are computed
+from source at task-8 time. → memory `feedback_measure_from_source_not_the_derived_store`.
+
+**Also closed:** falsifier (a) demanded a stale line whenever `last_run` exceeded `STALE_HOURS`
+with no exception for the states outranking stale — and state 2 guarantees `last_run` is older than
+8h once `run_started` passes 8h, so (a) and (g) could not both pass as hook tests; any faithful
+build would have been condemned by the spec's own falsifier. R9's spread rule was written strictly
+in one place and loosely in the two that graded it. R9 had no pass mark (one-of-five satisfied every
+sentence) — now all five. `falsifier` appeared **zero** times in the task list, so the section
+defining how the feature could be proven wrong had no step that read it → new task 10c.
+
+**Judge-verified figures** (all re-run, not recalled): archive 300,160 chars / 3,484 lines; **1.62×**
+the largest indexed doc (`vibe-scape/.../live-presence-plan.md`, 184,620 chars) — round 5's "2.3×"
+ranked by chunk count while the arithmetic was character-based and compared bytes to chars; plan
+sweep 14 hits; 20 session headings in two forms, zero of the shape the spec named; history blocks
+are 188/1,214 lines (15.5%), mid-pack against sibling specs.
+
+**Open:** round-9 judging owed. Checkpoint 2 (planning → implementation) still owed — literal
+`gate confirmed` only.
+
+## Session 34 — round-9 judging: the enumeration that drifted on arrival
+
+`main` @ `ceadcf0`. Spec unchanged at **1,270 lines**, blob `60199bd9`, still `phase: planning`,
+`branch: none`. No code exists.
+
+**The session opened on a two-rounds-stale handoff.** Session 33 ended without writing one, so
+`SessionStart` surfaced session 32's — claiming 1,021 lines, blob `748b108b`, "round-5 judging
+owed". Git said otherwise: four spec commits past it. Caught by the restore step that checks
+frontmatter against reality *before* acting. **A handoff's age header does not tell you it is
+current** — it timestamps the file, not the state it describes.
+
+**The user opened with `gate confirmed` and the gate did not open.** Round-9 judging was owed and
+the last verdict on record was round 8 = **fail**. Asked rather than treating the phrase as
+covering both; user chose to judge first. Checkpoint 2 answered in the same breath: **Sonnet 5**
+for implementation. The `gate confirmed` phrase is therefore already spent — when judging passes,
+open the gate without re-asking.
+
+**Round 9 judged: compliance `fail` (2 violations), observability advisory `risk=medium`.**
+Round 8's violation is verifiably closed — decision 5 bounded, the Design-decisions row present in
+the 17-entry inventory, the stale "1,163 lines" header gone, the spread rule identical in all
+three places.
+
+The two new ones:
+
+1. **The pass mark was not where the work happens.** R9's own new checklist claimed task 10(b)
+   restates the "all five queries must pass" bar. `grep "all five"` returns **exactly one hit in
+   1,270 lines** — in R9 itself. The step that runs and records the measurement states only
+   per-query pass/fail, so four-of-five would be recorded as a pass.
+2. **A scenario contradicted the state table.** "A failed scheduled run becomes visible" put a
+   9-hour-uncompleted run on the *stale* line; the table makes it state 2 (*stuck*), which
+   outranks stale. The identical proposition round 8 scoped out of falsifier (a) and left live in
+   the scenario **task 4 turns into a hook test** — so the wrong version is the one that ships.
+
+**The persistence rule tripped and the finding was escalated, not patched.** Id
+`writing-specs/derived-surfaces-out-of-sync` cited in rounds 8 and 9 consecutively. Substantively
+it is a new instance in the same territory, but it is the **fifth consecutive round** the class has
+appeared (5, 6, 7, 8, 9). Both judges found it independently this round: the advisory one caught
+that **R9's new seven-entry inventory was written by reading, not by the sweep the spec mandates**,
+and misses four surfaces. *The enumeration written to end the drift drifted on arrival* — which is
+what finally made the mechanism, not the instance, the thing to fix.
+
+**User decision: stop hand-maintaining the inventories.** Both lists come out of the document; the
+sweep becomes a step executed at implementation time, generated from what is actually there. A
+list that lives in the document is a copy, and every copy in this spec has gone stale — rounds 7
+and 9 shipped stale ones inside the very section meant to prevent staleness.
+
+**Also accepted (all four advisory items):** record the golden baseline; delete the two surviving
+pinned counts; state the counting unit as per-feature; add a falsifier clause for task 9's
+stop-and-ask (flagged three rounds running).
+
+**Baseline captured before any edit, re-run rather than trusted:** `uv run pytest -m golden -q` →
+**16 passed, 63 deselected, 2.53s** @ `ceadcf0`. Matches the advisory judge's figure. This is the
+before-picture task 10 lacked — without it the R10 measurement runs once, after the change, with
+nothing to compare against.
+
+**Two document self-contradictions worth keeping:** R9 states flatly that no count is pinned
+anywhere while **121 and 130 survive** in R10's noise paragraph, both read from `memory.db` — the
+exact failure mode round 9 existed to fix, one section over. And chunk counting is per-file while
+competition is per-feature, so one feature reads as 6 or 37 depending on the unit — enough slack to
+move a sample from the bottom third to mid-range while still complying with the anti-gaming rule.
+
+**Gotcha found the hard way:** `phase-guard`'s `.claude/*` exemption is **repo-relative**. In this
+repo that means `~/.claude/.claude/…`; a write to `~/.claude/session-state.md` sits at the repo
+root, matches nothing, and is denied. The hook was right — that path was wrong.
+
+**Open:** the round-10 revision (seven edits, enumerated in the handoff), then re-judge.
+
+## Sessions 35–36 — the response register: a rule that could not be written by the agent that needed it
+
+Two standing requests about how replies are written — **plain language on every reply**, and
+**every prompt carries a recommendation** — were being missed. An audit found the cause was
+*location*, not disagreement.
+
+**The plain-language rule existed, and was scoped wrong.** It lived only as auto memory, and its
+first six words read *"When asking the user a question"*. Explanations, findings, and status
+reports were never covered, so the rule read as already-followed while being routinely missed. The
+user asked for it three separate times (2026-08-02, sessions 33 and 35).
+
+**The recommendation rule did not exist at all.** `grep -riE "recommend"` over `CLAUDE.md`,
+`rules/` and `agents/` returned **zero matches**. The only adjacent guidance is
+`AskUserQuestion`'s own convention, phrased conditionally (*"**if** you recommend a specific
+option…"*), so it obligated nothing.
+
+**Why auto memory was the wrong home.** It is keyed per project — four such directories exist on
+this machine, only the current repo's loads at session start — and it is gitignored
+(`.gitignore:43`), so it never commits and never syncs. A rule about how the assistant *speaks*
+cannot be repo-specific. `triaging-new-instructions` put both at tier 2: they must hold every turn,
+and no script can judge whether prose is jargon-free or whether a recommendation was given. That is
+`rules/core-conduct.md` § Session Defaults. **ADR 0019** records the five options weighed.
+
+**The freeze, and the way past it.** The agent could not make the edit. `phase-guard.sh` is
+registered `PreToolUse` on `Edit|Write|NotebookEdit` and `rules/` is not on its exempt list, so
+every write was denied while two feature files sat at `phase: planning`. The guard was behaving
+correctly by its own contract — it matches on **path, not intent** — but the block was a false
+positive: neither planning feature has any relationship to the response register. The resolution
+was the hook's own scope: **it intercepts agent tool calls only, so the user edited the file by
+hand.** Rejected alternatives: managed policy (`sudo`, un-overridable, a third copy) and
+`autoMemoryDirectory` (merges all four repos' memories).
+
+**Then the duplicates were deleted, not synced.** Both memory files and their two `MEMORY.md` index
+lines are gone; `grep` confirms no dangling wikilinks. One fact, one home.
+
+**Handoff error caught on arrival.** The session-35 handoff claimed `docs/**` is outside
+`git-guard`'s `main` allowlist and needed a branch. It is not — `hooks/git-guard.sh:186` allows
+`CODING_MEMORY.md|coding-memory/*|docs/*.md`. Only `rules/` genuinely needed the branch. A handoff
+is data, not truth; this one was wrong on a fact that would have cost an unnecessary branch.
+
+**Also landed:** `docs/marker-gate-defect-checklist.md`, the open defects for
+`verification-marker-gate` re-verified against **revision 5**. Verified while checking: the spec
+mentions **`rtk` zero times** and names `kind: COMMIT` exactly once without defining the predicate.
+The hooks learned the rtk/chained-command lesson (`git-guard.sh:24-26`, `doc-guard.sh:119`); the
+spec did not.
+
+**Count discrepancy to settle:** the session-34 entry above says the round-10 revision is **seven**
+edits; the session-35 handoff enumerates **nine**. The nine-item list is the one that was worked
+from — treat it as authoritative and re-derive rather than trusting either number.
+
+**Closed:** PR #44 **MERGED** 2026-08-07T16:46:01Z; branch deleted local + remote via `git branch -d`.
+The rule is on `main` — verified `1` where the pre-merge falsifier on `main` returned `0`.
+
+**Open: the round-10 revision, then re-dispatch both judges.** The nine edits are recorded here
+rather than only in the handoff, because the session-35 handoff that held them was overwritten and
+they briefly existed in no durable place at all — the same staleness failure this spec exists to fix:
+
+1. Delete R3's 17-entry derived-surface inventory (~`:162`–`:186`).
+2. Delete R9's seven-entry "Surfaces derived from R9" (~`:339`–`:353`).
+3. Replace both with a task step regenerating the sweep **at implementation time**; keep the sweep
+   *method* (~`:144`–`:147`). Every stored copy went stale, twice inside the anti-staleness section.
+4. Scenario "A failed scheduled run becomes visible": 9h-uncompleted is **state 2 (stuck)**, not
+   stale (`6 ≤ 9 < 24`, stuck outranks stale). Emit the stuck line; copy R8's falsifier-(a) scoping.
+   Task 4 makes this scenario a hook test, so the wrong version is the one that ships.
+5. Move "all five queries must pass" into task 10(b) — it appears once in 1,270 lines and not in the
+   step that records the measurement, so four-of-five would be written down as a pass.
+6. Task 10(a) baseline: `uv run pytest -m golden -q` → 16 passed, 63 deselected, 2.53s @ `ceadcf0`.
+   Verified; do not re-measure, and do not let a later commit become the "before".
+7. Delete the pinned counts `121` and `130` from R10's noise paragraph — both read from `memory.db`.
+8. State the counting unit as **per-feature** in three places identically: R9's spread rule, task 8b,
+   falsifier (i).
+9. Add a falsifier clause for task 9's stop-and-ask — flagged three rounds running, still ungraded.
+
+Then re-hash the blob and re-dispatch both judges in panes with R9's two violation ids, `waived: []`,
+and the fact that edits 1–3 are a **user-directed structural change**, not a judge finding.
+
+## 2026-08-07 — session 37: the round-10 revision lands (nine edits, all nine applied)
+
+Spec `docs/features/memsearch-freshness.md` · `phase: planning` throughout · no branch · committed
+to `main` as docs (`git-guard.sh:186` allows `docs/*.md` there).
+
+**Blob `60199bd97edddf6e50e99c047a2a3573b34ffb40` → `022528c29a2b7ac9bd542f0271272855ceb4275d`**
+(1,270 → 1,289 lines). The pre-edit hash matched the handoff exactly, so no drift had occurred
+between sessions.
+
+All nine edits from the list above are applied. Three of them are worth recording beyond "done":
+
+- **Edit 4 was not a judgement call — the spec contradicted itself.** The scenario at `:867`
+  ("A failed scheduled run becomes visible") asserted a **stale** line for a 9-hour uncompleted run,
+  while the scenario 78 lines earlier at `:789` asserted **stuck** for the same 9 hours. Two hook
+  tests generated from one spec, mutually unsatisfiable — the identical defect clause (a) had in
+  round 8. Renamed to *"A wedged scheduled run surfaces as stuck, not as stale"* and scoped with
+  `run_started` later than `last_run`, `last_run` older than `STALE_HOURS`, and an explicit
+  `And no stale line is emitted` — so it now tests the *precedence*, which is what makes it
+  distinct from `:789` (that one tests the no-second-indexer guarantee) rather than a duplicate.
+
+- **Edit 3's task 1b had a phase collision that had to be designed around.** The sweep regenerates
+  "at implementation time", but `phase: implementation` **forbids spec edits** — so a task that
+  reconciles spec surfaces mid-implementation is out-of-phase by construction. Resolved by making
+  1b **detect-and-escalate, never fix**: a surface contradicting its authority triggers the
+  documented `"GATE: Spec change needed — switch back to the high-tier model to revise."` Fixing in
+  place would be the out-of-phase edit; staying silent is what rounds 5–9 each did.
+
+- **Edit 8 was applied without pinning the 6-vs-37 figure.** The handoff cited per-file-vs-per-feature
+  as worth 6 vs 37 chunks on one feature. Those are chunk counts, and the spec's own rule two
+  paragraphs down says **no chunk count is pinned in this document** — so the point is made in prose
+  ("counts as a small target read off its largest file alone, mid-range when summed") with no
+  numbers. Pinning them would have re-committed edit 7's exact sin in the act of fixing edit 8.
+
+Edits 1–3 removed both stored inventories; what survives is the sweep **method** plus a new
+"What the sweep must count as a derived surface" list preserving the three lessons the deleted
+tables encoded (an ordering claim is duplication; a section asserting precedence is restating the
+table; a state named in prose without its number is still a surface). Falsifier gained clause **(j)**
+(task 9's cold-run stop-and-ask), is now classed as an observation, and task 10c reads "(a) through
+(j)".
+
+**Open — next session:** re-dispatch **both** judges at round 10 in panes (`dispatching-pane-agents`),
+passing R9's two violation ids, `waived: []`, and that **edits 1–3 are a user-directed structural
+change**, not a judge finding. `gate confirmed` was already given in session 34, so round 10 passing
+**opens the gate — do not re-ask**; checkpoint-2 answer to record in task 1 is **Sonnet 5**.
+
+## 2026-08-07 — session 37 (cont.): rounds 11 and 12 both PASS; the gate is unblocked
+
+`docs/features/memsearch-freshness.md` · `phase: planning` throughout · pushed through `b229ef3`.
+Blob trail: `60199bd9` (r10 in) → `022528c2` (r10 out) → `b71672c3` (r11) → `c148cda8` (r12).
+1,270 → 1,289 → 1,317 → 1,336 lines.
+
+**Round 10 failed on one violation, and the failure was mine.** Edit 8 said "fix the counting unit
+in three places"; I fixed exactly those three and did not sweep for a fourth. There was one — the
+Gherkin scenario, i.e. *the* surface that becomes an executable check. Verified: `memory-system-split`
+is 53 + 713 lines, so per-file it ranks bottom-third and per-feature top-third. **This is the
+"enumerate the class, don't patch the instances" rule failing inside the edit meant to enforce it.**
+Round 11 fixed it by sweeping *and* deleting the two-entry mini-inventory that caused the miss.
+
+**Round 11: compliance PASS** (zero violations). `derived-surfaces-out-of-sync`, open rounds 8–10,
+closed — all seven surviving surfaces agree on unit and population.
+
+**Round 12 exists because the observability judge found the hole one level down.** R11 defined *which
+population*; it never defined what a **third** was. All four surfaces were silent *identically*, so
+they agreed with each other while the rule underneath was underdetermined. **Surfaces agreeing is not
+the same as a rule being defined** — no cross-surface comparison could ever have found this; it took
+reading the rule. Fixed as a **rank tertile** (lowest ⌊N/3⌋ by rank, N counted at task-8 time, never
+pinned, counted per feature — `docs/features/` is 11 files but **10 features**).
+
+**The judge then measured it with the project's own chunker rather than taking the fix on trust:**
+
+```
+ 1   6 stale-phase-guard-rule-text    6  37 memory-system-split
+ 2   9 falsifier-base-pin             7  53 verification-marker-gate
+ 3  13 git-guard-chained-command      8  66 memsearch-freshness
+ 4  13 shell-segments-redirects       9  70 replay-harness-base-pin
+ 5  24 git-guard-empty-index         10  91 phase-guard-hook
+```
+
+Value-span reading: bottom third = ≤34.3, so `git-guard-empty-index` (24) qualifies and the
+four-large-plus-one-medium sample **passes** — and *half the pool* sits in its own "bottom third".
+Rank-tertile: bottom third = `{6,9,13}`, it is rank 5, sample **fails**. Counterexample dead under
+every convention tried (⌈N/3⌉, percentile interpolation). Bottom third shrank 50% → 30% of the pool.
+Bonus: this spec is **66 chunks, rank 8 — its own top third**; round 8 listed it at 14 (bottom third)
+off the stale index. Its self-criticism was right.
+
+**Round 12: compliance PASS. Observability on the gate question: "No. Open it."**
+
+**Both judges corrected themselves against measurement, which is the point of running them:** the
+observability judge withdrew its round-11 `≥1.73×` (it had divided bytes by characters — the spec's
+**1.72×** stands, re-measured independently by both), and **reversed its round-11 demand for a
+pre-gate reorganization** — re-cutting the document would churn all four spread-rule surfaces
+immediately before task 1b's sweep must verify they agree, and after the gate it is phase-illegal.
+
+**Carried into implementation, none blocking:** (1) a live tie at the boundary — `git-guard-chained-command`
+and `shell-segments-redirects` are both 13 chunks, ranks 3/4, and "lowest ⌊N/3⌋" doesn't say which is
+third; not exploitable, but not reproducible — recommended rule: *a tie spanning the boundary puts
+both in the third*. (2) R9 names no command for computing chunk counts; use the project's chunker at
+task 8b, not a `wc` proxy. (3) **Deliberate canary:** falsifier (i) still says "chunk-count *range*"
+where R9 says "population", and `⌊N/3⌋` reached only 2 of 4 surfaces. Meaning is pinned everywhere,
+so it is cosmetic — **left in place on the judge's suggestion as a live test of whether task 1b's
+sweep actually works**, since that sweep is what replaced the deleted inventories and has never been
+exercised. If task 1b misses both, that is evidence about the mechanism, not about the wording.
+(4) The zero-files gap still renders a vanished corpus as fresh, by prior user decision.
+
+**Process finding — the "exit 2 ≠ dead" gotcha fired for real at round 11.** The compliance pane hit
+the 540s `wait` timeout and never wrote its result file, but the verdict was already complete and
+well-formed in `verdicts.jsonl`. Re-dispatching on the exit code would have burned a full round
+re-judging an already-passing spec. **Always read `verdicts.jsonl` before believing a timeout.**
