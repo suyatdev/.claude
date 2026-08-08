@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: review
+model_tier: low
+branch: feature/memsearch-freshness
 ---
 
 # memsearch freshness — refresh trigger and staleness reporting
@@ -103,7 +103,7 @@ Three measurement traps, recorded because each produced a confidently wrong answ
    measurement passing, and building on a result not yet obtained is how the last premise broke.
 
 Decisions 2 and 4 are structural — a new persistent background daemon, and a change to the meaning of
-a published status field. Both earn ADR 0018 (task 2).
+a published status field. Both earn ADR 0021 (task 2) — written as 0018, renumbered before merge.
 
 ### Requirements
 
@@ -1197,12 +1197,15 @@ result is reportable rather than embarrassing.
 
 ## Tasks
 
-Model per task set at checkpoint 2, which is **not yet asked**. Checkpoint 1 (entering planning)
-was asked and answered 2026-08-06: **Opus 5**.
+Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**. Checkpoint 1
+(entering planning) was asked and answered 2026-08-06: **Opus 5**.
 
-- [ ] 1 — Model-switch checkpoint 2 (planning → implementation); record the answer here, create
-      the branch, set `phase: implementation`.
-- [ ] 1b — **Regenerate the derived-surface sweep and reconcile it — first task after the gate,
+- [x] 1 — Model-switch checkpoint 2 (planning → implementation); record the answer here, create
+      the branch, set `phase: implementation`. Asked fresh at the gate 2026-08-07 (an earlier
+      session's answer never satisfies it) — answered **Sonnet 5**, for the whole implementation
+      phase including 1b, so the sweep is exercised by the tier that runs the rest of the work.
+      Branch `feature/memsearch-freshness`.
+- [x] 1b — **Regenerate the derived-surface sweep and reconcile it — first task after the gate,
       before any code.** Sweep the whole spec for every state name, every rendered line and every
       ordering claim (R3's method), and for every restatement of R9's two clauses and its spread
       rule. Key the result by **section, never by line number**, and record it **in this task's
@@ -1216,13 +1219,42 @@ was asked and answered 2026-08-06: **Opus 5**.
       **"GATE: Spec change needed — switch back to the high-tier model to revise."** Fixing it in
       place would be an out-of-phase spec edit; leaving it silently is what rounds 5 through 9 each
       did.
-- [ ] 2 — Write `docs/decisions/0018-*.md`: adopting a persistent `launchd` agent as the refresh
+- [x] 2 — Write `docs/decisions/0021-*.md`: adopting a persistent `launchd` agent as the refresh
       mechanism, and splitting run recency (`last_run`) from content recency (`last_indexed`).
       Options weighed, why these won, consequences.
-- [ ] 3 — Add `run_started`, `last_run`, `last_run_errors` to `status.json` (R5), written at both
+      `0021-launchd-agent-and-run-recency-split.md` — **written as 0018 and renumbered on 2026-08-08**,
+      because `main` had already landed a different ADR 0018 (the status-line one, PR #43) and a merged
+      decision record does not get renamed. Provenance is recorded in the ADR's own header; the
+      append-only archive still says 0018 and was deliberately left alone. One record for both
+      decisions — the scheduler's
+      known weakness (runs blind) is compensated by the warning, which needs decision 2's field.
+      ⚠️ **New fact, from `launchd.plist(5)` rather than recall:** a `StartInterval` firing across a
+      sleep is **missed**, not deferred to wake (`kqueue(3)` limitation) — the ADR records it as an
+      accepted consequence, not a mitigated one. The spec never claimed otherwise; it simply did not
+      say. Citations re-verified against source before restating (`db.py:156`, `index.py:125-127`,
+      `cli.py:66`, `status.py:27`, and `launchctl getenv PATH` empty).
+- [x] 3 — Add `run_started`, `last_run`, `last_run_errors` to `status.json` (R5), written at both
       ends of `run_index`, and surface the two new fields in `memsearch status` (`status.py:27`);
       extend `memsearch/tests/test_index.py` and `test_cli.py`. Existing keys unchanged.
-- [ ] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4, implementing **R3's state table verbatim**.
+      TDD: 8 tests written first, all 8 watched fail for the right reason, then implemented.
+      72 pass. Mutation round of 6 — every one caught (including the temp-file test, which could
+      not fail before the atomic write existed).
+      - **`status_report` tests live in `test_rename_status.py`, not `test_cli.py`** — that is where
+        the existing `status_report` tests are. `test_cli.py` covers argv routing only and needed no
+        change; the task named it before that split was checked.
+      - **The entry write is placed after the model-mismatch check, not at the literal top of
+        `run_index`.** A config error that indexes nothing must not leave a phantom `run_started`
+        for the nudge to decay into a stuck run. A genuinely killed run still leaves
+        `run_started > last_run`, exactly as the contract says.
+      - **`db._now` promoted to `db.now_iso`** so one function owns the published timestamp format;
+        reaching into a private for a format the spec requires to match exactly would invite drift.
+      - **`memsearch status` reads `status.json`** — the two new fields have no other home, and the
+        DB cannot answer "did a run finish". Unreadable or absent renders `last run: unknown`.
+      - Edge, harmless here, noted rather than silently absorbed: at second precision a run starting
+        in the same second the previous one ended yields `run_started == last_run`, which R3's
+        state 1 (strict `>`) does not match, so it reads fresh rather than in-progress. Unreachable
+        at a 6h interval with multi-second runs.
+- [x] 4 — Extend `hooks/memsearch-nudge.sh` for R1–R4, implementing **R3's state table verbatim**.
       Extend `hooks/memsearch-nudge.test.sh` to cover **every one of its eight states plus both
       silent paths**, and **every nudge scenario in the Scenarios section** — derive both lists by
       reading those two places, never from a count written here, which is precisely the number that
@@ -1231,13 +1263,61 @@ was asked and answered 2026-08-06: **Opus 5**.
       particular must be checked at the output. Include the state-3 case (an abandoned first run must
       not degrade into a bare unknown-age line) and the registration assertion. Hand-run a mutation
       check.
-- [ ] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
+      Both lists derived by reading the Scenarios section and the state table, not from any count.
+      27/27 pass; every case asserts the emitted line. Written first, watched fail (22 of 27 red;
+      the 5 green were the pre-existing silent paths and the registration check).
+      - **Classification is bash; only age arithmetic is Python.** One interpreter start returns
+        `chunks`, both stamps as ages in seconds, and the error count — an unusable stamp (unparsable
+        or future) and an unusable count (absent, non-integer, negative) both come back `-`, so the
+        table's "treated exactly as absent" needs no second rule in the hook.
+      - **Found while writing the harness, not the hook:** `check()` set `RC` inside a command
+        substitution, so under `set -u` the first case died on an unbound variable. A test harness
+        that cannot report is worth less than no harness — fixed before any hook change.
+      - Mutation check: 8 mutations, 7 caught (state 3/4 ordering, future-stamp usability, missing
+        count read as zero, `-ge`→`-gt` at the stale threshold, comparison direction, day rendering,
+        the stale ⚠). The 8th was cosmetic — it reworded "see" to "run" while still naming the log —
+        and the behavioural version of it, pointing state 7 at the index command, **is** caught;
+        verified separately rather than assumed.
+      - Live smoke against the real 7,631-chunk index: freeze, dead scheduler, Ollama-down and
+        wedged-run all render their intended state. The live file has no run stamps yet, so the
+        real nudge now says `age unknown` — correct, and it stops claiming freshness it cannot prove.
+- [x] 5 — Add the `launchd` template and `memsearch/bin/install-schedule`, install and `--uninstall`
       (R6, R7), with a `plutil -lint` test, the eight install/uninstall scenarios, and an assertion
       that no absolute path is committed.
-- [ ] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
+      `memsearch/bin/install-schedule.test.sh`, 19/19. All eight scenarios plus three the contract
+      implies. Written first; 16 of 18 red (two passed vacuously with no script to run — both are
+      live now that one exists).
+      - **No test-only seam in the production script.** Isolation is `HOME` redirected to a temp tree
+        plus a stub `launchctl` prepended to `PATH`. An override variable existing only for tests
+        would mean the tested path is never the real one.
+      - **The loaded-service set is the authority, not an exit code.** Real `launchctl bootout`
+        returns 3 for "No such process" and `print` returns 113 when absent (both probed, not
+        recalled) — but the script asserts the *outcome* via `is_loaded`, so no magic number is
+        pinned and a lying bootstrap is caught. The malformed-plist case uses a genuinely broken
+        template, not a mocked `plutil`.
+      - Exit `64` added for a usage error; the spec enumerates the install flow's failures (0/1/2/3)
+        and is silent on argument parsing, so this extends rather than contradicts it.
+      - Mutation check: 6 run, 5 caught. The 6th — swallowing `bootstrap`'s failure — is masked by
+        the post-bootstrap verification, which still exits 2 naming the step. Redundant guard, not a
+        test hole: the observable contract is identical either way.
+      - Real render verified against the live `$HOME`: valid plist, and `uv` is at
+        `/opt/homebrew/bin/uv` exactly where the pinned `PATH` expects it. **Nothing installed** —
+        `launchctl print` still returns 113. Installing is task 9, deliberately.
+      - `install-schedule.test.sh` is a bash suite; `uv run pytest` does not reach it. Task 6's
+        README entry names it.
+- [x] 6 — Document `bin/install-schedule` in `memsearch/README.md`, **in the same commit that adds
       it** (R8). This is the `bin/` section only; `README.md:22`'s exclusion invariant is task 7's,
       in task 7's commit. Record parent item 2 as a verified no-op — no config change.
-- [ ] 7 — **Index `CODING_MEMORY.md` (R10) — one commit, all seven parts.** Config: drop it from
+      **Parent item 2 confirmed a no-op by measurement, not recall:** `~/.claude/docs` is already a
+      `curated_docs` root (`memsearch/config.json`), and the live index holds **11** `sources` rows
+      under `docs/features/`. Nothing to add.
+      ⚠️ **R8 was briefly broken and then repaired.** Task 5 was committed without the README, which
+      R8 forbids ("in the change that creates it"). Rather than leave a commit whose README lies,
+      `69f3f5d` was amended to carry both and force-pushed with `--force-with-lease` — allowed on a
+      feature branch, and the commit was two minutes old with no PR open. Recorded because the
+      *reason* the split happened is that the checklist numbers them as two tasks while R8 requires
+      one commit; a future reader splitting them again would repeat it.
+- [x] 7 — **Index `CODING_MEMORY.md` (R10) — one commit, all seven parts.** Config: drop it from
       `exclude_paths`, **add `~/.claude/CODING_MEMORY.md` to `curated_docs`** (without this the
       change is a no-op for the file it targets), add `"archive_doc": 1.0` to `weights`. Delete
       `config.py:57-60` — **line 56's `excludes = …` assignment must survive**. Add `archive_doc` to
@@ -1254,10 +1334,56 @@ was asked and answered 2026-08-06: **Opus 5**.
       assert the retired rule and the historical listings to leave alone. Write
       `docs/decisions/0019-*.md`. Run the full suite — removing the guard touches every
       `load_config` caller.
-- [ ] 8 — Write the five measurement queries and commit them as their own commit, before running
+      - **Landed as ADR `0020-index-the-session-archive.md`, not `0019`.** `0019` was already taken
+        by `0019-response-register-belongs-in-core-conduct.md` (sessions 35–36), so the task text
+        was stale and the number is forced by the directory. ⚠️ Knock-on: the deferred
+        planning-pass ADR is now **0021**, not the 0020 the session-39 handoff reserved.
+      - **Every `test_index.py` line number in R10.4 was +11 stale** — task 3's commit `483c44e`
+        inserted lines above them. Mapped by test *function* and semantic role instead, per R10.4's
+        governing rule; the same drift had moved `README.md:22` to `:45` (task 6's insert).
+        R10.6's plan sweep, by contrast, re-ran to **fourteen** hits exactly as written.
+      - **The predicted failure set was observed before any test was edited:** 7 failed / 65 passed
+        — precisely the seven functions R10.4 names, from eight assertions. The two new
+        production-pinning tests were then mutation-checked (revert `chunk.py`'s episodic branch and
+        `_doc_source_type` → both fail; restore → 74 pass). A new test that has never been seen red
+        pins nothing.
+      - **R10.6 widened by one line, same defect class:** the design doc's `source_type` enum was a
+        three-value list (`transcript_digest | curated_doc | repo_doc`) that is now four.
+- [x] 8 — Write the five measurement queries and commit them as their own commit, before running
       any of them (R9). **After task 7**, so the queries are written against the corpus they will
       be scored on.
-- [ ] 8b — **Record the observed scores as a baseline. No pass mark is derived from them.** Run the
+      - **Committed unrun.** Only the two non-retrieval tests were executed before the commit
+        (`test_there_are_five_distinct_targets`, `test_targets_span_the_corpus_size_range`); no
+        `search()` call was made against the index. That is the whole of the blindness guarantee
+        this task can still offer — the git-history proof was lost to the orphaned rebuild (R9,
+        *On blindness*).
+      - **The tertile boundary tie was decided before ranking, and it then materialized.** Rule
+        declared first: *entries tied in chunk count across a boundary all belong to that third* —
+        a tie is indistinguishable by the metric, so ranking either side of it is arbitrary, and a
+        tied entry has an **identical** count to a bona fide bottom-third entry, not merely a
+        nearby one. Ranks 3 and 4 then came out tied at **13** chunks
+        (`git-guard-chained-command`, `shell-segments-redirects`), widening the bottom third to
+        four entries. Had the rule been chosen after seeing that, it would have been unfalsifiable.
+      - **N = 10, not 11** — `memory-system-split` spans two files and counts once (R9's
+        per-feature unit). ⌊10/3⌋ = 3.
+      - **`memsearch-freshness` measures 71 chunks — rank 9, top third.** R9 predicted this: the
+        round-8 draft pinned it at 14 chunks from the stale index and called it bottom-third. The
+        indexed figure understated it ~5×, and ranking on it would have let this file serve as the
+        *small* target while being one of the largest — satisfying the anti-gaming rule by doing
+        the thing it forbids. Counts are therefore computed by the runner at run time from source,
+        and **no count is pinned in any file**, this note included.
+      - **The span guard was mutation-checked in both arms**, because a guard never seen red pins
+        nothing. A sample whose smallest target is `git-guard-empty-index` (24) is the exact
+        discriminator between the rank-tertile rule and the weaker value-span reading — value-span
+        puts 24 inside the "bottom third" (6 + (91−6)/3 = 34.3), rank tertiles put it in the
+        middle. It fails, so the implemented rule is the strict one. Dropping the top target fails
+        the other arm. Original restored byte-identical after both.
+      - **`addopts` was extended to `-m 'not golden and not measurement'`.** It previously
+        deselected `golden` only, so registering a new marker alone would have left a bare `pytest`
+        running these against the real index. Consequence for task 10a: `-m golden` now reports
+        **23 deselected** rather than 16 — added tests, not a regression. Default run unchanged at
+        **74 passed**.
+- [x] 8b — **Record the observed scores as a baseline. No pass mark is derived from them.** Run the
       five committed queries at `k=6` and write, under `## Verification`, every hit's score
       alongside whether it belongs to the named feature — the raw numbers, unrounded, with no
       pass/fail attached. Also record the ceiling the scorer can emit
@@ -1276,7 +1402,17 @@ was asked and answered 2026-08-06: **Opus 5**.
       third** (R9's strict wording; "not all from one third" is not the rule).
       *There is no floor to set and no decision to stop for — R9's score clause was removed in
       round 8. These numbers exist to be compared against later, not to gate this branch.*
-- [ ] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
+      - **Run as the pre-R10 baseline** (user-confirmed 2026-08-07): 8b precedes task 9, so the
+        archive is configured but **not yet indexed** — zero `archive_doc` rows. This is the
+        *before* half of R10's noise measurement, mirroring how 10a's before-picture is frozen at
+        `ceadcf0`. R9's verdict is task 10b's, after the index run.
+      - Full table under `## Verification`. Two of five queries met both clauses; **that is an
+        observation, not R9's verdict**, and no pass mark is derived from it here.
+      - **The count drift the spec predicts happened inside this task.** `memsearch-freshness`
+        measured **71** chunks when targets were chosen and **72** an hour later — task 8's own
+        completion notes, appended to this file. Any count pinned in a document is wrong by the
+        next edit; the runner recomputes from source, which is why it stays right.
+- [x] 9 — Install the agent and run the first scheduled index. Confirm the job is loaded, that
       `scheduled-index.log` receives output, and that a `sources` row exists **for the exact path
       `~/.claude/CODING_MEMORY.md`** — not merely "in each repo root", which the two small project
       copies (159 and 119 lines) would satisfy on their own while the archive itself stayed
@@ -1289,7 +1425,7 @@ was asked and answered 2026-08-06: **Opus 5**.
       and record that figure; note the incremental figure too as the ordinary case, but choose the
       constant against the cold one. If it exceeds `RUN_MAX_HOURS`, stop and put the constant back
       to the user (R3).
-- [ ] 10 — **Two distinct measurements, both recorded under `## Verification`.** They are not the
+- [x] 10 — **Two distinct measurements, both recorded under `## Verification`.** They are not the
       same instrument and neither substitutes for the other (R9).
       **(a) The noise-regression net.** Run the pre-existing suite with `-m golden` —
       `pyproject.toml:23` sets `addopts = "-m 'not golden'"`, so a bare `pytest` deselects all
@@ -1322,15 +1458,458 @@ was asked and answered 2026-08-06: **Opus 5**.
       silently re-exclude the file (and see R10's exit cost: re-excluding does not remove the
       chunks already written). *Any pre-existing reading of "R9 failed" that rests on the retired
       `≥0.30` score floor is void — the scorer cannot reach 0.30 (R9).*
-- [ ] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
+      - **(a) no regression: 16 passed = `ceadcf0`'s 16.** Compared on *passed*; deselected moved
+        (63 → 81) only because this branch added test modules and a second marker, so it is not
+        comparable across commits. Zero warnings — the 3 stretch and 2 negative cases were clean on
+        their merits, not merely non-binding.
+      - **Entry 11's predicted failure did not happen, and the measured reason is recorded.** The
+        archive did enter the result set (2 of 6 slots) but a `transcript_digest` still holds ranks
+        1–2, and the assert needs `.jsonl` only *somewhere* in top-6. Two-slot margin; re-check as
+        the archive grows. Falsifier run: unfiltered, the same query returns zero `.jsonl`.
+      - **(b) R9 FAILS — 2 of 5 pass, 3 fail** (the "2" is the passing count). Same count as 8b,
+        *different two*: `falsifier-base-pin` regressed, `git-guard-empty-index` improved. Reporting
+        the count alone would have hidden both moves.
+      - ⚠️ **CORRECTION — R10 caused both moves; my first attribution was wrong.** I concluded R10's
+        cost was zero (no `archive_doc` in the 30 visible hits) and blamed this file's own
+        `## Verification` section (rank 1 on the two worst queries). The observability judge
+        overturned it; I re-derived its counterfactual independently and it holds. RRF scores by rank
+        in a 200-candidate pool built *before* the weight multiply (`search.py:63`), so an archive
+        chunk depresses everything below it while never surfacing at weight 1.0 — **absence from the
+        frame is not absence of effect.** Dropping the archive flips both moved queries; dropping
+        this file flips none. Full control table under `## Verification`.
+      - **Whether `falsifier-base-pin`'s regression is an accepted cost of R10 is now an open
+        decision**, not a recorded fact. ADR 0021 must inherit the corrected attribution.
+- [x] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
       through (j), by letter, each marked held / falsified / not yet observable, with the evidence
       or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
       the word *falsifier* appeared nowhere in this task list, so the section that defines how this
       feature could be proven wrong had no step that read it. A falsification test nobody runs is
       indistinguishable from one that passes — the same defect, one level up, as the index that
       reported freshness it never checked.
-- [ ] 11 — Observability judge (implementation stage), then PR.
+      - **No clause falsified.** (d), (i), (j) held as observations; (a), (b), (c), (e), (f), (g),
+        (h) held *in test* via the 27-case nudge suite. Full table under `## Verification`.
+      - ⚠️ **The window has not opened.** The falsifier reads "across the 20 sessions after it
+        lands" and this branch has not landed, so every verdict is held-on-available-evidence, not
+        observed in production. The post-landing re-check is owed; recorded, not quietly dropped.
+      - **(c) is weak by its own record** (spec `:231-232`): with no prior `last_run`, a dead
+        scheduler surfaces as state 3, which warns without ever naming the real cause — the clause
+        reads as passed because *something* surfaced. Held literally; noted as thin.
+      - **R9's 10b failure falsifies nothing.** Clause (i) conditions on 8b's scores being recorded
+        and on target span, never on R9 passing. Stated so no later reader invents that link.
+- [x] 11 — Observability judge (implementation stage), then PR.
+      - Five review-phase rounds, `coding-memory/observability-judge/2026-08-08-feature-memsearch-freshness*.md`;
+        the last verdict is at `5ff613d` (medium risk, high confidence). PR #45 opened at that SHA.
+      - `08b779d` merged `origin/main` in afterwards, so the verdict SHA trails HEAD by one merge
+        commit. `judge-guard.sh` gates `gh pr create`, not an already-open PR, so nothing re-runs.
+      - The checkbox was left unticked when the PR was opened; ticked here in the review phase to stop
+        the record claiming the judge round never ran.
 
 ## Verification
 
-<Appended during review: pass/fail per area and open issues only.>
+### Task 8b — R9 baseline, measured pre-R10 (2026-08-07)
+
+**Not a verdict.** The archive is configured but unindexed at this point (zero `archive_doc` rows),
+so this is the *before* half of R10's noise measurement. R9 is scored at task 10b, after task 9's
+index run. No pass mark is derived from anything below.
+
+Scorer ceiling `2 × 1/(RRF_K + 1) × max(weight)` = `2 × 1/61 × 1.5` = **0.049180**. Scores are
+recorded as `search()` returns them; it rounds to 6 dp at `search.py:80`, so 6 dp is the finest
+resolution available, not a rounding applied here.
+
+Per-feature chunk counts computed from source by the project's chunker at run time. Population
+N = **10**; ⌊N/3⌋ = 3; ranks 3–4 tie at 13, so the bottom third holds four entries.
+`*` marks a hit belonging to the named feature (`docs/features/F.md` or `F.spec.md`, nothing else).
+
+| target | chunks | third | clause 1 (≥2 hits) | clause 2 (top belongs) |
+|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | 6 | bottom | PASS (5) | PASS |
+| `falsifier-base-pin` | 9 | bottom | PASS (2) | PASS |
+| `git-guard-empty-index` | 24 | middle | FAIL (1) | PASS |
+| `verification-marker-gate` | 53 | middle | FAIL (1) | FAIL |
+| `phase-guard-hook` | 91 | top | PASS (3) | FAIL |
+
+```
+--- stale-phase-guard-rule-text (6 chunks, bottom)
+    'the rule text claimed phase-guard was dormant but it was actually registered'
+    *1. 0.048784  docs/features/stale-phase-guard-rule-text.md:1-11
+    *2. 0.048784  docs/features/stale-phase-guard-rule-text.md:61-76
+    *3. 0.047247  docs/features/stale-phase-guard-rule-text.md:12-24
+     4. 0.044643  coding-memory/pr-tracking.md:578-600
+    *5. 0.039300  docs/features/stale-phase-guard-rule-text.md:50-60
+    *6. 0.036878  docs/features/stale-phase-guard-rule-text.md:25-34
+
+--- falsifier-base-pin (9 chunks, bottom)
+    'why did the falsifier baseline move when its own fix merged'
+    *1. 0.047667  docs/features/falsifier-base-pin.md:7-17
+     2. 0.047247  coding-memory/pr-tracking.md:662-685
+     3. 0.045320  coding-memory/pr-tracking.md:686-702
+     4. 0.042727  coding-memory/pr-tracking.md:654-661
+    *5. 0.040570  docs/features/falsifier-base-pin.md:18-32
+     6. 0.040541  docs/features/replay-harness-base-pin.md:1198-1216
+
+--- git-guard-empty-index (24 chunks, middle)
+    'git-guard read an empty staging area as a denial'
+    *1. 0.048400  docs/features/git-guard-empty-index.md:14-25
+     2. 0.043910  coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:17-36
+     3. 0.042125  docs/features/replay-harness-base-pin.md:594-606
+     4. 0.042059  coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:445-471
+     5. 0.037723  coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:195-218
+     6. 0.037523  docs/features/replay-harness-base-pin.md:607-635
+
+--- verification-marker-gate (53 chunks, middle)
+    'how does the verification marker gate know the test suite really ran'
+     1. 0.046649  coding-memory/observability-judge/2026-08-02-main.md:1-12
+     2. 0.044936  coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md:1-10
+    *3. 0.044741  docs/features/verification-marker-gate.md:996-1009
+     4. 0.042727  coding-memory/observability-judge/2026-08-02-main-round4.md:1-19
+     5. 0.042009  coding-memory/observability-judge/2026-08-04-main.md:1-22
+     6. 0.041290  coding-memory/observability-judge/2026-08-02-main-round2.md:1-13
+
+--- phase-guard-hook (91 chunks, top)
+    'how does phase-guard scope write permission to the current branch'
+     1. 0.046165  coding-memory/observability-judge/2026-07-28-feature-phase-guard-hook.md:24-38
+     2. 0.046154  docs/decisions/0011-branch-scoped-write-permission.md:11-39
+    *3. 0.045826  docs/features/phase-guard-hook.md:777-809
+     4. 0.045549  docs/decisions/0011-branch-scoped-write-permission.md:1-10
+    *5. 0.045238  docs/features/phase-guard-hook.md:33-51
+    *6. 0.040548  docs/features/phase-guard-hook.md:12-21
+```
+
+### Task 9 — install and first run (2026-08-07), timings measured (2026-08-08). Complete.
+
+Installed `2026-08-07T19:04:10-0400`, exit 0. `launchctl print` reports `state = running`,
+`runs = 1`, `last exit code = (never exited)`. Rendered plist is mode `0644`; the committed
+template holds 3 `__HOME__` placeholders and **0** absolute paths.
+
+**R5's two-write protocol worked in production on its first real run**, exactly as the contract
+specifies. The entry write stamped `run_started` and **carried the six prior keys over rather than
+recomputing them** — `chunks` stayed `7631` instead of reading a freshly-emptied DB and stamping
+`0`, which is the failure that would have deleted the session line for the whole rebuild:
+
+```
+{"chunks": 7631, "sources": 911, "last_indexed": "2026-08-06T23:56:46+00:00",
+ "db_bytes": 48959488, "embed_model": "qwen3-embedding:0.6b", "embed_dim": 1024,
+ "run_started": "2026-08-07T23:04:10+00:00"}          <- last_run absent: first run under new code
+```
+
+The nudge classified that live state correctly as **state 1** and, per the table, carried no
+remediation command:
+
+```
+memsearch: index run in progress (started 0m ago) — 7631 chunks; query with: …
+```
+
+(The `SessionStart` line earlier in the same session was **state 4**, unknown age — so the
+transition 4 → 1 was observed live, not simulated.) `scheduled-index.log` filled during the run,
+confirming `PYTHONUNBUFFERED`.
+
+**R10 confirmed end-to-end in the real index** — `sources` rows by exact path, `ESCAPE` used so `_`
+is literal:
+
+| path | `source_type` | `recall_type` | chunks | weight |
+|---|---|---|---|---|
+| `~/.claude/CODING_MEMORY.md` | `archive_doc` | `episodic` | 229 | 1.0 |
+| `…/vibe-scape/CODING_MEMORY.md` | `archive_doc` | `episodic` | 13 | 1.0 |
+| `…/Snatch-Bracket/CODING_MEMORY.md` | `archive_doc` | `episodic` | 8 | 1.0 |
+
+Zero `archive_doc` rows carry a non-`episodic` `recall_type`. The exact-path check matters: the two
+project copies alone would satisfy a loose "a row in each repo root" test while the archive itself
+stayed unreachable. Filename classification is working in **both** branches, so the project copies
+sit at 1.0 rather than `repo_doc` 1.2, where they would outrank their own repos' decision records.
+At 229 chunks the archive is the single largest source, as R10 predicted.
+
+**The timing half — measured 2026-08-08.** Both runs recorded, cold chosen as the constant's basis
+per the task. The agent was booted out for the cold run's duration (`memsearch` has no lock, and
+`StartInterval` would otherwise have started a second indexer mid-rebuild) and **re-installed
+afterwards** — verified `state = running`, `runs = 1`.
+
+| run | wall clock | report | basis |
+|---|---|---|---|
+| **cold `--full`** (23:36:50 → 04:28:24 UTC) | **17494s = 4h 51m 34s** | `processed=988 skipped=0 chunks_added=8615 errors=0`, exit 0 | **the constant** |
+| incremental (23:04:10 → 23:36:45 UTC) | 1955s = 32m 35s | `processed=87 skipped=900 chunks_added=1176 errors=0` | ordinary case |
+
+**`RUN_MAX_HOURS` = 6 holds, but on 19% headroom.** 17494s is **81.0%** of the 21600s threshold —
+a margin of 1h 8m 26s. The cold run did **not** exceed the constant, so the task's stop-and-ask
+trigger did not fire and 6/24 stand as measured rather than provisional. ⚠️ **This margin is not
+durable.** `skipped=0` means a cold run re-digests *every* session transcript, so its cost scales
+with **session count**, which this feature's own archive grows on every session. The next embed-model
+change re-runs this at a larger corpus. Re-measure before assuming 6 still fits.
+
+⚠️ **Instrumentation caveat — the cold run's `full-run.log` is block-buffered and its intra-run
+progress cannot be timed.** `PYTHONUNBUFFERED` is set by the **plist** (hence the scheduled log
+filling live, above), not by `bin/memsearch`, so a manual run redirected to a file buffers at 8KB:
+lines land in bursts of ~40 with silent gaps between. The total above is unaffected — the timing
+script brackets the command with `date +%s` in the shell — but no rate, and no doc-phase /
+transcript-phase split, can be derived from that log. Carried as an observation, not fixed here:
+`bin/memsearch` setting `PYTHONUNBUFFERED` itself would make a manual run's tail survive a hard
+kill, which is the same rationale the plist already documents.
+
+**Open issue carried to task 10b — the size effect runs opposite to R9's stated worry.** R9 assumes
+a large target has *more* chances to land two hits, so five fat targets would pass while measuring
+nothing. Measured, the two **smallest** targets (6 and 9 chunks) are the only ones meeting both
+clauses, and the three larger ones are displaced — not by each other, but by the judge-verdict and
+ADR corpus written *about* them: `verification-marker-gate` loses its top two slots to
+`coding-memory/observability-judge/` and `compliance-judge/` files, `phase-guard-hook` to ADR 0011
+and a judge verdict. A small feature has little written about it and so faces no competitor; a
+mature one is outranked by its own paper trail, all of it at the same `curated_doc` 1.5 weight.
+This does **not** relax R9's anti-gaming rule — the span requirement still binds — but it means a
+failure at 10b needs reading carefully: crowding by ADRs and verdicts is a different finding from
+crowding by the archive, and only the second is R10's cost. Scores are also tightly packed near the
+ceiling (0.0366–0.0488 across every hit above), so rank is doing nearly all the work.
+
+### Task 10 — the two measurements, post-R10 (2026-08-08)
+
+Two distinct instruments, neither substituting for the other. Both run against the live index after
+task 9's cold rebuild (8615 chunks, `archive_doc` present).
+
+#### (a) The noise-regression net — no regression
+
+`uv run pytest -m golden -q` → **16 passed, 81 deselected in 2.65s**.
+Baseline at `ceadcf0`, pre-R10: **16 passed, 63 deselected, 2.53s**.
+
+**Compared on *passed*, 16 = 16.** The deselected count moved because this branch *added* test
+modules (`test_measurement_queries.py`, `test_rename_status.py`) and `addopts` now deselects two
+markers, not one — deselected counts the rest of the suite, so it is not a comparable quantity
+across commits. Passed is.
+
+**No warnings were emitted**, and warnings are the only channel the non-binding cases have
+(`test_golden_queries.py:50,60`): all 3 `stretch` cases hit and neither `negative` case surfaced its
+off-topic path. Only the 11 `must` cases can fail, so the green run is read against that — but here
+the other five were clean on their merits rather than merely warned-and-passed.
+
+**Golden entry 11, the named predicted casualty, PASSED — the prediction did not come true.** The
+spec asked for the judgment either way, so this is the measured reason rather than a narrated one.
+Top-6 for `'what were we working on in mid july 2026'` (`rtype: episodic`, `since: 2026-07-01`):
+
+| rank | score | `source_type` | path |
+|---|---|---|---|
+| 1 | 0.015152 | `transcript_digest` | `…/b2460eaa….jsonl` |
+| 2 | 0.014493 | `transcript_digest` | `…/b2460eaa….jsonl` |
+| **3** | 0.013158 | **`archive_doc`** | **`~/.claude/CODING_MEMORY.md`** |
+| 4 | 0.012346 | `transcript_digest` | `…/50498f7b….jsonl` |
+| 5 | 0.012048 | `transcript_digest` | `…/eb6f8877….jsonl` |
+| **6** | 0.011111 | **`archive_doc`** | **`~/.claude/CODING_MEMORY.md`** |
+
+**The crowding R10 predicted is real and visible — the archive took 2 of 6 slots — it just did not
+reach the top hit,** and this assert needs only `.jsonl` *somewhere* in top-6
+(`test_golden_queries.py:39`). So the entry survives with a two-slot margin: four more transcript
+slots would have to go before it fails. That margin is the thing to re-check as the archive grows,
+not the pass itself.
+
+⚠️ **The assert is not vacuous** — named falsifier, run: the *same* query with the filters removed
+returns six `curated_doc` hits and **zero** `.jsonl` paths, so `any('.jsonl' in p …)` demonstrably
+evaluates false. The `rtype`/`since` filter is what surfaces the episodic corpus at all.
+
+#### (b) R9's bar — **FAILS: only 2 of 5 queries pass, 3 fail**
+
+⚠️ *Phrasing note: "2 of 5" is the number that **passed**. An earlier commit subject read "fails 2/5",
+which invites reading it as two failures. Three fail.*
+
+`uv run pytest -m measurement -q` → **3 failed, 4 passed, 90 deselected** (4 passed = the 2 clean
+queries + the 2 structural guards). R9 passes iff all five satisfy both clauses, so **the verdict is
+a failure**, written down here as the task requires. Chunk counts computed from source by the runner
+at run time, never read from the DB:
+
+| target | chunks | third | clause 1 (≥2 hits) | clause 2 (top belongs) | vs 8b |
+|---|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | 6 | bottom | PASS (4) | PASS | held |
+| `falsifier-base-pin` | 9 | bottom | **FAIL (1)** | PASS | **regressed** (was PASS/PASS) |
+| `git-guard-empty-index` | 24 | middle | **PASS (2)** | PASS | **improved** (was FAIL/PASS) |
+| `verification-marker-gate` | 53 | middle | FAIL (1) | FAIL | held |
+| `phase-guard-hook` | 91 | top | PASS (2) | FAIL | held |
+
+⚠️ **The count is unchanged from 8b's 2-of-5 and the composition is not.** Recording only "2 of 5,
+same as before" would have reported no change where two queries in fact moved in opposite
+directions. One target regressed and a different one improved; the net is a coincidence.
+
+#### R10's noise cost on R9's bar: **it caused both moves. ⚠️ Corrected — the first reading here was wrong.**
+
+⚠️ **This section originally concluded R10's cost was zero and blamed this file's own
+`## Verification` section. That was wrong, and the error is left visible rather than quietly
+rewritten.** The observability judge (verdict `2026-08-08-feature-memsearch-freshness.md`) overturned
+it, and its counterfactual was then re-derived independently before being accepted.
+
+**The wrong inference and why it was tempting.** No `archive_doc` row appears in any of the five
+queries' 30 visible hits, and `docs/features/memsearch-freshness.md` *does* hold rank 1 at the score
+ceiling on the two worst queries. Reading cause off those two facts gives "the archive is innocent,
+the measurement record is guilty". Both facts are true; the inference does not follow.
+
+**The mechanism that breaks it.** RRF scores by **rank inside a 200-candidate pool**
+(`search.py:63`, `CANDIDATES=200`), and that pool is built from the raw KNN/FTS lists *before* the
+weight multiply. So an `archive_doc` chunk at candidate rank 8 pushes every chunk below it down one
+rank, depressing their scores — and then, at weight 1.0 against `curated_doc`'s 1.5, never surfaces
+in the visible top-6 itself. **Invisible displacement is this scorer's normal mode; absence from the
+frame is not absence of effect.** The architecting-stage verdict (2026-08-07) had already flagged
+that R9 had no control and that attribution was being pre-committed. It was right.
+
+**The control, re-derived independently.** Re-fuse each query with one population dropped from the
+candidate pool and the ranks re-enumerated. The pool is drawn at 1000 and truncated to 200 *after*
+removal, so a dropped population lets later chunks in rather than shrinking the pool. Harness guard:
+with nothing dropped it must reproduce `search()` exactly — it does, on all five queries.
+
+**The harness is recorded as a derivation, not kept as a file** — it was written in a session
+scratchpad, which does not survive a session clear, and a pointer to a path that will not exist is the
+exact rot this feature exists to fix. Rebuild it in ~40 lines; the monitor above needs it:
+
+1. Copy `search()`'s two retriever branches (`search.py:44-58`) but with `LIMIT 1000` in place of
+   `CANDIDATES`, giving the raw KNN and FTS id lists at pool depth, ranks unfused.
+2. For each branch, walk the ids in order, skip any chunk the variant drops, and stop at
+   `CANDIDATES=200` — **truncate after the skip, never before**, or "minus X" measures a smaller pool
+   instead of X's absence.
+3. Fuse the survivors exactly as `search.py:60-66` does, then apply the weight multiply at
+   `search.py:80` — `1/(RRF_K + rank + 1)` summed per branch,
+   then `× weight`, then sort descending, then take `k=6`.
+4. Score R9's two clauses with the measurement suite's own `belongs()`
+   (`test_measurement_queries.py:56`), so both instruments share one membership rule and cannot drift.
+5. **Guard, non-optional:** the no-op variant must equal `search(CFG, query, k=6)` path-for-path on
+   every query. If it does not, the harness models something other than the real scorer and every
+   column it prints is void.
+
+Variants used: `as-is` (drop nothing), `minus archive` (`source_type == "archive_doc"`),
+`minus this doc` (`file_path` ends with `docs/features/memsearch-freshness.md`).
+
+⚠️ **A committed version was attempted and correctly blocked.** `hooks/phase-guard.sh` denied
+`memsearch/tests/counterfactual.py`: the guard authorizes source writes only when a feature file
+records this branch at `phase: implementation`, and this file has advanced to `review`, so the branch
+no longer holds that authorization while `docs/features/verification-marker-gate.md` still sits at
+`phase: planning`.
+
+⚠️ **Corrected (round 4): an earlier draft here called that `planning` file "stale — its feature
+shipped". It has not shipped; it has not started.** Checkable, and checked: `phase: planning`,
+`branch: none`, **15 of 15 checklist items unchecked**, no `hooks/test-marker-guard.sh`, and no
+implementation commit for it on any branch. The two things cited as evidence prove nothing — being one
+of R9's measurement targets only means a *document* exists to retrieve (`belongs()` matches
+`docs/features/F.md`, nothing more), and the 2026-08-01 compliance verdict says `Spec:` in its own
+header: it judged the spec, on `main`.
+
+**That flips the conclusion.** The card is **correctly active**, so phase-guard denying the write was
+the guard working, not a false alarm. Leaving "stale" in place was the dangerous part: a later planning
+session could read it as licence to clear the one card currently guarding that feature — and
+`rules/gates.md` already documents four hooks that exist, pass their tests, and never run, so
+"written ≠ active" is a known trap in this repo and this nearly repeated it.
+
+So the single finding worth carrying is **(2)**, stated precisely — round 5 corrected an imprecise
+first attempt at it, and the imprecise version was falsifiable by one grep:
+
+> **`phase-guard.sh` does have a `review` arm** (`:448` matches `(implementation|review)`, with `:422-423`
+> saying review must count). The `implementation`-only gap is the **branch-claim** arm at `:387`, so a
+> branch whose feature file has advanced to `review` no longer *claims* that branch and loses source-write
+> authorization — but only while an unsuperseded `planning` card exists elsewhere; absent one, `:418`
+> and `:502` both exit 0.
+
+That belongs to the planning pass. Advancing or deleting another feature's file was never this branch's
+call, and remains not.
+
+| query | as-is | minus `archive_doc` | minus this file |
+|---|---|---|---|
+| `stale-phase-guard-rule-text` | PASS | PASS | PASS (hits 4 → 5) |
+| `falsifier-base-pin` | FAIL (1) | **PASS (2) — flipped** | FAIL (1) |
+| `git-guard-empty-index` | PASS (2) | **FAIL (1) — flipped** | **FAIL (1) — flipped** |
+| `verification-marker-gate` | FAIL | FAIL | FAIL (top renames only) |
+| `phase-guard-hook` | FAIL | FAIL | FAIL (top renames only) |
+
+**Removing the archive flips two outcomes — precisely the two that moved against 8b.**
+
+⚠️ **Second correction, same section: "removing this file flips none" was also wrong.** It flips
+**one** — `git-guard-empty-index` goes PASS (2) → FAIL (1) without this file, which the table above
+has said all along while the prose next to it said zero. Caught by the round-2 verdict, which notes it
+originated the "flips 0" phrasing in its own round-1 text; the table was in front of me either way.
+Re-ran the control to confirm: one flip, not zero.
+
+So the honest reading is narrower than "passenger, not driver":
+
+- **The archive is the driver of both moves against 8b** — that part stands, on three agreeing
+  sources: this control, the judge's independent control, and 8b's baseline taken when the archive
+  genuinely was not in the index.
+- **This file is load-bearing for one of the two queries that currently pass.**
+  `git-guard-empty-index` passes only with **both** populations present — dropping either breaks it.
+  Without this file R9 scores **1 of 5**, not 2.
+- On the other three queries it is a visible occupant with no effect on the verdict: dropping it
+  renames the top hit (to `2026-08-02-main.md` and ADR `0011`) but the replacement does not belong
+  either, so no clause turns.
+
+⇒ **R10 caused both the regression and the improvement.** `falsifier-base-pin` lost its second hit
+*because* the archive entered; `git-guard-empty-index` gained its second *because* the archive
+entered. The net 2-of-5 was never "no effect" — it was two opposite R10 effects cancelling in the
+count. Carried gotcha 2's question ("crowding by ADRs or by the archive?") answers: **by the
+archive**, and only a counterfactual could show it, because the archive is invisible in the frame.
+
+**Decision — `falsifier-base-pin`'s regression is an ACCEPTED cost of R10.** *User decision,
+2026-08-08, taken with the corrected attribution in hand.*
+
+The deciding frame: **R9's bar has never passed.** It was 2 of 5 pre-R10 (task 8b) and is 2 of 5
+post-R10 — R10 swapped *which* two, it did not break a green bar. Two of the three failures
+(`verification-marker-gate`, `phase-guard-hook`) fail in **every** variant of the control above,
+including with the archive removed, so they are the pre-existing ADR/judge-verdict crowding and not
+R10's doing at all. Against that, one target trading its second hit for another target's second hit
+is a **weight-tuning** question, not a correctness defect — and the archive being reachable is the
+whole point of the feature, since the original defect was that it never got indexed.
+
+⚠️ **The symmetry is weaker than "2 before, 2 after" reads, and the decision stands anyway.** The
+*after* 2 includes `git-guard-empty-index`, which the control above shows passes only while this
+file's own `## Verification` section is in the corpus — remove it and R9 is **1 of 5**. So one of the
+two current passes is propped up by the measurement write-up. This does not reverse the decision (the
+bar was never green, and two of the three failures are archive-independent), but it does mean the
+accepted cost is **less bounded** than the bare counts suggest, and it is recorded here rather than
+left for a reader to discover in the table.
+
+**Re-check trigger — the accepted cost gets a monitor, not just a note.** Accepted-with-no-alarm is
+how a known cost becomes an unknown one, and R9 is the *only* instrument that sees this drift while
+`pyproject.toml:26` deselects it from a default run.
+
+- **Owner:** the deferred planning pass (ADR 0021), which inherits **this** attribution — not the
+  retracted one, and not the "flips none" phrasing.
+- **Trigger:** re-run `-m measurement` after the **first scheduled index run that includes these
+  commits** and record the delta. The decision above was taken against an index whose `last_run`
+  predates them, so today's numbers will move.
+- **Threshold:** if R9 drops **below 2 of 5**, *or if the same 2 of 5 is reached by a different set of
+  queries*, the accepted cost has changed shape and the decision is reopened rather than re-accepted
+  by default. The count alone is not a sufficient trip-wire, and this section is the proof: 8b→10b held
+  at 2 of 5 while `falsifier-base-pin` regressed and `git-guard-empty-index` improved, two opposite R10
+  effects cancelling. A monitor watching only the count would have watched that happen and stayed
+  silent. **Record which queries pass, not how many.**
+- **Carried from the round-2 verdict:** consider running R9 in CI as *reported-not-blocking* instead
+  of deselected, so a red bar is visible without gating every run.
+
+Deliberately **not** doing now: lowering `archive_doc` below 1.0, or re-pointing the query. Both are
+retunings, and retuning without a control is exactly the error this section already had to retract
+twice. The counterfactual harness now exists to do it properly.
+
+**Still true, and still not the fix:** re-excluding `CODING_MEMORY.md` would not remove chunks
+already written, and this file's `## Verification` section really does occupy rank 1 on two queries —
+it is simply not what fails them.
+
+### Task 10c — every falsifier clause, evaluated (2026-08-08)
+
+**No clause is falsified.** Ten clauses, by letter, each with its evidence.
+
+⚠️ **First, the framing the clauses themselves impose:** the falsifier is scoped *"across the 20
+sessions after it lands"*, and **this branch has not landed** — 19 commits ahead of `main`, contained
+in no other branch. So the production observation window **has not opened for any clause**. Six
+clauses are hook tests and are discharged *in test* here; four are observations judgeable now. A
+"held" below means held on the evidence available, never "survived 20 sessions".
+
+| clause | verdict | evidence |
+|---|---|---|
+| **(a)** stale line owed but not emitted | **held (in test)** | 4 stale paths pass incl. the exact `STALE_HOURS` boundary and the override; *"2 wedged run: stuck wins over stale"* exercises the state 1/2/3 precedence carve-out the clause depends on |
+| **(b)** stale line emitted while the run is recent | **held (in test)** | *"8 at 7h59m it is still fresh"*; *"8 quiet night: stale content, fresh run"* — that second case **is** the clause's "changed no files" wording |
+| **(c)** dead agent unsurfaced, or a stuck line that never resolves | **held (in test), clause weak by its own record** | *"5 decay: stale, not stuck, once the claim is too old to believe"* is the resolve path. But spec `:231-232` already records that with **no prior `last_run`**, decay falls to state 3, which warns and names the log yet never says the scheduler died — and that clause (c) *"would read as passed in that state … it merely said the wrong thing."* Held literally; the literal text is the weakness |
+| **(d)** measurement queries modified after their introducing commit | **held** | introduced in `8a10f61`; `git log --follow` shows that single commit; `git diff 8a10f61 HEAD` on the file is empty. (Already recorded weaker than written, spec `:1124-1126`: the rebuild preceded authorship) |
+| **(e)** more than one line, or a non-zero exit, on any path | **held (in test)** | `memsearch-nudge.test.sh:43` captures `rc=$?` immediately, `:45` asserts `rc -eq 0`, `:46` asserts an exact line count — and all 23 emitting/silent cases funnel through that one helper. Guarded across 8 states + 2 silent paths + 3 overrides, **not** proven exhaustively over arbitrary input (malformed JSON is covered) |
+| **(f)** all-errors run read as fresh, or remediation on an in-progress/stuck line | **held (in test)** | *"7 degraded: names the count, points at the log not the indexer"*; *"1 in progress: … no remediation"*; *"2 stuck: … never invites a second indexer"* |
+| **(g)** in-progress/stuck past `RUN_ABANDON_HOURS`, or missing `last_run_errors` reading fresh | **held (in test)** | *"5 decay …"*; *"RUN_ABANDON_HOURS override keeps the 30h run merely stuck"*; *"6 errors absent: age reported, cleanliness withheld"* |
+| **(h)** abandoned first run with no warning marker and no log pointer | **held (in test)** | *"3 abandoned first run: warns, names the log, not unknown-age"* |
+| **(i)** ships without 8b's raw scores, or without the bottom/top-third span | **held** | 8b's raw per-hit scores are recorded above; `test_targets_span_the_corpus_size_range` passes; measured population is the whole of `docs/features/`, N=10, ⌊N/3⌋=3, and the sample is **6 / 9 / 24 / 53 / 91** — `stale-phase-guard-rule-text` in the bottom third, `phase-guard-hook` in the top. Explicitly not the "four large plus one medium" shape the clause names as a falsification |
+| **(j)** cold duration taken from a warm run, or `RUN_MAX_HOURS` reached and the branch proceeds anyway | **held** | timed from an explicit `--full`, which unlinks the DB (`index.py:148-149`) so the run is genuinely cold; **17494s = 81.0%** of the 21600s constant, so it did **not** reach it and no stop-and-ask was owed. The incremental figure is recorded separately and labelled the ordinary case, never used as the basis |
+
+**R9's failure at 10b does not falsify this feature, and that is the clauses' doing, not a
+concession.** Clause (i) conditions on 8b's scores being *recorded* and on the *span* of the chosen
+targets — it never made R9's pass a ship condition. Task 10 asks for the failure to be reported as a
+real result, which it is; no clause converts it into a falsification. Recorded explicitly so a later
+reader does not supply that link themselves.
+
+⚠️ **Carried to review: the falsifier cannot be discharged on this branch.** Its window is 20
+sessions of production behaviour after landing, and the six hook-test clauses are guarded rather than
+observed. This is not a gap to close before the PR — it is what the clause wording asks for — but it
+does mean "all clauses held" here means *held in test, window not yet open*, and the observational
+re-check after landing is owed.

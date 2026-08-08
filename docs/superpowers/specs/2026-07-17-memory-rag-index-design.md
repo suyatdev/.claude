@@ -55,7 +55,7 @@ projects/*/*.jsonl ──► extract (mechanical) ─┐
                        digest  (qwen3.6 MLX) ─┼─► chunk ─► embed ─► memory.db ◄─ CLI (agent via Bash)
 durable docs ────────────────────────────────┘           (Ollama)   ▲            SessionStart hook (nudge)
 config-listed repo roots ─────────────────────────────────────────┐ │
-(CODING_MEMORY.md excluded — ephemeral index)          sqlite-vec + FTS5
+(CODING_MEMORY.md indexed at archive_doc 1.0 — ADR 0020)  sqlite-vec + FTS5
 ```
 
 ```mermaid
@@ -64,10 +64,10 @@ flowchart LR
     A[projects/*.jsonl<br/>raw transcripts]
     B[durable docs<br/>coding-memory/ docs/<br/>docs/decisions ADRs]
     C[config repo roots<br/>e.g. vibe-scape, Snatch-Bracket]
-    Z[CODING_MEMORY.md<br/>ephemeral working index]:::excluded
+    Z[CODING_MEMORY.md<br/>session archive]:::archive
   end
-  classDef excluded fill:#eee,stroke:#999,stroke-dasharray:4 3,color:#666;
-  Z -.->|NOT indexed| S
+  classDef archive fill:#eef,stroke:#88a,color:#446;
+  Z --> H
   A --> X[extract turns<br/>strip tool-output noise]
   X --> D[digest per session<br/>qwen3.6:35b-mlx<br/>keep_alive=0]
   B --> H[header-aware split]
@@ -92,7 +92,7 @@ flowchart LR
   cache, never a source of truth).
 - Tables:
   - `chunks` — id, content, and metadata: `repo_id`, `repo_name`, `source_type`
-    (`transcript_digest` | `curated_doc` | `repo_doc`), `recall_type`
+    (`transcript_digest` | `curated_doc` | `repo_doc` | `archive_doc`), `recall_type`
     (`decision` | `episodic` | `doc`), `session_date`, `file_path`, `line_start`, `line_end`,
     `session_id`, `weight`, `content_hash`.
   - vector table (sqlite-vec) — 1024-dim embeddings keyed to `chunks`.
@@ -132,7 +132,8 @@ Three source types, processed differently, then a common `chunk → embed → st
 - `coding-memory/*.md` (history, decisions, branch logs), `docs/` specs, and `docs/decisions/`
   ADRs, chunked by markdown header (never mid-decision), embedded verbatim. **Highest retrieval
   weight** — a hand-written ADR outranks an auto-digest.
-- **`CODING_MEMORY.md` is explicitly excluded** — see "What Is NOT Indexed" below.
+- **`CODING_MEMORY.md` is indexed at its own `archive_doc` weight (1.0)**, below `curated_doc` —
+  see "What Is NOT Indexed" below. Reversed by ADR 0020; this section originally excluded it.
 
 ### 3. Config-listed repo roots — header-aware split
 
@@ -151,16 +152,27 @@ Three source types, processed differently, then a common `chunk → embed → st
 
 The trigger for (re-)embedding is **durable vs. ephemeral**, not update frequency.
 
-- **Excluded: `CODING_MEMORY.md` (and per-repo equivalents).** It is a *working index* whose
-  job is to be restored into the next session, not searched as long-term memory. Its durable
-  content is already promoted into indexed stores — decisions → `coding-memory/decisions.md` +
-  `docs/decisions/` ADRs, history → `coding-memory/session-log.md`, branch detail →
-  `coding-memory/branches/`. Indexing it would re-churn on every session and pollute semantic
-  search with transient "Active Session / Exact Next Steps" text. Excluded via config.
+- ⚠️ **REVERSED by ADR 0020 (2026-08-07): `CODING_MEMORY.md` is now indexed**, at its own
+  `archive_doc` weight of 1.0. The original exclusion is kept below as history, because the
+  reasoning it rests on is what changed, not the reasoning itself:
+
+  > **Excluded: `CODING_MEMORY.md` (and per-repo equivalents).** It is a *working index* whose
+  > job is to be restored into the next session, not searched as long-term memory. Its durable
+  > content is already promoted into indexed stores — decisions → `coding-memory/decisions.md` +
+  > `docs/decisions/` ADRs, history → `coding-memory/session-log.md`, branch detail →
+  > `coding-memory/branches/`. Indexing it would re-churn on every session and pollute semantic
+  > search with transient "Active Session / Exact Next Steps" text. Excluded via config.
+
+  **That promotion stopped.** Measured 2026-08-06 and re-verified 2026-08-07: `session-log.md`'s
+  last entry is dated 2026-07-16 and `decisions.md`'s 2026-07-19, both frozen, while the archive
+  carried sessions 24 onward — so the exclusion had become the direct cause of a three-week hole in
+  retrieval. `memory-system-split` separately retired the file as a read target and made it an
+  append-only archive, so "ephemeral working index" no longer describes it either. The
+  pollution half of the rationale survives as a real risk and is measured by R9, not argued.
 - **Included even though frequently updated:** `session-log.md`, `pr-tracking.md`, and generated
   specs are *durable* records (append-mostly), so they stay indexed. Content-hash keying means an
   appended file re-embeds **only that one small file**, not the corpus — cost is trivial, so the
-  reason to skip `CODING_MEMORY.md` is signal quality, not cost.
+  reason the archive was skipped was signal quality, not cost.
 - The excluded-path list lives in config so it is auditable and adjustable.
 
 ### Provenance (mandatory, zero-trust guard)

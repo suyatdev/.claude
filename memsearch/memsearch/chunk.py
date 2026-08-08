@@ -108,7 +108,12 @@ def _split_oversized(sections: list[Section]) -> list[Section]:
 
 def chunk_doc(path: Path, text: str, repo_id: str, repo_name: str,
               source_type: str, weight: float, session_date: str) -> list[Chunk]:
-    recall = "decision" if "decisions" in str(path) else "doc"
+    # The archive is session narrative, so it answers --type episodic — the
+    # bucket transcript digests already use — not the generic doc bucket a
+    # path-substring test would put it in.
+    recall = ("episodic" if source_type == "archive_doc"
+              else "decision" if "decisions" in str(path)
+              else "doc")
     return [
         Chunk(content=s.text, repo_id=repo_id, repo_name=repo_name,
               source_type=source_type, recall_type=recall,

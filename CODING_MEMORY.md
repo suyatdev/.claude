@@ -3849,3 +3849,692 @@ earlier in this same session — so it was left alone.
 - `statusline-command.falsify.py` still reports `FALSIFICATION BROKEN` (**pre-existing**, verified
   before this branch). #43 therefore merged with **no differential coverage** — feature file task 9.
 - **Nobody has seen the wrapped status line on a real narrow pane.** Every check was programmatic.
+## 2026-08-07 — session 38: the gate opens, and task 1b's sweep catches its canary
+
+**Branch `feature/memsearch-freshness`** created off `main` @ `b78eae8`. Feature file
+`docs/features/memsearch-freshness.md` moved to `phase: implementation`, `model_tier: low`.
+
+### The gate
+
+The user gave the literal phrase `gate confirmed` in this session — not the session-34 claim the
+handoff carried, which was correctly treated as data and ignored. State was verified against reality
+before opening: blob `c148cda8` at 1,336 lines (byte-identical to the revision both round-12 judges
+passed), clean tree, frontmatter genuinely still `planning`.
+
+**Model-switch checkpoint 2 was asked fresh** rather than inherited from the handoff, which had
+pre-supplied "Sonnet 5". Answered **Sonnet 5**, for the whole implementation phase *including task
+1b* — deliberately, so the sweep is exercised by the tier that runs the remaining tasks rather than
+by a frontier model that would have measured the wrong thing. Commit `4cb0a3c`.
+
+### Task 1b — the derived-surface sweep
+
+Commit `ef436e7`, **empty by design** (`--allow-empty`): the sweep changes no files, so the commit
+exists only to carry its output. The full section-keyed inventory lives in that commit message and
+is deliberately **not** reproduced here or in the spec — every stored copy of this sweep has gone
+stale, twice inside the anti-staleness section itself.
+
+Twenty-one R3 surfaces and eight R9 surfaces found, each checked against its authority. Verified
+mechanically by grep, not by recall.
+
+**Verdict: no surface contradicts its authority. No `GATE: Spec change needed` escalation.**
+
+**The canary worked, and the honest result is subtler than "it escalated."** Both planted defects
+were *found*:
+
+1. Falsifier (i) says "chunk-count **range**" where R9's tertile paragraph reasons over the
+   "population".
+2. `⌊N/3⌋` reaches only **2 of the spread rule's 4 surfaces** — R9 itself and task 8b. The Gherkin
+   scenario and falsifier (i) both stop at "rank tertiles".
+
+Both were then judged **cosmetic against task 1b's stated bar, which is *contradiction*, not
+imprecision** — R9's own heading sentence reads "The range **is** the population of every feature
+under `docs/features/`", so clause (i) is using the authority's own vocabulary, and "rank tertiles"
+carries the operative distinction even without the formula. Escalating on these would have been
+following the handoff's *prediction* rather than the rule. That the prediction went unfulfilled is
+itself the useful signal: **the sweep's detection worked; the escalation threshold simply wasn't
+met.**
+
+Two watch items recorded and left alone (decision 5's "in-progress ... for the first
+`RUN_ABANDON_HOURS`", which round 9 already adjudicated; and the three constants' "while the first
+run is still alive", which collides with row 3's name but reads correctly in context).
+
+### Found incidentally — a stale figure, outside 1b's scope
+
+R10's per-session-dating non-goal pins "**20** headings ... 17 date-first and 3 session-first",
+measured 2026-08-07. **Re-measured the same day: 24 (19 date-first, 5 session-first)** — it drifted
+across sessions 34–37. The non-goal's *load-bearing* claims both hold: still exactly two forms, and
+still **zero** carrying the `Session N — <date>` shape, so the argument the bullet makes is intact
+and only the count is wrong.
+
+Not fixable now — a spec edit during `implementation` is phase-illegal — and out of scope for task
+1b, whose sweep covers R3 state surfaces and R9 clause surfaces only. **Queued for the deferred
+planning pass** already carried for ADR 0019 and the missing headings.
+
+The archive's *size* figures (`317,249 characters / 3,723 lines`) are explicitly caveated as a
+floor, so this session's append does not rot them: re-measured **325,079 characters / 3,787 lines**,
+both above the floor. This entry uses the date-first heading form deliberately, to keep the
+non-goal's two-forms and zero-`Session N — <date>` claims true.
+
+## 2026-08-07 — session 39: ADR 0018 (task 2), and a launchd fact the spec never had
+
+`feature/memsearch-freshness`, `phase: implementation`, `model_tier: low` (Sonnet 5, set at
+checkpoint 2 for the whole phase). Task 2 only.
+
+### `docs/decisions/0018-launchd-agent-and-run-recency-split.md`
+
+Both of the spec's structural decisions in one record — design decision 4 (a persistent `launchd`
+agent as the refresh mechanism) and decision 2 (`last_run` split from `last_indexed`) — because
+neither stands alone. The scheduler's known weakness is that it runs blind and never reports on
+itself; the compensating control is the session-start staleness warning; that warning needs
+`last_run` to exist. Choosing the scheduler without the field ships the weakness with nothing behind
+it, so they are one decision wearing two names.
+
+Rejected options are recorded per decision, with the reason: `SessionStart`-hook trigger, `cron`, a
+file watcher, and manual indexing for the scheduler; `memory.db` mtime, `status.json` mtime, and
+reusing `last_indexed` for the staleness signal. A Mermaid tradeoff mindmap carries the shape,
+validated with `skills/diagramming-technical-docs/scripts/validate-diagrams.sh` (1 block, 0 failed).
+
+### The one new fact: `StartInterval` misses a sleep, it does not defer
+
+Read from `launchd.plist(5)` rather than recalled — and it contradicted what recall would have
+supplied. **A `StartInterval` firing that lands while the machine is asleep is *missed*** ("due to
+shortcomings in `kqueue(3)`"), not queued for wake; a firing that lands while the previous run is
+still going is likewise skipped. `RunAtLoad true` covers boot and login, not sleep/wake.
+
+Consequence for this feature: a laptop closed overnight can legitimately cross the 8h threshold.
+Recorded in the ADR as **accepted, not mitigated** — the warning is *correct* in that case (the
+index genuinely is stale) and the remediation is one command. The alternative, `StartCalendarInterval`,
+does coalesce missed firings on wake but schedules against wall-clock times rather than elapsed time,
+which is a worse fit for "every 6h". The spec never claimed otherwise; it simply never said.
+
+### Citations re-verified, not restated from the spec
+
+An ADR outlives the feature file it was derived from, so every code citation carried into it was
+checked against source first: `db.py:156` (`SELECT max(indexed_at) FROM sources`), `index.py:125-127`
+(the unchanged-hash early return), `cli.py:66` (`return 0` regardless of errors), `status.py:27`
+(the `sources: N  last_indexed: …` line), and `launchctl getenv PATH` — empty on this machine, which
+is what makes the plist's explicit `PATH` load-bearing rather than boilerplate. All five held.
+
+### Archive figures
+
+Session-heading count is now **26** (21 date-first + 5 session-first) after this append; it read
+20 + 5 = 25 immediately before it. R10's non-goal still pins **20**, and the previous entry's "24
+(19 + 5)" was measured before that session's own append landed — both are stale counts, already
+queued for the deferred planning pass. The bullet's two *load-bearing* claims were re-measured today
+and both still hold: exactly **two** heading forms, and **zero** carrying the `Session N — <date>`
+shape. Size figures remain above their stated floor (`317,249 chars / 3,723 lines`): **329,097
+characters / 3,853 lines** before this append. Date-first heading form used deliberately, again, to
+keep those two claims true.
+
+## 2026-08-07 — session 39 (continued): tasks 3-6, the implementation core
+
+`feature/memsearch-freshness` @ `d7a03fc`, 8 commits ahead of `main`. Suites: **72** pytest +
+**27** nudge + **19** installer, all green, tree clean.
+
+### What landed
+
+**Task 3** — `status.json` gains `run_started` / `last_run` / `last_run_errors`, written at both ends
+of `run_index`; `memsearch status` relabels `last_indexed` as content recency and shows run recency
+beside it. **Task 4** — `memsearch-nudge.sh` implements the eight-state table; classification in
+bash, only the parse and age arithmetic in the one Python call it already made. **Task 5+6** — the
+`launchd` template, `install-schedule`, and the README entry.
+
+### Three things worth carrying that are not in the diff
+
+**`launchd.plist(5)` contradicted recall.** A `StartInterval` firing across a machine sleep is
+*missed*, not deferred to wake (`kqueue(3)`); a firing during a still-running job is skipped too.
+Recorded in ADR 0018 as accepted, not mitigated — the warning that follows is *correct*. Matters for
+task 9: a post-sleep gap is not an install bug.
+
+**Every test asserts the emitted line, never a parsed field.** A field nobody reads is the defect
+this feature exists to close, so a suite that inspected the parse would test the wrong end of it.
+Same reasoning drove the installer's isolation: `HOME` redirected plus a stub `launchctl` on `PATH`,
+**no test-only seam in the production script** — an override that exists only for tests means the
+tested path is never the real one. The malformed-plist case breaks a real template rather than
+mocking `plutil`.
+
+**Mutation rounds are the acceptance, not the green bar.** 6 + 8 + 6 mutations run by hand. Two
+survived, and both were examined rather than waved through: one reworded "see" to "run" while still
+naming the log (cosmetic — the behavioural version, pointing state 7 at the index command, *is*
+caught, verified separately); one swallowed `bootstrap`'s failure but is masked by the
+post-bootstrap verification, which still exits 2 naming the step. A redundant guard, not a hole.
+
+### R8 was broken and repaired, and the reason is structural
+
+Task 5 was committed without the README, which R8 forbids. `69f3f5d` was amended to carry both and
+force-pushed with `--force-with-lease` (feature branch, two minutes old, no PR). The cause is worth
+more than the fix: **the checklist numbers 5 and 6 as separate tasks while R8 requires one commit.**
+A future reader following the numbering will split them again.
+
+### Verified, not recalled
+
+Parent item 2 is a confirmed no-op — `~/.claude/docs` is already a `curated_docs` root and the live
+index holds **11** `sources` rows under `docs/features/`. `launchctl bootout` returns **3** for "No
+such process" and `print` returns **113** when absent, both probed; the installer nonetheless asserts
+the *outcome* via `is_loaded` rather than pinning either number. All five code citations carried into
+ADR 0018 were re-checked against source first.
+
+Nothing is installed: `launchctl print` still returns 113. That is task 9.
+
+## 2026-08-07 — session 40: task 7, and the archive starts indexing itself
+
+`53a6b42` on `feature/memsearch-freshness`, pushed, tree clean. 13 files, all seven R10 parts in
+one commit as R8 requires. **74 pytest green** (72 before: −1 removed test, +3 new). The corpus this
+file belongs to now includes this file.
+
+### What landed
+
+`CODING_MEMORY.md` is indexed. The exclusion is gone from `exclude_paths`, the `ConfigError` guard
+that enforced it is deleted, and — the part that actually does the work — `~/.claude/CODING_MEMORY.md`
+is now named in `curated_docs`. It carries a new `archive_doc` weight tier at **1.0**, classified by
+filename so all three copies land there rather than outranking their own repos' decision records,
+and yields `recall_type == "episodic"` so `--type episodic` reaches it. ADR **0020**.
+
+### Three things worth carrying that are not in the diff
+
+**The ADR number in the spec was wrong, and the fix has a knock-on.** Task 7 said write `0019-*.md`;
+`0019-response-register-belongs-in-core-conduct.md` has existed since sessions 35–36. Landed as
+**0020**. ⚠️ The session-39 handoff had reserved 0020 for the deferred planning pass — that pass now
+needs **0021**. A spec naming a number in a monotonic sequence will rot whenever an unrelated
+session spends one; the number should have been "the next free ADR".
+
+**Spec line numbers rot inside their own implementation phase.** Every `test_index.py` line in R10.4
+was **+11** stale — task 3's own commit `483c44e`, on this branch, inserted lines above them.
+`README.md:22` had likewise become `:45` via task 6. R10.4 survived this only because it also stated
+a governing *rule* and named each assertion by semantic role, so mapping by test function was
+unambiguous. R10.6's plan sweep, written as "re-run `grep -n`, do not trust the list", re-ran to
+**fourteen** hits exactly. **The instruction that told the implementer how to re-derive beat every
+instruction that stored a number.**
+
+**Falsifier-first, twice, and it was not ceremony.** The suite was run *before* any test was edited:
+**7 failed / 65 passed**, precisely the seven functions R10.4 predicted, from eight assertions. Then
+the two new production-pinning tests were mutation-checked — revert `chunk.py`'s episodic branch and
+`_doc_source_type`, both go red; restore, 74 green. This mattered here specifically: the old
+exclusion test had passed for weeks while production was unreachable, because **the fixture wrote
+`CODING_MEMORY.md` inside the curated directory — a path the walker already visits.** The
+replacement test builds its own config for the root position and asserts both halves, including the
+one that fails if `curated_docs` omits the file.
+
+### One design choice made against future drift
+
+The replacement golden query uses `expect_path_contains: "CODING_MEMORY"`, not a session-specific
+path, and asks a question the archive answers in *many* sections. The archive grows every session —
+a query pinned to one session's heading would have rotted on the next append, which is the same
+class of defect as the two above.
+
+### Not done
+
+Nothing is installed yet; `launchctl print` still returns 113 (task 9). The archive is **configured**
+to be indexed but has not been indexed — no `memsearch index` run has happened, so `memory.db` holds
+zero `archive_doc` rows and the new golden query cannot pass until task 9. That is expected, not a
+regression.
+
+## 2026-08-07 — session 41: task 8, and a tie called before the coin landed
+
+Task 8 only: the five R9 measurement queries and their own runner, committed **unrun** (`8a10f61`)
+— `memsearch/tests/measurement_queries.json`, `tests/test_measurement_queries.py`, plus an
+`addopts` change. Restore was clean; frontmatter matched reality on every field.
+
+### The pre-declared tie rule, and why declaring it early was the whole point
+
+R9 ranks every feature under `docs/features/` by chunk count and demands a target in the bottom
+third and one in the top. `⌊N/3⌋` is silent on a tie spanning the boundary, so the rule was fixed
+**before any count was computed**: *tied entries all belong to that third* — a tie is
+indistinguishable by the metric, so ranking either side of it is arbitrary, and a tied entry has an
+identical count to a bona fide bottom-third entry rather than merely a nearby one.
+
+The tie then actually happened: ranks 3 and 4 came out **both at 13 chunks**
+(`git-guard-chained-command`, `shell-segments-redirects`), widening the bottom third to four
+entries. Declared afterwards, that rule could not have failed — it would have been read off the
+result it was meant to constrain. This is the same shape as the score floor R9 deleted in round 8
+(*a finish line drawn behind the runners*), caught one layer earlier.
+
+**N = 10, not 11.** `memory-system-split` spans `.md` + `.spec.md` and counts once — R9's
+per-feature unit, which is the rule the spec warns is *different and weaker* when read per-file.
+
+### The spec predicted its own miscount, and the prediction was right
+
+`memsearch-freshness.md` measures **71 chunks — rank 9, top third**. The round-8 draft pinned it at
+**14** from `memory.db` and called it bottom-third; the index had last read it at ~250 lines against
+1,400+ today, understating it roughly 5×. Ranking on that figure would have let this file serve as
+the *small* target while being one of the largest — **satisfying the anti-gaming rule by doing the
+thing it forbids**. So the runner computes counts from source with the project's own chunker at run
+time, and no count is pinned anywhere, including in the notes about it.
+
+### Two traps worth carrying
+
+**A marker alone does not deselect.** `addopts` read `-m 'not golden'`, so registering a
+`measurement` marker without extending it would have left a bare `pytest` firing five real queries
+at the live index — the opposite of "committed unrun". Now `-m 'not golden and not measurement'`.
+Knock-on for task 10a: `-m golden` reports **23 deselected**, not 16. Added tests, not a regression;
+default run still **74 passed**.
+
+**The span guard was mutation-checked, both arms.** A sample whose smallest target is
+`git-guard-empty-index` (24 chunks) is the exact discriminator between R9's rank-tertile rule and
+the value-span reading the spec calls weaker — value-span puts 24 inside the "bottom third"
+(6 + (91−6)/3 = 34.3), rank tertiles put it in the middle. It fails. Dropping the top target fails
+the other arm. Original restored byte-identical after both. A guard never seen red pins nothing,
+and this one guards the anti-gaming rule itself.
+
+### Not done
+
+8b (run the five, record raw scores + per-feature counts as a baseline), 9 (install the agent, time
+a **cold** `--full` run, re-choose `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS` against it — a user call),
+10a/10b, 10c (falsifier clauses a–j), 11 (judge, PR). Still nothing installed and **still nothing
+indexed** — `memory.db` holds zero `archive_doc` rows, so the new golden query cannot pass until
+task 9 runs. Expected, not a regression.
+
+## 2026-08-07 — session 41 (continued): task 8b's baseline, and task 9 goes live
+
+### Task 8b — the baseline said something R9 did not expect
+
+Ran the five committed queries pre-R10 (archive configured, **not yet indexed**), user-confirmed as
+the *before* half of R10's noise measurement. Two of five met both clauses — recorded as an
+observation, **not** R9's verdict, which is task 10b's after the index run.
+
+**The size effect runs opposite to R9's stated worry.** R9 assumes a fat target has *more* chances
+to land two hits, so five fat targets would pass while measuring nothing. Measured, the two
+**smallest** targets (6 and 9 chunks) were the only clean passes; the larger ones were displaced not
+by each other but by the **judge verdicts and ADRs written about them** — `verification-marker-gate`
+lost its top two slots to `coding-memory/observability-judge/` and `compliance-judge/` files,
+`phase-guard-hook` to ADR 0011 and a judge verdict, all at the same `curated_doc` 1.5 weight. A
+small feature has no paper trail and so faces no competitor; a mature one is outranked by its own.
+**Consequence for 10b: crowding by ADRs and verdicts is a different finding from crowding by the
+archive, and only the second is R10's cost.** Without this baseline that distinction was unavailable
+and a 10b failure would have been blamed on the archive wholesale.
+
+Scores clustered 0.0366–0.0488 against a 0.049180 ceiling — rank does nearly all the work, more
+evidence the retired 0.30 floor was unreachable rather than merely strict.
+
+### Task 9 — the feature watched itself work
+
+Installed at 19:04, `state = running`, `runs = 1`, plist `0644`, template still 0 absolute paths.
+
+**R5's two-write protocol worked on its first production run.** The entry write stamped
+`run_started` and *carried* the six prior keys instead of recomputing them, so `chunks` stayed
+**7631** rather than reading a freshly-emptied DB as `0` — the failure that would have blanked the
+session line for an entire multi-hour rebuild. The nudge then classified that live state as
+**state 1**, with no remediation command. The `SessionStart` line earlier in the very same session
+had been **state 4**, unknown age: the 4 → 1 transition was observed live, not simulated.
+
+**R10 confirmed in the real index**: `~/.claude/CODING_MEMORY.md` → **229 chunks**, the largest
+single source, `archive_doc` / `episodic` / weight **1.0**; both project copies likewise, with zero
+`archive_doc` rows carrying a non-`episodic` recall type. The **exact-path** check earned its
+wording — the two project copies alone would have satisfied a loose "a row in each repo root" test
+while the archive stayed unreachable.
+
+### The concurrency hazard task 9 had to route around
+
+`RunAtLoad` starts a run at bootstrap and `StartInterval` fires again 6h later, and `memsearch` has
+**no lock** — so a cold `--full` run started manually would be a *second* indexer if it overran the
+next firing. Sequenced instead: wait for the incremental run, snapshot its `status.json` before
+`--full` overwrites `run_started`/`last_run`, **bootout the agent**, then time the cold run into
+`memory-index/task9-timing.txt`. ⚠️ **The agent is booted out for the duration and must be
+re-installed** with `memsearch/bin/install-schedule`.
+
+### Not done
+
+Task 9's timing half (cold `--full` duration, then re-choose `RUN_MAX_HOURS`/`RUN_ABANDON_HOURS`
+**with the user**), 10a/10b, 10c, 11.
+
+## 2026-08-07 — session 42: the incremental figure lands, and two rate bases disagree
+
+### The ordinary-case number
+
+The scheduled incremental run finished cleanly: **23:04:10 → 23:36:45 UTC, 32m35s**, `processed=87
+skipped=900 chunks_added=1176 errors=0`, leaving 989 sources / 8607 chunks. `last_run_errors: 0`.
+This is task 9's *ordinary case* figure, snapshotted to `memory-index/status.incremental.json`
+before `--full` could overwrite it. The agent then booted out (`launchctl print` → **113**, as
+designed) and the cold `--full` run started **23:36:50**.
+
+R5's two-write protocol held across a second run, and the `--full` run is now exercising it against
+a genuinely emptied DB — the case the carry-forward exists for.
+
+### A short window is not a rate — the estimate was wrong by 4x
+
+Mid-run, extrapolating from a **83-second** sample (4 `.jsonl` files) gave 2.8 files/min and a
+projected **1.5–2h** remaining. The run actually finished in **~24 more minutes**. The sample landed
+inside a stretch of uniformly tiny transcripts and carried none of the run's variance.
+
+Worse, the two bases for projecting the *cold* run disagree, and the disagreement is not noise —
+it is which cost model is right:
+
+| basis | incremental rate | → 989 sources / 8607 chunks |
+|---|---|---|
+| files | 87 / 32.6min = **2.67/min** | **6.2h** |
+| chunks | 1176 / 32.6min = **36.1/min** | **4.0h** |
+
+The file basis is skewed high: those 87 included `CODING_MEMORY.md` (229 chunks), a compliance
+verdict (160) and a plan (91), so per-file cost is unrepresentative. Embedding cost tracks chunks,
+so **4.0h is the better guess** — but it is a guess, and no figure goes under `## Verification`
+except the measured one. Recorded here because the *spread itself* is the finding.
+
+### Why that spread matters now, not at hour six
+
+4.0–6.2h straddles **`RUN_MAX_HOURS` = 6**. Falsifier clause **(j)** falsifies this feature if the
+cold run reaches that constant and the branch proceeds anyway without putting it back to the user.
+So the constant is live and the decision is the user's — flagged early rather than at the boundary.
+Not widened, not pre-emptively touched.
+
+### Correction to session 41's handoff
+
+It stated the agent was "deliberately booted out". At session start it was still **loaded** —
+bootout is step 3 of the timing script and step 1 was still running. Harmless (`StartInterval` 6h,
+last fired 23:04, next ~05:04), but the handoff described an intended end state as a current one.
+
+## 2026-08-08 — session 43: task 10, and the measurement that contaminated itself
+
+Branch `feature/memsearch-freshness`, phase `implementation`, `model_tier: low`. Restored from a
+handoff whose HEAD (`1f18dce`) was one commit behind reality: task 9's completion commit `1ba8a38`
+landed at the handoff boundary, so the cold figure below was measured but unarchived here.
+
+### Task 9's closing fact, archived late
+
+Cold `--full` **17494s = 4h 51m 34s** (`processed=988 skipped=0 chunks_added=8615 errors=0`, exit 0)
+against `RUN_MAX_HOURS` = 6h (21600s) — **81.0%**, margin 1h 8m. The stop-and-ask trigger did not
+fire, so 6/24 stand as measured. `skipped=0` means a cold run re-digests every transcript, so the
+margin shrinks with session count — which this feature's archive grows every session. Agent
+re-installed after the run and verified loaded (`launchctl list` → last exit 0).
+
+### Verified the handoff's #1 action instead of trusting the tick
+
+Task 9's box was ticked and its commit message claimed the agent was re-installed. Checked
+`launchctl list` and the plist mtime directly before querying the index. It held — but the check was
+cheap and a ticked box is not evidence, which is the same discipline that caught the wrong-checkout
+commits earlier in this repo.
+
+### 10a — no regression, and a prediction that failed to come true
+
+`pytest -m golden -q` → **16 passed**, matching `ceadcf0`'s 16. Deselected moved 63 → 81; that
+number counts *the rest of the suite*, which this branch grew, so it is not comparable across
+commits. Compared on passed. Zero warnings, so the 3 stretch and 2 negative cases were clean on
+their merits rather than merely non-binding.
+
+**Golden entry 11 was named in the spec as a predicted casualty and it passed.** Measured the reason
+rather than narrating it: the archive *did* take 2 of 6 slots (ranks 3 and 6), but a
+`transcript_digest` still held ranks 1–2, and the assert needs `.jsonl` only somewhere in top-6.
+The crowding was real and simply below the threshold that assert can detect — a two-slot margin, not
+an absence of effect. Also ran the falsifier: unfiltered, the same query returns zero `.jsonl`, so
+the predicate can go false and the green result means something.
+
+### 10b — R9 FAILS, 2 of 5, and the net count hid two opposite moves
+
+Same 2-of-5 as task 8b's pre-R10 baseline, **but not the same two**: `falsifier-base-pin` regressed
+(2 hits → 1) while `git-guard-empty-index` improved (1 → 2). Had the record said "2 of 5, unchanged"
+it would have reported stability across a pair of opposite movements. The count was the same by
+coincidence.
+
+### The finding: recording the measurement moved the measurement
+
+**No `archive_doc` appears in any of the five queries' 30 hits — R10's noise cost on R9's bar
+measures zero.** The displacer is `docs/features/memsearch-freshness.md`'s own `## Verification`
+section: task 8b's baseline blocks quote each target's query string and target paths verbatim, so
+they are now indexed chunks that compete in exactly the queries they record. For `phase-guard-hook`
+and `verification-marker-gate`, **rank 1 is this feature's own file at the score ceiling 0.04918**,
+ahead of the target's own document — that is what fails clause 2. For `falsifier-base-pin`, the 8b
+chunk enters at rank 4 and pushes the target's second hit out of top-6, which is the clause-1
+regression.
+
+This resolves session 41's carried question (crowding by ADRs vs. crowding by the archive) with a
+third answer neither option contained: **crowding by the measurement record itself.** Same species
+as the index that reported freshness it never checked — an instrument whose own output feeds back
+into what it reads — one level up.
+
+Appending the 10b table necessarily worsens the next run. Recording under `## Verification` is what
+task 10 mandates, so it was recorded with the cost stated: the fix (exclude this file's
+`## Verification` from indexing, or hold measurement records outside the indexed corpus) belongs to
+the deferred planning pass. Did **not** re-exclude `CODING_MEMORY.md` — it did not cause this, and
+re-excluding would not remove chunks already written.
+
+### Carried unchanged
+
+`-m golden` deselected-count instability; the 20-heading non-goal drift; the zero-files freshness
+gap; the deferred planning pass (~85 lines → ADR 0021); the block-buffered `full-run.log` caveat.
+
+## 2026-08-08 — session 43 (continued): task 10c, and the judge overturning my attribution
+
+Tasks 10c and 11 (`46c9906` → judge run). Phase moved to `review`; model-switch checkpoint 3 asked as
+its own gate and answered **stay low**.
+
+### Task 10c — ten falsifier clauses, none falsified
+
+(d), (i), (j) held as observations; (a), (b), (c), (e), (f), (g), (h) held *in test* via the 27-case
+nudge suite. **The falsifier's window never opened** — its own wording is "across the 20 sessions
+after it lands" and the branch has not landed, so every verdict is held-on-evidence, not observed.
+Recorded rather than dropped.
+
+Verified clause (e) from source rather than from the test file's comment: the comment claims "always
+exit 0", but only `nudge.test.sh:43` capturing `rc=$?` and `:45` asserting it makes that true. Clause
+(c) held only literally — spec `:231-232` already records that with no prior `last_run` a dead
+scheduler surfaces as state 3, warning without naming the cause.
+
+R9's 10b failure falsifies nothing: clause (i) conditions on 8b's scores being recorded and on target
+span, never on R9 passing.
+
+### ⚠️ The correction — I attributed R9's regression to the wrong cause
+
+Session 43's earlier entry (above) states R10's noise cost measured **zero** and blamed this feature
+file's own `## Verification` section. **That is retracted.** The observability judge overturned it;
+I re-derived its counterfactual independently and it holds.
+
+**What I got wrong, and why it was tempting.** No `archive_doc` row appears in any of the five
+queries' 30 visible hits, and `memsearch-freshness.md` genuinely does hold rank 1 at the score ceiling
+on the two worst queries. I read cause off those two facts. Both are true; the inference is invalid.
+
+**The mechanism.** RRF scores by **rank inside a 200-candidate pool** (`search.py:63`), and the pool
+is built from raw KNN/FTS lists *before* the weight multiply. An `archive_doc` chunk at candidate
+rank 8 depresses every chunk below it, then at weight 1.0 against `curated_doc` 1.5 never surfaces in
+the frame. **Invisible displacement is this scorer's normal mode.** The architecting-stage verdict
+(2026-08-07) had already warned R9 had no control and that attribution was pre-committed. It was right
+and I proceeded anyway.
+
+**The control.** Re-fuse with one population dropped, ranks re-enumerated, pool drawn at 1000 and cut
+to 200 *after* removal so dropping lets later chunks in. Guard: the no-op variant reproduces
+`search()` exactly on all five queries.
+
+- **minus `archive_doc`** → flips **two** outcomes: `falsifier-base-pin` FAIL→PASS,
+  `git-guard-empty-index` PASS→FAIL. Exactly the two that moved against 8b.
+- **minus this file** → flips **zero**. Top hit renames on two queries (to `2026-08-02-main.md` and
+  ADR `0011`) but the replacement does not belong either. Passenger, not driver.
+
+⇒ **R10 caused both the regression and the improvement**; the unchanged 2-of-5 was two opposite R10
+effects cancelling in the count, not an absence of effect. Whether `falsifier-base-pin`'s regression
+is an *accepted* cost is now an open decision, and ADR 0021 must inherit this attribution.
+
+**The transferable lesson**, saved to memory: absence from a ranked frame says nothing about effect;
+run the leave-one-population-out control before attributing any ranking change, and re-derive a
+reviewer's counterfactual yourself rather than deferring or dismissing.
+
+Also fixed: "FAIL, 2 of 5" was ambiguous — 2 is the *passing* count, 3 fail. A commit subject read
+"fails 2/5". Noted: `addopts` deselects `measurement`, so a plain `pytest -q` reports all-green while
+the bar is red.
+
+### Left alone deliberately
+
+`coding-memory/compliance-judge/verdicts.jsonl` (M) and `2026-08-08-falsify-harness-signatures.md`
+(??) appeared mid-session from **another session** working a different feature. The judge advised
+stashing them; declined — parallel-agent invariants forbid touching another agent's domain. Every
+commit stayed pathspec-scoped instead.
+
+## 2026-08-08 — session 43 (continued): the correction needed correcting
+
+Judge round 2 (`coding-memory/observability-judge/2026-08-08-feature-memsearch-freshness-round2.md`,
+risk=medium confidence=high, no dimension `fail`) re-scored the retraction and found a second error
+**inside the correction itself**.
+
+### "Removing this file flips none" was wrong — it flips one
+
+The control table printed `git-guard-empty-index` as PASS(2) as-is and **FAIL(1)** with this feature
+file removed. That is a flip. I wrote "flips none — passenger, not driver" in the prose *next to that
+table*. Re-ran the control to confirm: **one flip.** The round-2 verdict notes it originated the
+"flips 0" phrasing in its own round-1 text and I inherited it — but my own output was on screen, and
+copying a reviewer's summary over reading my own table is the whole failure.
+
+Corrected reading:
+
+- **The archive drives both moves against 8b** — that stands, on three agreeing sources (my control,
+  the judge's independent control, and 8b's baseline taken when the archive was genuinely unindexed).
+- **This file is load-bearing for one of the two currently-passing queries.**
+  `git-guard-empty-index` passes only while **both** populations are present; drop either and it
+  fails. Without this file R9 scores **1 of 5**, not 2.
+- On the other three it is a visible occupant with no verdict effect — the top hit renames, the
+  replacement still does not belong.
+
+### Consequence for the accepted-cost decision: kept, but bounded worse than it read
+
+The "2 before, 2 after" symmetry that justified accepting `falsifier-base-pin`'s regression includes an
+*after* pass propped up by the measurement write-up itself. The decision stands (the bar was never
+green; two of three failures are archive-independent) but the cost is **less bounded** than the counts
+suggest, so it now carries a monitor rather than a note: owner = the planning pass / ADR 0021; trigger
+= re-run `-m measurement` after the first scheduled index run containing these commits; threshold =
+**below 2 of 5 reopens the decision.** Also carried: consider R9 in CI as reported-not-blocking, since
+`pyproject.toml:26` deselects it and a plain `pytest -q` prints all-green while the bar is red.
+
+### Two process facts worth keeping
+
+- **The decision was taken against a stale index** — `last_run` predates both correction commits, so
+  the numbers will move before anyone re-reads them. That is why the trigger is tied to the next
+  scheduled run rather than to a date.
+- **The judge withdrew its own item 5.** It had advised stashing the stray `compliance-judge` files;
+  on being told they belong to another session working a different feature, it agreed the pathspec-
+  scoped approach was correct — with the added warning: never `git commit -a` here.
+
+### Lesson recorded to memory
+
+Absence from a ranked frame says nothing about effect — run the leave-one-population-out control
+before attributing any ranking change. And check the resulting claim against **your own** table, even
+when the phrasing came from a reviewer whose control you just reproduced.
+
+## 2026-08-08 — session 44: the monitor was watching a blind gauge
+
+Judge round 3 (`coding-memory/observability-judge/2026-08-08-feature-memsearch-freshness-round3.md`,
+risk=medium confidence=high, **no dimension `fail`** — six pass, four concern, all four carried).
+It independently reimplemented the ranking from `search.py`, self-checked that its no-op variant
+reproduces `search()` on all five queries, and got the doc's control table cell-for-cell:
+`as-is=2/5 · minus-archive=2/5 · minus-thisfile=1/5`. Ten checkable claims, ten correct. All four
+test commands matched their declarations (74 · 16 · 3-fail-4-pass · 27/27).
+
+### The one real finding: a trip-wire tuned to the thing it can't detect
+
+The monitor attached in `1be05b5` said *reopen if R9 drops below 2 of 5*. Ninety lines above it, the
+same section's founding insight says a steady 2 of 5 is exactly what a hidden regression looks like —
+8b→10b held at 2 while `falsifier-base-pin` regressed and `git-guard-empty-index` improved, two
+opposite R10 effects cancelling. **The alarm was calibrated to the one smoke the document had already
+proved it cannot smell.** Widened: the trigger now fires on a drop below 2 of 5 *or on the same count
+reached by a different set of queries*. Record which queries pass, not how many.
+
+### What round 3 credited, and it is the right thing to have credited
+
+It did not overcorrect. The tempting move after "you got the blame wrong" twice is to swing into
+blaming yourself; the archive attribution survived on its three agreeing sources and only the one
+wrong sentence narrowed. The correction also made the accepted cost look *worse*, not better.
+
+Its explicit non-finding: the "on the other three queries" wording is a readability wrinkle, **not**
+a prose-vs-table contradiction like the two before it. Marked non-blocking; the PR did not wait on it.
+
+### Lesson recorded to memory
+
+Both real errors on this branch were caught by review, never by self-check, and both were the same
+species — **a summary sentence outrunning the table printed directly beneath it.** A derived count is
+not a monitor: when a section's own evidence shows a metric can hold steady while its composition
+moves, any threshold set on that metric inherits the blindness. Watch composition, not the scalar.
+
+## 2026-08-08 — session 43 (continued): rounds 4 and 5, and PR #45
+
+**PR #45 opened** — https://github.com/suyatdev/.claude/pull/45, base `main` @ `b78eae8`, created at
+`5ff613d`. Detail in `coding-memory/pr-tracking.md`. Task 11 complete; tasks 1–11 all done.
+
+**The gate passed on a real verdict — no `JUDGE_EXEMPT`.** Round 5, `head_sha 5ff613d`, risk=medium,
+confidence=high, no dimension `fail`. Ends the run of two consecutive PRs that needed the bypass.
+
+### Round 4 — "its feature shipped" was false, and the error flipped a safety conclusion
+
+I had labelled `docs/features/verification-marker-gate.md` a stale `planning` card whose feature had
+shipped. It has not shipped and has not **started**: `phase: planning`, `branch: none`, **15/15
+unchecked**, no `hooks/test-marker-guard.sh`, no implementation commit on any branch. Both things I
+cited as proof prove nothing — being an R9 measurement target only means a *document* exists to
+retrieve (`belongs()` matches `docs/features/F.md`), and the 2026-08-01 compliance verdict says `Spec:`
+in its own header. So the card is **correctly active**, and phase-guard denying my write was the guard
+working. The dangerous part was the label: a later planning session could read "stale" as licence to
+clear the one card guarding that feature, and `rules/gates.md` already documents four hooks that exist,
+pass tests, and never run — "written ≠ active" is a known trap here and this nearly repeated it.
+
+### Round 5 — the correction's own summary was imprecise too
+
+"`phase-guard.sh` has no `review` arm" was falsifiable by one grep: `:448` matches
+`(implementation|review)`. The real `implementation`-only gap is the **branch-claim** arm at `:387`, and
+"cannot write source at all" holds only while an unsuperseded `planning` card exists (`:418`/`:502`
+exit 0 otherwise). Fixed precisely in the doc and carried to the planning pass.
+
+**That is four rounds out of five in which a summary sentence outran the evidence beneath it** — rounds
+1 (wrong causal attribution), 2 ("flips none" against its own table), 4, and 5. Each was caught by a
+reader who checked the sentence against the artifact rather than against the previous sentence. The
+retractions all stay visible in the feature doc; erasing a causal error erases the lesson.
+
+### The doc's length is now a measured problem, not an aesthetic one
+
+Round 5 declined the offer to compress the retractions (~40 lines of ~1,900 — "~2% of the length,
+~100% of the audit value") and relocated the concern: this doc is the **displacing top hit on 2 of R9's
+3 failures**, pushing each target's own doc to rank 3–4. But the control shows removing it takes R9 from
+**2/5 to 1/5**, so shrinking it *moves the metric under test*. Booked as planning-pass work — the
+`.spec.md` split, with the counterfactual re-run after, not a pre-merge tidy.
+
+### Blocked, and handed to the user
+
+`phase-guard.sh` blocks `README.md` from this branch (path-not-intent; root files are not exempt), so
+the skill-required Roadmap entry **could not be written by the agent**. Same shape as the earlier
+`rules/` case; resolution is a hand edit, no hook touched. The exact line is in the PR thread and in
+`pr-tracking.md`.
+
+## 2026-08-08 — session 45: the rename that wasn't, and a conflict marker that balanced the books
+
+Review phase, `feature/memsearch-freshness`, PR #45 open throughout. No code changed; three record
+defects found and fixed. Design detail is in `docs/features/memsearch-freshness.md` and ADR 0021.
+
+### The duplicate ADR 0018, resolved
+
+`08b779d` merged `origin/main` and silently accepted **two** ADRs numbered 0018 — ours
+(`launchd-agent-and-run-recency-split`, unmerged) and main's (`the-status-line-may-span-multiple-rows`,
+merged via PR #43). Different filenames, so git saw no conflict. User chose: **ours yields → 0021**,
+because an accepted, landed decision record does not get renamed.
+
+The transferable part is the citation split, which the prior session's "~10 citations to update"
+framing hid. Counted precisely, ours had **3 live, editable** sites (`memsearch/README.md:36`, feature
+doc `:106`/`:1225`) and **14 append-only** ones (`CODING_MEMORY.md` ×4, 10 judge verdicts). Main's had
+1 live and 2 append-only. **A renumber can only ever fix the live half** — so the archive gets a
+*provenance header in the renamed ADR* ("anywhere dated 2026-08-06..08 saying ADR 0018 in a
+memsearch-freshness context means this file"), never an edit. Ambiguity is retired going forward, not
+retroactively; pretending otherwise would mean rewriting an append-only record.
+
+### `git mv` + a scoped commit produces a copy, not a rename
+
+`git mv` stages **two** index entries — a delete of the old path and an add of the new one.
+`git commit -- <new-path> <other>` committed only the add, so `fea2423` shipped **both** ADR files and
+the delete sat staged. Caught by `git ls-tree HEAD docs/decisions/`, not by the commit's own `--stat`,
+which looked correct because every path it named was present. Fixed by amend + `--force-with-lease`.
+**The pathspec on a rename must name the OLD path too.** This is the third instance of the
+scoped-commit family and the first where the scoping *silently duplicated* rather than omitted.
+
+### A verified merge still shipped a conflict marker
+
+`CODING_MEMORY.md` ended with a bare `||||||| b78eae8` — committed in `08b779d`, whose resolution note
+claimed "exactly 3 marker lines removed". There were four.
+
+It survived a line-count audit **because the arithmetic balanced**: base 3787 + ours 637 + main 64 =
+4488 = the merged count. It balanced only by coincidence — one of main's 64 added lines is a blank that
+diff matches against an existing blank, freeing exactly one slot for the marker. *Counting lines is not
+checking content.* The check that actually works, and that found the answer in one command:
+
+    diff <(git show <parent>:FILE) <(git show HEAD:FILE) | grep -c '^<'   # must be 0, for BOTH parents
+
+Zero deletions in both directions proves the merged file contains each parent in full, independent of
+any count. Content confirmed intact; only the stray line was removed.
+
+### Also
+
+- Task 11 was still unticked while five review-phase judge rounds sat on disk and PR #45 had been open
+  for hours. The checklist claimed the judge stage never ran.
+- `memsearch/README.md:36` still links the old ADR filename — a **broken path**, not merely a stale
+  number. `phase-guard.sh` denies it (not under `docs/`; no feature file claims this branch at
+  `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
+  root README Roadmap line.

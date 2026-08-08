@@ -37,15 +37,9 @@ def test_cloud_embed_model_refused(tmp_path):
         load_config(p)
 
 
-def test_coding_memory_exclusion_is_mandatory(tmp_path):
-    p = write_cfg(tmp_path, exclude_paths=["/subagents/"])
-    with pytest.raises(ConfigError, match="CODING_MEMORY"):
-        load_config(p)
-
-
 def test_is_excluded():
     cfg = load_config(REAL_CONFIG)
-    assert is_excluded(Path("/x/repo/CODING_MEMORY.md"), cfg)
+    assert not is_excluded(Path("/x/repo/CODING_MEMORY.md"), cfg)
     assert is_excluded(Path("/x/projects/p/abc/subagents/agent-1.jsonl"), cfg)
     assert not is_excluded(Path("/x/coding-memory/decisions.md"), cfg)
     # vendored/venv docs (smoke backfill pulled ~50 junk chunks from these)
