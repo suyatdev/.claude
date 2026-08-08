@@ -1421,7 +1421,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       and record that figure; note the incremental figure too as the ordinary case, but choose the
       constant against the cold one. If it exceeds `RUN_MAX_HOURS`, stop and put the constant back
       to the user (R3).
-- [ ] 10 — **Two distinct measurements, both recorded under `## Verification`.** They are not the
+- [x] 10 — **Two distinct measurements, both recorded under `## Verification`.** They are not the
       same instrument and neither substitutes for the other (R9).
       **(a) The noise-regression net.** Run the pre-existing suite with `-m golden` —
       `pyproject.toml:23` sets `addopts = "-m 'not golden'"`, so a bare `pytest` deselects all
@@ -1454,6 +1454,21 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       silently re-exclude the file (and see R10's exit cost: re-excluding does not remove the
       chunks already written). *Any pre-existing reading of "R9 failed" that rests on the retired
       `≥0.30` score floor is void — the scorer cannot reach 0.30 (R9).*
+      - **(a) no regression: 16 passed = `ceadcf0`'s 16.** Compared on *passed*; deselected moved
+        (63 → 81) only because this branch added test modules and a second marker, so it is not
+        comparable across commits. Zero warnings — the 3 stretch and 2 negative cases were clean on
+        their merits, not merely non-binding.
+      - **Entry 11's predicted failure did not happen, and the measured reason is recorded.** The
+        archive did enter the result set (2 of 6 slots) but a `transcript_digest` still holds ranks
+        1–2, and the assert needs `.jsonl` only *somewhere* in top-6. Two-slot margin; re-check as
+        the archive grows. Falsifier run: unfiltered, the same query returns zero `.jsonl`.
+      - **(b) R9 FAILS, 2 of 5** — the verdict, written down. Same count as 8b, *different two*:
+        `falsifier-base-pin` regressed, `git-guard-empty-index` improved. The net 2-of-5 is a
+        coincidence, and reporting the count alone would have hidden both moves.
+      - **R10's noise cost here measures zero — no `archive_doc` in any of the 30 hits.** The
+        displacer is **this file's own 8b baseline record**, now rank 1 at the score ceiling for the
+        two worst queries. Recording a retrieval measurement inside an indexed document perturbs the
+        next run of it. Do not re-exclude `CODING_MEMORY.md` for a failure it did not cause.
 - [ ] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
       through (j), by letter, each marked held / falsified / not yet observable, with the evidence
       or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
@@ -1615,3 +1630,94 @@ This does **not** relax R9's anti-gaming rule — the span requirement still bin
 failure at 10b needs reading carefully: crowding by ADRs and verdicts is a different finding from
 crowding by the archive, and only the second is R10's cost. Scores are also tightly packed near the
 ceiling (0.0366–0.0488 across every hit above), so rank is doing nearly all the work.
+
+### Task 10 — the two measurements, post-R10 (2026-08-08)
+
+Two distinct instruments, neither substituting for the other. Both run against the live index after
+task 9's cold rebuild (8615 chunks, `archive_doc` present).
+
+#### (a) The noise-regression net — no regression
+
+`uv run pytest -m golden -q` → **16 passed, 81 deselected in 2.65s**.
+Baseline at `ceadcf0`, pre-R10: **16 passed, 63 deselected, 2.53s**.
+
+**Compared on *passed*, 16 = 16.** The deselected count moved because this branch *added* test
+modules (`test_measurement_queries.py`, `test_rename_status.py`) and `addopts` now deselects two
+markers, not one — deselected counts the rest of the suite, so it is not a comparable quantity
+across commits. Passed is.
+
+**No warnings were emitted**, and warnings are the only channel the non-binding cases have
+(`test_golden_queries.py:50,60`): all 3 `stretch` cases hit and neither `negative` case surfaced its
+off-topic path. Only the 11 `must` cases can fail, so the green run is read against that — but here
+the other five were clean on their merits rather than merely warned-and-passed.
+
+**Golden entry 11, the named predicted casualty, PASSED — the prediction did not come true.** The
+spec asked for the judgment either way, so this is the measured reason rather than a narrated one.
+Top-6 for `'what were we working on in mid july 2026'` (`rtype: episodic`, `since: 2026-07-01`):
+
+| rank | score | `source_type` | path |
+|---|---|---|---|
+| 1 | 0.015152 | `transcript_digest` | `…/b2460eaa….jsonl` |
+| 2 | 0.014493 | `transcript_digest` | `…/b2460eaa….jsonl` |
+| **3** | 0.013158 | **`archive_doc`** | **`~/.claude/CODING_MEMORY.md`** |
+| 4 | 0.012346 | `transcript_digest` | `…/50498f7b….jsonl` |
+| 5 | 0.012048 | `transcript_digest` | `…/eb6f8877….jsonl` |
+| **6** | 0.011111 | **`archive_doc`** | **`~/.claude/CODING_MEMORY.md`** |
+
+**The crowding R10 predicted is real and visible — the archive took 2 of 6 slots — it just did not
+reach the top hit,** and this assert needs only `.jsonl` *somewhere* in top-6
+(`test_golden_queries.py:39`). So the entry survives with a two-slot margin: four more transcript
+slots would have to go before it fails. That margin is the thing to re-check as the archive grows,
+not the pass itself.
+
+⚠️ **The assert is not vacuous** — named falsifier, run: the *same* query with the filters removed
+returns six `curated_doc` hits and **zero** `.jsonl` paths, so `any('.jsonl' in p …)` demonstrably
+evaluates false. The `rtype`/`since` filter is what surfaces the episodic corpus at all.
+
+#### (b) R9's bar — **FAIL, 2 of 5**
+
+`uv run pytest -m measurement -q` → **3 failed, 4 passed, 90 deselected** (4 passed = the 2 clean
+queries + the 2 structural guards). R9 passes iff all five satisfy both clauses, so **the verdict is
+a failure**, written down here as the task requires. Chunk counts computed from source by the runner
+at run time, never read from the DB:
+
+| target | chunks | third | clause 1 (≥2 hits) | clause 2 (top belongs) | vs 8b |
+|---|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | 6 | bottom | PASS (4) | PASS | held |
+| `falsifier-base-pin` | 9 | bottom | **FAIL (1)** | PASS | **regressed** (was PASS/PASS) |
+| `git-guard-empty-index` | 24 | middle | **PASS (2)** | PASS | **improved** (was FAIL/PASS) |
+| `verification-marker-gate` | 53 | middle | FAIL (1) | FAIL | held |
+| `phase-guard-hook` | 91 | top | PASS (2) | FAIL | held |
+
+⚠️ **The count is unchanged from 8b's 2-of-5 and the composition is not.** Recording only "2 of 5,
+same as before" would have reported no change where two queries in fact moved in opposite
+directions. One target regressed and a different one improved; the net is a coincidence.
+
+#### R10's measured noise cost on R9's bar: **zero. The regression is self-inflicted.**
+
+**No `archive_doc` hit appears in any of the five queries' top-6** — every one of the 30 rows is
+`curated_doc`. R10 did not displace anything here, for or against.
+
+What *did* move in is **this file's own `## Verification` section**. The 8b baseline blocks — which
+contain each target's query string and its target file paths verbatim — are now indexed chunks that
+compete in the very queries they record:
+
+- `phase-guard-hook`: **rank 1 is `docs/features/memsearch-freshness.md`**, at the exact score
+  ceiling 0.04918, ahead of the target's own file. This is what fails clause 2.
+- `verification-marker-gate`: same, rank 1 at the ceiling.
+- `falsifier-base-pin`: the 8b chunk enters at rank 4 and pushes the target's *second* hit out of
+  top-6 — precisely the clause-1 regression above.
+
+So carried gotcha 2's distinction resolves cleanly: the displacement is **neither** the archive
+(R10's cost, measured zero) **nor** only the ADR/verdict paper trail, but the measurement record
+itself. **Recording a retrieval measurement inside an indexed document perturbs the next run of that
+measurement** — the same species of defect as an index that reported freshness it never checked, one
+level up. Locating the contaminating chunks by line range is deliberately avoided here: those
+numbers rot, and appending this very section moves them.
+
+⚠️ **Appending this table makes the next run worse, not better.** Recording under `## Verification`
+is what the task mandates, so it is recorded — but the cost is now visible and belongs to the
+deferred planning pass: either exclude this file's `## Verification` from indexing, or hold
+measurement records outside the indexed corpus. Not fixable in this phase; do not re-exclude
+`CODING_MEMORY.md` in response to a failure it did not cause (and re-excluding would not remove
+chunks already written).

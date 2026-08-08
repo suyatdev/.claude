@@ -4158,3 +4158,72 @@ Not widened, not pre-emptively touched.
 It stated the agent was "deliberately booted out". At session start it was still **loaded** —
 bootout is step 3 of the timing script and step 1 was still running. Harmless (`StartInterval` 6h,
 last fired 23:04, next ~05:04), but the handoff described an intended end state as a current one.
+
+## 2026-08-08 — session 43: task 10, and the measurement that contaminated itself
+
+Branch `feature/memsearch-freshness`, phase `implementation`, `model_tier: low`. Restored from a
+handoff whose HEAD (`1f18dce`) was one commit behind reality: task 9's completion commit `1ba8a38`
+landed at the handoff boundary, so the cold figure below was measured but unarchived here.
+
+### Task 9's closing fact, archived late
+
+Cold `--full` **17494s = 4h 51m 34s** (`processed=988 skipped=0 chunks_added=8615 errors=0`, exit 0)
+against `RUN_MAX_HOURS` = 6h (21600s) — **81.0%**, margin 1h 8m. The stop-and-ask trigger did not
+fire, so 6/24 stand as measured. `skipped=0` means a cold run re-digests every transcript, so the
+margin shrinks with session count — which this feature's archive grows every session. Agent
+re-installed after the run and verified loaded (`launchctl list` → last exit 0).
+
+### Verified the handoff's #1 action instead of trusting the tick
+
+Task 9's box was ticked and its commit message claimed the agent was re-installed. Checked
+`launchctl list` and the plist mtime directly before querying the index. It held — but the check was
+cheap and a ticked box is not evidence, which is the same discipline that caught the wrong-checkout
+commits earlier in this repo.
+
+### 10a — no regression, and a prediction that failed to come true
+
+`pytest -m golden -q` → **16 passed**, matching `ceadcf0`'s 16. Deselected moved 63 → 81; that
+number counts *the rest of the suite*, which this branch grew, so it is not comparable across
+commits. Compared on passed. Zero warnings, so the 3 stretch and 2 negative cases were clean on
+their merits rather than merely non-binding.
+
+**Golden entry 11 was named in the spec as a predicted casualty and it passed.** Measured the reason
+rather than narrating it: the archive *did* take 2 of 6 slots (ranks 3 and 6), but a
+`transcript_digest` still held ranks 1–2, and the assert needs `.jsonl` only somewhere in top-6.
+The crowding was real and simply below the threshold that assert can detect — a two-slot margin, not
+an absence of effect. Also ran the falsifier: unfiltered, the same query returns zero `.jsonl`, so
+the predicate can go false and the green result means something.
+
+### 10b — R9 FAILS, 2 of 5, and the net count hid two opposite moves
+
+Same 2-of-5 as task 8b's pre-R10 baseline, **but not the same two**: `falsifier-base-pin` regressed
+(2 hits → 1) while `git-guard-empty-index` improved (1 → 2). Had the record said "2 of 5, unchanged"
+it would have reported stability across a pair of opposite movements. The count was the same by
+coincidence.
+
+### The finding: recording the measurement moved the measurement
+
+**No `archive_doc` appears in any of the five queries' 30 hits — R10's noise cost on R9's bar
+measures zero.** The displacer is `docs/features/memsearch-freshness.md`'s own `## Verification`
+section: task 8b's baseline blocks quote each target's query string and target paths verbatim, so
+they are now indexed chunks that compete in exactly the queries they record. For `phase-guard-hook`
+and `verification-marker-gate`, **rank 1 is this feature's own file at the score ceiling 0.04918**,
+ahead of the target's own document — that is what fails clause 2. For `falsifier-base-pin`, the 8b
+chunk enters at rank 4 and pushes the target's second hit out of top-6, which is the clause-1
+regression.
+
+This resolves session 41's carried question (crowding by ADRs vs. crowding by the archive) with a
+third answer neither option contained: **crowding by the measurement record itself.** Same species
+as the index that reported freshness it never checked — an instrument whose own output feeds back
+into what it reads — one level up.
+
+Appending the 10b table necessarily worsens the next run. Recording under `## Verification` is what
+task 10 mandates, so it was recorded with the cost stated: the fix (exclude this file's
+`## Verification` from indexing, or hold measurement records outside the indexed corpus) belongs to
+the deferred planning pass. Did **not** re-exclude `CODING_MEMORY.md` — it did not cause this, and
+re-excluding would not remove chunks already written.
+
+### Carried unchanged
+
+`-m golden` deselected-count instability; the 20-heading non-goal drift; the zero-files freshness
+gap; the deferred planning pass (~85 lines → ADR 0021); the block-buffered `full-run.log` caveat.
