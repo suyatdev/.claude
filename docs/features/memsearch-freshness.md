@@ -1778,10 +1778,17 @@ session could read it as licence to clear the one card currently guarding that f
 `rules/gates.md` already documents four hooks that exist, pass their tests, and never run, so
 "written ≠ active" is a known trap in this repo and this nearly repeated it.
 
-So the single finding worth carrying is **(2): `phase-guard.sh` has no `review` arm** — a branch whose
-feature file has advanced to `review` cannot write source at all, because the guard authorizes only on
-`phase: implementation`. That belongs to the planning pass. Advancing or deleting another feature's
-file was never this branch's call, and remains not.
+So the single finding worth carrying is **(2)**, stated precisely — round 5 corrected an imprecise
+first attempt at it, and the imprecise version was falsifiable by one grep:
+
+> **`phase-guard.sh` does have a `review` arm** (`:448` matches `(implementation|review)`, with `:422-423`
+> saying review must count). The `implementation`-only gap is the **branch-claim** arm at `:387`, so a
+> branch whose feature file has advanced to `review` no longer *claims* that branch and loses source-write
+> authorization — but only while an unsuperseded `planning` card exists elsewhere; absent one, `:418`
+> and `:502` both exit 0.
+
+That belongs to the planning pass. Advancing or deleting another feature's file was never this branch's
+call, and remains not.
 
 | query | as-is | minus `archive_doc` | minus this file |
 |---|---|---|---|

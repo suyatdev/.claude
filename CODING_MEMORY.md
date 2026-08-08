@@ -4375,3 +4375,50 @@ Both real errors on this branch were caught by review, never by self-check, and 
 species — **a summary sentence outrunning the table printed directly beneath it.** A derived count is
 not a monitor: when a section's own evidence shows a metric can hold steady while its composition
 moves, any threshold set on that metric inherits the blindness. Watch composition, not the scalar.
+
+## 2026-08-08 — session 43 (continued): rounds 4 and 5, and PR #45
+
+**PR #45 opened** — https://github.com/suyatdev/.claude/pull/45, base `main` @ `b78eae8`, created at
+`5ff613d`. Detail in `coding-memory/pr-tracking.md`. Task 11 complete; tasks 1–11 all done.
+
+**The gate passed on a real verdict — no `JUDGE_EXEMPT`.** Round 5, `head_sha 5ff613d`, risk=medium,
+confidence=high, no dimension `fail`. Ends the run of two consecutive PRs that needed the bypass.
+
+### Round 4 — "its feature shipped" was false, and the error flipped a safety conclusion
+
+I had labelled `docs/features/verification-marker-gate.md` a stale `planning` card whose feature had
+shipped. It has not shipped and has not **started**: `phase: planning`, `branch: none`, **15/15
+unchecked**, no `hooks/test-marker-guard.sh`, no implementation commit on any branch. Both things I
+cited as proof prove nothing — being an R9 measurement target only means a *document* exists to
+retrieve (`belongs()` matches `docs/features/F.md`), and the 2026-08-01 compliance verdict says `Spec:`
+in its own header. So the card is **correctly active**, and phase-guard denying my write was the guard
+working. The dangerous part was the label: a later planning session could read "stale" as licence to
+clear the one card guarding that feature, and `rules/gates.md` already documents four hooks that exist,
+pass tests, and never run — "written ≠ active" is a known trap here and this nearly repeated it.
+
+### Round 5 — the correction's own summary was imprecise too
+
+"`phase-guard.sh` has no `review` arm" was falsifiable by one grep: `:448` matches
+`(implementation|review)`. The real `implementation`-only gap is the **branch-claim** arm at `:387`, and
+"cannot write source at all" holds only while an unsuperseded `planning` card exists (`:418`/`:502`
+exit 0 otherwise). Fixed precisely in the doc and carried to the planning pass.
+
+**That is four rounds out of five in which a summary sentence outran the evidence beneath it** — rounds
+1 (wrong causal attribution), 2 ("flips none" against its own table), 4, and 5. Each was caught by a
+reader who checked the sentence against the artifact rather than against the previous sentence. The
+retractions all stay visible in the feature doc; erasing a causal error erases the lesson.
+
+### The doc's length is now a measured problem, not an aesthetic one
+
+Round 5 declined the offer to compress the retractions (~40 lines of ~1,900 — "~2% of the length,
+~100% of the audit value") and relocated the concern: this doc is the **displacing top hit on 2 of R9's
+3 failures**, pushing each target's own doc to rank 3–4. But the control shows removing it takes R9 from
+**2/5 to 1/5**, so shrinking it *moves the metric under test*. Booked as planning-pass work — the
+`.spec.md` split, with the counterfactual re-run after, not a pre-merge tidy.
+
+### Blocked, and handed to the user
+
+`phase-guard.sh` blocks `README.md` from this branch (path-not-intent; root files are not exempt), so
+the skill-required Roadmap entry **could not be written by the agent**. Same shape as the earlier
+`rules/` case; resolution is a hand edit, no hook touched. The exact line is in the PR thread and in
+`pr-tracking.md`.

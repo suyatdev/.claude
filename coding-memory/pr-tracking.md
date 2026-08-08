@@ -786,3 +786,39 @@ Three things worth remembering rather than re-deriving:
   until merge. Verified: `git show main:rules/core-conduct.md | grep -c "Always give a
   recommendation"` → `0`, and checking out `main` removes the paragraph from disk. A session started
   on `main` before merge does not load the rule — **merge promptly.**
+
+## `.claude` — `feature/memsearch-freshness` → PR #45 (open)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `feature/memsearch-freshness` · **base:** `main` @ `b78eae8`
+- **PR:** https://github.com/suyatdev/.claude/pull/45 — **open**, created 2026-08-08 at `5ff613d`
+- **session_origin (created):** session 43 · **session_origin (last push):** session 43
+- **Feature-scale** — implementation state lives in `docs/features/memsearch-freshness.md`
+  (frontmatter + checklist + `## Verification`). Tasks 1–11 all complete.
+
+Phase 2 of the memory-index work (Phase 1 = #42): a `launchd` agent that refreshes the index on a
+schedule, an eight-state session line that separates run-recency from content-recency, and
+`CODING_MEMORY.md` indexed as `archive_doc`/`episodic` at weight 1.0.
+
+Four things worth remembering rather than re-deriving:
+
+- **No `JUDGE_EXEMPT` was needed.** The observability gate passed on a real verdict — round 5 at
+  `head_sha 5ff613d`, risk=medium, confidence=high, no dimension `fail`. That breaks the run of two
+  consecutive docs/rules PRs that needed the bypass, and it is evidence the gate's scope is fine for
+  PRs with an actual implementation surface; the earlier two were prose-only.
+- **Five judge rounds, and four of them caught a summary sentence outrunning its evidence.** Round 1
+  overturned the causal attribution for R9's regression; round 2 caught "flips none" contradicting the
+  table directly above it; round 4 caught "its feature shipped" about a feature that never started;
+  round 5 caught "no `review` arm" when the arm exists at `phase-guard.sh:448`. The doc keeps all of
+  these as **visible retractions** by design.
+- **`phase-guard.sh` blocks `README.md` on this branch**, so the skill-required Roadmap update could
+  not be made by the agent. Same shape as the earlier `rules/` case: the guard matches **path, not
+  intent**, `README.md` is not on its exempt list (`docs/*`, `coding-memory/*`, `CODING_MEMORY.md`,
+  `.claude/*`, `settings.json`, `projects/*/memory/*`), and advancing to `phase: review` cost this
+  branch its source-write claim (the `implementation`-only branch-claim arm at `:387`). **Resolution
+  is a hand edit by the user — no hook modified or bypassed.** Expect this for every root-level file
+  change from a branch in `review`.
+- **R9's bar ships red (2 of 5 pass), by explicit user decision**, with a monitor rather than a note:
+  re-run `-m measurement` after the first scheduled index run containing these commits; reopen if it
+  drops below 2 of 5 **or reaches 2 by a different set of queries**. Record *which* queries pass, not
+  how many.
