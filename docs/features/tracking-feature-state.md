@@ -220,3 +220,43 @@ at send time and refuse rather than send an unconfirmed ref. Separately — the 
 authentication** beyond its 0600 permission, so injection is already available to any process running
 as the user; the new risk this feature introduces is the HTTP hop, which is what the Security section
 above defends. Do not weaken any of it.
+
+### Second audit pass (session 48) — five more, same species
+
+The re-derivation the section above called for has now run: every factual claim in this card was
+re-checked against the repo. Five more failed. **Two of them are defects in the corrections above** —
+the correction stored a count and a line range that have already gone stale, which is the strongest
+available argument for storing the derivation rather than its result.
+
+5. **Evidence bullet 1 cannot be run at all.** `.gitignore` ignores `/.claude/`, so
+   `.claude/session-state.md` is untracked and `git log -1 --format=%cr` on it prints nothing. The
+   bullet asks a reader to compare a line count against a commit date that does not exist. The
+   "Strand survey" table it cites is also gone — `live-handoff.sh` rewrites that file every session.
+6. **All three numbers in the opening paragraph are wrong.** Re-derive: `ls docs/features/*.md` → 14
+   files but **13 cards** (`memory-system-split.spec.md` is a split half carrying no `phase`);
+   `awk '/^phase:/{print $2}' docs/features/*.md | sort -u` → **three** phases, not four;
+   `git worktree list | wc -l` → **6** worktrees, not three.
+7. **Correction 2 above is itself already stale.** It asserts "exactly 2 cards say `branch: none`";
+   `grep -l '^branch: *none' docs/features/*.md` now returns **3** — `pane-dispatch-model-flag` joined
+   them and is still untracked in the main checkout. Its *conclusion* survives (no worktree branch is
+   named for any of the three), which is exactly why the conclusion belongs in the card and the count
+   does not.
+8. **Correction 3 above cites the wrong lines.** It pins the marker discard to
+   `hooks/lib/feature_tasks.py:11-14`; those lines are docstring prose. The mechanism is `STRICT_RE`
+   (`:37`) capturing only group 1 — the text *after* the bracket — consumed at `:75` via
+   `match.group(1)`, with `identity()` (`:51`) and `task_ids()` (`:57`) around it. Cite the mechanism,
+   not the range.
+9. **"N feature cards" is checkout-dependent.** The main checkout and this worktree each hold 14 card
+   files, but not the *same* 14: main has an untracked `pane-dispatch-model-flag.md` and no
+   `tracking-feature-state.md`; here it is the reverse. Criterion 1 must name which working tree it
+   means, or it cannot be falsified.
+
+Re-derived this pass and **confirmed still true** — do not re-litigate: the `STRICT_RE` text (`:37`);
+`TMUX` unset under `TERM_PROGRAM=ghostty`; `panes/handoff-wrapper.sh:5` rejecting pre-typed keystrokes;
+all three `cmux.sh` citations used in correction 1 and in the security addition; `analyze.py` at 792
+lines; `test_analyze.py` / `test_store.py` shipped and collecting.
+
+**GATE: Spec change needed — switch back to the high-tier model to revise.** Nine recorded defects
+(four in the spec body, five found this pass, two of those inside the corrections themselves) cannot
+be repaired from inside `phase: implementation`. No further task starts until that revision is
+authorized.

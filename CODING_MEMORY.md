@@ -4538,3 +4538,36 @@ any count. Content confirmed intact; only the stray line was removed.
   number. `phase-guard.sh` denies it (not under `docs/`; no feature file claims this branch at
   `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
   root README Roadmap line.
+
+## 2026-08-09 — session 48: the correction list needed correcting
+
+Restored onto `feat/tracking-feature-state` (`37a8e38`, clean, `0 0` vs origin, `0 2` vs `origin/main`).
+Frontmatter verified against reality before any work: `phase: implementation`, `branch:` matches
+`git branch --show-current` in the worktree. No mismatch, so no stop-and-report.
+
+The one task on the board was the card audit session 47 deferred: re-derive **every** factual claim in
+`docs/features/tracking-feature-state.md` rather than patch the four errors it had already logged.
+That instruction came from the standing rule about repeated findings of one class, and it paid:
+
+- Five further defects, all the same species — a fact asserted from a grep nobody tried to falsify.
+- **Two of the five are inside the correction list itself.** Correction 2 pinned "exactly 2 cards say
+  `branch: none`" (now 3 — `pane-dispatch-model-flag` joined, still untracked in the main checkout).
+  Correction 3 pinned the marker discard to `feature_tasks.py:11-14`, which is docstring prose; the
+  mechanism is `STRICT_RE` at `:37` capturing group 1, consumed at `:75`.
+- A correction written to fix stale numbers went stale in under 24 hours, in the same file, during the
+  same implementation phase. Store the derivation, never the result — the rule now has a second,
+  self-referential proof.
+- Evidence bullet 1 turned out to be **unrunnable**, not merely stale: `.gitignore:72` ignores
+  `/.claude/`, so `git log -1 --format=%cr .claude/session-state.md` prints nothing. A derivation that
+  cannot execute reads exactly like one that passes, which is worse than a wrong number.
+- Criterion 1's "a repo with N feature cards" is checkout-dependent — main and the worktree each hold
+  14 card files and not the same 14. Unfalsifiable as written.
+
+Confirmed still true and not to be re-litigated: `STRICT_RE` text; `TMUX` unset under
+`TERM_PROGRAM=ghostty`; `handoff-wrapper.sh:5`; all three `cmux.sh` citations; `analyze.py` at 792
+lines; `test_analyze.py`/`test_store.py` collecting.
+
+Ended on **GATE: Spec change needed**. `managing-session-memory` forbids repairing a wrong spec from
+inside `phase: implementation` — the errors get noted and the gate gets raised, and that is where this
+session stops. Tasks 1-6 remain unticked on purpose: ticking a checklist whose criteria are known
+wrong records progress against a spec nobody has agreed to yet.
