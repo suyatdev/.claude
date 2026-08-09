@@ -4774,3 +4774,21 @@ The lesson is not the framing, it is the mechanism. This entry's own commit mess
 that cannot fail has not passed"* while asserting a headline count **nobody counted** — its
 self-verification was meticulous about *which rows* changed and silent about *the number claimed
 about them*. Verifying the operation is not verifying the claim you drew from it.
+
+## 2026-08-09 — session 50: closing out PR #49, and breaking the close-out regress
+
+The entry above was written on branch `docs/post-merge-followups-47`, merged as **PR #49** at
+**`0fe9723`** (2026-08-09T20:44:08Z) — identifiers recorded here because a grep for `PR #49` or the
+branch name matched **nothing** in this file or `pr-tracking.md` before now. The lesson had been
+archived; the work had not been *recorded*. An archive that omits the identifier a reader will search
+by is unreachable, and I found that gap by hitting it.
+
+Session 50 did two edits and no feature work: the last `verdicts.jsonl` row (`head_sha 6e35701`)
+`outcome: null → rework`, and #49's own section in `pr-tracking.md` — see that section for the merge
+verification, the re-derived 6 `low` / 2 `medium` split, and a `git-guard` gap found on the way.
+
+**The regress is the point.** Three close-outs running (#45→#46, #47→#49, #49→here), each PR left its
+own record unwritten, because a PR cannot mark itself merged — the merge happens after its last
+commit. Opening PR #50 would have created a fourth. **These two edits went straight to `main` as
+documentation instead**, which `git-guard`'s allowlist permits by design. The general rule: paperwork
+for a merged PR is not itself PR-worthy work.

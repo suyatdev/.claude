@@ -909,3 +909,48 @@ Three things worth remembering rather than re-deriving:
   including one in round 6 that this PR deliberately left standing in its verdict rather than editing.
   Take the challenge seriously; take the assertion to the data. The verdicts are the calibration
   record and are kept in both directions.
+
+## `.claude` — `docs/post-merge-followups-47` → PR #49 (MERGED 2026-08-09T20:44:08Z, merge commit `0fe9723`)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `docs/post-merge-followups-47` · **base:** `main` @ `b829eea` — which *is* PR #47's merge
+  commit. The regress in one line: this branch's base is the previous close-out's merge.
+- **PR:** https://github.com/suyatdev/.claude/pull/49 — **merged 2026-08-09T20:44:08Z** at `0fe9723`
+- **commits:** `6e35701` (the close-out) and `2e6f8fe` (correcting `6e35701`'s own headline)
+- **session_origin (created):** session 49 · **session_origin (last push):** session 49 ·
+  **closed out:** session 50
+- **Merge verified as a true union:** `git diff 2e6f8fe 0fe9723` empty (merge took branch content
+  verbatim), `git diff --numstat b829eea 0fe9723` = **+175 / −10**, and all 10 deletions are intended
+  replacements — 2 in this file (#47's `OPEN` header and its `— open` PR line) and 8 in
+  `verdicts.jsonl` (the 8 rows whose `outcome` was backfilled). Conflict-marker grep rc=1, **with a
+  falsifier run** proving the probe could report a hit.
+- **Verdict:** one round, `head_sha 6e35701`, `risk: low`, `confidence: high`, **`outcome: rework`**
+  (set in session 50 — see below). Card:
+  `coding-memory/observability-judge/2026-08-09-docs-post-merge-followups-47.md`.
+- **Worktree:** `~/.claude/memsearch-freshness`. Docs-only; touches no code.
+- **Card:** `docs/features/memsearch-freshness.md` (`phase: review`, `branch: none`).
+
+Its subject — *"close out PR #47 … and eight risk=low verdicts all became rework"* — carries the very
+error its own judge round caught: the count is **6 `low` / 2 `medium`**. `2e6f8fe` corrected the prose
+in `CODING_MEMORY.md` and here, and deliberately did **not** amend the subject away. Re-derived from
+the diff in session 50 rather than copied: the two `medium` risk rows are `3592a63` and `77102c4`, and
+the single `medium` confidence is `52b09c3`.
+
+**This section is the record #49 did not leave for itself**, written in session 50. Two things it got
+wrong about its own state, both worth knowing because they are how a close-out fails:
+
+- **It recorded every PR but its own.** A close-out PR cannot mark itself merged — it is merged after
+  its last commit — so each one leaves exactly this debt. #45 needed #46; #47 needed #49; #49 needed
+  this. **The regress was broken here** by committing these two edits straight to `main` as
+  documentation, which `git-guard`'s allowlist permits, instead of opening PR #50.
+- **A grep for `PR #49` or `post-merge-followups-47` matched nothing** in `CODING_MEMORY.md` or this
+  file before this section existed. Its *substance* was archived (the corrected 6/2 table, at
+  `CODING_MEMORY.md:4757`) but nothing named the PR, branch, or merge SHA — so the archive was
+  unreachable by the identifier a reader would search. **Archiving the lesson is not recording the
+  work**; a retrievable record needs the identifier in it.
+
+⚠️ **`git-guard` does not enforce the docs-only rule from a detached HEAD.** `on_main()` decides via
+`git rev-parse --abbrev-ref HEAD` (`hooks/git-guard.sh:91-100`), which returns `HEAD` when detached —
+so the main-branch allowlist never evaluates, and nothing guards a non-force `git push origin
+HEAD:main`. The docs-only scope of this commit was honoured by hand, not by hook. Recorded as a gap,
+not fixed here: a rule change belongs behind `triaging-new-instructions`.
