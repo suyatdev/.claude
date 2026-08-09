@@ -6,11 +6,18 @@ branch: feat/tracking-feature-state
 
 # Feature-state tracking with a browser UI
 
-Across this repo there are eight feature cards in four phases, three live worktrees, and a set of
-branches whose merge order is currently reconstructed by hand every session — session 46 wrote that
-survey as a markdown table into `.claude/session-state.md` and it went stale the same day. The
-information needed to build it is all mechanical: card frontmatter, checklist state, `git worktree
-list`, ahead/behind counts. Nothing derives it on demand.
+This repo carries more feature cards, phases and live worktrees than one session holds in its head —
+run `ls docs/features/*.md`, `awk '/^phase:/{print $2}' docs/features/*.md | sort -u` and
+`git worktree list` for the current spread. Every one of those counts moved during this feature's own
+implementation, which is the argument for the feature rather than an aside: the merge order across
+them is reconstructed by hand every session, and session 46 wrote that survey as a markdown table
+into `.claude/session-state.md` where it went stale the same day. The information needed to build it
+is all mechanical: card frontmatter, checklist state, `git worktree list`, ahead/behind counts.
+Nothing derives it on demand.
+
+**No count, line number, or phase tally is pinned anywhere in this card.** Two audit passes found nine
+factual defects here, every one of them a stored result that had gone stale — twice inside the
+corrections written to fix the previous round. Claims are written as derivations to re-run.
 
 This adds a skill that derives that survey for a given repo, writes it as a versioned run into a data
 file, and drives an **already-built** browser UI that renders it — with a control channel that lets
@@ -20,12 +27,16 @@ the UI drive the Claude session that launched it.
 
 Derivations, not pinned line numbers — re-run them, they move:
 
-- `grep -c '' .claude/session-state.md` against `git log -1 --format=%cr` on the same file — the
-  hand-written "Strand survey" table carries a date because it cannot be recomputed.
+- `.claude/session-state.md` is gitignored (`/.claude/`, `.gitignore:72`) and rewritten every session
+  by `hooks/live-handoff.sh`, so a survey written there has no history and no lifetime — session 46's
+  "Strand survey" table is already gone. A hand-maintained survey cannot live in the one file the
+  harness is designed to overwrite.
 - `ls docs/features/*.md | wc -l` vs. `grep -l '^phase: planning' docs/features/*.md` — the phase
   spread that `phase-guard.sh` depends on is only ever read one card at a time.
-- `git worktree list` — three worktrees, two of them holding branches for cards whose own frontmatter
-  says `branch: none`. That drift is exactly what the analysis is for.
+- `git worktree list` against `grep -l '^branch: *none' docs/features/*.md` — the two sets are
+  maintained independently and nothing cross-checks them. They may or may not conflict on any given
+  day, and that is the point: **nothing would report it if they did.** Criterion 2 therefore tests the
+  drift against a fixture rather than relying on this repo to keep exhibiting it.
 
 ## The output contract already exists — do not invent one
 
@@ -84,8 +95,8 @@ analyses and re-analyzing one are the same operation on different keys. Write at
 
 ### 3. Control server (`task-tracker/server.py`)
 
-Localhost only. This is the component the security section governs; it does not exist until task 1
-resolves how injection actually works.
+Localhost only. This is the component the Security section governs. Its send path is
+`cmux send --surface`, resolved — see §"Injection route".
 
 ### 4. Skill (`skills/tracking-feature-state/SKILL.md`)
 
@@ -94,21 +105,46 @@ stop the UI. Per `triaging-new-instructions` step 4 this is one skill because it
 the UI and server are its subject, not additional skills. It **points at**
 `managing-session-memory` for phase rules rather than restating them.
 
-## Injection is unproven — task 1 is a spike
+## Injection route: `cmux send --surface` — resolved, do not re-spike
 
-The chosen control model (UI → server → keys into the live session) has no working precedent here:
+The control model (UI → server → keys into the live session) **has** a working precedent here. This
+card's first draft claimed the opposite; that claim came from pooling function names across all four
+adapter files with `sort -u` and reading the union as a property of each — an artifact of the grep,
+not of the code.
 
-- Every adapter in `panes/adapters/` implements `send_launcher()` — *open a new pane and run a
-  command*. None sends input to an existing pane.
-- `TMUX` is unset in this environment (`TERM_PROGRAM=ghostty`), so `tmux send-keys` — the one clean
-  route — is unavailable as things stand.
-- `panes/handoff-wrapper.sh` records that the handoff spec **deliberately rejected** "pre-typed
-  keystroke tricks", so osascript keystroke injection would reverse a prior decision, not extend one.
+`panes/adapters/cmux.sh` `send_launcher()` sends to an **existing** surface:
 
-Task 1 therefore decides the route before anything is built on it, and has a defined fallback:
-**if no route survives the spike, the server degrades to serving commands for the UI to copy to the
-clipboard, and the feature still ships.** That fallback is not a lesser version of the feature; it is
-the same feature minus one verb.
+```sh
+"$CMUX_BIN" send ${WS_ARGS[@]+"${WS_ARGS[@]}"} --surface "$1" -- "bash $launcher_q\n"
+```
+
+and the pane-reuse branch is commented "v1-proven here (user-approved deviation 2026-07-21; the
+spec's intent is unchanged)". Tasks 8–10 build on that verb. **Task 1's spike has already run — the
+route is decided and re-running it is wasted work.**
+
+Two constraints ride along, both load-bearing for task 8:
+
+- **A stale ref may not error.** `cmux.sh` documents the resolution chain
+  `--tab` → `--surface` → `$CMUX_TAB_ID`/`$CMUX_SURFACE_ID` → **the focused tab**, with an
+  unresolvable ref falling through it *without erroring* — probe P6, proven live against
+  `surface:9999` at exit 0. ⚠️ That comment documents **`rename-tab`, not `send`.** `send` takes the
+  same `--surface` flag and very likely shares the chain, but no probe has shown that it does.
+  Task 8 must therefore (a) verify empirically whether `send` inherits the fall-through, and
+  (b) re-resolve and confirm the target surface at send time and **refuse** an unconfirmed ref
+  regardless of the answer. Keystrokes landing in the focused tab is the worst failure this feature
+  can have.
+- **The rejected routes stay rejected.** `TMUX` is unset here (`TERM_PROGRAM=ghostty`), so
+  `tmux send-keys` is not available; and `panes/handoff-wrapper.sh:5` records that the handoff spec
+  deliberately rejected "pre-typed keystroke tricks", so osascript keystroke injection would reverse a
+  prior decision rather than extend one. `cmux send` is the one sanctioned route.
+
+Still genuinely unproven, and worth 15 seconds on a scratch surface before task 8 starts: every proven
+use of `cmux send` targets a **shell prompt**. None targets a live Claude TUI.
+
+**Clipboard is a supported runtime mode, not a fallback.** `panes/terminal-detect.sh` prints `none`
+under SSH or headless (`terminal-detect.sh:14`), where no injection route exists by construction. In
+that mode the UI offers every allowlisted command as copyable text. That is the same feature minus one
+verb, and criterion 8 tests it as a first-class path rather than a degradation.
 
 ## Security
 
@@ -125,12 +161,30 @@ this repo has ever exposed, so it is default-deny:
   cross-origin POST — it only hides the response. A required non-simple header forces a preflight
   that the server refuses. Also reject on `Origin`/`Sec-Fetch-Site` mismatch.
 - **Bound lifetime.** The server exits with the session and on idle timeout; no daemon, no launchd.
+- **Confirm the target surface at send time**, per §"Injection route" — refuse an unconfirmed ref
+  rather than risk keystrokes reaching the focused tab.
 - Port comes from `allocating-local-ports` and is recorded in `PORTS.md` before first bind.
+
+**What this feature does and does not add to the threat model.** The cmux socket has no
+authentication beyond its `0600` permission, so surface injection is *already* available to any
+process running as this user — this feature does not create that exposure. What it does create is the
+**HTTP hop**: a network-reachable endpoint in front of a capability that was previously reachable only
+by a local process holding the user's uid. Every bullet above defends that hop specifically. None of
+them is redundant with the socket's file permission, and none may be weakened on the argument that
+"injection was possible anyway."
 
 ## Acceptance criteria
 
-1. **Given** a repo with N feature cards, **when** the analyzer runs, **then** `features[]` has N
-   entries and each `meta` matches `feature_tasks.py`'s own done/total count for that card.
+1. **Given** a **named working tree** — the criterion must name which one, because the main checkout
+   and each worktree hold different card sets — **when** the analyzer runs against it, **then**
+   `features[]` has exactly one entry per `docs/features/*.md` file *in that tree* whose frontmatter
+   carries a `phase:` key (a split `<name>.spec.md` half carries none and is not a card), and each
+   `meta` is `"<done>/<total>"` where `total` is `len(task_ids(...))` from `hooks/lib/feature_tasks.py`
+   and `done` is the count of `[xX]` markers on the same `STRICT_RE`-matched lines.
+   ⚠️ `feature_tasks.py` has no done/total of its own to compare against: `identity()` deliberately
+   consumes only `match.group(1)`, the text *after* the bracket, so task identity survives a tick.
+   The done count is therefore read off the raw matched lines, by this feature, using that module's
+   regex — one parser still holds.
 2. **Given** a card whose frontmatter says `branch: none` while a worktree holds a branch named for
    it, **then** that drift appears in `questions[]` — not silently resolved in either direction.
 3. **Given** two analyses of different directories, **then** both persist in `runs[]` and switching
@@ -143,28 +197,37 @@ this repo has ever exposed, so it is default-deny:
    server responds 403 and **no command reaches the session**.
 7. **Given** a cross-origin POST from a page the user did not open, **then** it is rejected on the
    preflight or the Origin check.
-8. **Given** the spike's fallback path, **then** the UI still renders every run and still offers each
-   allowlisted command — as clipboard text rather than injection.
+8. **Given** a host where `panes/terminal-detect.sh` prints `none` (SSH, headless), **then** the UI
+   still renders every run and still offers each allowlisted command — as copyable text rather than
+   injection.
+9. **Given** a `send` whose target surface ref no longer resolves, **then** the server refuses and
+   reports, and **no keystroke reaches any surface** — specifically not the focused one.
 
 ## Tasks
 
-- [ ] 1 — **Spike:** determine whether keys can be sent to this live session (cmux exec verb? a tmux
-      server started under Ghostty? Ghostty AppleScript?). Time-box it. Record the answer and the
-      chosen route in `## Verification`; if none works, mark the fallback in criterion 8 as the
-      shipping path and say so explicitly. **No other task starts first.**
-- [ ] 2 — Vendor the UI: copy the Nocturne export to `task-tracker/`, preserving `_ds/`. Verify the
+- [x] 1 — **Spike — done, do not re-run.** Route is `cmux send --surface`; see §"Injection route" for
+      the evidence, the two constraints it carries, and the one probe still outstanding (`send` into a
+      live Claude TUI, owed before task 8).
+- [x] 2 — Vendor the UI: copy the Nocturne export to `task-tracker/`, preserving `_ds/`. Verify the
       copied `Task Tracker.dc.html` opens and renders from the bundled `tracker-data.js`.
-- [ ] 3 — `task-tracker/analyze.py`: features + branches only, importing `hooks/lib/feature_tasks.py`.
+- [x] 3 — `task-tracker/analyze.py`: features + branches only, importing `hooks/lib/feature_tasks.py`.
       Emit schema-valid JSON. No waves yet.
-- [ ] 4 — `task-tracker/analyze.test.py`: criteria 1 and 2 against a fixture repo, not this one.
-- [ ] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader and the
+      - `analyze.py` is over the 400-line target though under the 800 hard max (`wc -l` it). The clean
+        split is a `task-tracker/git_facts.py` holding the worktree/ahead-behind/dirty readers. **Not
+        scheduled** — a structural split is a human-owned call, not a drive-by; raise it if the file
+        grows again.
+- [x] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo, not this one.
+      (Named `test_*.py`, not `*.test.py` — pytest collects only the former.)
+- [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader and the
       "undetectable dependency becomes a question" rule.
-- [ ] 6 — `task-tracker/store.py`: atomic emit of `tracker-data.js`, run upsert by id. Criteria 3-5.
+- [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`: atomic emit of `tracker-data.js`,
+      run upsert by id. Criteria 3-5.
 - [ ] 7 — `PORTS.md` entry for the control server, per `allocating-local-ports`, before any bind.
-- [ ] 8 — `task-tracker/server.py`: localhost bind, token, allowlist, custom-header requirement.
-      Route from task 1.
-- [ ] 9 — `task-tracker/server.test.py`: criteria 6 and 7, including the negative cases. A test that
-      only proves the happy path does not close this task.
+- [ ] 8 — `task-tracker/server.py`: localhost bind, token, allowlist, custom-header requirement, and
+      send-time surface confirmation. Route is settled (task 1); run the outstanding Claude-TUI probe
+      first.
+- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7 and 9, including the negative cases. A test
+      that only proves the happy path does not close this task.
 - [ ] 10 — Wire the UI's command buttons to the server (or clipboard, per task 1).
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`, following
       `skills/_standards/authoring-skills-and-agents.md`. Points at `managing-session-memory`; does
@@ -185,78 +248,36 @@ this repo has ever exposed, so it is default-deny:
 
 ## Verification
 
-_(to be filled during implementation — spike result and chosen injection route first, then
-before/after test counts per suite)_
+**Task 1 — injection route.** Resolved: `cmux send --surface`, evidence in §"Injection route". One
+probe remains outstanding and is owed before task 8 opens: `cmux send` into a live **Claude TUI**, as
+every proven use to date targets a shell prompt.
 
-## Card corrections required (found by lanes A and D, verified by the orchestrator)
+**Tasks 2–6 suites.** `uv run --with pytest --no-project pytest task-tracker/ -q` → **53 passed**
+(re-run 2026-08-09 during the spec revision; this is the only invocation that works here, as there is
+no system pytest). Re-run the command rather than trusting this number.
 
-Four factual errors in this card, all of the same species — **a fact asserted from a grep I did not
-falsify**. Per the standing rule about repeat findings of one class, the fix is to re-derive every
-factual claim here, not to patch these four. That audit is the next task.
+⚠️ **Task 13 must not use a bare `pytest -q`.** `addopts` in `pyproject.toml` deselects the `golden`
+and `measurement` marks, so the bare invocation reports green while those suites are unrun. Capture
+before-counts per suite, with marks explicitly re-enabled, before touching anything — otherwise a
+pre-existing failure reads as a regression introduced by this feature.
 
-1. **"Injection is unproven" is wrong.** `send_launcher()` (`panes/adapters/cmux.sh:163-165`) sends to
-   an *existing* surface via `cmux send --surface`, and the reuse branch (`cmux.sh:302-312`) is
-   commented "v1-proven here (user-approved deviation 2026-07-21)". My original claim came from
-   pooling function names across all four adapter files with `sort -u` — an artifact of the grep, not
-   a property of the code. `cmux send` exists and is documented.
-2. **Evidence bullet 3 is stale.** There are now 6 worktrees, exactly 2 cards say `branch: none`
-   (`falsify-harness-signatures`, `verification-marker-gate`), and **no worktree branch is named for
-   either** — so criterion 2's drift scenario does not currently occur in this repo. The test builds
-   it in a fixture, which is correct; the *evidence* bullet overclaimed.
-3. **Criterion 1 overstates `feature_tasks.py`.** That module deliberately discards the checkbox
-   marker (`feature_tasks.py:11-14`) because task identity must survive a tick — so it has no
-   done/total to match. Reword to: total from `task_ids()`, done read off the same `STRICT_RE`-matched
-   lines. One parser still holds.
-4. **Test filenames cannot be collected.** Tasks 4, 6 and 9 name `*.test.py`; pytest collects
-   `test_*.py`. Implemented as `test_analyze.py` / `test_store.py`; task 9 must be reworded before
-   anyone starts it.
+## Revision history
 
-Also open: `analyze.py` is 792 lines — under the 800 hard max, over the 400 target. The clean split is
-a `task-tracker/git_facts.py`, which needs an explicit ownership grant.
+**2026-08-09 (session 49) — nine defects repaired, corrections sections removed.** Two audit passes
+(sessions 47 and 48) found nine factual errors in this card, every one the same species: a stored
+result that went stale, twice inside the corrections written to fix the previous round. All nine are
+fixed in the body above and the corrections sections are deleted — a spec plus a list of ways the spec
+is wrong is two documents disagreeing, and a reader cannot tell which to believe. Git holds the
+detail; `a854e99` is the last commit carrying the unrepaired text.
 
-Security addition for task 8, from the spike: `cmux.sh:168-172` records that an unresolvable ref falls
-through to the **focused** tab without erroring. Task 8 must re-resolve and verify the target surface
-at send time and refuse rather than send an unconfirmed ref. Separately — the cmux socket has **no
-authentication** beyond its 0600 permission, so injection is already available to any process running
-as the user; the new risk this feature introduces is the HTTP hop, which is what the Security section
-above defends. Do not weaken any of it.
+The structural fix, applied throughout: **claims are written as derivations to re-run, not as stored
+counts or line ranges.** The one number retained above is stamped with the date it was measured and
+the command that reproduces it.
 
-### Second audit pass (session 48) — five more, same species
-
-The re-derivation the section above called for has now run: every factual claim in this card was
-re-checked against the repo. Five more failed. **Two of them are defects in the corrections above** —
-the correction stored a count and a line range that have already gone stale, which is the strongest
-available argument for storing the derivation rather than its result.
-
-5. **Evidence bullet 1 cannot be run at all.** `.gitignore` ignores `/.claude/`, so
-   `.claude/session-state.md` is untracked and `git log -1 --format=%cr` on it prints nothing. The
-   bullet asks a reader to compare a line count against a commit date that does not exist. The
-   "Strand survey" table it cites is also gone — `live-handoff.sh` rewrites that file every session.
-6. **All three numbers in the opening paragraph are wrong.** Re-derive: `ls docs/features/*.md` → 14
-   files but **13 cards** (`memory-system-split.spec.md` is a split half carrying no `phase`);
-   `awk '/^phase:/{print $2}' docs/features/*.md | sort -u` → **three** phases, not four;
-   `git worktree list | wc -l` → **6** worktrees, not three.
-7. **Correction 2 above is itself already stale.** It asserts "exactly 2 cards say `branch: none`";
-   `grep -l '^branch: *none' docs/features/*.md` now returns **3** — `pane-dispatch-model-flag` joined
-   them and is still untracked in the main checkout. Its *conclusion* survives (no worktree branch is
-   named for any of the three), which is exactly why the conclusion belongs in the card and the count
-   does not.
-8. **Correction 3 above cites the wrong lines.** It pins the marker discard to
-   `hooks/lib/feature_tasks.py:11-14`; those lines are docstring prose. The mechanism is `STRICT_RE`
-   (`:37`) capturing only group 1 — the text *after* the bracket — consumed at `:75` via
-   `match.group(1)`, with `identity()` (`:51`) and `task_ids()` (`:57`) around it. Cite the mechanism,
-   not the range.
-9. **"N feature cards" is checkout-dependent.** The main checkout and this worktree each hold 14 card
-   files, but not the *same* 14: main has an untracked `pane-dispatch-model-flag.md` and no
-   `tracking-feature-state.md`; here it is the reverse. Criterion 1 must name which working tree it
-   means, or it cannot be falsified.
-
-Re-derived this pass and **confirmed still true** — do not re-litigate: the `STRICT_RE` text (`:37`);
-`TMUX` unset under `TERM_PROGRAM=ghostty`; `panes/handoff-wrapper.sh:5` rejecting pre-typed keystrokes;
-all three `cmux.sh` citations used in correction 1 and in the security addition; `analyze.py` at 792
-lines; `test_analyze.py` / `test_store.py` shipped and collecting.
-
-**GATE: Spec change needed — switch back to the high-tier model to revise.** Nine recorded defects
-(four in the spec body, five found this pass, two of those inside the corrections themselves) cannot
-be repaired from inside `phase: implementation`. No further task starts until that revision is
-authorized.
+One defect was found *in the audit itself* during this revision and is recorded here rather than
+silently dropped: the audit asserted that tasks 4, 6 and 9 named uncollectable `*.test.py` files.
+Tasks 4 and 9 did; **task 6 never did** — it names `store.py`, an implementation file. The correction
+inherited "6" from the adjacent list without re-reading the task. Separately, the audit attributed
+cmux's non-erroring ref fall-through to `send`; the source comment documents it for **`rename-tab`**.
+That distinction is now carried explicitly into §"Injection route" and criterion 9, because assuming
+`send` shares the chain is the same unfalsified-inference error a third time.
