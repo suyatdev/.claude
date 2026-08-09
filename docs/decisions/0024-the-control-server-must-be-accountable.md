@@ -42,6 +42,13 @@ mechanism rather than an intention.**
   the real worst case half an hour of an orphaned full-permission control channel. That is the same
   unspecified-timeout mistake this feature had already written down and then made again one control
   later.
+- **A launch contract, because two of the controls above are inert without it**: the server runs as a
+  **non-detached child** of the session process with **`stderr` inherited**. Neither clause is
+  incidental. Detached, `getppid()` never changes and the parent-death check silently never fires;
+  with `stderr` redirected, the audit log is written and reaches nobody. Each failure leaves a green
+  suite next to a control that does nothing — exactly what this ADR exists to refuse — so the contract
+  is recorded here rather than only in the card, where an implementer reading the ADR alone would miss
+  it.
 
 ## Alternatives rejected
 

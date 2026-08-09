@@ -319,7 +319,7 @@ back** — an error body that reflects input is a free XSS gadget:
 |---|---|---|
 | `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
 | `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch |
-| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it, `tracker-data.js` before the first analysis, and **`/favicon.ico`**, which every browser requests unprompted and which is deliberately not served (criterion 13 carves it out as the one expected `404`) |
+| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it, `tracker-data.js` before the first analysis, and **`/favicon.ico`**, which every browser requests unprompted and which is deliberately not served. Both of those paths are **expected** `404`s and appear as such in criterion 13's run-(a) table; they are the only two |
 | `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
 | `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
@@ -638,27 +638,51 @@ and nothing above would notice.
     it must produce `sent=no` and invoke `cmux` **zero** times.
 13. **Given** a running server and **two runs, one per store state** — the check that replaces four
     rounds of trying to derive the manifest by searching — **when** the page is loaded from
-    `http://127.0.0.1:<port>/` and every request it issues at runtime is enumerated, **then** in both
-    runs every request returns `200` except `/favicon.ico`, **no other request returns `404`**, and
+    `http://127.0.0.1:<port>/` and every request it issues at runtime is enumerated, **then** the
+    observed set **equals** that run's expected set below, path for path and status for status, and
     **no request goes to a host other than `127.0.0.1`**.
 
-    **(a) First-run state — `tracker-data.js` absent.** `tracker-data-fallback.js` must request
-    `tracker-data.sample.js` and the UI must render the sample.
-    **(b) Populated state — `tracker-data.js` present.** The UI must render from it, and
-    `tracker-data.sample.js` must **not** be requested.
+    ⚠️ **The pass condition is set equality, not the absence of `404`s — and that correction is what
+    this round is.** Four rounds patched this criterion's *precondition* and left its pass condition an
+    unexamined negative universal ("every request returns `200` except `/favicon.ico`"), which the
+    round-5 revision falsified in the same commit that wrote it: run (a) moves `tracker-data.js` aside,
+    `Task Tracker.dc.html:15` requests it unconditionally, and §Design 3 correctly answers `404` —
+    so a correct server failed run (a) on its first request. This card withdrew one unsatisfiable
+    instruction in the same commit that created another, which is the argument for enumerating rather
+    than negating. Set equality also closes the other direction the negative form never covered: an
+    **unexpected `200` fails too**, so a server that quietly widens its manifest is caught.
 
-    ⚠️ **Run (a) is the entire point and it is the one a single run silently skips.** The shim returns
-    early when data exists (`tracker-data-fallback.js:16`), and `tracker-data.js` is present in this
-    tree today — so a criterion pinned only to the populated state never requests
-    `tracker-data.sample.js` at all, and a server that `404`s it passes. That file is the exact row
-    four rounds of greps missed. A runtime check with the wrong precondition reproduces the same
-    blind spot the greps had, in a shape that looks stronger. Create the first-run state by moving
-    `tracker-data.js` aside, not by editing it.
+    **(a) First-run state — move `tracker-data.js` aside; do not edit it.**
 
-    **`/favicon.ico` is carved out explicitly** because the browser requests it unprompted, it is on
-    no manifest, and the wire contract's own default correctly `404`s it — so an unqualified "no
-    request returns `404`" is unsatisfiable against a real browser. It is the one expected `404`;
-    any other is a failure.
+    | Request | Expected |
+    |---|---|
+    | `/` | `200` |
+    | `/support.js` | `200` |
+    | `/_ds/nocturne-<uuid>/styles.css` | `200` |
+    | `/_ds/nocturne-<uuid>/_ds_bundle.js` | `200` |
+    | `/tracker-data.js` | **`404`** — absent is the normal first-run path, the stated exception to `asset_unreadable` in §Design 3 |
+    | `/tracker-data-fallback.js` | `200` |
+    | `/tracker-data.sample.js` | `200` — requested **only** here, via `document.write` at `tracker-data-fallback.js:19` |
+    | `/favicon.ico` | `404` — every browser requests it unprompted, it is on no manifest, and the contract's default correctly refuses it |
+    | each of task 14's vendored assets | `200` |
+
+    …and `window.TRACKER_DATA_SOURCE === 'sample'`, with the UI rendering the sample.
+
+    **(b) Populated state — `tracker-data.js` present.** The same set with two changes:
+    `/tracker-data.js` → `200`, and **`/tracker-data.sample.js` absent from the observed set
+    entirely** (the shim returns early at `tracker-data-fallback.js:16`). The UI renders from the
+    generated file.
+
+    ⚠️ **Run (a) is the one a single run silently skips**, and it is why two runs exist. `tracker-data.js`
+    is present in this tree today, so a criterion pinned only to state (b) never requests
+    `tracker-data.sample.js` at all and a server that `404`s it passes — that file is the exact row
+    four rounds of greps missed. A runtime check with the wrong precondition reproduces the greps'
+    blind spot in a shape that looks stronger.
+
+    **The vendored row is completed by task 14 before this criterion runs**, with the exact paths it
+    wrote, appended to the §Design 3 manifest. Set equality is only as good as that completion: an
+    incomplete list here fails the run rather than passing it silently, which is the intended
+    direction of the error.
 
     **Mechanism — an agent-run verification, not a `pytest` test, and the card says so rather than
     implying otherwise.** Drive the page with the Claude browser extension and enumerate requests with
@@ -703,7 +727,9 @@ and nothing above would notice.
       - Port is **8422**, `TASK_TRACKER_PORT` overrides. Picked clear of the 8000-8100 block other
         projects own; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at allocation. Task 8 reads the
         number from `PORTS.md`, it is not re-decided there.
-- [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
+- [ ] 8 — **Task 14 runs immediately after this one, before 9 and 10** — it keeps its number for
+      reference stability, not its position; read that entry before starting 9.
+      `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
       from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to **the
       manifest table in §Design 3** (an explicit list — `_ds/` enumerated, not globbed; do not
       re-derive it by grep, and let criterion 13 tell you if it is wrong), the three-row allowlist,
@@ -723,6 +749,12 @@ and nothing above would notice.
       **Criterion 13 is deliberately not in that list** — it is an agent-run browser verification, not
       a pytest test, and belongs to task 14. Do not write a source-search stand-in for it here; that
       stand-in is the thing four rounds of judging removed.
+      - **The contract table carries two `500` rows** — `reanalyze_failed` and `asset_unreadable` —
+        so "each status code" is satisfied by neither on its own. Assert `asset_unreadable`
+        separately: make a manifest member unreadable, require `500`, an audit line naming the path
+        and `errno`, and **no filesystem detail in the body**. It arrived in round 5 with nothing
+        exercising it — the same shape as the audit log and the parent-death check before it, a
+        control shipped by the round that was fixing the previous one and left unasserted.
       - Criterion 10 must assert **every** clause it lists — the token absent from files, argv, child
         environments **and the captured stderr**, and present exactly once in the served HTML
         alongside `no-store` and the CSP. Capture the server's stderr for the whole test and include
