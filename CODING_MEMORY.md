@@ -4740,3 +4740,50 @@ not run unattended, needs an operator with the extension connected).
 probe still owed since round 2; `writing-specs/good-bad-edge-cases` cited in two consecutive rounds
 (4 and 5) on different instances. ADR 0024 written and then corrected in the same session — it had put
 the parent-death check on the idle timer and left the tick unnamed.
+
+## 2026-08-09 — session 55: round 6, and the defect moves from the precondition to the pass condition
+
+Compliance round 6 on `docs/features/tracking-feature-state.md`: **fail, one violation**, and it is
+`writing-specs/good-bad-edge-cases` for the **third consecutive round** — each time a new instance of
+the same class. Escalated to the user rather than auto-revised, as session 54 pre-committed to doing.
+
+**The finding.** Round 5's fix made criterion 13 run in both store states. Run (a) moves
+`tracker-data.js` aside — but `Task Tracker.dc.html:15` requests that file unconditionally, and the
+*same commit* added the wire-contract rule that a missing `tracker-data.js` answers `404` while
+criterion 13 forbade any `404` but `/favicon.ico`. **A correct implementation failed run (a) on its
+first request.** Both judges reached it independently from different rubrics.
+
+**Why it kept recurring, which is the part worth keeping.** Every round patched criterion 13's
+*precondition* and left its *pass condition* unexamined. The pass condition was a negative universal —
+"every request returns `200` except `/favicon.ico`" — and nobody re-reads a negative universal when
+the precondition moves. Sharper still: `126f5eb` **withdrew** the old "run criterion 13 before task
+14" instruction for being unsatisfiable, wrote down why that shape is dangerous ("a criterion whose
+first directed run must fail is one that gets weakened until it passes"), and then created the same
+shape four paragraphs earlier.
+
+**The fix (user decision: fix the class, not the instance).** Both judges named a sufficient
+one-clause patch — add `/tracker-data.js` to run (a)'s allowed-`404` list. The user rejected it for
+the same reason the round-3 escalation rejected a fifth narrowing of the grep. Criterion 13's pass
+condition is now **set equality** against an explicit per-run table of expected path → expected
+status. This also closes a direction the negative form never covered: an **unexpected `200` fails
+too**, so a server that quietly widens its manifest is caught.
+
+**Two derived surfaces moved with it, both easy to miss.** Line 322 said criterion 13 carves out "the
+one expected `404`" — the new table makes it two, so that line would have gone stale *inside the
+commit fixing what it describes*. And `support.js:158` issues a second token-bearing `GET /` only
+while `window.__resources` is undefined; task 14 defines it, so it is correctly out of a criterion
+that runs after task 14. Verifying that row rather than assuming it is what kept the new table from
+being a fifth instance of this class.
+
+**The recurring defect recurred a fourth time, mildest form yet:** round 5's new `500
+asset_unreadable` row had nothing exercising it — task 9's "each status code in the contract table"
+was satisfiable by `reanalyze_failed` alone, since the table carries two `500` rows. Task 9 now
+asserts it separately. ADR 0024 also gained the launch contract (non-detached child, `stderr`
+inherited); it had the 5-second poll correction but not this, so an implementer reading only the ADR
+would build both lifetime controls silently inert.
+
+**Still open at the end of session 55:** round 7 not yet dispatched; the `cmux send` → live Claude TUI
+probe still owed since round 2; the card is 933 lines, a fifth consecutive growth round, and both
+judges have now flagged the trend — a compaction pass is owed before the branch lands. The main
+checkout's three misrouted `statusline-followups` verdict rows are still unreconciled, deferred by
+the user until the card passes.
