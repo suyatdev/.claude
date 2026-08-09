@@ -4571,3 +4571,46 @@ Ended on **GATE: Spec change needed**. `managing-session-memory` forbids repairi
 inside `phase: implementation` — the errors get noted and the gate gets raised, and that is where this
 session stops. Tasks 1-6 remain unticked on purpose: ticking a checklist whose criteria are known
 wrong records progress against a spec nobody has agreed to yet.
+
+## 2026-08-09 — session 49: the spec revision the gate was holding
+
+Session 48 ended on **GATE: Spec change needed** with nine recorded defects in
+`docs/features/tracking-feature-state.md`. The user authorized repairing the card in place rather than
+flipping to `phase: planning` and re-gating — the phase gate exists to stop *silent* spec drift, and
+an explicitly authorized correction pass is its opposite. Committed as `1ac0e5e`, pushed.
+
+All nine repaired, and the two `## Card corrections required` sections deleted. Deleting them was the
+point, not tidiness: a spec plus a list of ways the spec is wrong is two documents disagreeing, and a
+reader cannot tell which one to believe. Git holds the detail — `a854e99` is the last commit carrying
+the unrepaired text.
+
+The structural fix applied throughout: **claims are written as derivations to re-run, not as stored
+counts or line ranges.** The single retained number (53 tests) is stamped with its measurement date
+and the command that reproduces it.
+
+**Two defects found in the audit itself**, while repairing the audit's findings — the third
+consecutive round of this species:
+
+- The audit said tasks 4, 6 and 9 named uncollectable `*.test.py` files. Tasks 4 and 9 did; **task 6
+  never did** — it names `store.py`, an implementation file. The correction inherited "6" from the
+  adjacent list without re-reading the task it was correcting.
+- The audit attributed cmux's non-erroring ref fall-through to `send`. The source comment
+  (`panes/adapters/cmux.sh`, above `rename_tab`) documents it for **`rename-tab`**, proven by probe P6
+  against `surface:9999` at exit 0. `send` takes the same `--surface` flag and plausibly shares the
+  resolution chain, but nothing has shown that it does.
+
+That second one is the same unfalsified-inference error that produced the original "injection is
+unproven" claim — a property read off an adjacent function and asserted of this one. It is now carried
+explicitly into the card as an open question for task 8 (new criterion 9: refuse an unconfirmed ref,
+and empirically determine whether `send` inherits the fall-through) rather than resolved by assumption
+in either direction.
+
+Verified this session rather than transcribed from the handoff: `cmux send --surface` at
+`panes/adapters/cmux.sh:163-164`; `feature_tasks.py` exposing `STRICT_RE`/`identity()`/`task_ids()`
+with no done/total of its own; `terminal-detect.sh:14` printing `none`; `handoff-wrapper.sh:5`;
+`TMUX` unset under `TERM_PROGRAM=ghostty`; `.gitignore:72`; and the suite at 53 passed via
+`uv run --with pytest --no-project pytest task-tracker/ -q`.
+
+Card now sits at `phase: implementation` with tasks 1-6 ticked and task 7 (`PORTS.md` entry) next.
+The compliance-judge gate has still never run on this card, and it is now owed twice over — the
+spec-compliance gate fires after *any* spec edit.
