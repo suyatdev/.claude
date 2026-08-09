@@ -4539,7 +4539,7 @@ any count. Content confirmed intact; only the stray line was removed.
   `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
   root README Roadmap line.
 
-## 2026-08-09 — session 46: the monitor earned its keep
+## 2026-08-09 — session 47: the monitor earned its keep
 
 Review phase, `feature/memsearch-freshness`, PR #45 open. No code changed. The one open review-phase
 item — R9's re-check monitor — became actionable and was run. Detail in
