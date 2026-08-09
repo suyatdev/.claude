@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: planning
 model_tier: high
 branch: feat/tracking-feature-state
 ---
@@ -15,9 +15,12 @@ into `.claude/session-state.md` where it went stale the same day. The informatio
 is all mechanical: card frontmatter, checklist state, `git worktree list`, ahead/behind counts.
 Nothing derives it on demand.
 
-**No count, line number, or phase tally is pinned anywhere in this card.** Two audit passes found nine
-factual defects here, every one of them a stored result that had gone stale — twice inside the
-corrections written to fix the previous round. Claims are written as derivations to re-run.
+**No count, test total or phase tally is pinned anywhere in this card**, and every code citation
+carries the command that re-finds it, so a line that moves is detectable instead of quietly wrong.
+Three audit passes and a compliance round found ten factual defects here, every one of them the same
+species — a stored result that had gone stale — twice inside the corrections written to fix the
+previous round. Claims are written as derivations to re-run. Measurements that must be recorded
+(test counts, tool versions) are stamped with their date and their reproducing command.
 
 This adds a skill that derives that survey for a given repo, writes it as a versioned run into a data
 file, and drives an **already-built** browser UI that renders it — with a control channel that lets
@@ -27,7 +30,7 @@ the UI drive the Claude session that launched it.
 
 Derivations, not pinned line numbers — re-run them, they move:
 
-- `.claude/session-state.md` is gitignored (`/.claude/`, `.gitignore:72`) and rewritten every session
+- `.claude/session-state.md` is gitignored (`grep -n '^/\.claude/' .gitignore`) and rewritten every session
   by `hooks/live-handoff.sh`, so a survey written there has no history and no lifetime — session 46's
   "Strand survey" table is already gone. A hand-maintained survey cannot live in the one file the
   harness is designed to overwrite.
@@ -40,15 +43,21 @@ Derivations, not pinned line numbers — re-run them, they move:
 
 ## The output contract already exists — do not invent one
 
-`/Users/marksuyat/Other\ Docs/AI/AI_Projx/Task Progress Analysis UI` holds a Nocturne design-system
-export: `Task Tracker.dc.html`, `Task Tracker Directions.dc.html` (a 4-direction options canvas),
-`nocturne.css`, `support.js`, `_ds/`, and `tracker-data.json` — **`task-tracker v0.4.1`, schema
-`version: 1`**. Its own `github.md` records that it was modeled on real features in this repo by
-reading `hooks/lib/feature_tasks.py` vocabulary.
+A Nocturne design-system export supplies the UI and the schema: `Task Tracker.dc.html`,
+`Task Tracker Directions.dc.html` (a 4-direction options canvas), `nocturne.css`, `support.js`,
+`_ds/`, and `tracker-data.json` — **`task-tracker v0.4.1`, schema `version: 1`**. Its own
+`github.md` records that it was modeled on real features in this repo by reading
+`hooks/lib/feature_tasks.py` vocabulary.
 
-⚠️ That directory is under `Other\ Docs` — a sibling of `Other Docs` whose name contains a **literal
-backslash**. Both exist in `$HOME`. Every path reference must be single-quoted with the one backslash
-intact, or it silently resolves to the wrong (space-named) directory, which has no such project.
+**The export is already vendored** (task 2) and lives at `task-tracker/`. Nothing in this feature
+reads the original export directory again, so no path to it is recorded here — it is
+machine-specific and would be a stale absolute path in a committed file within a week. If a
+re-vendor is ever needed, set `TRACKER_UI_SOURCE` to the export directory and copy from there.
+
+⚠️ If you do set `TRACKER_UI_SOURCE` on this machine, note that its parent is a directory whose
+name contains a **literal backslash**, sitting beside a similarly-named one that uses a space.
+Both exist in `$HOME`. Quote the value and keep the backslash intact, or it silently resolves to
+the space-named directory, which has no such project.
 
 The analyzer emits objects conforming to that schema. Read it, do not redesign it:
 
@@ -70,7 +79,40 @@ leading integer before the em dash. Reuse that module — do not write a second 
 
 ## Design
 
-Four components, in dependency order.
+Four components, in dependency order. The dashed edge is the only one that existed before this
+feature; every solid edge from the browser rightward is new, and `server.py` is the whole of the
+new trust boundary.
+
+```mermaid
+flowchart LR
+    subgraph browser["Browser - untrusted execution"]
+        UI["Task Tracker UI"]
+    end
+
+    subgraph srv["server.py - the new trust boundary"]
+        GATE["Gate: Origin, token, header, allowlist"]
+        SEND["Send: re-resolve surface, refuse if unconfirmed"]
+    end
+
+    subgraph host["Host - already reachable by any process with this uid"]
+        SOCK["cmux socket, mode 0600, no auth"]
+        SESSION["Claude session, full tool permissions"]
+    end
+
+    STORE["tracker-data.js - committed, holds no secret"]
+
+    STORE -.->|"script tag, read-only"| UI
+    UI -->|"GET / - token injected into this response"| GATE
+    UI -->|"POST /command"| GATE
+    GATE -->|"403 and nothing sent"| UI
+    GATE --> SEND
+    SEND -->|"cmux send --surface"| SOCK
+    SEND -->|"409 if ref did not re-resolve"| UI
+    SOCK --> SESSION
+```
+
+The socket-to-session edge is pre-existing exposure this feature does not widen. What it adds is
+the browser-to-server edge — see §Security, whose every bullet defends that edge specifically.
 
 ### 1. Analyzer (`task-tracker/analyze.py`)
 
@@ -86,6 +128,21 @@ Pure read. Given a repo root, produce one `run` object:
   inferred from prose. **An undetectable dependency must surface as a `questions[]` entry, not as a
   confident ordering** — a wrong merge order is worse than an admitted gap.
 
+**Failure behaviour — the analyzer degrades, it never guesses and never dies mid-repo.** Every case
+below yields a `questions[]` entry naming the input and the failure, and the run still emits:
+
+| Condition | Detected by | Behaviour |
+|---|---|---|
+| Target is not a git repo | `git rev-parse --show-toplevel` exits non-zero | Abort *this run* with a non-zero exit and a message naming the path. Nothing is written; a partial run is worse than no run. |
+| `git worktree list` / `for-each-ref` / `rev-list` exits non-zero | non-zero return | `branches[]` omits the affected entry; a `questions[]` entry records the command, its exit code, and its stderr. Other branches still resolve. |
+| Branch has no upstream | `rev-list --left-right --count` fails, or `@{u}` unresolvable | `ahead`/`behind` are `null` — **not** `0`, which would falsely read as "in sync". `note` says no upstream. |
+| Frontmatter malformed or unparseable | YAML error, or no `phase:` key | File is not a card and is skipped (criterion 1 already requires a `phase:` key). A YAML *error* on a file that does have `phase:` becomes a `questions[]` entry naming the file and the parse error. |
+| Checklist line matches `STRICT_RE` but has no leading integer | `identity()` yields no id | Task counts toward `total`, gets no id, and a `questions[]` entry names the card and the line text. |
+
+`null` versus `0` is the load-bearing distinction in that table: this feature exists to report merge
+order, and a branch silently reported as "0 behind" when its upstream could not be read is exactly
+the wrong answer to the question the feature was built to answer.
+
 ### 2. Store + emit (`task-tracker/tracker-data.js`)
 
 The UI loads `tracker-data.js`, not the JSON. Emit `window.TRACKER_DATA = {...}`. Runs are keyed by
@@ -93,10 +150,83 @@ The UI loads `tracker-data.js`, not the JSON. Emit `window.TRACKER_DATA = {...}`
 analyses and re-analyzing one are the same operation on different keys. Write atomically (temp file +
 `os.replace`) so a crashed run cannot truncate the store.
 
+This file is git-tracked and world-readable, and it **carries no secret** — the store module has no
+access to the token by construction, since the token exists only inside the running server process
+(§Security). Criterion 10 asserts this rather than trusting it.
+
 ### 3. Control server (`task-tracker/server.py`)
 
 Localhost only. This is the component the Security section governs. Its send path is
 `cmux send --surface`, resolved — see §"Injection route".
+
+**The server also serves the UI**, and that is a security decision rather than a convenience: the
+user opens `http://127.0.0.1:8422/`, not the `.dc.html` file. Two consequences that no other design
+gives us — the token is injected into the served HTML at request time and **never written to disk in
+any form**, and the UI is *same-origin* with `/command`, so the `Origin` check compares against one
+exact string instead of having to accept the `null` that every `file://` page sends. Opening the
+vendored file directly still works and is criterion 8's path; it simply has no control channel,
+which is the honest outcome on a host with no injection route anyway.
+
+#### Wire contract
+
+Exactly two routes. Anything else is `404`. This contract is what task 10 wires the UI against, so
+it is fixed here rather than improvised there.
+
+**`GET /`** → `200`, `Content-Type: text/html`. Serves the vendored `Task Tracker.dc.html` with one
+substitution: `<meta name="tracker-token" content="TOKEN">` injected into `<head>`. Static assets
+(`nocturne.css`, `support.js`, `_ds/**`, `tracker-data.js`) are served from `task-tracker/` under
+their own paths, read-only, with path traversal rejected — resolve the request path and require the
+result stay under `task-tracker/`, `403` otherwise. **No other file is reachable**; the process must
+not serve the repo root.
+
+**`POST /command`** — the only state-changing route.
+
+```http
+POST /command HTTP/1.1
+Host: 127.0.0.1:8422
+Origin: http://127.0.0.1:8422
+Content-Type: application/json
+X-Tracker-Token: <token>
+
+{"id": "clear"}
+```
+
+- `X-Tracker-Token` is the required non-simple header; it carries the token *and* forces the
+  preflight. One header does both jobs — a separate `Authorization` would be redundant.
+- The body has **exactly one key, `id`**, a string. Unknown keys are a `400`, not ignored — silent
+  tolerance is how an argument field gets smuggled in later.
+- **Commands take no arguments, in v1 or after.** This is the concrete answer to the question the
+  round-1 verdict raised: the wire carries an allowlist *id* and nothing else, so no untrusted text
+  ever reaches the session. Parameterising a command is a spec change and a new judge round, never
+  an implementation decision.
+
+Success is `200` with `{"ok": true, "id": "<id>"}`. Every failure is
+`{"ok": false, "error": "<code>"}` with these codes, and **no failure echoes any request content
+back** — an error body that reflects input is a free XSS gadget:
+
+| Status | `error` | Cause |
+|---|---|---|
+| `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
+| `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch |
+| `404` | `not_found` | Any path other than the two routes above |
+| `405` | `method_not_allowed` | Any method other than `GET` on `/`, or `POST`/`OPTIONS` on `/command` |
+| `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
+| `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
+| `415` | `unsupported_media_type` | `Content-Type` is not `application/json` |
+| `502` | `send_failed` | `cmux send` exited non-zero, or exceeded its 5-second timeout |
+
+**The single `403` is deliberate.** Bad token, unknown id, and bad origin are indistinguishable to
+the caller, so the endpoint cannot be used to enumerate the allowlist or confirm a guessed token.
+
+`OPTIONS /command` returns `204` and **no `Access-Control-Allow-*` header of any kind**. The server
+never emits CORS headers, so a genuine cross-origin preflight fails in the browser by construction —
+there is no allow-list of origins to get wrong, because there is no allow-list at all.
+
+**Failure behaviour.** `cmux send` runs with a 5-second timeout and its exit code is checked; a
+timeout is killed and reported as `502`, never awaited indefinitely and never assumed to have
+succeeded. A non-zero exit is `502` with the exit code logged server-side (not returned). Surface
+re-resolution failure is `409` **before** any send is attempted — the refusal happens on the near
+side of the socket, so nothing reaches the focused tab.
 
 ### 4. Skill (`skills/tracking-feature-state/SKILL.md`)
 
@@ -112,7 +242,8 @@ card's first draft claimed the opposite; that claim came from pooling function n
 adapter files with `sort -u` and reading the union as a property of each — an artifact of the grep,
 not of the code.
 
-`panes/adapters/cmux.sh` `send_launcher()` sends to an **existing** surface:
+`panes/adapters/cmux.sh` `send_launcher()` sends to an **existing** surface
+(`grep -n 'send .*--surface' panes/adapters/cmux.sh`):
 
 ```sh
 "$CMUX_BIN" send ${WS_ARGS[@]+"${WS_ARGS[@]}"} --surface "$1" -- "bash $launcher_q\n"
@@ -134,7 +265,8 @@ Two constraints ride along, both load-bearing for task 8:
   regardless of the answer. Keystrokes landing in the focused tab is the worst failure this feature
   can have.
 - **The rejected routes stay rejected.** `TMUX` is unset here (`TERM_PROGRAM=ghostty`), so
-  `tmux send-keys` is not available; and `panes/handoff-wrapper.sh:5` records that the handoff spec
+  `tmux send-keys` is not available; and `panes/handoff-wrapper.sh`
+  (`grep -n 'pre-typed keystroke' panes/handoff-wrapper.sh`) records that the handoff spec
   deliberately rejected "pre-typed keystroke tricks", so osascript keystroke injection would reverse a
   prior decision rather than extend one. `cmux send` is the one sanctioned route.
 
@@ -142,9 +274,17 @@ Still genuinely unproven, and worth 15 seconds on a scratch surface before task 
 use of `cmux send` targets a **shell prompt**. None targets a live Claude TUI.
 
 **Clipboard is a supported runtime mode, not a fallback.** `panes/terminal-detect.sh` prints `none`
-under SSH or headless (`terminal-detect.sh:14`), where no injection route exists by construction. In
-that mode the UI offers every allowlisted command as copyable text. That is the same feature minus one
-verb, and criterion 8 tests it as a first-class path rather than a degradation.
+under SSH or headless (`grep -n 'echo none' panes/terminal-detect.sh`), where no injection route
+exists by construction. In that mode the UI offers all three allowlisted commands as copyable text.
+That is the same feature minus one verb, and criterion 8 tests it as a first-class path rather than a
+degradation.
+
+This mode is also why opening the vendored `Task Tracker.dc.html` directly over `file://` must keep
+working even though the served `http://127.0.0.1:8422/` is the primary path. With no server there is
+no token and no `/command`, so the UI reads `tracker-data.js` via its `<script>` tag and renders every
+run read-only — the survey, which is the part of this feature that carries the actual stated value.
+The control channel is the part that needs a server, and it is precisely the part that has no route
+on such a host anyway.
 
 ## Security
 
@@ -152,11 +292,26 @@ The server can drive a Claude session holding full tool permissions. It is the h
 this repo has ever exposed, so it is default-deny:
 
 - **Bind `127.0.0.1` explicitly.** Never `0.0.0.0`, never a hostname that could resolve outward.
-- **Allowlisted commands only.** A fixed map of id → command (`clear`, `handoff`, `reanalyze`, …).
-  The wire carries the *id*; the command text never crosses the network. An endpoint accepting an
-  arbitrary string is a remote shell and is out of scope permanently, not just for v1.
-- **Per-launch bearer token**, generated with `secrets.token_urlsafe`, baked into the emitted
-  `tracker-data.js` and required on every POST. Compare with `hmac.compare_digest`.
+- **Allowlisted commands only — and the allowlist is exactly these three.** No ellipsis: this table
+  *is* the authorization set, and adding a fourth row is a spec change plus a new judge round, not
+  an implementation call.
+
+  | id | Effect | Reaches the session? |
+  |---|---|---|
+  | `clear` | Sends the literal keystrokes `/clear` + newline | Yes |
+  | `handoff` | Sends the literal keystrokes `/handoff` + newline | Yes |
+  | `reanalyze` | Re-runs the analyzer and re-emits the store, server-side | **No** — no keystroke is sent at all |
+
+  The wire carries the *id*; the command text never crosses the network and is never assembled from
+  request data. An endpoint accepting an arbitrary string is a remote shell and is out of scope
+  permanently, not just for v1.
+- **Per-launch bearer token that never touches disk.** Generated with `secrets.token_urlsafe(32)`
+  at startup, held in process memory only, and injected into the `GET /` response as a `<meta>` tag.
+  Required on every POST, compared with `hmac.compare_digest`. It is **not** written into
+  `tracker-data.js`, not written to any sidecar file, and not passed as a command-line argument
+  (which would expose it to `ps`). The store is a committed, world-readable file; the credential
+  guarding a full-permission session must not live in one, and the cleanest way to guarantee that is
+  for the credential to have no on-disk representation to leak. Dying process, dead token.
 - **Require a custom request header.** CORS does not stop a hostile page from *sending* a simple
   cross-origin POST — it only hides the response. A required non-simple header forces a preflight
   that the server refuses. Also reject on `Origin`/`Sec-Fetch-Site` mismatch.
@@ -193,15 +348,32 @@ them is redundant with the socket's file permission, and none may be weakened on
    other run is byte-identical.
 5. **Given** an interrupted write, **then** the previous `tracker-data.js` is still valid JS —
    assert by killing mid-write and reloading.
-6. **Given** a POST with no token, a wrong token, or a command id outside the allowlist, **then** the
-   server responds 403 and **no command reaches the session**.
-7. **Given** a cross-origin POST from a page the user did not open, **then** it is rejected on the
-   preflight or the Origin check.
-8. **Given** a host where `panes/terminal-detect.sh` prints `none` (SSH, headless), **then** the UI
-   still renders every run and still offers each allowlisted command — as copyable text rather than
-   injection.
-9. **Given** a `send` whose target surface ref no longer resolves, **then** the server refuses and
-   reports, and **no keystroke reaches any surface** — specifically not the focused one.
+6. **Given** a running server, **when** a POST arrives with no token, a wrong token, or a command id
+   outside the three-row allowlist, **then** the server responds `403` with body
+   `{"ok": false, "error": "forbidden"}` — byte-identical across all three causes, so the response
+   cannot distinguish them — and **no command reaches the session**.
+7. **Given** a cross-origin page the user did not open, **when** it POSTs to `/command`, **then** the
+   request is rejected on the preflight (no `Access-Control-Allow-*` header is ever emitted) or on
+   the `Origin` check, and **no command reaches the session**.
+8. **Given** a host where `panes/terminal-detect.sh` prints `none` (SSH, headless) and no server is
+   running, **when** the vendored `Task Tracker.dc.html` is opened over `file://`, **then** the UI
+   renders every run from `tracker-data.js` and offers all three allowlisted commands as copyable
+   text rather than injection — no request is attempted and no error is surfaced to the user.
+9. **Given** a target surface ref that no longer resolves, **when** an allowlisted command is POSTed
+   with a valid token, **then** the server responds `409` with
+   `{"ok": false, "error": "unresolved_surface"}`, refuses **before invoking `cmux` at all**, and
+   **no keystroke reaches any surface** — specifically not the focused one. This criterion holds
+   whether or not `send` turns out to inherit the non-erroring fall-through documented for
+   `rename-tab`, because the refusal happens on the near side of the socket.
+10. **Given** a server that has been launched and served `GET /` at least once, **when** the emitted
+    token is searched for across every file under `task-tracker/` — `tracker-data.js` included — and
+    across the process's own command line, **then** it appears in none of them; and **when** the
+    served HTML is fetched, **then** the token appears exactly once, in the `<meta>` tag. Assert both
+    halves: absence on disk is the security property, presence in the response is what makes the UI
+    work, and a test that checks only one of them passes while the feature is broken.
+11. **Given** a request path that resolves outside `task-tracker/` — `../../rules/core-conduct.md`,
+    an absolute path, or a symlink pointing out of the tree — **when** it is requested, **then** the
+    server responds `403` and the file's contents do not appear in the response body.
 
 ## Tasks
 
@@ -226,12 +398,21 @@ them is redundant with the socket's file permission, and none may be weakened on
       - Port is **8422**, `TASK_TRACKER_PORT` overrides. Picked clear of the 8000-8100 block other
         projects own; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at allocation. Task 8 reads the
         number from `PORTS.md`, it is not re-decided there.
-- [ ] 8 — `task-tracker/server.py`: localhost bind, token, allowlist, custom-header requirement, and
-      send-time surface confirmation. Route is settled (task 1); run the outstanding Claude-TUI probe
-      first.
-- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7 and 9, including the negative cases. A test
-      that only proves the happy path does not close this task.
-- [ ] 10 — Wire the UI's command buttons to the server (or clipboard, per task 1).
+- [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
+      from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to
+      `task-tracker/`, the three-row allowlist, `X-Tracker-Token` requirement, Origin check, and
+      send-time surface re-resolution. Route is settled (task 1); run the outstanding Claude-TUI probe
+      first. Python 3.9 — see §Toolchain before writing any annotation.
+      - This file carries bind + token + static serving + allowlist + header check + surface
+        re-resolution + subprocess, and will land near the 400-line target. If it crosses, the split
+        is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
+- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10 and 11, including every negative case
+      and each status code in the contract table. A test that only proves the happy path does not
+      close this task. Criterion 10 in particular must assert **both** halves — token absent from
+      every file under `task-tracker/`, and present in the served HTML.
+- [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
+      the injected `<meta name="tracker-token">`. Where `terminal-detect.sh` prints `none`, render the
+      same three commands as copyable text instead (criterion 8).
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`, following
       `skills/_standards/authoring-skills-and-agents.md`. Points at `managing-session-memory`; does
       not restate phase rules.
@@ -242,6 +423,9 @@ them is redundant with the socket's file permission, and none may be weakened on
 ## Out of scope
 
 - An endpoint that accepts arbitrary command text. Permanently, not just v1.
+- Command arguments of any kind. The wire carries an allowlist id and nothing else.
+- Serving any path that resolves outside `task-tracker/`. The server is not a repo file browser.
+- Persisting the token in any form — no file, no environment variable, no command-line argument.
 - Any daemon, launchd job, or server outliving the session.
 - Writing to the analyzed repo. The analyzer is read-only; it never edits a card to fix drift it
   found — it reports it in `questions[]`.
@@ -249,22 +433,96 @@ them is redundant with the socket's file permission, and none may be weakened on
 - Redesigning the UI or its schema. If a field is missing, that is a `questions[]` entry and a
   conversation, not an ad-hoc schema extension.
 
+## Toolchain — pinned
+
+Exact versions, so the recorded test counts are reproducible and `addopts`/collection behaviour
+cannot shift underneath this feature. Measured on this host 2026-08-09; each row carries the command
+that re-reads it, so drift is detectable rather than assumed away.
+
+| Tool | Pinned version | Re-read with |
+|---|---|---|
+| Python | `3.9.6` | `python3 -V` |
+| `uv` | `0.11.28` | `uv --version` |
+| `pytest` | `9.1.1` | `uv run --with pytest==9.1.1 --no-project pytest --version` |
+| `cmux` | `0.64.20 (100) [14e3400b9]` | `cmux --version` |
+
+**Python 3.9 is the binding constraint**, and it is easy to forget while writing `server.py`: no
+`match` statements, no PEP 604 `X | Y` unions in annotations, no `dict[str, int]` builtin generics at
+runtime without `from __future__ import annotations`. Use `typing.Optional`/`typing.Dict`.
+
+The canonical invocation pins pytest explicitly:
+
+```
+uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q
+```
+
+`cmux` is a host binary, not a dependency this repo can pin in a manifest; the version above is what
+the contract in §"Injection route" was verified against, and a mismatch is the first thing to check
+if `send` behaves differently.
+
 ## Verification
 
 **Task 1 — injection route.** Resolved: `cmux send --surface`, evidence in §"Injection route". One
 probe remains outstanding and is owed before task 8 opens: `cmux send` into a live **Claude TUI**, as
 every proven use to date targets a shell prompt.
 
-**Tasks 2–6 suites.** `uv run --with pytest --no-project pytest task-tracker/ -q` → **53 passed**
-(re-run 2026-08-09 during the spec revision; this is the only invocation that works here, as there is
-no system pytest). Re-run the command rather than trusting this number.
+**Tasks 2–6 suites.** Run the pinned invocation above. It reported **53 passed** on 2026-08-09; that
+number is a measurement with a date, not a contract — re-run it rather than trusting it. There is no
+system `pytest` here, so `uv run` is the only invocation that works.
 
-⚠️ **Task 13 must not use a bare `pytest -q`.** `addopts` in `pyproject.toml` deselects the `golden`
-and `measurement` marks, so the bare invocation reports green while those suites are unrun. Capture
-before-counts per suite, with marks explicitly re-enabled, before touching anything — otherwise a
-pre-existing failure reads as a regression introduced by this feature.
+⚠️ **Three of those tests are conditionally skipped, including one that proves a criterion.**
+`task-tracker/test_store.py` guards three tests with `@pytest.mark.skipif(NODE is None, ...)`
+(`grep -n skipif task-tracker/test_store.py`), and one of them is criterion 5's proof that a
+half-written `tracker-data.js` is still loadable JS. On a host without `node` the suite reports green
+with that assertion never executed. Task 13 must record `node --version` alongside the counts, and
+treat a skip of these three as an **unverified criterion**, not a pass.
+
+⚠️ **Task 13 must record before-counts per suite, captured before touching anything**, so a
+pre-existing failure is not read as a regression introduced by this feature.
+
+*Correction (this revision):* an earlier version of this section warned that `addopts` in
+`pyproject.toml` deselects the `golden` and `measurement` marks under a bare `pytest -q`. That
+warning was aimed at nothing. The repo's only `pyproject.toml` is `memsearch/pyproject.toml`, whose
+`[tool.pytest.ini_options]` governs `memsearch/` alone; `task-tracker/` carries **no pytest
+configuration of any kind** and defines no `golden` or `measurement` marks
+(`find . -name pyproject.toml`, then `grep -rn 'golden\|measurement' task-tracker/`). The warning
+erred safe, but it described a different package — the tenth instance of this card's recurring defect
+species, and the reason the derivations discipline above exists.
 
 ## Revision history
+
+**2026-08-09 (session 52) — compliance round 1 failed; all seven violations addressed.** The judge
+passed the parts of this card that had been audited three times and failed the one component that had
+never been written down: the control server. Changes, by violation id:
+
+- `core-conduct/secrets-not-client-side` — the token was to be baked into `tracker-data.js`, which is
+  git-tracked, not ignored, already holds real output, and lives in a public repo. **The server now
+  serves the UI** and injects the token into that response, so the credential has no on-disk
+  representation at all; the fix removes the exposure rather than mitigating it. Criterion 10 asserts
+  both halves. *User decision, this session:* server-served UI over gitignoring a token sidecar.
+- `writing-specs/api-contracts` — §Design 3 now carries the full wire contract: two routes, the
+  header, request and response schemas, all eight status codes, and the explicit answer that
+  **commands never carry arguments**.
+- `writing-specs/pinned-versions` — new §Toolchain pins Python, `uv`, `pytest` and `cmux`, and the
+  canonical invocation now pins `pytest==9.1.1`.
+- `core-conduct/explicit-error-handling` — the analyzer gets a failure table (including `null` vs `0`
+  for a missing upstream), and the server gets timeouts, exit-code checks, and a stated refusal path.
+- `core-conduct/no-absolute-paths` — the hardcoded export path is gone; it was only ever provenance,
+  since task 2 already vendored the files.
+- `writing-specs/no-placeholders` — the allowlist ellipsis is replaced by a three-row table that *is*
+  the authorization set.
+- `writing-specs/diagrams` — §Design opens with a rendered Mermaid flowchart of the trust boundary.
+
+Scope was put to the user rather than decided here, per the judge's non-blocking note: the control
+channel **stays in this card** rather than splitting into its own.
+
+Two further defects were found during this revision, neither cited by the judge. The task-13 `addopts`
+warning described `memsearch/pyproject.toml`, which never governed `task-tracker/` — the tenth
+instance of this card's one recurring defect species. And three `test_store.py` tests are skipped
+without `node`, one of them criterion 5's own proof, so a green run on a node-less host leaves a
+criterion unverified; §Verification now says so. This card's opening claim to pin no line numbers was
+itself false — four were pinned. Rather than delete useful citations, each now carries the `grep` that
+re-finds it, and the claim is corrected to what the discipline actually is.
 
 **2026-08-09 (session 49) — nine defects repaired, corrections sections removed.** Two audit passes
 (sessions 47 and 48) found nine factual errors in this card, every one the same species: a stored
