@@ -866,12 +866,24 @@ counterfactual harness was not run for this measurement, and the available self-
 the same inference that had to be retracted at 10b. That harness, run against a pinned index state, is
 the next owed step.
 
-## `.claude` — `docs/r9-counterfactual-control` → PR #47 (OPEN, opened 2026-08-09)
+## `.claude` — `docs/r9-counterfactual-control` → PR #47 (MERGED 2026-08-09T20:18:32Z, merge commit `b829eea`)
 
 - **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
 - **branch:** `docs/r9-counterfactual-control` · **base:** `main` @ `64d8acb`
-- **PR:** https://github.com/suyatdev/.claude/pull/47 — **open**
+- **PR:** https://github.com/suyatdev/.claude/pull/47 — **merged 2026-08-09T20:18:32Z** at `b829eea`
 - **session_origin (created):** session 49 · **session_origin (last push):** session 49
+- **Merge verified as a true union, not just balanced arithmetic:** `git diff dfb171b b829eea` is
+  empty (the merge took branch content verbatim), `git diff --numstat 64d8acb b829eea` shows **2
+  deletions total**, both the intended replacements, and a conflict-marker grep returned rc=1 —
+  *with a falsifier run to prove the probe could report a hit at all*, because the first attempt
+  piped into `head` and reported `head`'s exit code instead of `git grep`'s.
+- **All 8 verdicts backfilled `outcome: rework`** — `risk` was **6 `low` / 2 `medium`**, and
+  `confidence` was **7 `high` / 1 `medium`**. (The backfill commit's own subject said "8 risk=low";
+  that count is wrong and was caught by the judge round on the backfill. Corrected here rather than
+  amended away.) `risk` scores *operational* danger — documentation cannot break production — while
+  what recurred was *epistemic* rework, so the two are not the same axis. But the risk field did move
+  on two rounds, so "predicts nothing" over-reaches. **The stronger figure is `confidence`: high on 7
+  of 8, every one of which needed rework** — that is the field that plausibly claims correctness.
 - **Worktree:** `~/.claude/memsearch-freshness`. Docs-only; touches no code.
 - **Card:** `docs/features/memsearch-freshness.md` (`phase: review`, `branch: none` — this branch is
   not recorded there on purpose; see PR #46's note on stale frontmatter).

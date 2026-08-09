@@ -4746,3 +4746,31 @@ count grows every time the section is judged, which is the joke and also the fin
 corpus perturbs it. Stored as a derivation, deferred to ADR 0021 rather than estimated.
 
 PR #47 opened (docs-only, `docs/r9-counterfactual-control`); detail in `coding-memory/pr-tracking.md`.
+
+**Merged 2026-08-09T20:18Z** as `b829eea` (PR #47). Merge verified as a true *union* rather than a
+balanced total: empty diff against the branch tip, 2 deletions against old `main` (both intended), no
+conflict markers. The marker probe had to be run twice — the first version piped `git grep` into
+`head` and reported *`head`'s* exit code, so it would have said "clean" no matter what; the second
+captured the code directly and was falsified against a pattern known to exist before being believed.
+**A check that cannot fail has not passed.**
+
+All eight verdicts backfilled `outcome: rework`. ⚠️ **The commit that made this backfill claimed "8
+for 8 `risk=low`" in its subject and body. That count is wrong — it is 6 `low` and 2 `medium`** —
+and it was caught by the judge round on the backfill itself. Counted properly:
+
+| field | distribution across the 8 | all outcomes |
+|---|---|---|
+| `risk` | 6 `low`, 2 `medium` | `rework` |
+| `confidence` | **7 `high`**, 1 `medium` | `rework` |
+
+The framing survives but weaker than stated: `risk` scores whether a change can *break* something,
+and documentation cannot, while what recurred was being *wrong*. Six low-risk verdicts followed by
+rework still makes that point — but on two rounds the risk field *did* move, so "predicts nothing"
+over-reached. **The stronger signal was in the same rows and I missed it: `confidence` was `high` on
+7 of 8, and all 8 needed rework.** Confidence is the field that plausibly does claim correctness, and
+it was high-and-wrong seven times.
+
+The lesson is not the framing, it is the mechanism. This entry's own commit message says *"a check
+that cannot fail has not passed"* while asserting a headline count **nobody counted** — its
+self-verification was meticulous about *which rows* changed and silent about *the number claimed
+about them*. Verifying the operation is not verifying the claim you drew from it.
