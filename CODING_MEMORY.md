@@ -4538,3 +4538,51 @@ any count. Content confirmed intact; only the stray line was removed.
   number. `phase-guard.sh` denies it (not under `docs/`; no feature file claims this branch at
   `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
   root README Roadmap line.
+
+## 2026-08-09 — session 46: the monitor earned its keep
+
+Review phase, `feature/memsearch-freshness`, PR #45 open. No code changed. The one open review-phase
+item — R9's re-check monitor — became actionable and was run. Detail in
+`docs/features/memsearch-freshness.md` § "The R9 monitor fired".
+
+### A count-only monitor would have stayed silent, again
+
+The scheduled `launchd` run this feature installed finished `2026-08-09T04:45:18Z`, later than the
+newest branch commit, satisfying the monitor's trigger. `-m measurement` returned **3 failed /
+4 passed** — numerically identical to 10b, **2 of 5**. The passing *pair* changed:
+`{stale-phase-guard-rule-text, git-guard-empty-index}` → `{stale-phase-guard-rule-text,
+falsifier-base-pin}`. That is the monitor's second threshold clause verbatim, so the accepted cost is
+**reopened**.
+
+This is the second consecutive measurement where the count held and the composition moved. The
+monitor was written specifically because 8b→10b did that; it has now done it twice, which retires any
+argument that the "record which queries pass, not how many" clause was over-engineering.
+
+### Two queries oscillating on a threshold, not three causes
+
+`falsifier-base-pin`: PASS → FAIL → PASS. `git-guard-empty-index`: FAIL → PASS → FAIL. Across three
+measurements, both swings are **clause 1 alone, moving between 1 and 2 belonging hits** — both queries
+sit *on* the ≥2 boundary, where a single rank of movement flips the verdict. The transferable point:
+before attributing N verdict flips to N causes, check whether the metric has a boundary the targets
+are parked on. 10b's per-move attribution isn't retracted — it rests on a leave-one-out control that
+was actually run — but it reads differently next to a third data point.
+
+### Withholding the attribution that was right there
+
+This file's own `## Verification` section now holds **rank 1 on two queries and a top-6 slot in four
+of five**, and on the regressed query it sits at rank 2 where a belonging chunk used to be. Every fact
+points at self-displacement. I did not write that down as the cause: the RRF pool means an *unseen*
+population can displace while an on-screen one does not, and that exact inference already had to be
+retracted in 10b. The counterfactual harness was not run for this measurement, so the cause is
+recorded as unassigned rather than as the obvious answer. Cost of running it now: a ~40-line rebuild
+at ≥75k context, against an index that must be pinned first.
+
+Also worth keeping: **recording the monitor's result enlarges the section under suspicion.** The
+instrument and the record share a corpus, so measurement perturbs it. Unresolvable by writing more
+carefully; only the counterfactual separates them.
+
+### Still owed, unchanged
+
+Both hand-edit items survive — `phase-guard.sh` denies the agent both files on a `review`-phase branch
+(path, not intent): `memsearch/README.md:36`'s broken ADR-0018 link, and the root `README.md` Roadmap
+line. PR #45 merges through the UI.
