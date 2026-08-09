@@ -403,3 +403,122 @@ Round-1/2 ids still resolved and not re-cited: `core-conduct/secrets-not-client-
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+---
+
+## Round 5 — 2026-08-09T19:52:32Z — **FAIL** (3 violations)
+
+- **HEAD:** `b9ad3943939cc6034c922a7fecfa8c27c263cbc0` · **Spec blob:** `5839572c11fd1b8d0c44dca03eb0d63a31a92788`
+- Round 4's two: **1 resolved (`api-contracts`, after four rounds), 1 re-cited in a new place.**
+  1 promoted from a round-4 note. Waived: none, ever.
+
+### Summary in plain language
+
+**The structural fix worked, and I checked it the hard way.** The user's direction was to stop
+narrowing the search and replace it, and that is what landed. I re-derived the manifest from the files
+themselves rather than reading the table, and every row is right: `Task Tracker.dc.html` requests
+exactly `support.js`, `_ds/nocturne-73641b21…/styles.css`, `_ds/nocturne-73641b21…/_ds_bundle.js`,
+`tracker-data.js` and `tracker-data-fallback.js` (lines 6, 11, 12, 15, 16), and the shim
+`document.write`s `tracker-data.sample.js` on the first-run path (`tracker-data-fallback.js:19`).
+`nocturne.css` really is only loaded by `Task Tracker Directions.dc.html:12`, which is never served.
+Enumerating `_ds/` by its two requested files is correct — the directory also holds `_ds_manifest.json`,
+`_adherence.oxlintrc.json` and `readme.md`, which nothing requests. `_ds_bundle.js` contains no `url(`,
+no `@import` and no absolute URLs, so it adds nothing. **There is no longer a search defining the
+contract, and the contract is accurate. `writing-specs/api-contracts` is closed.**
+
+**But the backstop the manifest now leans on cannot be run.** Criterion 13 is the whole load-bearing
+idea of this revision — task 8 is told "do not re-derive it by grep, and let criterion 13 tell you if
+it is wrong," and task 14 is told "criterion 13 is the proof, not the grep." Three separate things
+stop it from being executable at the moment it is needed:
+
+1. **No tool.** "Load the page and follow every request it makes at runtime" needs a browser engine.
+   Task 9 assigns criterion 13 to `task-tracker/test_server.py` — a pytest file. §Toolchain pins five
+   tools and none of them can drive a page; there is no Playwright, Puppeteer, Selenium or CDP harness
+   anywhere in this repo (the one `Playwright` string in `PORTS.md` belongs to a different project).
+   The criterion also explicitly forbids the cheap substitute. So the implementer must choose *and add*
+   a browser dependency on their own, which core-conduct forbids doing unilaterally.
+2. **The "before task 14" run fails by construction.** The criterion is directed to run twice, and
+   before-vendoring is the run that "is the proof the manifest is complete." Before task 14 the page
+   fetches six assets from `unpkg.com` and `fonts.googleapis.com` — two from the served HTML directly
+   (lines 13-14) and three injected by `support.js:1143-1148` — so "no request goes to a host other
+   than `127.0.0.1`" is false the moment the page loads. With the network blocked React never arrives,
+   so "the UI reaches its rendered state" is false too, and task 8's `script-src 'self'` blocks those
+   scripts outright regardless of the network. Task 9 (write the test) precedes task 14 (vendor).
+   **At the exact point in the plan where the manifest needs checking, the grep has been demoted and
+   the runtime check cannot pass.** That is the gap the whole revision was meant to close.
+3. **The state the criterion runs in is never named, and it is the state that hides the bug.**
+   `tracker-data.js` is committed and populated (`window.TRACKER_DATA = {…}`), so
+   `tracker-data-fallback.js` returns early at its `if (window.TRACKER_DATA) return;` and
+   **`tracker-data.sample.js` is never requested.** Run criterion 13 against this repo as it stands and
+   it passes without ever touching the one manifest row whose omission was cited in round 4. The check
+   only proves the rows the page happens to ask for in whatever state the fixture is in — which is the
+   same species as the mis-scoped grep, relocated from the search to the fixture.
+
+A fourth, smaller one: the served page carries no `<link rel="icon">`, so a browser navigating to `/`
+requests `/favicon.ico`, which the wire contract answers `404` — colliding head-on with criterion 13's
+"no request returns `404`". Nothing in the card resolves that either way.
+
+**The rest of the revision is genuinely good.** Criteria 12 and 14 close round 4's "every criterion is
+a refusal" finding properly — 12 asserts `cmux send` was *invoked once* rather than trusting a `200`,
+and asserts `reanalyze` invokes it zero times; 14 asserts all three lifetime clauses including that the
+audit line actually reaches the parent's stderr. The `5`-second poll number, the launch-method bullet,
+criterion 11's in-directory half and §Out of scope's "inside the directory was never the boundary" are
+all real improvements. The remote-asset table is exact for the third round running, the three unpkg
+scripts do carry `sha384` (`support.js:1144, 1146, 1148`), all five toolchain rows match this host
+exactly (`Python 3.9.6`, `uv 0.11.28`, `pytest 9.1.1`, `cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0`)
+and the suite still reports **53 passed**.
+
+### Violations
+
+| # | id | Rule source | Where | Why |
+|---|---|---|---|---|
+| 1 | `writing-specs/pinned-versions` | `skills/writing-specs/SKILL.md` | §Toolchain — pinned; criterion 13; task 9 | Criterion 13 is now the sole proof of the static manifest and of task 14's vendoring and requires loading the page in a browser and following its runtime requests (explicitly rejecting a source search), yet no browser-automation tool is named or pinned anywhere, the repo contains none, and task 9 assigns the criterion to a pytest file — so the implementer must select and add a browser dependency unilaterally. |
+| 2 | `writing-specs/good-bad-edge-cases` | `skills/writing-specs/SKILL.md` | §Acceptance criteria → criterion 13; task 14 | The criterion's states are left implicit and one directed run is unsatisfiable: run "before task 14" it must fail because the page still fetches six third-party assets and cannot render offline; run against the repo's populated `tracker-data.js` it never requests `tracker-data.sample.js`, the very manifest row round 4 cited; and the browser's automatic `/favicon.ico` request makes "no request returns `404`" contradict the wire contract's own default. |
+| 3 | `core-conduct/explicit-error-handling` | `rules/core-conduct.md` | §Design 3 → Wire contract → status-code table | The table enumerates nine failure codes down to `413` and `415` but states no behaviour for the static-read boundary this design introduces — a manifest member that is absent or unreadable on disk (`tracker-data.js` is generated by `store.py`, which is why `tracker-data-fallback.js` exists) or an unreadable `Task Tracker.dc.html` — so the failure falls through to an implementer default, on a route that is the feature's trust boundary. |
+
+Round-4 id **resolved** this round and not re-cited: `writing-specs/api-contracts` — after four
+consecutive rounds. The servable set is no longer derived by any search; it is an explicit manifest
+that I verified row-by-row against `Task Tracker.dc.html`, `tracker-data-fallback.js`, `support.js`,
+`_ds_bundle.js` and `styles.css`, `_ds/` is enumerated rather than globbed, the wire contract's `404`
+row and §Out of scope now agree with it, and criterion 11 tests the in-directory half. The failure mode
+did not survive in the contract — it moved into the contract's verification, which is violations 1 and 2.
+
+Round-3 id still resolved and not re-cited: `writing-secure-code/csp`. Round-1/2 ids still resolved and
+not re-cited: `core-conduct/secrets-not-client-side`, `core-conduct/no-absolute-paths`,
+`writing-specs/no-placeholders`, `writing-specs/diagrams`.
+
+### Notes (non-blocking)
+
+- **How to make criterion 13 executable, if it helps:** pin a specific headless-browser harness with a
+  version in §Toolchain; state the two fixture states it must run in (populated store *and* a store
+  that leaves `window.TRACKER_DATA` unset, which is the only way the sample row is exercised); state
+  that the "no non-`127.0.0.1` host" clause applies only after task 14 and reorder task 14 before task
+  9 so the pre-vendoring run is not asked for at all; and say what happens to `/favicon.ico`.
+- **`support.js:159` fetches `location.href` at runtime** when `window.__resources` is undefined — so
+  before task 14 the page issues a second token-bearing `GET /`, and after task 14 it does not. The set
+  of runtime requests therefore differs across the vendoring boundary in a way criterion 13 does not
+  acknowledge. Same-origin and inside `connect-src 'self'`, so not a leak; it is a coverage point.
+- **The manifest still has one open row** — *(task 14's vendored assets)* — in a table the card calls
+  closed. Honest and unavoidable today, but it makes violations 1 and 2 load-bearing rather than
+  cosmetic: that row's only defence is criterion 13.
+- **`_ds/nocturne-<uuid>/` is a placeholder in the authorization set.** The literal is
+  `73641b21-c7ad-488a-8264-a28262dfe83e` and there is exactly one such directory, so this resolves
+  unambiguously and stays re-vendor-safe — not cited, but it does mean the manifest is still completed
+  from the filesystem at implementation time.
+- **`base-uri` is still absent from the CSP** (round-4 note, unaddressed). One token, and `default-src`
+  does not cover it.
+- **CSP lands before its vendoring** (round-4 note, unaddressed, and it now compounds criterion 13):
+  task 8 adds `script-src 'self'`, task 14 vendors the scripts, and between them the served page cannot
+  boot.
+- **The remote-asset grep returns 15 rows, not 9** — six are `repoUrls` GitHub links in
+  `tracker-data.js`/`tracker-data.sample.js`. The table's "six assets across nine reference sites" is
+  exact; a reader re-running the command must discard those six.
+- **`analyze.py` is 792 lines**, eight under the hard max; the card surfaces the split as a human-owned
+  call and declines to schedule it, which remains the right posture. The card itself is 851 lines.
+- **Gherkin shape**, fifth round running: several criteria fold `When` into `Given`. Still not cited,
+  same reasoning as rounds 1-4.
+- **Toolchain re-verified on this host, all five rows exact**; suite reports **53 passed** (2026-08-09).
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
