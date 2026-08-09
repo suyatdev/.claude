@@ -187,3 +187,111 @@ into the DOM is not demonstrably unescaped. `store.py` uses `ensure_ascii=True`,
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+---
+
+## Round 3 — 2026-08-09T18:00:15Z — **FAIL** (2 violations)
+
+- **HEAD:** `41b586cb07f6486feebd5f82866e56d1f69af997` · **Spec blob:** `9be9b9c20169f0faf422c969d4f297a375890f3d`
+- Round 2's five: **4 resolved, 1 re-cited on corrected evidence, 1 new.** Waived: none.
+
+### Summary in plain language
+
+Four of round 2's five are genuinely closed, and closed well. `tracker-data-fallback.js` is on the
+servable list with the grep that re-derives it; `Cache-Control: no-store` and a `Host` check now guard
+the one response that carries the credential; `500 reanalyze_failed` covers the only command that does
+server-side work, with the store left at its last valid state; and `node v26.5.0` is pinned. I re-read
+all five toolchain rows against this host and every one matches exactly — `node v26.5.0`, `Python
+3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`. The audit log the observability judge asked for
+is the right shape: it logs the *resolved* surface, logs refusals as loudly as successes, and bans
+headers, bodies and the token in the same breath as §Out of scope does.
+
+**The disputed CSP finding: you were right about the mechanism and wrong about the conclusion.** I
+verified your greps and they reproduce exactly — `Task Tracker.dc.html` contains two `https://` lines,
+both `<link rel="stylesheet">` for `@phosphor-icons`, and no remote `<script src>` at all. Round 2's
+description of *how* the remote code arrives was wrong, and the card is right to correct it.
+
+But the remote JavaScript is real; it is just not in the HTML. The vendored **`task-tracker/support.js`
+loads it at runtime**:
+
+```js
+// task-tracker/support.js:1143-1147
+var REACT_URL = "https://unpkg.com/react@18.3.1/umd/react.production.min.js";
+var REACT_DOM_URL = "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js";
+var BABEL_URL = "https://unpkg.com/@babel/standalone@7.29.0/babel.min.js";
+```
+
+`loadReactUmd()` (`support.js:1838-1847`) injects the first two as `<script>` elements on boot, and
+`ensureBabel()` (`support.js:1176-1192`) injects the third on first JSX import. The one escape hatch,
+`window.__resources`, is **read in four places and never assigned anywhere in `task-tracker/`**, so the
+CDN path is live, not dead code. `_ds_bundle.js` is 300 bytes and does not bundle React; `getReact()`
+throws without `window.React`. There is a fourth remote fetch too: `_ds/…/styles.css` `@import`s
+`https://fonts.googleapis.com/css2?family=Inter…`. So the page pulls **four** third-party resources,
+three of them executable — and the re-derivation command the card prescribes
+(`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`) cannot see any of them, because none live in
+that file.
+
+That makes two things false in the current text: task 14 does not "close the last remote fetch on the
+token-bearing page", and it is not "what makes criterion 8's offline path actually pass" — with React
+coming from unpkg, an offline `file://` load renders nothing at all. It also means the origin holding
+the `<meta>` token executes third-party code, which is why the CSP citation stands, on better evidence
+than round 2 had. In fairness to the vendored code, round 2's "with no SRI" was **wrong**: all three
+URLs carry `integrity` hashes, so a substituted payload is refused by the browser. That is why I did
+*not* re-open `core-conduct/secrets-not-client-side` — the token still has no on-disk representation and
+a tampered CDN script cannot run.
+
+The second header gap is framing. The card says every Security bullet defends the HTTP hop, but nothing
+stops a hostile page putting `http://127.0.0.1:8422/` in an iframe and clickjacking a click onto the
+`clear` or `handoff` button: that POST is same-origin, carries the real token, and passes every check
+the card lists. `frame-ancestors 'none'` (or `X-Frame-Options: DENY`) on the new route is the fix, which
+is the same header territory as the CSP.
+
+### Violations
+
+| # | id | Rule source | Where | Why |
+|---|---|---|---|---|
+| 1 | `writing-secure-code/csp` | `skills/writing-secure-code/SKILL.md` | §Design 3 → Wire contract (`GET /`); §Security | The new token-bearing route enumerates its response headers (`Content-Type`, `Cache-Control: no-store`) and specifies no CSP and no framing policy, while the page it serves injects React 18.3.1, ReactDOM 18.3.1 and `@babel/standalone` 7.29.0 from `unpkg.com` at runtime (`support.js:1143-1147, 1179, 1841-1846`) and calls `new Function` twice (`support.js:844, 1218`) — third-party code executes in the origin holding the `<meta>` token, a strict nonce-based policy is unachievable as designed, and an iframe + clickjack reaches an allowlisted command with a valid same-origin token. |
+| 2 | `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | §Security → "No remote assets on the token-bearing page"; task 14; criterion 8 | Same species as round 2 (the card's inventory of what the served page loads is incomplete), now on the remote side: the inventory names only the two `@phosphor-icons` stylesheets and asserts "no remote JavaScript is loaded", but the page also pulls three unpkg scripts via `support.js` and a Google Fonts stylesheet via `@import` in `_ds/…/styles.css`, so task 14 does not close the last remote fetch and criterion 8's offline `file://` path cannot pass — no React, nothing renders. |
+
+Round-2 ids **resolved** this round and not re-cited: `core-conduct/secrets-not-client-side`
+(`no-store` + criterion 10's three new clauses + the audit-log ban), `writing-specs/pinned-versions`
+(`node v26.5.0`, verified), `core-conduct/explicit-error-handling` (`500 reanalyze_failed`, store left
+intact), and round 2's `writing-specs/api-contracts` instance (`tracker-data-fallback.js` listed).
+
+### Notes (non-blocking)
+
+- **Correct derivation for the remote-asset claim.** Replace the HTML-scoped grep with a tree-scoped
+  one — `grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html'`.
+  The current command is scoped to the one file that happens not to contain the interesting hits, which
+  is how a card built on derivations still reached a false conclusion.
+- **One fix closes both violations.** Vendor React/ReactDOM/Babel and the Inter font alongside the
+  phosphor stylesheets, then the route can carry `default-src 'self'; connect-src 'self';
+  frame-ancestors 'none'` — with the caveat that `script-src` still needs `'unsafe-eval'` for the
+  dc-runtime's two `new Function` sites, so "strict nonce-based" is reachable only in the weaker sense.
+  Say so explicitly rather than leaving a reader to discover it.
+- **SRI correction, on the record.** All three CDN URLs carry `sha384` integrity hashes
+  (`support.js:1144, 1146, 1148`). Round 2's "with no SRI" was wrong; the card's correction is right to
+  push back on the round-2 wording, and this round's citation does not rest on that sub-claim.
+- **`Host`-check rejection has no status code.** §Design 3 says reject a bad `Host` on `GET /` but the
+  status table defines no code or body for it (the JSON error envelope belongs to `/command`). Not
+  cited: the behaviour is explicit and no component consumes that response — only an attacker sees it.
+  One clause would still close it.
+- **`nocturne.css` is on the servable list but the page never requests it** — it loads
+  `_ds/…/styles.css` (line 11). Harmless over-inclusion, not a violation.
+- **The page fetches its own URL on boot.** `support.js:158-162` re-fetches `location.href` when
+  `window.__resources` is unset, so the token-bearing response is retrieved twice per load. `no-store`
+  covers it; a CSP would need `connect-src 'self'` for it to keep working.
+- **`postMessage(…, "*")`** at `support.js:1856` fires only when the page is framed and carries boot
+  metadata, not the token. Worth knowing alongside the framing gap, not a finding on its own.
+- **ADRs 0022 and 0023 are consistent with the card.** No contradiction found; 0022's rejected
+  alternatives match the card's §Security reasoning.
+- **662 lines — the optional split is now worth considering.** The One-canonical-file discipline's
+  `<name>.spec.md` half is a MAY, so this is a note only: the frontmatter + tasks would stay in the
+  `.md`, and §Design/§Security/§Injection route/§Verification would move. The Revision history alone is
+  ~90 lines and is read approximately never.
+- **Gherkin shape**, third round running: several criteria still fold `When` into `Given`. Still not
+  cited, same reasoning as rounds 1 and 2.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
