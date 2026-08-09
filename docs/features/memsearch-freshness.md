@@ -1862,6 +1862,13 @@ bar was never green, and two of the three failures are archive-independent), but
 accepted cost is **less bounded** than the bare counts suggest, and it is recorded here rather than
 left for a reader to discover in the table.
 
+> 🛑 **SUPERSEDED — the "remove it and R9 is 1 of 5" claim above is withdrawn.** The counterfactual
+> control (2026-08-09, near the end of this file) removed this file and measured **no verdict change
+> on any of the five queries**: this document is inert, and `git-guard-empty-index` is not propped up
+> by it. What survives is only the weaker point that the accepted cost is less bounded than the bare
+> counts suggest. Left in place, tagged rather than deleted, because the superseded reading is why the
+> control was run at all.
+
 **Re-check trigger — the accepted cost gets a monitor, not just a note.** Accepted-with-no-alarm is
 how a known cost becomes an unknown one, and R9 is the *only* instrument that sees this drift while
 `pyproject.toml:26` deselects it from a default run.
@@ -1992,7 +1999,10 @@ next section. Neither of the two populations this section suspected turns out to
 >    regression is a change across two. Reconstructing 10b's index state is the blocking open item.
 > 3. **A weight change does help, and it is the one thing here that improves the bar.** Judge weight
 >    `1.5 → 1.2` takes R9 from **2 of 5 to 3 of 5** with **nothing regressing**. This is the only
->    actionable result in the section, and it was the last thing found.
+>    actionable result in the section, and it was the last thing found. Two caveats travel with it and
+>    are not optional: it is **judge chunks only, and no such knob exists yet** — `curated_doc` is one
+>    bucket, so this is a `source_type` split for ADR 0021, not a number change — and it is one index
+>    state on five queries, a lead to **re-confirm, not to apply blind**.
 > 4. **The instrument is sound but shallow.** Embedding noise never moves a verdict (8/8), while the
 >    margin under test is three ranks deep — so R9's clause 1 is far more sensitive to corpus growth
 >    than its stability suggests.
@@ -2128,7 +2138,7 @@ any of the five target features, three independent seeds.
 | `verification-marker-gate` | FAIL (1) | FAIL (3) | FAIL (1) | FAIL (1) | FAIL (1) |
 | `phase-guard-hook` | FAIL (2) | FAIL (3) | FAIL (2) | FAIL (2) | FAIL (2) |
 
-⚠️ **The three columns below are SUPERSEDED — read them only with the correction that follows.**
+⚠️ **The three columns above are SUPERSEDED — read them only with the correction that follows.**
 Under the approximate method every placebo column is identical to `as-is`. That null is partly an
 artefact, and the round-2 judge caught it. Re-measured *exactly* — 2405 chunks physically deleted,
 `chunk_fts` rebuilt — placebo seed 11 **does** perturb R9: `falsifier-base-pin` goes PASS (2) →
@@ -2327,6 +2337,22 @@ exact control in the section**: no re-index, no FTS rebuild, no re-embedding.
 That is the first change measured anywhere in this feature that *improves* the bar rather than trading
 one target's pass for another's, and it stands even though the crowding *narrative* was withdrawn: the
 enumeration killed the story, not the remedy.
+
+🛑 **This is not a config edit — the knob does not exist yet, and ADR 0021 must build it first.**
+`config.json:17` keys `weights` by *source type*, and `curated_docs` is a single bucket holding judge
+verdicts, feature docs, ADRs, `PORTS.md` and `CODING_MEMORY.md` alike. There is no judge-verdicts-only
+weight. Setting `curated_doc` to 1.2 wholesale would **not** reproduce the table above and would demote
+every spec in the corpus: all ten ranks printed earlier in this section are `curated_doc`, so a uniform
+multiplier scales them equally, leaves their order untouched, and moves the rank-8 target nowhere. The
+sweep necessarily re-weighted **judge chunks only** (the 2405-chunk corpus defined above), which today
+requires splitting them into their own `source_type` — the same move `archive_doc` got at `index.py:44-51`
+(user decision, 2026-08-06) — not a number change. Raised by the round-6 verdict.
+
+⚠️ **And the "anything regress?" column is verdict-level only** — the same flaw this section diagnoses
+at the `minus judges` variant, where a count hid a real regression. A PASS(4) → PASS(3) erosion would
+print as "no" here. Per-target hit counts were recorded only for the 1.2 row (both remaining failures
+gain hits, 1→3 and 2→3); the other rows' margins were not captured, and re-deriving them needs the
+pinned state this section can no longer reconstruct.
 
 What the planning pass (ADR 0021) inherits: that sweep, plus a structural observation needing no
 counterfactual — one 639-line verdict outranking the 375-line spec it grades, at equal `curated_doc`

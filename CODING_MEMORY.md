@@ -4654,7 +4654,10 @@ and 3 chunks produce the identical recovery, and only the second one tells you w
 
 Two things the count would have hidden, both recorded: dropping judges *regresses*
 `falsifier-base-pin`, holding 2 of 5 in a third distinct composition — retuning moves the failure
-rather than removing it. And `/api/embed` is **non-deterministic** (≤1.08e-04 per element, min cosine
+rather than removing it. ⚠️ **Corrected 2026-08-09: that last clause is true only at the `weight = 0`
+endpoint, which is what "dropping judges" is.** A later sweep of the interior found judge weight
+`1.5 → 1.2` takes R9 to **3 of 5 with nothing regressing** — so retuning *can* remove a failure, and
+the endpoint result does not generalise to the curve. Deletion-invariance is not weight-invariance. And `/api/embed` is **non-deterministic** (≤1.08e-04 per element, min cosine
 0.999999803) yet verdicts were identical on 8/8 re-embeddings for all five queries, which falsifies
 the marginal-instability explanation without touching the boundary observation itself.
 
