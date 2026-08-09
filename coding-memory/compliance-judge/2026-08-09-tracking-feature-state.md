@@ -522,3 +522,136 @@ not re-cited: `core-conduct/secrets-not-client-side`, `core-conduct/no-absolute-
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+---
+
+## Round 6 — 2026-08-09T20:16:51Z — **FAIL** (1 violation)
+
+- **Spec:** `docs/features/tracking-feature-state.md` (blob `0e6efd9ea09a43659849e8befd7123c4668224b8`, 901 lines)
+- **Branch:** `feat/tracking-feature-state` @ `73f9475f750e8d24c2cdfb21738270114be7e578`
+- **Rule sources read:** `rules/core-conduct.md`, `rules/gates.md`, `CLAUDE.md`,
+  `skills/writing-specs/SKILL.md`, `skills/writing-secure-code/SKILL.md` (no `.claude/project-standards.md` in this repo)
+
+### Summary in plain language
+
+Five of the six things round 5 asked for landed, and the two closed rules stayed closed — I rebuilt
+the servable manifest from source again and every row is still right. One thing broke, and it broke
+in the way this card keeps breaking: **the fix for round 5 collided with another fix from the same
+commit.**
+
+Criterion 13 now runs twice — once with `tracker-data.js` present, once with it moved aside — which
+was exactly the right correction, and the mechanism works: I traced it and moving the file aside does
+reliably produce the request for `tracker-data.sample.js`. But the same commit also added a rule
+saying that when `tracker-data.js` is missing the server must answer `404` (not `500`), because that
+is the normal first-run state. And criterion 13's pass condition says every request must return `200`
+except `/favicon.ico`, and that **any other `404` is a failure**.
+
+The served page asks for `tracker-data.js` unconditionally — it is a plain `<script src>` tag baked
+into the HTML at line 15, and the server's only edit to that page is injecting the token. So in run
+(a) the browser asks for a file the card has just finished saying should answer `404`, and criterion
+13 calls that a failure. **A correctly built server cannot pass criterion 13 run (a).**
+
+That is the same trap the card itself removed elsewhere in this very commit. It withdrew the "run
+criterion 13 before task 14" instruction with the reasoning that "a criterion whose first directed run
+must fail is a criterion that gets weakened until it passes" — and then re-created that exact shape one
+paragraph away. The fix is one clause: run (a) must expect `/tracker-data.js` to `404` alongside
+`/favicon.ico`.
+
+Everything else I checked reproduced exactly: 53 tests pass, all five toolchain pins match this host,
+the six-remote-asset table and its nine reference sites are correct, and the deliberate exclusion of
+`nocturne.css` from the manifest is correct (only the unserved Directions file loads it).
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/good-bad-edge-cases` | `skills/writing-specs/SKILL.md` | Good, bad, and edge-case scenarios — state explicitly what correct looks like and enumerate the edges | Acceptance criterion 13, run (a) (card:639-661), against the wire contract's `404` row (card:322) and the `500 asset_unreadable` exception (card:327) | Criterion 13 requires that in **both** runs "no other request returns `404`", but run (a) deletes `tracker-data.js`, which `Task Tracker.dc.html:15` requests unconditionally and which the card itself specifies must answer `404` in exactly that state — so a correct implementation fails the criterion by construction. |
+
+**Third consecutive citation of this rule — escalate to the user rather than auto-revising.**
+This is a **new instance of the same class**, not the round-5 instance surviving: round 5's defect was
+that criterion 13 was pinned to the populated store state and therefore never requested
+`tracker-data.sample.js`. That is genuinely fixed — run (a) exists and its mechanism works. The new
+defect lives *inside* the newly added run (a): its pass condition contradicts the `404` rule added by
+the same commit. **The uncovered step out:** each round has patched the criterion's *precondition*
+(which file exists, which state is loaded) and left its *pass condition* unexamined; the pass condition
+is now the part that is wrong.
+
+### Answering the two decisive questions
+
+1. **Is `good-bad-edge-cases` closed?** No — see above. New instance, same class, one step out.
+2. **Does criterion 13 work in both runs as written?**
+   - **Mechanism: yes.** Traced against source: moving `tracker-data.js` aside → server `404`s it →
+     `window.TRACKER_DATA` stays undefined → `tracker-data-fallback.js:16` falls through its early
+     return → line 19 `document.write`s `tracker-data.sample.js`. Run (a) does reliably reach the row
+     four rounds of greps missed.
+   - **Pass condition: no.** The `404` on `/tracker-data.js` is unavoidable and disallowed.
+   - **`/favicon.ico` carve-out: consistent.** The wire contract's `404` row names it explicitly and
+     criterion 13 names it as the one expected `404`. The two agree. The omission is
+     `/tracker-data.js`, which the same `404` row also names.
+   - **Anything else still search-dependent? No.** Task 8 says do not re-derive the manifest by grep,
+     task 14's grep is explicitly demoted to drafting, and criterion 13's "no request goes to a host
+     other than `127.0.0.1`" is a genuine runtime proof of the remote-asset closure.
+
+### Resolved since round 5
+
+- **`writing-specs/pinned-versions` — closed.** §Toolchain now names the mechanism (Claude browser
+  extension), records Chrome at run time, and states the cost in full: criterion 13 does not run under
+  `uv run pytest`, does not run unattended, needs a connected operator, and every other criterion stays
+  pinned and unattended. Judged as asked — the trade is stated honestly and completely.
+- **`core-conduct/explicit-error-handling` — closed.** The `500 asset_unreadable` row now covers a
+  manifest member that is absent or unreadable, logs path + `errno`, returns no filesystem detail, and
+  carves out the one deliberate exception with its reason.
+- **Ordering — resolved.** Task 14 runs immediately after task 8; the unsatisfiable "run criterion 13
+  before task 14" instruction is withdrawn with its reasoning recorded.
+- **Task 9's `cmux` fake** now states plainly that it proves the server's decision and never that
+  keystrokes arrive.
+- **ADR 0024** no longer leaves the tick unnamed (see note 2).
+- **`writing-specs/api-contracts` (closed round 5) stays closed.** Re-verified every manifest row
+  against source: `support.js`, `_ds/nocturne-73641b21-…/styles.css`, `_ds/…/_ds_bundle.js`,
+  `tracker-data.js`, `tracker-data-fallback.js` are all requested by `Task Tracker.dc.html:6,11,12,15,16`;
+  `tracker-data.sample.js` by the shim's `document.write`. `nocturne.css` is correctly excluded — the
+  only reference is `Task Tracker Directions.dc.html:12`, which is not served. The `_ds/` glob would
+  indeed also expose `_ds_manifest.json`, `_adherence.oxlintrc.json` and `readme.md`. Manifest correct.
+- **`writing-secure-code/csp` (closed round 4) stays closed.** The `'unsafe-eval'` justification is
+  real: two `new Function` sites at `support.js:844,1218`.
+
+### Notes (non-blocking)
+
+- **The new `500 asset_unreadable` row is only weakly asserted.** No numbered criterion exercises it;
+  it is covered by task 9's blanket "each status code in the contract table". The table carries **two**
+  `500` rows, so under a literal "each status *code*" reading a test for `reanalyze_failed` alone
+  satisfies it and `asset_unreadable` goes unexercised. Not cited — the error handling itself is stated
+  explicitly and the blanket does nominally cover it — but the card holds itself to a higher bar three
+  paragraphs earlier ("Assert every clause"), and naming the row in task 9 would cost four words. This
+  is the recurring "a control arrives with nothing asserting it" shape in its mildest form yet.
+- **Card and ADR 0024 describe the parent-death timer differently.** Card §Security (card:478-480)
+  says the check runs "on the same timer that drives the idle check"; ADR 0024:38-41 says it "gets its
+  own interval rather than riding the 30-minute idle timer". Reconcilable — one 5-second tick loop
+  evaluating a 30-minute threshold satisfies both readings, and criterion 14 cannot tell them apart —
+  so not cited. One of the two sentences should still move.
+- **`base-uri` still absent from the CSP** (round-4 and round-5 note, still open). `default-src` does
+  not cover it; `form-action` is likewise absent. Stated here as a note, not cited: `writing-secure-code`
+  requires the route to support a strict nonce-based policy, and the card's documented reason it cannot
+  is verified true.
+- **CSP-before-vendoring** (round-5 note) is now substantially mitigated: with task 14 moved to
+  immediately after task 8, the window in which `script-src 'self'` is live but the scripts are still
+  remote is one task wide, and no criterion is scheduled inside it.
+- **Static-error body shape is unspecified.** The `{"ok": false, "error": "<code>"}` envelope is
+  introduced under the `POST /command` heading, but the `404`, `405` and `500 asset_unreadable` rows
+  govern static `GET`s too. Nothing depends on it — criterion 11 only requires that file contents not
+  appear — so this is an ambiguity rather than a defect.
+- **Measurements re-verified on this host, all exact:** `53 passed` (4.63s), Python `3.9.6`,
+  `uv 0.11.28`, `node v26.5.0`, `cmux 0.64.20 (100) [14e3400b9]`. The §Verification correction about
+  `pyproject.toml` is right — the only one is `memsearch/pyproject.toml`, and the `golden`/`measurement`
+  hits under `task-tracker/` are data strings in `tracker-data.js`, not pytest marks. Three `skipif`
+  guards in `test_store.py` at lines 150, 361, 412. `STRICT_RE` and `identity(match.group(1))` match the
+  card's quotation exactly. `panes/adapters/cmux.sh:164` is the `send --surface` site and the
+  resolution-chain comment at line 168 does document `rename-tab`, not `send` — the card's ⚠️ is correct.
+- **`analyze.py` is 792 lines**, eight under the hard max. The card surfaces the split as a human-owned
+  call and declines to schedule it, which is the correct posture under `core-conduct`. The card is now
+  901 lines (up from 851) despite deleting the ~86-line revision narrative.
+- **Gherkin shape**, sixth round running: several criteria fold `When` into `Given`. Still not cited.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
