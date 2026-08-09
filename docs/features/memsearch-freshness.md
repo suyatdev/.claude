@@ -1,8 +1,14 @@
 ---
 phase: review
 model_tier: low
-branch: feature/memsearch-freshness
+branch: none  # merged via PR #45 (65ebf81); feature/memsearch-freshness deleted 2026-08-09
 ---
+
+> **Frontmatter note (2026-08-09):** `branch:` read `feature/memsearch-freshness` for three sessions
+> after that branch was merged and deleted — a stale value that agrees with itself and disagrees with
+> every checkout. Corrected to `none`. Review-phase follow-ups since then have run on their own short
+> branches (`docs/post-merge-followups-45`, `docs/r9-counterfactual-control`); this field names the
+> *feature's* branch, and the feature no longer has one.
 
 # memsearch freshness — refresh trigger and staleness reporting
 
@@ -1824,6 +1830,9 @@ So the honest reading is narrower than "passenger, not driver":
 - **This file is load-bearing for one of the two queries that currently pass.**
   `git-guard-empty-index` passes only with **both** populations present — dropping either breaks it.
   Without this file R9 scores **1 of 5**, not 2.
+  ⚠️ **No longer true at the current index state — see "The counterfactual control ran" below.**
+  `git-guard-empty-index` now fails with everything present, and dropping this file changes nothing.
+  The statement stands as what was measured then; it must not be read as a present-tense fact.
 - On the other three queries it is a visible occupant with no effect on the verdict: dropping it
   renames the top hit (to `2026-08-02-main.md` and ADR `0011`) but the replacement does not belong
   either, so no clause turns.
@@ -1852,6 +1861,13 @@ two current passes is propped up by the measurement write-up. This does not reve
 bar was never green, and two of the three failures are archive-independent), but it does mean the
 accepted cost is **less bounded** than the bare counts suggest, and it is recorded here rather than
 left for a reader to discover in the table.
+
+> 🛑 **SUPERSEDED — the "remove it and R9 is 1 of 5" claim above is withdrawn.** The counterfactual
+> control (2026-08-09, near the end of this file) removed this file and measured **no verdict change
+> on any of the five queries**: this document is inert, and `git-guard-empty-index` is not propped up
+> by it. What survives is only the weaker point that the accepted cost is less bounded than the bare
+> counts suggest. Left in place, tagged rather than deleted, because the superseded reading is why the
+> control was run at all.
 
 **Re-check trigger — the accepted cost gets a monitor, not just a note.** Accepted-with-no-alarm is
 how a known cost becomes an unknown one, and R9 is the *only* instrument that sees this drift while
@@ -1964,4 +1980,411 @@ without perturbing the instrument. Noted rather than resolved; the counterfactua
 separates them, and it must be run against a stated index state, not "current".
 
 **Owner unchanged:** the deferred planning pass (ADR 0021). What it inherits is now a *reopened*
-decision plus one unrun control, not an accepted cost.
+decision plus one unrun control, not an accepted cost. ⇒ **The control has since been run — see the
+next section. Neither of the two populations this section suspected turns out to move the verdict.**
+
+### The counterfactual control ran — no document is implicated, and the regression is still unexplained (2026-08-09)
+
+> **Read this first — the conclusion, above the archaeology.** This section reached its answer in six
+> narrowings, five of which were wrong, and the superseded reasoning is left visible below because it
+> is *why* each correction was needed. What is actually true, all of it measured against the pinned
+> index state:
+>
+> 1. **No document is implicated.** `git-guard-empty-index`'s second chunk sits at rank 8. Any three
+>    removals from the six ranks above it restore PASS (2); no two do; which documents they come from
+>    makes **no** difference (15/15 pairs FAIL, 20/20 triples PASS). This file and the archive — the
+>    two suspects the monitor named — are both inert.
+> 2. **The regression is still unexplained.** The chunks involved were indexed `2026-08-07T23:38:14`,
+>    already present when the query passed. A leave-one-out varies populations at one instant; a
+>    regression is a change across two. Reconstructing 10b's index state is the blocking open item.
+> 3. **A weight change does help, and it is the one thing here that improves the bar.** Judge weight
+>    `1.5 → 1.2` takes R9 from **2 of 5 to 3 of 5** with **nothing regressing**. This is the only
+>    actionable result in the section, and it was the last thing found. Two caveats travel with it and
+>    are not optional: it is **judge chunks only, and no such knob exists yet** — `curated_doc` is one
+>    bucket, so this is a `source_type` split for ADR 0021, not a number change — and it is one index
+>    state on five queries, a lead to **re-confirm, not to apply blind**.
+> 4. **The instrument is sound but shallow.** Embedding noise never moves a verdict (8/8), while the
+>    margin under test is three ranks deep — so R9's clause 1 is far more sensitive to corpus growth
+>    than its stability suggests.
+
+**The suspect this file named is innocent.** The section above withheld attribution and flagged one
+tempting reading: that `## Verification`'s own growth displaced `git-guard-empty-index`'s second hit.
+The control says it did not. Removing this file changes **no verdict on any of the five queries**.
+Withholding was right, and taking the tempting reading would have been the fourth wrong attribution
+in this section.
+
+**The index was pinned first, and that turned out to be load-bearing.** A page-level `conn.backup()`
+snapshot was taken before any measurement: sha256 `9ba25e05…`, 60116992 bytes, **8960 chunks / 1025
+sources**, `max(indexed_at) = 2026-08-09T04:45:14+00:00` — identical to the state the monitor fired
+against, so the two tables compare directly. Mid-session a scheduled run moved the live index to
+**9012 chunks** (`last_indexed 2026-08-09T10:53:37+00:00`). Against "current" the control would have
+been measuring a different corpus than the monitor it was explaining.
+
+**Harness guard held.** Rebuilt in the scratchpad from the derivation above (never committed —
+phase-guard's denial recorded at `:1771` still stands). The no-op variant equals
+`search(CFG, q, k=6)` **path-for-path on all five queries**; without that, every column below is void.
+
+Two variants are new. The recorded derivation names three; `minus judges` and `minus tracking` were
+added because the judge corpus was never a variant in 10b's control.
+
+⚠️ **Correct the size, because a first draft of this section got it wrong.** The judge corpus is
+**2405 chunks — 27% of the 8960-chunk index**, accumulated across many runs. It is *not* the
+2026-08-08T10:30 batch (14 sources / 237 chunks, including `pr-tracking.md`'s 53); that batch is only
+the portion post-dating 10b. Conflating the two would have claimed the whole variant post-dates 10b
+when only part of it does.
+
+| target | as-is | minus archive | minus this doc | minus judges | minus tracking |
+|---|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | PASS (4) | PASS (4) | PASS (4) | PASS (4) | PASS (4) |
+| `falsifier-base-pin` | PASS (2) | PASS (2) | PASS (2) | **FAIL (1) — flipped** | PASS (2) |
+| `git-guard-empty-index` | FAIL (1) | FAIL (1) | FAIL (1) | **PASS (2) — flipped** | FAIL (1) |
+| `verification-marker-gate` | FAIL (1) | FAIL (1) | FAIL (1) | FAIL (3), clause 2 | FAIL (1) |
+| `phase-guard-hook` | FAIL (2), clause 2 | FAIL (2), clause 2 | FAIL (2), clause 2 | FAIL (3), clause 2 | FAIL (2), clause 2 |
+
+**The three recorded variants are indistinguishable.** `as-is`, `minus archive` and `minus this doc`
+produce the same verdict on every query — 2 of 5, passing set `{falsifier-base-pin,
+stale-phase-guard-rule-text}`. At *this* index state the archive is not the driver either.
+
+**`minus judges` is the only variant that moves anything**, and the mechanism is visible at depth 10
+rather than inferred. `git-guard-empty-index`'s second belonging chunk sits at **rank 8**, with three
+chunks of the verdict written *about that very fix* above it:
+
+All ten ranks are printed, none elided — an excerpt that skipped rows would leave a reader unable to
+rule out some *other* population doing the displacing:
+
+```
+  * 1. 0.048784  curated_doc  ~/docs/features/git-guard-empty-index.md:14-25
+    2. 0.046329  curated_doc  ~/docs/features/memsearch-freshness.md:1541-1567   <- this file: present, not causal
+    3. 0.042998  curated_doc  ~/coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:17-36
+    4. 0.041619  curated_doc  ~/docs/features/replay-harness-base-pin.md:594-606
+    5. 0.041539  curated_doc  ~/coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:445-471
+    6. 0.036192  curated_doc  ~/docs/features/replay-harness-base-pin.md:607-635
+    7. 0.036150  curated_doc  ~/coding-memory/observability-judge/2026-08-03-fix-git-guard-empty-index.md:195-218
+  * 8. 0.035885  curated_doc  ~/docs/features/git-guard-empty-index.md:1-6       <- displaced out of the top-6
+    9. 0.035833  curated_doc  ~/docs/decisions/0014-empty-index-means-ask-the-command.md:1-6
+   10. 0.034300  curated_doc  ~/docs/features/replay-harness-base-pin.md:907-927
+```
+
+**No `archive_doc` chunk appears anywhere in the top 10** — which is why `minus archive` cannot move
+this query, and is independent confirmation of the table above.
+
+⇒ **A judge verdict about feature F outranks F's own spec on a query about F.** Verdicts are
+`curated_doc` at weight **1.5** — the same weight as the feature docs — and their subject matter is
+by construction the features they judge, so they compete head-on with what they grade. The structural
+observation (equal weight, derivative subject matter) is checkable independently of any variant; what
+the control establishes is **nothing about causation** — see the enumeration below, which shows
+document identity has no measured effect on the deletion result. The observation earns its place only
+because the weight sweep at the end of this section acts on identity and *does* improve the bar.
+
+⚠️ **Dropping the judges is not free, and the count would hide it.** `falsifier-base-pin` regresses
+PASS (2) → FAIL (1): with the judge chunks gone, `replay-harness-base-pin.md:1198-1216` (0.041104)
+rises past its second hit (0.038841). The score stays **2 of 5** in a **third** distinct composition —
+the monitor's second threshold clause tripping again, on a hypothetical. Retuning the judge weight
+would trade one target's second hit for another's, exactly as R10 did.
+
+**Instrument noise was measured, not assumed — and it is not the explanation.** `/api/embed` takes no
+seed (`ollama.py:30-42`) and is **not deterministic**: 8 re-embeddings per query differ by up to
+`1.08e-04` per element (min cosine `0.999999803`). Verdicts were nonetheless **identical on 8/8
+trials for all five queries**. So the marginal-instability reading floated at `:1944-1950` — that
+these queries sit on the clause-1 boundary and wobble — is **falsified as an explanation of the
+swaps**: the boundary observation holds, but the instrument does not move on its own. The swaps are
+signal.
+
+⚠️ **The artefacts are ephemeral, so "reproducible" means re-derivable, not re-runnable.** The pinned
+DB, the pinned query vectors and the raw output live in a **session scratchpad**, which does not
+survive a session clear — the same reason the harness is stored as a derivation rather than a path
+(`:1750-1752`). Reproduction means: re-pin, confirm `chunks = 8960` and
+`max(indexed_at) = 2026-08-09T04:45:14+00:00` against sha256
+`9ba25e05de7f558caccdd93b309cad9a316781a6574a66eb0b4f2bd6d93acd7a` (60116992 bytes), rebuild from the
+derivation, re-embed, and re-pin the vectors. **A different `last_indexed` voids the comparison**
+rather than merely shifting it.
+
+⚠️ **Do not use a file hash as that anchor.** The snapshot was recorded as sha256 `9ba25e05…`; the
+same untouched file now hashes `77997c76…`, because merely *connecting* runs `_init_schema` and
+`log_query` and SQLite rewrites the file. A hash of a live SQLite database is not stable across a
+read, so it fails as a fixture and — worse — a mismatch would read as corruption on a perfectly good
+artefact. **The content anchors are the ones that hold:** `chunks = 8960`, `sources = 1025`,
+`max(indexed_at) = 2026-08-09T04:45:14+00:00`. Caught by the round-2 judge.
+
+⚠️ **Availability, stated plainly so nobody spends an hour looking:** those anchors are *stable*, not
+*obtainable*. The snapshot exists only in this session's scratchpad and **is expected to be destroyed**;
+the live index had already moved past it twice by the end of the session (8960 → 9012 → 9016). Nobody
+can re-run these tables later — they can only be re-derived by re-pinning a new state, which will not
+be this one. Two judge rounds reported the artefact missing after searching `/tmp`, `/var/folders` and
+the worktree; it was present the whole time, in a session-scoped path outside all of them. **That
+gap — a real artefact that no reviewer can reach — is the honest limitation of this record**, and it
+is why the derivation, not the file, is what the doc stores.
+
+#### Two controls on the control
+
+Both were run because a leave-one-out result is only as good as its confounds, and this section's
+history is of attributions that read well and were wrong.
+
+**1. Size-matched placebo — ⚠️ SUPERSEDED, and its heading was the claim that died.** It originally
+read *"the effect is subject-matter, not dilution"*; the enumeration below shows there is no measured
+subject-matter effect at all, and the placebo's real content is that it removed 0-2 of the six ranks
+above the target, which is simply below the threshold of three. Retained only as the record of how the
+wrong reading was reached. The populations are wildly
+unequal: judges **2405** chunks, archive **295**, this file **93**, `pr-tracking.md` **53**. So
+"only `minus judges` flips anything" could just mean "only `minus judges` removed a quarter of the
+corpus". Control: drop **2405 randomly chosen chunks** that are neither judge verdicts nor part of
+any of the five target features, three independent seeds.
+
+| target | as-is | minus judges | placebo s11 | placebo s22 | placebo s33 |
+|---|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | PASS (4) | PASS (4) | PASS (4) | PASS (4) | PASS (4) |
+| `falsifier-base-pin` | PASS (2) | FAIL (1) | PASS (2) | PASS (2) | PASS (2) |
+| `git-guard-empty-index` | FAIL (1) | PASS (2) | FAIL (1) | FAIL (1) | FAIL (1) |
+| `verification-marker-gate` | FAIL (1) | FAIL (3) | FAIL (1) | FAIL (1) | FAIL (1) |
+| `phase-guard-hook` | FAIL (2) | FAIL (3) | FAIL (2) | FAIL (2) | FAIL (2) |
+
+⚠️ **The three columns above are SUPERSEDED — read them only with the correction that follows.**
+Under the approximate method every placebo column is identical to `as-is`. That null is partly an
+artefact, and the round-2 judge caught it. Re-measured *exactly* — 2405 chunks physically deleted,
+`chunk_fts` rebuilt — placebo seed 11 **does** perturb R9: `falsifier-base-pin` goes PASS (2) →
+**FAIL (2)**, keeping both hits but losing clause 2. So a size-matched random deletion is **not**
+inert, and "the placebo changes nothing" was wrong.
+
+⚠️ **The exact placebo is n=1, and it is a weak control by its own arithmetic.** Only one seed was
+re-measured exactly; the other two columns remain approximate and therefore unreliable in the
+direction just demonstrated. The round-3 verdict also estimates that a chance flip is roughly a
+1-in-3 event per seed, so a single non-recovering seed is a likely outcome rather than a demonstration.
+Treat it as *consistent with* dilution not explaining the recovery, not as proof of it.
+
+**What survives is the narrower claim that the finding actually needs.** Under the same exact
+measurement the placebo leaves `git-guard-empty-index` at **FAIL (1)** — it does not recover it.
+Removing 2405 unrelated chunks fails to reproduce the effect that removing 2405 judge chunks
+produces. Dilution is therefore ruled out **for this query's recovery**, which is the claim the
+section rests on; it is *not* ruled out as a source of noise elsewhere in R9.
+
+**2. The FTS approximation, measured rather than argued.** Leave-one-out drops ids from the
+*candidate lists*, which is exact for the vector branch (per-chunk cosine is independent of what else
+is indexed) but approximate for FTS, since BM25 weights by corpus-wide IDF and average document
+length. `chunk_fts` is external-content FTS5 (`db.py:80-81`), so the exact version is buildable:
+physically delete the 2405 judge chunks from a copy of the pinned DB, `INSERT INTO
+chunk_fts(chunk_fts) VALUES('rebuild')` to recompute BM25 statistics over the surviving 6555, and
+re-run with the same pinned vectors.
+
+| target | approximate (candidate-drop) | exact (re-indexed) |
+|---|---|---|
+| `stale-phase-guard-rule-text` | PASS (4) | **PASS (3)** |
+| `falsifier-base-pin` | FAIL (1) | FAIL (1) |
+| `git-guard-empty-index` | PASS (2) | PASS (2) |
+| `verification-marker-gate` | FAIL (3) | FAIL (3) |
+| `phase-guard-hook` | FAIL (3) | FAIL (3) |
+
+For `minus judges` all five PASS/FAIL verdicts survive the approximation; one clause-1 *margin* does
+not (`stale-phase-guard-rule-text` reads 4 hits approximately, 3 exactly).
+
+⚠️ **Do not generalise that into "verdict-safe" — a first draft of this section did, and the placebo
+above is the counter-example.** On the placebo variant the two methods disagree on a *verdict*, not
+just a count. The defensible statement is narrow: **the approximation agreed with an exact rebuild on
+every variant this section's conclusions rest on** (`minus judges`, `minus` one verdict file, `minus`
+three chunks), and **disagreed on one it does not** (placebo seed 11). Any new variant must be
+re-measured exactly rather than assumed. Arguing from "the chunks survive in both variants" is what
+produced the wrong generalisation twice: survival is not rank invariance, and RRF consumes ranks.
+
+#### The threshold is a removal *count*, not a document — R9's margin here is three ranks deep
+
+The round-2 verdict asked whether this is a population effect or one oversized document. It is the
+latter, and that makes the fix far cheaper. Measured both ways, on `git-guard-empty-index`:
+
+| variant | approximate | exact (FTS rebuilt) |
+|---|---|---|
+| `as-is` | FAIL (1) | FAIL (1) |
+| `minus judges` — 2405 chunks | PASS (2) | PASS (2) |
+| `minus` one verdict file — **41 chunks** | PASS (2) | PASS (2) |
+| `minus` **just the 3 chunks at ranks 3/5/7** | PASS (2) | PASS (2) |
+
+**Challenged and tested: is this identification, or just a one-rank-deep margin?** The round-3 verdict
+argued the result proves less than it reads — that the target sits at ranks 1 and 8, so *any* two
+removals from ranks 2-7 would lift it into the top 6, and that dropping ranks 4/6/10 (three chunks of
+`replay-harness-base-pin.md`, an ordinary feature doc) would recover it equally. **Measured, and it
+does not:**
+
+| removal | result |
+|---|---|
+| ranks 3/5/7 — the verdict file's three chunks | **PASS (2)** |
+| ranks 4/6/10 — feature doc, the predicted equivalent | FAIL (1) |
+| ranks 4/6 — two chunks above the target | FAIL (1) |
+| ranks 2/4 — this file + feature doc | FAIL (1) |
+| rank 4 alone | FAIL (1) |
+| ranks 9/10 — below the target, control | FAIL (1) |
+
+⚠️ **The table above is real and the conclusion first drawn from it was a non-sequitur.** It was read
+as "equal-sized removals of neighbours are not substitutes, therefore the verdict chunks are
+*specifically* load-bearing". **Refuting a counterexample does not establish a claim** — and the
+comparison was not even size-matched: **rank 10 sits below the target and is inert**, so `{4,6,10}`
+is a disguised *two*-chunk removal. Every row above that fails is a 1- or 2-effective removal.
+
+**The discriminating test — vary document identity at fixed removal size — settles it, exhaustively
+over the six ranks above the target:**
+
+| removal size | combinations | PASS | judge chunks among them |
+|---|---|---|---|
+| **2** of ranks 2-7 | all 15 | **0** | 0 → 0/3, 1 → 0/9, 2 → 0/3 |
+| **3** of ranks 2-7 | all 20 | **20** | 0 → 1/1, 1 → 9/9, 2 → 9/9, 3 → 1/1 |
+
+⇒ **Document identity has no measured effect whatsoever. The only variable is how many chunks above
+the target are removed, and the threshold is three.** Raised by the round-4 verdict and confirmed by
+re-running it here rather than adopting it — the same standard applied to its round-3 claim.
+
+⇒ **Every variant result in this section collapses into that arithmetic**, which is the simplest
+explanation and fits all of them without residue:
+
+| variant | chunks it removes from ranks 2-7 | result |
+|---|---|---|
+| `minus archive` | 0 (none appear in the top 10) | FAIL (1) |
+| `minus this doc` | 1 (rank 2) | FAIL (1) |
+| placebo, size-matched | 0-2, by seed | FAIL (1) |
+| `minus judges` — 2405 chunks | **3** (ranks 3/5/7) | PASS (2) |
+| `minus` one 41-chunk verdict file | **3** (the same three) | PASS (2) |
+| `minus` just those 3 chunks | **3** | PASS (2) |
+
+The 2405-chunk, 41-chunk and 3-chunk variants agree not because a verdict document is special but
+because they remove **the same three occupants**. ⇒ **There is no demonstrated subject-matter effect,
+and the "judge crowding" reading is withdrawn.** What R9 records on this query is a **margin three
+places deep**, not a displacer — and a margin that shallow is a fact about the bar's sensitivity, not
+about any document in the corpus.
+
+**What survives, because it needs no counterfactual:** a **639-line** judge verdict about
+`git-guard-empty-index` outranks the **375-line** spec it grades, and verdicts sit at `curated_doc`
+weight **1.5** — the same weight as the specs they are *about* (`config.json`). That is checkable from
+file lengths and config alone. It is **not** shown to have caused anything measured here, and ADR 0021
+should treat it as a structural observation worth a decision, not as a finding this control produced.
+
+#### ⚠️ And this control does **not** explain the regression it was run to explain
+
+Checked, not assumed: those three chunks were indexed at **`2026-08-07T23:38:14+00:00`**, in the
+original backfill. **They were already in the index at 10b, when this query passed 2 of 2.** A
+population that was present while the query passed cannot be what changed when it later failed.
+
+So the two questions come apart, and the section above answers only the second:
+
+- **What changed between 10b and the monitor firing?** *Still unassigned.* A leave-one-out at the
+  current state cannot answer it — it varies populations, not time.
+- **What is sufficient, at the pinned state, to restore the verdict?** Those three chunks. Answered,
+  and confirmed under an exact re-index.
+
+The framing "the control will assign the cause of the regression" — carried since `:1958` — was
+**wrong about what the instrument can do**, and no amount of care in running it would have fixed
+that. Reconstructing 10b's index state is therefore not an optional tidy-up; it is the only thing
+that can answer the first question, and it is now the blocking open item for ADR 0021.
+
+**Retained as the useful result:** a concrete, cheap, verified lead on *restoring* R9's second hit
+for one query, and a demonstration that neither this file nor the archive is implicated at this state.
+
+**Not retracted, and not reconciled either:** 10b's finding that the archive drove both of *its*
+moves rests on a control that was actually run, and this control was run against a different index —
+the archive was re-indexed at `2026-08-08T16:38` (274 chunks) and the judge batch landed at `10:30`
+that same day. **Which of those two batches 10b's index already contained has not been reconstructed
+here**, so "10b was right then, judges are the cause now" is the reading available, and the stronger
+claim that 10b mis-attributed is *not* supported by anything measured. Reconstructing 10b's index
+state is the open item.
+
+**Monitor status:** the decision stays **reopened**, and the owner is unchanged (the deferred
+planning pass, ADR 0021).
+
+**Stated at the strength the evidence supports, no further** — this section reached its conclusion in
+three passes, and each pass had to narrow the previous one:
+
+1. *"The cause is the judge corpus"* → over-claimed the definite article.
+2. *"Judge crowding is the only population that moves it, and a placebo rules out dilution"* →
+   the placebo's null was an artefact of the approximate method; measured exactly, it does perturb R9.
+3. *"Three chunks of one verdict document are the cause"* → they are **sufficient to restore** the
+   verdict; they were in the index while the query still passed, so they are not what changed.
+4. *"Those three chunks are specifically load-bearing"* → drawn from a **false counterexample** that
+   was not even size-matched. Enumerated exhaustively, document identity has no effect at all.
+5. **What is actually supported:** on `git-guard-empty-index` at this index state, the feature's
+   second chunk sits **three places below the cut**; any three removals from above it restore the
+   verdict and no two do; **no document is implicated**, this file and the archive included; and
+   **the regression's cause remains unassigned.**
+
+Each narrowing came from a control, never from re-reading the prose. Three failure modes recur, in
+increasing order of cost. Answering *"what is the cause"* with the first population that flips the
+result, when the discriminating question is **what is the smallest thing that flips it**. Concluding
+a claim is strengthened because a *counterexample to it* failed — **it is not**, and the test that
+discriminates (vary identity at fixed removal size) was available throughout. And, worst, **not
+noticing that the instrument answers a different question than the one being asked**: a leave-one-out
+varies populations at one instant, a regression is a change across two, and four rounds of
+increasingly careful measurement never turned the first into the second.
+
+⚠️ **Note what the care bought and what it did not.** Each round was more rigorous than the last —
+pinned state, exact re-index, size-matched placebo, exhaustive enumeration — and rounds 1-4 were
+wrong anyway, because the rigour was spent on the wrong comparison. **Precision is not accuracy**, and
+a well-controlled answer to the wrong question is the most persuasive kind of wrong.
+
+#### The remedy the enumeration does *not* rule out — and the only change that improves the bar
+
+⚠️ **A first draft of this closing concluded "no reweighting is supported at all, since document
+identity had no measured effect". That is wrong, and it is the same over-reach as the rest of the
+section, merely running conservative.** Deletion-invariance to identity does not imply
+*weight*-invariance, because **a weight change is defined by identity**. Deleting a population is the
+single point `weight = 0`; `minus judges` sampled only that endpoint, where `falsifier-base-pin` loses
+its pass. The interior of the curve was never sampled. Raised by the round-5 verdict, and re-run here
+before being believed — weight is a post-fusion multiplier (`search.py:80`), so this is the **cheapest
+exact control in the section**: no re-index, no FTS rebuild, no re-embedding.
+
+| judge weight | R9 | `git-guard-empty-index` | anything regress? |
+|---|---|---|---|
+| **1.5** (current) | 2 of 5 | FAIL (1) | — |
+| 1.4 | 2 of 5 | FAIL (1) | no |
+| 1.3 | 2 of 5 | FAIL (1) | no |
+| **1.2** | **3 of 5** | **PASS (2)** | **no** — and both remaining failures gain hits (1→3, 2→3) |
+| 1.1 / 1.0 | 3 of 5 | PASS (2) | no |
+
+⇒ **`curated_doc` weight 1.2 for judge verdicts takes R9 from 2 of 5 to 3 of 5 with no regression.**
+That is the first change measured anywhere in this feature that *improves* the bar rather than trading
+one target's pass for another's, and it stands even though the crowding *narrative* was withdrawn: the
+enumeration killed the story, not the remedy.
+
+🛑 **This is not a config edit — the knob does not exist yet, and ADR 0021 must build it first.**
+`config.json:17` keys `weights` by *source type*, and `curated_docs` is a single bucket holding judge
+verdicts, feature docs, ADRs and `PORTS.md` alike. (`CODING_MEMORY.md` is listed in that bucket too but
+never reaches it: `_doc_source_type` re-types it to `archive_doc` at **1.0** by filename —
+`index.py:46-58`.) There is no judge-verdicts-only weight. Setting `curated_doc` to 1.2 wholesale
+would **not** reproduce the table above and would demote every spec in the corpus: all ten ranks printed earlier in this section are `curated_doc`, so a uniform
+multiplier scales them equally, leaves their order untouched, and moves the rank-8 target nowhere. The
+sweep necessarily re-weighted **judge chunks only** (the 2405-chunk corpus defined above), which today
+requires splitting them into their own `source_type` — not a number change. The precedent is exact and
+already in the tree: `_doc_source_type` (`index.py:46-58`) classifies the archive **by filename, not by
+which bucket found it**, for precisely this reason — "bucket-based typing would tier them differently
+(1.5 vs 1.2), ranking session narrative at or above the decision records it narrates". A judge-verdict
+tier is the same shape of change, keyed on a path instead of a filename — but **on
+`coding-memory/observability-judge/` and `coding-memory/compliance-judge/`, not on `coding-memory/`.**
+That distinction is load-bearing: `coding-memory/` holds **2866** chunks against the sweep's **2405**,
+and the extra **461** are brainstorms, branch notes and `pr-tracking.md` (53 chunks) — which this very
+section runs as a separate variant and finds inert. Keyed too broadly, the knob would not reproduce the
+table it exists to reproduce.
+
+Raised by the round-6 verdict; the bucket membership corrected by round 7, which caught this paragraph
+naming `CODING_MEMORY.md` as a `curated_doc` member one sentence before citing the carve-out that
+removed it; the path scope corrected by round 8. Three rounds, three different errors, in the one
+paragraph that tells the next agent what to build — recorded because that concentration is the finding.
+
+⚠️ **And the "anything regress?" column is verdict-level only** — the same flaw this section diagnoses
+at the `minus judges` variant, where a count hid a real regression. A PASS(4) → PASS(3) erosion would
+print as "no" here. Per-target hit counts were recorded only for the 1.2 row (both remaining failures
+gain hits, 1→3 and 2→3); the other rows' margins were not captured, and re-deriving them needs the
+pinned state this section can no longer reconstruct.
+
+What the planning pass (ADR 0021) inherits: that sweep, plus a structural observation needing no
+counterfactual — one 639-line verdict outranking the 375-line spec it grades, at equal `curated_doc`
+weight. Two warnings still stand: the sweep is measured at one index state on five queries, so it is a
+lead to re-confirm rather than a tuning to apply blind; and at the `weight = 0` endpoint the failure
+moves rather than removing it (`minus judges` costs `falsifier-base-pin` its pass), so
+the improvement is an interior-point result and does not extend to the endpoint.
+
+📌 **Merging this branch perturbs the very corpus it measures, and here is the number.** This
+section's own verdict files are `curated_doc` judge chunks: **112 chunks across the seven files**
+(rounds 1–7), against the 2405-chunk judge corpus defined above — **+4.7%**, landing shortly before
+R9's re-check trigger next fires. Derivation, not a stored constant: run `chunk_doc` (`chunk.py`) over
+`coding-memory/observability-judge/2026-08-09-docs-r9-counterfactual-control*.md` and sum the lengths.
+It was 99 (+4.1%) at `1c89fbe`, before round 7's own verdict was written — the count grows every time
+this section is judged, which is itself the point. Measuring the effect needs a pinned state this
+branch can no longer reconstruct, so it is deferred to ADR 0021 rather than estimated.
+
+And the standing caveat over all of it: **the regression itself is still unexplained**, so even the
+1.2 sweep is tuning against a symptom whose cause was never found. Blocking open item, promoted from
+a footnote: reconstruct 10b's index state. Until then R9's monitor has a reopened decision, one
+measured improvement, and no assigned cause.
