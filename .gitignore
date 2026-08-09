@@ -70,3 +70,8 @@ tasks/
 # claude-code-handoff session state (this repo is itself a git toplevel, so the
 # vendored handoff hooks write their session files to a nested .claude/ here)
 /.claude/
+
+# Python bytecode / test caches (task-tracker)
+__pycache__/
+*.py[cod]
+.pytest_cache/

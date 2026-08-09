@@ -187,3 +187,36 @@ this repo has ever exposed, so it is default-deny:
 
 _(to be filled during implementation — spike result and chosen injection route first, then
 before/after test counts per suite)_
+
+## Card corrections required (found by lanes A and D, verified by the orchestrator)
+
+Four factual errors in this card, all of the same species — **a fact asserted from a grep I did not
+falsify**. Per the standing rule about repeat findings of one class, the fix is to re-derive every
+factual claim here, not to patch these four. That audit is the next task.
+
+1. **"Injection is unproven" is wrong.** `send_launcher()` (`panes/adapters/cmux.sh:163-165`) sends to
+   an *existing* surface via `cmux send --surface`, and the reuse branch (`cmux.sh:302-312`) is
+   commented "v1-proven here (user-approved deviation 2026-07-21)". My original claim came from
+   pooling function names across all four adapter files with `sort -u` — an artifact of the grep, not
+   a property of the code. `cmux send` exists and is documented.
+2. **Evidence bullet 3 is stale.** There are now 6 worktrees, exactly 2 cards say `branch: none`
+   (`falsify-harness-signatures`, `verification-marker-gate`), and **no worktree branch is named for
+   either** — so criterion 2's drift scenario does not currently occur in this repo. The test builds
+   it in a fixture, which is correct; the *evidence* bullet overclaimed.
+3. **Criterion 1 overstates `feature_tasks.py`.** That module deliberately discards the checkbox
+   marker (`feature_tasks.py:11-14`) because task identity must survive a tick — so it has no
+   done/total to match. Reword to: total from `task_ids()`, done read off the same `STRICT_RE`-matched
+   lines. One parser still holds.
+4. **Test filenames cannot be collected.** Tasks 4, 6 and 9 name `*.test.py`; pytest collects
+   `test_*.py`. Implemented as `test_analyze.py` / `test_store.py`; task 9 must be reworded before
+   anyone starts it.
+
+Also open: `analyze.py` is 792 lines — under the 800 hard max, over the 400 target. The clean split is
+a `task-tracker/git_facts.py`, which needs an explicit ownership grant.
+
+Security addition for task 8, from the spike: `cmux.sh:168-172` records that an unresolvable ref falls
+through to the **focused** tab without erroring. Task 8 must re-resolve and verify the target surface
+at send time and refuse rather than send an unconfirmed ref. Separately — the cmux socket has **no
+authentication** beyond its 0600 permission, so injection is already available to any process running
+as the user; the new risk this feature introduces is the HTTP hop, which is what the Security section
+above defends. Do not weaken any of it.
