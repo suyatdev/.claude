@@ -295,3 +295,111 @@ intact), and round 2's `writing-specs/api-contracts` instance (`tracker-data-fal
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+---
+
+## Round 4 — 2026-08-09T18:52:11Z — **FAIL** (2 violations)
+
+- **HEAD:** `81d98dc82a8f8b622ce9cf3e39e00b2aa56d1e17` · **Spec blob:** `32a7aa93eb5a2f9d56ed1a244bc95902a8d83e7d`
+- Round 3's two: **1 resolved, 1 re-cited one hop further out.** 1 new. Waived: none.
+
+### Summary in plain language
+
+The two things round 3 asked for were done, and done properly. I re-derived every claim in the
+revision against the actual files rather than reading the card, and the numbers hold: the remote-asset
+table is exactly right — six distinct assets across nine reference sites, and all three unpkg scripts
+really do carry `sha384` integrity hashes (`support.js:1144, 1146, 1148`), so the card's correction of
+the earlier "no SRI" claim is itself correct. Every pinned toolchain row matches this host exactly
+(`Python 3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0`), and the suite still
+reports **53 passed**. `tracker-data.sample.js` genuinely is reachable
+(`tracker-data-fallback.js:19` `document.write`s it), and `nocturne.css` genuinely is not — only
+`Task Tracker Directions.dc.html:12` loads it, and that file is never served. Both calls are right.
+
+**The CSP violation is closed, and I checked it would actually work rather than just that it exists.**
+The policy is compatible with the page it protects: the two `new Function` sites are real
+(`support.js:844, 1218`) so `'unsafe-eval'` is honestly earned; the served page's only apparently-inline
+`<script>` is `type="text/x-dc"` at line 297, a data block the browser never executes, so nothing needs
+a nonce; the one `<style>` element is covered by `style-src 'unsafe-inline'`; `bundledBlob` reads a
+pre-populated `Blob` map and never mints a `blob:` script URL, so `script-src 'self'` does not trip on
+it; and `support.js:159`'s `fetch(location.href)` is same-origin under `connect-src 'self'`. ADR 0024
+records the `'unsafe-eval'` concession as a rejected alternative with a reason, which is the
+human-owned-trade-off shape core-conduct asks for. Nothing further to cite here.
+
+**Where the pattern is not closed.** You asked me to judge the class, not the two instances, and the
+class survives one filetype out. The servable-closure rule is right; the command that implements it is
+still narrower than the question. `grep -rnE '(src|href)=' --include='*.html' --include='*.js'` cannot
+see a request emitted from CSS — wrong syntax for `url(...)`, and `.css` is not in the include list at
+all. That is not hypothetical: this card's own task 14 vendors the two `@phosphor-icons` stylesheets
+and states that "the icon font files they reference must come along", and rewrites the Inter `@import`
+inside `_ds/nocturne-<uuid>/styles.css`. Both produce local files that the served page requests **from
+CSS**, and the prescribed derivation returns zero rows for them. Task 8 — which builds the static
+manifest and is scheduled before task 14 — is told to "re-run the derivation", pointing the implementer
+at the blind command. Round 2's fix was file→repo scope; round 3's was HTML→JS scope; the surviving
+gap is JS→CSS scope. Same species, one hop out, for the third round running. The hedge "plus whatever
+local paths task 14's vendoring creates" is prose asking the reader to notice, which is exactly the
+mechanism this card elsewhere refuses to rely on. A second, smaller leg of the same finding: `_ds/**`
+is written into a set the card calls "closed" and "enumerated", but it is a glob — `_ds/` also holds
+`_ds_manifest.json`, `readme.md` and `_adherence.oxlintrc.json`, none of which the page requests.
+
+**The new finding, and the one-line test that shows it is real.** The acceptance criteria enumerate the
+control server's refusals exhaustively and never once state what success looks like. Criterion 6 ends
+"no command reaches the session". Criterion 9 ends "no keystroke reaches any surface". Criterion 7 ends
+"no command reaches the session". Criterion 11 requires a `403`. Criterion 10 fetches HTML and greps for
+a token. Nothing anywhere asserts that an authorized `clear` actually types `/clear` into the session,
+that `reanalyze` through the endpoint produces a new run, that a static-closure member returns `200`, or
+that the served page renders at all. The decisive check: **a server that returns `403` to every POST and
+`404` to every static path, and never invokes `cmux send`, satisfies criteria 6 through 11 completely.**
+The wire contract does define `200 {"ok": true, ...}`, so the shape is written down — but the criteria
+are what task 9 builds tests from, and task 9's own wording ("a test that only proves the happy path
+does not close this task") assumes a happy-path criterion that was never written. For a feature whose
+entire stated value is the send path and the rendered survey, the good case is the one case missing.
+
+### Violations
+
+| # | id | Rule source | Where | Why |
+|---|---|---|---|---|
+| 1 | `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | §Design 3 → Wire contract → "The servable set is defined as a rule"; task 8 | The static-asset contract is declared a closed, enumerated closure but its prescribed derivation (`grep -rnE '(src\|href)=' --include='*.html' --include='*.js'`) cannot see a request emitted from CSS, which is precisely what task 14's vendoring of the `@phosphor-icons` font files and the Inter `@import` in `_ds/nocturne-<uuid>/styles.css` creates — and `_ds/**` is a glob covering three files the page never requests, so the manifest is neither closed nor enumerated. |
+| 2 | `writing-specs/good-bad-edge-cases` | `skills/writing-specs/SKILL.md` | §Acceptance criteria (6-11); task 9 | The criteria state what wrong looks like for the new trust boundary in exhaustive detail and never state what correct looks like: no criterion asserts an authorized command reaches the session, that `reanalyze` via `POST /command` produces a new run, that a static-closure member returns `200`, or that the served page renders — so a server that refuses every request and never invokes `cmux send` satisfies criteria 6-11. |
+
+Round-3 ids **resolved** this round and not re-cited: `writing-secure-code/csp` — the token-bearing
+response now carries a full policy including `frame-ancestors 'none'`, the `'unsafe-eval'` concession is
+stated as a caveat rather than glossed, ADR 0024 records it as a rejected alternative with a reason, and
+I verified the policy is actually compatible with the page rather than merely present.
+
+Round-1/2 ids still resolved and not re-cited: `core-conduct/secrets-not-client-side`,
+`writing-specs/pinned-versions`, `core-conduct/explicit-error-handling`, `core-conduct/no-absolute-paths`,
+`writing-specs/no-placeholders`, `writing-specs/diagrams`.
+
+### Notes (non-blocking)
+
+- **Correct derivation for the servable closure.** Add `.css` and the CSS syntax to the command, e.g.
+  `grep -rnE '(src|href)=|url\(' task-tracker/ --include='*.html' --include='*.js' --include='*.css'`,
+  and enumerate `_ds/` by the two files actually requested rather than by `**`.
+- **One blind spot further out, latent today.** `support.js:1642` `ensureFetched()` builds a sibling
+  request as `COMPONENT_DIR + "/" + encodeURIComponent(name) + ".dc.html"` (`COMPONENT_DIR = "."`), a
+  path no `(src|href)=` grep can ever see. It does not fire for the served page — one `<x-dc>` root, no
+  `x-import` — but it is the same species one hop beyond the CSS gap.
+- **CSP lands before its vendoring.** Task 8 adds `script-src 'self'` and task 14 vendors the unpkg
+  scripts; between them the served page cannot boot, because React/ReactDOM/Babel are blocked by the
+  policy. Contained in practice (14 precedes 10, and task 9's tests are HTTP-level), but task 8 should
+  say so rather than leaving it to be discovered in a browser console.
+- **`base-uri` is absent and does not fall back to `default-src`.** Low impact given `script-src 'self'`,
+  but it is a one-token addition to a policy that is otherwise carefully reasoned.
+- **No error behaviour for a closure member missing on disk.** `tracker-data.js` does not exist before
+  the first analysis — that is the whole reason `tracker-data-fallback.js` exists — yet the status table
+  maps `404` only to non-members, and `GET /` states no behaviour if `Task Tracker.dc.html` is unreadable.
+- **`analyze.py` is 792 lines**, eight under the 800 hard max. The card surfaces the split as a
+  human-owned call and declines to schedule it, which is the right posture, but the headroom is gone.
+- **The remote-asset grep returns 15 rows, not 9.** Six are `repoUrls` GitHub links in `tracker-data.js`
+  and `tracker-data.sample.js` — link targets, not fetched assets. The table's "six assets across nine
+  reference sites" is exactly right; a reader re-running the command needs to know to discard those six.
+- **Toolchain re-verified on this host, all five rows exact:** `Python 3.9.6`, `uv 0.11.28`,
+  `pytest 9.1.1`, `cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0`; suite reports **53 passed**.
+- **Gherkin shape**, fourth round running: several criteria fold `When` into `Given`. Still not cited,
+  same reasoning as rounds 1-3.
+- **Deleting the revision history was the right call**, and the reasoning given for it generalises. The
+  three warnings kept beside the thing that would reproduce the mistake are the load-bearing survivors.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
