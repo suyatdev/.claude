@@ -2342,17 +2342,25 @@ enumeration killed the story, not the remedy.
 `config.json:17` keys `weights` by *source type*, and `curated_docs` is a single bucket holding judge
 verdicts, feature docs, ADRs and `PORTS.md` alike. (`CODING_MEMORY.md` is listed in that bucket too but
 never reaches it: `_doc_source_type` re-types it to `archive_doc` at **1.0** by filename —
-`index.py:46-58`.) There is no judge-verdicts-only weight. Setting `curated_doc` to 1.2 wholesale would **not** reproduce the table above and would demote
-every spec in the corpus: all ten ranks printed earlier in this section are `curated_doc`, so a uniform
+`index.py:46-58`.) There is no judge-verdicts-only weight. Setting `curated_doc` to 1.2 wholesale
+would **not** reproduce the table above and would demote every spec in the corpus: all ten ranks printed earlier in this section are `curated_doc`, so a uniform
 multiplier scales them equally, leaves their order untouched, and moves the rank-8 target nowhere. The
 sweep necessarily re-weighted **judge chunks only** (the 2405-chunk corpus defined above), which today
 requires splitting them into their own `source_type` — not a number change. The precedent is exact and
 already in the tree: `_doc_source_type` (`index.py:46-58`) classifies the archive **by filename, not by
 which bucket found it**, for precisely this reason — "bucket-based typing would tier them differently
 (1.5 vs 1.2), ranking session narrative at or above the decision records it narrates". A judge-verdict
-tier is the same shape of change, keyed on the `coding-memory/` path instead of a filename. Raised by
-the round-6 verdict; the bucket membership corrected by round 7, which caught this paragraph naming
-`CODING_MEMORY.md` as a `curated_doc` member one sentence before citing the carve-out that removed it.
+tier is the same shape of change, keyed on a path instead of a filename — but **on
+`coding-memory/observability-judge/` and `coding-memory/compliance-judge/`, not on `coding-memory/`.**
+That distinction is load-bearing: `coding-memory/` holds **2866** chunks against the sweep's **2405**,
+and the extra **461** are brainstorms, branch notes and `pr-tracking.md` (53 chunks) — which this very
+section runs as a separate variant and finds inert. Keyed too broadly, the knob would not reproduce the
+table it exists to reproduce.
+
+Raised by the round-6 verdict; the bucket membership corrected by round 7, which caught this paragraph
+naming `CODING_MEMORY.md` as a `curated_doc` member one sentence before citing the carve-out that
+removed it; the path scope corrected by round 8. Three rounds, three different errors, in the one
+paragraph that tells the next agent what to build — recorded because that concentration is the finding.
 
 ⚠️ **And the "anything regress?" column is verdict-level only** — the same flaw this section diagnoses
 at the `minus judges` variant, where a count hid a real regression. A PASS(4) → PASS(3) erosion would

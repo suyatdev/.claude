@@ -4704,3 +4704,45 @@ counterexample does not strengthen a claim.** Refuting "X would also work" leave
 exactly as unproven as before, and the discriminating test — vary identity at *fixed* removal size —
 was one script away with every artefact still on disk. Rigour applied to the wrong comparison reads
 as rigour right up until someone runs the right one.
+
+## 2026-08-09 — session 49: the verdict that invalidates itself, and the paragraph that kept being wrong
+
+Session 48 left one blocker: `judge-guard.sh` wants a verdict whose `head_sha` equals HEAD, and the
+commit recording rounds 1-5 had moved HEAD past them. Rounds 6, 7 and 8 ran. **All three passed with no
+`fail` dimension — and all three found a real error**, each time in the *same* paragraph: the one that
+tells ADR 0021 what to build.
+
+**Round 6:** the section's one actionable result — judge weight `1.5 → 1.2`, R9 from 2 of 5 to 3 of 5 —
+**is not a config edit**. `config.json:17` keys `weights` by `source_type` and judge verdicts share the
+`curated_doc` bucket with every spec and ADR. Verified: all ten printed ranks are `curated_doc`, so a
+uniform multiplier scales them equally and reorders nothing — which *proves* the sweep was judge-only,
+and proves a wholesale `curated_doc = 1.2` would demote every spec while reproducing none of the table.
+Round 6 also claimed the doc never names the re-weighted population; it does (`:2326`, "for judge
+verdicts"). **That wrong claim was left standing in its verdict rather than edited** — a calibration
+record that only records the judge's hits is not a calibration record.
+
+**Round 7** caught the fix itself naming `CODING_MEMORY.md` as a `curated_doc` member *one sentence
+before* citing the carve-out that removed it — `_doc_source_type` (`index.py:46-58`) re-types it to
+`archive_doc` (1.0) by filename, whichever bucket found it. I had verified the conclusion and skipped
+the enumeration, which is precisely the failure this section exists to document. **Round 8** caught the
+corrected version keying the proposed knob on `coding-memory/` — **2866** chunks against the sweep's
+**2405**, over-capturing **461** including `pr-tracking.md`, which this same section measures as inert.
+
+Three lessons, and the third is the general one.
+
+**(1) A verdict pins HEAD, so committing a verdict invalidates it.** That is a structural loop, not a
+mistake — three rounds were spent in it. The escape: run `gh pr create` while the verdict file is
+written but *uncommitted*, then commit and push it onto the open PR. No `JUDGE_EXEMPT` required.
+
+**(2) Errors concentrate in the instruction-to-a-successor.** Not in the measurements — those survived
+eight rounds — but in the paragraph saying *what to do next*, which is the least measurable prose in
+the document and the only part another agent will act on. Three rounds, three distinct errors, one
+paragraph. Judge that paragraph hardest; it is where being plausible is cheapest.
+
+**(3) When two rounds disagree twofold, re-derive rather than pick.** Round 6 estimated the merge
+perturbation at ~48 chunks, round 7 measured 99. Running `chunk_doc` myself gave **99 at `1c89fbe`,
+112 with round 7's own verdict added** (+4.7% of the judge corpus) — round 7 exact, round 6 half. The
+count grows every time the section is judged, which is the joke and also the finding: measuring this
+corpus perturbs it. Stored as a derivation, deferred to ADR 0021 rather than estimated.
+
+PR #47 opened (docs-only, `docs/r9-counterfactual-control`); detail in `coding-memory/pr-tracking.md`.
