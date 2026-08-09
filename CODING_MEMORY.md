@@ -4604,3 +4604,95 @@ The transferable failure is **acting on a premise the user supplied from my own 
 question — and never re-checked whether the PR was still open, the question that actually mattered. The
 push succeeded and left three commits stranded 3 ahead of a merged branch's merge point. **Verify the
 premise, not just the operation**; a fast-forward check cannot tell you the destination is dead.
+
+## 2026-08-09 — session 48: the owed control ran, and cleared its own prime suspect
+
+Branch `docs/r9-counterfactual-control`, cut from `origin/main` (`64d8acb`). Phase `review`
+throughout; model-switch checkpoint answered — stay on Opus 5.
+
+**Pinning the index was not ceremony.** The control was run against a `conn.backup()` snapshot
+(8960 chunks, `max(indexed_at) = 2026-08-09T04:45:14+00:00`, sha256 `9ba25e05…`) that matches the
+state the R9 monitor fired against. **Mid-session a scheduled run moved the live index to 9012
+chunks.** Had the control read "current", it would have explained a corpus the monitor never saw —
+the exact failure the feature doc predicted one paragraph before it happened.
+
+**Result: `## Verification`'s self-displacement — the reading the previous session called tempting
+and refused — is wrong.** Dropping this file changes no verdict on any of the five queries; so does
+dropping the archive. **And no other document is implicated either:** the final answer is that
+`git-guard-empty-index`'s second belonging chunk sits at **rank 8**, three places below the cut, and
+**any** three removals from the six ranks above it restore PASS (2) while **no** two do — regardless
+of which documents they come from. What R9 records on this query is a margin, not a displacer.
+
+The one structural observation that survives, because it needs no counterfactual: a **639-line**
+judge verdict about `git-guard-empty-index` outranks the **375-line** spec it grades, at equal
+`curated_doc` weight 1.5. That verdicts and specs share a weight while the verdicts are *about* the
+specs is checkable from `config.json` and the file lengths. It is **not** demonstrated to have caused
+anything here.
+
+**And the one change that actually helps, found last and nearly missed.** From "identity has no
+measured effect" I concluded "no reweighting is supported" — wrong, and wrong in the conservative
+direction. **Deletion-invariance to identity is not weight-invariance, because a weight change is
+*defined* by identity**; deleting a population is only the endpoint `weight = 0`, and I generalised
+from it without sampling the interior. Swept (a post-fusion multiplier, so no re-index — the cheapest
+control in the whole investigation, and the last one run): judge `curated_doc` weight **1.5 → 1.2
+takes R9 from 2 of 5 to 3 of 5 with nothing regressing**, both remaining failures gaining hits. That
+is the first change measured anywhere in this feature that *improves* the bar instead of trading one
+target's pass for another's. **The enumeration killed the narrative, not the remedy** — a story being
+wrong does not make every action it suggested wrong.
+
+**The conclusion narrowed three times, each time because a control said so, never because the prose
+was re-read.** (1) "the cause is the judge corpus" — over-claimed. (2) "the only population that moves
+it, and a placebo rules out dilution" — the placebo's null was an artefact of the approximate method;
+measured exactly it *does* perturb R9 (`falsifier-base-pin` loses clause 2), so "verdict-safe" was
+also wrong. (3) What holds: three chunks are sufficient, a size-matched random deletion does **not**
+recover the query, and the class-level claim "judge verdicts crowd out feature docs" is **untested** —
+one document, one query.
+
+The transferable rule: **"what is the cause" is answered by the first population that flips the
+result; the question that discriminates is "what is the smallest thing that flips it".** 2405 chunks
+and 3 chunks produce the identical recovery, and only the second one tells you what to fix.
+
+Two things the count would have hidden, both recorded: dropping judges *regresses*
+`falsifier-base-pin`, holding 2 of 5 in a third distinct composition — retuning moves the failure
+rather than removing it. And `/api/embed` is **non-deterministic** (≤1.08e-04 per element, min cosine
+0.999999803) yet verdicts were identical on 8/8 re-embeddings for all five queries, which falsifies
+the marginal-instability explanation without touching the boundary observation itself.
+
+**The largest lesson landed last, and it invalidates the framing rather than a number.** The three
+displacing chunks were indexed `2026-08-07T23:38:14` — **already present at 10b, when the query still
+passed.** Something present while a test passes cannot be why it later failed. So the control answers
+*"what is sufficient to restore the verdict now"* and **not** *"what caused the regression"*, which is
+the question it was run to answer and which stays unassigned. A leave-one-out varies populations at
+one instant; a regression is a change between two instants. Three rounds of increasingly careful
+measurement never turned the first into the second — and the tell was available from the start, in a
+timestamp I did not check until the fourth pass.
+
+Practical rule: **before running an instrument, state which question it can answer and check that it
+is the question being asked.** Method rigour cannot rescue a category error, and rigour is exactly
+what made this one persuasive for three rounds. Reconstructing 10b's index state is now the blocking
+item for ADR 0021, promoted from a footnote.
+
+**The final narrowing killed the story entirely, and it came from refuting a refutation.** Round 3
+predicted dropping ranks 4/6/10 would recover the query as well as the verdict chunks do. It does not
+(FAIL 1), and I concluded from that failed counterexample that the three verdict chunks were
+*specifically* load-bearing. **That is a non-sequitur, and round 4 caught it.** Enumerated
+exhaustively over the six ranks above the target: **all 15 two-chunk removals FAIL, all 20 three-chunk
+removals PASS, and the number of judge chunks among them (0, 1, 2 or 3) changes nothing.** Round 3's
+example was merely a disguised two-chunk removal — rank 10 sits *below* the target and is inert.
+
+⇒ **Document identity has no measured effect. The only variable is how many chunks above the target
+are removed, and the threshold is three.** Every earlier result collapses into that arithmetic:
+`minus this doc` removes 1 of the 6 above (FAIL), `minus archive` removes 0 (FAIL), `minus judges` and
+`minus` one 41-chunk file and `minus` 3 chunks all remove the same 3 (PASS). **The judge-crowding
+story is dead** — what R9 measures on this query is that the feature's second chunk sits three places
+below the cut, not that anything in particular displaced it.
+
+Two lessons, and the second is the one worth keeping. **(1) Take the challenge seriously, take the
+assertion to the data** — across four rounds the judges made four wrong factual claims (twice
+reporting the snapshot destroyed when it was present in a path they had not searched; guessing elided
+ranks were archive chunks when they were feature docs) *and* four right ones that each changed the
+conclusion. Neither deference nor dismissal survives contact with checking. **(2) A false
+counterexample does not strengthen a claim.** Refuting "X would also work" leaves "only Y works"
+exactly as unproven as before, and the discriminating test — vary identity at *fixed* removal size —
+was one script away with every artefact still on disk. Rigour applied to the wrong comparison reads
+as rigour right up until someone runs the right one.
