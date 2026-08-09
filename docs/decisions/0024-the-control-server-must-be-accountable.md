@@ -35,7 +35,13 @@ mechanism rather than an intention.**
   window in which keystrokes reach the focused tab.
 - **A Content-Security-Policy on the token-bearing response**, whose load-bearing clause is
   `frame-ancestors 'none'`.
-- **A parent-death check on the idle timer**: record `os.getppid()` at startup, exit when it changes.
+- **A parent-death check on its own `5`-second poll** (`TASK_TRACKER_POLL_SECS`, minimum 1s, may not
+  be disabled): record `os.getppid()` at startup, exit when it changes. It gets its own interval
+  rather than riding the 30-minute idle timer, and the interval is a number rather than "a poll" — the
+  first draft of this ADR said "on the idle timer" and left the tick unnamed, which would have made
+  the real worst case half an hour of an orphaned full-permission control channel. That is the same
+  unspecified-timeout mistake this feature had already written down and then made again one control
+  later.
 
 ## Alternatives rejected
 

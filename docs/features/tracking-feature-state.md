@@ -319,11 +319,12 @@ back** — an error body that reflects input is a free XSS gadget:
 |---|---|---|
 | `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
 | `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch |
-| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it |
+| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it, `tracker-data.js` before the first analysis, and **`/favicon.ico`**, which every browser requests unprompted and which is deliberately not served (criterion 13 carves it out as the one expected `404`) |
 | `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
 | `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
 | `415` | `unsupported_media_type` | `Content-Type` is not `application/json` |
+| `500` | `asset_unreadable` | A path **is** on the manifest but cannot be read — absent, permission-denied, or any other `OSError`. Log the path and the `errno`; return no filesystem detail in the body. **Exception, and it is the normal case, not an error:** `tracker-data.js` absent is `404`, because `store.py` generates it and it does not exist before the first analysis — that is precisely the first-run path `tracker-data-fallback.js` exists to cover, and a `500` there would break the empty state instead of rendering it |
 | `500` | `reanalyze_failed` | `id` was `reanalyze` and the analyzer aborted or the store write failed. The previous `tracker-data.js` is left intact (§Design 2's atomic write guarantees this) and the UI must surface the failure rather than silently continue displaying stale data |
 | `502` | `send_failed` | `cmux send` exited non-zero, or exceeded its 5-second timeout |
 
@@ -635,17 +636,40 @@ and nothing above would notice.
     resolved ref. Assert the invocation, not just the status code — a `200` proves the server decided
     to send, not that anything was sent. `reanalyze` is the one exception and is asserted separately:
     it must produce `sent=no` and invoke `cmux` **zero** times.
-13. **Given** a running server **and no network access** — the check that replaces four rounds of
-    trying to derive the manifest by searching — **when** the page is loaded from `http://127.0.0.1:<port>/`
-    and every request it makes is followed, **then** every one of them returns `200`, **no request
-    returns `404`**, **no request goes to a host other than `127.0.0.1`**, and the UI reaches its
-    rendered state with data from `tracker-data.js`.
-    This is the criterion that makes the servable manifest self-verifying, and it must follow requests
-    the page issues at *runtime* — including those emitted from JavaScript and from CSS `url(...)` —
-    rather than those a search can find in the source. Run it both before and after task 14; before,
-    it is the proof the manifest is complete, and after, it is the proof the vendoring closed every
-    remote fetch. **A source search is not an acceptable substitute for this criterion.** That
-    substitution is what failed rounds 1 through 4.
+13. **Given** a running server and **two runs, one per store state** — the check that replaces four
+    rounds of trying to derive the manifest by searching — **when** the page is loaded from
+    `http://127.0.0.1:<port>/` and every request it issues at runtime is enumerated, **then** in both
+    runs every request returns `200` except `/favicon.ico`, **no other request returns `404`**, and
+    **no request goes to a host other than `127.0.0.1`**.
+
+    **(a) First-run state — `tracker-data.js` absent.** `tracker-data-fallback.js` must request
+    `tracker-data.sample.js` and the UI must render the sample.
+    **(b) Populated state — `tracker-data.js` present.** The UI must render from it, and
+    `tracker-data.sample.js` must **not** be requested.
+
+    ⚠️ **Run (a) is the entire point and it is the one a single run silently skips.** The shim returns
+    early when data exists (`tracker-data-fallback.js:16`), and `tracker-data.js` is present in this
+    tree today — so a criterion pinned only to the populated state never requests
+    `tracker-data.sample.js` at all, and a server that `404`s it passes. That file is the exact row
+    four rounds of greps missed. A runtime check with the wrong precondition reproduces the same
+    blind spot the greps had, in a shape that looks stronger. Create the first-run state by moving
+    `tracker-data.js` aside, not by editing it.
+
+    **`/favicon.ico` is carved out explicitly** because the browser requests it unprompted, it is on
+    no manifest, and the wire contract's own default correctly `404`s it — so an unqualified "no
+    request returns `404`" is unsatisfiable against a real browser. It is the one expected `404`;
+    any other is a failure.
+
+    **Mechanism — an agent-run verification, not a `pytest` test, and the card says so rather than
+    implying otherwise.** Drive the page with the Claude browser extension and enumerate requests with
+    `read_network_requests`; a real browser is required because the blind spots being closed are
+    exactly CSS `url(...)` and runtime script injection, which no source-level tool sees. **A source
+    search is not an acceptable substitute** — that substitution is what failed rounds 1 through 4.
+    Consequences, stated because they are the cost of avoiding a browser-driver dependency: this
+    criterion does **not** run under `uv run pytest`, task 9 does not cover it, and it needs an
+    operator with the extension connected. Record both runs in §Verification with the request list and
+    the browser version, the same way `node --version` is recorded — the evidence is the enumeration,
+    not the conclusion.
 14. **Given** a server launched as §Security specifies — a non-detached child of the session process
     with `stderr` inherited — **when** its parent exits, **then** the server exits within
     `TASK_TRACKER_POLL_SECS` + one second and its port is free; **and when** it instead sits idle with
@@ -692,10 +716,13 @@ and nothing above would notice.
       - This file carries bind + token + static serving + allowlist + header check + surface
         re-resolution + subprocess, and will land near the 400-line target. If it crosses, the split
         is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
-- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12, 13 and 14**, including every
+- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**, including every
       negative case and each status code in the contract table. A test that only proves the happy path
       does not close this task — **and neither does one that only proves refusals**, which is the
       failure criteria 12–14 were added to catch.
+      **Criterion 13 is deliberately not in that list** — it is an agent-run browser verification, not
+      a pytest test, and belongs to task 14. Do not write a source-search stand-in for it here; that
+      stand-in is the thing four rounds of judging removed.
       - Criterion 10 must assert **every** clause it lists — the token absent from files, argv, child
         environments **and the captured stderr**, and present exactly once in the served HTML
         alongside `no-store` and the CSP. Capture the server's stderr for the whole test and include
@@ -703,6 +730,11 @@ and nothing above would notice.
         log unasserted, which is how it got there unasserted in the first place.
       - Criterion 12 must assert `cmux send` was **invoked**, not merely that a `200` came back. Fake
         the binary rather than typing into a real session.
+        ⚠️ **The fake proves the server's decision, never that keystrokes arrive** — and writing it
+        without saying so moves the live path from *visibly* untested to *apparently* tested, which is
+        worse than where it started. The `cmux send` → live **Claude TUI** probe (task 1, still owed)
+        is the only thing that closes that gap, and criterion 12 passing must never be read as having
+        closed it. Run the probe before this task, and record it in §Verification.
       - Criterion 14 needs short `TASK_TRACKER_POLL_SECS`/`TASK_TRACKER_IDLE_SECS` overrides and a
         real parent exit; a mocked `getppid()` proves the branch compiles, not that the server dies.
 - [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
@@ -720,9 +752,18 @@ and nothing above would notice.
 - [ ] 13 — Run every suite, record before/after counts in `## Verification`. Capture before-counts
       first so a pre-existing failure is not read as a regression. Record `node --version` beside the
       counts and report the three node-guarded tests per §Verification's wording.
-- [ ] 14 — **Do this before task 10.** Vendor **all six** remote assets and close the page to the
-      network. **Criterion 13 is the proof, not the grep** — the grep below drafts the list, and a
-      clean grep has twice been a wrong answer that looked right:
+- [ ] 14 — **Do this immediately after task 8 and before tasks 9 and 10** — it keeps its number
+      because renumbering a checklist mid-feature breaks every reference to it, but it is second in
+      execution order, not last. **This task owns criterion 13.** The earlier instruction to run that
+      criterion "before task 14" was unsatisfiable and is withdrawn: before the vendoring the page
+      still fetches six third-party assets, so "no non-`127.0.0.1` host" fails by construction, and a
+      criterion whose first directed run must fail is a criterion that gets weakened until it passes.
+      Running task 14 directly after task 8 closes the window instead — the manifest is never relied
+      on while unproven.
+
+      Vendor **all six** remote assets and close the page to the network. **Criterion 13 is the
+      proof, not the grep** — the grep below drafts the list, and a clean grep has twice been a wrong
+      answer that looked right:
       ```sh
       grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html' | grep -v prUrl
       ```
@@ -734,14 +775,13 @@ and nothing above would notice.
       - The Google Fonts `@import` — rewrite in **both** `nocturne.css` and
         `_ds/nocturne-<uuid>/styles.css`. The second is the one the served page actually loads;
         fixing only the first leaves the served page still fetching from `fonts.googleapis.com`.
-      - Verify by **re-running criterion 13** with the network blocked: zero `404`s and zero requests
-        to any host but `127.0.0.1`. A grep returning nothing is necessary, not sufficient — the
-        vendored font files are referenced from CSS, which is the exact shape four rounds of greps
-        could not see.
+      - Close the task by **running criterion 13 in both store states** with the Claude browser
+        extension, and record both request lists plus the browser version in §Verification. A grep
+        returning nothing is necessary, not sufficient — the vendored font files are referenced from
+        CSS, which is the exact shape four rounds of greps could not see.
 
-      Numbered last because it was found last; it is an ordering dependency of task 10, not a
-      follow-up to task 13. Closes the remote fetches on the token-bearing page and is what makes
-      criterion 8's offline path actually pass. The CSP added in task 8 is what keeps it closed.
+      Closes the remote fetches on the token-bearing page and is what makes criterion 8's offline path
+      actually pass. The CSP added in task 8 is what keeps it closed.
 
 ## Out of scope
 
@@ -774,6 +814,16 @@ that re-reads it, so drift is detectable rather than assumed away.
 | `pytest` | `9.1.1` | `uv run --with pytest==9.1.1 --no-project pytest --version` |
 | `cmux` | `0.64.20 (100) [14e3400b9]` | `cmux --version` |
 | `node` | `v26.5.0` | `node --version` |
+| Chrome (criterion 13 only) | record at run time | the browser's own version string, captured into §Verification alongside the request lists |
+
+**No browser-driver library is pinned, because none is added** — and that is a deliberate trade with a
+stated cost rather than an omission. Criterion 13 needs a real browser (CSS `url(...)` and runtime
+script injection are invisible to anything source-level), but adding a driver such as Playwright would
+put a browser download and a new dependency into a repo that has almost none. Instead criterion 13 is
+run by an agent through the **Claude browser extension**, and the version that matters is whatever
+Chrome the operator has, recorded with the evidence rather than pinned in advance. The cost, stated
+plainly: criterion 13 does not run under `uv run pytest`, does not run unattended, and needs an
+operator with the extension connected. Every *other* criterion is a pinned, unattended test.
 
 `node` is pinned because it is **verification-load-bearing, not optional**: three `test_store.py`
 tests are `skipif(NODE is None)`, and one of them is criterion 5's only independent JavaScript-engine
