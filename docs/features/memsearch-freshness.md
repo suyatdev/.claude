@@ -2340,13 +2340,19 @@ enumeration killed the story, not the remedy.
 
 🛑 **This is not a config edit — the knob does not exist yet, and ADR 0021 must build it first.**
 `config.json:17` keys `weights` by *source type*, and `curated_docs` is a single bucket holding judge
-verdicts, feature docs, ADRs, `PORTS.md` and `CODING_MEMORY.md` alike. There is no judge-verdicts-only
-weight. Setting `curated_doc` to 1.2 wholesale would **not** reproduce the table above and would demote
+verdicts, feature docs, ADRs and `PORTS.md` alike. (`CODING_MEMORY.md` is listed in that bucket too but
+never reaches it: `_doc_source_type` re-types it to `archive_doc` at **1.0** by filename —
+`index.py:46-58`.) There is no judge-verdicts-only weight. Setting `curated_doc` to 1.2 wholesale would **not** reproduce the table above and would demote
 every spec in the corpus: all ten ranks printed earlier in this section are `curated_doc`, so a uniform
 multiplier scales them equally, leaves their order untouched, and moves the rank-8 target nowhere. The
 sweep necessarily re-weighted **judge chunks only** (the 2405-chunk corpus defined above), which today
-requires splitting them into their own `source_type` — the same move `archive_doc` got at `index.py:44-51`
-(user decision, 2026-08-06) — not a number change. Raised by the round-6 verdict.
+requires splitting them into their own `source_type` — not a number change. The precedent is exact and
+already in the tree: `_doc_source_type` (`index.py:46-58`) classifies the archive **by filename, not by
+which bucket found it**, for precisely this reason — "bucket-based typing would tier them differently
+(1.5 vs 1.2), ranking session narrative at or above the decision records it narrates". A judge-verdict
+tier is the same shape of change, keyed on the `coding-memory/` path instead of a filename. Raised by
+the round-6 verdict; the bucket membership corrected by round 7, which caught this paragraph naming
+`CODING_MEMORY.md` as a `curated_doc` member one sentence before citing the carve-out that removed it.
 
 ⚠️ **And the "anything regress?" column is verdict-level only** — the same flaw this section diagnoses
 at the `minus judges` variant, where a count hid a real regression. A PASS(4) → PASS(3) erosion would
@@ -2360,6 +2366,15 @@ weight. Two warnings still stand: the sweep is measured at one index state on fi
 lead to re-confirm rather than a tuning to apply blind; and at the `weight = 0` endpoint the failure
 moves rather than removing it (`minus judges` costs `falsifier-base-pin` its pass), so
 the improvement is an interior-point result and does not extend to the endpoint.
+
+📌 **Merging this branch perturbs the very corpus it measures, and here is the number.** This
+section's own verdict files are `curated_doc` judge chunks: **112 chunks across the seven files**
+(rounds 1–7), against the 2405-chunk judge corpus defined above — **+4.7%**, landing shortly before
+R9's re-check trigger next fires. Derivation, not a stored constant: run `chunk_doc` (`chunk.py`) over
+`coding-memory/observability-judge/2026-08-09-docs-r9-counterfactual-control*.md` and sum the lengths.
+It was 99 (+4.1%) at `1c89fbe`, before round 7's own verdict was written — the count grows every time
+this section is judged, which is itself the point. Measuring the effect needs a pinned state this
+branch can no longer reconstruct, so it is deferred to ADR 0021 rather than estimated.
 
 And the standing caveat over all of it: **the regression itself is still unexplained**, so even the
 1.2 sweep is tuning against a symptom whose cause was never found. Blocking open item, promoted from

@@ -4646,7 +4646,12 @@ it, and a placebo rules out dilution" — the placebo's null was an artefact of 
 measured exactly it *does* perturb R9 (`falsifier-base-pin` loses clause 2), so "verdict-safe" was
 also wrong. (3) What holds: three chunks are sufficient, a size-matched random deletion does **not**
 recover the query, and the class-level claim "judge verdicts crowd out feature docs" is **untested** —
-one document, one query.
+one document, one query. ⚠️ **Corrected 2026-08-09: "untested" is now too kind for the deletion
+result.** The exhaustive enumeration measured it — any three removals from the six ranks above the
+target restore PASS, no two do, and *which documents they come from makes no difference* (20/20
+triples, 0/15 pairs). Document identity has **no** measured effect on deletion, so the crowding story
+is withdrawn rather than merely unproven. Identity still matters for *weighting*, which is a different
+control: see the judge-weight sweep in the feature doc.
 
 The transferable rule: **"what is the cause" is answered by the first population that flips the
 result; the question that discriminates is "what is the smallest thing that flips it".** 2405 chunks
