@@ -17,10 +17,16 @@ Nothing derives it on demand.
 
 **No count, test total or phase tally is pinned anywhere in this card**, and every code citation
 carries the command that re-finds it, so a line that moves is detectable instead of quietly wrong.
-Three audit passes and a compliance round found ten factual defects here, every one of them the same
-species — a stored result that had gone stale — twice inside the corrections written to fix the
-previous round. Claims are written as derivations to re-run. Measurements that must be recorded
+Three audit passes and four compliance rounds found defects here, and they are overwhelmingly one
+species — a stored result that had gone stale — including twice inside the corrections written to fix
+the previous round. Claims are written as derivations to re-run. Measurements that must be recorded
 (test counts, tool versions) are stamped with their date and their reproducing command.
+
+⚠️ **A derivation is only as good as its scope, and that is where rounds 3 and 4 were lost.** Twice
+this card prescribed a `grep` narrowed to one file to answer a question about the whole page, and
+twice the narrow answer read as authoritative because it was reproducible. **Before trusting any
+derivation below, ask what it cannot see** — the wrong scope fails silently and looks exactly like a
+clean result.
 
 This adds a skill that derives that survey for a given repo, writes it as a versioned run into a data
 file, and drives an **already-built** browser UI that renders it — with a control channel that lets
@@ -114,6 +120,21 @@ flowchart LR
 The socket-to-session edge is pre-existing exposure this feature does not widen. What it adds is
 the browser-to-server edge — see §Security, whose every bullet defends that edge specifically.
 
+**Decisions on record.** Two of this design's load-bearing choices are structural and live as ADRs
+rather than in this card, which describes *what* is built and defers *why this and not the
+alternative* to them. Read them before proposing a different shape:
+
+- **ADR 0022** — the control channel serves its own page. Why the server hands out the UI rather than
+  the user opening the `.dc.html` file: it is what gives the token a lifetime with no on-disk
+  representation and makes the `Origin` check compare one exact string instead of accepting `null`.
+- **ADR 0023** — the `tracker-data` schema is owned externally. Why the analyzer conforms to the
+  Nocturne export's schema instead of defining its own, and why a missing field is a `questions[]`
+  entry and a conversation rather than an ad-hoc extension.
+- **ADR 0024** — the control server must be accountable. Extends 0022 with the three things a
+  full-permission process owes an operator: the audit log, `frame-ancestors 'none'`, and a lifetime
+  with an actual mechanism. Records why the `403` stays collapsed on the wire while `reason` is
+  precise in the log, and why `'unsafe-eval'` cannot be removed in v1.
+
 ### 1. Analyzer (`task-tracker/analyze.py`)
 
 Pure read. Given a repo root, produce one `run` object:
@@ -169,12 +190,38 @@ which is the honest outcome on a host with no injection route anyway.
 
 #### Wire contract
 
-Exactly two routes. Anything else is `404`. This contract is what task 10 wires the UI against, so
-it is fixed here rather than improvised there.
+**Two dynamic routes — `GET /` and `POST /command` — plus a closed, enumerated set of static asset
+paths. Every other path is `404`.** An earlier revision of this section said "exactly two routes,
+anything else is `404`"; a server built literally to that sentence `404`s its own stylesheet, because
+the page it serves goes on to request several more files. The static set is not a third route so much
+as a read-only mount with a fixed manifest: it is enumerated below, it is closed, and nothing outside
+it is reachable. This contract is what task 10 wires the UI against, so it is fixed here rather than
+improvised there.
 
-**`GET /`** → `200`, `Content-Type: text/html`, **`Cache-Control: no-store`**. Serves the vendored
-`Task Tracker.dc.html` with one substitution: `<meta name="tracker-token" content="TOKEN">` injected
-into `<head>`.
+**`GET /`** → `200`, `Content-Type: text/html`, **`Cache-Control: no-store`**, **`Content-Security-Policy`**
+(below). Serves the vendored `Task Tracker.dc.html` with one substitution:
+`<meta name="tracker-token" content="TOKEN">` injected into `<head>`.
+
+**Content-Security-Policy on `GET /`:**
+
+```
+default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; frame-ancestors 'none'
+```
+
+Two clauses earn their place independently. `default-src`/`connect-src 'self'` is defence in depth
+behind task 14's vendoring: once nothing third-party is fetched, the CSP is what *keeps* it that way,
+so a re-export that reintroduces a CDN `<link>` fails visibly in the console instead of silently
+restoring the remote fetch. `frame-ancestors 'none'` is the load-bearing one — it is the only thing
+here that stops a hostile page framing `http://127.0.0.1:8422/` and clickjacking the user onto the
+`clear` button, an attack the token does nothing to prevent because the click carries the real token.
+
+⚠️ **The honest caveat: `script-src` needs `'unsafe-eval'`, so this is not a strict CSP.** The
+design-system runtime compiles components at runtime through two `new Function` sites
+(`grep -n 'new Function' task-tracker/support.js`), and `@babel/standalone` exists in this page for
+exactly that purpose. A nonce-based `script-src` with no `'unsafe-eval'` would break the UI. What this
+policy buys is origin confinement and frame refusal, not script-injection immunity; claiming
+"strict nonce-based CSP" here would be false. Removing `'unsafe-eval'` is a UI-architecture change
+(precompiling the components at vendor time), out of scope for v1 and recorded as such.
 
 `no-store` is not boilerplate — it is the difference between "the token has no on-disk
 representation" being true and being merely *intended*. Without it the browser may persist the
@@ -188,15 +235,34 @@ navigation sends none.
 
 Static assets are served from `task-tracker/` under their own paths, read-only, with path traversal
 rejected — resolve the request path, resolve symlinks, and require the result stay under
-`task-tracker/`, `403` otherwise. The servable set is exactly:
+`task-tracker/`, `403` otherwise.
 
-`nocturne.css`, `support.js`, `_ds/**`, `tracker-data.js`, **`tracker-data-fallback.js`**
+**The servable set is defined as a rule, not as a list to be trusted: it is the transitive closure of
+what the served page requests, and nothing else.** Derive it — do not copy the answer below without
+re-running this, and note that it must be **repo-wide across `.js` as well as `.html`**, because one
+of the requests is emitted from inside a JavaScript string:
 
-**No other file is reachable**; the process must not serve the repo root. `tracker-data-fallback.js`
-is on that list because `Task Tracker.dc.html` loads it directly
-(`grep -n 'tracker-data' 'task-tracker/Task Tracker.dc.html'`) — omitting it makes a server built
-exactly to this contract `404` a script its own page requests. Re-derive the list with that grep
-rather than trusting this line if the vendored HTML is ever re-exported.
+```sh
+grep -rnE '(src|href)=' task-tracker/ --include='*.html' --include='*.js' | grep -v prUrl
+```
+
+As of 2026-08-09 that closure is, starting from `Task Tracker.dc.html`: `support.js`, `_ds/**`
+(`styles.css` and `_ds_bundle.js`), `tracker-data.js`, `tracker-data-fallback.js`, and
+**`tracker-data.sample.js`** — plus whatever local paths task 14's vendoring creates.
+
+⚠️ **`tracker-data.sample.js` is the third instance of one recurring mistake and the reason the rule
+above is written as a closure.** Round 2 added `tracker-data-fallback.js` to the list because the page
+loads it; but that shim's whole job is to `document.write` a *further* script when no analysis has run
+yet (`task-tracker/tracker-data-fallback.js:19`), and that one was not added. A server built to the
+previous list `404`s the sample on exactly the first-run path the shim exists to cover. One hop was
+followed; the next hop was not.
+
+**`nocturne.css` is deliberately not in the closure.** The served page loads
+`_ds/nocturne-<uuid>/styles.css`, not `nocturne.css` — only `Task Tracker Directions.dc.html` loads
+the latter, and that file is not served. It was on the previous list by assumption. Serve it only if
+the derivation above starts returning it.
+
+**No other file is reachable**; the process must not serve the repo root.
 
 **`POST /command`** — the only state-changing route.
 
@@ -227,8 +293,8 @@ back** — an error body that reflects input is a free XSS gadget:
 |---|---|---|
 | `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
 | `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch |
-| `404` | `not_found` | Any path other than the two routes above |
-| `405` | `method_not_allowed` | Any method other than `GET` on `/`, or `POST`/`OPTIONS` on `/command` |
+| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a member of the derived static closure above |
+| `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
 | `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
 | `415` | `unsupported_media_type` | `Content-Type` is not `application/json` |
@@ -256,13 +322,29 @@ have — keystrokes reaching the wrong surface — is invisible after the fact u
 it happened. **One line per request** to stderr, which the launching session already captures:
 
 ```
-<ISO-8601 UTC> <outcome> id=<id|-> surface=<resolved-ref|-> status=<code> reason=<error-code|->
+<ISO-8601 UTC> <outcome> id=<id|-> surface=<resolved-ref|-> sent=<yes|no|unknown> status=<code> reason=<internal-cause>
 ```
 
 - `outcome` is `accepted`, `refused`, or `failed`. **Refusals are logged as loudly as successes** —
-  a run of `forbidden` entries is the only evidence a hostile page ever probed the endpoint.
-- `surface` is the ref the send actually resolved to at send time, not the one requested. This is the
-  field that answers "where did that keystroke go", and it is the reason the log exists.
+  a run of refusals is the only evidence a hostile page ever probed the endpoint.
+- **`reason` carries the *internal* cause, not the collapsed wire code.** The single `403 forbidden`
+  on the wire is deliberate and stays exactly as it is — the caller must not be able to tell bad token
+  from unknown id from bad origin. The operator has the opposite need: "someone got a 403" is not an
+  incident report, and an operator who cannot distinguish *a hostile page probing the allowlist* from
+  *my own UI holding a stale token after a restart* will investigate the wrong one. The log is
+  server-side, on a stream the attacker cannot read, so the two needs do not conflict. Values:
+  `bad_token`, `unknown_id`, `origin_mismatch`, `host_mismatch`, `malformed`, `too_large`,
+  `unsupported_media_type`, `unresolved_surface`, `send_failed`, `reanalyze_failed`, or `-` on success.
+- **`surface` and `sent` together record where the keystrokes went, not what the server intended.**
+  `surface` is the ref the send resolved to at send time, never the one requested. `sent` is what makes
+  the dangerous case reconstructable: re-resolution can succeed and the surface can still die between
+  confirmation and `cmux send` returning, and *that* is the window in which keystrokes reach the
+  focused tab — the worst failure this feature has. `yes` means `cmux send` exited 0; `no` means the
+  refusal happened before invocation (every `409`, every `403`); **`unknown` means `cmux send` was
+  invoked and did not exit 0 — a timeout kill or a non-zero exit, where the server genuinely cannot
+  say whether anything was typed.** A log that recorded only the resolved ref would show this case as
+  a clean send to a valid surface. Reconstruction is the reason the log exists; `unknown` is the value
+  that keeps it honest.
 - **Never log request headers, request bodies, or the token — in whole or in part**, and never log at
   a level that captures them incidentally. §Out of scope bans persisting the token to a file, an
   environment variable, or argv; a log file is none of those three, which is exactly why this
@@ -358,18 +440,63 @@ this repo has ever exposed, so it is default-deny:
 - **Require a custom request header.** CORS does not stop a hostile page from *sending* a simple
   cross-origin POST — it only hides the response. A required non-simple header forces a preflight
   that the server refuses. Also reject on `Origin`/`Sec-Fetch-Site` mismatch.
-- **Bound lifetime.** The server exits with the session and after **30 minutes** with no request
-  (`TASK_TRACKER_IDLE_SECS` overrides, minimum 60s, and it may not be disabled — there is no value
-  meaning "never"). No daemon, no launchd. A number is given rather than "an idle timeout" because an
-  unspecified timeout is implemented as no timeout, and the token's lifetime is the process's
-  lifetime.
-- **No remote assets on the token-bearing page.** The vendored `Task Tracker.dc.html` currently pulls
-  two `@phosphor-icons` stylesheets from `unpkg.com`
-  (`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`). Vendor them into `task-tracker/_ds/` and
-  rewrite the two `<link>` hrefs to local paths. This is not an arbitrary-code-execution fix — they
-  are stylesheets, not scripts, and no remote JavaScript is loaded — but a page that hands out a
-  session credential should fetch nothing from a third party, and vendoring is also what makes
-  criterion 8's offline `file://` path and the headless mode actually work, which they do not today.
+- **Bound lifetime — both halves need a mechanism, and only one had one.** The idle half is a
+  **30-minute** no-request timeout (`TASK_TRACKER_IDLE_SECS` overrides, minimum 60s, and it may not be
+  disabled — there is no value meaning "never"). A number is given rather than "an idle timeout"
+  because an unspecified timeout is implemented as no timeout.
+
+  "Exits with the session" was the other half and, as previously written, was a wish rather than a
+  design: nothing in this card made it happen, and a server whose parent session has ended is a
+  full-permission control channel with no one watching it. The mechanism is **launch it as a child of
+  the session and give it a parent-death check**: the server records `os.getppid()` at startup and, on
+  the same timer that drives the idle check, exits when the current `os.getppid()` no longer matches
+  (on POSIX the process is reparented to `init`/`launchd`, so the value changes). This is deliberately
+  the weaker, portable check rather than `prctl(PR_SET_PDEATHSIG)`, which does not exist on macOS —
+  the binding platform here. Worst case the server outlives its session by one timer tick, not
+  indefinitely. No daemon, no launchd job; the token's lifetime is the process's lifetime, and now the
+  process's lifetime is actually bounded by something.
+- **Content-Security-Policy on the token-bearing response**, including `frame-ancestors 'none'` so the
+  page cannot be framed and the user cannot be clickjacked into a `clear` they did not intend. Policy,
+  rationale, and the `'unsafe-eval'` caveat are in §Design 3's wire contract.
+- **No remote assets on the token-bearing page — and there are six of them, not two.** ⚠️ **Two
+  earlier revisions of this bullet were wrong in the same way, and the correction matters more than
+  the count.** Both derived the answer from `grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`
+  and concluded "two stylesheets, no remote JavaScript at all". That grep cannot see the scripts:
+  **React, ReactDOM and `@babel/standalone` are injected at runtime by `support.js`**
+  (`grep -n 'unpkg.com' task-tracker/support.js` — `REACT_URL`, `REACT_DOM_URL`, `BABEL_URL`), never
+  written into any HTML. A grep scoped to one file answered a question about the whole page. Derive
+  the real set repo-wide, and re-derive it rather than trusting this list:
+
+  ```sh
+  grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html' | grep -v prUrl
+  ```
+
+  As of 2026-08-09 that returns six distinct remote assets across nine reference sites:
+
+  | # | Asset | Referenced from | SRI today |
+  |---|---|---|---|
+  | 1 | `react@18.3.1` (UMD, production) | `support.js` (`REACT_URL`) | `sha384-…` ✓ |
+  | 2 | `react-dom@18.3.1` (UMD, production) | `support.js` (`REACT_DOM_URL`) | `sha384-…` ✓ |
+  | 3 | `@babel/standalone@7.29.0` | `support.js` (`BABEL_URL`) | `sha384-…` ✓ |
+  | 4 | `@phosphor-icons/web@2.1.1` regular `style.css` | **both** `.dc.html` files | none |
+  | 5 | `@phosphor-icons/web@2.1.1` fill `style.css` | **both** `.dc.html` files | none |
+  | 6 | Google Fonts `Inter` (`@import`) | `nocturne.css` **and** `_ds/nocturne-<uuid>/styles.css` | n/a |
+
+  So the page *does* load remote JavaScript, and it does so into the same origin as the token. The
+  three scripts do carry `sha384` SRI — a separate earlier claim that they had none was also wrong —
+  which bounds the risk to availability and privacy rather than code execution, but SRI is not a
+  substitute for vendoring: it does not stop the fetch, so `unpkg.com` still learns that this host
+  opened the page, and an offline or headless host still gets a UI that cannot boot.
+
+  **Vendoring mechanism — the export already has one; do not patch `support.js`.** `cdnScriptFor`
+  reads `window.__resources[url]` and, when it finds a non-empty string, uses it as the `src`
+  (`grep -n '__resources' task-tracker/support.js`). Define that map before `support.js` loads and the
+  three scripts resolve locally with no edit to vendored code. Assets 4–6 are plain `<link>` hrefs and
+  an `@import`, rewritten in place. Note that fixing only `nocturne.css` for asset 6 would miss the
+  served page entirely, since `Task Tracker.dc.html` loads `_ds/nocturne-<uuid>/styles.css`.
+
+  The CSP in §Design 3 is what keeps this closed after task 14 lands: once nothing third-party is
+  fetched, a re-export that reintroduces a CDN reference fails loudly instead of quietly restoring it.
 - **Confirm the target surface at send time**, per §"Injection route" — refuse an unconfirmed ref
   rather than risk keystrokes reaching the focused tab.
 - Port comes from `allocating-local-ports` and is recorded in `PORTS.md` before first bind.
@@ -419,18 +546,29 @@ them is redundant with the socket's file permission, and none may be weakened on
    **no keystroke reaches any surface** — specifically not the focused one. This criterion holds
    whether or not `send` turns out to inherit the non-erroring fall-through documented for
    `rename-tab`, because the refusal happens on the near side of the socket.
-10. **Given** a server that has served `GET /` **and has completed an accepted `reanalyze`** — the
-    only command that makes the token-holding process rewrite a file, and therefore the most
-    plausible route to a leak — **when** the emitted token is searched for as **raw bytes** (not
-    decoded text, so an encoded copy still matches) across every file under `task-tracker/` including
-    `tracker-data.js`, across the server process's command line, and across the environment of every
-    child process it spawns, **then** it appears in none of them; **and when** the served HTML is
-    fetched, **then** the token appears exactly once, in the `<meta>` tag, and the response carries
-    `Cache-Control: no-store`.
-    Assert every clause. Absence on disk is the security property, presence in the response is what
-    makes the UI work, `no-store` is what stops the browser writing the credential to its own cache,
-    and the `reanalyze` precondition is what stops the test passing without ever exercising the path
-    that would leak. A test that checks only one clause passes while the feature is broken.
+10. **Given** a server that has served `GET /`, **has completed an accepted `reanalyze`** — the only
+    command that makes the token-holding process rewrite a file, and therefore the most plausible
+    route to a leak — **and has refused at least one request carrying the real token in a header**
+    (a valid token with an unknown `id`, which is the request most likely to be logged verbatim),
+    **when** the emitted token is searched for as **raw bytes** (not decoded text, so an encoded copy
+    still matches) across every file under `task-tracker/` including `tracker-data.js`, across the
+    server process's command line, across the environment of every child process it spawns, **and
+    across the server's captured stderr for the whole test**, **then** it appears in none of them;
+    **and when** the served HTML is fetched, **then** the token appears exactly once, in the `<meta>`
+    tag, and the response carries `Cache-Control: no-store` and the `Content-Security-Policy` of
+    §Design 3 including `frame-ancestors 'none'`.
+
+    Assert every clause. **The stderr clause is the one added last and the one most likely to be
+    dropped as redundant — it is not.** The audit log is a leak surface this card introduced after
+    criterion 10 was first written, and the criterion did not follow: §Out of scope bans persisting the
+    token to a file, an env var, or argv, and a log stream is none of those three, so a single
+    `log.debug(request.headers)` satisfies every other clause here while writing the credential to the
+    session's own scrollback. The refusal precondition exists for the same reason — a test that only
+    ever sends *valid* requests never produces the error path where dumping the request for diagnosis
+    is most tempting. Absence on disk and in the log is the security property, presence in the response
+    is what makes the UI work, `no-store` stops the browser caching the credential, `frame-ancestors`
+    stops the clickjack, and the `reanalyze` precondition stops the test passing without ever
+    exercising the write path. A test that checks only one clause passes while the feature is broken.
 11. **Given** a request path that resolves outside `task-tracker/` — `../../rules/core-conduct.md`,
     an absolute path, or a symlink pointing out of the tree — **when** it is requested, **then** the
     server responds `403` and the file's contents do not appear in the response body.
@@ -459,10 +597,12 @@ them is redundant with the socket's file permission, and none may be weakened on
         projects own; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at allocation. Task 8 reads the
         number from `PORTS.md`, it is not re-decided there.
 - [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
-      from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to
-      `task-tracker/` (including `tracker-data-fallback.js`), the three-row allowlist,
-      `X-Tracker-Token` requirement, Origin check on `/command`, **`Host` check and
-      `Cache-Control: no-store` on `GET /`**, the 30-minute idle timeout, the **audit log**, and
+      from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to the derived
+      closure under `task-tracker/` (**re-run the derivation — it includes `tracker-data.sample.js`**),
+      the three-row allowlist, `X-Tracker-Token` requirement, Origin check on `/command`, **`Host`
+      check, `Cache-Control: no-store` and the `Content-Security-Policy` on `GET /`**, the 30-minute
+      idle timeout **and the parent-death check that makes "exits with the session" real**, the
+      **audit log** (`reason=` carries the internal cause; the wire keeps the collapsed `403`), and
       send-time surface re-resolution. Route is settled (task 1); run the outstanding Claude-TUI probe
       first. Python 3.9 — see §Toolchain before writing any annotation.
       - This file carries bind + token + static serving + allowlist + header check + surface
@@ -470,8 +610,11 @@ them is redundant with the socket's file permission, and none may be weakened on
         is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
 - [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10 and 11, including every negative case
       and each status code in the contract table. A test that only proves the happy path does not
-      close this task. Criterion 10 in particular must assert **both** halves — token absent from
-      every file under `task-tracker/`, and present in the served HTML.
+      close this task. Criterion 10 in particular must assert **every** clause it lists — the token
+      absent from files, argv, child environments **and the captured stderr**, and present exactly
+      once in the served HTML alongside `no-store` and the CSP. Capture the server's stderr for the
+      whole test and include the deliberate refusal; a criterion-10 test that never reads the log
+      stream leaves the audit log unasserted, which is how it got there unasserted in the first place.
 - [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
       the injected `<meta name="tracker-token">`. Where `terminal-detect.sh` prints `none`, render the
       same three commands as copyable text instead (criterion 8).
@@ -482,12 +625,26 @@ them is redundant with the socket's file permission, and none may be weakened on
 - [ ] 13 — Run every suite, record before/after counts in `## Verification`. Capture before-counts
       first so a pre-existing failure is not read as a regression. Record `node --version` beside the
       counts and report the three node-guarded tests per §Verification's wording.
-- [ ] 14 — **Do this before task 10.** Vendor the two `@phosphor-icons` stylesheets into
-      `task-tracker/_ds/` and rewrite the `<link>` hrefs in `Task Tracker.dc.html` to local paths
-      (`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'` for the current set — re-derive it,
-      the count is not pinned here). Numbered last because it was found last; it is an ordering
-      dependency of task 10, not a follow-up to task 13. Closes the last remote fetch on the
-      token-bearing page and is what makes criterion 8's offline path actually pass.
+- [ ] 14 — **Do this before task 10.** Vendor **all six** remote assets and close the page to the
+      network. Re-derive the set first with the repo-wide grep in §Security — **not** with a grep
+      scoped to one HTML file, which is what produced the "two stylesheets" answer twice:
+      ```sh
+      grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html' | grep -v prUrl
+      ```
+      - React, ReactDOM, `@babel/standalone` — vendor the files and point at them by defining
+        `window.__resources` before `support.js` loads. **Do not edit `support.js`**; it is vendored
+        third-party code with a supported hook (§Security).
+      - The two `@phosphor-icons` stylesheets — rewrite the `<link>` hrefs in **both** `.dc.html`
+        files; the icon font files they reference must come along, or the CSS resolves to nothing.
+      - The Google Fonts `@import` — rewrite in **both** `nocturne.css` and
+        `_ds/nocturne-<uuid>/styles.css`. The second is the one the served page actually loads;
+        fixing only the first leaves the served page still fetching from `fonts.googleapis.com`.
+      - Verify by loading the page with the network blocked and confirming zero outbound requests —
+        the grep returning nothing is necessary, not sufficient.
+
+      Numbered last because it was found last; it is an ordering dependency of task 10, not a
+      follow-up to task 13. Closes the remote fetches on the token-bearing page and is what makes
+      criterion 8's offline path actually pass. The CSP added in task 8 is what keeps it closed.
 
 ## Out of scope
 
@@ -575,88 +732,21 @@ species, and the reason the derivations discipline above exists.
 
 ## Revision history
 
-**2026-08-09 (session 52) — compliance round 2 failed with 5; escalated to the user, then fixed.**
-Round 2 resolved 3 of round 1's 7, narrowed 4, and found 1 new. Four ids recurring across two
-consecutive rounds tripped the escalation tripwire, so it went to the user, who directed a further
-revision and a round 3. The four were narrowed re-instances rather than survivals — round 1 said *no
-contract exists*, round 2 said *the contract you wrote omits one file* — and that distinction is
-recorded here because the tripwire counts ids, not severity.
+**Held in git, not here.** Four compliance rounds and three audit passes are recorded in
+`coding-memory/compliance-judge/2026-08-09-tracking-feature-state.md` (per-round verdicts with
+violation ids and citations), in `coding-memory/compliance-judge/verdicts.jsonl`, and in this
+branch's commit messages. An ~86-line narrative of those rounds previously lived at the bottom of
+this file; it was deleted rather than split into a `.spec.md` companion.
 
-Fixed: the servable-asset list omitted `tracker-data-fallback.js`, which the vendored page loads, so
-a server built exactly to contract would 404 its own script; `Cache-Control: no-store` added to the
-token-bearing response (without it "no on-disk representation" was false via the browser cache, and
-criterion 10 did not look there); a `500 reanalyze_failed` code for the one command doing server-side
-work; `node` pinned, since three tests skip without it; a `Host` check on `GET /`, the route that
-hands out the credential and has no `Origin` to check; and a number on the idle timeout, because an
-unspecified timeout gets implemented as none.
+That is a deliberate call and the reasoning generalises: this card's one recurring defect is a stored
+fact going stale, ten instances of it, twice inside the corrections written to fix the previous round.
+A synced second file is the ideal habitat for exactly that defect — two documents describing the same
+work, and no reader able to tell which one is wrong. The narrative was also the least load-bearing
+content here: every fix it described is in the body above, and every claim it made about *why* was a
+third copy of something git and the verdict files already hold.
 
-From the observability judge, which found the larger gap the compliance judge did not: **§Design 3
-gains an audit log.** In 544 lines about something that can type into a full-permission session there
-was one sentence about logging, and §Out of scope banned persisting the token to a file, an env var,
-or argv — a log file being none of those three, `log.debug(request.headers)` would have satisfied
-every word of this card and written the credential to disk. Criterion 10 was also tightened: it now
-requires an accepted `reanalyze` first (the only path where the token-holding process writes a file),
-scans raw bytes and child-process environments, and asserts `no-store`.
-
-Two claims were corrected rather than accepted. The compliance judge's headline finding described
-"three executable scripts from unpkg.com (React, ReactDOM, @babel/standalone) with no SRI" running
-same-origin with the token; the vendored HTML actually loads **two `@phosphor-icons` stylesheets and
-no remote JavaScript at all** (`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`). Vendoring
-them is still required — a page handing out a session credential should fetch nothing third-party,
-and it is what makes criterion 8's offline path work — but as a correctness and offline fix, not the
-code-execution one that was cited. Separately the observability judge withdrew its own round-1 claim
-that the committed `tracker-data.js` held genuine output: its `dir` values point at a non-existent
-`~/dev/`, so it is the vendored demo payload. The security conclusion held; the supporting fact did
-not.
-
-**2026-08-09 (session 52) — compliance round 1 failed; all seven violations addressed.** The judge
-passed the parts of this card that had been audited three times and failed the one component that had
-never been written down: the control server. Changes, by violation id:
-
-- `core-conduct/secrets-not-client-side` — the token was to be baked into `tracker-data.js`, which is
-  git-tracked, not ignored, already holds real output, and lives in a public repo. **The server now
-  serves the UI** and injects the token into that response, so the credential has no on-disk
-  representation at all; the fix removes the exposure rather than mitigating it. Criterion 10 asserts
-  both halves. *User decision, this session:* server-served UI over gitignoring a token sidecar.
-- `writing-specs/api-contracts` — §Design 3 now carries the full wire contract: two routes, the
-  header, request and response schemas, all eight status codes, and the explicit answer that
-  **commands never carry arguments**.
-- `writing-specs/pinned-versions` — new §Toolchain pins Python, `uv`, `pytest` and `cmux`, and the
-  canonical invocation now pins `pytest==9.1.1`.
-- `core-conduct/explicit-error-handling` — the analyzer gets a failure table (including `null` vs `0`
-  for a missing upstream), and the server gets timeouts, exit-code checks, and a stated refusal path.
-- `core-conduct/no-absolute-paths` — the hardcoded export path is gone; it was only ever provenance,
-  since task 2 already vendored the files.
-- `writing-specs/no-placeholders` — the allowlist ellipsis is replaced by a three-row table that *is*
-  the authorization set.
-- `writing-specs/diagrams` — §Design opens with a rendered Mermaid flowchart of the trust boundary.
-
-Scope was put to the user rather than decided here, per the judge's non-blocking note: the control
-channel **stays in this card** rather than splitting into its own.
-
-Two further defects were found during this revision, neither cited by the judge. The task-13 `addopts`
-warning described `memsearch/pyproject.toml`, which never governed `task-tracker/` — the tenth
-instance of this card's one recurring defect species. And three `test_store.py` tests are skipped
-without `node`, one of them criterion 5's own proof, so a green run on a node-less host leaves a
-criterion unverified; §Verification now says so. This card's opening claim to pin no line numbers was
-itself false — four were pinned. Rather than delete useful citations, each now carries the `grep` that
-re-finds it, and the claim is corrected to what the discipline actually is.
-
-**2026-08-09 (session 49) — nine defects repaired, corrections sections removed.** Two audit passes
-(sessions 47 and 48) found nine factual errors in this card, every one the same species: a stored
-result that went stale, twice inside the corrections written to fix the previous round. All nine are
-fixed in the body above and the corrections sections are deleted — a spec plus a list of ways the spec
-is wrong is two documents disagreeing, and a reader cannot tell which to believe. Git holds the
-detail; `a854e99` is the last commit carrying the unrepaired text.
-
-The structural fix, applied throughout: **claims are written as derivations to re-run, not as stored
-counts or line ranges.** The one number retained above is stamped with the date it was measured and
-the command that reproduces it.
-
-One defect was found *in the audit itself* during this revision and is recorded here rather than
-silently dropped: the audit asserted that tasks 4, 6 and 9 named uncollectable `*.test.py` files.
-Tasks 4 and 9 did; **task 6 never did** — it names `store.py`, an implementation file. The correction
-inherited "6" from the adjacent list without re-reading the task. Separately, the audit attributed
-cmux's non-erroring ref fall-through to `send`; the source comment documents it for **`rename-tab`**.
-That distinction is now carried explicitly into §"Injection route" and criterion 9, because assuming
-`send` shares the chain is the same unfalsified-inference error a third time.
+What survives from it, because it is not recoverable from a diff, is written where it applies rather
+than in a log: the two `grep`-scope corrections (§Security's remote-asset table, §Design 3's servable
+closure) and the `rename-tab`-vs-`send` distinction (§"Injection route", criterion 9). Those are
+warnings about how a wrong answer was produced, so they belong beside the thing that would produce it
+again.
