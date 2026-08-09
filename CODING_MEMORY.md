@@ -4645,3 +4645,51 @@ guaranteed cwd.
 Next: task 8 (`server.py`), still gated behind the outstanding 15-second probe — `cmux send` into a
 live **Claude TUI**, where every proven use to date targets a shell prompt. Not yet run. The
 compliance-judge gate on this card remains unrun and owed twice.
+
+## 2026-08-09 — session 51: the compliance gate finally ran, and failed the card
+
+The compliance-judge gate on `tracking-feature-state` — owed twice, unrun since the card was written
+— ran at last. **Round 1: `fail`, 7 violations, confidence high** (`4c921ad`). The ledger held 81
+rows across 13 other specs and not one for this card; `spec_blob_sha 28b46338` pins the verdict to
+the card at `24ff8da`.
+
+**Where a worktree card's verdict belongs.** `agents/compliance-judge.md:60` still hardcodes
+`~/.claude/coding-memory/compliance-judge/`. That is wrong for any card living on a feature branch,
+and this card is absent from the main checkout's working tree entirely — a verdict written there
+would sit beside a spec that is not present. `hooks/judge-guard.sh:33-35` records in its own comments
+that hardcoding `$HOME/.claude`'s copy was a **bug**, fixed so the guard reads the *judged repo's*
+store, repo-relative from `git rev-parse --show-toplevel`. `agents/observability-judge.md` already
+says repo-relative; the compliance agent was never updated to match. Both dispatches this session
+overrode the path explicitly and the verdicts landed in the worktree (78→79 rows) with the main
+checkout's store untouched at 81, another session's uncommitted work intact. **The agent file is
+still wrong — fixing that asymmetry is open work.**
+
+**Both judges converged independently on the same worst finding**, which is why it is worth trusting:
+the per-launch bearer token is specified to be baked into `task-tracker/tracker-data.js`, and that
+file is *already committed* (`37a8e38`), *not* gitignored, holding real output
+(`generatedAt 2026-08-09T06:21:47Z`) — in a repo `gh repo view` reports as **public**
+(`suyatdev/.claude`, `isPrivate: false`). All four facts re-verified by hand this session, not taken
+on the judges' word. Nothing is leaked today only because `server.py` does not exist yet, which is
+exactly why the decision is cheap now and awkward after task 8.
+
+Three of the seven violations are the specific content task 8 needs: the token's location, the
+server's wire contract (no endpoint, method, header name, request/response shape, or statement of
+whether a command id carries an argument), and an allowlist written as "(`clear`, `handoff`,
+`reanalyze`, …)" — an ellipsis standing in for the entire authorization set. Implementing task 8
+against that is how the improvised shape the judge warned about gets built.
+
+**A tenth defect of the known species, found this session.** The card's task-13 warning says
+`addopts` in `pyproject.toml` deselects the `golden` and `measurement` marks. The only
+`pyproject.toml` in the repo is `memsearch/pyproject.toml` — a sibling directory that never governs
+`task-tracker/`, which carries no pytest config of its own. The warning errs safe but is aimed at
+something that does not apply, and it is the same stale-claim species two audit passes were spent
+eliminating. Separately: three `test_store.py` tests are `skipif(NODE is None)` (lines 150, 361,
+412), **including criterion 5's JS-loadability proof** — on a node-less host the suite is green with
+that assertion unrun, which matters for task 13's before/after counts. `analyze.py` is 792 lines
+against the 800 hard cap, eight lines of headroom and no mechanical trigger.
+
+**Gate reached, not opened.** `phase: implementation` forbids spec edits, but the compliance loop's
+step 3 requires the main agent to revise the spec on a fail. Those cannot both hold, so this is a
+`GATE: Spec change needed`, handed to the user rather than worked around. `model_tier` is already
+`high`, so the model-switch half is satisfied in substance. Round 2 re-dispatch must pass the round-1
+violation ids so persistence detection stays sound.
