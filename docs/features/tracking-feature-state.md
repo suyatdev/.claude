@@ -172,12 +172,31 @@ which is the honest outcome on a host with no injection route anyway.
 Exactly two routes. Anything else is `404`. This contract is what task 10 wires the UI against, so
 it is fixed here rather than improvised there.
 
-**`GET /`** → `200`, `Content-Type: text/html`. Serves the vendored `Task Tracker.dc.html` with one
-substitution: `<meta name="tracker-token" content="TOKEN">` injected into `<head>`. Static assets
-(`nocturne.css`, `support.js`, `_ds/**`, `tracker-data.js`) are served from `task-tracker/` under
-their own paths, read-only, with path traversal rejected — resolve the request path and require the
-result stay under `task-tracker/`, `403` otherwise. **No other file is reachable**; the process must
-not serve the repo root.
+**`GET /`** → `200`, `Content-Type: text/html`, **`Cache-Control: no-store`**. Serves the vendored
+`Task Tracker.dc.html` with one substitution: `<meta name="tracker-token" content="TOKEN">` injected
+into `<head>`.
+
+`no-store` is not boilerplate — it is the difference between "the token has no on-disk
+representation" being true and being merely *intended*. Without it the browser may persist the
+token-bearing response into its own disk cache, which is a file on disk holding the credential, just
+not one this repo wrote. Criterion 10 checks for it.
+
+**`GET /` also carries the token, so it is guarded too.** Reject any request whose `Host` header is
+not `127.0.0.1:<port>` — a DNS-rebinding attack reaches a localhost server with an attacker-chosen
+`Host`, and this route hands out the credential with no `Origin` to check because a top-level
+navigation sends none.
+
+Static assets are served from `task-tracker/` under their own paths, read-only, with path traversal
+rejected — resolve the request path, resolve symlinks, and require the result stay under
+`task-tracker/`, `403` otherwise. The servable set is exactly:
+
+`nocturne.css`, `support.js`, `_ds/**`, `tracker-data.js`, **`tracker-data-fallback.js`**
+
+**No other file is reachable**; the process must not serve the repo root. `tracker-data-fallback.js`
+is on that list because `Task Tracker.dc.html` loads it directly
+(`grep -n 'tracker-data' 'task-tracker/Task Tracker.dc.html'`) — omitting it makes a server built
+exactly to this contract `404` a script its own page requests. Re-derive the list with that grep
+rather than trusting this line if the vendored HTML is ever re-exported.
 
 **`POST /command`** — the only state-changing route.
 
@@ -213,6 +232,7 @@ back** — an error body that reflects input is a free XSS gadget:
 | `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
 | `415` | `unsupported_media_type` | `Content-Type` is not `application/json` |
+| `500` | `reanalyze_failed` | `id` was `reanalyze` and the analyzer aborted or the store write failed. The previous `tracker-data.js` is left intact (§Design 2's atomic write guarantees this) and the UI must surface the failure rather than silently continue displaying stale data |
 | `502` | `send_failed` | `cmux send` exited non-zero, or exceeded its 5-second timeout |
 
 **The single `403` is deliberate.** Bad token, unknown id, and bad origin are indistinguishable to
@@ -226,7 +246,30 @@ there is no allow-list of origins to get wrong, because there is no allow-list a
 timeout is killed and reported as `502`, never awaited indefinitely and never assumed to have
 succeeded. A non-zero exit is `502` with the exit code logged server-side (not returned). Surface
 re-resolution failure is `409` **before** any send is attempted — the refusal happens on the near
-side of the socket, so nothing reaches the focused tab.
+side of the socket, so nothing reaches the focused tab. `reanalyze` failure is `500`; the store is
+left at its previous valid state, never truncated and never half-written.
+
+#### Audit log
+
+This component can type into a session holding full tool permissions, and the worst failure it can
+have — keystrokes reaching the wrong surface — is invisible after the fact unless it was recorded as
+it happened. **One line per request** to stderr, which the launching session already captures:
+
+```
+<ISO-8601 UTC> <outcome> id=<id|-> surface=<resolved-ref|-> status=<code> reason=<error-code|->
+```
+
+- `outcome` is `accepted`, `refused`, or `failed`. **Refusals are logged as loudly as successes** —
+  a run of `forbidden` entries is the only evidence a hostile page ever probed the endpoint.
+- `surface` is the ref the send actually resolved to at send time, not the one requested. This is the
+  field that answers "where did that keystroke go", and it is the reason the log exists.
+- **Never log request headers, request bodies, or the token — in whole or in part**, and never log at
+  a level that captures them incidentally. §Out of scope bans persisting the token to a file, an
+  environment variable, or argv; a log file is none of those three, which is exactly why this
+  prohibition is written here as well. A single `log.debug(request.headers)` would satisfy every
+  other word of this card and put the credential on disk.
+- Log lines are structured for a human reading a terminal, not for a collector; no log shipping, no
+  rotation, no daemon. Bounded lifetime means bounded logs.
 
 ### 4. Skill (`skills/tracking-feature-state/SKILL.md`)
 
@@ -315,7 +358,18 @@ this repo has ever exposed, so it is default-deny:
 - **Require a custom request header.** CORS does not stop a hostile page from *sending* a simple
   cross-origin POST — it only hides the response. A required non-simple header forces a preflight
   that the server refuses. Also reject on `Origin`/`Sec-Fetch-Site` mismatch.
-- **Bound lifetime.** The server exits with the session and on idle timeout; no daemon, no launchd.
+- **Bound lifetime.** The server exits with the session and after **30 minutes** with no request
+  (`TASK_TRACKER_IDLE_SECS` overrides, minimum 60s, and it may not be disabled — there is no value
+  meaning "never"). No daemon, no launchd. A number is given rather than "an idle timeout" because an
+  unspecified timeout is implemented as no timeout, and the token's lifetime is the process's
+  lifetime.
+- **No remote assets on the token-bearing page.** The vendored `Task Tracker.dc.html` currently pulls
+  two `@phosphor-icons` stylesheets from `unpkg.com`
+  (`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`). Vendor them into `task-tracker/_ds/` and
+  rewrite the two `<link>` hrefs to local paths. This is not an arbitrary-code-execution fix — they
+  are stylesheets, not scripts, and no remote JavaScript is loaded — but a page that hands out a
+  session credential should fetch nothing from a third party, and vendoring is also what makes
+  criterion 8's offline `file://` path and the headless mode actually work, which they do not today.
 - **Confirm the target surface at send time**, per §"Injection route" — refuse an unconfirmed ref
   rather than risk keystrokes reaching the focused tab.
 - Port comes from `allocating-local-ports` and is recorded in `PORTS.md` before first bind.
@@ -365,12 +419,18 @@ them is redundant with the socket's file permission, and none may be weakened on
    **no keystroke reaches any surface** — specifically not the focused one. This criterion holds
    whether or not `send` turns out to inherit the non-erroring fall-through documented for
    `rename-tab`, because the refusal happens on the near side of the socket.
-10. **Given** a server that has been launched and served `GET /` at least once, **when** the emitted
-    token is searched for across every file under `task-tracker/` — `tracker-data.js` included — and
-    across the process's own command line, **then** it appears in none of them; and **when** the
-    served HTML is fetched, **then** the token appears exactly once, in the `<meta>` tag. Assert both
-    halves: absence on disk is the security property, presence in the response is what makes the UI
-    work, and a test that checks only one of them passes while the feature is broken.
+10. **Given** a server that has served `GET /` **and has completed an accepted `reanalyze`** — the
+    only command that makes the token-holding process rewrite a file, and therefore the most
+    plausible route to a leak — **when** the emitted token is searched for as **raw bytes** (not
+    decoded text, so an encoded copy still matches) across every file under `task-tracker/` including
+    `tracker-data.js`, across the server process's command line, and across the environment of every
+    child process it spawns, **then** it appears in none of them; **and when** the served HTML is
+    fetched, **then** the token appears exactly once, in the `<meta>` tag, and the response carries
+    `Cache-Control: no-store`.
+    Assert every clause. Absence on disk is the security property, presence in the response is what
+    makes the UI work, `no-store` is what stops the browser writing the credential to its own cache,
+    and the `reanalyze` precondition is what stops the test passing without ever exercising the path
+    that would leak. A test that checks only one clause passes while the feature is broken.
 11. **Given** a request path that resolves outside `task-tracker/` — `../../rules/core-conduct.md`,
     an absolute path, or a symlink pointing out of the tree — **when** it is requested, **then** the
     server responds `403` and the file's contents do not appear in the response body.
@@ -400,7 +460,9 @@ them is redundant with the socket's file permission, and none may be weakened on
         number from `PORTS.md`, it is not re-decided there.
 - [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
       from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to
-      `task-tracker/`, the three-row allowlist, `X-Tracker-Token` requirement, Origin check, and
+      `task-tracker/` (including `tracker-data-fallback.js`), the three-row allowlist,
+      `X-Tracker-Token` requirement, Origin check on `/command`, **`Host` check and
+      `Cache-Control: no-store` on `GET /`**, the 30-minute idle timeout, the **audit log**, and
       send-time surface re-resolution. Route is settled (task 1); run the outstanding Claude-TUI probe
       first. Python 3.9 — see §Toolchain before writing any annotation.
       - This file carries bind + token + static serving + allowlist + header check + surface
@@ -418,14 +480,24 @@ them is redundant with the socket's file permission, and none may be weakened on
       not restate phase rules.
 - [ ] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`.
 - [ ] 13 — Run every suite, record before/after counts in `## Verification`. Capture before-counts
-      first so a pre-existing failure is not read as a regression.
+      first so a pre-existing failure is not read as a regression. Record `node --version` beside the
+      counts and report the three node-guarded tests per §Verification's wording.
+- [ ] 14 — **Do this before task 10.** Vendor the two `@phosphor-icons` stylesheets into
+      `task-tracker/_ds/` and rewrite the `<link>` hrefs in `Task Tracker.dc.html` to local paths
+      (`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'` for the current set — re-derive it,
+      the count is not pinned here). Numbered last because it was found last; it is an ordering
+      dependency of task 10, not a follow-up to task 13. Closes the last remote fetch on the
+      token-bearing page and is what makes criterion 8's offline path actually pass.
 
 ## Out of scope
 
 - An endpoint that accepts arbitrary command text. Permanently, not just v1.
 - Command arguments of any kind. The wire carries an allowlist id and nothing else.
 - Serving any path that resolves outside `task-tracker/`. The server is not a repo file browser.
-- Persisting the token in any form — no file, no environment variable, no command-line argument.
+- Persisting the token in any form — no file, no environment variable, no command-line argument,
+  **and no log line**, at any level. The audit log in §Design 3 records outcomes and resolved surface
+  refs; it never records headers, bodies, or the credential.
+- Log shipping, rotation, or any collector. One line per request to stderr, and nothing else.
 - Any daemon, launchd job, or server outliving the session.
 - Writing to the analyzed repo. The analyzer is read-only; it never edits a card to fix drift it
   found — it reports it in `questions[]`.
@@ -445,6 +517,12 @@ that re-reads it, so drift is detectable rather than assumed away.
 | `uv` | `0.11.28` | `uv --version` |
 | `pytest` | `9.1.1` | `uv run --with pytest==9.1.1 --no-project pytest --version` |
 | `cmux` | `0.64.20 (100) [14e3400b9]` | `cmux --version` |
+| `node` | `v26.5.0` | `node --version` |
+
+`node` is pinned because it is **verification-load-bearing, not optional**: three `test_store.py`
+tests are `skipif(NODE is None)`, and one of them is criterion 5's only independent JavaScript-engine
+oracle — precisely the U+2028 class of bug `store.dumps`'s own docstring names. A host without it
+reports green having never run that check.
 
 **Python 3.9 is the binding constraint**, and it is easy to forget while writing `server.py`: no
 `match` statements, no PEP 604 `X | Y` unions in annotations, no `dict[str, int]` builtin generics at
@@ -470,12 +548,18 @@ every proven use to date targets a shell prompt.
 number is a measurement with a date, not a contract — re-run it rather than trusting it. There is no
 system `pytest` here, so `uv run` is the only invocation that works.
 
-⚠️ **Three of those tests are conditionally skipped, including one that proves a criterion.**
+⚠️ **Three of those tests are conditionally skipped on a host without `node`.**
 `task-tracker/test_store.py` guards three tests with `@pytest.mark.skipif(NODE is None, ...)`
-(`grep -n skipif task-tracker/test_store.py`), and one of them is criterion 5's proof that a
-half-written `tracker-data.js` is still loadable JS. On a host without `node` the suite reports green
-with that assertion never executed. Task 13 must record `node --version` alongside the counts, and
-treat a skip of these three as an **unverified criterion**, not a pass.
+(`grep -n skipif task-tracker/test_store.py`), one of them criterion 5's JS-loadability check. This
+is why `node` is pinned in §Toolchain.
+
+Precisely what is lost, since overstating it is its own defect: each node-guarded test has an
+**unguarded Python sibling** asserting byte-identity and a real envelope parse
+(`grep -n 'def test_' task-tracker/test_store.py`), so on a node-less host criterion 5 is *partially*
+verified, not unverified. What goes missing is the independent JavaScript-engine oracle — exactly the
+U+2028/U+2029 class of bug that `store.dumps`'s own docstring names as the reason it escapes them.
+Task 13 must record `node --version` beside the counts, and report a skip of these three as
+**"criterion 5 verified without a JS-engine oracle"** rather than either a clean pass or a failure.
 
 ⚠️ **Task 13 must record before-counts per suite, captured before touching anything**, so a
 pre-existing failure is not read as a regression introduced by this feature.
@@ -490,6 +574,40 @@ erred safe, but it described a different package — the tenth instance of this 
 species, and the reason the derivations discipline above exists.
 
 ## Revision history
+
+**2026-08-09 (session 52) — compliance round 2 failed with 5; escalated to the user, then fixed.**
+Round 2 resolved 3 of round 1's 7, narrowed 4, and found 1 new. Four ids recurring across two
+consecutive rounds tripped the escalation tripwire, so it went to the user, who directed a further
+revision and a round 3. The four were narrowed re-instances rather than survivals — round 1 said *no
+contract exists*, round 2 said *the contract you wrote omits one file* — and that distinction is
+recorded here because the tripwire counts ids, not severity.
+
+Fixed: the servable-asset list omitted `tracker-data-fallback.js`, which the vendored page loads, so
+a server built exactly to contract would 404 its own script; `Cache-Control: no-store` added to the
+token-bearing response (without it "no on-disk representation" was false via the browser cache, and
+criterion 10 did not look there); a `500 reanalyze_failed` code for the one command doing server-side
+work; `node` pinned, since three tests skip without it; a `Host` check on `GET /`, the route that
+hands out the credential and has no `Origin` to check; and a number on the idle timeout, because an
+unspecified timeout gets implemented as none.
+
+From the observability judge, which found the larger gap the compliance judge did not: **§Design 3
+gains an audit log.** In 544 lines about something that can type into a full-permission session there
+was one sentence about logging, and §Out of scope banned persisting the token to a file, an env var,
+or argv — a log file being none of those three, `log.debug(request.headers)` would have satisfied
+every word of this card and written the credential to disk. Criterion 10 was also tightened: it now
+requires an accepted `reanalyze` first (the only path where the token-holding process writes a file),
+scans raw bytes and child-process environments, and asserts `no-store`.
+
+Two claims were corrected rather than accepted. The compliance judge's headline finding described
+"three executable scripts from unpkg.com (React, ReactDOM, @babel/standalone) with no SRI" running
+same-origin with the token; the vendored HTML actually loads **two `@phosphor-icons` stylesheets and
+no remote JavaScript at all** (`grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`). Vendoring
+them is still required — a page handing out a session credential should fetch nothing third-party,
+and it is what makes criterion 8's offline path work — but as a correctness and offline fix, not the
+code-execution one that was cited. Separately the observability judge withdrew its own round-1 claim
+that the committed `tracker-data.js` held genuine output: its `dir` values point at a non-existent
+`~/dev/`, so it is the vendored demo payload. The security conclusion held; the supporting fact did
+not.
 
 **2026-08-09 (session 52) — compliance round 1 failed; all seven violations addressed.** The judge
 passed the parts of this card that had been audited three times and failed the one component that had
