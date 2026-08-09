@@ -787,11 +787,11 @@ Three things worth remembering rather than re-deriving:
   recommendation"` → `0`, and checking out `main` removes the paragraph from disk. A session started
   on `main` before merge does not load the rule — **merge promptly.**
 
-## `.claude` — `feature/memsearch-freshness` → PR #45 (open)
+## `.claude` — `feature/memsearch-freshness` → PR #45 (merged, commit 65ebf81)
 
 - **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
 - **branch:** `feature/memsearch-freshness` · **base:** `main` @ `b78eae8`
-- **PR:** https://github.com/suyatdev/.claude/pull/45 — **open**, created 2026-08-08 at `5ff613d`
+- **PR:** https://github.com/suyatdev/.claude/pull/45 — **merged 2026-08-08** at `65ebf81`, created 2026-08-08 at `5ff613d`
 - **session_origin (created):** session 43 · **session_origin (last push):** session 43
 - **Feature-scale** — implementation state lives in `docs/features/memsearch-freshness.md`
   (frontmatter + checklist + `## Verification`). Tasks 1–11 all complete.

@@ -4538,3 +4538,69 @@ any count. Content confirmed intact; only the stray line was removed.
   number. `phase-guard.sh` denies it (not under `docs/`; no feature file claims this branch at
   `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
   root README Roadmap line.
+
+## 2026-08-09 — session 47: the monitor earned its keep
+
+Post-merge. **PR #45 merged 2026-08-08T15:33:59Z at `65ebf81`**, which is `main`'s tip. No code
+changed. R9's re-check monitor became actionable and was run. Detail in
+`docs/features/memsearch-freshness.md` § "The R9 monitor fired".
+
+⚠️ **This entry was first written claiming "Review phase, PR #45 open", and closed with a "Still owed"
+section listing two hand-edits as blocked. Both were false and are corrected below.** The session
+began in a worktree parked on `memsearch-freshness`, a copy of the *pre-merge* tip: the feature file
+there still read `phase: review`, so every artefact agreed with each other and disagreed with reality.
+The lesson is the restore check, not the merge — `git branch --show-current` returned
+`memsearch-freshness` against frontmatter saying `branch: feature/memsearch-freshness`, a mismatch
+`rules/gates.md` calls stop-and-report, and it was read as a match. **A stale checkout is internally
+consistent; only a ref comparison catches it.** `gh pr view` would have cost one call and ended the
+error before three commits were built on it.
+
+### A count-only monitor would have stayed silent, again
+
+The scheduled `launchd` run this feature installed finished `2026-08-09T04:45:18Z`, later than the
+newest branch commit, satisfying the monitor's trigger. `-m measurement` returned **3 failed /
+4 passed** — numerically identical to 10b, **2 of 5**. The passing *pair* changed:
+`{stale-phase-guard-rule-text, git-guard-empty-index}` → `{stale-phase-guard-rule-text,
+falsifier-base-pin}`. That is the monitor's second threshold clause verbatim, so the accepted cost is
+**reopened**.
+
+This is the second consecutive measurement where the count held and the composition moved. The
+monitor was written specifically because 8b→10b did that; it has now done it twice, which retires any
+argument that the "record which queries pass, not how many" clause was over-engineering.
+
+### Two queries oscillating on a threshold, not three causes
+
+`falsifier-base-pin`: PASS → FAIL → PASS. `git-guard-empty-index`: FAIL → PASS → FAIL. Across three
+measurements, both swings are **clause 1 alone, moving between 1 and 2 belonging hits** — both queries
+sit *on* the ≥2 boundary, where a single rank of movement flips the verdict. The transferable point:
+before attributing N verdict flips to N causes, check whether the metric has a boundary the targets
+are parked on. 10b's per-move attribution isn't retracted — it rests on a leave-one-out control that
+was actually run — but it reads differently next to a third data point.
+
+### Withholding the attribution that was right there
+
+This file's own `## Verification` section now holds **rank 1 on two queries and a top-6 slot in four
+of five**, and on the regressed query it sits at rank 2 where a belonging chunk used to be. Every fact
+points at self-displacement. I did not write that down as the cause: the RRF pool means an *unseen*
+population can displace while an on-screen one does not, and that exact inference already had to be
+retracted in 10b. The counterfactual harness was not run for this measurement, so the cause is
+recorded as unassigned rather than as the obvious answer. Cost of running it now: a ~40-line rebuild
+at ≥75k context, against an index that must be pinned first.
+
+Also worth keeping: **recording the monitor's result enlarges the section under suspicion.** The
+instrument and the record share a corpus, so measurement perturbs it. Unresolvable by writing more
+carefully; only the counterfactual separates them.
+
+### Corrected: nothing was owed — `c012eda` had already closed it
+
+Both hand-edits were **already done** on `docs/post-merge-followups-45` (`c012eda`, unpushed at the
+time): `memsearch/README.md`'s ADR link repointed to 0021, and the root `README.md:57` Roadmap line
+added. That commit also marked #45 merged in `pr-tracking.md` and backfilled the round-5 verdict
+outcome. This session's three commits were cherry-picked onto that branch, where they belong; the
+merged `feature/memsearch-freshness` and the stray `memsearch-freshness` were both deleted.
+
+The transferable failure is **acting on a premise the user supplied from my own bad report.** Asked to
+"push to `feature/memsearch-freshness`", I verified the push was a clean fast-forward — the mechanical
+question — and never re-checked whether the PR was still open, the question that actually mattered. The
+push succeeded and left three commits stranded 3 ahead of a merged branch's merge point. **Verify the
+premise, not just the operation**; a fast-forward check cannot tell you the destination is dead.

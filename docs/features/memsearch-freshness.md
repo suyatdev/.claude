@@ -1913,3 +1913,55 @@ sessions of production behaviour after landing, and the six hook-test clauses ar
 observed. This is not a gap to close before the PR — it is what the clause wording asks for — but it
 does mean "all clauses held" here means *held in test, window not yet open*, and the observational
 re-check after landing is owed.
+
+### The R9 monitor fired — **reopened, 2026-08-09**
+
+The monitor's trigger condition was met and its **second** threshold clause tripped. Recorded here
+because the whole point of that clause was that the count alone would have stayed silent.
+
+**Trigger satisfied.** A scheduled run finished `2026-08-09T04:45:18+00:00` (0 errors, 8960 chunks,
+`content indexed through 2026-08-09T04:45:14+00:00`), later than the newest branch commit
+`2296e3c` (`2026-08-08T15:10:20Z`) — so this is the first scheduled run that includes these commits.
+
+`uv run pytest -m measurement -q` → **3 failed, 4 passed, 90 deselected**. Chunk counts recomputed
+from source by the runner; all five are unchanged from 10b, as are the tertile bands, so the corpus
+of the targets did not move.
+
+| target | chunks | third | clause 1 (≥2 hits) | clause 2 (top belongs) | vs 10b |
+|---|---|---|---|---|---|
+| `stale-phase-guard-rule-text` | 6 | bottom | PASS (4) | PASS | **held PASS** |
+| `falsifier-base-pin` | 9 | bottom | PASS (2) | PASS | **recovered → PASS** |
+| `git-guard-empty-index` | 24 | middle | **FAIL (1)** | PASS | **regressed → FAIL** |
+| `verification-marker-gate` | 53 | top | FAIL (1) | FAIL | held FAIL |
+| `phase-guard-hook` | 91 | top | PASS (2) | FAIL | held FAIL |
+
+**Still 2 of 5 — by a different pair.** Passing set was `{stale-phase-guard-rule-text,
+git-guard-empty-index}`; it is now `{stale-phase-guard-rule-text, falsifier-base-pin}`. That is
+verbatim the monitor's second threshold — *"the same 2 of 5 reached by a different set of queries"* —
+so **the accepted cost is reopened, not re-accepted.** The count-only reading would have reported
+"unchanged" for the second consecutive measurement.
+
+⚠️ **The same two queries have now swapped twice, in opposite directions.**
+`falsifier-base-pin`: PASS (8b) → FAIL (10b) → PASS (now). `git-guard-empty-index`: FAIL (8b) →
+PASS (10b) → FAIL (now). Both swings are clause 1 alone, moving between **1 and 2** belonging hits —
+i.e. both queries sit *on* the clause-1 boundary, where one rank of movement flips the verdict. Three
+measurements make this look like marginal instability rather than three separate causes; 10b's
+per-move attribution to R10 should be read in that light, though this does not retract it — 10b's
+conclusion rests on a leave-one-out control that was actually run, and this observation is not one.
+
+**Attribution deliberately withheld.** The tempting reading is available and I am not taking it: the
+`## Verification` section of this file (`:1509-1577`) now occupies **rank 1 on two queries and a top-6
+slot in four of five**, up from rank 1 on two in 10b, and on `git-guard-empty-index` it sits at rank 2
+where a second belonging chunk used to be. That is *consistent* with self-displacement causing the
+regression, and it is not evidence of it — the RRF pool depth means an unseen population can displace
+while an on-screen one does not, which is exactly the inference that had to be retracted once already
+in 10b. **The counterfactual harness (derivation recorded above) has not been run for this
+measurement.** Until it is, the observed facts are the table and the swap; the cause is unassigned.
+
+⚠️ **This entry enlarges the section it is measuring.** Recording the monitor's result grows
+`## Verification`, the same corpus whose growth is the leading suspect — the record cannot be kept
+without perturbing the instrument. Noted rather than resolved; the counterfactual run is what
+separates them, and it must be run against a stated index state, not "current".
+
+**Owner unchanged:** the deferred planning pass (ADR 0021). What it inherits is now a *reopened*
+decision plus one unrun control, not an accepted cost.

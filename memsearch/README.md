@@ -33,7 +33,7 @@ no self-report, so the `SessionStart` nudge's staleness line is its only
 monitor: `hooks/memsearch-nudge.sh` reads `status.json` and reports how long ago
 the indexer last *finished* (`last_run`), never how current the content is
 (`last_indexed`) — a run that finds nothing new never advances the latter.
-Design: `../docs/decisions/0018-launchd-agent-and-run-recency-split.md`.
+Design: `../docs/decisions/0021-launchd-agent-and-run-recency-split.md` (written as 0018; renumbered 2026-08-08 because `main` had already landed a different ADR 0018).
 
 Exit codes: `0` installed and verified · `1` render or `plutil -lint` failure,
 nothing bootstrapped · `2` bootout/bootstrap/verification failure · `3`

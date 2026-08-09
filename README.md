@@ -54,6 +54,7 @@
 - [x] Terminal-pane orchestration for dispatching subagents (judges, plan implementers) into real headless sessions (#23–#27)
 - [x] Two dev-time judges gating PRs: compliance (spec vs. rules) and observability (evaluation + observability rubrics) (#13, #16)
 - [x] Local memory RAG index (`memsearch`) over session digests and docs (#14)
+- [x] Scheduled index refreshes with honest staleness reporting — a launchd agent plus an eight-state session line that separates "a run happened" from "the content is current" (#42, #45)
 - [x] Status line with model and token-usage segments (#18, #20)
 - [x] Documentation-enforcement backstop — hooks that block undocumented business-logic changes (#10)
 - [x] Phase-frontmatter permission system: a feature file's `phase` survives a session clear and gates what work is allowed on restore
