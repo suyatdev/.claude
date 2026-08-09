@@ -4541,9 +4541,19 @@ any count. Content confirmed intact; only the stray line was removed.
 
 ## 2026-08-09 — session 47: the monitor earned its keep
 
-Review phase, `feature/memsearch-freshness`, PR #45 open. No code changed. The one open review-phase
-item — R9's re-check monitor — became actionable and was run. Detail in
+Post-merge. **PR #45 merged 2026-08-08T15:33:59Z at `65ebf81`**, which is `main`'s tip. No code
+changed. R9's re-check monitor became actionable and was run. Detail in
 `docs/features/memsearch-freshness.md` § "The R9 monitor fired".
+
+⚠️ **This entry was first written claiming "Review phase, PR #45 open", and closed with a "Still owed"
+section listing two hand-edits as blocked. Both were false and are corrected below.** The session
+began in a worktree parked on `memsearch-freshness`, a copy of the *pre-merge* tip: the feature file
+there still read `phase: review`, so every artefact agreed with each other and disagreed with reality.
+The lesson is the restore check, not the merge — `git branch --show-current` returned
+`memsearch-freshness` against frontmatter saying `branch: feature/memsearch-freshness`, a mismatch
+`rules/gates.md` calls stop-and-report, and it was read as a match. **A stale checkout is internally
+consistent; only a ref comparison catches it.** `gh pr view` would have cost one call and ended the
+error before three commits were built on it.
 
 ### A count-only monitor would have stayed silent, again
 
@@ -4581,8 +4591,16 @@ Also worth keeping: **recording the monitor's result enlarges the section under 
 instrument and the record share a corpus, so measurement perturbs it. Unresolvable by writing more
 carefully; only the counterfactual separates them.
 
-### Still owed, unchanged
+### Corrected: nothing was owed — `c012eda` had already closed it
 
-Both hand-edit items survive — `phase-guard.sh` denies the agent both files on a `review`-phase branch
-(path, not intent): `memsearch/README.md:36`'s broken ADR-0018 link, and the root `README.md` Roadmap
-line. PR #45 merges through the UI.
+Both hand-edits were **already done** on `docs/post-merge-followups-45` (`c012eda`, unpushed at the
+time): `memsearch/README.md`'s ADR link repointed to 0021, and the root `README.md:57` Roadmap line
+added. That commit also marked #45 merged in `pr-tracking.md` and backfilled the round-5 verdict
+outcome. This session's three commits were cherry-picked onto that branch, where they belong; the
+merged `feature/memsearch-freshness` and the stray `memsearch-freshness` were both deleted.
+
+The transferable failure is **acting on a premise the user supplied from my own bad report.** Asked to
+"push to `feature/memsearch-freshness`", I verified the push was a clean fast-forward — the mechanical
+question — and never re-checked whether the PR was still open, the question that actually mattered. The
+push succeeded and left three commits stranded 3 ahead of a merged branch's merge point. **Verify the
+premise, not just the operation**; a fast-forward check cannot tell you the destination is dead.
