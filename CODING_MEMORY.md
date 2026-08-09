@@ -4693,3 +4693,50 @@ step 3 requires the main agent to revise the spec on a fail. Those cannot both h
 `GATE: Spec change needed`, handed to the user rather than worked around. `model_tier` is already
 `high`, so the model-switch half is satisfied in substance. Round 2 re-dispatch must pass the round-1
 violation ids so persistence detection stays sound.
+
+## 2026-08-09 — sessions 52–54: five compliance rounds, and the derivation that had to stop being a grep
+
+Sessions 52 and 53 ran compliance rounds 2 and 3 on `docs/features/tracking-feature-state.md`
+(fail 5, fail 2). Session 54 ran rounds 4 and 5 (fail 2, fail 3). Commits `81d98dc`, `7e2bf90`,
+`b9ad394`, `ce3af84`, `126f5eb` on `feat/tracking-feature-state`. Phase stayed `planning` throughout —
+task 8 is still gated.
+
+**The finding worth keeping: a derivation is only as good as its scope, and a wrongly-scoped one is
+indistinguishable from a correct one.** `writing-specs/api-contracts` failed four consecutive rounds.
+Each fix widened the same `grep` by one step and a new blind spot appeared just past the new edge —
+one file → the repo (round 2), HTML → HTML plus JS (round 3), and still not CSS, whose `url(...)`
+syntax the pattern never matched (round 4). Two of those wrong answers were *reproducible*, which is
+why they read as authoritative. In session 52 the observability judge "confirmed" one of them by
+re-running the same mis-scoped grep; two agents agreeing was one error repeated.
+
+Round 5 closed it, and only because the user rejected a fifth narrowing and directed a structural fix:
+**the servable set stopped being a search and became an explicit manifest, proved by loading the page
+and enumerating what it actually requests.** "What does this page request?" is a runtime property; a
+text search can only ever approximate one, so each round had been moving where the approximation
+failed rather than removing the failure. The judge closed the id by rebuilding the manifest from
+source rather than reading the table.
+
+**And then the same disease appeared inside the cure.** Criterion 13 — the new runtime check — pinned
+the populated store state, so it never requested `tracker-data.sample.js`: the fallback shim returns
+early when `tracker-data.js` exists (`tracker-data-fallback.js:16`), and that file is present. The one
+row four rounds of greps had missed was the row the new check did not verify, in a shape that looked
+stronger than what it replaced. Both judges found it independently. Criterion 13 now runs in both
+store states.
+
+Three smaller instances of the same shape, all in material added by the round that was fixing the
+previous round: the audit log arrived in round 3 with nothing asserting it (round 4 added the stderr
+scan); the parent-death shutdown arrived in round 4 with no criterion and no poll interval, one
+paragraph after the card argues an unspecified timeout gets implemented as no timeout; and criterion
+12 asserted `cmux send` was invoked while task 9 said to fake the binary, moving the live path from
+visibly untested to *apparently* tested. **A control that creates a new surface and ships without the
+test for that surface is the recurring defect here, not a one-off.**
+
+Two dependency-shaped calls were the user's, not the model's: the structural fix over a fifth grep,
+and using the Claude browser extension for criterion 13 rather than adding a browser driver to a repo
+that has almost none — recorded with its cost stated (criterion 13 does not run under `pytest`, does
+not run unattended, needs an operator with the extension connected).
+
+**Still open at the end of session 54:** round 6 not yet dispatched; the `cmux send` → live Claude TUI
+probe still owed since round 2; `writing-specs/good-bad-edge-cases` cited in two consecutive rounds
+(4 and 5) on different instances. ADR 0024 written and then corrected in the same session — it had put
+the parent-death check on the idle timer and left the tick unnamed.
