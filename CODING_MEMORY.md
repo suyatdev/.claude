@@ -4614,3 +4614,34 @@ with no done/total of its own; `terminal-detect.sh:14` printing `none`; `handoff
 Card now sits at `phase: implementation` with tasks 1-6 ticked and task 7 (`PORTS.md` entry) next.
 The compliance-judge gate has still never run on this card, and it is now owed twice over — the
 spec-compliance gate fires after *any* spec edit.
+
+## 2026-08-09 — session 50: task 7, and a session-start branch line that disagreed with the checkout
+
+Task 7 of `tracking-feature-state` closed: port **8422** allocated to the task-tracker control server
+and recorded in `PORTS.md`, with `TASK_TRACKER_PORT` as the documented override. Picked clear of the
+8000-8100 block mtg-wizard and snatch-bracket hold; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at
+allocation. The card's task-7 bullet stores the *derivation*, not just the number, and states that
+task 8 reads the port from `PORTS.md` rather than re-deciding it.
+
+The registry row carries the two facts a future collision-hunter needs and neither of which is
+inferable from the port alone: the bind is `127.0.0.1` **explicitly**, and the server is
+session-scoped with no daemon or launchd job — so a stale listener on 8422 means a leaked process,
+not a service.
+
+**Restore gotcha, new:** the harness's SessionStart `gitStatus` block named the current branch as
+`feat/tracking-feature-state` while `git branch --show-current` in `/Users/marksuyat/.claude` printed
+`feature/memsearch-freshness` — and the working-tree entries it listed (`verdicts.jsonl`,
+`memsearch-freshness/`) were the main checkout's, not the feature worktree's. So that block mixed a
+branch name from one checkout with a status from another. The restore step that says "run `git status`
+yourself" is not redundant with it; it is the thing that catches this. Read the branch from
+`git branch --show-current` in the directory you intend to work in, every time.
+
+The worktree is `/Users/marksuyat/.claude/.claude/worktrees/tracking-feature-state` — nested
+`.claude/.claude/`, per `git worktree list`. The handoff wrote it as `.claude/worktrees/…`, which is
+correct **relative to the repo root**; reading it as an absolute-ish path off `$HOME/.claude` and
+`cd`-ing there fails. Handoffs should write worktree paths absolutely, since the reader has no
+guaranteed cwd.
+
+Next: task 8 (`server.py`), still gated behind the outstanding 15-second probe — `cmux send` into a
+live **Claude TUI**, where every proven use to date targets a shell prompt. Not yet run. The
+compliance-judge gate on this card remains unrun and owed twice.
