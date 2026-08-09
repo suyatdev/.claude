@@ -4754,9 +4754,23 @@ conflict markers. The marker probe had to be run twice — the first version pip
 captured the code directly and was falsified against a pattern known to exist before being believed.
 **A check that cannot fail has not passed.**
 
-All eight verdicts backfilled `outcome: rework`. Each returned `risk=low`, and each was followed by a
-fix commit — 8 for 8. Read carefully that is not a miscalibration: `risk` scores whether the change
-can *break* something, and documentation cannot, while what actually recurred was being *wrong*.
-The gate's risk field predicts blast radius, not correctness, and this branch is the cleanest
-demonstration of the gap in the record so far. Anything relying on `risk=low` as a proxy for "this is
-probably right" is reading a field that does not carry that meaning.
+All eight verdicts backfilled `outcome: rework`. ⚠️ **The commit that made this backfill claimed "8
+for 8 `risk=low`" in its subject and body. That count is wrong — it is 6 `low` and 2 `medium`** —
+and it was caught by the judge round on the backfill itself. Counted properly:
+
+| field | distribution across the 8 | all outcomes |
+|---|---|---|
+| `risk` | 6 `low`, 2 `medium` | `rework` |
+| `confidence` | **7 `high`**, 1 `medium` | `rework` |
+
+The framing survives but weaker than stated: `risk` scores whether a change can *break* something,
+and documentation cannot, while what recurred was being *wrong*. Six low-risk verdicts followed by
+rework still makes that point — but on two rounds the risk field *did* move, so "predicts nothing"
+over-reached. **The stronger signal was in the same rows and I missed it: `confidence` was `high` on
+7 of 8, and all 8 needed rework.** Confidence is the field that plausibly does claim correctness, and
+it was high-and-wrong seven times.
+
+The lesson is not the framing, it is the mechanism. This entry's own commit message says *"a check
+that cannot fail has not passed"* while asserting a headline count **nobody counted** — its
+self-verification was meticulous about *which rows* changed and silent about *the number claimed
+about them*. Verifying the operation is not verifying the claim you drew from it.

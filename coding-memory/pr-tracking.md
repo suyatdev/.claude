@@ -877,11 +877,13 @@ the next owed step.
   deletions total**, both the intended replacements, and a conflict-marker grep returned rc=1 —
   *with a falsifier run to prove the probe could report a hit at all*, because the first attempt
   piped into `head` and reported `head`'s exit code instead of `git grep`'s.
-- **All 8 verdicts backfilled `outcome: rework`.** Every one returned `risk=low` and every one was
-  followed by a fix commit. That is not the judge misfiring: `risk` scores *operational* danger
-  (documentation cannot break production) while what recurred was *epistemic* rework. The two are
-  not the same axis, and 8-for-8 is the clearest evidence yet that a low-risk verdict predicts
-  nothing about whether the content is right.
+- **All 8 verdicts backfilled `outcome: rework`** — `risk` was **6 `low` / 2 `medium`**, and
+  `confidence` was **7 `high` / 1 `medium`**. (The backfill commit's own subject said "8 risk=low";
+  that count is wrong and was caught by the judge round on the backfill. Corrected here rather than
+  amended away.) `risk` scores *operational* danger — documentation cannot break production — while
+  what recurred was *epistemic* rework, so the two are not the same axis. But the risk field did move
+  on two rounds, so "predicts nothing" over-reaches. **The stronger figure is `confidence`: high on 7
+  of 8, every one of which needed rework** — that is the field that plausibly claims correctness.
 - **Worktree:** `~/.claude/memsearch-freshness`. Docs-only; touches no code.
 - **Card:** `docs/features/memsearch-freshness.md` (`phase: review`, `branch: none` — this branch is
   not recorded there on purpose; see PR #46's note on stale frontmatter).
