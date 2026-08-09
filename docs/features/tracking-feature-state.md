@@ -237,30 +237,56 @@ Static assets are served from `task-tracker/` under their own paths, read-only, 
 rejected — resolve the request path, resolve symlinks, and require the result stay under
 `task-tracker/`, `403` otherwise.
 
-**The servable set is defined as a rule, not as a list to be trusted: it is the transitive closure of
-what the served page requests, and nothing else.** Derive it — do not copy the answer below without
-re-running this, and note that it must be **repo-wide across `.js` as well as `.html`**, because one
-of the requests is emitted from inside a JavaScript string:
+**The servable set is an explicit manifest, and criterion 13 is what proves it correct. A `grep` is
+not the contract.**
+
+⚠️ **This is the fifth attempt at this rule and the first that is not a search, which is the whole
+point of the change.** Four consecutive judge rounds cited it, and each fix widened the same search by
+one step while a new blind spot appeared just past the new edge: one file → the repo (round 2), HTML →
+HTML plus JS (round 3), and still not CSS, whose `url(...)` syntax the pattern does not match at all
+(round 4). That last gap is not hypothetical — task 14 vendors the `@phosphor-icons` font files, and a
+stylesheet referencing its own fonts is exactly the shape the search cannot see.
+
+The root cause is not carelessness about scope. **"What does this page request?" is a runtime
+property, and a text search can only ever approximate it** — so each round moved where the
+approximation failed rather than removing the failure. A wrongly-scoped search returns cleanly and is
+indistinguishable from a search that found nothing. So the contract is now a fixed list, checked by
+loading the page:
+
+| Path | Requested by |
+|---|---|
+| `support.js` | `Task Tracker.dc.html` |
+| `_ds/nocturne-<uuid>/styles.css` | `Task Tracker.dc.html` |
+| `_ds/nocturne-<uuid>/_ds_bundle.js` | `Task Tracker.dc.html` |
+| `tracker-data.js` | `Task Tracker.dc.html` |
+| `tracker-data-fallback.js` | `Task Tracker.dc.html` |
+| `tracker-data.sample.js` | `tracker-data-fallback.js`, via `document.write` on the first-run path |
+| *(task 14's vendored assets)* | added by that task, and criterion 13 is what catches them if they are not |
+
+**`_ds/` is enumerated by its two requested files, not globbed as `_ds/**`.** The glob also covers
+`_ds_manifest.json`, `_adherence.oxlintrc.json` and `readme.md`, which the page never requests —
+a set claiming to be closed while serving three files nothing asks for is not closed.
+
+A search is still useful for *drafting* this table, and demoting it to that role is deliberate — it
+informs the list, it does not define it. If you use one, use the widest form, and treat a clean result
+as a prompt to check the runtime rather than as proof:
 
 ```sh
-grep -rnE '(src|href)=' task-tracker/ --include='*.html' --include='*.js' | grep -v prUrl
+grep -rnE '(src|href)=|url\(' task-tracker/ --include='*.html' --include='*.js' --include='*.css' | grep -v prUrl
 ```
 
-As of 2026-08-09 that closure is, starting from `Task Tracker.dc.html`: `support.js`, `_ds/**`
-(`styles.css` and `_ds_bundle.js`), `tracker-data.js`, `tracker-data-fallback.js`, and
-**`tracker-data.sample.js`** — plus whatever local paths task 14's vendoring creates.
-
-⚠️ **`tracker-data.sample.js` is the third instance of one recurring mistake and the reason the rule
-above is written as a closure.** Round 2 added `tracker-data-fallback.js` to the list because the page
-loads it; but that shim's whole job is to `document.write` a *further* script when no analysis has run
-yet (`task-tracker/tracker-data-fallback.js:19`), and that one was not added. A server built to the
+⚠️ **`tracker-data.sample.js` is why the list needs a runtime check rather than a careful author.**
+Round 2 added `tracker-data-fallback.js` because the page loads it; but that shim's whole job is to
+`document.write` a *further* script when no analysis has run yet
+(`task-tracker/tracker-data-fallback.js:19`), and that one was not added. A server built to the
 previous list `404`s the sample on exactly the first-run path the shim exists to cover. One hop was
-followed; the next hop was not.
+followed, the next was not — and no reading of the list would have revealed it, because the list
+looked complete. Loading the page reveals it immediately.
 
 **`nocturne.css` is deliberately not in the closure.** The served page loads
 `_ds/nocturne-<uuid>/styles.css`, not `nocturne.css` — only `Task Tracker Directions.dc.html` loads
-the latter, and that file is not served. It was on the previous list by assumption. Serve it only if
-the derivation above starts returning it.
+the latter, and that file is not served. It was on the previous list by assumption. Add it only if
+criterion 13 shows the page actually requesting it.
 
 **No other file is reachable**; the process must not serve the repo root.
 
@@ -293,7 +319,7 @@ back** — an error body that reflects input is a free XSS gadget:
 |---|---|---|
 | `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
 | `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch |
-| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a member of the derived static closure above |
+| `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it |
 | `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
 | `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
@@ -452,9 +478,24 @@ this repo has ever exposed, so it is default-deny:
   the same timer that drives the idle check, exits when the current `os.getppid()` no longer matches
   (on POSIX the process is reparented to `init`/`launchd`, so the value changes). This is deliberately
   the weaker, portable check rather than `prctl(PR_SET_PDEATHSIG)`, which does not exist on macOS —
-  the binding platform here. Worst case the server outlives its session by one timer tick, not
-  indefinitely. No daemon, no launchd job; the token's lifetime is the process's lifetime, and now the
-  process's lifetime is actually bounded by something.
+  the binding platform here.
+
+  ⚠️ **The poll interval is `5` seconds** (`TASK_TRACKER_POLL_SECS` overrides, minimum 1s, may not be
+  disabled). A number is given for the same reason the idle timeout carries one, and the omission was
+  caught one round after that argument was written two paragraphs above: "worst case it outlives the
+  session by one timer tick" is a bound only if the tick has a length. Unstated, the only interval
+  anywhere in this card was the 30-minute idle timer, which would have made the worst case half an
+  hour of an orphaned full-permission control channel. No daemon, no launchd job.
+
+- **How the server is launched — stated because two controls above depend on it silently, and break
+  in opposite directions.** The skill (§Design 4) starts it as a **direct child of the Claude session's
+  own process, with `stderr` inherited, not redirected, and not detached** — no `nohup`, no `setsid`,
+  no `&` into a disowned shell, no launchd. Both halves matter and neither is self-announcing: detach
+  it and `getppid()` never changes, so the parent-death check silently never fires and the server
+  outlives the session it was supposed to die with; redirect `stderr` and the audit log goes to a file
+  or to nothing, which either violates §Out of scope's no-log-file rule or discards the only record of
+  where keystrokes went. A wrong launch leaves both controls *present in the code and inert*, which is
+  the failure mode neither a code reader nor the test suite would notice. Criterion 14 pins it.
 - **Content-Security-Policy on the token-bearing response**, including `frame-ancestors 'none'` so the
   page cannot be framed and the user cannot be clickjacked into a `clear` they did not intend. Policy,
   rationale, and the `'unsafe-eval'` caveat are in §Design 3's wire contract.
@@ -571,7 +612,49 @@ them is redundant with the socket's file permission, and none may be weakened on
     exercising the write path. A test that checks only one clause passes while the feature is broken.
 11. **Given** a request path that resolves outside `task-tracker/` — `../../rules/core-conduct.md`,
     an absolute path, or a symlink pointing out of the tree — **when** it is requested, **then** the
-    server responds `403` and the file's contents do not appear in the response body.
+    server responds `403` and the file's contents do not appear in the response body;
+    **and given** a path that resolves *inside* `task-tracker/` but is not on the manifest —
+    `/store.py`, `/analyze.py`, `/tracker-data.json`, `/test_server.py`,
+    `/_ds/nocturne-<uuid>/readme.md` — **then** the server responds `404` and the file's contents do
+    not appear in the response body.
+    The in-directory half is the one worth stating explicitly: traversal is the attack everyone
+    remembers to block, but the manifest has been wrong in three separate rounds, so "it is not on the
+    list, therefore it is unreachable" is precisely the assumption this criterion refuses to make.
+    `404` rather than `403` here, matching the wire contract — an unlisted path is indistinguishable
+    from a nonexistent one, which is also what stops the server confirming which source files exist.
+
+**Criteria 12–14 state what *success* looks like.** Everything from 6 to 11 describes a refusal, and
+a judge round found the consequence: a server that answers `403` to every POST, `404` to every asset,
+and never invokes `cmux send` at all satisfies every one of them. It would be flawless and useless,
+and nothing above would notice.
+
+12. **Given** a running server and the token from its own `GET /`, **when** an allowlisted `id` is
+    POSTed with a valid `Origin` and a surface ref that re-resolves, **then** the response is `200`
+    with `{"ok": true, "id": "<id>"}`, **`cmux send` is invoked exactly once** with the re-resolved
+    surface, and the audit log carries one `accepted` line for that request with `sent=yes` and the
+    resolved ref. Assert the invocation, not just the status code — a `200` proves the server decided
+    to send, not that anything was sent. `reanalyze` is the one exception and is asserted separately:
+    it must produce `sent=no` and invoke `cmux` **zero** times.
+13. **Given** a running server **and no network access** — the check that replaces four rounds of
+    trying to derive the manifest by searching — **when** the page is loaded from `http://127.0.0.1:<port>/`
+    and every request it makes is followed, **then** every one of them returns `200`, **no request
+    returns `404`**, **no request goes to a host other than `127.0.0.1`**, and the UI reaches its
+    rendered state with data from `tracker-data.js`.
+    This is the criterion that makes the servable manifest self-verifying, and it must follow requests
+    the page issues at *runtime* — including those emitted from JavaScript and from CSS `url(...)` —
+    rather than those a search can find in the source. Run it both before and after task 14; before,
+    it is the proof the manifest is complete, and after, it is the proof the vendoring closed every
+    remote fetch. **A source search is not an acceptable substitute for this criterion.** That
+    substitution is what failed rounds 1 through 4.
+14. **Given** a server launched as §Security specifies — a non-detached child of the session process
+    with `stderr` inherited — **when** its parent exits, **then** the server exits within
+    `TASK_TRACKER_POLL_SECS` + one second and its port is free; **and when** it instead sits idle with
+    no request, **then** it exits within `TASK_TRACKER_IDLE_SECS` (drive both with short overrides so
+    the test does not take 30 minutes); **and when** a line is written to the audit log, **then** it
+    appears on the stderr the parent captures.
+    All three clauses, because a lifetime control that is present in the code and inert is the failure
+    this criterion exists for: detached, `getppid()` never changes and the shutdown silently never
+    fires; with `stderr` redirected, the audit log exists and reaches nobody. Both leave a green suite.
 
 ## Tasks
 
@@ -597,37 +680,49 @@ them is redundant with the socket's file permission, and none may be weakened on
         projects own; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at allocation. Task 8 reads the
         number from `PORTS.md`, it is not re-decided there.
 - [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
-      from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to the derived
-      closure under `task-tracker/` (**re-run the derivation — it includes `tracker-data.sample.js`**),
-      the three-row allowlist, `X-Tracker-Token` requirement, Origin check on `/command`, **`Host`
-      check, `Cache-Control: no-store` and the `Content-Security-Policy` on `GET /`**, the 30-minute
-      idle timeout **and the parent-death check that makes "exits with the session" real**, the
+      from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to **the
+      manifest table in §Design 3** (an explicit list — `_ds/` enumerated, not globbed; do not
+      re-derive it by grep, and let criterion 13 tell you if it is wrong), the three-row allowlist,
+      `X-Tracker-Token` requirement, Origin check on `/command`, **`Host` check,
+      `Cache-Control: no-store` and the `Content-Security-Policy` on `GET /`**, the 30-minute idle
+      timeout **and the 5-second parent-death poll that makes "exits with the session" real**, the
       **audit log** (`reason=` carries the internal cause; the wire keeps the collapsed `403`), and
       send-time surface re-resolution. Route is settled (task 1); run the outstanding Claude-TUI probe
       first. Python 3.9 — see §Toolchain before writing any annotation.
       - This file carries bind + token + static serving + allowlist + header check + surface
         re-resolution + subprocess, and will land near the 400-line target. If it crosses, the split
         is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
-- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10 and 11, including every negative case
-      and each status code in the contract table. A test that only proves the happy path does not
-      close this task. Criterion 10 in particular must assert **every** clause it lists — the token
-      absent from files, argv, child environments **and the captured stderr**, and present exactly
-      once in the served HTML alongside `no-store` and the CSP. Capture the server's stderr for the
-      whole test and include the deliberate refusal; a criterion-10 test that never reads the log
-      stream leaves the audit log unasserted, which is how it got there unasserted in the first place.
+- [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12, 13 and 14**, including every
+      negative case and each status code in the contract table. A test that only proves the happy path
+      does not close this task — **and neither does one that only proves refusals**, which is the
+      failure criteria 12–14 were added to catch.
+      - Criterion 10 must assert **every** clause it lists — the token absent from files, argv, child
+        environments **and the captured stderr**, and present exactly once in the served HTML
+        alongside `no-store` and the CSP. Capture the server's stderr for the whole test and include
+        the deliberate refusal; a criterion-10 test that never reads the log stream leaves the audit
+        log unasserted, which is how it got there unasserted in the first place.
+      - Criterion 12 must assert `cmux send` was **invoked**, not merely that a `200` came back. Fake
+        the binary rather than typing into a real session.
+      - Criterion 14 needs short `TASK_TRACKER_POLL_SECS`/`TASK_TRACKER_IDLE_SECS` overrides and a
+        real parent exit; a mocked `getppid()` proves the branch compiles, not that the server dies.
 - [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
       the injected `<meta name="tracker-token">`. Where `terminal-detect.sh` prints `none`, render the
       same three commands as copyable text instead (criterion 8).
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`, following
       `skills/_standards/authoring-skills-and-agents.md`. Points at `managing-session-memory`; does
       not restate phase rules.
+      - **This skill owns the launch, so it owns two security controls whether or not it knows it.**
+        It must start `server.py` as a non-detached child with `stderr` inherited, per §Security —
+        no `nohup`, no `setsid`, no `&` into a disowned shell. Detaching disables the parent-death
+        shutdown silently; redirecting `stderr` sends the audit log nowhere. Both leave the code
+        looking correct. Write the reason beside the command, not just the command.
 - [ ] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`.
 - [ ] 13 — Run every suite, record before/after counts in `## Verification`. Capture before-counts
       first so a pre-existing failure is not read as a regression. Record `node --version` beside the
       counts and report the three node-guarded tests per §Verification's wording.
 - [ ] 14 — **Do this before task 10.** Vendor **all six** remote assets and close the page to the
-      network. Re-derive the set first with the repo-wide grep in §Security — **not** with a grep
-      scoped to one HTML file, which is what produced the "two stylesheets" answer twice:
+      network. **Criterion 13 is the proof, not the grep** — the grep below drafts the list, and a
+      clean grep has twice been a wrong answer that looked right:
       ```sh
       grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html' | grep -v prUrl
       ```
@@ -639,8 +734,10 @@ them is redundant with the socket's file permission, and none may be weakened on
       - The Google Fonts `@import` — rewrite in **both** `nocturne.css` and
         `_ds/nocturne-<uuid>/styles.css`. The second is the one the served page actually loads;
         fixing only the first leaves the served page still fetching from `fonts.googleapis.com`.
-      - Verify by loading the page with the network blocked and confirming zero outbound requests —
-        the grep returning nothing is necessary, not sufficient.
+      - Verify by **re-running criterion 13** with the network blocked: zero `404`s and zero requests
+        to any host but `127.0.0.1`. A grep returning nothing is necessary, not sufficient — the
+        vendored font files are referenced from CSS, which is the exact shape four rounds of greps
+        could not see.
 
       Numbered last because it was found last; it is an ordering dependency of task 10, not a
       follow-up to task 13. Closes the remote fetches on the token-bearing page and is what makes
@@ -650,7 +747,9 @@ them is redundant with the socket's file permission, and none may be weakened on
 
 - An endpoint that accepts arbitrary command text. Permanently, not just v1.
 - Command arguments of any kind. The wire carries an allowlist id and nothing else.
-- Serving any path that resolves outside `task-tracker/`. The server is not a repo file browser.
+- Serving any path that resolves outside `task-tracker/`, **or any path inside it that is not on the
+  §Design 3 manifest** — `store.py`, `analyze.py`, `tracker-data.json` and the tests are not servable.
+  The server is not a repo file browser, and "inside the directory" was never the boundary.
 - Persisting the token in any form — no file, no environment variable, no command-line argument,
   **and no log line**, at any level. The audit log in §Design 3 records outcomes and resolved surface
   refs; it never records headers, bodies, or the credential.
