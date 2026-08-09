@@ -222,7 +222,10 @@ them is redundant with the socket's file permission, and none may be weakened on
       "undetectable dependency becomes a question" rule.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`: atomic emit of `tracker-data.js`,
       run upsert by id. Criteria 3-5.
-- [ ] 7 — `PORTS.md` entry for the control server, per `allocating-local-ports`, before any bind.
+- [x] 7 — `PORTS.md` entry for the control server, per `allocating-local-ports`, before any bind.
+      - Port is **8422**, `TASK_TRACKER_PORT` overrides. Picked clear of the 8000-8100 block other
+        projects own; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at allocation. Task 8 reads the
+        number from `PORTS.md`, it is not re-decided there.
 - [ ] 8 — `task-tracker/server.py`: localhost bind, token, allowlist, custom-header requirement, and
       send-time surface confirmation. Route is settled (task 1); run the outstanding Claude-TUI probe
       first.
