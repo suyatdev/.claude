@@ -4539,6 +4539,260 @@ any count. Content confirmed intact; only the stray line was removed.
   `phase: implementation`, and `:387`'s claim arm ignores `review`). Second hand-edit item after the
   root README Roadmap line.
 
+## 2026-08-09 — session 47: the monitor earned its keep
+
+Post-merge. **PR #45 merged 2026-08-08T15:33:59Z at `65ebf81`**, which is `main`'s tip. No code
+changed. R9's re-check monitor became actionable and was run. Detail in
+`docs/features/memsearch-freshness.md` § "The R9 monitor fired".
+
+⚠️ **This entry was first written claiming "Review phase, PR #45 open", and closed with a "Still owed"
+section listing two hand-edits as blocked. Both were false and are corrected below.** The session
+began in a worktree parked on `memsearch-freshness`, a copy of the *pre-merge* tip: the feature file
+there still read `phase: review`, so every artefact agreed with each other and disagreed with reality.
+The lesson is the restore check, not the merge — `git branch --show-current` returned
+`memsearch-freshness` against frontmatter saying `branch: feature/memsearch-freshness`, a mismatch
+`rules/gates.md` calls stop-and-report, and it was read as a match. **A stale checkout is internally
+consistent; only a ref comparison catches it.** `gh pr view` would have cost one call and ended the
+error before three commits were built on it.
+
+### A count-only monitor would have stayed silent, again
+
+The scheduled `launchd` run this feature installed finished `2026-08-09T04:45:18Z`, later than the
+newest branch commit, satisfying the monitor's trigger. `-m measurement` returned **3 failed /
+4 passed** — numerically identical to 10b, **2 of 5**. The passing *pair* changed:
+`{stale-phase-guard-rule-text, git-guard-empty-index}` → `{stale-phase-guard-rule-text,
+falsifier-base-pin}`. That is the monitor's second threshold clause verbatim, so the accepted cost is
+**reopened**.
+
+This is the second consecutive measurement where the count held and the composition moved. The
+monitor was written specifically because 8b→10b did that; it has now done it twice, which retires any
+argument that the "record which queries pass, not how many" clause was over-engineering.
+
+### Two queries oscillating on a threshold, not three causes
+
+`falsifier-base-pin`: PASS → FAIL → PASS. `git-guard-empty-index`: FAIL → PASS → FAIL. Across three
+measurements, both swings are **clause 1 alone, moving between 1 and 2 belonging hits** — both queries
+sit *on* the ≥2 boundary, where a single rank of movement flips the verdict. The transferable point:
+before attributing N verdict flips to N causes, check whether the metric has a boundary the targets
+are parked on. 10b's per-move attribution isn't retracted — it rests on a leave-one-out control that
+was actually run — but it reads differently next to a third data point.
+
+### Withholding the attribution that was right there
+
+This file's own `## Verification` section now holds **rank 1 on two queries and a top-6 slot in four
+of five**, and on the regressed query it sits at rank 2 where a belonging chunk used to be. Every fact
+points at self-displacement. I did not write that down as the cause: the RRF pool means an *unseen*
+population can displace while an on-screen one does not, and that exact inference already had to be
+retracted in 10b. The counterfactual harness was not run for this measurement, so the cause is
+recorded as unassigned rather than as the obvious answer. Cost of running it now: a ~40-line rebuild
+at ≥75k context, against an index that must be pinned first.
+
+Also worth keeping: **recording the monitor's result enlarges the section under suspicion.** The
+instrument and the record share a corpus, so measurement perturbs it. Unresolvable by writing more
+carefully; only the counterfactual separates them.
+
+### Corrected: nothing was owed — `c012eda` had already closed it
+
+Both hand-edits were **already done** on `docs/post-merge-followups-45` (`c012eda`, unpushed at the
+time): `memsearch/README.md`'s ADR link repointed to 0021, and the root `README.md:57` Roadmap line
+added. That commit also marked #45 merged in `pr-tracking.md` and backfilled the round-5 verdict
+outcome. This session's three commits were cherry-picked onto that branch, where they belong; the
+merged `feature/memsearch-freshness` and the stray `memsearch-freshness` were both deleted.
+
+The transferable failure is **acting on a premise the user supplied from my own bad report.** Asked to
+"push to `feature/memsearch-freshness`", I verified the push was a clean fast-forward — the mechanical
+question — and never re-checked whether the PR was still open, the question that actually mattered. The
+push succeeded and left three commits stranded 3 ahead of a merged branch's merge point. **Verify the
+premise, not just the operation**; a fast-forward check cannot tell you the destination is dead.
+
+## 2026-08-09 — session 48: the owed control ran, and cleared its own prime suspect
+
+Branch `docs/r9-counterfactual-control`, cut from `origin/main` (`64d8acb`). Phase `review`
+throughout; model-switch checkpoint answered — stay on Opus 5.
+
+**Pinning the index was not ceremony.** The control was run against a `conn.backup()` snapshot
+(8960 chunks, `max(indexed_at) = 2026-08-09T04:45:14+00:00`, sha256 `9ba25e05…`) that matches the
+state the R9 monitor fired against. **Mid-session a scheduled run moved the live index to 9012
+chunks.** Had the control read "current", it would have explained a corpus the monitor never saw —
+the exact failure the feature doc predicted one paragraph before it happened.
+
+**Result: `## Verification`'s self-displacement — the reading the previous session called tempting
+and refused — is wrong.** Dropping this file changes no verdict on any of the five queries; so does
+dropping the archive. **And no other document is implicated either:** the final answer is that
+`git-guard-empty-index`'s second belonging chunk sits at **rank 8**, three places below the cut, and
+**any** three removals from the six ranks above it restore PASS (2) while **no** two do — regardless
+of which documents they come from. What R9 records on this query is a margin, not a displacer.
+
+The one structural observation that survives, because it needs no counterfactual: a **639-line**
+judge verdict about `git-guard-empty-index` outranks the **375-line** spec it grades, at equal
+`curated_doc` weight 1.5. That verdicts and specs share a weight while the verdicts are *about* the
+specs is checkable from `config.json` and the file lengths. It is **not** demonstrated to have caused
+anything here.
+
+**And the one change that actually helps, found last and nearly missed.** From "identity has no
+measured effect" I concluded "no reweighting is supported" — wrong, and wrong in the conservative
+direction. **Deletion-invariance to identity is not weight-invariance, because a weight change is
+*defined* by identity**; deleting a population is only the endpoint `weight = 0`, and I generalised
+from it without sampling the interior. Swept (a post-fusion multiplier, so no re-index — the cheapest
+control in the whole investigation, and the last one run): judge `curated_doc` weight **1.5 → 1.2
+takes R9 from 2 of 5 to 3 of 5 with nothing regressing**, both remaining failures gaining hits. That
+is the first change measured anywhere in this feature that *improves* the bar instead of trading one
+target's pass for another's. **The enumeration killed the narrative, not the remedy** — a story being
+wrong does not make every action it suggested wrong.
+
+**The conclusion narrowed three times, each time because a control said so, never because the prose
+was re-read.** (1) "the cause is the judge corpus" — over-claimed. (2) "the only population that moves
+it, and a placebo rules out dilution" — the placebo's null was an artefact of the approximate method;
+measured exactly it *does* perturb R9 (`falsifier-base-pin` loses clause 2), so "verdict-safe" was
+also wrong. (3) What holds: three chunks are sufficient, a size-matched random deletion does **not**
+recover the query, and the class-level claim "judge verdicts crowd out feature docs" is **untested** —
+one document, one query. ⚠️ **Corrected 2026-08-09: "untested" is now too kind for the deletion
+result.** The exhaustive enumeration measured it — any three removals from the six ranks above the
+target restore PASS, no two do, and *which documents they come from makes no difference* (20/20
+triples, 0/15 pairs). Document identity has **no** measured effect on deletion, so the crowding story
+is withdrawn rather than merely unproven. Identity still matters for *weighting*, which is a different
+control: see the judge-weight sweep in the feature doc.
+
+The transferable rule: **"what is the cause" is answered by the first population that flips the
+result; the question that discriminates is "what is the smallest thing that flips it".** 2405 chunks
+and 3 chunks produce the identical recovery, and only the second one tells you what to fix.
+
+Two things the count would have hidden, both recorded: dropping judges *regresses*
+`falsifier-base-pin`, holding 2 of 5 in a third distinct composition — retuning moves the failure
+rather than removing it. ⚠️ **Corrected 2026-08-09: that last clause is true only at the `weight = 0`
+endpoint, which is what "dropping judges" is.** A later sweep of the interior found judge weight
+`1.5 → 1.2` takes R9 to **3 of 5 with nothing regressing** — so retuning *can* remove a failure, and
+the endpoint result does not generalise to the curve. Deletion-invariance is not weight-invariance. And `/api/embed` is **non-deterministic** (≤1.08e-04 per element, min cosine
+0.999999803) yet verdicts were identical on 8/8 re-embeddings for all five queries, which falsifies
+the marginal-instability explanation without touching the boundary observation itself.
+
+**The largest lesson landed last, and it invalidates the framing rather than a number.** The three
+displacing chunks were indexed `2026-08-07T23:38:14` — **already present at 10b, when the query still
+passed.** Something present while a test passes cannot be why it later failed. So the control answers
+*"what is sufficient to restore the verdict now"* and **not** *"what caused the regression"*, which is
+the question it was run to answer and which stays unassigned. A leave-one-out varies populations at
+one instant; a regression is a change between two instants. Three rounds of increasingly careful
+measurement never turned the first into the second — and the tell was available from the start, in a
+timestamp I did not check until the fourth pass.
+
+Practical rule: **before running an instrument, state which question it can answer and check that it
+is the question being asked.** Method rigour cannot rescue a category error, and rigour is exactly
+what made this one persuasive for three rounds. Reconstructing 10b's index state is now the blocking
+item for ADR 0021, promoted from a footnote.
+
+**The final narrowing killed the story entirely, and it came from refuting a refutation.** Round 3
+predicted dropping ranks 4/6/10 would recover the query as well as the verdict chunks do. It does not
+(FAIL 1), and I concluded from that failed counterexample that the three verdict chunks were
+*specifically* load-bearing. **That is a non-sequitur, and round 4 caught it.** Enumerated
+exhaustively over the six ranks above the target: **all 15 two-chunk removals FAIL, all 20 three-chunk
+removals PASS, and the number of judge chunks among them (0, 1, 2 or 3) changes nothing.** Round 3's
+example was merely a disguised two-chunk removal — rank 10 sits *below* the target and is inert.
+
+⇒ **Document identity has no measured effect. The only variable is how many chunks above the target
+are removed, and the threshold is three.** Every earlier result collapses into that arithmetic:
+`minus this doc` removes 1 of the 6 above (FAIL), `minus archive` removes 0 (FAIL), `minus judges` and
+`minus` one 41-chunk file and `minus` 3 chunks all remove the same 3 (PASS). **The judge-crowding
+story is dead** — what R9 measures on this query is that the feature's second chunk sits three places
+below the cut, not that anything in particular displaced it.
+
+Two lessons, and the second is the one worth keeping. **(1) Take the challenge seriously, take the
+assertion to the data** — across four rounds the judges made four wrong factual claims (twice
+reporting the snapshot destroyed when it was present in a path they had not searched; guessing elided
+ranks were archive chunks when they were feature docs) *and* four right ones that each changed the
+conclusion. Neither deference nor dismissal survives contact with checking. **(2) A false
+counterexample does not strengthen a claim.** Refuting "X would also work" leaves "only Y works"
+exactly as unproven as before, and the discriminating test — vary identity at *fixed* removal size —
+was one script away with every artefact still on disk. Rigour applied to the wrong comparison reads
+as rigour right up until someone runs the right one.
+
+## 2026-08-09 — session 49: the verdict that invalidates itself, and the paragraph that kept being wrong
+
+Session 48 left one blocker: `judge-guard.sh` wants a verdict whose `head_sha` equals HEAD, and the
+commit recording rounds 1-5 had moved HEAD past them. Rounds 6, 7 and 8 ran. **All three passed with no
+`fail` dimension — and all three found a real error**, each time in the *same* paragraph: the one that
+tells ADR 0021 what to build.
+
+**Round 6:** the section's one actionable result — judge weight `1.5 → 1.2`, R9 from 2 of 5 to 3 of 5 —
+**is not a config edit**. `config.json:17` keys `weights` by `source_type` and judge verdicts share the
+`curated_doc` bucket with every spec and ADR. Verified: all ten printed ranks are `curated_doc`, so a
+uniform multiplier scales them equally and reorders nothing — which *proves* the sweep was judge-only,
+and proves a wholesale `curated_doc = 1.2` would demote every spec while reproducing none of the table.
+Round 6 also claimed the doc never names the re-weighted population; it does (`:2326`, "for judge
+verdicts"). **That wrong claim was left standing in its verdict rather than edited** — a calibration
+record that only records the judge's hits is not a calibration record.
+
+**Round 7** caught the fix itself naming `CODING_MEMORY.md` as a `curated_doc` member *one sentence
+before* citing the carve-out that removed it — `_doc_source_type` (`index.py:46-58`) re-types it to
+`archive_doc` (1.0) by filename, whichever bucket found it. I had verified the conclusion and skipped
+the enumeration, which is precisely the failure this section exists to document. **Round 8** caught the
+corrected version keying the proposed knob on `coding-memory/` — **2866** chunks against the sweep's
+**2405**, over-capturing **461** including `pr-tracking.md`, which this same section measures as inert.
+
+Three lessons, and the third is the general one.
+
+**(1) A verdict pins HEAD, so committing a verdict invalidates it.** That is a structural loop, not a
+mistake — three rounds were spent in it. The escape: run `gh pr create` while the verdict file is
+written but *uncommitted*, then commit and push it onto the open PR. No `JUDGE_EXEMPT` required.
+
+**(2) Errors concentrate in the instruction-to-a-successor.** Not in the measurements — those survived
+eight rounds — but in the paragraph saying *what to do next*, which is the least measurable prose in
+the document and the only part another agent will act on. Three rounds, three distinct errors, one
+paragraph. Judge that paragraph hardest; it is where being plausible is cheapest.
+
+**(3) When two rounds disagree twofold, re-derive rather than pick.** Round 6 estimated the merge
+perturbation at ~48 chunks, round 7 measured 99. Running `chunk_doc` myself gave **99 at `1c89fbe`,
+112 with round 7's own verdict added** (+4.7% of the judge corpus) — round 7 exact, round 6 half. The
+count grows every time the section is judged, which is the joke and also the finding: measuring this
+corpus perturbs it. Stored as a derivation, deferred to ADR 0021 rather than estimated.
+
+PR #47 opened (docs-only, `docs/r9-counterfactual-control`); detail in `coding-memory/pr-tracking.md`.
+
+**Merged 2026-08-09T20:18Z** as `b829eea` (PR #47). Merge verified as a true *union* rather than a
+balanced total: empty diff against the branch tip, 2 deletions against old `main` (both intended), no
+conflict markers. The marker probe had to be run twice — the first version piped `git grep` into
+`head` and reported *`head`'s* exit code, so it would have said "clean" no matter what; the second
+captured the code directly and was falsified against a pattern known to exist before being believed.
+**A check that cannot fail has not passed.**
+
+All eight verdicts backfilled `outcome: rework`. ⚠️ **The commit that made this backfill claimed "8
+for 8 `risk=low`" in its subject and body. That count is wrong — it is 6 `low` and 2 `medium`** —
+and it was caught by the judge round on the backfill itself. Counted properly:
+
+| field | distribution across the 8 | all outcomes |
+|---|---|---|
+| `risk` | 6 `low`, 2 `medium` | `rework` |
+| `confidence` | **7 `high`**, 1 `medium` | `rework` |
+
+The framing survives but weaker than stated: `risk` scores whether a change can *break* something,
+and documentation cannot, while what recurred was being *wrong*. Six low-risk verdicts followed by
+rework still makes that point — but on two rounds the risk field *did* move, so "predicts nothing"
+over-reached. **The stronger signal was in the same rows and I missed it: `confidence` was `high` on
+7 of 8, and all 8 needed rework.** Confidence is the field that plausibly does claim correctness, and
+it was high-and-wrong seven times.
+
+The lesson is not the framing, it is the mechanism. This entry's own commit message says *"a check
+that cannot fail has not passed"* while asserting a headline count **nobody counted** — its
+self-verification was meticulous about *which rows* changed and silent about *the number claimed
+about them*. Verifying the operation is not verifying the claim you drew from it.
+
+## 2026-08-09 — session 50: closing out PR #49, and breaking the close-out regress
+
+The entry above was written on branch `docs/post-merge-followups-47`, merged as **PR #49** at
+**`0fe9723`** (2026-08-09T20:44:08Z) — identifiers recorded here because a grep for `PR #49` or the
+branch name matched **nothing** in this file or `pr-tracking.md` before now. The lesson had been
+archived; the work had not been *recorded*. An archive that omits the identifier a reader will search
+by is unreachable, and I found that gap by hitting it.
+
+Session 50 did two edits and no feature work: the last `verdicts.jsonl` row (`head_sha 6e35701`)
+`outcome: null → rework`, and #49's own section in `pr-tracking.md` — see that section for the merge
+verification, the re-derived 6 `low` / 2 `medium` split, and a `git-guard` gap found on the way.
+
+**The regress is the point.** Three close-outs running (#45→#46, #47→#49, #49→here), each PR left its
+own record unwritten, because a PR cannot mark itself merged — the merge happens after its last
+commit. Opening PR #50 would have created a fourth. **These two edits went straight to `main` as
+documentation instead**, which `git-guard`'s allowlist permits by design. The general rule: paperwork
+for a merged PR is not itself PR-worthy work.
+
 ## 2026-08-09 — session 48: the correction list needed correcting
 
 Restored onto `feat/tracking-feature-state` (`37a8e38`, clean, `0 0` vs origin, `0 2` vs `origin/main`).
