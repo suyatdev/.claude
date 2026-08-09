@@ -822,3 +822,46 @@ Four things worth remembering rather than re-deriving:
   re-run `-m measurement` after the first scheduled index run containing these commits; reopen if it
   drops below 2 of 5 **or reaches 2 by a different set of queries**. Record *which* queries pass, not
   how many.
+
+## `.claude` — `docs/post-merge-followups-45` → PR #46 (merged, commit 38f216a)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `docs/post-merge-followups-45` · **base:** `main` @ `65ebf81`
+- **PR:** https://github.com/suyatdev/.claude/pull/46 — **merged 2026-08-09T07:05:04Z** at `38f216a`
+- **session_origin (created):** session 46 · **session_origin (last push):** session 47
+- **Branch deleted local + remote 2026-08-09.** `git branch -d` — but note its confirmation was
+  against the *upstream tracking ref*, not `main`, because the deleting worktree was on a detached
+  HEAD. What actually established safety was `git merge-base --is-ancestor <sha> origin/main` on all
+  four commits. **A `-d` that succeeds from a detached HEAD has not checked what you think it has.**
+- **Card:** `docs/features/post-merge-followups-45.md`, now `phase: review`, with a `## Closed` note.
+
+Closes the four record-keeping items PR #45 left behind: `memsearch/README.md`'s broken ADR-0018 link
+repointed to 0021, the root `README.md` Roadmap line, #45 marked merged here, and the round-5
+observability verdict's `outcome` backfilled as `rework`.
+
+Three things worth remembering rather than re-deriving:
+
+- **It merged carrying four commits beyond its four tasks** — R9's monitor result plus session 47's
+  archive entry, its renumber, and a correction to it. Recorded in the card's `## Closed` note rather
+  than as a retro-fitted task 5, because the branch sat at `phase: implementation` while they were
+  added and the phase gate forbids checklist edits there.
+- **A stale worktree is internally consistent, and that is what makes it dangerous.** Session 47
+  restored into a checkout parked on the *pre-merge* tip of `feature/memsearch-freshness`. The feature
+  card there read `phase: review`, so #45 looked open and both `README` fixes looked owed; every
+  artefact corroborated every other, and all of them disagreed with the remote. The one available
+  signal was `git branch --show-current` disagreeing with the card's `branch:` field — the mismatch
+  `rules/gates.md` already calls stop-and-report. **Compare the branch field; don't just read it.**
+- **Verifying the operation is not verifying the premise.** Three commits were pushed onto
+  `feature/memsearch-freshness` after confirming the push was a clean fast-forward. It was — onto a
+  branch whose PR had merged hours earlier, leaving them 3 ahead of its own merge point and requiring
+  a cherry-pick. A fast-forward check cannot tell you the destination is dead; `gh pr view` can, in
+  one call.
+
+**R9's monitor has now fired once and the decision is reopened** (detail in
+`docs/features/memsearch-freshness.md` § "The R9 monitor fired"): still 2 of 5, but a different pair —
+`falsifier-base-pin` recovered, `git-guard-empty-index` regressed. Both moves are clause 1 only, and
+both queries have now swapped twice in opposite directions across three measurements, which reads as
+instability on the ≥2 boundary rather than three causes. **Cause is unassigned on purpose** — the
+counterfactual harness was not run for this measurement, and the available self-displacement reading is
+the same inference that had to be retracted at 10b. That harness, run against a pinned index state, is
+the next owed step.
