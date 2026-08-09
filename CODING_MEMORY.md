@@ -4746,3 +4746,17 @@ count grows every time the section is judged, which is the joke and also the fin
 corpus perturbs it. Stored as a derivation, deferred to ADR 0021 rather than estimated.
 
 PR #47 opened (docs-only, `docs/r9-counterfactual-control`); detail in `coding-memory/pr-tracking.md`.
+
+**Merged 2026-08-09T20:18Z** as `b829eea` (PR #47). Merge verified as a true *union* rather than a
+balanced total: empty diff against the branch tip, 2 deletions against old `main` (both intended), no
+conflict markers. The marker probe had to be run twice — the first version piped `git grep` into
+`head` and reported *`head`'s* exit code, so it would have said "clean" no matter what; the second
+captured the code directly and was falsified against a pattern known to exist before being believed.
+**A check that cannot fail has not passed.**
+
+All eight verdicts backfilled `outcome: rework`. Each returned `risk=low`, and each was followed by a
+fix commit — 8 for 8. Read carefully that is not a miscalibration: `risk` scores whether the change
+can *break* something, and documentation cannot, while what actually recurred was being *wrong*.
+The gate's risk field predicts blast radius, not correctness, and this branch is the cleanest
+demonstration of the gap in the record so far. Anything relying on `risk=low` as a proxy for "this is
+probably right" is reading a field that does not carry that meaning.
