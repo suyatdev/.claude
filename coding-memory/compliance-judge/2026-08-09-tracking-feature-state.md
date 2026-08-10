@@ -986,3 +986,116 @@ to ADR 0024 explicitly and the wording matches). Still closed: `writing-specs/go
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+---
+
+## Round 9 — 2026-08-10 — **PASS** (terminal round, user-authorised)
+
+`head_sha` `4775afd4e09392415a074a4c2dde6e34db6f0521` · branch `feat/tracking-feature-state` ·
+spec blob `716548b733199ec75719163774aed75b389a938e` · confidence **high**
+
+### Layman summary
+
+Both problems the last round found are genuinely fixed, and I checked them by re-running the
+measurements myself rather than reading the card's word for it.
+
+The first problem was that the spec's own pass/fail test was impossible to pass. It told the
+implementer to bring along "the icon font files" a stylesheet references, and left the list of those
+files blank for a later task to fill in — so a developer who followed the instruction exactly would
+ship eight font files when the test only expected two, and would fail. The spec now names all nine
+files up front, and makes an explicit decision to ship only the modern `.woff2` format. I fetched the
+real stylesheets to check: the icon stylesheet does list four formats in one line as claimed, and the
+Google Fonts stylesheet really does contain 28 references that resolve to only 7 actual files — the
+card's earlier "4 files, one per weight" was wrong and the corrected "one file" is right. I then
+diffed the spec's two copies of the file list against each other: identical.
+
+The second problem was the safety control that stops the server typing into the wrong Claude session.
+Last round it said "confirm the target" without saying what the target was compared *against*, what
+happens if the check errors, or how long to wait. The fix is better than a patch — it deletes the
+guesswork entirely. The server now takes the session's own ID from the environment it was launched
+in, rather than trying to work out which session it belongs to. I confirmed that environment variable
+is set and holds the right kind of value. Every failure now has a stated outcome: three ways the
+server refuses to even start, three ways a send is refused, each with an HTTP code, a log reason, and
+a matching test in the same task that builds it. Critically, "I couldn't check" is treated as "refuse",
+not "probably fine" — which is the failure that would otherwise be silent.
+
+The card grew again (1080 → 1204 lines), the seventh straight round. I am not scoring that a
+violation, and I say why below rather than leaving it implied.
+
+### Violations
+
+**None.** Both persistent ids from round 8 are closed on the merits.
+
+| Prior id | Status | Evidence I re-measured |
+|---|---|---|
+| `writing-specs/api-contracts` | **closed** | Phosphor `regular/style.css`: exactly 1 `@font-face`, 4 `src` formats (`./Phosphor.woff2`, `.woff`, `.ttf`, `.svg#Phosphor`) — the card's "delete the three non-woff2 `src` entries so the relative `./` resolves unchanged" is exactly right. Inter: 28 `woff2` references / **7** distinct files / 28 `@font-face` blocks, and the `latin` subset is **one** file shared by all four weights. `diff` of the §Design 3 manifest (16 rows) against criterion 13 run (a) (18 rows) minus `/` and `/favicon.ico`: **identical**. All manifest extensions (`.js`/`.css`/`.woff2`) present in the fixed map. Six remote assets across nine reference sites; phosphor `<link>`s at `*.dc.html:13-14` in **both** files; Inter `@import` at line 2 of **both** `nocturne.css` and `_ds/nocturne-<uuid>/styles.css`. A correctly built server now passes criterion 13. |
+| `core-conduct/explicit-error-handling` | **closed** | The basis of comparison now exists: `$CMUX_SURFACE_ID` verified live in this environment as a bare UUID (`7C0A4E33-…`), inherited rather than inferred. Three startup aborts (unset/empty; `read-screen` non-zero, which folds in the `agent-session` case; probe >5s), each naming its cause and serving nothing. Three send-time outcomes tabulated with wire code + audit `reason` + `sent` value; `confirm_failed`/`confirm_timeout` added to the `reason` enumeration (card:400) and to the `502` row (card:364). Could-not-confirm is **refused**, not assumed fine (card:700-703) — the one branch whose absence would have been silent. Six matching assertions in task 9 (card:966-977), in the same task that builds the control. |
+
+### Notes (non-blocking)
+
+- **Card growth, scored plainly: not a violation, and here is the honest arithmetic.** 1080 → 1204,
+  a seventh consecutive rise. `writing-specs` §"Tokenization Is a Hard Constraint" names *redundant
+  `Given/When/Then` blocks* as the offender it is aimed at; this growth is ~180 lines of two
+  enumerated **contracts** — the nine `vendor/` rows written into both lists, and the two
+  surface-check tables — which were the literal substance of both cited violations. Neither is
+  boilerplate, and removing either re-opens a violation. Against that, ~55 lines of round-forensics
+  prose came out. Net verdict: length earned. **But the trend now warrants a human call rather than
+  another judge round**: `rules/gates.md`'s `.spec.md` split is a MAY keyed to "the checklist file
+  stops reading comfortably in one pass", and at 1204 lines that threshold is arguably met. The
+  standing trim candidate is unchanged — the ⚠️ paragraphs narrating how prior rounds got things
+  wrong (roughly card:240-251, 272-279, 302-325, 802-808, 835-859) are ~120 lines of forensics that
+  a `.spec.md` half could carry.
+- **Gherkin shape — DROPPED, permanently, with reasoning; future rounds should not carry it.**
+  Criteria 2, 3, 4 and 5 fold `When` into `Given`. I decline to cite it, and this is a resolution
+  rather than another deferral: in all four the trigger is unambiguous from context (the analyzer
+  running; the re-analysis; the interrupted write, whose `When` sits in its own assert clause), so
+  the rule's stated purpose — "the format exposes the gap while it is still cheap to close" — is
+  already served. `writing-specs` simultaneously names redundant `Given/When/Then` as the primary
+  token offender, so enforcing the literal shape here would trade tokens for zero correctness gain.
+  Eight rounds of carrying it as a note was the wrong disposition; it is closed.
+- **CSP `onClick` — now VERIFIED (round 8 left it inferred), and the card should say one sentence.**
+  `<x-dc>` at `Task Tracker.dc.html:9` is a **live element in the body**, not a
+  `<script type="text/x-dc">` — that type appears only at line 297, on a nested props block — so the
+  HTML parser does parse the 20 `onClick` attributes into `onclick` inline handlers on real DOM.
+  Under this card's CSP (no `'unsafe-inline'` in `script-src`) Chrome refuses them and logs console
+  violations. `support.js:318` maps `onclick → onClick` in `encodeCase` and the subtree is lifted via
+  `template.innerHTML` (`:468-470`) and compiled through Babel (`:1211`), so the *live* handlers are
+  React props and the UI works — the violations are console noise only. Recommend one clause in
+  criterion 13 so the operator does not report a passing run as a failure.
+- **Host-mismatch has an audit `reason` but no wire status row.** Card:231 states the behaviour
+  ("Reject any request whose `Host` header is not `127.0.0.1:<port>`") and card:399 lists
+  `host_mismatch` among audit reasons, but the §Design 3 `403 forbidden` row enumerates a **closed**
+  list of three causes that does not include it. `403` is safely inferable from the neighbouring
+  reasons; the gap is that the table claims completeness. One-word fix, not cited.
+- **`reanalyze` is the one subprocess boundary the tightening pass did not reach.** `cmux send`,
+  `read-screen` and `cmux tree` each carry an explicit 5-second bound; the analyzer invoked by
+  `reanalyze` carries none, so a wedged `git` (plausible in a repo that deliberately runs parallel
+  agents across worktrees) hangs the request. The card's own standard argues for a bound —
+  "never awaited indefinitely" (card:375) and "an unbounded probe is a server that neither starts nor
+  reports why" (card:685). Low materiality: a hang is visible to the operator, not silent, which is
+  why it is a note and not a citation.
+- **`.html` in the fixed extension map is unused.** No manifest row is `.html` (`GET /` sets
+  `text/html` directly at card:201), so "those four extensions cover every row above with none left
+  over" (card:290) holds in one direction only. Harmless.
+- **Inter `unicode-range` is unstated.** Task 14 (card:1074-1075) says to write four `@font-face`
+  blocks pointing at the single latin file, but omits `unicode-range`. Without it the face claims
+  every codepoint and non-Latin glyphs render as tofu rather than "falling back to the system stack",
+  which is the outcome card:1071 says to expect. Google's own latin block — which the card's `curl`
+  reproducer already prints — carries the range verbatim.
+- **Round 8's own note was wrong where the card was wrong.** It recorded "Inter = 28 woff2, 7 subsets
+  × 4 weights, `latin` = 4 ✓" — the `latin = 4` half repeated the card's error rather than catching
+  it. `sort -u` on the live stylesheet returns **one** latin file. Recorded because it is this
+  card's documented failure species (a stored result reproduced from the artifact under review)
+  reappearing inside the judge's own audit trail.
+- **Claims re-verified live today, all exact:** `support.js` first script at `Task Tracker.dc.html:6`;
+  single `_ds` directory `nocturne-73641b21-c7ad-488a-8264-a28262dfe83e`; `analyze.py` at **792**
+  lines, eight under the hard max, split named and explicitly unscheduled as a human-owned call —
+  correct posture, unchanged; no `TBD`/`TODO`/`FIXME`/placeholder anywhere in the card; no absolute
+  path (`/Users/`, `/home/`) committed.
+- **Spec path:** `docs/features/` rather than `writing-specs`' `docs/superpowers/specs/`. Not cited —
+  `rules/gates.md`'s one-canonical-file discipline is the repo layer and takes precedence on conflict.
+
+### Waivers
+
+**None.** No violation has been waived for this spec in any of the nine rounds, and none is needed:
+round 9 passes clean, so the waiver conversation the user pre-authorised does not arise.
