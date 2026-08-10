@@ -5162,3 +5162,53 @@ revision 3 and **is still uncommitted in the primary checkout**, whose `complian
 verdicts.jsonl` is behind `main`, so a naive commit there reverts the backfill. Rounds 4 of both
 judges are the next step, in panes. Tasks 10-12 of `statusline-wrap-worktree.md` (the "unknown"
 worktree rendering, int64 `COLUMNS` noise, the environment-dependent row assertion) remain untouched.
+
+## Session 57 (cont.) — judge rounds 4 and 5, and the point where correcting became the defect
+
+Ran both judges twice, in panes, on `falsify-harness-signatures`. **Both `wait` calls timed out at
+540s while the judge was still alive** — twice the verdict was already persisted to its card and
+`verdicts.jsonl` before the `RESULT_FILE` contract line appeared. Read the card directly rather than
+trusting the timeout; `wait` exit 2 means *inspect*, and the artifact is the verdict, not the result
+file.
+
+**Round 4.** Compliance `fail`, 6 violations, all new ids. Observability `risk=medium` — but it
+built a **working exploit**: 8 bytes of injection slack on ords 43-46 leaves floor, closure, rows,
+column and vacuity lists all green and the harness prints `falsification intact`. It works because
+the ratchet is *saturated* on 13 of 15 pinned ids, so only two can ever trip. User decision: written
+non-goal, carried by task 10, and the banner renamed to `measured`.
+
+**Round 5.** Compliance `fail`, 2 violations — the **first recurrence** in this spec
+(`writing-specs/exit-path-enumeration`), which is the escalation trigger. The recurrence is the
+lesson: one fact (an exit code) lived in seven places, round 4 synced them and missed three, and the
+Gherkin block ended up with two scenarios sharing a `Given` and asserting different codes. Syncing
+was the wrong repair. §5's table now carries condition ids `E1a`-`E3a`, every other site cites an
+id, and the contradictory scenario was **deleted, not fixed**.
+
+**The finding worth carrying forward.** The observability judge: *"two of the five repairs each
+introduced a new fault about the size of the one they fixed… the corrections are now the defect
+source."* Concretely, one sentence — what catches a wholesale collapse — was wrong in revision 4
+(credited the full-count assertion), wrong again after the round-4 correction (credited the
+empty-column guard), and only right when the attribution was **deleted**: measured, 13 of 15 pinned
+ids pass against the silent stub so the column is never empty, and the matrix catches it with 12 of
+15 row mismatches. Two independent judges verified every *number* in that document across five
+rounds and both missed that *sentence* twice. Recorded as
+`feedback_delete_the_claim_when_the_correction_is_wrong_too`.
+
+Also fixed in the structural pass: the floor run could not certify its own length (its count came
+from itself, and the suite's tally denominator is `pass+fail`, so a run truncated at 30 all-passing
+prints `30/30 passed`) — three length-independent signals now gate adoption. Closure split by
+direction: a *new* discriminating id is `E3a`/exit 3, a *pinned* id that stopped discriminating is
+`E1c`/exit 1, because revision 4 filed the second under the calmest label in the table.
+
+**Verdict stores.** Compliance rounds 1-3 were stranded in the primary checkout by the judge's
+hardcoded `$HOME/.claude` write path, on a branch behind `main`. Migrated as a verified union
+(84→87, zero pre-existing rows lost), and every round-4/5 dispatch overrode the write path
+explicitly. **Confirmed live:** `git rev-parse <sha>:<path>` from the Bash tool returns the *commit*
+object — the rtk-proxy rewrite the harness docstring warns about — so the five pinned blob SHAs had
+to be computed from Python.
+
+**State:** spec at `099a3e0`, still `phase: planning`, `branch: none`. Round 5's two violations are
+addressed but **unjudged** — the user chose one structural pass then the review gate rather than a
+round 6, on the advisory judge's recommendation to stop iterating prose and let the next judge run
+the harness and read `$?`. The file is now **892 lines**, past the 800 ceiling; a `.spec.md` split is
+open but was deliberately not done mid-pass.
