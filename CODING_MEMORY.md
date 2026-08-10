@@ -5041,3 +5041,64 @@ probe still owed since round 2; the card is 933 lines, a fifth consecutive growt
 judges have now flagged the trend — a compaction pass is owed before the branch lands. The main
 checkout's three misrouted `statusline-followups` verdict rows are still unreconciled, deferred by
 the user until the card passes.
+
+## 2026-08-09 — session 56: two PRs merged past their own gates, and the outcome that isn't a value
+
+**Session numbering: the collision the last handoff warned about is now materialised inside one
+file.** `main` carries *two* `## 2026-08-09 — session 48`, *two* `session 49`, and *two* `session 50`
+headings (lines 4608/4796, 4708/4829, 4778/4872) — one from each lane, with different content, fused
+by PR #48's merge. **56 is chosen as `max(all lanes) + 1`, not `mine + 1`.** Anyone numbering the next
+entry should grep the whole file, not their own lane's tail.
+
+Both PRs that were open at the end of session 50 merged while the session was down, one minute apart:
+**PR #48** (`feat/tracking-feature-state`) at `e4f873e` 01:48:16Z, **PR #50**
+(`docs/verify-before-claiming`) at `fe55b2d` 01:49:51Z. Zero PRs are open now. Neither had a
+`pr-tracking.md` section; both do now — that file is where the detail lives, and this entry is only
+the part worth carrying forward.
+
+**Both merges are true unions, and the check that proved it was falsified first.** #48: `git diff
+dd69033 e4f873e` empty, base→merge **+11886 / −0 across 35 files**. #50: base→merge **+142 / −2**,
+and both deletions were *read* — the rewritten `core-conduct.md` line and a rebase-staled SHA — not
+assumed benign. The conflict-marker grep returned rc=1 on the merged tree, and the same pattern
+returned rc=0 against a string known to match. **A clean probe means nothing until you have watched
+it come back dirty**; that is the lesson from session 50 applied rather than restated.
+
+**The finding: PR #48 merged past both judge gates.** Compliance ran **six rounds, every one `fail`,
+with no round 7** — the last recorded judgment on that branch is a failure. Observability has **six
+verdicts, all stage `architecting`, and zero stage `implementation`** — the stage `judge-guard`
+actually gates `gh pr create` on — with the final architecting verdict at `risk: high`. Its feature
+card on `main` still reads `phase: planning` against a merged 35-file implementation. None of this is
+a criticism of the merge, which is the user's call; it is a record-keeping fact that twelve `null`
+rows would otherwise have left looking like the question was never asked.
+
+**`outcome` has no honest value for a change that shipped over a `fail`, so it keeps `null` — with
+prose.** Rounds 1–5 in both stores are backfilled `rework`, and that is *derivable*: each round's
+successor carries a different `head_sha`, so a revision provably followed. Round 6 shipped
+**unchanged** past a failing verdict, where `clean` (judged fine, shipped fine) and `rework` (revised
+after) are both false. The enum has no third value, so the row stays `null` and `pr-tracking.md` says
+why — otherwise it is indistinguishable from the 77 rows that are merely un-backfilled. **A missing
+value with a written reason beats a plausible value with none**; this is `outcome: null` used as a
+statement rather than a gap. Net: 83 → 77 null, six rows changed, count verified from disk.
+
+**PR #50's row is `clean` — the first non-`rework` in eleven** — and that too was measured: `git diff
+--stat 31840d8 23b7302` touches the verdict card, `verdicts.jsonl`, ADR 0025 and one
+`CODING_MEMORY.md` line, but **not `rules/core-conduct.md`**, the file under judgment. What shipped is
+what was judged. The prior ten `rework`s made `rework` the reflex; the diff is what stopped it.
+
+**Wrong-checkout near-miss, caught by an assertion rather than by luck.** The first backfill script
+ran against `/Users/marksuyat/.claude` — the primary checkout, which is pinned to
+`feature/memsearch-freshness` @ `2296e3c` and therefore holds *old* file contents. It reported `0 rows
+matched` for both stores and edited nothing. The earlier reads had come from `git show origin/main:…`,
+which masked the difference. **A repo path is not a content version**; the working tree of a checkout
+on a stale branch is stale, and only the row-count assertion distinguished "no matches" from "silently
+patched the wrong file".
+
+**Still open at the end of session 56:** the two blind guards — `git-guard`'s allowlist never
+evaluating from a detached HEAD (`on_main()` reads `--abbrev-ref`, gets `HEAD`), and `judge-guard`
+resolving repo/branch/head_sha from the ambient cwd so a cross-worktree verdict is invisible — both
+still unfixed, both owed one `triaging-new-instructions` pass, and the first of them is the very path
+this entry was pushed through. `docs/features/pane-dispatch-model-flag.md` still awaits `gate
+confirmed`, and `falsify-harness-signatures` compliance round 3 (`fail`) is still uncommitted; both
+live *only* in the primary checkout's working tree, whose `compliance-judge/verdicts.jsonl` is 81 rows
+against `main`'s 84 — **a naive commit there would revert this backfill.** 77 `outcome: null` rows
+remain across the observability store.

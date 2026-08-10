@@ -954,3 +954,67 @@ wrong about its own state, both worth knowing because they are how a close-out f
 so the main-branch allowlist never evaluates, and nothing guards a non-force `git push origin
 HEAD:main`. The docs-only scope of this commit was honoured by hand, not by hook. Recorded as a gap,
 not fixed here: a rule change belongs behind `triaging-new-instructions`.
+
+## `.claude` — `feat/tracking-feature-state` → PR #48 (MERGED 2026-08-10T01:48:16Z, merge commit `e4f873e`)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `feat/tracking-feature-state` · **base:** `main` @ `8f0e884` · **tip at merge:** `dd69033`
+- **PR:** https://github.com/suyatdev/.claude/pull/48 — **merged 2026-08-10T01:48:16Z** at `e4f873e`
+- **commits:** 22 (`git rev-list --count 8f0e884..dd69033`)
+- **session_origin:** the `feat/tracking-feature-state` lane — `CODING_MEMORY.md` carries its sessions
+  48, 49, 50, 51, 52–54 and 55 · **closed out:** session 56 (this section)
+- **Merge verified as a true union:** `git diff dd69033 e4f873e` empty (the merge took branch content
+  verbatim), `git diff --numstat 8f0e884 e4f873e` = **+11886 / −0 across 35 files** — *zero* deletions,
+  so nothing on `main` was displaced. Conflict-marker grep over the merged tree rc=1, **with a
+  falsifier** proving the probe reports rc=0 against a string known to match.
+- **The `CONFLICTING` state the prior handoff recorded was resolved on the branch, not at the merge.**
+  `dd69033` is a `Merge origin/main into feat/tracking-feature-state`, which is why the base→merge diff
+  is purely additive. The two conflicting files were `CODING_MEMORY.md` and
+  `observability-judge/verdicts.jsonl`, both append-only.
+- **Worktree:** `~/.claude/.claude/worktrees/tracking-feature-state` — clean after merge, removable.
+
+⚠️ **This PR merged over both judge gates, and the record should say so rather than leave it implied.**
+
+- **Compliance: 6 rounds, every one `fail`, and no round 7.** Rounds 1–6 at `24ff8da`, `badd4f8`,
+  `41b586c`, `81d98dc`, `b9ad394`, `73f9475`. The last recorded judgment on this branch is a failure.
+- **Observability: 6 verdicts, all stage `architecting`, and *zero* stage `implementation`.** The final
+  architecting verdict (`73f9475`) is `risk: high`. `judge-guard` blocks `gh pr create` until a fresh
+  **implementation**-stage verdict matches HEAD (`rules/gates.md`, observability-judge gate) — no such
+  verdict exists for this branch, so the PR was opened past that hook, not through it.
+- **Outcome backfill, and the row deliberately left `null`.** For both stores, rounds 1–5 are
+  backfilled `rework` — each is provably followed by a revision, since the next round carries a
+  different `head_sha`. **Round 6 in each store is left `outcome: null` on purpose.** The change
+  shipped *unchanged* over a `fail`, so neither `clean` (judged fine, shipped fine) nor `rework` (the
+  change was revised after) is true, and inventing one would corrupt the calibration record these
+  fields exist to feed. The `null` here means "no outcome is derivable", and this bullet is what makes
+  that distinguishable from the 77 rows that are merely un-backfilled.
+- **`docs/features/tracking-feature-state.md` on `main` still reads `phase: planning`** against a
+  merged 35-file implementation (`task-tracker/`, ADRs, `PORTS.md`, `.gitignore`). That is the
+  frontmatter-vs-reality mismatch the phase gate calls stop-and-report, now merged. **Unresolved** —
+  left as found, because correcting a merged card is a judgment call for the lane that owns it.
+
+## `.claude` — `docs/verify-before-claiming` → PR #50 (MERGED 2026-08-10T01:49:51Z, merge commit `fe55b2d`)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `docs/verify-before-claiming` · **base:** `main` @ `e4f873e` — which *is* PR #48's merge
+  commit, one minute earlier. **The close-out regress again:** each PR's base is the previous merge.
+- **PR:** https://github.com/suyatdev/.claude/pull/50 — **merged 2026-08-10T01:49:51Z** at `fe55b2d`
+- **commits:** `31840d8` (the rule change), `f0d4c87` (its verdict), `23b7302` (ADR 0025 + stale-SHA unpin)
+- **session_origin (created):** session 50 · **closed out:** session 56 (this section)
+- **Merge verified:** `git diff --numstat e4f873e fe55b2d` = **+142 / −2 across 5 files**, and **both
+  deletions are in-place replacements, read rather than assumed** — the `rules/core-conduct.md` line
+  the PR rewrites (its whole point), and a `CODING_MEMORY.md` bullet whose pinned SHA the rebase had
+  made stale (`` `1721a3c`, off `2b8564b`, pushed `` → `` rebased onto current `main`; PR #50 ``).
+  Nothing was lost. Conflict-marker grep rc=1 with the same falsifier as above.
+- **Verdict: `31840d8`, `risk: low`, `confidence: high`, `trajectory: pass`, `outcome: clean`.** This is
+  **the first non-`rework` outcome in eleven rows**, and it is measured, not assumed: `git diff --stat
+  31840d8 23b7302` touches only `CODING_MEMORY.md`, the verdict card, `verdicts.jsonl` and ADR 0025 —
+  **`rules/core-conduct.md`, the judged change, is not in that diff.** What shipped is what was judged.
+  Card: `coding-memory/observability-judge/2026-08-09-docs-verify-before-claiming.md`.
+- **`JUDGE_EXEMPT` was used to open this PR, and it was a path bug, not a skipped judge.** `judge-guard`
+  resolves `repo`/`branch`/`head_sha` from the ambient cwd (`judge-guard.sh:239-242`), and the harness
+  resets shell cwd after every Bash call, so an inline `cd` cannot move it — a valid, fresh verdict
+  living in another worktree is invisible to it. Second guard found blind in two sessions, alongside
+  the detached-HEAD `git-guard` gap above. **Both are still open and belong in one
+  `triaging-new-instructions` pass** — the most actionable work left in this repo.
+- **Worktree:** `~/.claude/.claude/worktrees/verify-rule` — clean after merge, removable.
