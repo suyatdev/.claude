@@ -5093,6 +5093,15 @@ which masked the difference. **A repo path is not a content version**; the worki
 on a stale branch is stale, and only the row-count assertion distinguished "no matches" from "silently
 patched the wrong file".
 
+**A parallel session began round 7 minutes after the close-out was pushed.** The
+`tracking-feature-state` worktree was clean when its section was drafted and dirty when re-checked —
+an untracked round-7 verdict card and a modified `verdicts.jsonl`. So **"no round 7" is a statement
+about `84ed83c`, not about tomorrow**, and it is written down that way rather than left to age into a
+falsehood. Its worktree was *not* removed (only `verify-rule` was); its append will land adjacent to a
+line this commit rewrote, so the resolution is recorded in `pr-tracking.md` before the conflict
+happens: **take both sides.** Re-checking a precondition immediately before acting on it is what
+turned a destructive step into a two-line note.
+
 **Still open at the end of session 56:** the two blind guards — `git-guard`'s allowlist never
 evaluating from a detached HEAD (`on_main()` reads `--abbrev-ref`, gets `HEAD`), and `judge-guard`
 resolving repo/branch/head_sha from the ambient cwd so a cross-worktree verdict is invisible — both

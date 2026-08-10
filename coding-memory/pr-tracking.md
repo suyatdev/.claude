@@ -993,6 +993,21 @@ not fixed here: a rule change belongs behind `triaging-new-instructions`.
   frontmatter-vs-reality mismatch the phase gate calls stop-and-report, now merged. **Unresolved** —
   left as found, because correcting a merged card is a judgment call for the lane that owns it.
 
+⏳ **"No round 7" is true as of `84ed83c`, and is already being overtaken.** Minutes after that commit,
+`~/.claude/.claude/worktrees/tracking-feature-state` — clean when this section was drafted — went dirty
+with an untracked `coding-memory/observability-judge/2026-08-09-feat-tracking-feature-state-round7.md`
+and a modified `verdicts.jsonl`. **A parallel session is producing round 7 now.** Recorded rather than
+waited on, because a claim in an audit trail reads as *settled* and this one has a known expiry.
+
+⚠️ **That parallel work and this commit will collide on one line.** That worktree sits at `fe55b2d`,
+one commit behind `84ed83c`, so its `verdicts.jsonl` still shows the six `feat/tracking-feature-state`
+rows and the `docs/verify-before-claiming` row as `outcome: null`. Its append lands at line 144,
+**immediately after the line 143 this commit rewrote** — adjacent-line, so a rebase can conflict. If it
+does: **take both** — their new row 144 *and* this commit's `outcome` values on rows 78–83 and 143. The
+same trap, larger, sits in the primary checkout: `~/.claude` is pinned to `feature/memsearch-freshness`
+@ `2296e3c`, and its uncommitted `compliance-judge/verdicts.jsonl` is **81 rows against `main`'s 84** —
+committing that file from there would silently revert this backfill *and* drop three rows.
+
 ## `.claude` — `docs/verify-before-claiming` → PR #50 (MERGED 2026-08-10T01:49:51Z, merge commit `fe55b2d`)
 
 - **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
