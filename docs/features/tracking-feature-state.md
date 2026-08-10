@@ -7,9 +7,12 @@ branch: feat/tracking-feature-state
 # Feature-state tracking with a browser UI
 
 **The spec half of this feature lives in `tracking-feature-state.spec.md`** — design, the injection
-route, security, and all fourteen acceptance criteria. It carries no `phase:` key, so it is not a
-card and the analyzer skips it (criterion 1). Read it when a task sends you there; it is not
-session-start reading, which is the whole reason for the split.
+route, security, and all fourteen acceptance criteria. The analyzer skips it **by filename** — the
+card set is `docs/features/*.md` minus anything ending `.spec.md`
+(`grep -n 'SPEC_SUFFIX' task-tracker/analyze.py`). Frontmatter has nothing to do with the selection,
+in either direction: a `.spec.md` half is skipped even when it *does* carry a `phase:` key, and a
+non-`.spec.md` file that carries none is still counted as a card. Read it when a task sends you
+there; it is not session-start reading, which is the whole reason for the split.
 
 **Every `§` reference below resolves in the spec half except `§Verification`, which is in this
 file** — deliberately, because task 13 writes measurements into it during implementation, when the
@@ -47,8 +50,16 @@ like a correct result.
         split is a `task-tracker/git_facts.py` holding the worktree/ahead-behind/dirty readers. **Not
         scheduled** — a structural split is a human-owned call, not a drive-by; raise it if the file
         grows again.
-- [x] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo, not this one.
+- [ ] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo, not this one.
       (Named `test_*.py`, not `*.test.py` — pytest collects only the former.)
+      - **Re-opened in round 11 — criterion 1's selector is asserted in one direction only.**
+        `test_criterion_1_n_cards_in_n_features_out` builds its `.spec.md` half through
+        `repo.card(...)`, which always writes a `phase:` key, so it already proves a spec half is
+        skipped *despite* carrying one. Nothing asserts the converse: that a non-`.spec.md` file
+        carrying **no** `phase:` key is still a card. Add it — require the file to appear in
+        `features[]` **and** to raise a `questions[]` entry naming it, so the test breaks if the
+        analyzer ever starts filtering on frontmatter. Everything else in this task stands; this one
+        assertion is the whole of what is missing.
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader and the
       "undetectable dependency becomes a question" rule.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`: atomic emit of `tracker-data.js`,
@@ -143,17 +154,27 @@ like a correct result.
         **byte-identical to the `$CMUX_SURFACE_ID` the server was started with** — that is the whole
         identity claim, and a `200` plus an invocation is not proof of correct delivery.
       - **The surface binding and confirmation are asserted here, in the same task that builds
-        them** — six of them, because a control that reaches the tables one round after it reaches
+        them** — seven of them, because a control that reaches the tables one round after it reaches
         the prose is this card's second recurring shape, and the fix for it is not another paragraph:
         the three startup aborts (`$CMUX_SURFACE_ID` unset; the `read-screen` probe exiting non-zero;
         that probe timing out — each must exit non-zero, name its cause, and serve **nothing**,
-        proven by a `GET /` that gets no answer), and the three send-time outcomes (confirmed
+        proven by a `GET /` that gets no answer), and the four send-time outcomes (confirmed
         present → `send` invoked once; confirmed absent → `409 unresolved_surface`; check
-        unrunnable → `502` with `confirm_failed`/`confirm_timeout`). Drive the last one by making
+        unrunnable → `502` with `confirm_failed`/`confirm_timeout`; **`send` itself failing → `502`
+        with `send_failed`**). Drive the unrunnable case by making
         the faked `cmux tree` exit non-zero and, separately, hang past the timeout; require `cmux
         send` to be invoked **zero** times in both, and the audit line to read `sent=no`. An
         unconfirmable target that gets sent to anyway is the one bug this control exists to stop,
         and it is invisible from the wire — both refusals look identical to a caller.
+        ⚠️ **The fourth outcome carries `sent=unknown`, and nothing drove it until round 11.** After
+        a confirmation that *succeeded*, make the faked `cmux send` exit non-zero and, separately,
+        hang past its 5-second timeout. Require `502`, `reason=send_failed`, and — the whole point —
+        `sent=unknown`, never `no`. §"Audit log" calls this the worst failure this feature has: the
+        surface was confirmed, `send` **was** invoked, and the server genuinely cannot say whether
+        keystrokes landed. Logging `sent=no` here would assert that nothing was typed, which is
+        precisely the false reassurance a three-valued field exists to prevent. `send_failed` was
+        the one `reason` value in the enum that no assertion reached, and `unknown` the one `sent`
+        value — the same unasserted-control shape as the four bullets above, found the same way.
       - Criterion 14 needs short `TASK_TRACKER_POLL_SECS`/`TASK_TRACKER_IDLE_SECS` overrides and a
         real parent exit; a mocked `getppid()` proves the branch compiles, not that the server dies.
       - **Bind failure has no criterion of its own, so it is asserted here.** Start a server, start a

@@ -1,6 +1,7 @@
 <!--
-The spec half of docs/features/tracking-feature-state.md. Deliberately carries NO frontmatter:
-a `phase:` key here would make the analyzer count this file as a second card (criterion 1).
+The spec half of docs/features/tracking-feature-state.md. It carries no frontmatter because it is
+not a card -- NOT because frontmatter would make it one. The analyzer selects on the filename and
+skips every `*.spec.md` whatever its frontmatter says: `grep -n 'SPEC_SUFFIX' task-tracker/analyze.py`.
 The checklist, the phase gate and the verification record stay in the .md; this file is design,
 contracts and acceptance criteria, read on demand rather than at session start.
 -->
@@ -158,7 +159,7 @@ below yields a `questions[]` entry naming the input and the failure, and the run
 | Target is not a git repo | `git rev-parse --show-toplevel` exits non-zero | Abort *this run* with a non-zero exit and a message naming the path. Nothing is written; a partial run is worse than no run. |
 | `git worktree list` / `for-each-ref` / `rev-list` exits non-zero | non-zero return | `branches[]` omits the affected entry; a `questions[]` entry records the command, its exit code, and its stderr. Other branches still resolve. |
 | Branch has no upstream | `rev-list --left-right --count` fails, or `@{u}` unresolvable | `ahead`/`behind` are `null` — **not** `0`, which would falsely read as "in sync". `note` says no upstream. |
-| Frontmatter malformed or unparseable | YAML error, or no `phase:` key | File is not a card and is skipped (criterion 1 already requires a `phase:` key). A YAML *error* on a file that does have `phase:` becomes a `questions[]` entry naming the file and the parse error. |
+| Frontmatter malformed, unparseable, or carrying no `phase:` | no closing `---` delimiter; or `phase:` absent or not one of the three | **The file is still a card** — selection is by filename alone, so nothing in the frontmatter can remove it from `features[]`. Each becomes a `questions[]` entry naming the file: an unclosed delimiter reports that phase and branch went unread; an absent or out-of-vocabulary `phase:` reports the value seen, an absent key reading as `''`. |
 | Checklist line matches `STRICT_RE` but has no leading integer | `identity()` yields no id | Task counts toward `total`, gets no id, and a `questions[]` entry names the card and the line text. |
 
 `null` versus `0` is the load-bearing distinction in that table: this feature exists to report merge
@@ -745,10 +746,16 @@ them is redundant with the socket's file permission, and none may be weakened on
 
 1. **Given** a **named working tree** — the criterion must name which one, because the main checkout
    and each worktree hold different card sets — **when** the analyzer runs against it, **then**
-   `features[]` has exactly one entry per `docs/features/*.md` file *in that tree* whose frontmatter
-   carries a `phase:` key (a split `<name>.spec.md` half carries none and is not a card), and each
+   `features[]` has exactly one entry per `docs/features/*.md` file *in that tree* **whose name does
+   not end `.spec.md`**, and each
    `meta` is `"<done>/<total>"` where `total` is `len(task_ids(...))` from `hooks/lib/feature_tasks.py`
    and `done` is the count of `[xX]` markers on the same `STRICT_RE`-matched lines.
+   ⚠️ **Selection is by filename, never by frontmatter, and the test must pin both directions.** This
+   criterion read "whose frontmatter carries a `phase:` key" for ten rounds and that was never what
+   the code did (`grep -n 'SPEC_SUFFIX' task-tracker/analyze.py`). A `.spec.md` half is skipped *even
+   when it carries a `phase:` key*, and a non-`.spec.md` file that carries none is still a card —
+   it lands in `features[]` and raises a `questions[]` entry rather than being dropped. Asserting
+   only the first direction passes under either mechanism and therefore proves neither.
    ⚠️ `feature_tasks.py` has no done/total of its own to compare against: `identity()` deliberately
    consumes only `match.group(1)`, the text *after* the bracket, so task identity survives a tick.
    The done count is therefore read off the raw matched lines, by this feature, using that module's
