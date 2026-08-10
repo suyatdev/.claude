@@ -115,18 +115,51 @@ versions** — `baseline renders model and context-bar segments`, `sub-1000 toke
 so on. They fail everywhere because every historical script predates the token bar. A signature
 drawn from them is satisfied by every version and proves nothing about any defect.
 
-The only shape that proves an assertion detects *that* defect is **differential**: it fails on the
-version and **passes on the version that fixed it**.
+The only shape that proves an assertion detects *that* defect is **differential**: it flips across
+the transition where the defect appears or disappears.
 
-| transition | discriminating | of which non-vacuous |
-|---|---|---|
-| `f0902ed` → `925c310` (route-1 fix) | **1** | **0** |
-| `925c310` → `29d6131` (route-2 fix) | 9 | **2** |
-| `29d6131` → `4d63b09` ($PWD ordering) | 5 | **0** |
-| `4d63b09` → `e882659` (regression) | **1** | **0** |
+| transition | fix-direction | of which non-vacuous | regression-direction |
+|---|---|---|---|
+| `f0902ed` → `925c310` (route-1 fix) | **1** | **0** | 0 |
+| `925c310` → `29d6131` (route-2 fix) | 9 | **2** | 1 |
+| `29d6131` → `4d63b09` ($PWD ordering) | 5 | **0** | 0 |
+| `4d63b09` → `e882659` (regression) | **0** | **0** | **1** |
 
 The two non-vacuous ones are `surrounding text survives stripping` and `path with a stripped
 newline is joined, not truncated`.
+
+#### Correction — direction is not uniform along the chain
+
+Re-measured independently 2026-08-09; the first three rows reproduce exactly. The fourth row read
+`1` because it was computed in the opposite direction from the other three. `e882659` is a
+**regression**: nothing was fixed there, so "fails on the version, passes on the version that fixed
+it" yields the **empty set** for it.
+
+This matters because §4 makes an empty signature a hard error. A harness defining signatures
+fix-direction-only would hard-error on `e882659` for being what it is. **The relation is
+transition-typed** — a fix's evidence is `fails on A, passes on B`; a regression's is `passes on A,
+fails on B` — and revision 4 must say which applies to each version rather than assuming one.
+
+#### The chain has only 15 discriminating assertions, and one carries three defects
+
+Measured over all 68 × 5. **53 of 68 assertions never change state across any version** — they pass
+everywhere or fail everywhere, and carry zero information about any of these defects. The
+discriminating set is 15, of which 13 are vacuous. Pattern is `P` = passes, `.` = fails, in chain
+order:
+
+| id | f09 925 291 4d6 e88 | vacuous | assertion |
+|---|---|---|---|
+| 37 | `.  P  P  P  P` | yes | `literal \x1b in display_name stays inert` |
+| 38-42, 66, 67 | `.  .  P  P  P` | yes | the route-2 strip family (7 ids) |
+| 43-46 | `.  .  .  P  P` | yes | `$PWD fallback stripped for stdin …` (4 ids) |
+| **47** | **`P  P  .  P  .`** | yes | `all-control cwd falls through to a stripped $PWD` |
+| 48, 49 | `.  .  P  P  P` | **no** | `surrounding text survives stripping`, `path with a stripped newline is joined` |
+
+**Id 47 is the only assertion in the suite that flips more than once.** It alone tracks the
+$PWD-fallback defect through its whole history — clean at `f0902ed`/`925c310` (no stripping, so the
+cwd never empties), broken at `29d6131` (strip-then-fallback), fixed at `4d63b09`, broken again at
+`e882659` (second fallback below the strip). It is also vacuous: a script that prints nothing
+passes it.
 
 ### The finding that reframes this feature
 
@@ -139,6 +172,22 @@ This invalidates revision 3's framing of §6 as secondary, and its worked exampl
 **Revision 4 must be designed from this table.** Open for that revision: whether signatures become
 differential by definition, and whether "fix the vacuous assertions" can still be a non-goal when
 three of four signatures would consist entirely of them.
+
+### How to reproduce any number above
+
+Copy the suite and a candidate script into a temp directory, run `bash statusline-command.test.sh`,
+and parse `ok   — ` / `FAIL — ` lines in emission order. **Two traps**, both hit while measuring:
+
+1. **A failing case prints a diagnostic, not its name** — ordinal 0 prints `baseline renders model
+   and context-bar segments` when it passes and `baseline segments missing: …` when it fails.
+2. **A passing description embeds measured values** — `literal \x1b in display_name stays inert
+   (esc=10<=10 …)` on the working tree, `(esc=0<=0 …)` against a stub.
+
+So descriptions cannot be compared across runs without stripping the trailing parenthetical, and
+alignment cannot be checked on failing ordinals at all. The valid proof of alignment — which all
+ten runs pass — is: every run emits exactly 68 results, **and** every *passing* ordinal's
+normalized description equals the working tree's at that ordinal. This is a third independent
+reason §1's stable ids are needed, alongside "descriptions get edited".
 
 ## Design
 
