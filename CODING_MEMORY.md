@@ -431,7 +431,7 @@ how this file and its linked files should be written (plain language, major chan
   · **Next for THIS branch:** obs judge (implementation stage) pinning the final HEAD → `gh pr create`
   → merge via GitHub UI → prune branch + worktree local+remote → tip-reachability check + outcome
   backfill. Unlike PR #32, no PR is open here, so **judge-guard genuinely gates this one**.
-- **SIBLING BRANCH `docs/verify-before-claiming`** (`1721a3c`, off `2b8564b`, pushed) — one line in
+- **SIBLING BRANCH `docs/verify-before-claiming`** (rebased onto current `main`; PR #50) — one line in
   `rules/core-conduct.md`: **verification precedes both the claim and the write-down**, not just the
   claim. Closes the gap the four corrections above all shared — each was a claim that entered a
   durable artifact before it was checked. Triaged via `triaging-new-instructions` → **static rule,
