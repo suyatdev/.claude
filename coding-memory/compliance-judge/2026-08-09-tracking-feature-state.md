@@ -812,3 +812,177 @@ a new instance of the same rule, not the old one reopened.
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+---
+
+## Round 8 — 2026-08-10T02:44:28Z — **FAIL** (2 violations)
+
+- **Spec:** `docs/features/tracking-feature-state.md` (blob `566da22a005bf0edc466ba4a836e2740d24c52e4`, 1080 lines)
+- **Branch:** `feat/tracking-feature-state` @ `ca3e07943756df628a02bd636069e4ef36a7bef0`
+- **Rule sources read:** `rules/core-conduct.md`, `rules/gates.md`, `CLAUDE.md`,
+  `skills/writing-specs/SKILL.md`, `skills/writing-secure-code/SKILL.md`
+  (no `.claude/project-standards.md` in this repo)
+- Round 7's three: **2 closed, 1 re-cited on the surface one hop past where it was fixed.**
+  1 new instance of a previously-cited rule, on the control this revision introduced. Waived: none, ever.
+
+### Summary in plain language
+
+**Two of round 7's three are properly closed, and I checked them against the sources rather than
+against the card's own account of itself.**
+
+The ADR contradiction is gone. `docs/decisions/0024-…:38-41` says the parent-death check gets "its own
+`5`-second poll (`TASK_TRACKER_POLL_SECS`, minimum 1s, may not be disabled)" and records "on the idle
+timer" as a first-draft error; the card now says exactly that and names the ADR as authoritative in the
+same sentence. `writing-specs/ambiguous-requirement` is **closed**.
+
+The bind boundary is gone too. `EADDRINUSE` is a startup abort naming the port, explicitly with no
+probing for a free one, any other bind error aborts naming the `errno`, and task 9 asserts it the way
+that matters — second server exits non-zero having served nothing, *first server still answers with its
+original token*. The reasoning for refusing to fall back (two servers, browser on the first, token from
+the second, every button returning the deliberately collapsed `403`) is the right reasoning. That
+instance is **closed**.
+
+Every fresh factual claim in this revision reproduces. `support.js` really is the page's first script,
+at `Task Tracker.dc.html:6`, with nothing above it — so `vendor-resources.js` genuinely has to load
+ahead of it. The CSP genuinely carries no nonce and no `'unsafe-inline'` in `script-src`, so the
+inline-block alternative really is forbidden by the card's own policy. I fetched the Google Fonts
+stylesheet with the browser UA the card specifies: **28** woff2 URLs, `4 cyrillic, 4 cyrillic-ext,
+4 greek, 4 greek-ext, 4 latin, 4 latin-ext, 4 vietnamese` — 7 subsets × 4 weights, and `latin` is
+exactly 4 of them. `vendor-resources.js` appears in all five places a reader would look (manifest row,
+§Design 3 prose, §Security vendoring mechanism, criterion 13 run (a), task 14) and contradicts itself
+nowhere. All four re-checkable toolchain pins match this host exactly (`3.9.6`, `0.11.28`,
+`0.64.20 (100) [14e3400b9]`, `v26.5.0`). `tracker-data-fallback.js:16`/`:19` are as described.
+
+**The static contract is still not completable, and it failed at the one hop the card fixed for Inter
+and not for phosphor.** §Security's own ⚠️ names both second hops in one sentence — "the phosphor icon
+font files, and Inter's **28** `fonts.gstatic.com` woff2 URLs" — then task 14 gives Inter a measured
+count, a reproducing command and an explicit `latin`-only scope decision, and gives phosphor the same
+one-line instruction it had before: "the icon font files they reference must come along". I fetched
+both phosphor stylesheets. Each declares **four** `src` formats for its family:
+
+```
+url("./Phosphor.woff2") format("woff2"), url("./Phosphor.woff") format("woff"),
+url("./Phosphor.ttf") format("truetype"), url("./Phosphor.svg#Phosphor") format("svg")
+```
+
+and `fill/style.css` is the same shape for `Phosphor-Fill`. So the literal instruction adds **eight**
+files, and two independent rules in this card break on them:
+
+1. **Six of the eight carry `.woff`, `.ttf` or `.svg`,** none of which is in the fixed extension map
+   (`.js`, `.css`, `.html`, `.woff2`). The card's rule for that case is not a `500` — it is
+   "**aborts at startup**". Built to the card as written, the server does not start.
+2. **A browser fetches exactly one format from a `src:` list** — the first it supports, i.e. the
+   woff2. So six vendored files are never requested, while criterion 13's expected set says
+   "each of task 14's vendored assets | `200`". The pass condition is set equality. **A correct
+   implementation fails criterion 13.** That is verbatim the round-6 shape ("a correctly built server
+   cannot pass criterion 13 run (a)"), relocated from the store state to the vendored rows. The same
+   hazard applies to Inter: `@font-face` files are fetched lazily per weight actually rendered, so
+   four vendored latin weights are not four guaranteed requests.
+
+Two smaller members of the same gap: the rewritten Inter `@import` has no stated target — a served
+`inter.css` (a new manifest row, needing a `Content-Type`) or `@font-face` blocks inlined into
+`styles.css` are different servers — and the vendored assets have no stated paths, so the row that
+completes the manifest cannot be predicted, only discovered.
+
+**The second finding is the newest control in the card, and it arrived the way the audit log, the
+parent-death check and `asset_unreadable` each arrived: described in prose, absent from every table.**
+Task 1's fourth probe was the important one — a ref that resolved, at exit 0, with `OK` on stdout, to
+the **wrong live Claude session**. The card draws the right conclusion and promotes send-time
+**identity** confirmation to the primary control, demoting criterion 9's re-resolution to defence in
+depth. But that control introduces a new subprocess boundary — reading the target surface — and it has:
+
+- **no status row.** The table's `409 unresolved_surface` is defined as "ref did not re-resolve"; the
+  failure this control exists for is a ref that *does* re-resolve. There is no code for it.
+- **no audit `reason` value.** The enumeration is `bad_token, unknown_id, origin_mismatch,
+  host_mismatch, malformed, too_large, unsupported_media_type, unresolved_surface, send_failed,
+  reanalyze_failed, -`. The log's stated purpose is letting an operator tell one refusal from another,
+  and the single most important refusal this card added cannot be written down.
+- **no behaviour when the read itself fails** — non-zero exit, or a timeout (`cmux send` has a
+  5-second one; the read has none). The card documents at line 456 that `read-screen` exits 1 against
+  an `agent-session` surface, so this is a case it has already met and not routed.
+- **no comparison basis.** "Verify it is the intended session" does not say what is compared, nor
+  where the intended target comes from. §Verification records that `cmux identify` returned
+  `surface_ref: null` on this host, which removes the obvious mechanism; §"Injection route" mentions
+  `$CMUX_SURFACE_ID` is inherited but only as the *default* an omitted `--surface` falls back to.
+  Task 9 says "assert the identity confirmation itself" — with no definition, two implementers write
+  two different checks and both pass their own test.
+
+**On card size, asked directly: no rule is breached and I am not citing it, for the third round
+running.** `rules/gates.md` makes `docs/features/<name>.md` the default and the `.spec.md` split a
+**MAY**; `core-conduct`'s 400/800 limit sits under **Code Style** and governs code files. But 1080
+lines is +147 this round and the sixth consecutive rise, and I now put the round-attribution and
+forensic-narrative content near ~130 lines. The author's reasoning for keeping the two `grep`-scope
+warnings and the `rename-tab`-vs-`send` distinction beside the code that would reproduce them is
+sound and I would keep those. §Revision history (20 lines narrating a deletion) and the round
+attributions inside criterion 13 and §Design 3 are a third copy of what these verdict files and the
+commit messages already hold. `writing-specs` calls the human review gate "the whole point" — the
+argument for trimming is that a reviewer must finish the document, not that the document is illegal.
+Recommendation unchanged from round 7: ~60 lines, no buildable content lost.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | Database schemas and API contracts — give the agent the real interface boundaries instead of letting it improvise shapes | §Design 3 static manifest + fixed extension map (card:256-275), criterion 13 runs (a)/(b) (card:741-772), task 14 phosphor bullet (card:921-922), §Security asset table ⚠️ (card:618-623) | The phosphor second hop is still unenumerated while Inter's now is: each `@phosphor-icons/web@2.1.1` stylesheet declares four `src` formats (`.woff2`, `.woff`, `.ttf`, `.svg` — verified live 2026-08-10), so task 14's literal "the icon font files they reference must come along" adds eight rows, six of them carrying extensions absent from the fixed `Content-Type` map — which the card says **aborts the server at startup** — and six of them never requested by a browser, which fails criterion 13's set equality against "each of task 14's vendored assets → `200`" for a *correct* implementation; the rewritten Inter `@import`'s target file and the vendored assets' served paths are likewise unnamed, so the manifest still cannot be completed before the work rather than during it. |
+| 2 | `core-conduct/explicit-error-handling` | `rules/core-conduct.md` | Handle errors explicitly, never swallow them; validate all input at system boundaries | §"Injection route" identity paragraph (card:441-451), §Security "Confirm the target surface at send time" (card:627-628), §Design 3 status table (card:339-349) and audit `reason` enumeration (card:383-384), task 8 (card:830-832), task 9 (card:867-875) | Send-time identity confirmation — promoted this revision to the primary safety control — introduces a new subprocess boundary with no stated failure behaviour: no status row (`409 unresolved_surface` covers a ref that did **not** resolve, not one that resolves to the wrong session), no `reason` value so the log cannot record this card's most important refusal, no timeout and no stated outcome when the read exits non-zero (which the card itself documents happens against an `agent-session` surface), and no definition of what "the intended session" is compared against — the mechanism the card's own §Verification rules out (`cmux identify` returning `surface_ref: null`) being the obvious one. |
+
+**Recurrence, stated plainly for the escalation decision.** Both ids are second consecutive citations,
+and neither is the round-7 instance reopened:
+
+- `writing-specs/api-contracts` — cited rounds 1-4 (manifest derived by `grep`), closed round 5,
+  re-cited round 7 (no `Content-Type`, missing `__resources` file, Inter's second hop), all three of
+  which are **fixed and verified fixed**. This round is the *fourth* distinct instance of one class:
+  the static-asset contract is complete for everything the page requests today and incomplete for
+  everything task 14 will add. The territory is identical, so the id is reused.
+- `core-conduct/explicit-error-handling` — cited round 5 (`asset_unreadable`), closed round 6;
+  cited round 7 (bind), **closed this round**; cited now on the send-path identity check. Three
+  instances, three different boundaries, one class: a control lands in prose in the round that
+  introduces it and reaches the tables a round later. Id reused for that class, per the round-7
+  precedent in this file.
+
+Closed this round and not re-cited: `writing-specs/ambiguous-requirement` (round 7 — card now defers
+to ADR 0024 explicitly and the wording matches). Still closed: `writing-specs/good-bad-edge-cases`
+(round 7), `writing-specs/pinned-versions` (round 6), `writing-secure-code/csp` (round 4),
+`core-conduct/secrets-not-client-side`, `core-conduct/no-absolute-paths`,
+`writing-specs/no-placeholders`, `writing-specs/diagrams` (rounds 1-2).
+
+### Notes
+
+- **The round-7 UNVERIFIED CSP note is now resolved, and it resolves benign.** `support.js:318` maps
+  `onclick → onClick` inside `encodeCase`, the `<x-dc>` subtree is lifted via `template.innerHTML`
+  (`support.js:468-470`) and compiled through Babel into `React.createElement` calls
+  (`support.js:1211-1218`), so the handlers the user actually clicks are React props, not DOM inline
+  handlers — `script-src` without `'unsafe-inline'` does not gate them. What the browser *will* do is
+  refuse to compile the literal `onClick="{{ … }}"` content attributes it parsed, emitting CSP
+  violations to the console for markup that is template source and is replaced before it matters
+  (and `{{ t.toggle }}` is not valid JS anyway, so nothing is lost). **Worth one clause in the card:**
+  criterion 13's operator will see red console errors on a passing run, and an unexplained console
+  error is how a correct run gets reported as a failure.
+- **`base-uri`/`form-action` — reconfirmed closed as low-value**, on the same evidence as round 7: no
+  `<form>` on the served page, and a `<base>` redirect sends relative fetches to an origin
+  `default-src`/`script-src 'self'` already blocks.
+- **Static-error body shape (standing note) is now half-resolved.** Violation 1's `Content-Type` work
+  landed for the success path; the `404`/`405`/`500` rows still govern static `GET`s, so
+  `/favicon.ico` receives a JSON envelope. Harmless, one sentence to state.
+- **Set equality has a lazy-fetch assumption the card should state once**, beyond violation 1: font
+  files are requested per weight/format actually rendered, so any expected-set row for a font is a
+  claim about rendering, not about vendoring. Naming that is what stops the next round rediscovering
+  it from the other side.
+- **`.svg` deserves a decision, not a map entry.** If phosphor's SVG fallback is vendored and served
+  from the token-bearing origin, `image/svg+xml` from `'self'` is script-capable markup on the origin
+  that holds the credential. Dropping the `.svg` and `.ttf` sources (rewriting the `src:` list to
+  woff2-only) is the smaller-surface answer and matches the Inter `latin`-only precedent.
+- **Claims re-verified against source this round, all exact:** `support.js` is the first script,
+  `Task Tracker.dc.html:6` ✓; `_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/` is the single
+  `_ds` directory, `styles.css` + `_ds_bundle.js` requested at lines 11-12 ✓; CSP has no nonce and no
+  `'unsafe-inline'` in `script-src` ✓; Inter = 28 woff2, 7 subsets × 4 weights, `latin` = 4 ✓;
+  `tracker-data-fallback.js:16` early return, `:19` `document.write` of `tracker-data.sample.js` ✓;
+  `window.TRACKER_DATA_SOURCE = 'sample'` at `:18`, matching criterion 13(a) ✓; ADR 0024's 5-second
+  own-poll wording ✓; Python `3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0` ✓.
+- **`analyze.py` remains at 792 lines**, eight under the hard max, split named and explicitly
+  unscheduled as a human-owned call. Correct posture, unchanged.
+- **Gherkin shape**, eighth round running: several criteria fold `When` into `Given`. Still not cited.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
