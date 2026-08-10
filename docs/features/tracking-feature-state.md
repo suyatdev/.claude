@@ -101,8 +101,11 @@ like a correct result.
         filesystem detail in the body**. It arrived in round 5 with nothing exercising it — the same
         shape as the audit log and the parent-death check before it, a control shipped by the round
         that was fixing the previous one and left unasserted.
-      - **Two more controls that are written down and checked by nothing** — the pattern above,
-        caught a round later, so they are pinned here rather than described again:
+      - **Four more controls that are written down and checked by nothing** — the pattern above,
+        each caught a round after it was written, so they are pinned here rather than described
+        again. ⚠️ **Two of these were added by the very commit that fixed the previous batch**,
+        which is the strongest evidence available that describing a control and asserting it must
+        happen in one edit, not two:
         - **`X-Content-Type-Options: nosniff` on every static response.** Criterion 13 asserts the
           `Content-Type` but not this header, and a missing `nosniff` is invisible in a passing
           render — it only matters against a browser that would have sniffed.
@@ -111,6 +114,18 @@ like a correct result.
           nothing**, proven by a `GET /` that gets no answer. This is the control that keeps the
           manifest and the map in lockstep; unasserted, the two silently drift and the first symptom
           is a stylesheet served as the wrong type.
+        - **The `reanalyze` 60-second timeout.** Drive it with a short
+          `TASK_TRACKER_ANALYZE_SECS` override and an analyzer stub that hangs; require `500`
+          `reanalyze_failed`, the previous `tracker-data.js` byte-identical afterwards, and the
+          request to actually return rather than hanging with it. A timeout that is never made to
+          fire is indistinguishable from no timeout, which is the state this one was in.
+        - **`reason` covers every status row.** Assert the two are in bijection — walk the contract
+          table, require each row's `reason` to be a defined value, and require every value to be
+          reachable. `404`, `405` and `asset_unreadable` had no value for three rounds, so the audit
+          assertions naming them had nothing to compare against. Include a traversal probe from
+          criterion 11 and require `reason=not_found` rather than `-`: §"Audit log" claims refusals
+          are the only evidence a hostile page probed the endpoint, and an undefined `reason` makes
+          that claim false exactly when it matters.
       - Criterion 10 must assert **every** clause it lists — the token absent from files, argv, child
         environments **and the captured stderr**, and present exactly once in the served HTML
         alongside `no-store` and the CSP. Capture the server's stderr for the whole test and include
@@ -276,9 +291,17 @@ recorded here rather than tidied away because it is the only direct evidence thi
 failure the whole §Security section exists to prevent, and it says something no reasoning had: the
 mis-delivery is indistinguishable from success at the call site.
 
-**Tasks 2–6 suites.** Run the pinned invocation above. It reported **53 passed** on 2026-08-09; that
-number is a measurement with a date, not a contract — re-run it rather than trusting it. There is no
-system `pytest` here, so `uv run` is the only invocation that works.
+**Tasks 2–6 suites.** The canonical invocation, repeated here rather than referenced because task 13
+runs from this file and the pin lives in the other half (`§Toolchain` in `tracking-feature-state.spec.md`,
+which is authoritative if the two ever disagree):
+
+```
+uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q
+```
+
+It reported **53 passed** on 2026-08-09; that number is a measurement with a date, not a contract —
+re-run it rather than trusting it. There is no system `pytest` here, so `uv run` is the only
+invocation that works.
 
 ⚠️ **Three of those tests are conditionally skipped on a host without `node`.**
 `task-tracker/test_store.py` guards three tests with `@pytest.mark.skipif(NODE is None, ...)`

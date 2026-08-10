@@ -417,11 +417,21 @@ filesystem path, which would leak the serving root into a log the operator may p
   *my own UI holding a stale token after a restart* will investigate the wrong one. The log is
   server-side, on a stream the attacker cannot read, so the two needs do not conflict. Values:
   `bad_token`, `unknown_id`, `origin_mismatch`, `host_mismatch`, `malformed`, `too_large`,
-  `unsupported_media_type`, `unresolved_surface`, **`confirm_failed`**, **`confirm_timeout`**,
-  `send_failed`, `reanalyze_failed`, or `-` on success. The two `confirm_*` values share the `502`
-  the wire shows for `send_failed`, and separating them here is the point of the whole `reason`
-  field: "the send failed" and "the target could not be confirmed, so nothing was sent" are the same
-  wire code and completely different incidents.
+  `unsupported_media_type`, **`not_found`**, **`method_not_allowed`**, **`asset_unreadable`**,
+  `unresolved_surface`, **`confirm_failed`**, **`confirm_timeout`**, `send_failed`,
+  `reanalyze_failed`, or `-` on success. The two `confirm_*` values share the `502` the wire shows
+  for `send_failed`, and separating them here is the point of the whole `reason` field: "the send
+  failed" and "the target could not be confirmed, so nothing was sent" are the same wire code and
+  completely different incidents.
+
+  ⚠️ **This enum must cover every row of the status table, and for three rounds it did not.** The
+  `404`, `405` and `asset_unreadable` rows had no `reason` value, so task 9's audit assertions for
+  them had nothing defined to assert against and would have been written to match whatever the code
+  emitted — the self-fulfilling test this card keeps producing. `not_found` matters most: criterion
+  11's traversal probes are the hostile-page case, and §"Audit log" claims a run of refusals is the
+  only evidence anyone ever probed the endpoint. Logged as `-`, that evidence does not exist. **The
+  enum and the status table are checked against each other in task 9 — every row has a value, every
+  value has a row.**
 - **`surface` and `sent` together record where the keystrokes went, not what the server intended.**
   `surface` is the ref the send resolved to at send time, never the one requested. `sent` is what makes
   the dangerous case reconstructable: re-resolution can succeed and the surface can still die between
