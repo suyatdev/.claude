@@ -17,16 +17,16 @@ Nothing derives it on demand.
 
 **No count, test total or phase tally is pinned anywhere in this card**, and every code citation
 carries the command that re-finds it, so a line that moves is detectable instead of quietly wrong.
-Three audit passes and four compliance rounds found defects here, and they are overwhelmingly one
-species — a stored result that had gone stale — including twice inside the corrections written to fix
-the previous round. Claims are written as derivations to re-run. Measurements that must be recorded
-(test counts, tool versions) are stamped with their date and their reproducing command.
+Every audit and judge round here has found defects, overwhelmingly of one species — a stored result
+that had gone stale — including twice inside the corrections written to fix the previous round.
+Claims are written as derivations to re-run; measurements that must be recorded (test counts, tool
+versions) are stamped with their date and their reproducing command.
 
-⚠️ **A derivation is only as good as its scope, and that is where rounds 3 and 4 were lost.** Twice
-this card prescribed a `grep` narrowed to one file to answer a question about the whole page, and
-twice the narrow answer read as authoritative because it was reproducible. **Before trusting any
-derivation below, ask what it cannot see** — the wrong scope fails silently and looks exactly like a
-clean result.
+⚠️ **A derivation is only as good as its scope, and that is where the rounds were lost.** Twice this
+card prescribed a `grep` narrowed to one file to answer a question about the whole page, and twice
+the narrow answer read as authoritative because it was reproducible. A third time it counted
+*references* where the question was *files*, and was off by 4×. **Before trusting any derivation
+below, ask what it cannot see** — a wrong scope fails silently and looks exactly like a clean result.
 
 This adds a skill that derives that survey for a given repo, writes it as a versioned run into a data
 file, and drives an **already-built** browser UI that renders it — with a control channel that lets
@@ -240,18 +240,15 @@ rejected — resolve the request path, resolve symlinks, and require the result 
 **The servable set is an explicit manifest, and criterion 13 is what proves it correct. A `grep` is
 not the contract.**
 
-⚠️ **This is the fifth attempt at this rule and the first that is not a search, which is the whole
-point of the change.** Four consecutive judge rounds cited it, and each fix widened the same search by
-one step while a new blind spot appeared just past the new edge: one file → the repo (round 2), HTML →
-HTML plus JS (round 3), and still not CSS, whose `url(...)` syntax the pattern does not match at all
-(round 4). That last gap is not hypothetical — task 14 vendors the `@phosphor-icons` font files, and a
-stylesheet referencing its own fonts is exactly the shape the search cannot see.
+⚠️ **Four rounds tried to derive this list by searching, and each fix widened the same search by one
+step while a new blind spot opened just past the new edge** — one file → the repo → HTML plus JS, and
+never CSS, whose `url(...)` the pattern does not match at all. That last gap is not hypothetical:
+task 14 vendors font files referenced from a stylesheet, the exact shape a search cannot see.
 
-The root cause is not carelessness about scope. **"What does this page request?" is a runtime
-property, and a text search can only ever approximate it** — so each round moved where the
-approximation failed rather than removing the failure. A wrongly-scoped search returns cleanly and is
-indistinguishable from a search that found nothing. So the contract is now a fixed list, checked by
-loading the page:
+The root cause is not careless scoping. **"What does this page request?" is a runtime property, and a
+text search can only ever approximate it**, so each round moved where the approximation failed rather
+than removing the failure — and a wrongly-scoped search returns cleanly, indistinguishable from one
+that found nothing. So the contract is a fixed list, checked by loading the page:
 
 | Path | Requested by | `Content-Type` |
 |---|---|---|
@@ -262,7 +259,24 @@ loading the page:
 | `tracker-data.js` | `Task Tracker.dc.html` | `text/javascript` |
 | `tracker-data-fallback.js` | `Task Tracker.dc.html` | `text/javascript` |
 | `tracker-data.sample.js` | `tracker-data-fallback.js`, via `document.write` on the first-run path | `text/javascript` |
-| *(task 14's vendored assets)* | added by that task, and criterion 13 is what catches them if they are not | from the map below |
+| `vendor/react.production.min.js` | `vendor-resources.js` → `support.js` | `text/javascript` |
+| `vendor/react-dom.production.min.js` | `vendor-resources.js` → `support.js` | `text/javascript` |
+| `vendor/babel.min.js` | `vendor-resources.js` → `support.js` | `text/javascript` |
+| `vendor/phosphor/regular/style.css` | `Task Tracker.dc.html` `<link>` | `text/css` |
+| `vendor/phosphor/regular/Phosphor.woff2` | that stylesheet's `src`, relative `./` | `font/woff2` |
+| `vendor/phosphor/fill/style.css` | `Task Tracker.dc.html` `<link>` | `text/css` |
+| `vendor/phosphor/fill/Phosphor-Fill.woff2` | that stylesheet's `src`, relative `./` | `font/woff2` |
+| `vendor/inter/inter.css` | `@import` in `_ds/nocturne-<uuid>/styles.css` | `text/css` |
+| `vendor/inter/inter-latin.woff2` | that stylesheet's `src` | `font/woff2` |
+
+**The nine `vendor/` rows are task 14's whole output — enumerated here, not left for that task to
+discover.** They were a single placeholder row for four rounds, and a placeholder is not a contract:
+taken literally ("the icon font files they reference must come along") task 14 yields *eight*
+phosphor rows, six of them carrying `.woff`/`.ttf`/`.svg` — extensions absent from the map below,
+which **aborts this server at startup** — and six that no browser ever requests, which fails
+criterion 13's set equality. A correctly built server failed the card's own acceptance test. The
+scope decision that resolves it (`.woff2` only, `latin` only) is task 14's, stated there with its
+measurement; this table is that decision's contract.
 
 **Every static response carries an explicit `Content-Type` and `X-Content-Type-Options: nosniff`.**
 Criterion 13 asserts that the UI *renders*, and a stylesheet served as `text/plain` is discarded by
@@ -271,8 +285,10 @@ comes from a **fixed extension map in the source** (`.js` → `text/javascript`,
 `.html` → `text/html`, `.woff2` → `font/woff2`), never from `mimetypes.guess_type`, whose answer
 depends on the host's `/etc/mime.types` and would make the served type a property of the machine. A
 manifest row whose extension is absent from that map is a programming error and **aborts at startup**,
-not a `500` at request time — task 14 adds font files, and the failure should surface when the
-manifest is wrong rather than when a user first loads the page.
+not a `500` at request time — the failure should surface when the manifest is wrong rather than when a
+user first loads the page. Those four extensions cover every row above with none left over, and that
+is a property to re-check rather than assume: **widening the manifest without widening the map is a
+server that will not start**, which is the intended direction of the error.
 
 **`vendor-resources.js` is a file this feature writes, and it has to be a file.** Task 14 points the
 three CDN scripts at local copies by defining `window.__resources` before `support.js` reads it
@@ -296,12 +312,11 @@ grep -rnE '(src|href)=|url\(' task-tracker/ --include='*.html' --include='*.js' 
 ```
 
 ⚠️ **`tracker-data.sample.js` is why the list needs a runtime check rather than a careful author.**
-Round 2 added `tracker-data-fallback.js` because the page loads it; but that shim's whole job is to
-`document.write` a *further* script when no analysis has run yet
-(`task-tracker/tracker-data-fallback.js:19`), and that one was not added. A server built to the
-previous list `404`s the sample on exactly the first-run path the shim exists to cover. One hop was
-followed, the next was not — and no reading of the list would have revealed it, because the list
-looked complete. Loading the page reveals it immediately.
+An earlier list added `tracker-data-fallback.js` because the page loads it, but that shim's whole job
+is to `document.write` a *further* script when no analysis has run yet
+(`grep -n document.write task-tracker/tracker-data-fallback.js`) — one hop followed, the next not, on
+exactly the first-run path the shim exists to cover. No reading of the list would have revealed it,
+because the list looked complete. Loading the page reveals it immediately.
 
 **`nocturne.css` is deliberately not in the closure.** The served page loads
 `_ds/nocturne-<uuid>/styles.css`, not `nocturne.css` — only `Task Tracker Directions.dc.html` loads
@@ -341,12 +356,12 @@ back** — an error body that reflects input is a free XSS gadget:
 | `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch |
 | `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it, `tracker-data.js` before the first analysis, and **`/favicon.ico`**, which every browser requests unprompted and which is deliberately not served. Both of those paths are **expected** `404`s and appear as such in criterion 13's run-(a) table; they are the only two |
 | `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
-| `409` | `unresolved_surface` | Target surface ref did not re-resolve at send time — this is criterion 9's "refuses and reports" |
+| `409` | `unresolved_surface` | The UUID bound at startup (§Security) is **confirmed absent** from `cmux tree` at send time — the session ended. This is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
 | `415` | `unsupported_media_type` | `Content-Type` is not `application/json` |
 | `500` | `asset_unreadable` | A path **is** on the manifest but cannot be read — absent, permission-denied, or any other `OSError`. Log the path and the `errno`; return no filesystem detail in the body. **Exception, and it is the normal case, not an error:** `tracker-data.js` absent is `404`, because `store.py` generates it and it does not exist before the first analysis — that is precisely the first-run path `tracker-data-fallback.js` exists to cover, and a `500` there would break the empty state instead of rendering it |
 | `500` | `reanalyze_failed` | `id` was `reanalyze` and the analyzer aborted or the store write failed. The previous `tracker-data.js` is left intact (§Design 2's atomic write guarantees this) and the UI must surface the failure rather than silently continue displaying stale data |
-| `502` | `send_failed` | `cmux send` exited non-zero, or exceeded its 5-second timeout |
+| `502` | `send_failed` | `cmux send` exited non-zero or exceeded its 5-second timeout; **or** the send-time surface confirmation could not be *run* — non-zero exit or timeout — which refuses before any send, logged as `confirm_failed`/`confirm_timeout` (§Security). Unconfirmable is refused, never assumed fine |
 
 **The single `403` is deliberate.** Bad token, unknown id, and bad origin are indistinguishable to
 the caller, so the endpoint cannot be used to enumerate the allowlist or confirm a guessed token.
@@ -358,8 +373,9 @@ there is no allow-list of origins to get wrong, because there is no allow-list a
 **Failure behaviour.** `cmux send` runs with a 5-second timeout and its exit code is checked; a
 timeout is killed and reported as `502`, never awaited indefinitely and never assumed to have
 succeeded. A non-zero exit is `502` with the exit code logged server-side (not returned). Surface
-re-resolution failure is `409` **before** any send is attempted — the refusal happens on the near
-side of the socket, so nothing reaches the focused tab. `reanalyze` failure is `500`; the store is
+confirmation runs **before** any send is attempted — the refusal happens on the near side of the
+socket, so nothing reaches the focused tab; its three outcomes and their codes are tabulated once, in
+§Security, rather than restated here. `reanalyze` failure is `500`; the store is
 left at its previous valid state, never truncated and never half-written.
 
 #### Audit log
@@ -381,7 +397,11 @@ it happened. **One line per request** to stderr, which the launching session alr
   *my own UI holding a stale token after a restart* will investigate the wrong one. The log is
   server-side, on a stream the attacker cannot read, so the two needs do not conflict. Values:
   `bad_token`, `unknown_id`, `origin_mismatch`, `host_mismatch`, `malformed`, `too_large`,
-  `unsupported_media_type`, `unresolved_surface`, `send_failed`, `reanalyze_failed`, or `-` on success.
+  `unsupported_media_type`, `unresolved_surface`, **`confirm_failed`**, **`confirm_timeout`**,
+  `send_failed`, `reanalyze_failed`, or `-` on success. The two `confirm_*` values share the `502`
+  the wire shows for `send_failed`, and separating them here is the point of the whole `reason`
+  field: "the send failed" and "the target could not be confirmed, so nothing was sent" are the same
+  wire code and completely different incidents.
 - **`surface` and `sent` together record where the keystrokes went, not what the server intended.**
   `surface` is the ref the send resolved to at send time, never the one requested. `sent` is what makes
   the dangerous case reconstructable: re-resolution can succeed and the surface can still die between
@@ -445,10 +465,27 @@ Two constraints ride along, both load-bearing for task 8:
   two, because a successful `send` reports *delivery*, never *destination*.
 
   So the send-time check may not be an existence check. **Re-resolution proving the ref resolves is
-  worthless here — it is exactly what succeeded in the failure above.** Confirmation must be
-  **identity-based**: read the target surface and verify it is the intended session before sending,
-  and refuse otherwise. Criterion 9 remains correct as written (refuse on the near side of the
-  socket) but is now defence in depth rather than the primary control.
+  worthless here — it is exactly what succeeded in the failure above.**
+
+  **The fix is to delete the inference, not to check it harder.** That send went astray because the
+  target was *deduced* from `cmux tree`'s `[focused]`/`[selected]` markers while `cmux identify`
+  returned `surface_ref: null`. The server never has to deduce anything: it is launched as a
+  non-detached child of the session (§Security), so it **inherits `$CMUX_SURFACE_ID`**, which is that
+  session's own surface — authoritative, not inferred. Verified 2026-08-10: the variable holds a bare
+  **UUID** (not a `surface:N` ref), `cmux read-screen --surface "$CMUX_SURFACE_ID"` exits `0` against
+  it, and that UUID appears exactly once in `cmux tree --id-format both`. Reproduce with:
+
+  ```sh
+  echo "$CMUX_SURFACE_ID"; cmux tree --id-format both | grep -c "$CMUX_SURFACE_ID"
+  ```
+
+  So **the intended session is defined as: the surface whose UUID equals the `$CMUX_SURFACE_ID` the
+  server inherited at startup** — captured once, never re-derived, never taken from a request. Every
+  `cmux send` passes that UUID as `--surface`. This is what makes the residual check meaningful
+  rather than circular: refs are monotonically allocated and never reused (bullet below), so a UUID
+  that no longer resolves means the surface *died*, and it can never come to mean a different one.
+  Criterion 9's refusal-on-the-near-side is that residual check, and it stays exactly as written —
+  what changed is that it now guards a name that was never guessed.
 
 - **`send` rejects a non-terminal surface, so the target's *type* is part of the contract.** cmux
   surfaces come in kinds (`cmux tree --id-format both`); a Claude session may run either in a
@@ -468,9 +505,11 @@ Two constraints ride along, both load-bearing for task 8:
   *wrong* name, not a recycled one.
 
 - **`$CMUX_SURFACE_ID` is inherited, and §Security launches the server as a non-detached child.**
-  A `cmux send` with no `--surface` therefore defaults to **the launching session's own surface**.
-  Task 8 must pass `--surface` explicitly on every invocation; an omitted flag does not fail, it
-  types into the session that started the server.
+  A `cmux send` with no `--surface` therefore defaults to **the launching session's own surface** —
+  which is the intended target, so an omitted flag does not *fail*, it silently does the right thing
+  for the wrong reason. Task 8 passes `--surface "$CMUX_SURFACE_ID"` explicitly on every invocation
+  anyway: the value is what the confirmation above is checked against, and a target that is never
+  named cannot be confirmed, logged, or shown to have been correct after the fact.
 - **The rejected routes stay rejected.** `TMUX` is unset here (`TERM_PROGRAM=ghostty`), so
   `tmux send-keys` is not available; and `panes/handoff-wrapper.sh`
   (`grep -n 'pre-typed keystroke' panes/handoff-wrapper.sh`) records that the handoff spec
@@ -576,13 +615,12 @@ this repo has ever exposed, so it is default-deny:
   page cannot be framed and the user cannot be clickjacked into a `clear` they did not intend. Policy,
   rationale, and the `'unsafe-eval'` caveat are in §Design 3's wire contract.
 - **No remote assets on the token-bearing page — and there are six of them, not two.** ⚠️ **Two
-  earlier revisions of this bullet were wrong in the same way, and the correction matters more than
-  the count.** Both derived the answer from `grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`
-  and concluded "two stylesheets, no remote JavaScript at all". That grep cannot see the scripts:
-  **React, ReactDOM and `@babel/standalone` are injected at runtime by `support.js`**
-  (`grep -n 'unpkg.com' task-tracker/support.js` — `REACT_URL`, `REACT_DOM_URL`, `BABEL_URL`), never
-  written into any HTML. A grep scoped to one file answered a question about the whole page. Derive
-  the real set repo-wide, and re-derive it rather than trusting this list:
+  earlier revisions read "two stylesheets, no remote JavaScript at all" off
+  `grep -n 'https://' 'task-tracker/Task Tracker.dc.html'`, and the correction matters more than the
+  count:** that grep cannot see the scripts. **React, ReactDOM and `@babel/standalone` are injected
+  at runtime by `support.js`** (`grep -n 'unpkg.com' task-tracker/support.js` — `REACT_URL`,
+  `REACT_DOM_URL`, `BABEL_URL`), never written into any HTML. A grep scoped to one file answered a
+  question about the whole page. Re-derive the set repo-wide rather than trusting this list:
 
   ```sh
   grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html' | grep -v prUrl
@@ -617,15 +655,52 @@ this repo has ever exposed, so it is default-deny:
 
   ⚠️ **Assets 4–6 are stylesheets, so each is a reference to further remote files, not a leaf.** The
   table counts what the page *references*; closing the page to the network means following the second
-  hop too — the phosphor icon font files, and Inter's **28** `fonts.gstatic.com` woff2 URLs (7
-  subsets × 4 weights, measured 2026-08-09; task 14 carries the reproducing command and the
-  `latin`-only scope decision). A count of referenced assets is not a count of fetches, and it is the
-  fetches criterion 13 enumerates.
+  hop too. **A count of references is not a count of files, and it is files criterion 13 enumerates**
+  — the two differ by more than 4× here, in both directions:
+
+  | Second hop | References | Distinct files | Why they differ |
+  |---|---|---|---|
+  | phosphor regular `style.css` | 4 `src` formats | 4 | `.woff2`, `.woff`, `.ttf`, `.svg` — the browser fetches **only the first it supports** |
+  | phosphor fill `style.css` | 4 `src` formats | 4 | same |
+  | Google Fonts `Inter` | 28 `woff2` URLs | **7** | 7 unicode-range subsets × 4 weights, but v20 is a **variable** font: all four weights of a subset name the *same* file |
+
+  Measured 2026-08-10; task 14 carries both reproducing commands and the scope decision that cuts
+  this to **one file per stylesheet** (`.woff2` only, `latin` only). Neither direction is safe to
+  guess: expecting all four phosphor formats puts three never-requested rows in criterion 13's
+  expected set, and expecting "4 Inter files, one per weight" puts three more.
 
   The CSP in §Design 3 is what keeps this closed after task 14 lands: once nothing third-party is
   fetched, a re-export that reintroduces a CDN reference fails loudly instead of quietly restoring it.
-- **Confirm the target surface at send time**, per §"Injection route" — refuse an unconfirmed ref
-  rather than risk keystrokes reaching the focused tab.
+- **Bind the target surface at startup, confirm it at send time, and fail closed at both** — per
+  §"Injection route", where the identity is defined. This is the primary safety control, so its
+  failure behaviour is pinned here rather than left to task 8:
+
+  **At startup, three aborts, each naming its cause and serving nothing** (same posture as the
+  `EADDRINUSE` abort above — never a fallback, never a warning-and-continue):
+
+  | Condition | Why it must abort rather than degrade |
+  |---|---|
+  | `$CMUX_SURFACE_ID` unset or empty | The server was detached or launched outside cmux. A `send` with no target then defaults to *whatever surface it inherits*, which is the mis-delivery this control exists to prevent |
+  | `cmux read-screen --surface "$CMUX_SURFACE_ID"` exits non-zero | Covers the `agent-session` case (`invalid_params: Surface is not a terminal`, exit 1) at launch instead of as a per-request mystery — the control channel does not exist for that target, and §Design 4's skill says so |
+  | that probe exceeds **5 seconds** | Kill it and abort. An unbounded probe is a server that neither starts nor reports why |
+
+  The UUID that probe validated is held in process memory for the server's lifetime and is **never
+  re-derived and never read from a request**.
+
+  **At send time, before `cmux send` is invoked at all**, re-resolve that UUID against
+  `cmux tree --id-format both` under the same 5-second timeout. Three outcomes, and the two failures
+  are distinguished because they need different operator responses:
+
+  | Outcome | Wire | Audit `reason` | `sent` |
+  |---|---|---|---|
+  | UUID present as a `[terminal]` surface | proceed to `send` | — | per §Design 3 |
+  | UUID absent — the session ended | `409 unresolved_surface` | `unresolved_surface` | `no` |
+  | The check could not run — non-zero exit or timeout | `502 send_failed` | `confirm_failed` / `confirm_timeout` | `no` |
+
+  **The third row is the one that is easy to get wrong, and getting it wrong is silent.** "Could not
+  confirm" is not "confirmed absent" and must never be treated as "probably fine" — an unconfirmed
+  target is refused, so `sent` is `no` rather than `unknown`, because nothing was invoked. `unknown`
+  remains reserved for a `send` that *was* invoked (§Design 3).
 - Port comes from `allocating-local-ports` and is recorded in `PORTS.md` before first bind.
 
 **What this feature does and does not add to the threat model.** The cmux socket has no
@@ -685,17 +760,13 @@ them is redundant with the socket's file permission, and none may be weakened on
     tag, and the response carries `Cache-Control: no-store` and the `Content-Security-Policy` of
     §Design 3 including `frame-ancestors 'none'`.
 
-    Assert every clause. **The stderr clause is the one added last and the one most likely to be
-    dropped as redundant — it is not.** The audit log is a leak surface this card introduced after
-    criterion 10 was first written, and the criterion did not follow: §Out of scope bans persisting the
-    token to a file, an env var, or argv, and a log stream is none of those three, so a single
-    `log.debug(request.headers)` satisfies every other clause here while writing the credential to the
-    session's own scrollback. The refusal precondition exists for the same reason — a test that only
-    ever sends *valid* requests never produces the error path where dumping the request for diagnosis
-    is most tempting. Absence on disk and in the log is the security property, presence in the response
-    is what makes the UI work, `no-store` stops the browser caching the credential, `frame-ancestors`
-    stops the clickjack, and the `reanalyze` precondition stops the test passing without ever
-    exercising the write path. A test that checks only one clause passes while the feature is broken.
+    Assert every clause — a test checking one passes while the feature is broken. **The stderr
+    clause reads as redundant and is not:** §Out of scope bans the token from a file, an env var and
+    argv, and a log stream is none of those three, so a single `log.debug(request.headers)` satisfies
+    every other clause here while writing the credential to the session's own scrollback. The refusal
+    precondition exists for the same reason — only the error path tempts anyone to dump the request
+    for diagnosis — and the `reanalyze` precondition stops the test passing without ever exercising
+    the write path.
 11. **Given** a request path that resolves outside `task-tracker/` — `../../rules/core-conduct.md`,
     an absolute path, or a symlink pointing out of the tree — **when** it is requested, **then** the
     server responds `403` and the file's contents do not appear in the response body;
@@ -728,15 +799,13 @@ and nothing above would notice.
     **each response carries the `Content-Type` the §Design 3 manifest assigns it**, and
     **no request goes to a host other than `127.0.0.1`**.
 
-    ⚠️ **The pass condition is set equality, not the absence of `404`s — and that correction is what
-    this round is.** Four rounds patched this criterion's *precondition* and left its pass condition an
-    unexamined negative universal ("every request returns `200` except `/favicon.ico`"), which the
-    round-5 revision falsified in the same commit that wrote it: run (a) moves `tracker-data.js` aside,
-    `Task Tracker.dc.html:15` requests it unconditionally, and §Design 3 correctly answers `404` —
-    so a correct server failed run (a) on its first request. This card withdrew one unsatisfiable
-    instruction in the same commit that created another, which is the argument for enumerating rather
-    than negating. Set equality also closes the other direction the negative form never covered: an
-    **unexpected `200` fails too**, so a server that quietly widens its manifest is caught.
+    ⚠️ **The pass condition is set equality, not the absence of `404`s.** The earlier negative
+    universal ("every request returns `200` except `/favicon.ico`") was falsified in the same commit
+    that wrote it: run (a) moves `tracker-data.js` aside, the page requests it unconditionally
+    (`grep -n tracker-data.js 'task-tracker/Task Tracker.dc.html'`), and §Design 3 correctly answers
+    `404` — so a correct server failed run (a) on its first request. Set equality also closes the
+    direction a negative never covered: an **unexpected `200` fails too**, catching a server that
+    quietly widens its manifest.
 
     **(a) First-run state — move `tracker-data.js` aside; do not edit it.**
 
@@ -749,15 +818,31 @@ and nothing above would notice.
     | `/_ds/nocturne-<uuid>/_ds_bundle.js` | `200` |
     | `/tracker-data.js` | **`404`** — absent is the normal first-run path, the stated exception to `asset_unreadable` in §Design 3 |
     | `/tracker-data-fallback.js` | `200` |
-    | `/tracker-data.sample.js` | `200` — requested **only** here, via `document.write` at `tracker-data-fallback.js:19` |
+    | `/tracker-data.sample.js` | `200` — requested **only** here, via the shim's `document.write` |
     | `/favicon.ico` | `404` — every browser requests it unprompted, it is on no manifest, and the contract's default correctly refuses it |
-    | each of task 14's vendored assets | `200` |
+    | `/vendor/react.production.min.js` | `200` |
+    | `/vendor/react-dom.production.min.js` | `200` |
+    | `/vendor/babel.min.js` | `200` |
+    | `/vendor/phosphor/regular/style.css` | `200` |
+    | `/vendor/phosphor/regular/Phosphor.woff2` | `200` |
+    | `/vendor/phosphor/fill/style.css` | `200` |
+    | `/vendor/phosphor/fill/Phosphor-Fill.woff2` | `200` |
+    | `/vendor/inter/inter.css` | `200` |
+    | `/vendor/inter/inter-latin.woff2` | `200` |
 
     …and `window.TRACKER_DATA_SOURCE === 'sample'`, with the UI rendering the sample.
 
+    ⚠️ **The three font rows assert *rendering*, not vendoring, and that is the stronger claim.** A
+    browser fetches a `@font-face` file only when a glyph in that face is actually laid out, so an
+    absent `Phosphor.woff2` row means either the file is missing **or** no phosphor icon reached the
+    page — and set equality reports both as the same failure. That is the intended reading: a font
+    served but never used is indistinguishable from one that does not exist, and neither is a UI
+    that renders. It also means the two runs must be driven with the icon-bearing view on screen,
+    not just the document loaded.
+
     **(b) Populated state — `tracker-data.js` present.** The same set with two changes:
     `/tracker-data.js` → `200`, and **`/tracker-data.sample.js` absent from the observed set
-    entirely** (the shim returns early at `tracker-data-fallback.js:16`). The UI renders from the
+    entirely** (the shim returns early — `grep -n return task-tracker/tracker-data-fallback.js`). The UI renders from the
     generated file.
 
     ⚠️ **Run (a) is the one a single run silently skips**, and it is why two runs exist. `tracker-data.js`
@@ -766,10 +851,12 @@ and nothing above would notice.
     four rounds of greps missed. A runtime check with the wrong precondition reproduces the greps'
     blind spot in a shape that looks stronger.
 
-    **The vendored row is completed by task 14 before this criterion runs**, with the exact paths it
-    wrote, appended to the §Design 3 manifest. Set equality is only as good as that completion: an
-    incomplete list here fails the run rather than passing it silently, which is the intended
-    direction of the error.
+    **The nine `vendor/` rows are fixed here and in the §Design 3 manifest, not appended by task 14
+    when it finishes.** Through round 8 this was a single placeholder row that task 14 was to
+    complete with "the exact paths it wrote" — which makes the acceptance test a transcript of
+    whatever the implementation happened to do, and cannot fail. The two lists are now written in
+    advance and must match each other and the observed set; task 14 vendoring a tenth file, or eight,
+    fails the run.
 
     **Mechanism — an agent-run verification, not a `pytest` test, and the card says so rather than
     implying otherwise.** Drive the page with the Claude browser extension and enumerate requests with
@@ -827,11 +914,14 @@ and nothing above would notice.
       `Cache-Control: no-store` and the `Content-Security-Policy` on `GET /`**, the 30-minute idle
       timeout **and the 5-second parent-death poll that makes "exits with the session" real**, the
       **audit log** (`reason=` carries the internal cause; the wire keeps the collapsed `403`), and
-      send-time surface **identity confirmation** — read the target surface and verify it is the
-      intended session, **not** merely that the ref resolves; task 1's fourth probe delivered to the
-      wrong live Claude session with a ref that resolved fine. Always pass `--surface` explicitly:
-      the server inherits `$CMUX_SURFACE_ID` from the session that launched it, so an omitted flag
-      types into that session rather than failing. Route is settled and every probe is closed
+      **surface binding and confirmation** exactly as §Security tabulates it: capture
+      `$CMUX_SURFACE_ID` at startup, validate it with `cmux read-screen` under a 5-second timeout,
+      abort on unset/non-zero/timeout, hold the UUID in memory, pass it as `--surface` on **every**
+      `cmux send`, and re-confirm it against `cmux tree` before each send — `409` when confirmed
+      absent, `502` when the check itself could not run. Never infer the target from `cmux tree`
+      markers and never take it from a request; task 1's fourth probe delivered to the wrong live
+      Claude session with a ref that resolved fine, and an omitted `--surface` types into the
+      launching session rather than failing. Route is settled and every probe is closed
       (task 1) — do not re-run them. Python 3.9 — see §Toolchain before writing any annotation.
       - **Bind failure aborts the launch** (§Security): `EADDRINUSE` exits non-zero naming the port,
         no probing for a free one, nothing served. The state that prevents — two live servers with
@@ -870,9 +960,21 @@ and nothing above would notice.
         (`send` does reach a live Claude TUI composer — §Verification), so this task no longer waits
         on it. What the fake still cannot prove is the half task 1 also exposed: that the keystrokes
         reached the **intended** session. A fake binary records the ref it was handed; it cannot tell
-        a right ref from a resolvable wrong one. Assert the identity confirmation itself — that the
-        server read the target surface and refused a surface whose identity did not match — rather
-        than treating a `200` plus an invocation as proof of correct delivery.
+        a right ref from a resolvable wrong one. Assert that the `--surface` the fake received is
+        **byte-identical to the `$CMUX_SURFACE_ID` the server was started with** — that is the whole
+        identity claim, and a `200` plus an invocation is not proof of correct delivery.
+      - **The surface binding and confirmation are asserted here, in the same task that builds
+        them** — six of them, because a control that reaches the tables one round after it reaches
+        the prose is this card's second recurring shape, and the fix for it is not another paragraph:
+        the three startup aborts (`$CMUX_SURFACE_ID` unset; the `read-screen` probe exiting non-zero;
+        that probe timing out — each must exit non-zero, name its cause, and serve **nothing**,
+        proven by a `GET /` that gets no answer), and the three send-time outcomes (confirmed
+        present → `send` invoked once; confirmed absent → `409 unresolved_surface`; check
+        unrunnable → `502` with `confirm_failed`/`confirm_timeout`). Drive the last one by making
+        the faked `cmux tree` exit non-zero and, separately, hang past the timeout; require `cmux
+        send` to be invoked **zero** times in both, and the audit line to read `sent=no`. An
+        unconfirmable target that gets sent to anyway is the one bug this control exists to stop,
+        and it is invisible from the wire — both refusals look identical to a caller.
       - Criterion 14 needs short `TASK_TRACKER_POLL_SECS`/`TASK_TRACKER_IDLE_SECS` overrides and a
         real parent exit; a mocked `getppid()` proves the branch compiles, not that the server dies.
       - **Bind failure has no criterion of its own, so it is asserted here.** Start a server, start a
@@ -905,7 +1007,9 @@ and nothing above would notice.
       Running task 14 directly after task 8 closes the window instead — the manifest is never relied
       on while unproven.
 
-      Vendor **all six** remote assets and close the page to the network. **Criterion 13 is the
+      Vendor **all six** remote assets — which is **nine local files**, because three of the six are
+      stylesheets with a second hop; the §Design 3 manifest names all nine and criterion 13 asserts
+      exactly them. **Criterion 13 is the
       proof, not the grep** — the grep below drafts the list, and a clean grep has twice been a wrong
       answer that looked right:
       ```sh
@@ -919,27 +1023,60 @@ and nothing above would notice.
         **Do not edit `support.js`**; it is vendored third-party code with a supported hook
         (§Security).
       - The two `@phosphor-icons` stylesheets — rewrite the `<link>` hrefs in **both** `.dc.html`
-        files; the icon font files they reference must come along, or the CSS resolves to nothing.
+        files (lines 13–14 of `Task Tracker.dc.html`; re-find with
+        `grep -n phosphor task-tracker/*.dc.html`) to `vendor/phosphor/{regular,fill}/style.css`,
+        and bring the font files along or the CSS resolves to nothing.
+
+        ⚠️ **"The font files they reference" is four files per stylesheet, and vendoring all four
+        breaks the build twice over.** Each `@font-face` names `.woff2`, `.woff`, `.ttf` and `.svg`
+        in one `src` list, and the browser fetches only the first format it supports. Re-read with:
+        ```sh
+        curl -s https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css | sed -n '1,10p'
+        ```
+        **Vendor `.woff2` only — one file per stylesheet, two in total.** Every browser that runs
+        this UI supports woff2, and the other three formats are pure legacy fallback. Recorded as a
+        decision rather than taken quietly, because taking the bullet literally is what a correct
+        implementation would do: eight rows, six with extensions the §Design 3 map does not carry
+        (startup abort) and six no browser requests (criterion 13 set-equality failure). Serving
+        `.svg` would also put script-capable SVG on the token-bearing origin for no benefit.
+
+        Keep each font beside its stylesheet — `vendor/phosphor/regular/Phosphor.woff2` and
+        `vendor/phosphor/fill/Phosphor-Fill.woff2` — so the vendored `src: url("./Phosphor.woff2")`
+        resolves unchanged and the only edit to either stylesheet is **deleting the three
+        non-woff2 `src` entries**.
       - The Google Fonts `@import` — rewrite in **both** `nocturne.css` and
         `_ds/nocturne-<uuid>/styles.css`. The second is the one the served page actually loads;
         fixing only the first leaves the served page still fetching from `fonts.googleapis.com`.
 
         ⚠️ **The `@import` is only the first hop, and the second one is where the font files are.**
-        The stylesheet Google returns is a list of `fonts.gstatic.com` woff2 URLs — **28** of them,
-        7 unicode-range subsets × 4 weights, measured 2026-08-09. Re-read the count with:
+        The stylesheet Google returns carries **28 `woff2` references that resolve to 7 distinct
+        files** — 7 unicode-range subsets × 4 weights, but Inter v20 is a *variable* font, so all
+        four weights of a subset name the **same** URL. Re-read both numbers, not just the first:
         ```sh
-        curl -sA 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' \
-          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' | grep -c 'woff2'
+        UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+        curl -sA "$UA" 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' \
+          | tee /tmp/inter.css | grep -c woff2                      # 28 references
+        grep -o 'https://fonts.gstatic.com[^)]*' /tmp/inter.css | sort -u | wc -l   # 7 files
         ```
         The browser UA is load-bearing — Google serves a different, older stylesheet to `curl`'s
         default agent. Rewriting the `@import` without bringing those files along leaves the page
-        fetching a **second** remote host that no reading of the `@import` line would reveal: exactly
-        the second-hop shape as the phosphor icon fonts one bullet above.
+        fetching a **second** remote host that no reading of the `@import` line would reveal: the
+        same second-hop shape as the phosphor fonts one bullet above.
 
-        **Vendor the `latin` subset only — 4 files, one per weight — and drop the other six subsets.**
-        Recorded as a decision rather than done quietly: the UI's own strings are ASCII, and a
-        non-Latin glyph falls back to the system stack, which is an acceptable and *visible* v1
-        outcome. Vendoring all 28 is the alternative the moment that stops being true.
+        **Vendor the `latin` subset only — which is _one_ file, not four.** ⚠️ An earlier revision
+        of this bullet said "4 files, one per weight", read straight off the 28-reference count; the
+        `sort -u` above is what falsifies it. Three of those four rows would be files no browser
+        ever requests, and criterion 13's set equality fails on an unexpected *absence* exactly as it
+        does on an unexpected `200`. The subset scope is a decision, not an oversight: the UI's own
+        strings are ASCII and a non-Latin glyph falls back to the system stack, a visible v1 outcome;
+        vendoring all 7 is the alternative the moment that stops being true.
+
+        Write the four `@font-face` blocks into **`vendor/inter/inter.css`**, all four pointing at
+        the single `vendor/inter/inter-latin.woff2`, and point each `@import` at that file.
+        ⚠️ **The two `@import`s need different relative paths** — `vendor/inter/inter.css` from
+        `nocturne.css`, `../../vendor/inter/inter.css` from `_ds/nocturne-<uuid>/styles.css`. A
+        root-relative `/vendor/...` would work when served and break criterion 8's `file://` path,
+        where it resolves against the filesystem root.
       - Close the task by **running criterion 13 in both store states** with the Claude browser
         extension, and record both request lists plus the browser version in §Verification. A grep
         returning nothing is necessary, not sufficient — the vendored font files are referenced from
@@ -1049,32 +1186,19 @@ Task 13 must record `node --version` beside the counts, and report a skip of the
 ⚠️ **Task 13 must record before-counts per suite, captured before touching anything**, so a
 pre-existing failure is not read as a regression introduced by this feature.
 
-*Correction (this revision):* an earlier version of this section warned that `addopts` in
-`pyproject.toml` deselects the `golden` and `measurement` marks under a bare `pytest -q`. That
-warning was aimed at nothing. The repo's only `pyproject.toml` is `memsearch/pyproject.toml`, whose
-`[tool.pytest.ini_options]` governs `memsearch/` alone; `task-tracker/` carries **no pytest
-configuration of any kind** and defines no `golden` or `measurement` marks
-(`find . -name pyproject.toml`, then `grep -rn 'golden\|measurement' task-tracker/`). The warning
-erred safe, but it described a different package — the tenth instance of this card's recurring defect
-species, and the reason the derivations discipline above exists.
+`task-tracker/` carries **no pytest configuration of any kind** — the repo's only `pyproject.toml`
+governs `memsearch/` alone (`find . -name pyproject.toml`), so no `addopts` and no mark deselection
+applies here. Stated because an earlier revision warned about exactly that, having read a different
+package's config as this one's.
 
 ## Revision history
 
-**Held in git, not here.** Four compliance rounds and three audit passes are recorded in
-`coding-memory/compliance-judge/2026-08-09-tracking-feature-state.md` (per-round verdicts with
-violation ids and citations), in `coding-memory/compliance-judge/verdicts.jsonl`, and in this
-branch's commit messages. An ~86-line narrative of those rounds previously lived at the bottom of
-this file; it was deleted rather than split into a `.spec.md` companion.
+**Held in git, not here** — `coding-memory/compliance-judge/verdicts.jsonl` and its per-round
+markdown carry every verdict, violation id and citation; the commit messages carry every fix.
+Restating them here would be a third copy of a fact that has already gone stale ten times in this
+card, twice inside a correction written to fix the previous round.
 
-That is a deliberate call and the reasoning generalises: this card's one recurring defect is a stored
-fact going stale, ten instances of it, twice inside the corrections written to fix the previous round.
-A synced second file is the ideal habitat for exactly that defect — two documents describing the same
-work, and no reader able to tell which one is wrong. The narrative was also the least load-bearing
-content here: every fix it described is in the body above, and every claim it made about *why* was a
-third copy of something git and the verdict files already hold.
-
-What survives from it, because it is not recoverable from a diff, is written where it applies rather
-than in a log: the two `grep`-scope corrections (§Security's remote-asset table, §Design 3's servable
-closure) and the `rename-tab`-vs-`send` distinction (§"Injection route", criterion 9). Those are
-warnings about how a wrong answer was produced, so they belong beside the thing that would produce it
-again.
+What is *not* recoverable from a diff — how a wrong answer got produced — stays beside the thing that
+would produce it again, not in a log: the `grep`-scope corrections (§Security's remote-asset table,
+§Design 3's servable closure), the `rename-tab`-vs-`send` distinction (§"Injection route"), and the
+reference-count-vs-file-count trap (§Security, task 14).
