@@ -5111,3 +5111,54 @@ confirmed`, and `falsify-harness-signatures` compliance round 3 (`fail`) is stil
 live *only* in the primary checkout's working tree, whose `compliance-judge/verdicts.jsonl` is 81 rows
 against `main`'s 84 — **a naive commit there would revert this backfill.** 77 `outcome: null` rows
 remain across the observability store.
+
+## Session 57 — the differential table was measured in two directions, and revision 4 fell out of it
+
+Picked up `falsify-harness-signatures` at `phase: planning`, revision 3, with the previous session's
+closing commit (`8d79094`) instructing that **revision 4 be designed from the measured table** — and
+reopening two questions it declined to settle.
+
+**Re-measured everything first, rather than designing on the table.** Three revisions running had
+shipped worked examples that did not exist in the suite, so the table itself was the last artifact
+that deserved trust by inheritance. All nine baselines reproduced exactly (stubs 24/23/31/30,
+versions 19/20/28/33/32), as did `vacuous = 31/68` and the `must_pass` pools. Differential rows 1-3
+reproduced exactly: 1/0, 9/2, 5/0.
+
+**Row 4 did not.** It read `1`; measured in the same direction as the other three it is **0**.
+`e882659` is a *regression* — nothing was fixed there — so "fails on the version, passes on the
+version that fixed it" is empty for it, and the `1` came from the opposite relation. Revision 3's §4
+made an empty signature a hard error, so the design as written would have hard-errored on that
+version **for being a regression**. One table, two relations, one column heading.
+
+**Two traps invalidate the obvious way to measure any of this**, and both were hit before being
+understood: a *failing* case prints a diagnostic rather than its name (`baseline segments missing:
+…` vs `baseline renders model and context-bar segments`), and a *passing* description embeds
+measured values (`esc=10<=10` on the working tree, `esc=0<=0` against a stub). The first attempt's
+alignment check compared description strings and declared the ordinals misaligned — the check was
+wrong, not the data. The valid proof, which all ten runs pass: every run emits exactly 68 results,
+**and** every *passing* ordinal's normalized description matches the working tree's at that ordinal.
+Alignment cannot be checked on failing ordinals at all. A third independent reason §1's stable ids
+are needed.
+
+**The finding that produced the new design.** 53 of 68 assertions never change state across any
+version. The discriminating set is 15 — and `[47] all-control cwd falls through to a stripped $PWD`
+is the only assertion in the suite that flips more than once, tracking the `$PWD` defect through
+clean/clean/broken/fixed/broken (`P P . P .`). A per-version *list* has to name a direction for each
+transition; a per-id *row* just is the defect's history. Both user decisions followed the data:
+**adopt the flip matrix** (which also makes `must_pass` unnecessary — it pins passes too, so it
+anchors itself), and **report rather than fix** the vacuous assertions. 13 of the 15 load-bearing
+assertions are vacuous and three of four transitions rest entirely on them (1/1, 7/9, 5/5, 1/1); the
+harness prints those fractions beside its verdict, and strengthening them becomes its own follow-up
+rather than editing the suite this harness exists to measure.
+
+**Rebase collision, resolved as a verified union.** Another session had pushed 21 verdict rows to
+`main` while this one worked. The conflict was diff3-style, and the first resolution attempt crashed
+on the `|||||||` base marker rather than silently mis-parsing it. Resolution asserted zero
+deletions against all three sides, then confirmed against the remote: origin's 143 rows all present
+in HEAD's 146. `git show origin/main:<file>` is the check; a balanced line count is not.
+
+**Still open.** Judges have not seen revision 4 — compliance round 3 returned `fail` against
+revision 3 and **is still uncommitted in the primary checkout**, whose `compliance-judge/
+verdicts.jsonl` is behind `main`, so a naive commit there reverts the backfill. Rounds 4 of both
+judges are the next step, in panes. Tasks 10-12 of `statusline-wrap-worktree.md` (the "unknown"
+worktree rendering, int64 `COLUMNS` noise, the environment-dependent row assertion) remain untouched.
