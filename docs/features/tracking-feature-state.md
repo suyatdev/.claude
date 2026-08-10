@@ -253,15 +253,35 @@ approximation failed rather than removing the failure. A wrongly-scoped search r
 indistinguishable from a search that found nothing. So the contract is now a fixed list, checked by
 loading the page:
 
-| Path | Requested by |
-|---|---|
-| `support.js` | `Task Tracker.dc.html` |
-| `_ds/nocturne-<uuid>/styles.css` | `Task Tracker.dc.html` |
-| `_ds/nocturne-<uuid>/_ds_bundle.js` | `Task Tracker.dc.html` |
-| `tracker-data.js` | `Task Tracker.dc.html` |
-| `tracker-data-fallback.js` | `Task Tracker.dc.html` |
-| `tracker-data.sample.js` | `tracker-data-fallback.js`, via `document.write` on the first-run path |
-| *(task 14's vendored assets)* | added by that task, and criterion 13 is what catches them if they are not |
+| Path | Requested by | `Content-Type` |
+|---|---|---|
+| `vendor-resources.js` | `Task Tracker.dc.html`, **first — ahead of `support.js`** | `text/javascript` |
+| `support.js` | `Task Tracker.dc.html` | `text/javascript` |
+| `_ds/nocturne-<uuid>/styles.css` | `Task Tracker.dc.html` | `text/css` |
+| `_ds/nocturne-<uuid>/_ds_bundle.js` | `Task Tracker.dc.html` | `text/javascript` |
+| `tracker-data.js` | `Task Tracker.dc.html` | `text/javascript` |
+| `tracker-data-fallback.js` | `Task Tracker.dc.html` | `text/javascript` |
+| `tracker-data.sample.js` | `tracker-data-fallback.js`, via `document.write` on the first-run path | `text/javascript` |
+| *(task 14's vendored assets)* | added by that task, and criterion 13 is what catches them if they are not | from the map below |
+
+**Every static response carries an explicit `Content-Type` and `X-Content-Type-Options: nosniff`.**
+Criterion 13 asserts that the UI *renders*, and a stylesheet served as `text/plain` is discarded by
+the browser while still answering `200` — set equality would pass over an unstyled page. The value
+comes from a **fixed extension map in the source** (`.js` → `text/javascript`, `.css` → `text/css`,
+`.html` → `text/html`, `.woff2` → `font/woff2`), never from `mimetypes.guess_type`, whose answer
+depends on the host's `/etc/mime.types` and would make the served type a property of the machine. A
+manifest row whose extension is absent from that map is a programming error and **aborts at startup**,
+not a `500` at request time — task 14 adds font files, and the failure should surface when the
+manifest is wrong rather than when a user first loads the page.
+
+**`vendor-resources.js` is a file this feature writes, and it has to be a file.** Task 14 points the
+three CDN scripts at local copies by defining `window.__resources` before `support.js` reads it
+(§Security), and `support.js` is the page's *first* script — line 6, re-read with
+`grep -n '<script' 'task-tracker/Task Tracker.dc.html'` — so the map must load ahead of it. It cannot
+be an inline `<script>`: the CSP two paragraphs above carries no nonce and no `'unsafe-inline'` in
+`script-src`, so an inline block is refused by the very policy this section defines. A separate served
+file satisfies both constraints and nothing else does, which is why it is on the manifest and in both
+of criterion 13's expected sets rather than being left for task 14 to discover.
 
 **`_ds/` is enumerated by its two requested files, not globbed as `_ds/**`.** The glob also covers
 `_ds_manifest.json`, `_adherence.oxlintrc.json` and `readme.md`, which the page never requests —
@@ -487,6 +507,16 @@ The server can drive a Claude session holding full tool permissions. It is the h
 this repo has ever exposed, so it is default-deny:
 
 - **Bind `127.0.0.1` explicitly.** Never `0.0.0.0`, never a hostname that could resolve outward.
+
+  **A bind that fails is a startup abort, never a fallback.** On `EADDRINUSE` the server exits
+  non-zero *before serving anything*, with a message naming the port and the likely cause — a server
+  from another session still holding it. It must **not** probe for a free port. A second server on a
+  different port leaves the operator's browser still talking to the **first** one, which holds a
+  different in-memory token, so every button comes back `403` — and that `403` is deliberately
+  collapsed (§Design 3), so the UI cannot say "wrong token" and the operator reads a stale-token
+  problem as a broken feature. Parallel sessions on a fixed port make this the normal case rather
+  than an edge one, which is why the behaviour is pinned here instead of left to implementation.
+  Any other bind error aborts identically, naming the `errno`.
 - **Allowlisted commands only — and the allowlist is exactly these three.** No ellipsis: this table
   *is* the authorization set, and adding a fourth row is a spec change plus a new judge round, not
   an implementation call.
@@ -519,7 +549,9 @@ this repo has ever exposed, so it is default-deny:
   design: nothing in this card made it happen, and a server whose parent session has ended is a
   full-permission control channel with no one watching it. The mechanism is **launch it as a child of
   the session and give it a parent-death check**: the server records `os.getppid()` at startup and, on
-  the same timer that drives the idle check, exits when the current `os.getppid()` no longer matches
+  **its own poll — explicitly not the idle timer** (the ⚠️ below fixes it at 5 seconds; **ADR 0024 is
+  authoritative** and records "on the idle timer" as a first-draft error it corrected), exits when the
+  current `os.getppid()` no longer matches
   (on POSIX the process is reparented to `init`/`launchd`, so the value changes). This is deliberately
   the weaker, portable check rather than `prctl(PR_SET_PDEATHSIG)`, which does not exist on macOS —
   the binding platform here.
@@ -575,10 +607,20 @@ this repo has ever exposed, so it is default-deny:
 
   **Vendoring mechanism — the export already has one; do not patch `support.js`.** `cdnScriptFor`
   reads `window.__resources[url]` and, when it finds a non-empty string, uses it as the `src`
-  (`grep -n '__resources' task-tracker/support.js`). Define that map before `support.js` loads and the
-  three scripts resolve locally with no edit to vendored code. Assets 4–6 are plain `<link>` hrefs and
-  an `@import`, rewritten in place. Note that fixing only `nocturne.css` for asset 6 would miss the
-  served page entirely, since `Task Tracker.dc.html` loads `_ds/nocturne-<uuid>/styles.css`.
+  (`grep -n '__resources' task-tracker/support.js`). Define that map in **`vendor-resources.js`**,
+  loaded ahead of `support.js` — which is the page's first script — and the three resolve locally with
+  no edit to vendored code. It must be a served file rather than an inline block, because the CSP has
+  no nonce and no `'unsafe-inline'` in `script-src`; it is on the §Design 3 manifest for that reason.
+  Assets 4–6 are plain `<link>` hrefs and an `@import`, rewritten in place. Note that fixing only
+  `nocturne.css` for asset 6 would miss the served page entirely, since `Task Tracker.dc.html` loads
+  `_ds/nocturne-<uuid>/styles.css`.
+
+  ⚠️ **Assets 4–6 are stylesheets, so each is a reference to further remote files, not a leaf.** The
+  table counts what the page *references*; closing the page to the network means following the second
+  hop too — the phosphor icon font files, and Inter's **28** `fonts.gstatic.com` woff2 URLs (7
+  subsets × 4 weights, measured 2026-08-09; task 14 carries the reproducing command and the
+  `latin`-only scope decision). A count of referenced assets is not a count of fetches, and it is the
+  fetches criterion 13 enumerates.
 
   The CSP in §Design 3 is what keeps this closed after task 14 lands: once nothing third-party is
   fetched, a re-export that reintroduces a CDN reference fails loudly instead of quietly restoring it.
@@ -682,7 +724,8 @@ and nothing above would notice.
 13. **Given** a running server and **two runs, one per store state** — the check that replaces four
     rounds of trying to derive the manifest by searching — **when** the page is loaded from
     `http://127.0.0.1:<port>/` and every request it issues at runtime is enumerated, **then** the
-    observed set **equals** that run's expected set below, path for path and status for status, and
+    observed set **equals** that run's expected set below, path for path and status for status,
+    **each response carries the `Content-Type` the §Design 3 manifest assigns it**, and
     **no request goes to a host other than `127.0.0.1`**.
 
     ⚠️ **The pass condition is set equality, not the absence of `404`s — and that correction is what
@@ -700,6 +743,7 @@ and nothing above would notice.
     | Request | Expected |
     |---|---|
     | `/` | `200` |
+    | `/vendor-resources.js` | `200` — task 14's `window.__resources` map, requested ahead of `support.js` |
     | `/support.js` | `200` |
     | `/_ds/nocturne-<uuid>/styles.css` | `200` |
     | `/_ds/nocturne-<uuid>/_ds_bundle.js` | `200` |
@@ -789,6 +833,14 @@ and nothing above would notice.
       the server inherits `$CMUX_SURFACE_ID` from the session that launched it, so an omitted flag
       types into that session rather than failing. Route is settled and every probe is closed
       (task 1) — do not re-run them. Python 3.9 — see §Toolchain before writing any annotation.
+      - **Bind failure aborts the launch** (§Security): `EADDRINUSE` exits non-zero naming the port,
+        no probing for a free one, nothing served. The state that prevents — two live servers with
+        the browser pointed at the first while holding the second's token — is invisible from the UI,
+        which sees only the collapsed `403`.
+      - **Static responses carry an explicit `Content-Type` from the fixed extension map, plus
+        `X-Content-Type-Options: nosniff`** (§Design 3). Not `mimetypes.guess_type`: a served type
+        that varies with the host's `/etc/mime.types` is a rendering failure that reproduces on one
+        machine and not the next.
       - This file carries bind + token + static serving + allowlist + header check + surface
         re-resolution + subprocess, and will land near the 400-line target. If it crosses, the split
         is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
@@ -823,6 +875,12 @@ and nothing above would notice.
         than treating a `200` plus an invocation as proof of correct delivery.
       - Criterion 14 needs short `TASK_TRACKER_POLL_SECS`/`TASK_TRACKER_IDLE_SECS` overrides and a
         real parent exit; a mocked `getppid()` proves the branch compiles, not that the server dies.
+      - **Bind failure has no criterion of its own, so it is asserted here.** Start a server, start a
+        second on the same port; require the second to exit non-zero, to have served nothing, and to
+        name the port, **and the first to still answer `GET /` with its original token**. It is a
+        launch property rather than a wire property, which is why it is a task bullet — but left
+        unasserted it would be this card's recurring shape exactly: a control described in prose and
+        never once run.
 - [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
       the injected `<meta name="tracker-token">`. Where `terminal-detect.sh` prints `none`, render the
       same three commands as copyable text instead (criterion 8).
@@ -854,13 +912,34 @@ and nothing above would notice.
       grep -rn 'https\?://' task-tracker/ --include='*.js' --include='*.css' --include='*.html' | grep -v prUrl
       ```
       - React, ReactDOM, `@babel/standalone` — vendor the files and point at them by defining
-        `window.__resources` before `support.js` loads. **Do not edit `support.js`**; it is vendored
-        third-party code with a supported hook (§Security).
+        `window.__resources` in **`task-tracker/vendor-resources.js`**, pulled in by a `<script>` tag
+        inserted **ahead of line 6's `support.js`** in `Task Tracker.dc.html`. A served file, not an
+        inline block: the CSP carries no nonce and no `'unsafe-inline'` in `script-src`, so an inline
+        map is refused (§Design 3, where the file is on the manifest and in both criterion-13 sets).
+        **Do not edit `support.js`**; it is vendored third-party code with a supported hook
+        (§Security).
       - The two `@phosphor-icons` stylesheets — rewrite the `<link>` hrefs in **both** `.dc.html`
         files; the icon font files they reference must come along, or the CSS resolves to nothing.
       - The Google Fonts `@import` — rewrite in **both** `nocturne.css` and
         `_ds/nocturne-<uuid>/styles.css`. The second is the one the served page actually loads;
         fixing only the first leaves the served page still fetching from `fonts.googleapis.com`.
+
+        ⚠️ **The `@import` is only the first hop, and the second one is where the font files are.**
+        The stylesheet Google returns is a list of `fonts.gstatic.com` woff2 URLs — **28** of them,
+        7 unicode-range subsets × 4 weights, measured 2026-08-09. Re-read the count with:
+        ```sh
+        curl -sA 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' \
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' | grep -c 'woff2'
+        ```
+        The browser UA is load-bearing — Google serves a different, older stylesheet to `curl`'s
+        default agent. Rewriting the `@import` without bringing those files along leaves the page
+        fetching a **second** remote host that no reading of the `@import` line would reveal: exactly
+        the second-hop shape as the phosphor icon fonts one bullet above.
+
+        **Vendor the `latin` subset only — 4 files, one per weight — and drop the other six subsets.**
+        Recorded as a decision rather than done quietly: the UI's own strings are ASCII, and a
+        non-Latin glyph falls back to the system stack, which is an acceptable and *visible* v1
+        outcome. Vendoring all 28 is the alternative the moment that stops being true.
       - Close the task by **running criterion 13 in both store states** with the Claude browser
         extension, and record both request lists plus the browser version in §Verification. A grep
         returning nothing is necessary, not sufficient — the vendored font files are referenced from
