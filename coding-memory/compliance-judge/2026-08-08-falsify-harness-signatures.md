@@ -464,3 +464,154 @@ reproduced". Those measurements stand on the earlier run's record, not on a seco
 
 Housekeeping for the caller: `verdicts.jsonl` is modified and this card is untracked — both need a
 commit before the session clears.
+
+---
+
+## Round 5 — 2026-08-10T03:26:00Z — **FAIL** (2 violations)
+
+Branch `main` · head `631a72fff45b88980f3a95178854fb5e89dea9ab` · spec blob `4a94081592842874b88fd64c2db932369e122703`
+
+### Layman summary
+
+Five of the six round-4 problems are properly closed, and the sixth — the exit-code table — is
+closed *at the table* but not everywhere the table is quoted. §5 now says a newly-discriminating
+test exits `3` (REVIEW NEEDED), and the flowchart, task 5 and task 7 were all updated to agree.
+Three other places were missed: §3's closure bullet (`:373`) still says "`exit 2` — review needed",
+task 8 (`:786`) still says "confirm exit 2", and — worst — the Gherkin block now contains **two
+scenarios with the identical Given and different Thens**: "adding a discriminating test demands
+review … Then the harness exits 2" (`:622-626`) sitting eleven lines above "an unpinned flip is
+review … Then the harness exits 3" (`:671-674`). Scenarios are the part a builder turns straight
+into tests, so this is the one place the contradiction is most likely to be built rather than
+noticed. This is the **first violation id in this spec to recur across rounds** — the premise the
+user's decision to continue past the escalation cap rested on no longer holds, and that is worth
+saying plainly rather than burying.
+
+The second finding is new, and it comes from text added after round 4. The spec now says the total
+number of test cases must never be written down as a literal but derived: "It is
+`len(working_tree_results)` from the floor run" (`:337-339`). But §4, §5's table and task 5 all
+promise that *every* run — "working tree, all five versions, **and** both stubs" (`:393`) — is
+checked against that count. For the working-tree run that check can never fail: it is being
+compared against its own length. And there is no other source of truth available — I checked, and
+the suite's own tally prints `pass+fail` as the denominator (`statusline-command.test.sh:844`), so
+a run that dies halfway reports `30/30 passed` and looks perfect. I reproduced the truncation
+live: a script that crashes mid-run emits exactly **30 of 68** results, the same number §6b
+quotes. So a working-tree run truncated at 30 all-passing cases would set the count to 30, satisfy
+the "must be all-pass" floor, let all five version runs clear the guard, and exit `0` — the
+harness reporting "falsification measured" while the suite it measures against is broken. That is
+precisely the class of defect this whole feature exists to end, one level up, and it is the same
+argument §4 already makes for stub runs.
+
+Everything else I could check came out right, including things no earlier round had verified. The
+five newly pinned blob SHAs are **exact**, all five byte counts too — and I confirmed them the way
+§Toolchain demands, from Python, after my Bash-tool `git rev-parse` reproduced the documented `rtk`
+proxy rewrite live (it handed back the commit object). §5's table really is ten conditions: three
+exit-1, six exit-2, one exit-3, counted. §6b's corrected row 2 (10 ids, 8-of-10) derives correctly
+from the spec's own id table. The hollow-out non-goal is properly owned, not a defect being
+shipped.
+
+### Round-4 violations — five verified fixed, one recurs
+
+| round-4 id | how `631a72f` resolves it | verified |
+|---|---|---|
+| `writing-specs/exit-path-enumeration` | §5's table declared the single enumeration (`:405-407`), ten conditions across four codes, REVIEW NEEDED promoted to its own exit `3`; flowchart, task 5 ("all ten exit conditions") and task 7 (ten falsifiers) rewritten to match | **partial — recurs.** Table/flowchart/task 5/task 7 agree exactly. §3 `:373`, Scenarios `:625` and task 8 `:786` were not updated. Cited below under the same id. |
+| `writing-specs/matrix-row-schema` | §2 `:322-335` adds the parse contract — alphabet `P`/`.` only, width exactly `len(VERSIONS)`, key must exist in suite output and be unique, whitespace meaningless — each violation exit `2`, plus the rationale for why width is load-bearing | fixed — the four properties are stated as a table with an exit code each, and §5's exit-2 row and the Gherkin at `:661-664` both carry the malformed-row path |
+| `writing-specs/superseded-open-questions` | heading `:189` marked *(answered by §2 and §Non-goals — no longer open)*; closing paragraph `:198-202` rewritten to state both answers and "nothing here is live scope" | fixed |
+| `writing-specs/internal-count-contradiction` | `:572` now reads "31 separate assertion rewrites" | fixed — 31 is consistent across `:113`, `:285-288` (13+15+3), `:491`, `:570-572`, `:715`; no surviving 23 |
+| `core-conduct/dry` | `MATRIX_RESTS_ON_VACUOUS` deleted; §6b `:557-563` states the overlap is computed as `FLIP_MATRIX.keys() & (both stub lists)` and explains why the declared copy was wrong | fixed — the two stub lists are now the only declared vacuity state |
+| `core-conduct/verified-before-write-down` | §2 `:356-361` credits §4's empty-column guard, quotes the measurement (`silent+exit emitted 68 passes 24`); §6b `:546-549` corrected to "That was wrong, and round 4 demonstrated it" with the SEGV evidence | fixed — and I reproduced the SEGV run independently: **30 of 68**, exact |
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/exit-path-enumeration` | `skills/writing-specs/SKILL.md` | "precise enough that the agent has nothing left to guess at"; "Anything you leave implicit, the agent infers — and inference is where the defects come from"; "Ambiguity surfaces early" (BDD section) | §3 closure bullet (`:373`), Scenarios "adding a discriminating test demands review" (`:622-626`), Task 8 (`:786`) — against §5's single-enumeration table (`:414`) | §5 gives REVIEW NEEDED its own exit `3`, but three derived sites still assign exit `2` to the same condition, and the Gherkin block now self-contradicts: `:625` and `:673` share the Given "a test is added whose state differs across the five versions" and assert different exit codes, so a builder generating tests from the Scenarios block cannot determine what the closure check returns. |
+| 2 | `writing-specs/derived-count-self-reference` | `skills/writing-specs/SKILL.md` | "Good, bad, and edge-case scenarios: state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers"; with `rules/core-conduct.md` "Handle errors explicitly, never swallow them" | §2 "The full case count is derived, never a literal" (`:337-339`) against §4 "A run that did not finish" (`:391-395`), §5's exit-2 row (`:413`) and Task 5 (`:769-770`) | The full case count is defined as `len(working_tree_results)` from the floor run, yet the same run is one of those the harness must assert "emitted the full case count" — an unfalsifiable comparison against its own length — and no independent bound is available (the suite's tally denominator is `pass+fail`, `statusline-command.test.sh:844`, also self-derived), so a working-tree run truncated at 30 all-passing results (reproduced live via `kill -SEGV $$`: **30 of 68**) sets the count to 30, satisfies the all-pass floor, lets all five version runs clear the guard, and exits `0`. |
+
+### Notes (non-blocking)
+
+- **Caller question 2 — the ten conditions, counted.** §5's table (`:411-414`) holds exit-1: three
+  (row no longer matches / working-tree floor failed / a vacuity list grew); exit-2: six (short
+  run, id not in suite, duplicate id, malformed row, empty column, blob-SHA mismatch); exit-3: one
+  (discriminating set ≠ pinned set). **Ten.** The caller's claim is exact, and `:416`'s "exactly six
+  exit-2 conditions and one exit-3 condition" holds. Task 5's "all ten exit conditions" matches;
+  task 7's list is ten items with the right codes (1,1,1,2,2,2,2,2,2,3).
+- **The flowchart agrees on codes but is a partial view.** All six exit-2 conditions are present
+  (node `A` = short run; node `B` = the other five). Only **one of the three** exit-1 conditions is
+  drawn — the working-tree floor and vacuity-list growth appear nowhere in it, and the floor's
+  position relative to the `2 > 3 > 1 > 0` precedence is therefore unstated. Not cited: §5 declares
+  the table authoritative over the flowchart, and an omission is not a contradiction. Two extra
+  nodes would close it.
+- **Task 7 says "one falsifier per row of §5's table"** (`:776-777`) — the table has four rows and
+  the list has ten items. Not cited: the list is explicitly enumerated with an exit code per item,
+  so nothing is left undetermined. "Per condition" is the word.
+- **Caller question 3 — the hollow-out non-goal is adequately scoped.** It names the limit, carries
+  the working exploit, states *why* it cannot be closed here (per-row margins means editing the
+  suite — the same boundary as the vacuity non-goal), attributes it to a dated user decision, and
+  hands it to task 10 as the stronger of two motivations. The banner rename from "intact" to
+  "measured" (`:531-534`) removes the over-claim that would have made it read as a shipped defect.
+  Its premise checks out against the suite: `statusline-command.test.sh:601-602` says in its own
+  comment that the benign twin puts "the ceiling 8 escapes above what the hostile payload can
+  legitimately emit", so the slack is real and **pre-existing in the suite as shipped** — this
+  feature neither creates nor widens it. That is disclosure of a measurement harness's limit, not a
+  defect being shipped. Not a violation.
+- **Blob SHAs — all five exact, verified the hard way.** From Python: `f0902ed`
+  `ce85493054775cb7917fc71b95d14792d80d4213` (2845), `925c310`
+  `d28a0895dddb4fdae81853c21766f4fda213d1e8` (3310), `29d6131`
+  `e30dcd0a9d872fe9fdbc978584174de785739df4` (4520), `4d63b09`
+  `b5a071634f48e21abf206df89dfe6f0002b8a65d` (4811), `e882659`
+  `4b6be5a94eb016ed925b603093ee56e877f89664` (5407) — every SHA and every byte count matches §2
+  `:303-309`. My first attempt went through the Bash tool and **reproduced the documented `rtk`
+  rewrite live**: `git rev-parse f0902ed:statusline-command.sh` returned the *commit* object
+  `f0902ed82880e9e793b40a4576c5cd1d7bd3055e`. §Toolchain's "invoked from Python, never via the Bash
+  tool" (`:709`) is not folklore; it is the only route that works on this machine today.
+- **§6b row 2 (10 ids, 8-of-10) is arithmetically correct.** Derived from §2's id table
+  (`:177-181`) across `925c310 → 29d6131`: ids 38-42/66/67 flip `.`→`P` (7), id 47 flips `P`→`.`
+  (1, the regression), ids 48/49 flip `.`→`P` (2) = **10**; vacuous among them 7 + 1 = **8**. The
+  old `9`/`7-of-9` was the fix direction only, and `:147`'s differential table still correctly
+  shows 9 for that column because it is explicitly the fix-direction table.
+- **One provenance clause is off.** `:517-518` says of that correction "round 4 caught it" —
+  compliance round 4 recorded the *old* 7/9 as reproducing exactly (see this card, round 4 notes);
+  per the caller the correction came from the advisory judge. If "round 4" means the round rather
+  than this judge the sentence reads fine, but `:361` uses "Round 4 cited it as
+  `core-conduct/verified-before-write-down`", which is this judge specifically. Two usages, one
+  word. Not cited — no build decision hangs on it — but the audit trail now carries the correction.
+- **Id-spelling drift on ordinal 47.** `pwd-fallthrough-stripped` in §1 (`:242-243`) and §6
+  (`:457`), `pwd-fallthrough` in §2 (`:317`), §6b (`:515`) and the Gherkin (`:635`) — the same
+  assertion under two ids inside the document that defines the identity contract. Not cited: the
+  ids do not exist yet (task 2 authors them, task 3 writes the matrix from what the suite actually
+  emits), so nothing is undetermined. Worth one sweep since §1 is the contract.
+- **Two stale cross-references survive from earlier rounds.** §Risk `:738` "If **§7** shows a label
+  misdescribes its commit" → reasoning-first is §8; §Non-goals `:733` "No commit hook (§8)" → the
+  hook is §9. Flagged non-blocking in rounds 3 and 4; still there. Also `falsify.py:44-57` for
+  `EXPECTED` is off by one — it closes at `:58`.
+- **Pinned versions re-verified live:** `Python 3.9.6`, `GNU bash 3.2.57(1)-release`,
+  `git 2.50.1` — all three match the toolchain table. Still stdlib-only, no new dependencies.
+- **Security: nothing to cite, unchanged from rounds 1-4.** Blob extraction stays an argv-list
+  `subprocess.run` with no shell (`falsify.py:61-72`), the `#!` guard survives as a Gherkin
+  scenario, stubs are generated into a `tempfile.TemporaryDirectory` (0700), no secrets or absolute
+  paths appear. The new blob-SHA pinning is a supply-chain **improvement** — core-conduct's "vetted
+  registries, pinned versions" applied to historical artifacts, and it closes the one gap the `#!`
+  check alone left open (a wrong-but-script-shaped blob).
+- **File-size convention.** `falsify.py` 125 lines. `statusline-command.test.sh` is **845** lines,
+  above core-conduct's 800 maximum; this feature edits all 91 call sites in it but adds
+  approximately no lines, and splitting it would be a drive-by cleanup, which core-conduct makes
+  its own task. Correctly out of scope; the spec still never acknowledges the ceiling.
+- **Spec location unchanged and still accepted** — `docs/features/` under this repo's
+  `one-canonical-file` gate, which takes precedence over `writing-specs`' `docs/superpowers/specs/`
+  default.
+- **What I ran this round, and what I did not.** Ran: the five blob-SHA/size extractions from
+  Python; one suite execution against a `kill -SEGV $$` stub (30 of 68); `python3`/`bash`/`git`
+  versions; every cited line range in `falsify.py` (`44-58`, `68`, `82`, `99-107`, `120-121`) and
+  `statusline-command.test.sh` (`524-535`, `606-617`, `710-717`, `844`). **Not re-run:** the ten-run
+  measurement matrix — the five baselines, both stub counts, the 15/18/35 partition, the 13-of-15
+  vacuity split. Those stand on round 4's independent reproduction, not on a second confirmation
+  here. The 91 call sites (45 `ok` + 46 `bad`) I also did not re-derive; my quick grep patterns
+  under-counted and rounds 3 and 4 both counted it exactly.
+
+### Waivers
+
+None. No violation ids were waived by the user for this round. **Escalation note for the caller:**
+round 4 already exceeded the round-3 escalation cap, and the user chose to continue on the stated
+grounds that no violation id had ever recurred. Violation 1 above breaks that premise — it is the
+first recurring id in this spec's history. The design is not in question; both findings are edits
+to three sentences and one paragraph.
