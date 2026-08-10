@@ -23,6 +23,7 @@ service; see `allocating-local-ports` for when that's required.
 | 8000 | mtg-wizard | `core-api` (FastAPI) | Docker container / local dev | `docker-compose.yml`, desktop app's `API_BASE_URL` default. |
 | 8001 | snatch-bracket | backend (FastAPI, `snatch_bracket.main:app`) | Local dev process (`just dev-backend`) | Moved from 8000 on 2026-07-15 — mtg-wizard's `core-api` owns 8000. Set in `justfile`; frontend `BACKEND_URL` default (`frontend/lib/backend.ts`, `.env.example`, `.env.local`) points here. CI unaffected (no live server). |
 | 8100 | mtg-wizard | `ai-service` (FastAPI) | Docker container | Internal to compose network; proxied through `core-api`. |
+| 8422 | .claude | task-tracker control server (`task-tracker/server.py`) | Local dev process, session-scoped | Allocated 2026-08-09. Binds `127.0.0.1:8422` explicitly — never `0.0.0.0`; see the Security section of `docs/features/tracking-feature-state.md`. Chosen outside the 8000-8100 block mtg-wizard and snatch-bracket own. Exits with the session and on idle timeout — no daemon, no launchd, so a stale listener here means a leaked process. Override with `TASK_TRACKER_PORT`; register the replacement here if the override becomes permanent. |
 | — | Homebrew `postgresql@15` | Postgres | Homebrew service, **installed but stopped/unused** | Defaults to 5432 (commented out in its `postgresql.conf`) — would collide with the container if ever started. Leave stopped, or assign it a port here first. |
 
 ## Conventions

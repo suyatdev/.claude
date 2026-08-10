@@ -4792,3 +4792,252 @@ own record unwritten, because a PR cannot mark itself merged — the merge happe
 commit. Opening PR #50 would have created a fourth. **These two edits went straight to `main` as
 documentation instead**, which `git-guard`'s allowlist permits by design. The general rule: paperwork
 for a merged PR is not itself PR-worthy work.
+
+## 2026-08-09 — session 48: the correction list needed correcting
+
+Restored onto `feat/tracking-feature-state` (`37a8e38`, clean, `0 0` vs origin, `0 2` vs `origin/main`).
+Frontmatter verified against reality before any work: `phase: implementation`, `branch:` matches
+`git branch --show-current` in the worktree. No mismatch, so no stop-and-report.
+
+The one task on the board was the card audit session 47 deferred: re-derive **every** factual claim in
+`docs/features/tracking-feature-state.md` rather than patch the four errors it had already logged.
+That instruction came from the standing rule about repeated findings of one class, and it paid:
+
+- Five further defects, all the same species — a fact asserted from a grep nobody tried to falsify.
+- **Two of the five are inside the correction list itself.** Correction 2 pinned "exactly 2 cards say
+  `branch: none`" (now 3 — `pane-dispatch-model-flag` joined, still untracked in the main checkout).
+  Correction 3 pinned the marker discard to `feature_tasks.py:11-14`, which is docstring prose; the
+  mechanism is `STRICT_RE` at `:37` capturing group 1, consumed at `:75`.
+- A correction written to fix stale numbers went stale in under 24 hours, in the same file, during the
+  same implementation phase. Store the derivation, never the result — the rule now has a second,
+  self-referential proof.
+- Evidence bullet 1 turned out to be **unrunnable**, not merely stale: `.gitignore:72` ignores
+  `/.claude/`, so `git log -1 --format=%cr .claude/session-state.md` prints nothing. A derivation that
+  cannot execute reads exactly like one that passes, which is worse than a wrong number.
+- Criterion 1's "a repo with N feature cards" is checkout-dependent — main and the worktree each hold
+  14 card files and not the same 14. Unfalsifiable as written.
+
+Confirmed still true and not to be re-litigated: `STRICT_RE` text; `TMUX` unset under
+`TERM_PROGRAM=ghostty`; `handoff-wrapper.sh:5`; all three `cmux.sh` citations; `analyze.py` at 792
+lines; `test_analyze.py`/`test_store.py` collecting.
+
+Ended on **GATE: Spec change needed**. `managing-session-memory` forbids repairing a wrong spec from
+inside `phase: implementation` — the errors get noted and the gate gets raised, and that is where this
+session stops. Tasks 1-6 remain unticked on purpose: ticking a checklist whose criteria are known
+wrong records progress against a spec nobody has agreed to yet.
+
+## 2026-08-09 — session 49: the spec revision the gate was holding
+
+Session 48 ended on **GATE: Spec change needed** with nine recorded defects in
+`docs/features/tracking-feature-state.md`. The user authorized repairing the card in place rather than
+flipping to `phase: planning` and re-gating — the phase gate exists to stop *silent* spec drift, and
+an explicitly authorized correction pass is its opposite. Committed as `1ac0e5e`, pushed.
+
+All nine repaired, and the two `## Card corrections required` sections deleted. Deleting them was the
+point, not tidiness: a spec plus a list of ways the spec is wrong is two documents disagreeing, and a
+reader cannot tell which one to believe. Git holds the detail — `a854e99` is the last commit carrying
+the unrepaired text.
+
+The structural fix applied throughout: **claims are written as derivations to re-run, not as stored
+counts or line ranges.** The single retained number (53 tests) is stamped with its measurement date
+and the command that reproduces it.
+
+**Two defects found in the audit itself**, while repairing the audit's findings — the third
+consecutive round of this species:
+
+- The audit said tasks 4, 6 and 9 named uncollectable `*.test.py` files. Tasks 4 and 9 did; **task 6
+  never did** — it names `store.py`, an implementation file. The correction inherited "6" from the
+  adjacent list without re-reading the task it was correcting.
+- The audit attributed cmux's non-erroring ref fall-through to `send`. The source comment
+  (`panes/adapters/cmux.sh`, above `rename_tab`) documents it for **`rename-tab`**, proven by probe P6
+  against `surface:9999` at exit 0. `send` takes the same `--surface` flag and plausibly shares the
+  resolution chain, but nothing has shown that it does.
+
+That second one is the same unfalsified-inference error that produced the original "injection is
+unproven" claim — a property read off an adjacent function and asserted of this one. It is now carried
+explicitly into the card as an open question for task 8 (new criterion 9: refuse an unconfirmed ref,
+and empirically determine whether `send` inherits the fall-through) rather than resolved by assumption
+in either direction.
+
+Verified this session rather than transcribed from the handoff: `cmux send --surface` at
+`panes/adapters/cmux.sh:163-164`; `feature_tasks.py` exposing `STRICT_RE`/`identity()`/`task_ids()`
+with no done/total of its own; `terminal-detect.sh:14` printing `none`; `handoff-wrapper.sh:5`;
+`TMUX` unset under `TERM_PROGRAM=ghostty`; `.gitignore:72`; and the suite at 53 passed via
+`uv run --with pytest --no-project pytest task-tracker/ -q`.
+
+Card now sits at `phase: implementation` with tasks 1-6 ticked and task 7 (`PORTS.md` entry) next.
+The compliance-judge gate has still never run on this card, and it is now owed twice over — the
+spec-compliance gate fires after *any* spec edit.
+
+## 2026-08-09 — session 50: task 7, and a session-start branch line that disagreed with the checkout
+
+Task 7 of `tracking-feature-state` closed: port **8422** allocated to the task-tracker control server
+and recorded in `PORTS.md`, with `TASK_TRACKER_PORT` as the documented override. Picked clear of the
+8000-8100 block mtg-wizard and snatch-bracket hold; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at
+allocation. The card's task-7 bullet stores the *derivation*, not just the number, and states that
+task 8 reads the port from `PORTS.md` rather than re-deciding it.
+
+The registry row carries the two facts a future collision-hunter needs and neither of which is
+inferable from the port alone: the bind is `127.0.0.1` **explicitly**, and the server is
+session-scoped with no daemon or launchd job — so a stale listener on 8422 means a leaked process,
+not a service.
+
+**Restore gotcha, new:** the harness's SessionStart `gitStatus` block named the current branch as
+`feat/tracking-feature-state` while `git branch --show-current` in `/Users/marksuyat/.claude` printed
+`feature/memsearch-freshness` — and the working-tree entries it listed (`verdicts.jsonl`,
+`memsearch-freshness/`) were the main checkout's, not the feature worktree's. So that block mixed a
+branch name from one checkout with a status from another. The restore step that says "run `git status`
+yourself" is not redundant with it; it is the thing that catches this. Read the branch from
+`git branch --show-current` in the directory you intend to work in, every time.
+
+The worktree is `/Users/marksuyat/.claude/.claude/worktrees/tracking-feature-state` — nested
+`.claude/.claude/`, per `git worktree list`. The handoff wrote it as `.claude/worktrees/…`, which is
+correct **relative to the repo root**; reading it as an absolute-ish path off `$HOME/.claude` and
+`cd`-ing there fails. Handoffs should write worktree paths absolutely, since the reader has no
+guaranteed cwd.
+
+Next: task 8 (`server.py`), still gated behind the outstanding 15-second probe — `cmux send` into a
+live **Claude TUI**, where every proven use to date targets a shell prompt. Not yet run. The
+compliance-judge gate on this card remains unrun and owed twice.
+
+## 2026-08-09 — session 51: the compliance gate finally ran, and failed the card
+
+The compliance-judge gate on `tracking-feature-state` — owed twice, unrun since the card was written
+— ran at last. **Round 1: `fail`, 7 violations, confidence high** (`4c921ad`). The ledger held 81
+rows across 13 other specs and not one for this card; `spec_blob_sha 28b46338` pins the verdict to
+the card at `24ff8da`.
+
+**Where a worktree card's verdict belongs.** `agents/compliance-judge.md:60` still hardcodes
+`~/.claude/coding-memory/compliance-judge/`. That is wrong for any card living on a feature branch,
+and this card is absent from the main checkout's working tree entirely — a verdict written there
+would sit beside a spec that is not present. `hooks/judge-guard.sh:33-35` records in its own comments
+that hardcoding `$HOME/.claude`'s copy was a **bug**, fixed so the guard reads the *judged repo's*
+store, repo-relative from `git rev-parse --show-toplevel`. `agents/observability-judge.md` already
+says repo-relative; the compliance agent was never updated to match. Both dispatches this session
+overrode the path explicitly and the verdicts landed in the worktree (78→79 rows) with the main
+checkout's store untouched at 81, another session's uncommitted work intact. **The agent file is
+still wrong — fixing that asymmetry is open work.**
+
+**Both judges converged independently on the same worst finding**, which is why it is worth trusting:
+the per-launch bearer token is specified to be baked into `task-tracker/tracker-data.js`, and that
+file is *already committed* (`37a8e38`), *not* gitignored, holding real output
+(`generatedAt 2026-08-09T06:21:47Z`) — in a repo `gh repo view` reports as **public**
+(`suyatdev/.claude`, `isPrivate: false`). All four facts re-verified by hand this session, not taken
+on the judges' word. Nothing is leaked today only because `server.py` does not exist yet, which is
+exactly why the decision is cheap now and awkward after task 8.
+
+Three of the seven violations are the specific content task 8 needs: the token's location, the
+server's wire contract (no endpoint, method, header name, request/response shape, or statement of
+whether a command id carries an argument), and an allowlist written as "(`clear`, `handoff`,
+`reanalyze`, …)" — an ellipsis standing in for the entire authorization set. Implementing task 8
+against that is how the improvised shape the judge warned about gets built.
+
+**A tenth defect of the known species, found this session.** The card's task-13 warning says
+`addopts` in `pyproject.toml` deselects the `golden` and `measurement` marks. The only
+`pyproject.toml` in the repo is `memsearch/pyproject.toml` — a sibling directory that never governs
+`task-tracker/`, which carries no pytest config of its own. The warning errs safe but is aimed at
+something that does not apply, and it is the same stale-claim species two audit passes were spent
+eliminating. Separately: three `test_store.py` tests are `skipif(NODE is None)` (lines 150, 361,
+412), **including criterion 5's JS-loadability proof** — on a node-less host the suite is green with
+that assertion unrun, which matters for task 13's before/after counts. `analyze.py` is 792 lines
+against the 800 hard cap, eight lines of headroom and no mechanical trigger.
+
+**Gate reached, not opened.** `phase: implementation` forbids spec edits, but the compliance loop's
+step 3 requires the main agent to revise the spec on a fail. Those cannot both hold, so this is a
+`GATE: Spec change needed`, handed to the user rather than worked around. `model_tier` is already
+`high`, so the model-switch half is satisfied in substance. Round 2 re-dispatch must pass the round-1
+violation ids so persistence detection stays sound.
+
+## 2026-08-09 — sessions 52–54: five compliance rounds, and the derivation that had to stop being a grep
+
+Sessions 52 and 53 ran compliance rounds 2 and 3 on `docs/features/tracking-feature-state.md`
+(fail 5, fail 2). Session 54 ran rounds 4 and 5 (fail 2, fail 3). Commits `81d98dc`, `7e2bf90`,
+`b9ad394`, `ce3af84`, `126f5eb` on `feat/tracking-feature-state`. Phase stayed `planning` throughout —
+task 8 is still gated.
+
+**The finding worth keeping: a derivation is only as good as its scope, and a wrongly-scoped one is
+indistinguishable from a correct one.** `writing-specs/api-contracts` failed four consecutive rounds.
+Each fix widened the same `grep` by one step and a new blind spot appeared just past the new edge —
+one file → the repo (round 2), HTML → HTML plus JS (round 3), and still not CSS, whose `url(...)`
+syntax the pattern never matched (round 4). Two of those wrong answers were *reproducible*, which is
+why they read as authoritative. In session 52 the observability judge "confirmed" one of them by
+re-running the same mis-scoped grep; two agents agreeing was one error repeated.
+
+Round 5 closed it, and only because the user rejected a fifth narrowing and directed a structural fix:
+**the servable set stopped being a search and became an explicit manifest, proved by loading the page
+and enumerating what it actually requests.** "What does this page request?" is a runtime property; a
+text search can only ever approximate one, so each round had been moving where the approximation
+failed rather than removing the failure. The judge closed the id by rebuilding the manifest from
+source rather than reading the table.
+
+**And then the same disease appeared inside the cure.** Criterion 13 — the new runtime check — pinned
+the populated store state, so it never requested `tracker-data.sample.js`: the fallback shim returns
+early when `tracker-data.js` exists (`tracker-data-fallback.js:16`), and that file is present. The one
+row four rounds of greps had missed was the row the new check did not verify, in a shape that looked
+stronger than what it replaced. Both judges found it independently. Criterion 13 now runs in both
+store states.
+
+Three smaller instances of the same shape, all in material added by the round that was fixing the
+previous round: the audit log arrived in round 3 with nothing asserting it (round 4 added the stderr
+scan); the parent-death shutdown arrived in round 4 with no criterion and no poll interval, one
+paragraph after the card argues an unspecified timeout gets implemented as no timeout; and criterion
+12 asserted `cmux send` was invoked while task 9 said to fake the binary, moving the live path from
+visibly untested to *apparently* tested. **A control that creates a new surface and ships without the
+test for that surface is the recurring defect here, not a one-off.**
+
+Two dependency-shaped calls were the user's, not the model's: the structural fix over a fifth grep,
+and using the Claude browser extension for criterion 13 rather than adding a browser driver to a repo
+that has almost none — recorded with its cost stated (criterion 13 does not run under `pytest`, does
+not run unattended, needs an operator with the extension connected).
+
+**Still open at the end of session 54:** round 6 not yet dispatched; the `cmux send` → live Claude TUI
+probe still owed since round 2; `writing-specs/good-bad-edge-cases` cited in two consecutive rounds
+(4 and 5) on different instances. ADR 0024 written and then corrected in the same session — it had put
+the parent-death check on the idle timer and left the tick unnamed.
+
+## 2026-08-09 — session 55: round 6, and the defect moves from the precondition to the pass condition
+
+Compliance round 6 on `docs/features/tracking-feature-state.md`: **fail, one violation**, and it is
+`writing-specs/good-bad-edge-cases` for the **third consecutive round** — each time a new instance of
+the same class. Escalated to the user rather than auto-revised, as session 54 pre-committed to doing.
+
+**The finding.** Round 5's fix made criterion 13 run in both store states. Run (a) moves
+`tracker-data.js` aside — but `Task Tracker.dc.html:15` requests that file unconditionally, and the
+*same commit* added the wire-contract rule that a missing `tracker-data.js` answers `404` while
+criterion 13 forbade any `404` but `/favicon.ico`. **A correct implementation failed run (a) on its
+first request.** Both judges reached it independently from different rubrics.
+
+**Why it kept recurring, which is the part worth keeping.** Every round patched criterion 13's
+*precondition* and left its *pass condition* unexamined. The pass condition was a negative universal —
+"every request returns `200` except `/favicon.ico`" — and nobody re-reads a negative universal when
+the precondition moves. Sharper still: `126f5eb` **withdrew** the old "run criterion 13 before task
+14" instruction for being unsatisfiable, wrote down why that shape is dangerous ("a criterion whose
+first directed run must fail is one that gets weakened until it passes"), and then created the same
+shape four paragraphs earlier.
+
+**The fix (user decision: fix the class, not the instance).** Both judges named a sufficient
+one-clause patch — add `/tracker-data.js` to run (a)'s allowed-`404` list. The user rejected it for
+the same reason the round-3 escalation rejected a fifth narrowing of the grep. Criterion 13's pass
+condition is now **set equality** against an explicit per-run table of expected path → expected
+status. This also closes a direction the negative form never covered: an **unexpected `200` fails
+too**, so a server that quietly widens its manifest is caught.
+
+**Two derived surfaces moved with it, both easy to miss.** Line 322 said criterion 13 carves out "the
+one expected `404`" — the new table makes it two, so that line would have gone stale *inside the
+commit fixing what it describes*. And `support.js:158` issues a second token-bearing `GET /` only
+while `window.__resources` is undefined; task 14 defines it, so it is correctly out of a criterion
+that runs after task 14. Verifying that row rather than assuming it is what kept the new table from
+being a fifth instance of this class.
+
+**The recurring defect recurred a fourth time, mildest form yet:** round 5's new `500
+asset_unreadable` row had nothing exercising it — task 9's "each status code in the contract table"
+was satisfiable by `reanalyze_failed` alone, since the table carries two `500` rows. Task 9 now
+asserts it separately. ADR 0024 also gained the launch contract (non-detached child, `stderr`
+inherited); it had the 5-second poll correction but not this, so an implementer reading only the ADR
+would build both lifetime controls silently inert.
+
+**Still open at the end of session 55:** round 7 not yet dispatched; the `cmux send` → live Claude TUI
+probe still owed since round 2; the card is 933 lines, a fifth consecutive growth round, and both
+judges have now flagged the trend — a compaction pass is owed before the branch lands. The main
+checkout's three misrouted `statusline-followups` verdict rows are still unreconciled, deferred by
+the user until the card passes.

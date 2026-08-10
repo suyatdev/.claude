@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="nocturne.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<style>
+body{margin:0;background:#0e0f16;font-family:var(--font-body)}
+:root{--ok:#8fcaa8;--ok-bg:#17352a;--warn:#d8b06c;--warn-bg:#3a2d15;--bad:#e8968e;--bad-bg:#42201d;--info:#9ec2ec;--info-bg:#1d2c44;--mono:ui-monospace,Menlo,Consolas,monospace}
+@keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(255,255,255,.07);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px var(--mono);padding:3px 7px;background:#e9e9ed;color:#161826;border-radius:4px;text-decoration:none}
+.dv-tname{font:500 13px/1.2 Inter,system-ui,sans-serif;color:#e9e9ed}
+.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px var(--mono);padding:3px 7px;background:rgba(255,255,255,.1);color:#e9e9ed;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11.5px/1.3 Inter,system-ui,sans-serif;color:rgba(233,233,237,.6)}
+.dv-card{max-width:100%;background:var(--color-bg);border:1px solid rgba(255,255,255,.09);border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.5);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--color-accent);color:#161826}
+.dv-next{margin:24px 0 0;font:12px/1.5 Inter,system-ui,sans-serif;color:rgba(233,233,237,.5)}
+.dv-next a{color:var(--color-accent-300)}
+a{color:var(--color-accent)}a:hover{color:var(--color-accent-300)}
+</style>
+</helmet>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Task Tracker — four directions, one dataset (Nocturne DS)</span></div>
+<div style="max-width:1100px;margin:0 0 26px;padding:14px 18px;background:var(--color-surface);border-radius:8px;display:flex;gap:28px;font-size:12px;line-height:1.55;color:var(--color-neutral-400)">
+  <div style="flex:1"><span style="display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Assumptions</span>Skill writes <span style="font-family:var(--mono);color:var(--color-neutral-200)">tracker-data.json</span> next to the HTML; since it opens as file://, the final build embeds a data fallback. Reviewed marks, resolved questions + run switching persist to localStorage. Sample data modeled on your repos (memsearch, phase-guard, pane-split-policy).</div>
+  <div style="flex:1"><span style="display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">What works in this mock</span>Rows with a dot expand on click (try "Digest re-index CLI" / "Branch-scoped write permission"), constraints collapse, reviewed checkboxes toggle, copy-branch copies. Search, sort + run switching are wired in the final build after you pick a direction.</div>
+</div>
+<div class="dv-opts">
+
+<!-- ═══════════════ 1a MISSION CONTROL ═══════════════ -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Mission Control — dashboard-first, bold stat hero, icon rail</div>
+<div class="dv-card" style="width:1340px;display:flex;background:var(--color-bg)">
+  <div style="width:58px;flex:none;display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px;background:#12131e;border-right:1px solid rgba(255,255,255,.06)">
+    <div style="width:30px;height:30px;border-radius:8px;border:1px solid var(--color-accent);color:var(--color-accent);display:grid;place-items:center;margin-bottom:10px"><i class="ph ph-crosshair" style="font-size:17px"></i></div>
+    <sc-for list="{{ runs }}" as="r" hint-placeholder-count="3">
+      <div title="{{ r.name }}" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:11px;font-weight:600;font-family:var(--mono);color:{{ r.railC }};background:{{ r.railBg }};box-shadow:{{ r.railGlow }};cursor:pointer">{{ r.init }}</div>
+    </sc-for>
+    <div style="width:22px;height:1px;background:var(--color-divider);margin:8px 0"></div>
+    <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+      <div title="{{ n.label }}" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:{{ n.railC }};background:{{ n.railBg }};cursor:pointer" style-hover="color:var(--color-accent-300)"><i class="{{ n.icon }}" style="font-size:16px"></i></div>
+    </sc-for>
+    <div style="flex:1"></div>
+    <div style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--color-neutral-600)"><i class="ph ph-gear-six" style="font-size:16px"></i></div>
+  </div>
+  <div style="flex:1;min-width:0;padding:22px 28px 30px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:10px"><h1 style="font-size:21px;margin:0">guard + memsearch push</h1><span style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500)">~/dev/.claude</span></div>
+        <div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:2px">analyzed 2h ago · 4 repos · 9 worktrees scanned</div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:8px;min-width:230px;padding:7px 12px;background:var(--color-surface);border:1px solid var(--color-divider);border-radius:8px;color:var(--color-neutral-500);font-size:13px"><i class="ph ph-magnifying-glass"></i>Search tasks, branches, PRs…<span style="margin-left:auto;font-family:var(--mono);font-size:10px;border:1px solid var(--color-divider);border-radius:4px;padding:1px 5px">/</span></div>
+      <button class="btn btn-primary" style="font-size:13px"><i class="ph ph-arrows-clockwise"></i>Re-analyze</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:10px">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="6">
+        <div style="padding:14px 16px;background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:28px;font-weight:500;font-family:var(--font-heading);letter-spacing:-.02em;color:{{ s.c }};text-shadow:{{ s.glow }}">{{ s.n }}</div>
+          <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-500);margin-top:2px">{{ s.l }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:26px">
+      <div style="flex:1;height:6px;border-radius:3px;background:var(--color-neutral-900);overflow:hidden"><div style="width:35%;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--color-accent-700),var(--color-accent));box-shadow:0 0 12px var(--color-accent-700)"></div></div>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--color-accent-300)">12 / 34 merged · 35%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent)">Tasks</span>
+      <div style="flex:1"></div>
+      <sc-for list="{{ filterChips }}" as="f" hint-placeholder-count="5">
+        <span style="font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;color:{{ f.c }};background:{{ f.bg }};border:1px solid {{ f.bc }}">{{ f.label }}</span>
+      </sc-for>
+    </div>
+    <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:4px 18px 10px;margin-bottom:26px">
+      <div style="display:grid;grid-template-columns:26px minmax(230px,1.5fr) 140px 104px 150px 66px 108px 26px;gap:10px;padding:10px 0 8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600)">
+        <span></span><span>Task</span><span>Phase</span><span>State</span><span>Repo / branch</span><span>PR</span><span>PR state</span><span></span>
+      </div>
+      <sc-for list="{{ featsA }}" as="f" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 0 5px;font-family:var(--mono);font-size:11px;color:var(--color-accent-300)"><i class="ph ph-folder-simple"></i>{{ f.name }}<span style="color:var(--color-neutral-600)">{{ f.meta }}</span></div>
+        <sc-for list="{{ f.tasks }}" as="t" hint-placeholder-count="3">
+          <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:26px minmax(230px,1.5fr) 140px 104px 150px 66px 108px 26px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.05);cursor:{{ t.cursor }};opacity:{{ t.rowOpacity }}" style-hover="background:rgba(255,255,255,.025)">
+            <span onClick="{{ t.toggleReviewed }}" style="width:16px;height:16px;border-radius:5px;display:grid;place-items:center;cursor:pointer;border:1px solid {{ t.cbBc }};background:{{ t.cbBg }};color:#161826;font-size:11px"><i class="{{ t.cbIcon }}"></i></span>
+            <span style="min-width:0"><span style="display:block;font-size:13.5px;color:var(--color-neutral-100)">{{ t.name }}</span><span style="display:block;font-size:11.5px;color:var(--color-neutral-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.desc }}</span></span>
+            <span style="display:flex;align-items:center;gap:6px"><span style="display:flex;gap:3px"><sc-for list="{{ t.dots }}" as="d" hint-placeholder-count="5"><span style="width:5px;height:5px;border-radius:50%;background:{{ d.bg }}"></span></sc-for></span><span style="font-size:11.5px;color:var(--color-neutral-400)">{{ t.phase }}</span></span>
+            <span style="justify-self:start;font-size:11px;padding:2px 9px;border-radius:6px;color:{{ t.sc.c }};background:{{ t.sc.bg }}">{{ t.state }}</span>
+            <span style="min-width:0;font-family:var(--mono);font-size:11px"><span style="display:block;color:var(--color-neutral-300)">{{ t.repo }}</span><span style="display:flex;align-items:center;gap:5px;color:var(--color-neutral-600)"><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.branch }}</span><i onClick="{{ t.copy }}" class="{{ t.copyIcon }}" style="cursor:pointer;flex:none;font-size:12px;color:{{ t.copyC }}"></i></span></span>
+            <a href="#1a" onClick="{{ t.stop }}" style="font-family:var(--mono);font-size:12px;color:{{ t.prC }};text-decoration:none">{{ t.pr }}</a>
+            <span style="justify-self:start;font-size:11px;padding:2px 9px;border-radius:6px;color:{{ t.pc.c }};background:{{ t.pc.bg }}">{{ t.prState }}</span>
+            <i class="{{ t.chev }}" style="font-size:13px;color:var(--color-neutral-600)"></i>
+          </div>
+          <sc-if value="{{ t.showDetail }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:0 0 8px 36px;padding:14px 18px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.06);border-radius:10px;display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:22px">
+              <div style="font-size:12px">
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:7px">Worktree</div>
+                <div style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-300)">{{ t.d.worktree }}</div>
+                <div style="font-family:var(--mono);font-size:11.5px;color:var(--color-accent-300);margin:3px 0 12px">{{ t.branch }} <span style="color:var(--color-neutral-500)">{{ t.d.diff }}</span></div>
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:6px">Ordering</div>
+                <sc-for list="{{ t.d.links }}" as="lk" hint-placeholder-count="1"><div style="display:flex;align-items:center;gap:6px;font-size:11.5px;margin-bottom:4px;color:{{ lk.c }}"><i class="{{ lk.icon }}"></i>{{ lk.t }}</div></sc-for>
+                <div style="font-size:11px;color:var(--color-neutral-500);margin-top:10px"><i class="ph ph-clock" style="margin-right:4px"></i>last activity {{ t.d.last }}</div>
+              </div>
+              <div>
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:7px">Recent commits</div>
+                <sc-for list="{{ t.d.commits }}" as="c" hint-placeholder-count="3">
+                  <div style="display:flex;gap:8px;font-size:11.5px;padding:3px 0"><span style="font-family:var(--mono);color:var(--color-accent-400)">{{ c.sha }}</span><span style="color:var(--color-neutral-300)">{{ c.msg }}</span></div>
+                </sc-for>
+                <div style="margin-top:12px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:6px">Notes from analysis</div>
+                <div style="font-size:12px;line-height:1.5;color:var(--color-neutral-400)">{{ t.d.notes }}</div>
+              </div>
+              <div>
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:7px">Checklist</div>
+                <sc-for list="{{ t.d.checklist }}" as="ck" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:12px;padding:3px 0;color:{{ ck.c }}"><i class="{{ ck.icon }}"></i>{{ ck.t }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </sc-for>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1.15fr;gap:14px;margin-bottom:26px">
+      <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:14px">Execution &amp; merge order</div>
+        <sc-for list="{{ waves }}" as="w" hint-placeholder-count="4">
+          <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)">
+            <div style="width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--color-accent);border:1px solid var(--color-accent-700);background:var(--color-accent-900)">{{ w.n }}</div>
+            <div style="min-width:0"><div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ w.items }}" as="i" hint-placeholder-count="2"><span style="font-size:11.5px;padding:3px 9px;border-radius:6px;background:var(--color-neutral-900);color:var(--color-neutral-200);display:inline-flex;gap:6px;align-items:center">{{ i.t }}<span style="font-family:var(--mono);color:{{ i.prC }}">{{ i.pr }}</span></span></sc-for>
+            </div><div style="font-size:11px;color:var(--color-neutral-500);margin-top:4px">{{ w.note }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:10px">Dependency graph</div>
+        <div style="position:relative;height:248px">
+          <svg width="700" height="248" style="position:absolute;inset:0">
+            <sc-for list="{{ graphEdges }}" as="e" hint-placeholder-count="5"><path d="{{ e.d }}" stroke="{{ e.c }}" stroke-width="1.4" fill="none"></path></sc-for>
+            <sc-for list="{{ graphEdges }}" as="e" hint-placeholder-count="5"><circle cx="{{ e.tx }}" cy="{{ e.ty }}" r="2.6" fill="{{ e.c }}"></circle></sc-for>
+          </svg>
+          <sc-for list="{{ graphNodes }}" as="n" hint-placeholder-count="8">
+            <div style="position:absolute;left:{{ n.left }};top:{{ n.top }};width:180px;padding:7px 11px;border-radius:8px;background:var(--color-bg);border:1px solid {{ n.bc }};border-style:{{ n.bs }}">
+              <div style="font-size:11.5px;color:var(--color-neutral-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.label }}</div>
+              <div style="font-family:var(--mono);font-size:10px;color:{{ n.c }}">{{ n.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px;margin-bottom:26px">
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:12px">Hard ordering constraints</div>
+      <sc-for list="{{ consA }}" as="c" hint-placeholder-count="3">
+        <div style="border-top:1px solid rgba(255,255,255,.05)">
+          <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:10px;padding:11px 0;cursor:pointer" style-hover="background:rgba(255,255,255,.02)">
+            <i class="{{ c.chev }}" style="color:var(--color-neutral-500)"></i>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--bad);background:var(--bad-bg);padding:2px 7px;border-radius:5px">{{ c.id }}</span>
+            <span style="font-size:13.5px;color:var(--color-neutral-100)">{{ c.title }}</span>
+            <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--color-neutral-500)">{{ c.pair }}</span>
+          </div>
+          <sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:0 0 14px 34px;font-size:12.5px;line-height:1.6;color:var(--color-neutral-400);max-width:860px">{{ c.body }}</div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-bottom:26px">
+      <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:12px">Branches &amp; worktrees</div>
+        <sc-for list="{{ branchGroups }}" as="g" hint-placeholder-count="3">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--color-accent-300);padding:8px 0 4px">{{ g.repo }}</div>
+          <sc-for list="{{ g.rows }}" as="b" hint-placeholder-count="2">
+            <div style="display:grid;grid-template-columns:1.4fr 1.2fr 90px 96px 44px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,.05);font-size:11.5px">
+              <span style="font-family:var(--mono);color:var(--color-neutral-200);display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:{{ b.dotBg }};box-shadow:{{ b.dotGlow }}"></span>{{ b.branch }}</span>
+              <span style="font-family:var(--mono);color:var(--color-neutral-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.wt }}</span>
+              <span style="font-family:var(--mono)"><span style="color:var(--ok)">↑{{ b.ahead }}</span> <span style="color:{{ b.behindC }}">↓{{ b.behind }}</span></span>
+              <span style="font-size:10.5px;padding:2px 7px;border-radius:5px;justify-self:start;color:{{ b.nc }};background:{{ b.nbg }}">{{ b.note }}</span>
+              <span style="color:var(--color-neutral-600);font-family:var(--mono);font-size:10.5px">{{ b.last }}</span>
+            </div>
+          </sc-for>
+        </sc-for>
+      </div>
+      <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
+        <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:12px">Open questions</div>
+        <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+          <div style="padding:10px 0;border-top:1px solid rgba(255,255,255,.05);opacity:{{ q.op }}">
+            <div style="display:flex;gap:9px;align-items:flex-start"><i class="{{ q.icon }}" style="color:{{ q.ic }};font-size:15px;margin-top:1px"></i>
+            <div style="min-width:0;flex:1"><div style="font-size:13px;color:var(--color-neutral-100)">{{ q.q }}</div>
+            <div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:3px;line-height:1.5">{{ q.ctx }}</div></div>
+            <button class="btn btn-ghost" style="font-size:11px;flex:none">{{ q.btn }}</button></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
+      <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:14px">What's left</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <sc-for list="{{ kanban }}" as="k" hint-placeholder-count="4">
+          <div style="min-width:0">
+            <div style="display:flex;align-items:center;gap:7px;padding-bottom:8px;border-bottom:2px solid {{ k.c }};margin-bottom:10px"><span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:{{ k.c }}">{{ k.title }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-500)">{{ k.n }}</span></div>
+            <sc-for list="{{ k.items }}" as="i" hint-placeholder-count="3">
+              <div style="padding:9px 11px;border-radius:9px;background:var(--color-bg);border:1px solid rgba(255,255,255,.06);margin-bottom:7px">
+                <div style="font-size:12px;color:var(--color-neutral-200);line-height:1.35">{{ i.t }}</div>
+                <div style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-500);margin-top:4px">{{ i.m }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════ 1b LEDGER ═══════════════ -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Ledger — table-first, quiet, ultra-dense, labeled sidebar</div>
+<div class="dv-card" style="width:1340px;display:flex;background:var(--color-bg)">
+  <div style="width:212px;flex:none;padding:20px 0;border-right:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;min-height:900px">
+    <div style="padding:0 18px 16px;display:flex;align-items:center;gap:8px"><i class="ph ph-crosshair" style="color:var(--color-accent);font-size:16px"></i><span style="font-size:13.5px;font-weight:500">Task Tracker</span></div>
+    <div style="padding:0 18px 6px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600)">Open runs</div>
+    <sc-for list="{{ runs }}" as="r" hint-placeholder-count="3">
+      <div style="padding:7px 18px;cursor:pointer;border-left:2px solid {{ r.edge }};background:{{ r.bg }}" style-hover="background:rgba(255,255,255,.03)">
+        <div style="font-size:12.5px;color:{{ r.nameC }}">{{ r.name }}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);margin-top:1px">{{ r.dir }} · {{ r.meta }}</div>
+      </div>
+    </sc-for>
+    <div style="height:1px;margin:14px 18px;background:var(--color-divider)"></div>
+    <div style="padding:0 18px 6px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600)">On this page</div>
+    <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+      <div style="display:flex;align-items:center;gap:9px;padding:6px 18px;font-size:12.5px;cursor:pointer;color:{{ n.sideC }};border-left:2px solid {{ n.sideEdge }}" style-hover="color:var(--color-accent-300)"><i class="{{ n.icon }}" style="font-size:14px"></i>{{ n.label }}<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600)">{{ n.count }}</span></div>
+    </sc-for>
+    <div style="flex:1"></div>
+    <div style="padding:12px 18px;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);line-height:1.7">tracker-data.json<br>generated 02:41 · v0.4.1</div>
+  </div>
+  <div style="flex:1;min-width:0;padding:20px 26px 28px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
+      <h1 style="font-size:17px;margin:0;font-weight:500">guard + memsearch push</h1>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-500)">~/dev/.claude</span>
+      <span style="flex:1"></span>
+      <span style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-400)">34 tasks · <span style="color:var(--ok)">12 merged</span> · <span style="color:var(--bad)">3 blocked</span> · 7 open PRs · 4 repos · 9 worktrees · 35%</span>
+    </div>
+    <div style="height:1px;margin:10px 0 16px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent)"></div>
+    <div style="display:grid;grid-template-columns:20px minmax(170px,1.1fr) minmax(200px,1.4fr) 82px 84px 88px 168px 46px 86px;gap:8px;padding:4px 0 6px;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600)">
+      <span></span><span>Task</span><span>Description</span><span style="color:var(--color-accent-300)">Phase ▾</span><span>State</span><span>Repo</span><span>Branch</span><span>PR</span><span>PR state</span>
+    </div>
+    <sc-for list="{{ featsB }}" as="f" hint-placeholder-count="4">
+      <div style="display:flex;align-items:center;gap:7px;padding:7px 0 3px;font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-400)">{{ f.name }}<span style="color:var(--color-neutral-700)">{{ f.meta }}</span><span style="flex:1;height:1px;background:linear-gradient(to right,var(--color-divider),transparent)"></span></div>
+      <sc-for list="{{ f.tasks }}" as="t" hint-placeholder-count="3">
+        <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:20px minmax(170px,1.1fr) minmax(200px,1.4fr) 82px 84px 88px 168px 46px 86px;gap:8px;align-items:center;padding:4.5px 0;font-size:12px;cursor:{{ t.cursor }};opacity:{{ t.rowOpacity }};border-top:1px solid rgba(255,255,255,.035)" style-hover="background:rgba(255,255,255,.02)">
+          <span onClick="{{ t.toggleReviewed }}" style="width:13px;height:13px;border-radius:3px;display:grid;place-items:center;cursor:pointer;border:1px solid {{ t.cbBc }};background:{{ t.cbBg }};color:#161826;font-size:9px"><i class="{{ t.cbIcon }}"></i></span>
+          <span style="color:var(--color-neutral-100);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</span>
+          <span style="color:var(--color-neutral-500);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.desc }}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-400)">{{ t.phaseShort }}</span>
+          <span style="font-size:11px;color:{{ t.sc.c }}">● {{ t.stateShort }}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-400)">{{ t.repo }}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-600);display:flex;align-items:center;gap:5px"><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.branch }}</span><i onClick="{{ t.copy }}" class="{{ t.copyIcon }}" style="cursor:pointer;flex:none;color:{{ t.copyC }}"></i></span>
+          <a href="#1b" onClick="{{ t.stop }}" style="font-family:var(--mono);font-size:11px;color:{{ t.prC }};text-decoration:none">{{ t.pr }}</a>
+          <span style="font-size:11px;color:{{ t.pc.c }}">{{ t.prState }}</span>
+        </div>
+        <sc-if value="{{ t.showDetail }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:2px 0 6px 28px;padding:10px 14px;border-left:2px solid var(--color-accent-700);background:rgba(255,255,255,.02);display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:18px;font-size:11.5px">
+            <div><div style="font-family:var(--mono);color:var(--color-neutral-300)">{{ t.d.worktree }}</div><div style="font-family:var(--mono);color:var(--color-accent-300);margin:2px 0 8px">{{ t.branch }} <span style="color:var(--color-neutral-500)">{{ t.d.diff }}</span></div>
+            <sc-for list="{{ t.d.links }}" as="lk" hint-placeholder-count="1"><div style="display:flex;gap:5px;align-items:center;color:{{ lk.c }};margin-bottom:3px;font-size:11px"><i class="{{ lk.icon }}"></i>{{ lk.t }}</div></sc-for>
+            <div style="color:var(--color-neutral-600);font-size:10.5px;margin-top:6px">last activity {{ t.d.last }}</div></div>
+            <div><sc-for list="{{ t.d.commits }}" as="c" hint-placeholder-count="3"><div style="display:flex;gap:7px;padding:1.5px 0"><span style="font-family:var(--mono);color:var(--color-accent-400);font-size:10.5px">{{ c.sha }}</span><span style="color:var(--color-neutral-400);font-size:11px">{{ c.msg }}</span></div></sc-for>
+            <div style="color:var(--color-neutral-500);font-size:11px;line-height:1.5;margin-top:7px">{{ t.d.notes }}</div></div>
+            <div><sc-for list="{{ t.d.checklist }}" as="ck" hint-placeholder-count="3"><div style="display:flex;gap:6px;align-items:center;padding:1.5px 0;color:{{ ck.c }};font-size:11px"><i class="{{ ck.icon }}" style="font-size:11px"></i>{{ ck.t }}</div></sc-for></div>
+          </div>
+        </sc-if>
+      </sc-for>
+    </sc-for>
+    <div style="margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:0 34px">
+      <div>
+        <h6 style="font-size:10px;color:var(--color-neutral-500);margin-bottom:8px">Execution &amp; merge order</h6>
+        <sc-for list="{{ waves }}" as="w" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:18px 1fr 150px;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.04);font-size:11.5px;align-items:baseline">
+            <span style="font-family:var(--mono);color:var(--color-accent)">{{ w.n }}</span>
+            <span style="color:var(--color-neutral-300);line-height:1.5">{{ w.flat }}</span>
+            <span style="font-size:10.5px;color:var(--color-neutral-600)">{{ w.note }}</span>
+          </div>
+        </sc-for>
+        <h6 style="font-size:10px;color:var(--color-neutral-500);margin:22px 0 8px">Hard ordering constraints</h6>
+        <sc-for list="{{ consB }}" as="c" hint-placeholder-count="3">
+          <div style="border-top:1px solid rgba(255,255,255,.04)">
+            <div onClick="{{ c.toggle }}" style="display:flex;gap:8px;align-items:baseline;padding:6px 0;cursor:pointer;font-size:12px">
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--bad)">{{ c.id }}</span>
+              <span style="color:var(--color-neutral-200)">{{ c.title }}</span>
+              <span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-600)">{{ c.pairShort }} {{ c.mark }}</span>
+            </div>
+            <sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}"><div style="padding:0 0 10px 26px;font-size:11.5px;line-height:1.55;color:var(--color-neutral-500)">{{ c.body }}</div></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div>
+        <h6 style="font-size:10px;color:var(--color-neutral-500);margin-bottom:8px">Branches &amp; worktrees</h6>
+        <sc-for list="{{ branches }}" as="b" hint-placeholder-count="7">
+          <div style="display:grid;grid-template-columns:76px 1.3fr 76px 92px 34px;gap:8px;padding:4.5px 0;border-top:1px solid rgba(255,255,255,.04);font-size:11px;align-items:center;font-family:var(--mono)">
+            <span style="color:var(--color-neutral-500)">{{ b.repo }}</span>
+            <span style="color:var(--color-neutral-200);display:flex;gap:5px;align-items:center;white-space:nowrap;overflow:hidden"><span style="width:6px;height:6px;flex:none;border-radius:50%;background:{{ b.dotBg }}"></span>{{ b.branch }}</span>
+            <span><span style="color:var(--ok)">↑{{ b.ahead }}</span> <span style="color:{{ b.behindC }}">↓{{ b.behind }}</span></span>
+            <span style="font-size:10px;color:{{ b.nc }}">{{ b.note }}</span>
+            <span style="color:var(--color-neutral-600);font-size:10px">{{ b.last }}</span>
+          </div>
+        </sc-for>
+        <h6 style="font-size:10px;color:var(--color-neutral-500);margin:22px 0 8px">What's left</h6>
+        <sc-for list="{{ kanban }}" as="k" hint-placeholder-count="4">
+          <div style="display:flex;gap:8px;align-items:baseline;padding:5px 0;border-top:1px solid rgba(255,255,255,.04)">
+            <span style="width:86px;flex:none;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:{{ k.c }}">{{ k.title }}</span>
+            <span style="font-size:11.5px;color:var(--color-neutral-400);line-height:1.6">{{ k.flat }}</span>
+          </div>
+        </sc-for>
+        <h6 style="font-size:10px;color:var(--color-neutral-500);margin:22px 0 8px">Open questions</h6>
+        <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+          <div style="display:flex;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.04);font-size:11.5px;opacity:{{ q.op }}">
+            <i class="{{ q.icon }}" style="color:{{ q.ic }};font-size:13px;margin-top:1px"></i>
+            <span style="color:var(--color-neutral-300);line-height:1.5">{{ q.q }} <span style="color:var(--color-neutral-600)">— {{ q.ctx }}</span></span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════ 1c TERMINAL ═══════════════ -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Terminal — CLI-flavored, mono, keyboard-first</div>
+<div class="dv-card" style="width:1280px;background:#101119;font-family:var(--mono)">
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.07)">
+    <span style="color:var(--ok)">❯</span><span style="font-size:13px;color:var(--color-neutral-100)">task-tracker analyze ~/dev/.claude</span><span style="width:8px;height:15px;background:var(--color-accent);animation:blink 1.1s steps(1) infinite"></span>
+    <span style="margin-left:auto;font-size:10.5px;color:var(--color-neutral-600)">run: guard + memsearch push · 02:41:07 · exit 0</span>
+  </div>
+  <div style="display:flex">
+    <div style="width:198px;flex:none;padding:14px 0;border-right:1px solid rgba(255,255,255,.07);font-size:11.5px;min-height:760px;display:flex;flex-direction:column">
+      <div style="padding:0 16px 5px;font-size:9.5px;letter-spacing:.12em;color:var(--color-neutral-600)">RUNS</div>
+      <sc-for list="{{ runs }}" as="r" hint-placeholder-count="3">
+        <div style="padding:4px 16px;cursor:pointer;color:{{ r.termC }};background:{{ r.termBg }}">{{ r.termMark }} {{ r.name }}</div>
+      </sc-for>
+      <div style="padding:12px 16px 5px;font-size:9.5px;letter-spacing:.12em;color:var(--color-neutral-600)">GOTO</div>
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+        <div style="display:flex;gap:8px;padding:4px 16px;cursor:pointer;color:{{ n.sideC }}" style-hover="color:var(--color-accent-300)"><span style="color:var(--color-accent-700)">[{{ n.key }}]</span>{{ n.label }}</div>
+      </sc-for>
+      <div style="flex:1"></div>
+      <div style="padding:10px 16px;font-size:10px;color:var(--color-neutral-700);line-height:1.8">data: tracker-data.json<br>34 tasks · 4 repos</div>
+    </div>
+    <div style="flex:1;min-width:0;padding:16px 22px 24px;font-size:12px">
+      <div style="color:var(--color-neutral-400);margin-bottom:4px">tasks <span style="color:var(--color-neutral-600)">34</span> │ merged <span style="color:var(--ok)">12</span> │ blocked <span style="color:var(--bad)">3</span> │ review <span style="color:var(--info)">4</span> │ PRs open <span style="color:var(--color-accent-300)">7</span> │ repos 4 │ worktrees 9</div>
+      <div style="margin-bottom:16px;color:var(--color-neutral-500)">progress <span style="color:var(--color-accent-300)">{{ termBar }}</span> 35%</div>
+      <div style="color:var(--color-accent);font-size:10.5px;letter-spacing:.1em;margin-bottom:6px">── TASKS ─────────────────────────────────────────────────────────────</div>
+      <sc-for list="{{ featsC }}" as="f" hint-placeholder-count="4">
+        <div style="color:var(--color-neutral-500);padding:6px 0 2px">▾ {{ f.name }} <span style="color:var(--color-neutral-700)">{{ f.meta }}</span></div>
+        <sc-for list="{{ f.tasks }}" as="t" hint-placeholder-count="3">
+          <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:26px minmax(210px,1.4fr) 92px 110px 84px 150px 44px 96px;gap:8px;padding:2.5px 0;cursor:{{ t.cursor }};opacity:{{ t.rowOpacity }};align-items:baseline" style-hover="background:rgba(255,255,255,.03)">
+            <span onClick="{{ t.toggleReviewed }}" style="cursor:pointer;color:{{ t.termCbC }}">{{ t.termCb }}</span>
+            <span style="color:var(--color-neutral-100);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.name }}</span>
+            <span style="color:var(--color-neutral-500);font-size:11px">{{ t.termPhase }}</span>
+            <span style="color:{{ t.sc.c }};font-size:11px">● {{ t.stateShort }}</span>
+            <span style="color:var(--color-neutral-500);font-size:11px">{{ t.repo }}</span>
+            <span onClick="{{ t.copy }}" title="y — copy branch" style="color:{{ t.termBranchC }};font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">{{ t.termBranch }}</span>
+            <span style="color:{{ t.prC }};font-size:11px">{{ t.pr }}</span>
+            <span style="color:{{ t.pc.c }};font-size:11px">{{ t.prStateTerm }}</span>
+          </div>
+          <sc-if value="{{ t.showDetail }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:3px 0 8px 26px;padding:9px 13px;border:1px solid rgba(255,255,255,.09);border-radius:4px;background:rgba(0,0,0,.3);font-size:11px;line-height:1.7;color:var(--color-neutral-400)">
+              <div><span style="color:var(--color-neutral-600)">worktree</span>  {{ t.d.worktree }}   <span style="color:var(--color-neutral-600)">diff</span> <span style="color:var(--ok)">{{ t.d.diffAdd }}</span> <span style="color:var(--bad)">{{ t.d.diffDel }}</span>   <span style="color:var(--color-neutral-600)">last</span> {{ t.d.last }}</div>
+              <sc-for list="{{ t.d.commits }}" as="c" hint-placeholder-count="3"><div><span style="color:var(--color-accent-400)">{{ c.sha }}</span> {{ c.msg }}</div></sc-for>
+              <sc-for list="{{ t.d.checklist }}" as="ck" hint-placeholder-count="3"><div style="color:{{ ck.c }}">{{ ck.termBox }} {{ ck.t }}</div></sc-for>
+              <div style="color:var(--color-neutral-500)"># {{ t.d.notes }}</div>
+            </div>
+          </sc-if>
+        </sc-for>
+      </sc-for>
+      <div style="color:var(--color-accent);font-size:10.5px;letter-spacing:.1em;margin:18px 0 6px">── MERGE ORDER ───────────────────────────────────────────────────────</div>
+      <div style="font:11.5px/1.75 var(--mono);color:var(--color-neutral-300);white-space:nowrap">
+        <div>1&nbsp;&nbsp;<span style="color:var(--ok)">base-pin-resolution #96</span> ──▶ 2 branch-write-perm <span style="color:var(--color-neutral-600)">#91</span> ──▶ 3 guard-replay</div>
+        <div>1&nbsp;&nbsp;<span style="color:var(--info)">digest-cli #139</span> ─────────▶ 2 freshness-ranker <span style="color:var(--color-neutral-600)">#142</span></div>
+        <div><span style="color:var(--warn)">×&nbsp;cmux-0.9-gate</span> ──────────▶ 4 pane-governance <span style="color:var(--color-neutral-600)">#58</span> ──▶ 5 exec-fixtures</div>
+      </div>
+      <div style="color:var(--color-accent);font-size:10.5px;letter-spacing:.1em;margin:18px 0 6px">── HARD CONSTRAINTS ──────────────────────────────────────────────────</div>
+      <sc-for list="{{ consC }}" as="c" hint-placeholder-count="3">
+        <div onClick="{{ c.toggle }}" style="padding:2.5px 0;cursor:pointer;color:var(--color-neutral-200)"><span style="color:var(--color-neutral-600)">{{ c.mark }}</span> <span style="color:var(--bad)">{{ c.id }}</span> {{ c.title }} <span style="color:var(--color-neutral-600)">· {{ c.pairShort }}</span></div>
+        <sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}"><div style="padding:2px 0 8px 30px;color:var(--color-neutral-500);font-size:11px;line-height:1.6;max-width:760px">{{ c.body }}</div></sc-if>
+      </sc-for>
+      <div style="color:var(--color-accent);font-size:10.5px;letter-spacing:.1em;margin:18px 0 6px">── BRANCHES / WORKTREES ──────────────────────────────────────────────</div>
+      <sc-for list="{{ branches }}" as="b" hint-placeholder-count="7">
+        <div style="display:grid;grid-template-columns:82px minmax(170px,1fr) 190px 74px 110px 40px;gap:8px;padding:2px 0;font-size:11.5px">
+          <span style="color:var(--color-neutral-600)">{{ b.repo }}</span>
+          <span style="color:var(--color-neutral-200)">{{ b.dirtyMark }}{{ b.branch }}</span>
+          <span style="color:var(--color-neutral-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.wt }}</span>
+          <span><span style="color:var(--ok)">+{{ b.ahead }}</span> <span style="color:{{ b.behindC }}">-{{ b.behind }}</span></span>
+          <span style="color:{{ b.nc }};font-size:10.5px">{{ b.note }}</span>
+          <span style="color:var(--color-neutral-700);font-size:10.5px">{{ b.last }}</span>
+        </div>
+      </sc-for>
+      <div style="color:var(--color-accent);font-size:10.5px;letter-spacing:.1em;margin:18px 0 6px">── WHAT'S LEFT ───────────────────────────────────────────────────────</div>
+      <sc-for list="{{ kanban }}" as="k" hint-placeholder-count="4">
+        <div style="display:flex;gap:10px;padding:2.5px 0;font-size:11.5px"><span style="width:96px;flex:none;color:{{ k.c }}">{{ k.title }} ({{ k.n }})</span><span style="color:var(--color-neutral-400);line-height:1.6">{{ k.flat }}</span></div>
+      </sc-for>
+      <div style="color:var(--color-accent);font-size:10.5px;letter-spacing:.1em;margin:18px 0 6px">── OPEN QUESTIONS ────────────────────────────────────────────────────</div>
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="padding:2.5px 0;font-size:11.5px;opacity:{{ q.op }}"><span style="color:{{ q.ic }}">{{ q.termMark }}</span> <span style="color:var(--color-neutral-200)">{{ q.q }}</span> <span style="color:var(--color-neutral-600)">— {{ q.ctx }}</span></div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:flex;gap:16px;padding:9px 18px;border-top:1px solid rgba(255,255,255,.07);font-size:10.5px;color:var(--color-neutral-600)">
+    <span><span style="color:var(--color-neutral-400)">j/k</span> rows</span><span><span style="color:var(--color-neutral-400)">enter</span> expand</span><span><span style="color:var(--color-neutral-400)">/</span> search</span><span><span style="color:var(--color-neutral-400)">y</span> copy branch</span><span><span style="color:var(--color-neutral-400)">r</span> mark reviewed</span><span><span style="color:var(--color-neutral-400)">1–7</span> goto section</span><span style="margin-left:auto;color:var(--color-neutral-700)">task-tracker v0.4.1</span>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════ 1d EDITORIAL ═══════════════ -->
+<div class="dv-opt" id="1d">
+<div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Editorial — airy, big type, cards, floating pill nav</div>
+<div class="dv-card" style="width:1400px;background:var(--color-bg);position:relative">
+  <div style="position:absolute;left:26px;top:56px;width:196px;display:flex;flex-direction:column;gap:14px">
+    <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-md);padding:14px 6px">
+      <div style="padding:0 12px 8px;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600)">Open runs</div>
+      <sc-for list="{{ runs }}" as="r" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:10px;cursor:pointer;background:{{ r.pillBg }}" style-hover="background:rgba(255,255,255,.04)">
+          <span style="width:8px;height:8px;flex:none;border-radius:50%;background:{{ r.dot }}"></span>
+          <span style="min-width:0"><span style="display:block;font-size:12.5px;color:{{ r.nameC }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="display:block;font-size:10px;color:var(--color-neutral-600)">{{ r.meta }}</span></span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-md);padding:14px 6px">
+      <div style="padding:0 12px 8px;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600)">Sections</div>
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+        <div style="display:flex;align-items:center;gap:10px;padding:7.5px 12px;border-radius:10px;font-size:13px;cursor:pointer;color:{{ n.sideC }};background:{{ n.pillBg }}" style-hover="color:var(--color-accent-300)"><i class="{{ n.icon }}" style="font-size:15px"></i>{{ n.label }}</div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="margin-left:262px;padding:52px 56px 56px;min-width:0">
+    <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent);margin-bottom:10px">Task Tracker · analyzed 2h ago</div>
+    <h1 style="font-size:36px;margin:0 0 6px">guard + memsearch push</h1>
+    <div style="font-family:var(--mono);font-size:12.5px;color:var(--color-neutral-500);margin-bottom:34px">~/dev/.claude · 4 repos · 9 worktrees</div>
+    <div style="display:flex;gap:52px;align-items:flex-end;margin-bottom:14px">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="6">
+        <div><div style="font-size:46px;font-weight:400;letter-spacing:-.03em;line-height:1;color:{{ s.c }}">{{ s.n }}</div><div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:7px">{{ s.l }}</div></div>
+      </sc-for>
+      <div style="flex:1"></div>
+      <div style="text-align:right"><div style="font-size:46px;font-weight:400;letter-spacing:-.03em;line-height:1;color:var(--color-accent)">35%</div><div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:7px">merged &amp; shipped</div></div>
+    </div>
+    <div style="height:1px;margin:0 0 40px;background:linear-gradient(to right,transparent,var(--color-divider) 48px,var(--color-divider) calc(100% - 48px),transparent)"></div>
+    <h2 style="font-size:22px;margin:0 0 18px">Tasks</h2>
+    <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-sm);padding:8px 26px 14px;margin-bottom:44px">
+      <sc-for list="{{ featsD }}" as="f" hint-placeholder-count="4">
+        <div style="display:flex;align-items:baseline;gap:10px;padding:16px 0 6px"><span style="font-size:14px;color:var(--color-accent-300)">{{ f.name }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-600)">{{ f.meta }}</span></div>
+        <sc-for list="{{ f.tasks }}" as="t" hint-placeholder-count="3">
+          <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:22px minmax(260px,1.6fr) 120px 110px 200px 120px 22px;gap:14px;align-items:center;padding:11px 0;border-top:1px solid rgba(255,255,255,.05);cursor:{{ t.cursor }};opacity:{{ t.rowOpacity }}" style-hover="background:rgba(255,255,255,.02)">
+            <span onClick="{{ t.toggleReviewed }}" style="width:17px;height:17px;border-radius:50%;display:grid;place-items:center;cursor:pointer;border:1px solid {{ t.cbBc }};background:{{ t.cbBg }};color:#161826;font-size:11px"><i class="{{ t.cbIcon }}"></i></span>
+            <span style="min-width:0"><span style="display:block;font-size:14.5px;color:var(--color-neutral-100)">{{ t.name }}</span><span style="display:block;font-size:12px;color:var(--color-neutral-500);margin-top:1px">{{ t.desc }}</span></span>
+            <span style="font-size:12px;color:var(--color-neutral-400)">{{ t.phase }} <span style="color:var(--color-neutral-600)">· {{ t.phaseStep }}</span></span>
+            <span style="justify-self:start;font-size:11.5px;padding:3px 11px;border-radius:999px;color:{{ t.sc.c }};background:{{ t.sc.bg }}">{{ t.state }}</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-500);display:flex;align-items:center;gap:6px"><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.repo }} · {{ t.branch }}</span><i onClick="{{ t.copy }}" class="{{ t.copyIcon }}" style="cursor:pointer;flex:none;color:{{ t.copyC }}"></i></span>
+            <span style="justify-self:start;font-size:11.5px;padding:3px 11px;border-radius:999px;border:1px solid {{ t.pc.c }};color:{{ t.pc.c }};display:inline-flex;gap:6px;align-items:center"><i class="ph ph-git-pull-request" style="font-size:12px"></i>{{ t.prPill }}</span>
+            <i class="{{ t.chev }}" style="color:var(--color-neutral-600)"></i>
+          </div>
+          <sc-if value="{{ t.showDetail }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:2px 0 14px 36px;padding:20px 24px;background:var(--color-bg);border-radius:14px;display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:26px;font-size:12.5px">
+              <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Worktree</div>
+              <div style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-300)">{{ t.d.worktree }}</div>
+              <div style="font-family:var(--mono);font-size:11.5px;color:var(--color-accent-300);margin:3px 0 14px">{{ t.branch }} <span style="color:var(--color-neutral-500)">{{ t.d.diff }}</span></div>
+              <sc-for list="{{ t.d.links }}" as="lk" hint-placeholder-count="1"><div style="display:flex;gap:7px;align-items:center;color:{{ lk.c }};margin-bottom:5px;font-size:12px"><i class="{{ lk.icon }}"></i>{{ lk.t }}</div></sc-for>
+              <div style="color:var(--color-neutral-500);font-size:11.5px;margin-top:10px">last activity {{ t.d.last }}</div></div>
+              <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Commits &amp; notes</div>
+              <sc-for list="{{ t.d.commits }}" as="c" hint-placeholder-count="3"><div style="display:flex;gap:9px;padding:2.5px 0"><span style="font-family:var(--mono);font-size:11px;color:var(--color-accent-400)">{{ c.sha }}</span><span style="color:var(--color-neutral-300)">{{ c.msg }}</span></div></sc-for>
+              <div style="color:var(--color-neutral-400);line-height:1.6;margin-top:10px">{{ t.d.notes }}</div></div>
+              <div><div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Checklist</div>
+              <sc-for list="{{ t.d.checklist }}" as="ck" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:center;padding:3px 0;color:{{ ck.c }}"><i class="{{ ck.icon }}"></i>{{ ck.t }}</div></sc-for></div>
+            </div>
+          </sc-if>
+        </sc-for>
+      </sc-for>
+    </div>
+    <h2 style="font-size:22px;margin:0 0 18px">Execution &amp; merge order</h2>
+    <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:20px;margin-bottom:44px">
+      <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-sm);padding:24px 28px">
+        <sc-for list="{{ waves }}" as="w" hint-placeholder-count="4">
+          <div style="display:flex;gap:16px;padding:12px 0;border-top:1px solid rgba(255,255,255,.05)">
+            <div style="font-size:26px;font-weight:400;color:var(--color-accent-400);line-height:1;width:26px;flex:none">{{ w.n }}</div>
+            <div><div style="font-size:13.5px;color:var(--color-neutral-200);line-height:1.6">{{ w.flat }}</div><div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:3px">{{ w.note }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-sm);padding:24px 28px">
+        <div style="position:relative;height:248px">
+          <svg width="700" height="248" style="position:absolute;inset:0">
+            <sc-for list="{{ graphEdges }}" as="e" hint-placeholder-count="5"><path d="{{ e.d }}" stroke="{{ e.c }}" stroke-width="1.4" fill="none"></path></sc-for>
+            <sc-for list="{{ graphEdges }}" as="e" hint-placeholder-count="5"><circle cx="{{ e.tx }}" cy="{{ e.ty }}" r="2.6" fill="{{ e.c }}"></circle></sc-for>
+          </svg>
+          <sc-for list="{{ graphNodes }}" as="n" hint-placeholder-count="8">
+            <div style="position:absolute;left:{{ n.left }};top:{{ n.top }};width:180px;padding:8px 12px;border-radius:11px;background:var(--color-bg);border:1px solid {{ n.bc }};border-style:{{ n.bs }}">
+              <div style="font-size:11.5px;color:var(--color-neutral-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.label }}</div>
+              <div style="font-family:var(--mono);font-size:10px;color:{{ n.c }}">{{ n.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <h2 style="font-size:22px;margin:0 0 18px">Hard ordering constraints</h2>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:44px">
+      <sc-for list="{{ consD }}" as="c" hint-placeholder-count="3">
+        <div style="background:var(--color-surface);border-radius:14px;box-shadow:var(--shadow-sm);padding:16px 22px">
+          <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:12px;cursor:pointer">
+            <span style="font-family:var(--mono);font-size:11px;color:var(--bad);background:var(--bad-bg);padding:3px 9px;border-radius:7px">{{ c.id }}</span>
+            <span style="font-size:15px;color:var(--color-neutral-100)">{{ c.title }}</span>
+            <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--color-neutral-500)">{{ c.pair }}</span>
+            <i class="{{ c.chev }}" style="color:var(--color-neutral-500)"></i>
+          </div>
+          <sc-if value="{{ c.open }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 0 2px 0;font-size:13px;line-height:1.65;color:var(--color-neutral-400);max-width:900px">{{ c.body }}</div></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <h2 style="font-size:22px;margin:0 0 18px">Branches &amp; worktrees</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:44px">
+      <sc-for list="{{ branchGroups }}" as="g" hint-placeholder-count="3">
+        <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px 22px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--color-accent-300);margin-bottom:10px"><i class="ph ph-git-branch"></i>{{ g.repo }}</div>
+          <sc-for list="{{ g.rows }}" as="b" hint-placeholder-count="2">
+            <div style="padding:8px 0;border-top:1px solid rgba(255,255,255,.05)">
+              <div style="display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-200)"><span style="width:7px;height:7px;border-radius:50%;background:{{ b.dotBg }}"></span>{{ b.branch }}<span style="margin-left:auto"><span style="color:var(--ok)">↑{{ b.ahead }}</span> <span style="color:{{ b.behindC }}">↓{{ b.behind }}</span></span></div>
+              <div style="display:flex;gap:8px;font-size:10.5px;color:var(--color-neutral-600);margin-top:3px;font-family:var(--mono)"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.wt }}</span><span style="margin-left:auto;flex:none;color:{{ b.nc }}">{{ b.note }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <h2 style="font-size:22px;margin:0 0 18px">What's left</h2>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:44px">
+      <sc-for list="{{ kanban }}" as="k" hint-placeholder-count="4">
+        <div style="background:var(--color-surface);border-radius:16px;box-shadow:var(--shadow-sm);padding:18px 20px">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px"><span style="font-size:13px;color:{{ k.c }}">{{ k.title }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-600)">{{ k.n }}</span></div>
+          <sc-for list="{{ k.items }}" as="i" hint-placeholder-count="3">
+            <div style="padding:10px 0;border-top:1px solid rgba(255,255,255,.05)">
+              <div style="font-size:13px;color:var(--color-neutral-200);line-height:1.4">{{ i.t }}</div>
+              <div style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-500);margin-top:4px">{{ i.m }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <h2 style="font-size:22px;margin:0 0 18px">Open questions</h2>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="background:var(--color-surface);border-radius:14px;box-shadow:var(--shadow-sm);padding:18px 22px;display:flex;gap:14px;align-items:flex-start;opacity:{{ q.op }}">
+          <i class="{{ q.icon }}" style="color:{{ q.ic }};font-size:18px;margin-top:1px"></i>
+          <div style="flex:1;min-width:0"><div style="font-size:15px;color:var(--color-neutral-100)">{{ q.q }}</div><div style="font-size:12.5px;color:var(--color-neutral-500);margin-top:4px;line-height:1.6">{{ q.ctx }}</div></div>
+          <button class="btn btn-primary" style="font-size:12px;flex:none">{{ q.btn }}</button>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: "build out <a class="dv-oid" href="#1b">1b</a> as the real UI with search + data.json loading" · "mix <a class="dv-oid" href="#1a">1a</a>'s hero onto <a class="dv-oid" href="#1c">1c</a>" · "new directions for the merge-order graph"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dimReviewed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Canvas&quot;},&quot;showResolvedQuestions&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Canvas&quot;}}">
+const FEATURES=[
+ {name:'memsearch-freshness',repo:'memsearch',meta:'1/4 merged',tasks:[
+  {name:'Freshness scoring in ranker',desc:'Half-life decay on chunk age, blended with BM25 score',phase:'Implement',pi:1,state:'In progress',repo:'memsearch',branch:'feat/freshness-ranker',pr:'#142',prState:'Draft'},
+  {name:'Digest re-index CLI',desc:'memsearch reindex --digest with dry-run plan',phase:'Verify',pi:2,state:'In review',repo:'memsearch',branch:'feat/digest-cli',pr:'#139',prState:'Open',
+   d:{worktree:'~/wt/memsearch-digest-cli',diff:'+412 −86',diffAdd:'+412',diffDel:'-86',last:'2h ago',
+    commits:[{sha:'a3f19e2',msg:'reindex: add --digest flag + dry-run plan'},{sha:'90c4d17',msg:'db: expose last_indexed_at per chunk'},{sha:'5b82aa0',msg:'tests: golden queries for stale digests'}],
+    links:[{t:'blocks — Freshness scoring in ranker',icon:'ph ph-arrow-bend-down-right',c:'var(--warn)',termBox:''}],
+    checklist:[{t:'Dry-run prints plan',done:true},{t:'Re-index is idempotent',done:true},{t:'Golden queries pass on CI',done:false}],
+    notes:'Approved path: land before the ranker so freshness reads real timestamps. One golden query is flaky on CI — see run 2214.'}},
+  {name:'Stale-index nudge hook',desc:'SessionStart nudge when index is older than digest',phase:'Spec',pi:0,state:'Not started',repo:'.claude',branch:'—',pr:'—',prState:'—'},
+  {name:'Freshness eval queries',desc:'Measurement set for tuning the decay constant',phase:'Verify',pi:2,state:'In progress',repo:'memsearch',branch:'feat/freshness-evals',pr:'—',prState:'—'}]},
+ {name:'phase-guard-hook',repo:'.claude',meta:'1/3 merged',tasks:[
+  {name:'Branch-scoped write permission',desc:'Frontmatter phase gates writes per branch',phase:'Review',pi:3,state:'Blocked',repo:'.claude',branch:'feat/branch-write-perm',pr:'#91',prState:'Changes req.',
+   d:{worktree:'~/wt/branch-write-perm',diff:'+318 −64',diffAdd:'+318',diffDel:'-64',last:'3d ago',
+    commits:[{sha:'f41c09b',msg:'hook: phase frontmatter → write permission map'},{sha:'7d2e881',msg:'tests: deny cross-branch spec writes'}],
+    links:[{t:'blocked by — reviewer changes on #91',icon:'ph ph-prohibit',c:'var(--bad)'},{t:'after — Base pin resolution #96',icon:'ph ph-arrow-elbow-down-right',c:'var(--color-neutral-500)'}],
+    checklist:[{t:'Permission matrix in ADR',done:false},{t:'Deny path has replay fixture',done:true},{t:'Rebase onto main (behind 3)',done:false}],
+    notes:'Reviewer wants the phase→permission matrix split into its own ADR before approving. Rebase needed — main moved under it.'}},
+  {name:'Guard replay harness',desc:'Replays recorded sessions against the guard',phase:'Implement',pi:1,state:'Blocked',repo:'.claude',branch:'feat/guard-replay',pr:'—',prState:'—'},
+  {name:'Phase frontmatter parser',desc:'Single source of phase truth for all hooks',phase:'Ship',pi:4,state:'Merged',repo:'.claude',branch:'feat/phase-frontmatter',pr:'#87',prState:'Merged'}]},
+ {name:'replay-harness-base-pin',repo:'.claude',meta:'0/1 · ready',tasks:[
+  {name:'Base pin resolution',desc:'Pin replay base to the recorded merge-base sha',phase:'Verify',pi:2,state:'In review',repo:'.claude',branch:'feat/replay-base-pin',pr:'#96',prState:'Approved'}]},
+ {name:'pane-split-policy',repo:'cmux',meta:'0/2 · gated',tasks:[
+  {name:'Three-lane governance config',desc:'inline / panes max=N policy per session',phase:'Implement',pi:1,state:'In progress',repo:'cmux',branch:'feat/pane-split-policy',pr:'#58',prState:'Draft'},
+  {name:'cmux exec adapter fixtures',desc:'Replay fixtures for tab and layout probes',phase:'Verify',pi:2,state:'Stale',repo:'cmux',branch:'feat/exec-fixtures',pr:'—',prState:'—'}]}];
+const CONSTRAINTS=[
+ {id:'C1',title:'Base pin merges before any replay work',pair:'#96 → #91 → guard-replay',pairShort:'#96→#91→replay',body:'Guard replay harness rebases onto the API introduced in replay-harness-base-pin (#96). Merging replay work first would re-record every fixture against an unpinned base — a silent falsification of the harness. Required order: #96, then branch-write-perm (#91), then guard-replay.'},
+ {id:'C2',title:'Digest CLI lands before the freshness ranker',pair:'#139 → #142',pairShort:'#139→#142',body:'The ranker reads last_indexed_at timestamps that the digest CLI writes. Merged in reverse, the ranker scores every chunk as maximally stale and the eval set is meaningless until a full re-index.'},
+ {id:'C3',title:'cmux merges frozen until the 0.9 version gate',pair:'0.9 gate → #58 → fixtures',pairShort:'0.9→#58→fixtures',body:'pane-split-policy targets the 0.9 layout API. The cmux-version-gate check blocks any merge to cmux until 0.9 tags; exec adapter fixtures re-record after governance lands.'}];
+const WAVES=[
+ {n:'1',note:'ready now — approved, rebased, CI green',items:[{t:'Base pin resolution',pr:'#96',prC:'var(--ok)'},{t:'Digest re-index CLI',pr:'#139',prC:'var(--info)'}]},
+ {n:'2',note:'after wave 1 — unblocked by #96 landing',items:[{t:'Branch-scoped write permission',pr:'#91',prC:'var(--warn)'},{t:'Freshness scoring in ranker',pr:'#142',prC:'var(--color-neutral-500)'}]},
+ {n:'3',note:'after #91 — rebases onto the pinned base',items:[{t:'Guard replay harness',pr:'',prC:''}]},
+ {n:'4',note:'behind the cmux 0.9 gate — do not start merge',items:[{t:'Three-lane governance config',pr:'#58',prC:'var(--color-neutral-500)'},{t:'cmux exec adapter fixtures',pr:'',prC:''}]}];
+const BRANCHES=[
+ {repo:'.claude',branch:'main',wt:'~/dev/.claude',ahead:0,behind:0,dirty:false,note:'clean',tone:'ok',last:'1h'},
+ {repo:'.claude',branch:'feat/replay-base-pin',wt:'~/wt/replay-base-pin',ahead:3,behind:0,dirty:false,note:'ready to merge',tone:'ok',last:'2h'},
+ {repo:'.claude',branch:'feat/branch-write-perm',wt:'~/wt/branch-write-perm',ahead:7,behind:3,dirty:false,note:'needs rebase',tone:'warn',last:'3d'},
+ {repo:'.claude',branch:'feat/guard-replay',wt:'~/wt/guard-replay',ahead:4,behind:0,dirty:true,note:'2 uncommitted',tone:'bad',last:'5h'},
+ {repo:'memsearch',branch:'feat/digest-cli',wt:'~/wt/memsearch-digest-cli',ahead:6,behind:0,dirty:false,note:'ready to merge',tone:'ok',last:'2h'},
+ {repo:'memsearch',branch:'feat/freshness-ranker',wt:'~/wt/freshness-ranker',ahead:12,behind:1,dirty:true,note:'WIP',tone:'accent',last:'20m'},
+ {repo:'cmux',branch:'feat/pane-split-policy',wt:'~/wt/pane-split-policy',ahead:9,behind:5,dirty:false,note:'stale · 0.9 gate',tone:'warn',last:'6d'}];
+const KANBAN=[
+ {title:'Up next',tone:'accent',items:[{t:'Stale-index nudge hook',m:'.claude · spec'},{t:'Rebase branch-write-perm onto main',m:'.claude · ↓3'},{t:'Fix flaky golden query',m:'memsearch · CI 2214'}]},
+ {title:'In progress',tone:'info',items:[{t:'Freshness scoring in ranker',m:'#142 · memsearch'},{t:'Three-lane governance config',m:'#58 · cmux'},{t:'Freshness eval queries',m:'memsearch'}]},
+ {title:'Blocked',tone:'bad',items:[{t:'Guard replay harness',m:'waits on #96 → #91'},{t:'Branch-scoped write permission',m:'changes requested'}]},
+ {title:'In review',tone:'ok',items:[{t:'Base pin resolution',m:'#96 approved — merge it'},{t:'Digest re-index CLI',m:'#139 open · 1 flaky check'}]}];
+const QUESTIONS=[
+ {q:'Nudge hook: fire on SessionStart or pre-search?',ctx:'SessionStart is cheap but stale by mid-session; pre-search adds ~80ms to every query.',resolved:false},
+ {q:'Split the #91 permission matrix into its own ADR?',ctx:'Reviewer wants the phase→permission table versioned separately from the hook code.',resolved:false},
+ {q:'Freeze cmux work until 0.9 tags?',ctx:'Resolved yes — enforced by the cmux-version-gate check.',resolved:true}];
+const RUNS=[
+ {name:'guard + memsearch push',dir:'~/dev/.claude',meta:'34 tasks · 2h ago',active:true,init:'GM'},
+ {name:'pane orchestration v2',dir:'~/dev/cmux',meta:'18 tasks · 3d ago',active:false,init:'PO'},
+ {name:'statusline wrap',dir:'~/dev/.claude',meta:'done · 1w ago',active:false,init:'SW'}];
+const NAV=[
+ {icon:'ph ph-gauge',label:'Overview',key:'1',count:''},
+ {icon:'ph ph-table',label:'Tasks',key:'2',count:'34'},
+ {icon:'ph ph-git-merge',label:'Merge order',key:'3',count:'4'},
+ {icon:'ph ph-lock-key',label:'Constraints',key:'4',count:'3'},
+ {icon:'ph ph-git-branch',label:'Branches',key:'5',count:'9'},
+ {icon:'ph ph-kanban',label:"What's left",key:'6',count:'10'},
+ {icon:'ph ph-chat-circle-dots',label:'Open questions',key:'7',count:'2'}];
+const GNODES=[
+ {id:'A',label:'Base pin resolution',sub:'#96 approved',tone:'ok',x:8,y:16},
+ {id:'B',label:'Digest re-index CLI',sub:'#139 in review',tone:'info',x:8,y:104},
+ {id:'C',label:'cmux 0.9 gate',sub:'external gate',tone:'warn',x:8,y:192,gate:true},
+ {id:'D',label:'Branch write permission',sub:'#91 changes req.',tone:'warn',x:258,y:0},
+ {id:'E',label:'Guard replay harness',sub:'blocked',tone:'bad',x:258,y:66},
+ {id:'F',label:'Freshness ranker',sub:'#142 draft',tone:'accent',x:258,y:132},
+ {id:'G',label:'Governance config',sub:'#58 draft',tone:'accent',x:258,y:198},
+ {id:'H',label:'exec fixtures',sub:'stale',tone:'neutral',x:508,y:198}];
+const GEDGES=[['A','D'],['D','E'],['B','F'],['C','G'],['G','H']];
+const TONES={ok:{c:'var(--ok)',bg:'var(--ok-bg)'},warn:{c:'var(--warn)',bg:'var(--warn-bg)'},bad:{c:'var(--bad)',bg:'var(--bad-bg)'},info:{c:'var(--info)',bg:'var(--info-bg)'},accent:{c:'var(--color-accent-300)',bg:'var(--color-accent-900)'},neutral:{c:'var(--color-neutral-500)',bg:'var(--color-neutral-900)'}};
+const SC={'Not started':TONES.neutral,'In progress':TONES.accent,'In review':TONES.info,'Blocked':TONES.bad,'Stale':TONES.warn,'Merged':TONES.ok};
+const PC={'Draft':TONES.neutral,'Open':TONES.info,'Approved':TONES.ok,'Changes req.':TONES.warn,'Merged':TONES.accent,'—':{c:'var(--color-neutral-700)',bg:'transparent'}};
+const SHORT={'Not started':'todo','In progress':'wip','In review':'review','Blocked':'blocked','Stale':'stale','Merged':'merged'};
+const PSHORT={Spec:'spec',Implement:'impl',Verify:'verify',Review:'review',Ship:'ship'};
+class Component extends DCLogic {
+  state={ox:{'a:Digest re-index CLI':true,'b:Digest re-index CLI':true,'c:Digest re-index CLI':true,'d:Branch-scoped write permission':true},oc:{aC1:true,bC1:true,cC1:true,dC1:true},rv:{'Digest re-index CLI':true,'Phase frontmatter parser':true,'Base pin resolution':true},copied:null};
+  mkFeats(k){
+    const S=this.state,dim=this.props.dimReviewed??false;
+    return FEATURES.map(f=>({...f,tasks:f.tasks.map(t=>{
+      const key=k+':'+t.name,open=!!S.ox[key],rev=!!S.rv[t.name],copied=S.copied===k+t.branch;
+      const d=t.d?{...t.d,checklist:t.d.checklist.map(ck=>({...ck,icon:ck.done?'ph-fill ph-check-circle':'ph ph-circle-dashed',c:ck.done?'var(--ok)':'var(--color-neutral-400)',termBox:ck.done?'[x]':'[ ]'}))}:null;
+      return {...t,d,sc:SC[t.state],pc:PC[t.prState]||PC['—'],prC:t.pr==='—'?'var(--color-neutral-700)':'var(--color-accent-300)',
+        dots:['','','','',''].map((_,i)=>({bg:i<=t.pi?'var(--color-accent)':'var(--color-neutral-800)'})),
+        phaseShort:PSHORT[t.phase],stateShort:SHORT[t.state],phaseStep:(t.pi+1)+'/5',
+        termPhase:PSHORT[t.phase]+' '+['▹▹▹▹','▸▹▹▹','▸▸▹▹','▸▸▸▹','▸▸▸▸'][t.pi],
+        termCb:rev?'[x]':'[ ]',termCbC:rev?'var(--ok)':'var(--color-neutral-600)',
+        termBranch:copied?'copied ✓':t.branch,termBranchC:copied?'var(--ok)':'var(--color-neutral-500)',
+        prStateTerm:t.prState==='—'?'':t.prState.toLowerCase(),prPill:t.pr==='—'?'no PR':t.pr+' · '+t.prState,
+        reviewed:rev,rowOpacity:dim&&rev?0.45:1,cursor:t.d?'pointer':'default',
+        open,showDetail:open&&!!t.d,chev:t.d?(open?'ph ph-caret-up':'ph ph-caret-down'):'ph ph-dot-outline',
+        cbIcon:rev?'ph-fill ph-check':'ph ph-check',cbBc:rev?'var(--color-accent)':'var(--color-neutral-700)',cbBg:rev?'var(--color-accent)':'transparent',
+        copyIcon:copied?'ph-fill ph-check-circle':'ph ph-copy',copyC:copied?'var(--ok)':'var(--color-neutral-600)',
+        toggle:t.d?()=>this.setState(s=>({ox:{...s.ox,[key]:!s.ox[key]}})):undefined,
+        stop:e=>e.stopPropagation(),
+        toggleReviewed:e=>{e.stopPropagation();this.setState(s=>({rv:{...s.rv,[t.name]:!s.rv[t.name]}}))},
+        copy:e=>{e.stopPropagation();if(t.branch==='—')return;try{navigator.clipboard.writeText(t.branch)}catch(_){ }
+          this.setState({copied:k+t.branch});clearTimeout(this._ct);this._ct=setTimeout(()=>this.setState({copied:null}),1300)}};
+    })}));
+  }
+  mkCons(k){
+    const S=this.state;
+    return CONSTRAINTS.map(c=>({...c,open:!!S.oc[k+c.id],mark:S.oc[k+c.id]?'▾':'▸',chev:S.oc[k+c.id]?'ph ph-caret-up':'ph ph-caret-down',
+      toggle:()=>this.setState(s=>({oc:{...s.oc,[k+c.id]:!s.oc[k+c.id]}}))}));
+  }
+  renderVals(){
+    const showRes=this.props.showResolvedQuestions??true;
+    const nodes=GNODES.map(n=>({...n,left:n.x+'px',top:n.y+'px',c:TONES[n.tone].c,bc:n.gate?'var(--warn)':'var(--color-neutral-700)',bs:n.gate?'dashed':'solid'}));
+    const pos=Object.fromEntries(nodes.map(n=>[n.id,n]));
+    const edges=GEDGES.map(([a,b])=>{const s=pos[a],t=pos[b];const sx=s.x+180,sy=s.y+19,tx=t.x,ty=t.y+19,mx=sx+(tx-sx)/2;
+      return {d:`M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`,tx,ty,c:t.tone==='bad'?'var(--bad)':'var(--color-neutral-700)'}});
+    const stats=[
+      {n:'34',l:'tasks',c:'var(--color-neutral-100)',glow:'none'},
+      {n:'12',l:'merged',c:'var(--ok)',glow:'none'},
+      {n:'3',l:'blocked',c:'var(--bad)',glow:'0 0 18px rgba(232,150,142,.35)'},
+      {n:'7',l:'open PRs',c:'var(--color-accent-300)',glow:'0 0 18px var(--color-accent-800)'},
+      {n:'4',l:'repos',c:'var(--color-neutral-100)',glow:'none'},
+      {n:'9',l:'worktrees',c:'var(--color-neutral-100)',glow:'none'}];
+    const waves=WAVES.map(w=>({...w,flat:w.items.map(i=>i.t+(i.pr?' '+i.pr:'')).join('  ·  ')}));
+    const kanban=KANBAN.map(kb=>({...kb,c:TONES[kb.tone].c,n:kb.items.length,flat:kb.items.map(i=>i.t).join('  ·  ')}));
+    const branches=BRANCHES.map(b=>({...b,dotBg:b.dirty?'var(--bad)':TONES[b.tone].c,dotGlow:b.dirty?'0 0 8px var(--bad)':'none',nc:TONES[b.tone].c,nbg:TONES[b.tone].bg,behindC:b.behind>0?'var(--warn)':'var(--color-neutral-700)',dirtyMark:b.dirty?'*':' '}));
+    const repos=[...new Set(BRANCHES.map(b=>b.repo))];
+    const branchGroups=repos.map(r=>({repo:r,rows:branches.filter(b=>b.repo===r)}));
+    const qs=(showRes?QUESTIONS:QUESTIONS.filter(q=>!q.resolved)).map(q=>({...q,op:q.resolved?0.45:1,icon:q.resolved?'ph-fill ph-check-circle':'ph ph-question',ic:q.resolved?'var(--ok)':'var(--warn)',btn:q.resolved?'Reopen':'Resolve',termMark:q.resolved?'[resolved]':'[open]    '}));
+    const runs=RUNS.map(r=>({...r,railC:r.active?'var(--color-accent-100)':'var(--color-neutral-500)',railBg:r.active?'var(--color-accent-800)':'var(--color-neutral-900)',railGlow:r.active?'0 0 12px var(--color-accent-800)':'none',
+      edge:r.active?'var(--color-accent)':'transparent',bg:r.active?'rgba(255,255,255,.03)':'transparent',nameC:r.active?'var(--color-neutral-100)':'var(--color-neutral-500)',
+      termMark:r.active?'❯':' ',termC:r.active?'var(--color-accent-300)':'var(--color-neutral-500)',termBg:r.active?'rgba(145,132,217,.09)':'transparent',
+      pillBg:r.active?'rgba(145,132,217,.12)':'transparent',dot:r.active?'var(--color-accent)':'var(--color-neutral-700)'}));
+    const nav=NAV.map((n,i)=>({...n,railC:i===0?'var(--color-accent)':'var(--color-neutral-600)',railBg:i===0?'var(--color-accent-900)':'transparent',
+      sideC:i===0?'var(--color-accent-300)':'var(--color-neutral-400)',sideEdge:i===0?'var(--color-accent)':'transparent',pillBg:i===0?'rgba(145,132,217,.12)':'transparent'}));
+    const filterChips=[{label:'All 34',on:true},{label:'In progress 9'},{label:'Blocked 3'},{label:'In review 4'},{label:'Stale 2'}].map(f=>({...f,c:f.on?'var(--color-accent-200)':'var(--color-neutral-500)',bg:f.on?'var(--color-accent-900)':'transparent',bc:f.on?'var(--color-accent-700)':'var(--color-divider)'}));
+    return {featsA:this.mkFeats('a'),featsB:this.mkFeats('b'),featsC:this.mkFeats('c'),featsD:this.mkFeats('d'),
+      consA:this.mkCons('a'),consB:this.mkCons('b'),consC:this.mkCons('c'),consD:this.mkCons('d'),
+      stats,waves,kanban,branches,branchGroups,questions:qs,runs,navItems:nav,filterChips,graphNodes:nodes,graphEdges:edges,
+      termBar:'[█████████░░░░░░░░░░░░░░░░]'};
+  }
+}
+</script>
+</body>
+</html>
