@@ -1099,3 +1099,126 @@ violation, and I say why below rather than leaving it implied.
 
 **None.** No violation has been waived for this spec in any of the nine rounds, and none is needed:
 round 9 passes clean, so the waiver conversation the user pre-authorised does not arise.
+
+---
+
+## Round 10 — 2026-08-10T22:17:22Z — **FAIL** (3 violations)
+
+`head_sha` `7be4aec8b2337bf1b67190e16f96a72e5046cd45` · branch `feat/tracking-feature-state` ·
+spec blobs `772e5fc1f8d35a4af11dcbfb90212fb1714d7954` (`.md`) /
+`e41e1f8bf2ad35be5e4731f1c526acef535953dd` (`.spec.md`) · confidence **high**
+
+First round judging the pair as one document, and a fresh judgement of the current text rather than a
+re-litigation. Round 9's two closed ids stay closed — I checked both territories and neither reopened.
+All three findings below are new, and **two were introduced by the split itself**. (A first round-10
+run died on a spend limit before writing anything; this is the only round-10 verdict.)
+
+### Layman summary
+
+The card was cut into two files so a session no longer has to load 1,204 lines at start-up. That part
+worked — start-up reading is now 326 lines. But the cut was made in a shape this repo has a *live
+hook* to forbid, and the reasoning written down to justify the cut is factually wrong about the tool
+it names.
+
+**One.** This repo already allows a feature to live in two files, but only on one condition: the two
+halves must list the same tasks, so they cannot silently drift apart. That condition is not advice —
+it is enforced by `hooks/feature-sync-guard.sh`, which is registered and running in the live settings
+file, and which blocks any `git commit` that would record a mismatched pair. This split put all
+fourteen tasks in one half and none in the other. I ran the exact comparison the hook runs: it exits
+3 and reports all fourteen ids missing from the spec half, which means the hook exits 2 and blocks.
+The repo's only other split pair, `memory-system-split`, carries the same task ids in both halves and
+compares clean — that is the house shape, and this split did the opposite of it. There is a second
+symptom that needs no hook: the analyzer this very feature builds already flags its own card in
+`questions[]` as *"Which half of `tracking-feature-state` is right?"*.
+
+**Two.** Both halves explain that the spec half is safe from being double-counted because it "carries
+no `phase:` key, so it is not a card and the analyzer skips it". I built a throwaway repo and ran the
+shipped analyzer against it. A feature file with no frontmatter at all is **not** skipped — it comes
+out in `features[]` like any other card. What actually excludes the spec half is its *filename*: the
+analyzer drops `*.spec.md` by suffix. So the stated safety mechanism is not the real one, and the
+card's own acceptance criterion 1 describes a rule the code it says is already built and tested does
+not implement. This is the card's signature defect — a confident claim about behaviour that nobody
+re-ran — sitting inside the paragraph that justifies this round's biggest change.
+
+**Three.** The card is unusually good at hunting down "controls written in prose that nothing tests",
+and this round closed four of them. One is left, one field over from the one just fixed. The audit
+log records `sent=yes|no|unknown`, and the card says `unknown` — meaning the keystroke command was
+actually launched and then failed or timed out — is "the value that keeps [the log] honest", covering
+"the worst failure this feature has". No acceptance criterion and no task-9 assertion ever produces
+it: the only failing-send test drives the *pre-send* check, which the card fixes at `sent=no`.
+
+Nothing security-relevant regressed, no content was lost in the move, and every cross-file `§`
+reference resolves. The fixes are small: give the spec half the matching task ids (or fold back),
+correct one sentence about how the analyzer excludes files, and add one test.
+
+### Violations
+
+| id | Rule source | Where | Why | Evidence I ran |
+|---|---|---|---|---|
+| `gates/split-half-sync` | `rules/gates.md` — one-canonical-file discipline: "A **synced** `<name>.spec.md` half **MAY** be split off"; the sync condition is encoded in `hooks/lib/feature_tasks.py:compare` and the registered Tier-1 `hooks/feature-sync-guard.sh` | the split itself — `tracking-feature-state.spec.md` (zero task lines) against `tracking-feature-state.md` §Tasks (ids 1–14) | The pair shape is permitted only while the two halves' task lists cannot silently diverge, and this pair's lists disagree on every id, so a registered blocking hook now stands between this card and every future commit. | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` → **exit 3**, "in `tracking-feature-state.md` but missing from `tracking-feature-state.spec.md`: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14" (`feature-sync-guard.sh:204-226` turns status 3 into exit 2 + block). `$HOME/.claude/hooks/feature-sync-guard.sh` exists and is **REGISTERED LIVE** in `$HOME/.claude/settings.json` (`PreToolUse`/`Bash`); on `main` since `7f9bb6f`. The same call inside `analyze.py:568-577` already emits *"Which half of `tracking-feature-state` is right?"* when the analyzer is run against this worktree. Contrast `memory-system-split`: task ids `- [x] 1 …`, `- [x] 11 …` present in **both** halves, compare **exit 0**. Neither half mentions `feature-sync-guard`, `FEATURE_SYNC_EXEMPT`, or the sync contract anywhere, so this is unacknowledged rather than an accepted trade. |
+| `writing-specs/spec-code-drift` | `skills/writing-specs/SKILL.md` — "Drift causes hallucination: when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists. Keeping them aligned is not tidiness; it is correctness." | criterion 1's parenthetical; §Design 1 failure table row "Frontmatter malformed or unparseable"; the header note at `.md:9-12` and the `.spec.md` HTML comment | Both halves stake the split's no-double-count guarantee on a rule the shipped analyzer does not implement, and the criterion stating that rule is already ticked `[x]` as closed by tasks 3–4. | Fixture repo `/tmp/cj10fix` with `docs/features/orphan-nophase.md` (no frontmatter at all) → `python3 task-tracker/analyze.py` emits `features: [('orphan-nophase', '0/1', …), ('real-card', '1/2', …)]` — the phase-less file **is** a card, not skipped; it only raises a question. The actual exclusion is by filename: `SPEC_SUFFIX = ".spec.md"` (`analyze.py:36`) filtered in `_card_paths` (`analyze.py:192`), present since the analyzer's first commit `37a8e38`, and the same filename convention is used by `phase-guard.sh:372`. So adding a `phase:` key to the spec half would **not** make it a second card, and no test in `test_analyze.py` covers a card without a `phase:` key (the fixture helper at `test_analyze.py:94` always writes one). |
+| `writing-specs/good-bad-edge-cases` | `skills/writing-specs/SKILL.md` — "state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from." | §Design 3 status table `502 send_failed` row + §"Audit log" `sent=<yes\|no\|unknown>`, against task 9's assertion list and criterion 12 | The one path that yields `sent=unknown` — a `cmux send` that was actually invoked and then exited non-zero or hit its 5-second timeout — has no criterion and no task-9 assertion, so the value the card calls the record of "the worst failure this feature has" is produced by nothing. | `grep -n 'sent=' docs/features/*.md`: the only prescribed assertions are `sent=yes` (criterion 12), `sent=no` (criterion 12's `reanalyze`, task 9's two confirm failures). Task 9's only `502` driver is the **pre-send** confirmation failure, which §Security fixes at `sent=no`; `reason=send_failed` is likewise never driven. The card's own precedent forbids leaning on "each status code" here — it already rules that the two `500` rows are "satisfied by neither on its own", and the `502` row carries two causes with different `sent` values. Same species as the four controls closed this round, one field over from the `reason` enum that was just fixed. |
+
+### Waivers
+
+**None.** No violation has been waived for this spec in any of the ten rounds, and the waived-id list
+is still empty. Round 9's two long-running ids (`writing-specs/api-contracts`,
+`core-conduct/explicit-error-handling`) were closed on the merits and remain closed — I checked both
+territories in the current text and neither has reopened.
+
+### Notes (non-blocking)
+
+- **`§Verification` staying in the `.md` is the right call** and is *not* what trips the sync guard —
+  the guard compares task ids only. `gates.md` assigns the `.md` "frontmatter + task list"; a
+  measurement record is neither that nor spec/Gherkin detail, and task 13 writes into it during
+  implementation, when the phase gate forbids editing a spec. Keep it where it is.
+- **Nothing was lost in the move.** Of the 1,204 lines at `4775afd`, 11 are absent from the union of
+  the two halves at `3ca4daf`, and all 11 are lines that same commit deliberately rewrote (the `403`
+  row, the `reanalyze` row, the audit-log format, task 9's `asset_unreadable` bullet, task 14's
+  subset paragraph). Zero unintended loss.
+- **Every cross-file reference resolves.** All `§Design 1–4`, `§Security`, `§"Injection route"`,
+  `§"Audit log"` (a `####` heading), `§Out of scope`, `§Toolchain` map to headings in the spec half;
+  `§Verification` maps to the `.md`. No dangling pointer in either direction.
+- **Duplication across halves is small and mostly well-handled.** Only two substantive lines appear
+  verbatim in both files: the wide `grep -rn 'https\?://'` derivation and the canonical
+  `uv run --with pytest==9.1.1 …` invocation — and the second names `§Toolchain` authoritative on
+  disagreement, which is the correct way to duplicate. The governing "no pinned counts / check your
+  derivation's scope" preamble is restated in both halves in *different words* and has already
+  drifted slightly (the `.md` adds "once inside a judge's own verdict"; the spec half omits it).
+  Acceptable for a two-reader document, but that paragraph is the drift surface to watch.
+- **The `.md` preamble contradicts its own `§Verification`.** "no count, test total or phase tally is
+  pinned anywhere" is falsified ~270 lines later by "It reported **53 passed** on 2026-08-09" and by
+  task 13's mandate to record counts. The spec half's phrasing carves out exactly that exception
+  ("measurements that must be recorded … are stamped with their date and their reproducing command").
+  Copy the spec half's sentence into the `.md`.
+- **Task 9's `reason` bijection instruction is readable two ways.** "require every value to be
+  reachable" suggests a runtime exercise; the spec half restates it as "every row has a value, every
+  value has a row" — a static table↔enum check. Under the static reading `host_mismatch`,
+  `send_failed` and both `confirm_*` values are never exercised. One clarifying clause fixes it, and
+  the runtime reading would also close most of violation 3.
+- **Criterion 14's idle clause implies a ≥60-second test.** It says "drive both with short overrides",
+  while §Security fixes `TASK_TRACKER_IDLE_SECS` at a 60s minimum that "may not be disabled". Not a
+  contradiction (60s ≪ 30 min), but state the expected runtime so nobody weakens the minimum to make
+  the suite fast.
+- **Extension map still carries `.html` with no manifest row** (`GET /` sets `text/html` directly), so
+  "those four extensions cover every row above with none left over" holds in one direction only.
+  Same harmless imprecision recorded in round 9; unchanged.
+- **Spec path** is `docs/features/` rather than `writing-specs`' `docs/superpowers/specs/`. Not cited —
+  `rules/gates.md`'s one-canonical-file discipline is the repo layer and takes precedence.
+- **Security territory re-checked** (the design touches external input, shell execution, a localhost
+  server and a credential): no request data reaches a command line (allowlist id only; `--surface`
+  from a captured env UUID), no error body echoes input, the token stays memory-only with the stderr
+  clause asserted in criterion 10, boundary validation covers method/content-type/size/schema/
+  traversal, and the `'unsafe-eval'` CSP shortfall remains a stated human-owned trade with ADR 0024
+  behind it. Nothing new, nothing regressed.
+- **Context trend, honestly.** Session-start load 1,204 → **326** lines, which is what the split was
+  for and it delivered. But the two halves total **1,312**, ~108 lines *more* than the pre-split card,
+  so the document is still growing round over round — the eighth consecutive rise in total size. Not
+  cited (the growth is enumerated contract and assertions, not boilerplate), but the trend is now the
+  single best argument for a human to call a trim rather than another judge round.
+- **`analyze.py` is 792 lines** against the 800 hard max, with `task-tracker/git_facts.py` named as
+  the clean split and explicitly unscheduled as a human-owned call — correct posture, unchanged.
+- **Re-verified live at `7be4aec`:** no `TBD`/`TODO`/`FIXME`/placeholder in either half; no absolute
+  path (`/Users/`, `/home/`) committed; `analyze.py` 792 lines; `feature_tasks.compare` exit 3 on this
+  pair and exit 0 on `memory-system-split`; `feature-sync-guard.sh` present and registered in the live
+  `$HOME/.claude/settings.json`.
