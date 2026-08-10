@@ -10,11 +10,20 @@ Planned session 29 (2026-08-08) on `main` @ `5fa766f`. Closes task 9 of
 `docs/features/statusline-wrap-worktree.md`, which shipped as PR #43 while this harness was
 broken — so the statusline script currently has 68 tests and no proof any of them can fail.
 
+**Revision 4** (2026-08-09), after an independent re-measurement of the whole suite. It replaces
+per-version `must_fail`/`must_pass` lists with a single **flip matrix** (§2) — the pass/fail state
+of every discriminating assertion across every version. `must_pass` is gone: the matrix pins passes
+as well as failures, so it anchors itself. Two user decisions, 2026-08-09: adopt the matrix, and
+**report rather than fix** the vacuous assertions (§6b) — 13 of the 15 load-bearing assertions are
+vacuous, and strengthening them means editing the suite this harness exists to measure, so it
+becomes its own follow-up.
+
 **Revision 3** after compliance rounds 1-2 (`fail`/`fail`) and two observability architecting reads
-(both `risk=medium`). Scope grew by explicit user decision, 2026-08-08: the vacuity ratchet (§5)
-was added after the advisory judge measured that a third of the suite passes against a script that
-produces no output. Revision 3 adds per-iteration ids (§1), `must_pass` anchors (§3), a second stub
-and the overlap rule (§5), and states real coverage (§9).
+(both `risk=medium`). Scope grew by explicit user decision, 2026-08-08: the vacuity ratchet was
+added after the advisory judge measured that a third of the suite passes against a script that
+produces no output. Revision 3 added per-iteration ids (§1), `must_pass` anchors, a second stub and
+the overlap rule, and stated real coverage (§9). Sections below marked *superseded* record what it
+measured; revision 4 keeps the measurements and replaces the design built on them.
 
 **Location note.** `writing-specs` defers to `docs/superpowers/specs/`, but this repo's
 `one-canonical-file` discipline (`rules/gates.md`) puts feature-scale work in a single
@@ -58,13 +67,14 @@ re-investigate a settled question.
 
 ### Defect 2 — a third of the suite is satisfied by silence
 
-Measured by the architecting judge: against a stub script that produces no output, **23 of 68
-assertions pass** — including *every* injection assertion, all four `$PWD fallback stripped`
-cases, and `a control character in a path never reaches the output`. They are "count of bad byte
+Measured by the architecting judge and re-confirmed 2026-08-09: against a stub script that
+produces no output, **24 of 68 assertions pass** (23 without its `exit 0` — see §6) — including
+*every* injection assertion, all four `$PWD fallback stripped` cases, and `a control character in a
+path never reaches the output`. They are "count of bad byte
 ≤ limit" checks, and silence satisfies them.
 
 These are the safety-critical tests. Neither the old harness nor revision 1 of this spec measured
-this, which is why §5 exists.
+this, which is why §6 exists.
 
 ## Measured against the real suite (2026-08-08)
 
@@ -72,7 +82,9 @@ Revisions 1-3 were reasoned from a mental model of the suite rather than the sui
 round-3 advisory caught three artifacts that do not exist in it. Everything below is measured
 first-hand, reproducibly: copy `statusline-command.test.sh` and a candidate script into a temp
 directory, run the suite, and match results by **ordinal** — every run emits exactly 68 results in
-a stable order, which is what makes cross-run comparison valid before ids exist.
+a stable order, which is what makes cross-run comparison valid before ids exist. Ordinal matching
+has two traps that invalidate the naive version of it; see *How to reproduce any number above*,
+below, before re-running any of this.
 
 ### Baselines
 
@@ -94,9 +106,10 @@ pairs are the same effect — a redundant `exit 0` changes the result — which 
 **bytes**, not prose.
 
 **`f0902ed` (19) and `925c310` (20) pass fewer assertions than a script that does nothing (24).**
-They are already failing wholesale, which is precisely what §3's `must_pass` was added to detect.
+They are already failing wholesale, which is precisely what revision 3's `must_pass` was added to
+detect — and could not, which is part of why revision 4 dropped it.
 
-### `must_pass` is a liveness check, not a defect anchor
+### `must_pass` is a liveness check, not a defect anchor *(superseded by §2)*
 
 The pool of assertions that pass on a version *and* fail against both stubs is **3 for `f0902ed`
 and `925c310`, 5 for the others, and the same 3 across all five**:
@@ -105,8 +118,9 @@ and `925c310`, 5 for the others, and the same 3 across all five**:
 - `uncommitted changes -> dirty marker`
 - `an over-wide segment survives intact on its own line`
 
-Those say "this is still a working script", not "this version failed for its own defect". §3 must
-claim only that.
+Those say "this is still a working script", not "this version failed for its own defect". Revision
+3 required §3 to claim only that; revision 4 removed `must_pass` altogether, because the flip matrix
+pins each version's passing entries directly and needs no separate liveness list.
 
 ### Non-vacuity is not sufficient — signatures must be DIFFERENTIAL
 
@@ -135,10 +149,12 @@ Re-measured independently 2026-08-09; the first three rows reproduce exactly. Th
 **regression**: nothing was fixed there, so "fails on the version, passes on the version that fixed
 it" yields the **empty set** for it.
 
-This matters because §4 makes an empty signature a hard error. A harness defining signatures
-fix-direction-only would hard-error on `e882659` for being what it is. **The relation is
-transition-typed** — a fix's evidence is `fails on A, passes on B`; a regression's is `passes on A,
-fails on B` — and revision 4 must say which applies to each version rather than assuming one.
+This mattered because revision 3's §4 made an empty signature a hard error: a harness defining
+signatures fix-direction-only would have hard-errored on `e882659` for being a regression. **The
+relation is transition-typed** — a fix's evidence is `fails on A, passes on B`, a regression's is
+`passes on A, fails on B`. Revision 4 resolves this by not encoding a direction at all: §2's matrix
+records each id's state per version, and `P P . P .` is the history regardless of which way any
+individual transition ran.
 
 #### The chain has only 15 discriminating assertions, and one carries three defects
 
@@ -240,84 +256,113 @@ for case in "empty-object:{}" "garbage:garbage" "null-cwd:{\"cwd\":null}" "empty
 harness cannot attribute a result and must not guess. This is the check that catches the most
 likely authoring mistake — see §Risk.
 
-This is the API contract the compliance judge required. With §5's ratchet list, these are the only
+This is the API contract the compliance judge required. With §6's ratchet lists, these are the only
 changes this feature makes to `statusline-command.test.sh`.
 
-### 2. Signatures replace counts
+### 2. The flip matrix replaces counts *and* per-version lists
+
+**Decided 2026-08-09.** Revisions 1-3 pinned per-version `must_fail`/`must_pass` lists. Revision 4
+replaces both with a single artifact: the pass/fail state of every **discriminating** assertion
+across every version.
+
+An assertion is *discriminating* if its state is not constant across the five versions. Measured,
+the suite partitions exactly:
+
+| class | count | vacuous |
+|---|---|---|
+| discriminating (state changes somewhere on the chain) | **15** | 13 |
+| constant-pass on all five | 18 | 15 |
+| constant-fail on all five | 35 | 3 |
+| | **68** | |
+
+Only the 15 carry information about any of these defects. The other 53 are pinned by nothing and
+need to be pinned by nothing — 35 of them fail on every historical version because the feature did
+not exist yet (the era noise revision 3's §3 used to chase), and 18 pass on every version because
+no defect here
+touches them.
 
 ```python
-EXPECTED = {
-    "f0902ed": {
-        "label": "original: printf '%b', no stripping",
-        "must_fail": ["esc-literal-inert", "esc-real-stripped"],
-    },
+# id -> state on each version, chain order. "P" passes, "." fails.
+#   Adding a test to the suite does NOT belong here unless it discriminates.
+FLIP_MATRIX = {
+    #                       f09  925  291  4d6  e88
+    "esc-literal-inert":  "  .    P    P    P    P ",
+    "esc-real-stripped":  "  .    .    P    P    P ",
+    "pwd-fallthrough":    "  P    P    .    P    . ",   # the only id that flips twice
+    ...
 }
 ```
 
-Every named id **must fail** on that version. Other cases may fail freely — that is what adding
-tests does, and allowing it is what stops the treadmill.
+**Why this shape.** Three properties fall out of it that the list shape had to bolt on:
 
-Stated cost: the harness no longer notices a version failing *more* than expected. That is the
-right trade, because "fails more on an old buggy version" is the normal consequence of writing
-better tests, and treating it as an error is exactly what broke this harness.
+1. **Differential by construction.** A row *is* a defect's history. Nothing has to declare that a
+   signature "fails here and passes on the successor" — the row says it.
+2. **Direction-free.** The regression at `e882659` needed a special case under the list shape
+   (§Correction, above). Here `pwd-fallthrough`'s `P P . P .` simply records clean/clean/broken/
+   fixed/broken. There is no direction to get backwards.
+3. **Self-anchoring, so `must_pass` is unnecessary.** The matrix pins passes as well as failures,
+   so a version that collapses wholesale mismatches its own `P` entries. The old §3 existed only
+   because the list shape pinned failures alone.
 
-### 3. `must_pass` anchors — proving a version failed for its *own* defect
+**Stated honestly:** for `f0902ed` the self-anchor is thin. Its column is `1/15 P` — one passing
+discriminating assertion, `pwd-fallthrough`, and that one is vacuous. Per-version P counts are
+`1, 2, 10, 15, 14`. §4's full-count assertion is what actually catches a wholesale collapse on the
+two oldest versions; the matrix alone would not.
 
-Measured by the round-1 architecting judge: **~31 of the ~40-50 failures per version are era
-noise.** The historical scripts predate the token bar, the sigma counter, the lock recovery, the
-quota segment, worktrees and wrapping, so most of what fails on them fails because the feature did
-not exist yet — not because of the defect under test.
+### 3. The matrix is closed — an unpinned flip is an error
 
-"Extra failures allowed" (§2) therefore removes something the old count check provided implicitly:
-evidence that a version is *not* simply failing wholesale. A signature can be satisfied by a
-version that fails everything, including for reasons unrelated to its defect.
+The list shape stopped the treadmill by allowing extra failures. The matrix stops it by scope: a
+new test only enters the matrix if it discriminates. But "extra failures allowed" also meant the
+harness stopped noticing anything it had not been told about, which is how it went stale unread.
 
-Each version therefore also declares a small **named** `must_pass` list — assertions that must
-still pass on it:
+The matrix is therefore **closed under discrimination**. The harness computes the full 68 × 5
+result set on every run — it already executes all of it — and asserts both directions:
 
-```python
-"f0902ed": {
-    "label": "original: printf '%b', no stripping",
-    "must_fail": ["esc-literal-inert", "esc-real-stripped"],
-    "must_pass": ["baseline-user-host", "dir-basename"],
-},
-```
+- every pinned row matches its recorded pattern exactly (`exit 1` — detection changed); **and**
+- the set of ids that discriminate is *exactly* the pinned set (`exit 2` — review needed).
 
-A named list costs zero treadmill: like `must_fail`, it does not grow when the suite grows. A
-`must_pass` id that fails exits `1` — the version is failing wholesale and its signature proves
-nothing.
+An assertion that starts or stops discriminating is a real change in what the suite can prove, and
+it is now impossible to introduce silently. Adding a discriminating test costs one reviewed line;
+adding a non-discriminating test costs nothing. That is the treadmill gone at the root — the old
+harness demanded an edit for *every* added test, including the 53 that prove nothing.
 
-### 4. An empty signature is a hard error
+### 4. Two hard errors that a subset check cannot catch
 
-`4d63b09` fails nothing today (`falsify.py:54` scores it 20/20), so its `must_fail` would be empty
-— and an empty list is satisfied by **any** input: the right blob, the wrong blob, a truncated
-file, a stub. One of five versions would become decoration while the harness printed success.
+**A column with no `P`.** A version passing none of the 15 is failing wholesale, and every `.` in
+its column is satisfied for the wrong reason. No column is empty today (`1, 2, 10, 15, 14`), so
+this is a guard, not a live defect.
 
-**A version whose `must_fail` is empty is a hard error, not a pass.** Resolving `4d63b09`
-specifically is task 4, which forces one of two explicit outcomes, both recorded in the file:
+**A run that did not finish.** Every check here is satisfied by a run that died early: the ids that
+did emit match, and the ones that would have contradicted the matrix never ran. The harness
+therefore asserts every run — working tree, all five versions, **and** both stubs — emitted the
+full case count, and exits `2` otherwise. Revision 3 applied this to stub runs only; the reasoning
+it gave ("a subset check is satisfied by the empty set") applies identically to a version run, and
+it is free.
 
-- an assertion is added that does catch its defect, and becomes its signature; or
-- it is removed from `EXPECTED` with a written rationale that its flaw is genuinely undetectable
-  by any assertion at this layer.
-
-Silently keeping it with an empty signature is neither.
+Note that `4d63b09` is no longer a special case. Under the list shape its `must_fail` was empty and
+§4 of revision 3 made that a hard error requiring task 4 to resolve. Under the matrix it is simply
+the column that is `15/15 P` — the version that fixed everything the suite can discriminate and
+regressed nothing. That is a fact worth pinning, not an error.
 
 ### 5. Three states, three exit codes
 
 ```mermaid
 flowchart TD
-    A[id named in a signature] --> B{id present in suite output?}
-    B -->|no| E["exit 2 — HARNESS ERROR<br/>signature names an id that no longer exists"]
-    B -->|yes| C{did it fail?}
-    C -->|yes| P[satisfied]
+    A[every run emitted the full case count?] -->|no| E2["exit 2 — HARNESS ERROR<br/>a run died early; every check below is vacuously satisfied"]
+    A -->|yes| B{pinned ids all present in suite output?}
+    B -->|no| E["exit 2 — HARNESS ERROR<br/>the matrix names an id that no longer exists"]
+    B -->|yes| D{discriminating set == pinned set?}
+    D -->|no| E3["exit 2 — REVIEW NEEDED<br/>an assertion started or stopped discriminating"]
+    D -->|yes| C{every pinned row matches its pattern?}
+    C -->|yes| P["exit 0 — falsification intact"]
     C -->|no| F["exit 1 — FALSIFICATION LOST<br/>the suite no longer detects this defect"]
 ```
 
 | exit | meaning |
 |---|---|
-| `0` | falsification intact — every signature satisfied, ratchet holding |
+| `0` | falsification intact — matrix matches, ratchet holding |
 | `1` | the suite lost detection power, or the working-tree floor failed, or the ratchet grew |
-| `2` | harness error — missing id, empty signature, or a blob that is not the script |
+| `2` | harness error — short run, missing id, empty column, unpinned flip, or a blob that is not the script |
 
 An `ERROR` must never exit `0`. The current file returns a binary `0`/`1` (`falsify.py:120-121`),
 so a third outcome added without its own code would read as green to whatever runs it.
@@ -339,41 +384,88 @@ KNOWN_VACUOUS = ["esc-literal-inert", "pwd-fallthrough-stripped", ...]
 - Adding an id requires a deliberate edit, which is visible in review.
 
 **Two stubs, not one.** Silence is the weakest possible broken script. Measured: a stub printing a
-single harmless line passes **30** of 68 — seven more than the silent stub, and those seven are
+single harmless line passes **31** of 68 — seven more than the silent stub, and those seven are
 "output exists" / "output is one line" assertions, the flimsiest shape in the suite. A silence-only
 ratchet would bless them forever. Both stubs are run, each with its own list:
 
-| stub | definition | measured |
-|---|---|---|
-| `STUB_SILENT` | executable, exits `0`, writes nothing | **24** of 68 pass |
-| `STUB_ONE_LINE` | executable, exits `0`, writes one plain ASCII line | **30** of 68 pass |
+**Prose does not pin bytes.** Revision 3 defined the stubs in a sentence and quoted 24 and 30. Both
+sentences admit two scripts that differ by one assertion: a redundant `exit 0` moves the silent stub
+between **23** and **24**, and the one-line stub between **30** and **31**. Same species as the
+23-vs-24 wobble revision 3 went and reconciled, one layer down. The harness therefore constructs
+each stub from these literal bytes, and the spec carries them:
 
-**The seeded number is 24, not 23.** The advisory judge's 23 came from a slightly different stub
-(`exit 1`); the stub *this spec defines* yields 24. Recorded here so task 7 seeds from the defined
-stub and the discrepancy is not rediscovered as a defect. Note this is the one place seeding from
-measurement is correct — §Risk's "never re-baseline" governs **signatures and labels**, which
-encode a belief about a defect. A vacuity list encodes no belief; it is a starting position for a
-ratchet whose only permitted direction is down.
+```bash
+# STUB_SILENT -> 24 of 68 pass
+#!/bin/bash
+exit 0
+```
+
+```bash
+# STUB_ONE_LINE -> 31 of 68 pass
+#!/bin/bash
+cat >/dev/null 2>&1
+printf 'statusline\n'
+exit 0
+```
+
+**Union of the two: 31 of 68 vacuous**, re-measured 2026-08-09 and stable across repeats. Revision 2
+quoted 24 for the union, which was the silent stub alone.
+
+Seeding these two lists from measurement is correct, and is the one place in this feature where it
+is — §Risk's "never re-baseline" governs the **matrix**, which encodes a belief about a defect. A
+vacuity list encodes no belief; it is a starting position for a ratchet whose only permitted
+direction is down.
+
+### 6b. The harness reports what its evidence rests on
+
+**Decided 2026-08-09: report, do not fix.** 13 of the 15 discriminating assertions are vacuous, and
+per transition the evidence is:
+
+| transition | kind | signature | resting on vacuous evidence |
+|---|---|---|---|
+| `f0902ed` → `925c310` | fix | 1 | **1/1** |
+| `925c310` → `29d6131` | fix | 9 | 7/9 |
+| `29d6131` → `4d63b09` | fix | 5 | **5/5** |
+| `4d63b09` → `e882659` | regression | 1 | **1/1** |
+
+Three of the four transitions rest **entirely** on assertions a script printing nothing also
+satisfies. The harness prints this fraction next to its verdict rather than suppressing it:
+
+```
+falsification intact  (15 of 68 assertions load-bearing)
+  f0902ed -> 925c310  fix         1 id   1/1 rests on vacuous evidence
+  925c310 -> 29d6131  fix         9 ids  7/9 rests on vacuous evidence
+  29d6131 -> 4d63b09  fix         5 ids  5/5 rests on vacuous evidence
+  4d63b09 -> e882659  regression  1 id   1/1 rests on vacuous evidence
+```
+
+This is deliberately uncomfortable to read, and that is its function — the ratchet stops the
+fraction worsening, the printout stops it being forgotten. **Strengthening the 13 vacuous
+assertions is explicitly not in this feature** (§Non-goals): it means editing the suite that this
+harness exists to measure, and the suite is the unbiased baseline. It becomes its own follow-up,
+which now has measured evidence behind it instead of a hunch.
 
 **A subset check is satisfied by the empty set.** If a stub run breaks and yields fewer results,
-"subset" reads that as progress — the same shape as the empty-signature bug §4 fixes. The harness
+"subset" reads that as progress — the same shape as the empty-column guard in §4. The harness
 therefore also asserts each stub run produced the **full case count**, and exits `2` if not.
 Stated honestly: this is hardening, not a proven bug — silence, NUL bytes and 200KB of junk all
 held the count at 68, so it could not be triggered.
 
-**Overlap between a signature and a vacuity list is reported, and ratcheted.** An id can legitimately
+**Overlap between the matrix and a vacuity list is reported, and ratcheted.** An id can legitimately
 be in both: `esc-literal-inert` fails on `f0902ed` (which leaks escapes, exceeding the limit) *and*
 passes against a silent stub (zero escapes is under the limit). Those are not contradictory — the
 assertion does detect that defect. But it detects it by a measure silence also satisfies, so the
-signature rests on weaker evidence than it appears to. Every overlapping id must appear in a
-declared `SIGNATURE_RESTS_ON_VACUOUS` list, which may only shrink, exactly like the stub lists.
+evidence is weaker than it appears. Every overlapping id must appear in a declared
+`MATRIX_RESTS_ON_VACUOUS` list, which may only shrink, exactly like the stub lists. §6b prints the
+per-transition fraction so the size of the overlap is visible, not just its membership.
 
 *(The round-2 advisory called this a contradiction — "both lights green, saying opposite things".
 It is not, for the reason above, and treating it as one would forbid a legitimate state. It is a
 real weakness, and is handled as one.)*
 
 This is a ratchet, not a count: it cannot go stale as the suite grows, which is the failure this
-whole feature exists to end. It starts at the measured 23 and is expected to fall. **Driving it to
+whole feature exists to end. It starts at the measured 24 and 31 (one list per stub, union 31 of
+68) and is expected to fall. **Driving it to
 zero is explicitly not this feature's job** — those are 23 separate assertion rewrites, and mixing
 them in would mean neither half got reviewed properly. This feature makes them visible and stops
 new ones.
@@ -399,11 +491,13 @@ what happens.
 Documented in the harness docstring and referenced from the script header, alongside the
 observability judge.
 
-**The harness states its own coverage.** Roughly **11 of 68** assertions gain falsification
-coverage — the ones named in signatures — and one of five versions may contribute none once
-`4d63b09` is resolved. "falsification intact" must therefore print the coverage alongside it, so
-the line cannot be read as a claim about the whole suite. Over-claiming here would be the same
-class of defect as the vacuous assertions themselves.
+**The harness states its own coverage.** Exactly **15 of 68** assertions gain falsification
+coverage — the discriminating set, which is also precisely the union of the four transition
+signatures. The other 53 are pinned by nothing and prove nothing about these defects.
+"falsification intact" must therefore print the coverage alongside it, so the line cannot be read
+as a claim about the whole suite. Over-claiming here would be the same class of defect as the
+vacuous assertions themselves. §6b's per-transition vacuity fractions print on the same lines, for
+the same reason one level deeper: 15 ids are load-bearing, and 13 of them are vacuous.
 
 **Residual risk, stated not hidden:** this is a human remembering, the
 mechanism that already failed. A commit hook on the two files that can invalidate it would cost
@@ -415,38 +509,57 @@ if it rots again.
 ```gherkin
 Feature: falsification survives a growing suite
 
-  Scenario: adding an unrelated test does not break the harness
-    Given every version's signature is satisfied
-    When a test is added whose id no signature names
-    And that test is not vacuous against the stub
+  Scenario: adding a non-discriminating test does not break the harness
+    Given every pinned row matches its recorded pattern
+    When a test is added whose state is the same on all five versions
+    And that test is not vacuous against either stub
     Then the harness exits 0
+    And FLIP_MATRIX is not edited
+
+  Scenario: adding a discriminating test demands review
+    Given every pinned row matches its recorded pattern
+    When a test is added whose state differs across the five versions
+    Then the harness exits 2
+    And names the unpinned id as a change in what the suite can prove
 
   Scenario: a test that stops detecting its defect fails the harness
-    Given "esc-real-stripped" is in f0902ed's signature
+    Given FLIP_MATRIX records "esc-real-stripped" as failing on f0902ed
     When that assertion is weakened so it passes against f0902ed
     Then the harness exits 1
     And names both the id and the version
 
-  Scenario: a signature naming a removed id is a harness error
-    Given a signature names "esc-real-stripped"
+  Scenario: an id that flips twice is pinned across its whole history
+    Given FLIP_MATRIX records "pwd-fallthrough" as "P P . P ."
+    When the regression at e882659 is no longer detected
+    Then the harness exits 1
+    And the regression needs no direction to be declared anywhere
+
+  Scenario: the matrix naming a removed id is a harness error
+    Given FLIP_MATRIX names "esc-real-stripped"
     When that assertion is deleted or its id changed
     Then the harness exits 2
     And does not report falsification intact
 
-  Scenario: failing more than the signature is not an error
-    Given f0902ed's signature names two ids
-    When six other cases also fail on f0902ed
+  Scenario: failing more than the matrix pins is not an error
+    Given FLIP_MATRIX pins 15 ids
+    When six non-discriminating cases also fail on f0902ed
     Then the harness exits 0
 
-  Scenario: an empty signature is rejected
-    Given a version's must_fail list is empty
+  Scenario: a column with no passing entry is rejected
+    Given a version passes none of the pinned ids
     Then the harness exits 2
+
+  Scenario: a run that ends early is rejected
+    Given a version's run emits fewer than the full case count
+    When every pinned id that did emit matches its pattern
+    Then the harness exits 2
+    And does not report falsification intact
 
 Feature: vacuity ratchet
 
   Scenario: a newly vacuous assertion is caught
-    Given KNOWN_VACUOUS holds the currently-vacuous ids
-    When a new assertion is added that passes against the stub
+    Given KNOWN_VACUOUS holds the currently-vacuous ids for each stub
+    When a new assertion is added that passes against either stub
     Then the harness exits 1
     And names the new id
 
@@ -481,7 +594,10 @@ No new dependencies. `re`, `subprocess`, `sys`, `tempfile`, `pathlib` — all al
 
 ## Non-goals
 
-- **Fixing the 23 vacuous assertions.** Measured and ratcheted here, rewritten elsewhere.
+- **Fixing the 31 vacuous assertions** — including the 13 that are load-bearing. Measured,
+  ratcheted and *reported* here (§6b); rewritten in the follow-up task 10 opens. Confirmed as a
+  non-goal by user decision 2026-08-09, on the grounds that strengthening them means editing the
+  suite this harness exists to measure.
 - No generalising the harness to other suites. One consumer, YAGNI.
 - No change to the five historical commits.
 - No commit hook (§8).
@@ -498,7 +614,7 @@ exists to prevent.
 **Adding ids touches 91 call sites, not 68.** Measured: 45 `ok` and 46 `bad` calls, roughly 45 of
 them `if`/`else` pairs where the *same* id is typed twice — the classic setup for a copy-pasted
 duplicate or a swapped pair. The stated safety net ("a bad id won't resolve → exit 2") catches
-neither, and covers only the ~11 ids named in signatures. Two checks close it: **duplicate ids are
+neither, and covers only the 15 ids pinned in the matrix. Two checks close it: **duplicate ids are
 exit 2** (§1), and **task 2 requires the two vacuity lists to be byte-identical before and after
 the id edits** — adding ids is purely additive, so any movement is a bug, and this catches a
 swapped `ok`/`bad` pair that "68/68 still green" cannot.
@@ -506,28 +622,36 @@ swapped `ok`/`bad` pair that "68/68 still green" cannot.
 ## Tasks
 
 - [ ] 1. Measure and record both stub baselines **before** any edit, by id — this is the reference
-      task 2 checks against.
+      task 2 checks against. Construct each stub from §6's literal bytes, not from its description.
 - [ ] 2. Add stable ids to all 91 call sites; `ok()`/`bad()` take the id first so a site cannot omit
       one. Loop sites use authored `id-suffix:value` pairs (§1). Then verify: ids unique, suite still
       68/68, and **both vacuity lists byte-identical to task 1's baseline** — ids are additive, so
       any movement is a bug.
-- [ ] 3. Reason out all five `must_fail` signatures **and** `must_pass` anchors from the commits
-      alone; record predictions **before** running. Then run, compare, record every disagreement.
-- [ ] 4. Resolve `4d63b09`'s empty signature — add a detecting assertion, or remove the version with
-      written rationale. No third option.
-- [ ] 5. Resolve any label disagreement from task 3 with evidence. Never re-baseline.
+- [ ] 3. Reason out the flip matrix from the five commits **alone** — for each of the 15
+      discriminating ids, predict its state on each version — and record the predictions **before**
+      running anything. Then run, compare, and record every disagreement.
+- [ ] 4. Resolve any disagreement from task 3 with evidence from the commit diffs. Never
+      re-baseline: the matrix encodes a belief about a defect, and fitting it to observed output is
+      the failure this whole feature exists to end.
       (The `f0902ed`/`925c310` count discrepancy is **already resolved** — see §Background. Do not
       re-investigate it.)
-- [ ] 6. Rewrite `EXPECTED` to the signature shape; implement the three-state check, the three exit
-      codes, duplicate-id detection, and the `must_pass` anchors; preserve the working-tree floor.
-- [ ] 7. Implement the vacuity ratchet against **both** stubs; seed each list from task 1's
-      measurement; assert each stub run produced the full case count; implement the
-      `SIGNATURE_RESTS_ON_VACUOUS` overlap list.
-- [ ] 8. Prove the harness can fail, one falsifier per path: weaken a named assertion (expect 1),
-      break a `must_pass` (expect 1), rename an id (expect 2), duplicate an id (expect 2), empty a
-      signature (expect 2), add a vacuous assertion (expect 1), truncate a stub run (expect 2).
-- [ ] 9. Confirm the treadmill is gone: add a throwaway non-vacuous passing test, confirm exit 0
-      with no harness edit.
-- [ ] 10. Print coverage (~11 of 68) alongside the verdict; document the PR-time run in the
-      docstring and the script header.
+- [ ] 5. Replace `EXPECTED` with `FLIP_MATRIX`; implement the closure check (discriminating set ==
+      pinned set), pattern matching per row, duplicate-id detection, the empty-column guard, the
+      full-case-count assertion **on every run**, and the four exit paths. Preserve the working-tree
+      floor.
+- [ ] 6. Implement the vacuity ratchet against **both** stubs; seed each list from task 1's
+      measurement; compute and print §6b's per-transition vacuity fractions.
+- [ ] 7. Prove the harness can fail, one falsifier per path: weaken a pinned assertion so a row
+      stops matching (expect 1); make a non-discriminating assertion discriminate (expect 2); rename
+      an id (expect 2); duplicate an id (expect 2); empty a column (expect 2); add a vacuous
+      assertion (expect 1); truncate any run (expect 2). A path with no demonstrated falsifier is
+      not implemented.
+- [ ] 8. Confirm the treadmill is gone: add a throwaway **non-discriminating** passing test, confirm
+      exit 0 with no harness edit. Then add a **discriminating** one and confirm exit 2 — the
+      closure check must demand review for exactly one of the two.
+- [ ] 9. Print coverage (15 of 68 load-bearing) alongside the verdict; document the PR-time run in
+      the docstring and the script header.
+- [ ] 10. Open the vacuous-assertion follow-up (§6b) as its own feature file, carrying §6b's
+      measured table — 13 of 15 load-bearing assertions vacuous, three of four transitions resting
+      entirely on them.
 - [ ] 11. Compliance + observability judges, then PR.
