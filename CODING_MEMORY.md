@@ -5041,3 +5041,52 @@ probe still owed since round 2; the card is 933 lines, a fifth consecutive growt
 judges have now flagged the trend — a compaction pass is owed before the branch lands. The main
 checkout's three misrouted `statusline-followups` verdict rows are still unreconciled, deferred by
 the user until the card passes.
+
+## 2026-08-09 — sessions 56–57: task 1's probes close the transport question, round 7 fails, round 8 in flight
+
+**Session 56 closed task 1** (`c2c2542`) with four live `cmux send` probes — the spike that five
+rounds of spec work had been sitting on top of unproven. Two of the four changed the design rather
+than confirming it. `send` errors at exit 1 on an unresolvable ref, so it does *not* inherit
+`rename-tab`'s silent fall-through and the card's central fear did not apply to that verb. The
+fourth probe is the one worth remembering: a send aimed at a surface *believed* to be the operator's
+own was delivered to a **different live Claude session**, at exit 0, with `OK` on stdout. The ref
+resolved; the destination was wrong. A successful `send` reports delivery, never destination — so
+the send-time check must confirm **identity**, not existence, and criterion 9's re-resolution became
+defence in depth rather than the primary control. It is recorded in §Verification rather than tidied
+away because it is the only direct evidence this repo has of the failure §Security exists to prevent.
+
+**Compliance round 7 failed** at `fe55b2d` with three violations, two of them recurrences of ids
+closed in earlier rounds — the static contract (`api-contracts`, closed at round 5, back on a
+different surface) and the bind path (`explicit-error-handling`, closed at round 6).
+
+**Session 57 closed all three** (`ca3e079`), each against re-read source rather than against the
+judge's summary:
+
+- Statics had no `Content-Type` at all — only `GET /` did — while criterion 13 asserts the UI
+  *renders*. A stylesheet served as `text/plain` answers `200` and is then discarded by the browser,
+  so set equality would have passed over an unstyled page. Now a fixed extension map in the source
+  (never `mimetypes.guess_type`, whose answer is a property of the host) plus `nosniff`, and an
+  unmapped manifest row aborts at startup rather than `500`-ing at request time.
+- The file defining `window.__resources` was on no manifest and in no expected set, and the card's
+  own CSP forbids the inline alternative it implied. Named `vendor-resources.js`, and pinned ahead of
+  `support.js` — verified as the page's first script at `Task Tracker.dc.html:6`, not assumed.
+- Task 14 required the phosphor font files but not Inter's equivalent second hop. Measured live: the
+  Google Fonts `@import` returns a stylesheet listing **28** `fonts.gstatic.com` woff2 URLs, and the
+  browser UA is load-bearing to reproduce it — `curl`'s default agent is served a different sheet.
+  Scope decision recorded rather than taken quietly: `latin` subset only, 4 files.
+- The card said the parent-death check rides the idle timer; **ADR 0024 records that exact phrasing
+  as a first-draft error it corrected**. Two authoritative documents disagreeing is the same defect
+  species as a stale stored fact, one document over. Card now defers to the ADR.
+- `EADDRINUSE` had no stated behaviour, and parallel sessions on a fixed port make it the normal
+  case. Now a startup abort naming the port, never a probe for a free one — a second server on
+  another port leaves the browser on the first while holding the second's token, so every button
+  returns the deliberately collapsed `403` and a stale-token problem reads as a broken feature.
+
+**Still open at the end of session 57:** round 8 was dispatched to panes and its verdicts are not yet
+read — `coding-memory/{compliance,observability}-judge/` in this worktree, with pane result files
+under session 57's scratchpad. The card is now **1080 lines**, a sixth consecutive growth round; the
+observability judge's recommended ~60-line trim of round-forensics prose was deliberately kept out of
+`ca3e079` so that diff stayed judgeable, and is now owed before the branch lands. Two of round 7's
+three ids were recurrences, so a third consecutive citation of either escalates to the user rather
+than looping again. Tasks 8–14 remain unstarted and the card is still `phase: planning` — the gate
+has not been re-opened.
