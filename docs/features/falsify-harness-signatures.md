@@ -264,7 +264,7 @@ for case in "empty-object:{}" "garbage:garbage" "null-cwd:{\"cwd\":null}" "empty
   id="pwd-fallback-${case%%:*}"; payload="${case#*:}"
 ```
 
-**Duplicate ids are a harness error (exit 2).** If the same id is emitted twice in one run, the
+**Duplicate ids are a harness error (`E2c`).** If the same id is emitted twice in one run, the
 harness cannot attribute a result and must not guess. This is the check that catches the most
 likely authoring mistake — see §Risk.
 
@@ -299,7 +299,7 @@ VERSIONS = ("f0902ed", "925c310", "29d6131", "4d63b09", "e882659")
 
 # Each historical script is pinned by BLOB sha, not by commit. Extraction that
 # returns anything else -- including the commit object, the documented rtk-proxy
-# failure -- is exit 2, not a silently different comparison.
+# failure -- is E2f, not a silently different comparison.
 BLOB_SHA = {
     "f0902ed": "ce85493054775cb7917fc71b95d14792d80d4213",   # 2845 bytes
     "925c310": "d28a0895dddb4fdae81853c21766f4fda213d1e8",   # 3310
@@ -324,19 +324,44 @@ reading the remainder as one state per version:
 
 | property | rule | violation |
 |---|---|---|
-| alphabet | exactly `P` (passes) and `.` (fails); nothing else, no case folding | exit `2` |
-| width | exactly `len(VERSIONS)` states after whitespace is stripped | exit `2` |
-| key | an id present in the suite's output, unique (§1) | exit `2` |
+| alphabet | exactly `P` (passes) and `.` (fails); nothing else, no case folding | `E2d` |
+| width | exactly `len(VERSIONS)` states after whitespace is stripped | `E2d` |
+| key | present in the suite's output, unique there **and** unique as a `FLIP_MATRIX` key | `E2b`, `E2c` |
 | whitespace | free, and carries no meaning — it is column alignment only | — |
 
 The width check is the load-bearing one: a row typed with four states instead of five shifts every
-subsequent version's expectation by one, and without this rule it surfaces as exit `1`
-`FALSIFICATION LOST` — a wrong answer with a confident label — rather than the exit `2` §5's
+subsequent version's expectation by one, and without this rule it surfaces as `E1a`
+`FALSIFICATION LOST` — a wrong answer with a confident label — rather than the `E2d` §5's
 precedence demands.
 
+**A duplicated `FLIP_MATRIX` key is `E2c`, not a silent overwrite.** A Python dict literal keeps
+the last of two identical keys without complaint, so the file would say one thing and the harness
+compare another — Defect 1 one level up. The matrix must therefore be parsed from a sequence of
+pairs, not built as a literal dict, so the duplicate is visible.
+
 **The full case count is derived, never a literal.** It is `len(working_tree_results)` from the
-floor run (§7), which must be all-pass. Writing `68` into the harness would re-introduce Defect 1
-one level up: a number that is a fact about suite size, going stale on the next added test.
+floor run (§7). Writing `68` into the harness would re-introduce Defect 1 one level up: a number
+that is a fact about suite size, going stale on the next added test.
+
+**But the floor run cannot validate itself.** Round 5 cited this as
+`writing-specs/derived-count-self-reference`: the working-tree run is one of the runs `E2a` checks
+against the count, so it is compared to its own length and that comparison can never fail. Nor does
+the suite's own tally help — its denominator is `pass + fail` (`statusline-command.test.sh:844`),
+also self-derived, so a run truncated at 30 all-passing cases prints `30/30 passed` and looks
+perfect. Left there, a truncated floor run would set the count to 30, satisfy the all-pass floor,
+let all five version runs clear `E2a`, and exit `0`.
+
+The count is therefore only adopted from a floor run that satisfies **three signals independent of
+its own length**, all `E2a` otherwise:
+
+| signal | what a truncated run does |
+|---|---|
+| the suite printed its terminating tally line | absent — the suite died before reaching it |
+| the tally's `pass + fail` equals the parsed result count | catches a suite that prints a tally it did not earn |
+| the suite process exited `0` | a killed suite carries a signal status |
+
+Measured: `kill -SEGV $$` inside the script under test kills the **suite** (bash expands `$$` to the
+original shell in a subshell), which is why round 4's crash produced 30 of 68 — and no tally line.
 
 **Why this shape.** Three properties fall out of it that the list shape had to bolt on:
 
@@ -353,12 +378,20 @@ one level up: a number that is a fact about suite size, going stale on the next 
 discriminating assertion, `pwd-fallthrough`, and that one is vacuous. Per-version P counts are
 `1, 2, 10, 15, 14`.
 
-What catches a wholesale collapse there is **§4's empty-column guard**, not the full-count
-assertion. Measured: a script that prints nothing still emits all 68 results and passes 24 of them,
-so the count is unchanged by total failure and cannot detect it — the empty column is what trips.
-(Revision 4 originally credited the full-count assertion here. Round 4 cited it as
-`core-conduct/verified-before-write-down`, and the correction is confirmed against the same
-measurement run as every other number in this spec: `silent+exit  emitted 68  passes 24`.)
+**What catches a wholesale collapse there is the matrix itself** — no separate guard. Measured
+against the silent stub:
+
+```
+emitted 68, passes 24            -> E2a does not fire; the count is unchanged by total failure
+13 of 15 pinned ids PASS         -> E2e does not fire; the column is never empty
+12 of 15 rows mismatch f0902ed   -> E1a fires
+```
+
+This sentence has now been wrong twice — revision 4 credited the full-count assertion, and the
+round-4 correction credited the empty-column guard. Both were reasoned rather than measured, and
+round 5 caught the second. It is stated here as three measurements and no attribution, because the
+attribution is what kept failing. `E2e` remains in §5 as a guard against a case not present today,
+not as the mechanism for this one.
 
 ### 3. The matrix is closed — an unpinned flip is an error
 
@@ -369,8 +402,9 @@ harness stopped noticing anything it had not been told about, which is how it we
 The matrix is therefore **closed under discrimination**. The harness computes the full 68 × 5
 result set on every run — it already executes all of it — and asserts both directions:
 
-- every pinned row matches its recorded pattern exactly (`exit 1` — detection changed); **and**
-- the set of ids that discriminate is *exactly* the pinned set (`exit 2` — review needed).
+- every pinned row matches its recorded pattern exactly (`E1a`); **and**
+- the discriminating set is *exactly* the pinned set — and the two directions differ in severity:
+  a new id that discriminates is `E3a`, a pinned id that stopped discriminating is `E1c` (§5).
 
 An assertion that starts or stops discriminating is a real change in what the suite can prove, and
 it now cannot enter the pinned set without a reviewed edit. **That is narrower than "impossible to
@@ -389,8 +423,12 @@ this is a guard, not a live defect.
 
 **A run that did not finish.** Every check here is satisfied by a run that died early: the ids that
 did emit match, and the ones that would have contradicted the matrix never ran. The harness
-therefore asserts every run — working tree, all five versions, **and** both stubs — emitted the
-full case count, and exits `2` otherwise. Revision 3 applied this to stub runs only; the reasoning
+therefore asserts every run — working tree, all five versions, **and** both stubs — emitted
+**exactly** the full case count (`E2a`).
+
+**"Exactly", not "at least".** Revision 4 said *fewer than*, which does not fire on a run that
+emits **more** — round 5 produced 102 lines from a forged script whose output impersonates result
+lines. Equality catches both truncation and forgery; an inequality catches one. Revision 3 applied this to stub runs only; the reasoning
 it gave ("a subset check is satisfied by the empty set") applies identically to a version run, and
 it is free.
 
@@ -406,28 +444,55 @@ implementation list and task 7's falsifier list are all derived from it; if any 
 with this table, this table is what is built. (Round 4 cited the spec for enumerating its own exits
 four incompatible ways — `writing-specs/exit-path-enumeration`.)
 
-| exit | name | conditions |
-|---|---|---|
-| `0` | falsification measured | every pinned row matches, closure holds, ratchet holding |
-| `1` | FALSIFICATION LOST | a pinned row no longer matches; the working-tree floor failed; a vacuity list grew |
-| `2` | HARNESS ERROR | a run emitted fewer than the full case count; the matrix names an id not in the suite; a duplicate id (§1); a malformed matrix row (§2); a column with no `P`; an extracted blob whose SHA is not its pinned SHA (§2) |
-| `3` | REVIEW NEEDED | the discriminating set is not the pinned set — an assertion started or stopped discriminating |
+| id | exit | name | condition |
+|---|---|---|---|
+| `E1a` | `1` | FALSIFICATION LOST | a pinned row no longer matches its recorded pattern |
+| `E1b` | `1` | FALSIFICATION LOST | the working-tree floor failed (§7) |
+| `E1c` | `1` | FALSIFICATION LOST | a vacuity list grew, **or** a pinned id stopped discriminating |
+| `E2a` | `2` | HARNESS ERROR | a run emitted other than the full case count |
+| `E2b` | `2` | HARNESS ERROR | the matrix names an id the suite does not emit |
+| `E2c` | `2` | HARNESS ERROR | an id is emitted twice in one run (§1), or a key is duplicated in `FLIP_MATRIX` |
+| `E2d` | `2` | HARNESS ERROR | a malformed matrix row — bad alphabet or wrong width (§2) |
+| `E2e` | `2` | HARNESS ERROR | a column with no `P` |
+| `E2f` | `2` | HARNESS ERROR | an extracted blob whose SHA is not its pinned SHA (§2), or any uncaught exception |
+| `E3a` | `3` | REVIEW NEEDED | a **new** id discriminates that the matrix does not pin |
+| — | `0` | falsification measured | none of the above |
 
-**Exactly six exit-2 conditions and one exit-3 condition.** `REVIEW NEEDED` gets its own code
-because it is not an error: the harness ran correctly and found a legitimate change that a human
-must classify. Collapsing it into `2` would make "someone added a discriminating test" and "the
-extraction is broken" indistinguishable to CI.
+**These ids are the reference.** Every other mention of an exit path in this spec — §1, §2, §3,
+§6, the Scenarios block and the task list — cites an id from this column and **never restates the
+number**. Round 4 cited `writing-specs/exit-path-enumeration` because the spec enumerated its exits
+four incompatible ways; round 5 cited it *again* because the table was fixed and three sites
+quoting it were not. Syncing seven copies failed twice. There is now one copy and a set of labels
+pointing at it.
+
+**`E1c` and `E3a` split the closure check by direction**, and the direction decides the severity:
+
+- `discriminating - pinned` — something new discriminates. Benign, expected on roughly one added
+  test in five, a human classifies it: **`E3a`, exit 3**.
+- `pinned - discriminating` — something pinned **stopped** discriminating. That is detection loss,
+  the thing this harness exists to catch: **`E1c`, exit 1**.
+
+Revision 4 filed both under one exit-3 condition. Round 5 measured the consequence: hollow out ord
+66 and its row goes `. . P P P` → `P P P P P`, an assertion that now detects *nothing*, reported
+under the calmest label in the table. The asymmetry is not cosmetic.
+
+**Eleven conditions: three exit-1, six exit-2, one exit-3, one exit-0.** `REVIEW NEEDED` keeps its
+own code because it is not an error — the harness ran correctly and found a legitimate change a
+human must classify; collapsing it into `2` would make "someone added a discriminating test" and
+"the extraction is broken" indistinguishable to CI. What it must **not** absorb is `E1c`.
 
 ```mermaid
 flowchart TD
-    A[every run emitted the full case count?] -->|no| E2["exit 2 — HARNESS ERROR<br/>a run died early; every check below is vacuously satisfied"]
+    A[every run emitted the full case count?] -->|no| E2["E2a — HARNESS ERROR<br/>a run did not finish; every check below is vacuously satisfied"]
     A -->|yes| B{blob SHAs, ids and row formats all valid?}
-    B -->|no| E["exit 2 — HARNESS ERROR<br/>bad blob, missing/duplicate id, malformed row, or empty column"]
-    B -->|yes| D{discriminating set == pinned set?}
-    D -->|no| E3["exit 3 — REVIEW NEEDED<br/>an assertion started or stopped discriminating"]
-    D -->|yes| C{every pinned row matches its pattern?}
+    B -->|no| E["E2b-f — HARNESS ERROR<br/>bad blob, missing/duplicate id, malformed row, or empty column"]
+    B -->|yes| G{any pinned id stopped discriminating?}
+    G -->|yes| L1["E1c — FALSIFICATION LOST<br/>a pinned assertion detects nothing now"]
+    G -->|no| D{any new id discriminates?}
+    D -->|yes| E3["E3a — REVIEW NEEDED<br/>a human classifies the new id"]
+    D -->|no| C{every pinned row matches its pattern?}
     C -->|yes| P["exit 0 — falsification measured"]
-    C -->|no| F["exit 1 — FALSIFICATION LOST<br/>the suite no longer detects this defect"]
+    C -->|no| F["E1a — FALSIFICATION LOST<br/>the suite no longer detects this defect"]
 ```
 
 An `ERROR` must never exit `0`. The current file returns a binary `0`/`1` (`falsify.py:120-121`),
@@ -440,10 +505,14 @@ harness error today is indistinguishable from a falsification loss. Exit `2` mus
 message, and Python then uses status `1`. Every exit-2 path in this section inherits that
 requirement.
 
-**Precedence, when a run trips more than one condition:** `2` beats `3` beats `1` beats `0`. A
-short run (`2`) is reported even if a row also mismatches (`1`), because a short run means the row
-comparison was not actually performed; an unpinned flip (`3`) is reported ahead of a row mismatch
-because the pinned set is the thing being compared against.
+**An uncaught exception must not exit `1` either.** `main()` is wrapped so any unhandled exception
+becomes `E2f` — a crashed harness is a harness error, and Python's default for an uncaught
+exception is status `1`, which reads as FALSIFICATION LOST.
+
+**Precedence, when a run trips more than one condition:** `2` beats `1` beats `3` beats `0`. A
+run that did not finish (`E2a`) is reported even if a row also mismatches, because the comparison
+was not actually performed. **`1` beats `3`** — detection loss outranks a benign new id; revision 4
+had `3` beating `1`, which is what filed the hollowed-out ord 66 under REVIEW NEEDED.
 
 ### 6. The vacuity ratchet
 
@@ -460,7 +529,10 @@ VACUOUS_AGAINST_ONE_LINE = [...]                                                
 
 - **Assertion:** the set passing against a stub must be a **subset** of that stub's list.
 - Shrinking is always allowed and needs no edit — fixing a test just works.
-- Growing fails the harness (exit `1`), so a newly-written vacuous assertion is caught first run.
+- Growing fails the harness (`E1c`), so a newly-written vacuous assertion is caught first run.
+- **Every listed id must still be emitted by the suite** (`listed ⊆ emitted`, else `E2b`). Without
+  it, an id can be retired from the suite, silently leave the ratchet, and be reused later by a new
+  vacuous assertion that the list already blesses.
 - Adding an id requires a deliberate edit, which is visible in review.
 
 **Two stubs, not one.** Silence is the weakest possible broken script. Measured: a stub printing a
@@ -609,96 +681,119 @@ if it rots again.
 
 ## Scenarios
 
+Every scenario carries the §5 condition id it exercises, and **§5's table is the authority** — a
+scenario asserting a code that disagrees with its id is a bug in this block, not in the table.
+Task 5 asserts the coverage mechanically: **every one of §5's eleven rows is named by at least one
+scenario, and every scenario names a row that exists.** A row with no scenario is an untested exit
+path; a scenario naming no row is the drift that got cited twice.
+
 ```gherkin
 Feature: falsification survives a growing suite
 
-  Scenario: adding a non-discriminating test does not break the harness
+  Scenario: adding a non-discriminating test does not break the harness   # exit 0
     Given every pinned row matches its recorded pattern
     When a test is added whose state is the same on all five versions
     And that test is not vacuous against either stub
     Then the harness exits 0
     And FLIP_MATRIX is not edited
 
-  Scenario: adding a discriminating test demands review
+  Scenario: a new id that discriminates is review, not error and not loss   # E3a
     Given every pinned row matches its recorded pattern
     When a test is added whose state differs across the five versions
-    Then the harness exits 2
-    And names the unpinned id as a change in what the suite can prove
+    Then the harness exits 3
+    And the exit code distinguishes it from a broken extraction
 
-  Scenario: a test that stops detecting its defect fails the harness
+  Scenario: a pinned id that stops discriminating is a loss, not review   # E1c
+    Given FLIP_MATRIX records "control-char-absent" as ". . P P P"
+    When that assertion is hollowed out so it passes on all five versions
+    Then the harness exits 1
+    And it is not reported as REVIEW NEEDED
+
+  Scenario: a test that stops detecting its defect fails the harness   # E1a
     Given FLIP_MATRIX records "esc-real-stripped" as failing on f0902ed
     When that assertion is weakened so it passes against f0902ed
     Then the harness exits 1
     And names both the id and the version
 
-  Scenario: an id that flips twice is pinned across its whole history
+  Scenario: an id that flips twice is pinned across its whole history   # E1a
     Given FLIP_MATRIX records "pwd-fallthrough" as "P P . P ."
     When the regression at e882659 is no longer detected
     Then the harness exits 1
     And the regression needs no direction to be declared anywhere
 
-  Scenario: the matrix naming a removed id is a harness error
+  Scenario: the working-tree floor must pass before anything is compared   # E1b
+    Given the working tree does not pass every case
+    Then the harness exits 1
+    And no historical version is run
+
+  Scenario: failing more than the matrix pins is not an error   # exit 0
+    Given FLIP_MATRIX pins 15 ids
+    When six non-discriminating cases also fail on f0902ed
+    Then the harness exits 0
+
+  Scenario: the matrix naming a removed id is a harness error   # E2b
     Given FLIP_MATRIX names "esc-real-stripped"
     When that assertion is deleted or its id changed
     Then the harness exits 2
     And does not report falsification measured
 
-  Scenario: failing more than the matrix pins is not an error
-    Given FLIP_MATRIX pins 15 ids
-    When six non-discriminating cases also fail on f0902ed
-    Then the harness exits 0
-
-  Scenario: a column with no passing entry is rejected
-    Given a version passes none of the pinned ids
+  Scenario: a duplicated matrix key is caught, not silently overwritten   # E2c
+    Given FLIP_MATRIX lists "esc-real-stripped" twice with different patterns
     Then the harness exits 2
+    And the matrix is parsed from pairs, not built as a dict literal
 
-  Scenario: a run that ends early is rejected
-    Given a version's run emits fewer than the full case count
-    When every pinned id that did emit matches its pattern
-    Then the harness exits 2
-    And does not report falsification measured
-
-  Scenario: a malformed matrix row is a harness error, not a lost test
+  Scenario: a malformed matrix row is a harness error, not a lost test   # E2d
     Given a FLIP_MATRIX row is typed with four states instead of five
     Then the harness exits 2
     And does not exit 1
 
-  Scenario: an extracted blob that is not its pinned SHA is refused
+  Scenario: a column with no passing entry is rejected   # E2e
+    Given a version passes none of the pinned ids
+    Then the harness exits 2
+
+  Scenario: an extracted blob that is not its pinned SHA is refused   # E2f
     Given extraction returns the commit object instead of the file blob
     When the content still begins with "#!"
     Then the harness exits 2
 
-  Scenario: an unpinned flip is review, not error and not loss
-    Given a test is added whose state differs across the five versions
-    Then the harness exits 3
-    And the exit code distinguishes it from a broken extraction
+  Scenario: a run that does not emit exactly the case count is rejected   # E2a
+    Given a run emits 30 results, or a forged script emits 102
+    When every pinned id that did emit matches its pattern
+    Then the harness exits 2
+    And does not report falsification measured
+
+  Scenario: the floor run cannot certify its own length   # E2a
+    Given the working-tree run is truncated at 30 all-passing results
+    When its tally line is absent
+    Then the harness exits 2
+    And the case count is not adopted from that run
 
 Feature: vacuity ratchet
 
-  Scenario: a newly vacuous assertion is caught
+  Scenario: a newly vacuous assertion is caught   # E1c
     Given each stub has its own list of currently-vacuous ids
     When a new assertion is added that passes against either stub
     Then the harness exits 1
     And names the new id
 
-  Scenario: fixing a vacuous assertion needs no harness edit
+  Scenario: a retired id cannot linger in a vacuity list   # E2b
+    Given a vacuity list names an id the suite no longer emits
+    Then the harness exits 2
+
+  Scenario: fixing a vacuous assertion needs no harness edit   # exit 0
     Given "esc-literal-inert" is in VACUOUS_AGAINST_SILENT
-    When it is rewritten so it fails against the stub
+    When it is rewritten so it fails against both stubs
     Then the harness exits 0
     And neither vacuity list is edited
-
-Feature: extraction safety
-
-  Scenario: a blob that is not the script is refused
-    Given a historical blob is extracted for a commit
-    When the content does not begin with "#!"
-    Then the harness exits 2
 ```
 
-The last scenario preserves existing behaviour and its reason: the `rtk` proxy rewrites
+**`E2f`'s blob scenario preserves existing behaviour and its reason.** The `rtk` proxy rewrites
 `git show <sha>:<path>` issued from the Bash tool to return the commit object rather than the file
 blob, which once made the harness score identical non-script text five times while appearing to
-work. Extraction stays in Python; the `#!` check stays.
+work. This is not folklore: writing the pinned SHAs into §2 reproduced it live — `git rev-parse
+<sha>:statusline-command.sh` from the Bash tool returned each **commit** SHA, and the five real
+blob SHAs had to be computed from Python. Extraction stays in Python; the `#!` check stays; the
+pinned-SHA check is what turns a silent substitution into `E2f`.
 
 ## Toolchain — pinned
 
@@ -742,16 +837,19 @@ exists to prevent.
 
 **Adding ids touches 91 call sites, not 68.** Measured: 45 `ok` and 46 `bad` calls, roughly 45 of
 them `if`/`else` pairs where the *same* id is typed twice — the classic setup for a copy-pasted
-duplicate or a swapped pair. The stated safety net ("a bad id won't resolve → exit 2") catches
+duplicate or a swapped pair. The stated safety net ("a bad id won't resolve → `E2b`") catches
 neither, and covers only the 15 ids pinned in the matrix. Two checks close it: **duplicate ids are
-exit 2** (§1), and **task 2 requires the two vacuity lists to be byte-identical before and after
+`E2c`** (§1), and **task 2 requires the two vacuity lists to be byte-identical before and after
 the id edits** — adding ids is purely additive, so any movement is a bug, and this catches a
 swapped `ok`/`bad` pair that "68/68 still green" cannot.
 
 ## Tasks
 
-- [ ] 1. Measure and record both stub baselines **before** any edit, by id — this is the reference
-      task 2 checks against. Construct each stub from §6's literal bytes, not from its description.
+- [ ] 1. Measure and record both stub baselines **before** any edit, **by ordinal** — ids do not
+      exist until task 2, so "by id" was unimplementable as revision 4 wrote it. Ordinals are valid
+      here for the reason §"How to reproduce" gives, and task 2 converts this baseline to ids as its
+      first step, before touching any call site. Construct each stub from §6's literal bytes, not
+      from its description.
 - [ ] 2. Add stable ids to all 91 call sites; `ok()`/`bad()` take the id first so a site cannot omit
       one. Loop sites use authored `id-suffix:value` pairs (§1). Then verify: ids unique, suite still
       68/68, and **both vacuity lists byte-identical to task 1's baseline** — ids are additive, so
@@ -766,23 +864,23 @@ swapped `ok`/`bad` pair that "68/68 still green" cannot.
       re-investigate it.)
 - [ ] 5. Replace `EXPECTED` with `FLIP_MATRIX`; implement the closure check (discriminating set ==
       pinned set), pattern matching per row, duplicate-id detection, the empty-column guard, the
-      full-case-count assertion **on every run**, the row-format contract, the pinned blob-SHA
-      check, and **all ten exit conditions in §5's table** (every exit-2 path raised as
-      `SystemExit(2)`, not a bare string — §5). Preserve the working-tree floor. **In the same commit, delete the
+      exact-case-count assertion **on every run**, the floor run's three independent integrity
+      signals, the row-format contract, the pinned blob-SHA check, and **all eleven conditions in
+      §5's table** (every exit-2 path raised as `SystemExit(2)`, not a bare string, and `main()`
+      wrapped so an uncaught exception becomes `E2f`). Also assert the Scenarios block's coverage:
+      every §5 row named by a scenario, every scenario naming a real row. Preserve the working-tree floor. **In the same commit, delete the
       five stale counts from the module docstring (`falsify.py:8-18`) including the "single source
       of truth" sentence** — leaving them is the defect this feature exists to remove, restated in
       the file that removes it.
 - [ ] 6. Implement the vacuity ratchet against **both** stubs; seed each list from task 1's
       measurement; compute and print §6b's per-transition vacuity fractions.
-- [ ] 7. Prove the harness can fail, **one falsifier per row of §5's table** — that table is the
-      enumeration, this list must match it exactly: weaken a pinned assertion so a row stops
-      matching (1); grow a vacuity list (1); break the working-tree floor (1); truncate any run (2);
-      rename a pinned id out of the suite (2); duplicate an id (2); type a row with four states (2);
-      empty a column (2); return the commit object instead of the blob (2); make a
-      non-discriminating assertion discriminate (3). A path with no demonstrated falsifier is not
-      implemented.
+- [ ] 7. Prove the harness can fail, **one falsifier per row of §5's table**, driven from the
+      table itself rather than from a list restated here — restating it is what recurred twice.
+      Iterate §5's rows, build the falsifier each row's Scenario describes, and assert the observed
+      `$?` equals that row's code. `E1c` needs both of its falsifiers (a grown vacuity list *and* a
+      hollowed-out pinned id). A row with no demonstrated falsifier is not implemented.
 - [ ] 8. Confirm the treadmill is gone: add a throwaway **non-discriminating** passing test, confirm
-      exit 0 with no harness edit. Then add a **discriminating** one and confirm exit 2 — the
+      exit 0 with no harness edit. Then add a **discriminating** one and confirm `E3a` — the
       closure check must demand review for exactly one of the two.
 - [ ] 9. Print coverage (15 of 68 load-bearing) alongside the verdict; document the PR-time run in
       the docstring and the script header.
