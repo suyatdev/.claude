@@ -655,3 +655,160 @@ is now the part that is wrong.
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+## Round 7 — 2026-08-10T01:58:16Z — **FAIL** (3 violations)
+
+- **Spec:** `docs/features/tracking-feature-state.md` (blob `ce97b6972cf226cac1f94136741c5b15b062a6a3`, 933 lines)
+- **Branch:** `feat/tracking-feature-state` @ `fe55b2d5052d85deb87283eab6c6545e17b56e40`
+- **Rule sources read:** `rules/core-conduct.md`, `rules/gates.md`, `CLAUDE.md`,
+  `skills/writing-specs/SKILL.md`, `skills/writing-secure-code/SKILL.md` (no `.claude/project-standards.md` in this repo)
+
+### Summary in plain language
+
+**Round 6's violation is fixed, and the class behind it is fixed too.** Criterion 13's pass condition
+is now set equality against two explicit path→status tables, `/tracker-data.js` → `404` sits in run
+(a)'s table where it belongs, and a correctly built server now passes. Set equality also closes the
+direction the old negative wording never covered. I rebuilt both tables from the real files and every
+row that is spelled out is right: the four `200`s, the two deliberate `404`s (`/tracker-data.js` in run
+(a), `/favicon.ico` in both) are the only `404`s, and run (b)'s two changes are correct — I confirmed
+`tracker-data-fallback.js:16` returns early when `window.TRACKER_DATA` is set, so
+`tracker-data.sample.js` genuinely drops out of the observed set. `writing-specs/good-bad-edge-cases`
+is **closed**.
+
+The bad news is that the same defect species surfaced one hop further out, and this time it is on the
+side of the closure the card has never examined: **not what the page requests, but what task 14's own
+vendoring work adds to the servable set, and what headers those responses need.** Three concrete gaps,
+all in the manifest the card insists is "an explicit list, not a grep":
+
+1. **Static assets have no `Content-Type`.** The card specifies `Content-Type: text/html` for `GET /`
+   and nothing at all for the six static rows. Chrome refuses to apply a stylesheet served with a
+   non-CSS MIME type, so criterion 13's own "with the UI rendering the sample" clause depends on a
+   header the contract never states. Everything else about these responses is pinned to the byte; this
+   is the one field missing.
+2. **The file that defines `window.__resources` is on no list.** §Security's vendoring mechanism says
+   "define that map before `support.js` loads", and I verified the hook works exactly as described
+   (`support.js:1149-1153`, `cdnScriptFor` reads `window.__resources[url]`). But the obvious
+   implementation — an inline `<script>` in `Task Tracker.dc.html` — is **forbidden by the card's own
+   CSP**: `script-src 'self' 'unsafe-eval'` carries no nonce and no `'unsafe-inline'`, so an inline
+   script is blocked. The map must therefore live in a separate served file, and that file appears
+   neither on the §Design 3 manifest nor in either criterion 13 table. It is not covered by the
+   *"(task 14's vendored assets)"* row either — it is a new first-party shim, the same species as
+   `tracker-data-fallback.js`, which the card lists as its own explicit row.
+3. **Task 14 stops one hop short on the Inter font.** For `@phosphor-icons` the card correctly says
+   "the icon font files they reference must come along, or the CSS resolves to nothing". For Google
+   Fonts it says only "rewrite the `@import`" — but that `@import` fetches a stylesheet from
+   `fonts.googleapis.com` whose `@font-face` rules point at `fonts.gstatic.com` woff2 files, so Inter
+   is a **two**-hop asset where phosphor is one. Rewriting only the `@import` leaves the page still
+   fetching fonts from a third-party host, failing criterion 13's "no request goes to a host other
+   than `127.0.0.1`". This is verbatim the failure the card documents at lines 278-284: *"One hop was
+   followed, the next was not."*
+
+None of the three is silent — criterion 13 catches all of them, which is the design working. But they
+are unbuildable-as-written instructions handed to task 14, and the card's standard is that the
+implementer has nothing left to guess at.
+
+**Second finding: the card now contradicts an ADR it defers to.** §Security:478-480 says the
+parent-death check runs "on the same timer that drives the idle check". ADR 0024:38-41 says it "gets
+its own interval **rather than riding the 30-minute idle timer**" — and explicitly records that "on the
+idle timer" was a first-draft error it corrected. Rounds 5 and 6 both noted this as a reconcilable
+wording split and did not cite it. Having now read the ADR, it is not reconcilable: the ADR names that
+exact phrasing as a bug it fixed, and the card kept it. The card says at lines 123-125 that the ADRs
+hold the *why* and the card holds the *what*; here the two *whats* disagree, and the card's own next
+paragraph warns that the 30-minute reading "would have made the worst case half an hour of an orphaned
+full-permission control channel". The card contains both the error and the warning against it, six
+lines apart. **Cited this round** — this is the card's signature defect (a fact corrected in one copy
+and not the other), and it has now survived two rounds as a note.
+
+**Third finding: the bind boundary has no error behaviour.** Every other boundary in this card is
+exhaustive — eleven wire-error rows, five analyzer-failure rows, a `cmux send` timeout, a store-write
+failure. The first boundary the server crosses, `bind()`, has none. Port 8422 already in use is not
+exotic here: `core-conduct`'s parallel-agent invariants state that multiple sessions run concurrently
+in worktrees, and two sessions each running the skill collide on a fixed port. The failure is also
+confusing rather than clean — the second launch dies while the user's browser still reaches the *first*
+server on `http://127.0.0.1:8422/`, holding a different in-memory token, so the UI loads and every
+button `403`s with the card's deliberately uninformative collapsed error.
+
+**On the card's size, which I was asked to judge directly: no rule is breached, and I am not citing
+it.** `rules/gates.md` makes a single `docs/features/<name>.md` the default and makes the `.spec.md`
+split a MAY; `core-conduct`'s 400/800 limit sits under **Code Style** and governs code files. But the
+trend is real — 933 lines, up from 901, 851 and 813, growing every round — and roughly 110-120 lines
+(~12%) is now forensic narrative about earlier judge rounds rather than buildable requirement:
+lines 18-29, 240-254, 270-289, part of 503-517, 627-630, 644-653, 676-685, 905-912, and the 20-line
+§Revision history at 914-933 that exists to explain why an 86-line narrative was deleted.
+`writing-specs` pulls both ways here — it calls the human review gate "the whole point" and warns that
+"bloat degrades reasoning" — and the card's defence (warnings belong beside the thing that would
+produce the error again) is genuinely sound for the two `grep`-scope corrections and the
+`rename-tab`-vs-`send` distinction. It is much weaker for §Revision history, which narrates a deletion,
+and for the round-by-round histories now duplicated in the verdict files the card itself points at.
+Recommendation: trim §Revision history to two sentences and cut the round-attribution prose from
+criterion 13 and §Design 3, keeping the substantive warnings. That is ~60 lines with no loss of
+buildable content.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | Database schemas and API contracts — give the agent the real interface boundaries instead of letting it improvise shapes | §Design 3 "Wire contract" static manifest (card:256-291), criterion 13 runs (a)/(b) (card:655-685), task 14 (card:796-816), against the CSP at card:208 | The static-serving contract is incomplete in three ways that criterion 13's set equality cannot be run against: no `Content-Type` is specified for any static asset (only for `GET /`), though the criterion asserts the UI renders; the file that must define `window.__resources` is absent from the manifest and both expected sets, and the card's own CSP (`script-src 'self' 'unsafe-eval'`, no nonce) forbids the inline alternative; and task 14 names the phosphor font files as required but omits the equivalent second hop for Inter, whose Google Fonts stylesheet resolves to `fonts.gstatic.com` woff2 files. |
+| 2 | `writing-specs/ambiguous-requirement` | `skills/writing-specs/SKILL.md` | Maintain the spec with production rigor; drift causes hallucination — a requirement must not be readable two ways | §Security, bounded-lifetime bullet (card:478-480) vs. `docs/decisions/0024-the-control-server-must-be-accountable.md:38-41` | The card says the parent-death check runs "on the same timer that drives the idle check" while ADR 0024 — which the card names as authoritative for this decision — says it "gets its own interval rather than riding the 30-minute idle timer" and records that exact phrasing as a first-draft error it corrected, so the two authoritative documents now disagree on the control's tick length. |
+| 3 | `core-conduct/explicit-error-handling` | `rules/core-conduct.md` | Handle errors explicitly, never swallow them; validate all input at system boundaries | §Security bind bullet (card:446), port allocation (card:544), task 8 (card:732-741) | The server's first boundary has no stated failure behaviour for a port already in use, which `core-conduct`'s parallel-agent invariants make a normal case on a fixed port, and the resulting state is misleading rather than clean — the second launch dies while the browser still reaches the first server holding a different in-memory token, so every button returns the deliberately collapsed `403`. |
+
+**`writing-specs/api-contracts` is a recurrence of the class closed at round 5** (cited rounds 1-4 for
+the manifest being a `grep` rather than a table). The table fixed *how* the manifest is derived; this
+round finds the table itself short three entries and one field. **`core-conduct/explicit-error-handling`
+was cited at round 5 and closed at round 6** in a different territory (`500 asset_unreadable`); this is
+a new instance of the same rule, not the old one reopened.
+
+### Notes
+
+- **Round 6's violation is closed and so is its class.** Set equality is the right instrument and both
+  tables are correct as far as they are enumerated. Verified by hand: `Task Tracker.dc.html` lines
+  6, 11, 12, 15, 16 are the five parser-inserted requests; `tracker-data-fallback.js:19` is the sixth
+  via `document.write`, gated by the early return at line 16.
+- **The `_ds/` two-file enumeration is still correct**, and the three excluded files really are
+  unrequested — `find _ds -type f` returns exactly five: `styles.css` and `_ds_bundle.js` (both on the
+  manifest) plus `_ds_manifest.json`, `_adherence.oxlintrc.json` and `readme.md` (correctly off it).
+  `nocturne.css`'s exclusion remains correct: only the unserved Directions file loads it.
+  `_ds_bundle.js` contains no `url(`, no `http`, no `fetch` — it adds no further requests.
+- **Defining `window.__resources` has a side effect the card does not mention.** `support.js:158-163`
+  issues a second `GET /` (`fetch(location.href)`, a template refresh) **only when
+  `window.__resources` is falsy**. So task 14 suppresses it, which is what makes round 6's "out of
+  scope" call correct — after task 14 there is exactly one `GET /`, matching criterion 13's tables. But
+  the card presents the `__resources` hook as resolving scripts "with no edit to vendored code" and
+  does not note that it also disables a runtime behaviour. Benign; worth one clause.
+- **`base-uri`/`form-action` — downgrading this from a standing note to closed-as-low-value.** I
+  checked the actual attack surface: `grep -c '<form'` on the served page is **0**, so `form-action`
+  guards nothing, and a `<base>`-tag redirect would send relative fetches to a foreign origin where
+  `default-src`/`script-src 'self'` already blocks them. Two tokens of defence-in-depth, not a gap.
+- **Static-error body shape (standing note) will be resolved by violation 1.** The
+  `{"ok": false, "error": "<code>"}` envelope is introduced under `POST /command` but the `404`/`405`/
+  `500` rows govern static `GET`s too, so a browser receives JSON for `/favicon.ico`. Harmless, and
+  specifying `Content-Type` per response class closes the ambiguity in the same edit.
+- **CSP vs. the vendored page's inline attributes — unverified, and I am not claiming either way.**
+  `Task Tracker.dc.html` carries one `<script type="text/x-dc">` data block (line 297) and many
+  `onClick="{{ … }}"` content attributes. The data block is a non-executable script type, so CSP does
+  not gate it. The `onClick` attributes are template syntax the DS runtime consumes, but the browser
+  parses them as inline event handlers, which `script-src` without `'unsafe-inline'` refuses to run;
+  whether Chrome compiles them before the runtime replaces the `<x-dc>` subtree I did not test.
+  Criterion 13's "the UI renders" clause is what would catch it — recommend the operator reads the
+  console during that run, not only the request list.
+- **The `405` row is readable two ways** (card:323): "Any method other than `GET` on `/` or on a
+  static-closure path, or `POST`/`OPTIONS` on `/command`" can parse as `405`-ing the only working
+  route. Criterion 12 and card:334 resolve it unambiguously, so not cited — but it is a five-word fix.
+- **`_ds/nocturne-<uuid>/` is never expanded in the card.** The real value is
+  `73641b21-c7ad-488a-8264-a28262dfe83e`; the "explicit list" therefore still needs one `ls`. Consistent
+  with the card's derivations discipline, so acceptable.
+- **Claims re-verified against source this round, all exact:** the six remote assets across nine
+  reference sites (react 1, react-dom 1, babel 1, phosphor regular 2, phosphor fill 2, Google Fonts 2)
+  ✓; `new Function` in `support.js` is exactly **2** ✓; `REACT_URL`/`REACT_DOM_URL`/`BABEL_URL` at
+  `support.js:1143/1145/1147` each carry a `sha384` SRI ✓; `cdnScriptFor` behaves as described (and
+  drops `integrity` when a local `src` is substituted, which is correct) ✓; ADRs 0022, 0023, 0024 all
+  exist ✓; `analyze.py` is **792** lines ✓.
+- **`analyze.py` at 792 lines has eight lines of headroom** under `core-conduct`'s 800 hard max, and
+  both tasks that write it (3 and 5) are complete, so that is its final size. The card's posture —
+  split named (`git_facts.py`), explicitly not scheduled, human-owned — is correct and not a violation.
+  But "raise it if the file grows again" has effectively already fired: the next edit breaches the cap.
+- **Gherkin shape**, seventh round running: several criteria fold `When` into `Given`. Still not cited.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.

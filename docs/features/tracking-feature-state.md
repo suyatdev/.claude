@@ -407,23 +407,66 @@ route is decided and re-running it is wasted work.**
 
 Two constraints ride along, both load-bearing for task 8:
 
-- **A stale ref may not error.** `cmux.sh` documents the resolution chain
-  `--tab` → `--surface` → `$CMUX_TAB_ID`/`$CMUX_SURFACE_ID` → **the focused tab**, with an
-  unresolvable ref falling through it *without erroring* — probe P6, proven live against
-  `surface:9999` at exit 0. ⚠️ That comment documents **`rename-tab`, not `send`.** `send` takes the
-  same `--surface` flag and very likely shares the chain, but no probe has shown that it does.
-  Task 8 must therefore (a) verify empirically whether `send` inherits the fall-through, and
-  (b) re-resolve and confirm the target surface at send time and **refuse** an unconfirmed ref
-  regardless of the answer. Keystrokes landing in the focused tab is the worst failure this feature
-  can have.
+- **A stale ref errors — `send` does *not* inherit `rename-tab`'s fall-through.** Probed live
+  2026-08-09 against `cmux 0.64.20 (100) [14e3400b9]` (`cmux --version`); re-run with
+  `cmux send --surface surface:9999 -- "<marker>"` and read the exit code. `send` returns
+  `Error: not_found: Surface not found for the given surface_id` at **exit 1**, and the payload is
+  delivered nowhere — confirmed by reading every live surface for the marker afterwards, not by
+  trusting the exit code. `cmux.sh`'s resolution-chain comment (`--tab` → `--surface` →
+  `$CMUX_TAB_ID`/`$CMUX_SURFACE_ID` → the focused tab, falling through *without* erroring at exit 0)
+  documents **`rename-tab`, and it does not generalise to `send`.** The two verbs share a flag, not a
+  resolver. The fear this bullet previously carried — an unresolvable ref silently reaching the
+  focused tab — is **not a `send` failure mode**, and no design here needs to defend against it.
+
+  ⚠️ **The real hazard is the opposite one, and it is worse: a ref that *does* resolve, to the wrong
+  session.** During this probe a send targeted at a surface believed to be the operator's own session
+  was delivered to a **different live Claude session** in the same workspace, at exit 0, with `OK` on
+  stdout. The ref resolved; the destination was wrong. Nothing in the return value distinguished the
+  two, because a successful `send` reports *delivery*, never *destination*.
+
+  So the send-time check may not be an existence check. **Re-resolution proving the ref resolves is
+  worthless here — it is exactly what succeeded in the failure above.** Confirmation must be
+  **identity-based**: read the target surface and verify it is the intended session before sending,
+  and refuse otherwise. Criterion 9 remains correct as written (refuse on the near side of the
+  socket) but is now defence in depth rather than the primary control.
+
+- **`send` rejects a non-terminal surface, so the target's *type* is part of the contract.** cmux
+  surfaces come in kinds (`cmux tree --id-format both`); a Claude session may run either in a
+  `[terminal]` surface (the `claude` CLI in a shell — the shape this feature targets) or in a native
+  `agent-session` surface. Against the latter both `send` and `read-screen` fail with
+  `Error: invalid_params: Surface is not a terminal` at exit 1 — probed 2026-08-09,
+  reproduce with `cmux new-surface --type agent-session --provider claude` then `cmux send` at it.
+  A clean refusal, not a mis-delivery, so it is a usability boundary rather than a safety one; but
+  the control channel simply does not exist for an agent-session target, and §Design 4's skill must
+  say so rather than letting the operator discover it as an unexplained failure.
+
+- **`surface:N` refs are monotonically allocated and never reused**, so a stale ref cannot silently
+  come to mean a *different* surface. Observed 2026-08-09: creating and closing scratch surfaces
+  consumed `surface:203` and `surface:205`, and neither number was reissued; every live ref maps 1:1
+  to a stable UUID in `cmux tree --id-format both`. This is what makes the identity-based
+  confirmation above implementable — the ref is a durable name, and the failure it must catch is a
+  *wrong* name, not a recycled one.
+
+- **`$CMUX_SURFACE_ID` is inherited, and §Security launches the server as a non-detached child.**
+  A `cmux send` with no `--surface` therefore defaults to **the launching session's own surface**.
+  Task 8 must pass `--surface` explicitly on every invocation; an omitted flag does not fail, it
+  types into the session that started the server.
 - **The rejected routes stay rejected.** `TMUX` is unset here (`TERM_PROGRAM=ghostty`), so
   `tmux send-keys` is not available; and `panes/handoff-wrapper.sh`
   (`grep -n 'pre-typed keystroke' panes/handoff-wrapper.sh`) records that the handoff spec
   deliberately rejected "pre-typed keystroke tricks", so osascript keystroke injection would reverse a
   prior decision rather than extend one. `cmux send` is the one sanctioned route.
 
-Still genuinely unproven, and worth 15 seconds on a scratch surface before task 8 starts: every proven
-use of `cmux send` targets a **shell prompt**. None targets a live Claude TUI.
+**`cmux send` into a live Claude TUI is now proven, and it was the last open question here.** Probed
+2026-08-09: an inert marker sent with no trailing newline to a running Claude TUI in a `[terminal]`
+surface appeared in that session's composer, at exit 0, and was not submitted. Reproduce with
+`cmux send --surface <ref> -- "<marker>"` followed by `cmux read-screen --surface <ref> --lines 12`.
+
+⚠️ **Read that back with a window large enough to contain the composer.** The first verification of
+this probe used `--lines 4`, concluded the composer had been cleared, and was wrong — the text sat on
+line 6. `send-key ctrl+u` returned exit 0 without clearing anything, so *the operation succeeding was
+mistaken for the claim being true*. Both the send and the cleanup need a read-back sized to the thing
+being checked; `--lines 12` covers the composer on this host.
 
 **Clipboard is a supported runtime mode, not a fallback.** `panes/terminal-detect.sh` prints `none`
 under SSH or headless (`grep -n 'echo none' panes/terminal-detect.sh`), where no injection route
@@ -706,9 +749,12 @@ and nothing above would notice.
 
 ## Tasks
 
-- [x] 1 — **Spike — done, do not re-run.** Route is `cmux send --surface`; see §"Injection route" for
-      the evidence, the two constraints it carries, and the one probe still outstanding (`send` into a
-      live Claude TUI, owed before task 8).
+- [x] 1 — **Spike — fully done, do not re-run.** Route is `cmux send --surface`. All four probes ran
+      2026-08-09 and **nothing is outstanding**; §Verification tabulates the results and
+      §"Injection route" carries each finding beside its reproducing command. Two of them change the
+      design rather than confirming it: `send` errors on an unresolvable ref (so the fall-through
+      fear does not apply to this verb), and a resolvable-but-wrong ref delivers at exit 0 (so the
+      send-time check must confirm **identity**, not existence).
 - [x] 2 — Vendor the UI: copy the Nocturne export to `task-tracker/`, preserving `_ds/`. Verify the
       copied `Task Tracker.dc.html` opens and renders from the bundled `tracker-data.js`.
 - [x] 3 — `task-tracker/analyze.py`: features + branches only, importing `hooks/lib/feature_tasks.py`.
@@ -737,8 +783,12 @@ and nothing above would notice.
       `Cache-Control: no-store` and the `Content-Security-Policy` on `GET /`**, the 30-minute idle
       timeout **and the 5-second parent-death poll that makes "exits with the session" real**, the
       **audit log** (`reason=` carries the internal cause; the wire keeps the collapsed `403`), and
-      send-time surface re-resolution. Route is settled (task 1); run the outstanding Claude-TUI probe
-      first. Python 3.9 — see §Toolchain before writing any annotation.
+      send-time surface **identity confirmation** — read the target surface and verify it is the
+      intended session, **not** merely that the ref resolves; task 1's fourth probe delivered to the
+      wrong live Claude session with a ref that resolved fine. Always pass `--surface` explicitly:
+      the server inherits `$CMUX_SURFACE_ID` from the session that launched it, so an omitted flag
+      types into that session rather than failing. Route is settled and every probe is closed
+      (task 1) — do not re-run them. Python 3.9 — see §Toolchain before writing any annotation.
       - This file carries bind + token + static serving + allowlist + header check + surface
         re-resolution + subprocess, and will land near the 400-line target. If it crosses, the split
         is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
@@ -764,9 +814,13 @@ and nothing above would notice.
         the binary rather than typing into a real session.
         ⚠️ **The fake proves the server's decision, never that keystrokes arrive** — and writing it
         without saying so moves the live path from *visibly* untested to *apparently* tested, which is
-        worse than where it started. The `cmux send` → live **Claude TUI** probe (task 1, still owed)
-        is the only thing that closes that gap, and criterion 12 passing must never be read as having
-        closed it. Run the probe before this task, and record it in §Verification.
+        worse than where it started. Task 1's probe closed the *transport* half of that gap
+        (`send` does reach a live Claude TUI composer — §Verification), so this task no longer waits
+        on it. What the fake still cannot prove is the half task 1 also exposed: that the keystrokes
+        reached the **intended** session. A fake binary records the ref it was handed; it cannot tell
+        a right ref from a resolvable wrong one. Assert the identity confirmation itself — that the
+        server read the target surface and refused a surface whose identity did not match — rather
+        than treating a `200` plus an invocation as proof of correct delivery.
       - Criterion 14 needs short `TASK_TRACKER_POLL_SECS`/`TASK_TRACKER_IDLE_SECS` overrides and a
         real parent exit; a mocked `getppid()` proves the branch compiles, not that the server dies.
 - [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
@@ -878,9 +932,23 @@ if `send` behaves differently.
 
 ## Verification
 
-**Task 1 — injection route.** Resolved: `cmux send --surface`, evidence in §"Injection route". One
-probe remains outstanding and is owed before task 8 opens: `cmux send` into a live **Claude TUI**, as
-every proven use to date targets a shell prompt.
+**Task 1 — injection route. Closed 2026-08-09; nothing is outstanding.** Route is
+`cmux send --surface`. All four probes ran live against `cmux 0.64.20 (100) [14e3400b9]`; each
+reproducing command is in §"Injection route" beside the finding it produced.
+
+| Probe | Result | Bearing on the design |
+|---|---|---|
+| `send` into a live Claude TUI (terminal surface), no newline | Delivered to the composer, exit 0, not submitted | The control channel works. This was the premise five rounds of spec work sat on top of |
+| `send` at an unresolvable ref (`surface:9999`) | `not_found`, **exit 1**, delivered nowhere | `send` does **not** inherit `rename-tab`'s silent fall-through — the card's central fear does not apply to this verb |
+| `send` at an `agent-session` surface | `invalid_params: Surface is not a terminal`, exit 1 | Clean refusal; the channel exists only for a Claude TUI in a `[terminal]` surface |
+| `send` at a ref that resolved to the **wrong live Claude session** | Delivered, exit 0, `OK` on stdout | The actual hazard. A successful send reports delivery, never destination — so the send-time check must confirm *identity*, not existence |
+
+The fourth row was not a designed probe; it happened, to a parallel session, because the operator's
+own surface was inferred from `cmux tree`'s `[focused]`/`[selected]` markers while `cmux identify`
+returned `surface_ref: null`. Nothing was submitted (no newline) and the composer was restored. It is
+recorded here rather than tidied away because it is the only direct evidence this repo has of the
+failure the whole §Security section exists to prevent, and it says something no reasoning had: the
+mis-delivery is indistinguishable from success at the call site.
 
 **Tasks 2–6 suites.** Run the pinned invocation above. It reported **53 passed** on 2026-08-09; that
 number is a measurement with a date, not a contract — re-run it rather than trusting it. There is no
