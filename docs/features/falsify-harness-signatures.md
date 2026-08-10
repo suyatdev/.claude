@@ -42,7 +42,16 @@ the only mechanism that catches that class directly, and it was broken throughou
 
 ### Defect 1 — pass counts go stale by design
 
-`EXPECTED` maps each historical commit to an exact **pass count** (`falsify.py:44-57`). A count is
+The stale counts live in **two** places, and both must go in the same change. `EXPECTED` maps each
+historical commit to an exact **pass count** (`falsify.py:44-57`) — and the module docstring
+(`falsify.py:8-18`) repeats all five in their original `n/20` form under the heading "Expected, and
+asserted below", closing with *"These are the single source of truth alongside EXPECTED below; if
+the two ever disagree, EXPECTED is what runs."* Those five lines are already wrong (the suite holds
+68 cases, not 20) and they declare themselves authoritative. A build that rewrites only `EXPECTED`
+leaves a file whose purpose is to delete stale counts still asserting five of them in its own
+docstring. Task 5 deletes the block; §9's docstring edit is additive and does not cover it.
+
+A count is
 a fact about **how many tests exist**, not about the defect. The numbers were written at 20 cases;
 the suite held 50 before PR #43 and 68 after. Measured against the 50-case suite:
 
@@ -367,15 +376,28 @@ flowchart TD
 An `ERROR` must never exit `0`. The current file returns a binary `0`/`1` (`falsify.py:120-121`),
 so a third outcome added without its own code would read as green to whatever runs it.
 
+**`raise SystemExit("<message>")` exits `1`, not `2`.** Both existing error paths use it —
+`falsify.py:82` (suite produced no tally) and `falsify.py:68-72` (blob is not a script) — so every
+harness error today is indistinguishable from a falsification loss. Exit `2` must be raised as
+`SystemExit(2)` with the message printed to `stderr` separately; a bare string argument is the
+message, and Python then uses status `1`. Every exit-2 path in this section inherits that
+requirement.
+
+**Precedence, when a run trips more than one condition:** the highest code wins — a short run (`2`)
+is reported even if a row also mismatches (`1`), because a short run means the row comparison was
+not actually performed.
+
 ### 6. The vacuity ratchet
 
 The harness additionally runs the suite against a **stub**: a script that is executable, exits
 `0`, and writes nothing to stdout. It records **by id** which assertions still pass.
 
 ```python
-# Assertions satisfied by a script that produces no output. This list may only
-# ever SHRINK. Each entry is a test that cannot fail for the reason it claims.
-KNOWN_VACUOUS = ["esc-literal-inert", "pwd-fallthrough-stripped", ...]
+# Assertions satisfied by a script that produces no output. Each list may only
+# ever SHRINK. Every entry is a test that cannot fail for the reason it claims.
+#   One list per stub -- both are named, neither is "the" vacuity list.
+VACUOUS_AGAINST_SILENT   = ["esc-literal-inert", "pwd-fallthrough-stripped", ...]   # seeded at 24
+VACUOUS_AGAINST_ONE_LINE = [...]                                                    # seeded at 31
 ```
 
 - **Assertion:** the set passing against a stub must be a **subset** of that stub's list.
@@ -558,16 +580,16 @@ Feature: falsification survives a growing suite
 Feature: vacuity ratchet
 
   Scenario: a newly vacuous assertion is caught
-    Given KNOWN_VACUOUS holds the currently-vacuous ids for each stub
+    Given each stub has its own list of currently-vacuous ids
     When a new assertion is added that passes against either stub
     Then the harness exits 1
     And names the new id
 
   Scenario: fixing a vacuous assertion needs no harness edit
-    Given "esc-literal-inert" is in KNOWN_VACUOUS
+    Given "esc-literal-inert" is in VACUOUS_AGAINST_SILENT
     When it is rewritten so it fails against the stub
     Then the harness exits 0
-    And KNOWN_VACUOUS is not edited
+    And neither vacuity list is edited
 
 Feature: extraction safety
 
@@ -637,8 +659,11 @@ swapped `ok`/`bad` pair that "68/68 still green" cannot.
       re-investigate it.)
 - [ ] 5. Replace `EXPECTED` with `FLIP_MATRIX`; implement the closure check (discriminating set ==
       pinned set), pattern matching per row, duplicate-id detection, the empty-column guard, the
-      full-case-count assertion **on every run**, and the four exit paths. Preserve the working-tree
-      floor.
+      full-case-count assertion **on every run**, and the four exit paths (each as `SystemExit(2)`,
+      not a bare string — §5). Preserve the working-tree floor. **In the same commit, delete the
+      five stale counts from the module docstring (`falsify.py:8-18`) including the "single source
+      of truth" sentence** — leaving them is the defect this feature exists to remove, restated in
+      the file that removes it.
 - [ ] 6. Implement the vacuity ratchet against **both** stubs; seed each list from task 1's
       measurement; compute and print §6b's per-transition vacuity fractions.
 - [ ] 7. Prove the harness can fail, one falsifier per path: weaken a pinned assertion so a row
