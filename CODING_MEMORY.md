@@ -5783,3 +5783,54 @@ spec revision during implementation still forces re-entry at round 1.
 
 **Next step:** the `confirm_timeout` split in `confirm_surface()` (`task-tracker/server.py`), as its
 own commit before any task-9 test, then tasks 9-13.
+
+### Session 70, continued — the re-run I argued against found a defect three cycles had missed
+
+**The user overrode my judgment and was right.** I recorded "the compliance judge was not re-run,
+and the reasoning holds" as a considered call. The user said re-run it. Round 1 came back **FAIL**.
+
+**`writing-specs/derivation-scope-mismatch`.** The `.md` preamble asserted every other `planning`
+card carries `branch: none`, citing `grep -m1 '^phase:\|^branch:' docs/features/*.md`. Run verbatim
+that emits 14 lines, every one a `phase:` line: `-m1` stops at the first match per file and `phase:`
+sorts above `branch:` in every card, so it can never reach a branch value. **The claim was true and
+the citation was inert** — and it had survived both prior cycles, including a PASS.
+
+**The part worth keeping: I had "verified" that same claim ninety minutes earlier.** I ran a per-file
+loop of my own, saw `branch: none, ticked=0`, and wrote "claim holds". I confirmed the *fact* and
+never ran the *citation*. Confirming a conclusion is not testing the evidence, and the two feel
+identical from the inside.
+
+**Round 2 FAIL — same id, one clause over.** The fix corrected the `branch: none` half; the same
+sentence also claimed "and zero ticked tasks", which neither replacement command counts. Two
+consecutive rounds on one id is the escalation tripwire, so it went to the user rather than a round 4.
+History checked before escalating, because the judge said the clause was new: `df72753` carried it,
+`15cc372` (my gate rewrite) dropped it, `22cae86` (my fix) **reintroduced** it. New relative to its
+parent — the judge's characterization was right and my hypothesis was wrong.
+
+**User's decision: delete the unbacked claim, don't add a command to back it.** Same move as
+`c4c3349`. Deleting also shrank a paragraph both judges had flagged as accreting.
+
+**Verifying that fix turned up a second hazard in the fix itself.** The two field-scoped greps were
+cited to be "read together" — but grep's file ordering is **not stable between two runs of the same
+command** (`git-guard-chained-command` and `falsifier-base-pin` swap places). Any positional pairing
+of the two outputs is wrong. Both judges independently reproduced it; the observability read ran it
+five times and saw the order change twice. Replaced with one `head -5 docs/features/*.md`: stable,
+filename-headed, nothing to mis-pair. Verified `branch:` sits within the first five lines of all 14
+cards — and that this goes silently blind if a card ever gains two keys ahead of `branch:`
+(`verification-marker-gate.md` already carries an extra `revision:`). Recorded as known fragility.
+
+**And my own check was blind, in the same shape.** Verifying the fix I wrote `grep -B3 'phase: planning'`
+to show the planning cards' branch values. `branch:` comes *after* `phase:`, so a "before" filter
+could never show one. It printed clean-looking output and proved nothing — the exact defect being
+fixed, committed by the person fixing it, inside the verification step.
+
+**Round 3: PASS, zero violations**, `derivation-scope-mismatch` closed at `88d524a`. The judge ran
+every command rather than reading them, and independently reproduced the ordering instability.
+Paragraph 13 → 11 lines; `.md` half 220 → 218 — the first round it moved the right way.
+
+**Standing, from the user, third time of asking:** explain in plain English **in every session**, and
+the rule binds hardest on `AskUserQuestion` text, not the prose around it. Recorded in
+`feedback_plain_english_includes_the_question`.
+
+**State:** `phase: planning`, `model_tier: high`, HEAD `88d524a`. Reopening implementation takes a
+fresh `gate confirmed` plus its own model-switch checkpoint. Task order unchanged.

@@ -2177,3 +2177,223 @@ self-evidently correct.
 - Security territory (`writing-secure-code`) not re-audited line-by-line this round: `server.py` and
   the rest of `task-tracker/` did not change (confirmed via the diff-stat above), and round 2 of the
   first cycle already did a full source-level read.
+
+## Round 2 — 2026-08-11T22:10:21Z — **FAIL** (1 violation — recurrence, escalate)
+
+### Plain-English summary
+
+The fix in `22cae86` does repair the specific thing round 1 broke. I ran both new commands
+(`grep -m1 '^phase:' docs/features/*.md` and `grep -m1 '^branch:' docs/features/*.md`) myself: the
+first isolates the three `planning` cards, the second now genuinely prints a `branch:` value per file
+— unlike the old single-pattern `-m1`, which I re-ran too and confirmed still returns only `phase:`
+lines. I also checked the stated reason for not simply dropping `-m1`: without it,
+`grep -n '^branch:' docs/features/falsifier-base-pin.md` really does pick up a body line at 144
+("`branch:` `git-guard.sh`, ..."), so keeping `-m1` per field is the correct call, not a stylistic
+choice. The phase-coupling defect is also genuinely gone — the new paragraph never states the card's
+current phase, points the reader at the frontmatter instead, and that framing can't go stale at the
+next transition the way the old narrated version did twice.
+
+But the same sentence that got fixed also grew a new, uncited half. It now reads "every other
+`planning` card in this repo carries `branch: none` **and zero ticked tasks**; re-derive that with
+two commands" — and then names exactly the two commands above, neither of which touches a checklist.
+I ran `grep -c '^\s*-\s\[[xX]\]' docs/features/falsify-harness-signatures.md
+docs/features/verification-marker-gate.md` myself: both are `0`, so the claim is true. But a reader
+who does exactly what the sentence tells them to do — run the two named commands — gets zero evidence
+for the "zero ticked tasks" conjunct, the same way round 1's reader got zero evidence for `branch:`
+from the old single grep. This is not carried-over debt: "and zero ticked tasks" is new text this
+commit added (round 1's flagged version didn't claim it), most likely lifted from round 1's own
+verdict, which had independently checked ticked-task counts as part of its own verification — but
+that check never made it into a citation, only into the prose.
+
+Per the dispatch's own tripwire: this is `writing-specs/derivation-scope-mismatch`, in the same
+paragraph, on the same sentence, in two consecutive rounds. That is a real recurrence, not a
+relabeling of the closed part of round 1's finding — the `branch: none` half is genuinely fixed; the
+new `zero ticked tasks` half is the same species of defect, freshly introduced by the fix itself.
+Per the escalation rule this goes to the user rather than into a round 3.
+
+### What else I checked in this commit (`22cae86`, `.md`-only, confirmed via `git show --stat`)
+
+- **Frontmatter vs. reality:** `phase: planning`, `branch: feat/tracking-feature-state`,
+  `model_tier: high` — consistent with the documented convention paragraph directly below it (a
+  mid-implementation spec revision returns to `planning`, keeps its real branch), and consistent
+  with the phase gate itself: the fix this commit makes *is* a spec edit, which `implementation`
+  forbids, so `planning` is the only phase that permits this commit to exist. No mismatch.
+- **The dropped sentence** ("`phase-guard.sh` correctly blocks writes to source" while paused): this
+  was accurate (round 1 of the first cycle independently verified it against `phase-guard.sh:340-553`
+  and it hasn't changed since), and it duplicated content already stated precisely in `rules/gates.md`
+  ("denies writes to source while an un-superseded `planning` feature file exists..."). Removing a
+  true-but-duplicated sentence to stop the paragraph accreting layers is the right call, not a loss —
+  no violation, and I'd have flagged it as a miss if it had stayed.
+- **Line growth (9 → 12 lines):** re-counted directly off `git diff 15cc372 22cae86`. Most of the
+  growth is earned — the two-command split necessarily costs more than one line, and the new
+  "Read `phase:` above..." sentence is what actually closes the phase-narration defect. The part that
+  isn't earned is exactly the violation above: one clause added with no matching derivation.
+- **No other files changed** (`git show --stat 22cae86`: 1 file, 15 insertions, 11 deletions, all in
+  `docs/features/tracking-feature-state.md`). `task-tracker/server.py` and the rest of the security
+  territory are untouched since the first cycle's round-2 full audit; not re-audited this round.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/derivation-scope-mismatch` | `rules/core-conduct.md` (project layer) + `~/.claude/skills/writing-specs/SKILL.md` | Project core-conduct: "Verification precedes both the claim and the write-down — never state that something works … and never record that claim in a durable artifact … until you have actually run it and re-read the output"; writing-specs: a spec must leave nothing readable two ways or resting on an unstated inference | `.md` preamble, the ⚠️ paragraph beginning "This card has passed the planning→implementation gate more than once" (`docs/features/tracking-feature-state.md`, lines 9-21) | The sentence "Every other `planning` card in this repo carries `branch: none` **and zero ticked tasks**; re-derive that with two commands" cites exactly `grep -m1 '^phase:'` and `grep -m1 '^branch:'` — both real, both correctly scoped, and together sufficient to re-derive the `branch: none` half (verified by running them). Neither command counts checklist items, so the "zero ticked tasks" half has no re-derivable citation at all. The underlying fact is true (independently re-verified: both other `planning` cards show 0 ticked tasks), but that is exactly round 1's finding restated — a true claim with a citation that cannot demonstrate it — and this specific clause is new text this fix commit introduced, not inherited debt. |
+
+**Recurrence:** same id as round 1 (`22cae86` cites itself as closing round 1's finding), same
+paragraph, same sentence. Two consecutive rounds on `writing-specs/derivation-scope-mismatch` — per
+the compliance-judge escalation rule this is reported to the user rather than sent back for a round 3.
+
+### Resolved / not recurring
+
+| id | check performed | result |
+|---|---|---|
+| `core-conduct/file-size-decision-unsurfaced` | Not touched by `22cae86` (diff is `.md`-only, this id's territory is task 8's `.spec.md` entry / `server.py`) | Still closed, unchanged since round 2 of the first cycle |
+| `writing-specs/stale-recorded-claim` | Not touched by `22cae86` (this id's territory is task 4's `§Tasks` entry / `test_analyze.py`) | Still closed, unchanged since `b2ed7bb` |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, commit `1d54816`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` — ground is the session-start (`.md`) half staying small, not this half's size. |
+
+### Line counts, re-derived (observation, not a violation — per dispatch instruction)
+
+`wc -l docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md`:
+**220** / **1537**. The `.md` half grew from round 1's **216** to **220** (net +4, matching the
+dispatch's own figure), still over ADR 0017:39's `≤200` — covered by `adr-0017/md-half-size-budget`.
+The `.spec.md` half is unchanged at **1537**, still over `≤800` — covered by
+`adr-0017/spec-half-size-budget`. Neither waiver's stated ground (session-start-half-stays-small)
+depended on either exact number, so neither waiver is disturbed by this movement; flagging the growth
+here is purely so the trend is visible, per the dispatch's explicit request.
+
+### Notes (non-blocking)
+
+- Acceptance-criteria count (`awk` over `## Acceptance criteria` in the spec half) still **15**;
+  `.spec.md` is byte-identical to the last count (blob `ca31bb8d…`, unmoved since `c4c3349`).
+- Security territory (`writing-secure-code`) not re-audited line-by-line this round: no file under
+  `task-tracker/` changed in `22cae86`.
+- Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
+## Round 3 — 2026-08-11T22:30:31Z — **PASS** (0 violations) — the oscillation cap
+
+`head_sha` `88d524a08466e77be22613a2d460c8ceadc36364` · branch `feat/tracking-feature-state` ·
+`md_half_blob_sha` `3c16087eda0ac2758d96fffb3d08634ed833d01f` · `spec_half_blob_sha`
+`ca31bb8d53b38e7db4d88cb35fd1e4f54ff3795e` (byte-identical since `c4c3349`) · `spec_blob_sha`
+(pair hash, `cat <md> <spec> | git hash-object --stdin`) `63bb9e388d253632f0ecb253ed0501ea79d89a93`
+· confidence **high**
+
+### Layman summary
+
+Two straight rounds failed the same sentence for citing a command that couldn't actually prove what
+it claimed, even though the underlying fact was true both times. This round's fix (`88d524a`) took
+the harder, better option: instead of patching the citation a third time, it deleted the half of the
+claim nothing backed ("and zero ticked tasks") and replaced the fragile two-command citation with a
+single `head -5` that shows each card's frontmatter under its own name — no pairing across two
+command outputs required, which matters because I confirmed grep's file ordering actually does shift
+between runs on this host (see below). I ran every command in the paragraph myself rather than
+reading it, and the paragraph now says only what it can prove. **`writing-specs/derivation-scope-mismatch`
+is closed**, three commits and three rounds after it first surfaced.
+
+### What I verified, from source, not from any prior verdict's word
+
+| Claim in the paragraph | How I checked | Result |
+|---|---|---|
+| `head -5 docs/features/*.md` shows `branch:` for every card | Ran it directly | `branch:` appears in the printed block for all 14 real cards, `verification-marker-gate.md` included (its extra `revision:` key sits *after* `branch:`, on line 5, so it doesn't push `branch:` out) |
+| Every other `planning` card carries `branch: none` | `grep -l '^phase: planning' docs/features/*.md` then read each one's `branch:` directly | The only two other `phase: planning` cards, `falsify-harness-signatures.md` and `verification-marker-gate.md`, both read `branch: none`. This card itself (`tracking-feature-state.md`) is the named exception and is correctly excluded by "every *other*" |
+| `grep -m1 '^phase:\|^branch:' docs/features/*.md` returns only `phase:` lines | Ran it directly, all 14 output lines are `phase: <value>`, zero are `branch:` | Confirmed — the paragraph's warning against reverting to this form is accurate |
+| "and zero ticked tasks" is gone | Read the current paragraph (lines 9-19) | Confirmed deleted, not merely reworded |
+| `git-guard-chained-command`/`falsifier-base-pin` ordering instability (commit message's stated reason for dropping the two-grep pairing) | Ran `grep -m1 '^phase:\|^branch:' docs/features/*.md` three times back-to-back | Two runs matched, the third reordered (`git-guard-chained-command` moved ahead of `git-guard-empty-index`) — file ordering is genuinely not stable on this host, so the commit's stated reason for abandoning positional pairing is real, not a plausible-sounding excuse |
+| Paragraph length 13 → 11 lines | `git show 22cae86:docs/features/tracking-feature-state.md \| sed -n '9,21p'` (13 lines) vs. current lines 9-19 (11 lines) | Exact |
+| `.md` half 220 → 218 lines | `wc -l` | Exact (`218`) |
+| `.spec.md` half unchanged | `wc -l` → `1537`; blob `ca31bb8d…` matches every prior round back to `c4c3349` | Unchanged |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` | **15**, unchanged |
+| Task-number sync | `hooks/lib/feature_tasks.py` on both halves | exit `0` |
+| No TBD/TODO/FIXME/XXX/absolute-path hits | grep both halves | none |
+| Diff scope of `88d524a` | `git show --stat` | 1 file, `docs/features/tracking-feature-state.md`, `+4/-6` — nothing under `task-tracker/` changed, so security territory is not re-audited line-by-line this round (full source-level reads already stand from round 2 of the first cycle and round 1 re-entry of the second) |
+
+Every sentence of the paragraph checked out, not only the one cited in rounds 1 and 2: the
+`gates/phase-branch-mismatch` back-reference names the right round, "Read `phase:` above" is accurate
+(the card's own frontmatter reads `planning` and this round's diff doesn't touch it), and the
+`§Verification`/`§Tasks` cross-references two paragraphs down are unchanged and were already verified
+in the immediately prior round.
+
+### Answering the dispatch's specific questions
+
+1. **Does `head -5` demonstrate the claim, and does it invite a misreading?** Yes, and no more than
+   any multi-file `head` invocation does. One soft imprecision: the glob `docs/features/*.md` also
+   matches the two `.spec.md` halves in this repo (`memory-system-split.spec.md`,
+   `tracking-feature-state.spec.md` itself), and those carry no frontmatter by design — the paragraph's
+   "prints each card's frontmatter under its own filename" is very slightly broader than literally true,
+   since two of the printed blocks aren't frontmatter at all. I'm not citing this: a reader scanning for
+   `phase: planning` lines simply finds nothing to match in those two blocks and moves on, so the
+   imprecision doesn't manufacture false confidence about the one fact the sentence needs to prove — it's
+   different in kind from round 1/2's defect, where the cited command *structurally could not* produce
+   the needed line no matter how carefully it was read. Marginal, noted for the record only.
+2. **Is `branch:` reliably within the first five lines, and is the sixth-line fragility worth citing?**
+   Verified true for all 14 current cards, `verification-marker-gate.md`'s extra `revision:` key
+   included (it lands after `branch:`, not before). The fragility is real in the sense that a future
+   card adding two keys before `branch:` would push it past line 5 and `head -5` would go silently
+   quiet on that file — but that is a hypothetical about a file this spec doesn't own edits to, not a
+   present scope mismatch. Every other derivation in this document (the acceptance-criteria `awk`, the
+   task-sync script, the extension-map `awk`) carries the identical shape of forward fragility to a
+   format change elsewhere in the repo, and this card's own standing discipline has never asked for
+   citations to be hardened against changes nobody has made yet — only for citations to be honest about
+   what they show *today*. Judged **acceptable, not a violation** — flagged here as a note in case a
+   future frontmatter convention change makes it worth a one-clause defensive comment.
+3. **Every other claim in the paragraph, checked against source, not just the cited one:** all confirmed
+   (table above plus the cross-reference check). No new defect found anywhere else in the paragraph.
+4. **Length and altitude:** both moved the right direction and by the amount claimed (13→11, 220→218).
+   The trimmed phase-restatement rationale is not missed: round 2 of the first cycle already found it
+   duplicated `rules/gates.md`'s own wording almost verbatim and removed a near-identical sentence for
+   that reason, so this round's cut is the same call applied a second time, correctly. Nothing a future
+   editor needs was lost — the mechanism (`phase-guard.sh`'s write-block) is documented once, in
+   `rules/gates.md`, and this card correctly no longer duplicates it.
+
+### Violations
+
+None.
+
+### Resolved this round
+
+| id | how it was verified |
+|---|---|
+| `writing-specs/derivation-scope-mismatch` | Cited rounds 1 and 2 of this re-entry cycle on the same sentence. This round's fix deletes the unbacked "zero ticked tasks" clause outright and replaces the two-command citation (whose positional pairing I confirmed is unsafe — grep's file ordering shifted across three consecutive runs on this host) with a single `head -5` invocation, independently verified above to demonstrate the surviving claim for all 14 cards. Not a narrower patch of the same defect — the class of defect (a citation that cannot produce the evidence it's cited for) is absent from the current text. |
+
+### Not recurring (unrelated to this diff, not re-verified line-by-line)
+
+`core-conduct/file-size-decision-unsurfaced` and `writing-specs/stale-recorded-claim`: both territories
+(task 8's `.spec.md` entry / `server.py`; task 4's `§Tasks` entry / `test_analyze.py`) are outside the
+one file `88d524a` touched (`git show --stat` above), and were last independently re-verified in round
+1 of this re-entry cycle.
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, commit `1d54816`. `.md` half is **218 lines** against ADR 0017:39's `≤200` — over by 18, moved the right way from round 2's 220. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` — ground is the session-start (`.md`) half staying small, not this half's size. `.spec.md` is unchanged at **1537** lines, still over `≤800`; ground unmoved since `.spec.md` wasn't touched. |
+
+### Notes (non-blocking, includes the two marginal items above)
+
+- **`head -5`'s sixth-line fragility** (question 2 above): real, forward-looking, not cited as a
+  violation. Worth a one-clause defensive comment if this repo's frontmatter convention ever grows,
+  not worth blocking on today.
+- **The glob also prints two non-card `.spec.md` blocks** (question 1 above): softens "prints each
+  card's frontmatter" from literally true to descriptively true; does not create a false reading of
+  the load-bearing claim. Not cited.
+- **Grep file-ordering instability, independently confirmed.** Ran the old single-`-m1` grep three
+  times back to back; two runs matched, the third reordered two filenames. This directly supports the
+  commit message's stated reason for replacing the two-command citation rather than re-pairing it, and
+  is why `head -5`'s per-file self-contained blocks are a structurally safer shape than two greps
+  "read together," independent of whether the two-grep version was otherwise correct.
+- **This is the second cycle's third round, and the escalation cap is reached with zero violations
+  outstanding.** Per the dispatch's own framing, that means nothing here is being handed to the user
+  as an open finding — the two items flagged above are explicitly marginal observations, not
+  suppressed violations.
+- Acceptance-criteria count (`awk` over `## Acceptance criteria` in the spec half) still **15**;
+  `.spec.md` byte-identical to every prior round back to `c4c3349`.
+- Security territory (`writing-secure-code`) not re-audited line-by-line this round: no file under
+  `task-tracker/` changed in `88d524a`; full source-level reads stand from round 2 of the first cycle
+  and round 1 of this re-entry cycle.
+- Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
+
+---
