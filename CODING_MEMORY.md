@@ -5258,3 +5258,39 @@ cannot distinguish "allowed" from "blind". Falsified it: reverting the card to `
 same probe deny with the real message (exit 2), and restoring it allowed again. The permission is
 real. Two related facts confirmed while checking: the spec half carries **no frontmatter** at all, and
 `phase-guard.sh:372` skips `*.spec.md` outright, so the long half can never hold the guard shut.
+
+## Session 61 — 2026-08-11 — task 4 closed: the selector's other direction, falsified both ways
+
+First session past the gate; phase `implementation`, branch `feat/tracking-feature-state`, tree clean
+at `becc3dd`. Only test and doc files touched — no analyzer change was needed, and none was made.
+
+**The fixture could not express the case, so it was widened first.** `repo.card(...)` emitted
+`phase:` unconditionally, so the un-asserted direction of criterion 1's selector — a non-`.spec.md`
+file carrying *no* `phase:` key is still a card — was literally unwritable. `phase=None` now omits the
+key, `phase=""` still writes an empty value, and the default is unchanged; all three forms were run
+and printed rather than reasoned about.
+
+**The test names its branch, because there are two and they are not interchangeable.** A card with
+intact `---` and no `phase:` reads back `""` and lands on *not-a-known-phase* ("What phase is `alpha`
+in?"); a card missing its closing delimiter lands on *unread-frontmatter* with a different question.
+The test asserts the first question is present **and** the second is absent. "Some question was
+raised" would have passed on either branch — a different bug wearing the same green tick.
+
+**Both assertions were falsified before being trusted, then `analyze.py` was restored.** A passing new
+test proves nothing until you have seen it fail. Two probes, each reverted with `git checkout --`:
+making the selector filter on `"phase:" in text` broke the membership assertion (`assert 'alpha' in
+set()`); folding the phase check into the `frontmatter_ok` branch broke the branch assertion, which
+then reported the delimiter question in its place — exactly the wrong-branch pass the assertion exists
+to catch. This is the same discipline as the `skip-worktree` finding: name the falsifier first.
+
+**Three dangling pointers closed, blocked all through planning by `phase-guard.sh`'s exempt list.**
+`task-tracker/test_analyze.py:1`, `task-tracker/test_store.py:3` and `PORTS.md:26` all cited sections
+of `tracking-feature-state.md` that had moved to the `.spec.md` half. Confirmed dangling rather than
+assumed: the `.md` half's only headings are `## Tasks` and `## Verification` (`grep -n '^## '`).
+
+Suite: **54 passed**, `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q`, 2026-08-11 —
+53 before, +1 for the new test. A dated measurement, not a contract; task 13 re-derives it. Task-number
+sync across the two halves re-checked after ticking task 4 in both: 14 ids each, sets equal.
+
+Next: **task 8** (`server.py`, the new trust boundary) — the model-routing note says switch back to
+Opus for it, and **task 14 runs immediately after task 8**, before 9 and 10.

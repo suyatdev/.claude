@@ -49,7 +49,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 1 — Spike the injection route. **Fully done, do not re-run**; all four probes ran 2026-08-09.
 - [x] 2 — Vendor the UI: copy the Nocturne export to `task-tracker/`, preserving `_ds/`.
 - [x] 3 — `task-tracker/analyze.py`: features + branches only, importing `hooks/lib/feature_tasks.py`.
-- [ ] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo. **Re-opened in round 11.**
+- [x] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo. Round-11 reopen closed: `repo.card(phase=None)` omits the key, and the converse selector direction is asserted by branch, falsified both ways.
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`. Criteria 3-5.
 - [x] 7 — `PORTS.md` entry for the control server, before any bind. Port is **8422**.

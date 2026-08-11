@@ -1091,7 +1091,7 @@ forbids editing a spec.
         split is a `task-tracker/git_facts.py` holding the worktree/ahead-behind/dirty readers. **Not
         scheduled** — a structural split is a human-owned call, not a drive-by; raise it if the file
         grows again.
-- [ ] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo, not this one.
+- [x] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo, not this one.
       (Named `test_*.py`, not `*.test.py` — pytest collects only the former.)
       - **Re-opened in round 11 — criterion 1's selector is asserted in one direction only.**
         `test_criterion_1_n_cards_in_n_features_out` builds its `.spec.md` half through
