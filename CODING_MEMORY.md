@@ -5488,8 +5488,37 @@ citations or round 3) — moot here, since self-revision was never available in 
 Session also crossed the 78k-token freshness watch mid-restore; this entry and the push below satisfy
 that checkpoint in the same pass rather than a separate one.
 
-Next: **user decides** whether to switch tier now to fix the spec (all four violations, three of which
-are one-sentence corrections; the size-cap question in violation 1 may need their call, not a revision)
-or defer and let task 9 proceed now on the criteria untouched by violation 4 (6, 7, 9, 10, 11, 12, 14
-minus the babel/`vendor-resources.js` manifest-sweep assertion), matching the risk they already accepted
-in session 64 ("a FAIL costs only the tests that touch the two revised bullets").
+User chose **fix the spec first**. Card returned to `phase: planning` / `model_tier: high` for the
+revision (`6e17fd9`) — implementation forbids spec edits, and this card's own 2026-08-11 revision set
+that precedent. ⚠️ **Resuming task 9 therefore needs the literal `gate confirmed` again.** The tier is
+the *declared* one; as in session 64, the switch was not independently observable from here.
+
+**Three violations closed, one escalated.**
+
+- `writing-specs/stale-recorded-claim` — closed, and the judge undercounted it. Three claims were
+  false, not two: the spec half's "112 lines / inside its cap", the `.md` RESOLUTION's "task 14 still
+  unticked … `phase: planning`", and — found only while fixing those — the criterion-13 header still
+  opening "Result: one row fails … task 14 is therefore not ticked". All three replaced with
+  derivations rather than fresh numbers, per this card's own governing rule.
+- `gates/split-half-sync` — closed. "fourteen acceptance criteria" → a derivation. ⚠️ **The first
+  derivation I wrote returned `0`** (`grep -c '^### Criterion'`); criteria are a numbered list, not
+  headings. Caught only because I ran it before recording it — the exact failure this card has been
+  punished for repeatedly. The verified `awk` form reads **15**.
+- `writing-specs/good-bad-edge-cases` — closed, and it was a real hole. Task 9 now asserts every CDN
+  URL `support.js` can request is a `vendor-resources.js` key resolving to a manifest row, derived
+  from source and required to be **falsified by a one-character mutation** (both sides read from one
+  file otherwise passes while asserting nothing). Mapping verified real before writing the assertion:
+  `BABEL_URL` at `support.js:1147` matches the key exactly. Also corrected the wrong mechanism
+  sentence the judge caught — **the manifest makes the copy servable; CSP `script-src 'self'` makes
+  `unpkg.com` unreachable and only on the *served* page (criterion 8's `file://` has no CSP); and
+  `window.__resources` is what redirects, failing *open*.** That misattribution is why the gap
+  survived a round.
+- `adr-0017/md-half-size-budget` — **NOT closed; escalated.** 215 → 206 by deleting duplication the
+  spec half now owns authoritatively. The remaining 6 lines over are measurement, and **task 13 must
+  still append per-suite counts to that same section**, so any number hit today breaks again by
+  design. ADR 0017 deliberately keeps `## Verification` in the `.md` half precisely because task 13
+  writes there while the phase gate forbids spec edits — the cap and that placement rule are in
+  tension, which is a human's call, not a revision's. The round-1 judge reached the same conclusion.
+
+Round 2 **not dispatched yet**, deliberately: it would re-cite violation 1 (206 > 200) and spend a
+round on a question already sitting with the user. Dispatch it with their decision in hand.
