@@ -1,20 +1,24 @@
 ---
-phase: implementation
-model_tier: low
+phase: planning
+model_tier: high
 branch: feat/tracking-feature-state
 ---
 
 # Feature-state tracking with a browser UI
 
-⚠️ **This card returned to `phase: planning` once mid-implementation for a spec revision** — the only
-phase in which spec edits are permitted — and reopened to `implementation` on 2026-08-11 on the
-literal `gate confirmed`. The convention is recorded here because the three-state `phase` field
-cannot express "paused for revision": across such a pause the card keeps its real branch and its
-ticked tasks rather than resetting `branch:` to `none`, which is what every other `planning` card in
-this repo carries (`grep -m1 '^phase:\|^branch:' docs/features/*.md`). Compliance round 2 cited that
-ambiguity as `gates/phase-branch-mismatch`; the answer was to write the convention down rather than
-invent a fourth state. Should another revision be needed the same pause applies — and while it is
-paused `phase-guard.sh` correctly blocks writes to source, which is the point.
+⚠️ **This card has passed the planning→implementation gate more than once; the convention for that is
+recorded here rather than as a fourth `phase` state.** The three-state field cannot express "paused
+for revision", so when a mid-implementation spec revision is needed the card returns to
+`phase: planning` — the only phase permitting spec edits — keeping its real branch and its ticked
+tasks instead of resetting `branch:` to `none`; reopening then takes the literal `gate confirmed`
+again. Compliance round 2 cited that `planning`-with-a-branch shape as `gates/phase-branch-mismatch`,
+and documenting the convention was the answer, not a fourth state. **Read `phase:` above for where
+the card is now** — this paragraph deliberately does not restate it, because one that names the
+current phase goes stale at the very next transition, which is how it has broken before. Every other
+`planning` card in this repo carries `branch: none` and zero ticked tasks; re-derive that with two
+commands — `grep -m1 '^phase:' docs/features/*.md` and `grep -m1 '^branch:' docs/features/*.md` —
+never one `-m1` over both patterns, which returns only `phase:` lines because `phase:` sorts first in
+every card.
 
 **The spec half of this feature lives in `tracking-feature-state.spec.md`** — design, the injection
 route, security, and every acceptance criterion. Re-derive the count rather than trusting a number
