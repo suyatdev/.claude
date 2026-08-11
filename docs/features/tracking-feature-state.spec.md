@@ -1120,7 +1120,7 @@ forbids editing a spec.
       - Port is **8422**, `TASK_TRACKER_PORT` overrides. Picked clear of the 8000-8100 block other
         projects own; `lsof -nP -iTCP:8422 -sTCP:LISTEN` was empty at allocation. Task 8 reads the
         number from `PORTS.md`, it is not re-decided there.
-- [ ] 8 — **Task 14 runs immediately after this one, before 9 and 10** — it keeps its number for
+- [x] 8 — **Task 14 runs immediately after this one, before 9 and 10** — it keeps its number for
       reference stability, not its position; read that entry before starting 9.
       `task-tracker/server.py` to the wire contract in §Design 3: `127.0.0.1` bind on the port
       from `PORTS.md`, in-memory token injected into `GET /`, static serving confined to **the

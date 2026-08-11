@@ -5294,3 +5294,42 @@ sync across the two halves re-checked after ticking task 4 in both: 14 ids each,
 
 Next: **task 8** (`server.py`, the new trust boundary) — the model-routing note says switch back to
 Opus for it, and **task 14 runs immediately after task 8**, before 9 and 10.
+
+## Session 61b — 2026-08-11 — task 8: the trust boundary, built and smoke-verified
+
+`task-tracker/server.py`, 694 lines, implementing §Design 3's wire contract and §Security's posture
+literally. Nothing else in the repo changed; the existing 54 tests still pass untouched.
+
+**Every route, refusal and abort was driven against a fake `cmux` shim before the task was ticked** —
+not read for correctness. What that caught, and what it confirmed:
+
+- `unconfirmable` (tree exits non-zero) logs `sent=no`; `send_failed` (send exits non-zero) logs
+  `sent=unknown`. That pair is the point of the whole `reason` field and the one thing a code read
+  would have blessed either way.
+- Absent manifest row → `500 asset_unreadable path=vendor/react.production.min.js errno=ENOENT`,
+  while absent `tracker-data.js` → `404 not_found`. The first-run exception is live, not intended.
+- `manifest ⊆ map` is genuinely one-directional: a `.svg` row aborts startup, three unused map
+  entries do not. Both directions run, because only asserting the abort would pass on a two-way check.
+- Watchdog tested on the real function with a **negative control** — fresh request + live parent keeps
+  serving. Without it, "shutdown was called" proves nothing about a watchdog that always fires.
+
+**`reanalyze` failed on its first run and the failure was mine, not the server's.** The temp copy I
+served from had no `../hooks/lib`, so `analyze.py` could not import `feature_tasks`. Two things came
+out of it: the server now writes the analyzer's own stderr to its log (`_reanalyze_failed`), because
+the previous version swallowed every cause on the one path that rewrites the store; and the re-run
+proved the failure path leaves an **existing** store byte-identical. ⚠️ The first attempt's
+"store unchanged: YES" was **vacuous — it compared two absences.** Same species as every other defect
+on this card: a check that cannot fail returns clean.
+
+**⚠️ Open spec gap for task 9, not worked around.** §Design 3 mandates `403` when a manifest row
+resolves outside the serving root (a planted symlink), but the status table's `403` row lists only
+token/id/origin/host, and the `reason` enum has no value for it. Implemented as `403` with
+`reason=path_escape` — a value the enum does not define, so task 9's "every row has a value, every
+value has a row" check will flag it. **Escalate before writing that test.**
+
+Note `HEAD` is a `405` (the status table admits no other reading), so `curl -I` cannot inspect the
+`GET /` headers — the first header check read 0 for CSP and no-store for that reason alone, not
+because they were missing. Re-checked with `curl -D -` on a GET: both present.
+
+Next: **task 14** (vendor the six remote assets, nine files) — it runs before 9 and 10. Nine `vendor/`
+manifest rows currently 500 by design until it lands.

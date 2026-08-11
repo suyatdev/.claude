@@ -53,7 +53,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`. Criteria 3-5.
 - [x] 7 — `PORTS.md` entry for the control server, before any bind. Port is **8422**.
-- [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.**
+- [x] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.** Every route, refusal and startup abort smoke-verified against a cmux shim; task 9 is what pins them as tests.
 - [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**. Not criterion 13.
 - [ ] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists. **Owns criterion 15** — the page's own failure behaviour, which no server test can reach.
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch.
