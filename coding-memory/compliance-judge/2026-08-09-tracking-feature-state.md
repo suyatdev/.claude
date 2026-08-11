@@ -1969,3 +1969,99 @@ None this round.
 ### Waivers
 
 Same two as above — no new waiver requested or granted this round.
+
+---
+
+## Round 1 (re-entry) — 2026-08-11T20:47:54Z — **PASS** (0 violations)
+
+`head_sha` `224174247735630246d0a71d348217fcad533240` · branch `feat/tracking-feature-state` ·
+`md_half_blob_sha` `4bccdca99153217c7a8e1d42ffa23f4997f25a5b` (unchanged since `bd73da6`) ·
+`spec_half_blob_sha` `ca31bb8d53b38e7db4d88cb35fd1e4f54ff3795e` (moved by `c4c3349`) ·
+`spec_blob_sha` (pair hash, `cat .md .spec.md | git hash-object --stdin`)
+`2da123086a59b4ec1de278a5cc3324b61202fe98` · confidence **high**
+
+This restarts the loop: the prior cycle passed clean at `b2ed7bb` (round 3, 2026-08-11T20:06:36Z),
+and `c4c3349` then edited `.spec.md` alone, moving its blob and invalidating that pass under the
+freshness rule. Judged as a genuine first round, not a continuation — every figure below was
+re-derived from source in this session, none carried over from a prior verdict's word.
+
+### Layman summary
+
+The one change since the last clean pass is a single-hunk docs-only edit to task 4's closing bullet
+in `§Tasks`, and it does what its commit message says: it deletes a number that was never counted
+(the previous "six commits" claim) and replaces it with the two commits that bound the gap plus a
+command that sizes it. I ran that exact command rather than taking the sentence's word for it.
+
+`git rev-list --count 3d5a2ff..b2ed7bb -- docs/features/tracking-feature-state.spec.md` returns
+**8** on this checkout — a number that appears nowhere in the fix commit's own working notes (which
+computed 18 for the full range, 17 minus the fixing commit, 11 restricted to both halves of the
+pair, 10 minus the fixing commit restricted to the pair). That mismatch was worth chasing down
+before trusting the embedded command, given this card's history of a derivation that quietly answers
+a neighbouring question. It resolves cleanly: the sentence attaches to "this entry," which lives
+only in `.spec.md`, so scoping the count to that one file is the *more* precise reading, not a wrong
+one — and I confirmed `b2ed7bb` really is the commit that rewrote the entry from present-tense "open
+problem" language to past-tense "closed" language (`git show b2ed7bb -- docs/features/...spec.md`
+shows exactly that rewrite, plus the addition of the very bullet under discussion). That also
+corrects something the round-3 PASS got wrong in its own reasoning: round 3's notes sized the same
+gap against `bd73da6` (the commit that merely *caught* the staleness) instead of `b2ed7bb` (the
+commit that actually *fixed* it), which is why round 3 landed on "six, defensible" — a smaller,
+slightly-wrong-endpoint number that happened to read as plausible. The new text names both SHAs
+explicitly and lets the reader run the command, so no wrong number is asserted either way; this is
+not cited, but it is worth recording precisely, since a derivation that quietly returns 8 instead of
+an expected 18/17/11/10 is exactly the shape this card has been burned by before, and it deserved
+the same scrutiny as a number that turned out wrong.
+
+I also checked whether this bullet has crossed from instruction into narration, since it is a
+correction *about* the card's own documentation history, and this card's own "Revision history"
+section says that kind of content belongs in git, not the spec — except where it teaches a lesson
+that stays "beside the thing that would produce it again." This one does: it tells a future reader
+what to do when the two halves disagree ("re-derive from source rather than believing either one's
+prose"), which is instruction, not just a chronicle of round numbers. The edit under judgment does
+not add a new layer — it rewrites the existing bullet in place (7 insertions, 5 deletions, same
+bullet count) — so the "another such layer is the signal to compress" warning from the round-3
+notes does not fire here. Not cited.
+
+Everything else was re-derived from source rather than read off any prior verdict, including this
+prompt's own numbers: acceptance-criteria count, task-number sync, every pinned toolchain version,
+every file line count, `pytest`'s output, the phase/branch precedent across all 14 other feature
+cards, and a spot-check of the security-relevant code (`server.py` did not change since the last
+line-by-line audit at round 2 of the prior cycle — confirmed via `git diff --stat b2ed7bb..HEAD`,
+which touches only `.spec.md` and memory/judge bookkeeping files).
+
+### Violations
+
+None.
+
+### Waivers (carried forward from the prior cycle, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. Re-verified: `.md` half is **216 lines** (`wc -l`) against ADR 0017:39's `≤200`, unchanged across every round since the waiver. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` on the ground that the waiver depends only on the session-start (`.md`) half staying small, not on this half's size. Re-verified that ground still holds: `.md` half unchanged at 216 lines. See Notes for the growth figure. |
+
+### Verified clean, re-derived from source (not from any prior verdict or from this prompt's own numbers)
+
+| Claim | Method | Result |
+|---|---|---|
+| The `c4c3349` derivation, checked against the SHAs it names | `git show 3d5a2ff --stat`; `git show b2ed7bb -- docs/features/tracking-feature-state.spec.md` | `3d5a2ff` is genuinely the commit that landed the round-11 fix (its own message: "test(tracker): close task 4"); `b2ed7bb` is genuinely the commit that rewrote the stale bullet to past tense *and* added the bullet under discussion — both SHAs the new text names are the right two |
+| The embedded command's actual output | `git rev-list --count 3d5a2ff..b2ed7bb -- docs/features/tracking-feature-state.spec.md` | **8** — a number that appears in neither the doc nor the fix commit's message; judged a defensible, correctly-scoped reading (see summary), not a fabrication |
+| Only `.spec.md` (plus memory/judge files) changed since the last PASS | `git diff --stat b2ed7bb..HEAD` | `docs/features/tracking-feature-state.spec.md` (+12/-5, one hunk), `CODING_MEMORY.md`, two judge-memory files, two `verdicts.jsonl` — no `task-tracker/` source touched |
+| Acceptance-criteria count | `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` over the spec half | **15** |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` | exit **0** |
+| `.md` / `.spec.md` / `server.py` / `analyze.py` line counts | `wc -l` | **216** / **1537** / **694** / **792** — matches every present-tense claim the card makes about them |
+| Toolchain pins | `python3 -V`, `uv --version`, `cmux --version`, `node --version` | `Python 3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `v26.5.0` — all four match §Toolchain exactly |
+| Test suite | `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` | **54 passed** — the card's own "53 passed on 2026-08-09... re-run it rather than trusting it" framing is honest; the number has moved and the card said it would |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`XXX`/`/Users/`/`/home/` | Zero live hits |
+| `confirm_timeout` still correctly marked as an open, human-decided prerequisite (not falsely complete) | Read `confirm_surface()` (`server.py:236-253`) | Both `TimeoutExpired` and a non-zero/OSError still collapse into one `"unrunnable"` state — task 8's "ticked but owes one edit" marker in both halves is still true, not stale |
+| Token/CSP/traversal/no-store spot-check | `grep -n 'compare_digest\|token_urlsafe\|Content-Security-Policy\|frame-ancestors\|path_escape\|no-store' task-tracker/server.py` | All present and matching §Design 3 / §Security as described; unchanged since the last full audit, consistent with the diff-stat showing no source edit |
+| Phase/branch precedent (the `.md` preamble's central claim) | `grep -m1 '^phase:\|^branch:' docs/features/*.md`; `grep -c '^\- \[[xX]\]'` on the two other `planning` cards | Both other `phase: planning` cards (`falsify-harness-signatures.md`, `verification-marker-gate.md`) carry `branch: none` and 0 ticked tasks, exactly as the preamble states |
+| PORTS.md / ADR cross-references | `grep -n '8422' PORTS.md`; `grep -rn 'tracking-feature-state.spec.md' docs/decisions/0022-*.md docs/decisions/0023-*.md` | All three correctly point at the `.spec.md` filename and the port entry |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` half has grown again since the last re-confirmation.** `git show 686057d:docs/features/tracking-feature-state.spec.md | wc -l` → **1493**; current `wc -l` → **1537** — **+44** since the ground the waiver was re-confirmed on. The `.md` half, which is what that waiver's ground actually depends on (session-start load staying small), is unchanged at **216** lines. So the ground still holds and this is not raised as a violation, per the waiver's own terms — flagged only as the observation the dispatch asked for.
+- **The `c4c3349` derivation's scope is worth a future round re-checking the same way before trusting it further.** It answers a real, well-defined question (commits touching the one file the stale entry lives in, inclusive of the commit that fixed it), but it is a fifth distinct scoping of "the gap" beyond the four the fix commit's own message worked through, and none of those four matches it. Not cited — no number is asserted in the prose itself, only a command — but this is precisely the kind of derivation that has silently answered a neighbouring question before on this card, so it should not be trusted a second time without re-running it.
+- **Narration-vs-instruction check, on request.** Task 4's closing bullet is meta-commentary about the card's own documentation history, which is the category this card's "Revision history" section says belongs in git, not the spec. It earns its place anyway because it ends in an instruction ("re-derive from source... rather than believing either one's prose"), not just a chronicle — and this edit compressed nothing further but also added no new layer. If a future edit adds a fourth "here is why the last correction was itself wrong" layer to this same bullet, that is the signal to delete the bullet and let git carry the history, per the card's own stated policy.
+- **Gherkin shape**, as in every prior round across every cycle: several criteria still fold `When` into `Given`. Not cited, same reasoning as every prior round (token economy, intent stays unambiguous).
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md` + ADR 0017's one-canonical-file discipline) takes precedence over `writing-specs`' `docs/superpowers/specs/` default, and project rules win on conflict.
+- Security territory (`writing-secure-code`) re-checked at the source level (external input, shell execution, a localhost server, a bearer credential) even though no `task-tracker/` source changed this round — see the spot-check row above. Nothing regressed.

@@ -5648,9 +5648,13 @@ derivation, not the number" survives this, but only with the follow-on: check wh
 neither was re-cited, so nothing was in a persistence state; the gate cleared at its cap.
 
 **Then the PASS verdict's own notes reproduced this card's dominant failure mode.** My round-2
-revision had written that the two halves disagreed "for six commits". I never counted it. No reading
-of the log yields six — 18 commits in `3d5a2ff..b2ed7bb`, 17 without the fixing commit, 11 touching
-the spec pair, 10 without it. The verdict did not cite the number, but its notes defended it as
+revision had written that the two halves disagreed "for six commits". I never counted it, and the
+four readings I did count — 18 commits in `3d5a2ff..b2ed7bb`, 17 without the fixing commit, 11
+touching the spec pair, 10 without it — led me to write "no reading of the log yields six".
+⚠️ **That absolute was wrong too, and Session 69 found the reading that produces it:**
+`git rev-list --count 3d5a2ff..01f0c45 -- docs/features/tracking-feature-state.spec.md` → **6** —
+the spec-half commits from the one that landed task 4 up to the last one *before* round 2 caught the
+text stale. The verdict did not cite the number, but its notes defended it as
 "accurate under one reasonable way of counting (excluding both the commit that landed the fix and
 the commit that caught it stale)" — a reading that gives 16 or 9. **A fabricated number recruited a
 fabricated justification**, from a judge, in a PASS verdict, inside the one paragraph whose entire
@@ -5668,3 +5672,64 @@ rule.** A re-entry restarts the compliance loop at **round 1**; both waived ids 
 Everything else is unchanged: implementation stays closed, and reopening still takes the literal
 `gate confirmed` plus its own model-switch checkpoint, with the `confirm_timeout` split in
 `confirm_surface()` first in the queue.
+
+## Session 69 — 2026-08-11 — the re-entry passes, and the correction to the fabricated number is itself corrected
+
+**Compliance re-entry round 1: PASS, zero violations.** Judged the two-file pair at `2241742`
+(`.md` blob `4bccdca9`, unchanged since `bd73da6`; `.spec.md` blob `ca31bb8d`, moved by `c4c3349`).
+Both waived ids — `adr-0017/md-half-size-budget`, `adr-0017/spec-half-size-budget` — were recorded
+rather than re-cited. Nothing entered a persistence state: the re-entry restarted the tripwire, and
+the previous cycle's two ids were confirmed closed. Advisory observability read at the same HEAD:
+`stage: architecting`, `verdict: null`, risk=low confidence=high. Verdict artifacts were verified on
+disk at the worktree-local override path, not trusted from the pane reports.
+
+**The advisory read corrected the commit that existed to correct a fabrication.** `c4c3349` deleted
+the invented "six commits" figure, and its message argued the deletion with an absolute: *no reading
+of the log yields six*. The observability judge found one that does, and re-derivation confirms it:
+
+```
+git rev-list --count 3d5a2ff..01f0c45 -- docs/features/tracking-feature-state.spec.md   ->  6
+```
+
+Six `.spec.md` commits from the one that landed task 4 up to the last one *before* round 2 caught
+the text stale. It is not a contrived scope — it is the most natural reading of "how long did the
+stale text survive unnoticed", and it is one subtraction away from the four readings I did enumerate.
+**A universal negative is a claim, not a summary**, and I shipped it in the same commit whose whole
+subject was not asserting uncounted numbers. Two layers of correction, each introducing the defect it
+was written to remove. The Session 68 entry above now carries the correction inline; the pushed
+commit message cannot be changed and stays wrong, which is the argument for never putting an absolute
+in one.
+
+**The blocking verdict passed anyway, and correctly.** The defect lives in the audit trail *around*
+the fix, never in the document — the spec text names two SHAs and a command and asserts no number at
+all. That is the convention working: storing the derivation instead of the number is what kept a
+wrong count out of the spec even while the reasoning about it was wrong twice.
+
+**Both judges independently converged on: stop editing that paragraph.** Three rewrites, each fixing
+something the last got wrong. The fabricated number is gone and the text is accurate; a fourth edit
+is likelier to add an error than remove one. Standing decision: leave task 4's ⚠️ bullet alone.
+
+**Fixed a freshness hole in the verdict ledger.** `spec_blob_sha` is what the freshness rule keys on,
+and the existing rows defeated it two different ways — rounds 1 and 3 left it `null`, and round 2 set
+it to the **`.md` half's** blob, under which the `.spec.md`-only edit that invalidated the round-3
+PASS would have read as still fresh. This round's dispatch prescribes a pair hash that moves when
+either half moves, independently recomputed after the fact and matching the recorded value:
+
+```
+cat docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md \
+  | git hash-object --stdin   ->  2da12308
+```
+
+Prior rows were left alone; the ledger is append-only.
+
+**The line-based grep blind spot bit again, in the act of hunting the false claim.**
+`grep -n 'No reading of the log yields six' CODING_MEMORY.md` returned nothing — the sentence wraps
+across a newline. The same shape this card has already documented twice for the reason-coverage
+derivation. A line-based search cannot see a wrapped match, and its silence reads exactly like
+absence. Search prose with a wrap-tolerant matcher (`python3 -c` over the whole file, `\s+` between
+words) before concluding a string is not there.
+
+**State unchanged otherwise.** Implementation stays closed; reopening takes the literal
+`gate confirmed` plus its own model-switch checkpoint, with the `confirm_timeout` split in
+`confirm_surface()` first in the queue, then tasks 9-13. Next step is the **user review gate** — the
+spec now carries a fresh PASS, which is the precondition that gate exists to guarantee.
