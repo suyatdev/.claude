@@ -5239,3 +5239,22 @@ gate still has no passing verdict — round 11's FAIL is the last on record and 
 the user's call, so five more ids are now closed in text no judge has read. Three dangling pointers
 into the card (`PORTS.md:26`, two test docstrings) remain outside `phase-guard.sh`'s exempt list and
 are still the first job in implementation. Next step is the **user review gate**.
+
+**The gate opened at the end of session 60.** `gate confirmed` given after the user read the card;
+frontmatter is now `phase: implementation`, `model_tier: low`, branch `feat/tracking-feature-state`
+(which already existed, so nothing was created). The model-switch checkpoint was asked *after* the
+confirmation rather than before it — I had substituted my own review question for the prescribed
+announce, so the user confirmed the gate without ever being asked to switch tiers. Asked and answered
+separately rather than inferred: **Sonnet for tasks 4–7, back to Opus for task 8** (`server.py`, the
+new trust boundary) **and 14**. That routing lives here and in `session-state.md`, deliberately *not*
+in the card — the card is signed off, implementation phase forbids spec edits, and reopening it for a
+bullet would re-trigger a compliance gate the user chose not to spend on. Model tier is session
+routing, not part of the feature's contract.
+
+**`phase-guard.sh` was proved open, not assumed open.** Nine other cards sit at `phase: planning`, any
+of which could have held the guard shut. A payload probe on `task-tracker/test_analyze.py` returned
+exit 0 — but that hook fails open on an unparsed payload (`hooks/phase-guard.sh:189`), so exit 0 alone
+cannot distinguish "allowed" from "blind". Falsified it: reverting the card to `planning` made the
+same probe deny with the real message (exit 2), and restoring it allowed again. The permission is
+real. Two related facts confirmed while checking: the spec half carries **no frontmatter** at all, and
+`phase-guard.sh:372` skips `*.spec.md` outright, so the long half can never hold the guard shut.
