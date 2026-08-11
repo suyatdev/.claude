@@ -13,12 +13,10 @@ for revision", so when a mid-implementation spec revision is needed the card ret
 tasks instead of resetting `branch:` to `none`; reopening then takes the literal `gate confirmed`
 again. Compliance round 2 cited that `planning`-with-a-branch shape as `gates/phase-branch-mismatch`,
 and documenting the convention was the answer, not a fourth state. **Read `phase:` above for where
-the card is now** — this paragraph deliberately does not restate it, because one that names the
-current phase goes stale at the very next transition, which is how it has broken before. Every other
-`planning` card in this repo carries `branch: none` and zero ticked tasks; re-derive that with two
-commands — `grep -m1 '^phase:' docs/features/*.md` and `grep -m1 '^branch:' docs/features/*.md` —
-never one `-m1` over both patterns, which returns only `phase:` lines because `phase:` sorts first in
-every card.
+the card is now** — restating it here would only go stale at the next transition. Every other
+`planning` card in this repo carries `branch: none`; re-derive with `head -5 docs/features/*.md`,
+which prints each card's frontmatter under its own filename. Not a `-m1` grep over both keys: that
+returns only `phase:` lines, because `phase:` sorts above `branch:` in every card.
 
 **The spec half of this feature lives in `tracking-feature-state.spec.md`** — design, the injection
 route, security, and every acceptance criterion. Re-derive the count rather than trusting a number
