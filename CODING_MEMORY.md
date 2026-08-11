@@ -5090,3 +5090,59 @@ observability judge's recommended ~60-line trim of round-forensics prose was del
 three ids were recurrences, so a third consecutive citation of either escalates to the user rather
 than looping again. Tasks 8–14 remain unstarted and the card is still `phase: planning` — the gate
 has not been re-opened.
+
+## 2026-08-10 — session 58: the card re-splits, and the checker turns out to have been right
+
+*(Numbering continues from the last archived pair, sessions 56–57. Rounds 9 and 10 were committed
+between that archive and this entry without an archive of their own — `git log a502474..` back to
+`ca3e079` is the record for them.)*
+
+Round 10's three compliance violations, all closed. Two were straightforward; the third reversed a
+recommendation I had already given and the user had already accepted.
+
+**`writing-specs/spec-code-drift` — mine, and wrong in both directions.** Four places in the card
+claimed the analyzer skips the spec half because it carries no `phase:` key. It does not:
+`_card_paths` globs `docs/features/*.md` and drops anything ending `.spec.md`, by filename
+(`grep -n SPEC_SUFFIX task-tracker/analyze.py`). Probed against a throwaway fixture repo rather than
+read: a `.spec.md` half *carrying* `phase:` is still skipped, and a `.md` file carrying none is still
+a card (it lands in `features[]` and raises a `questions[]` entry, `phase` reading as `''`). Both
+halves of the claim false, in opposite directions.
+
+That demoted criterion 1 to half-asserted, so **task 4 was re-opened**. Its existing test builds the
+`.spec.md` fixture through `repo.card(...)`, which always writes a `phase:` key — so it already pins
+the first direction, and pins it well. Nothing pins the converse, and a one-direction assertion
+passes under either mechanism, so it proves neither.
+
+**`writing-specs/good-bad-edge-cases`.** Task 9 drove three send-time outcomes, all ending
+`sent=no`. `send_failed` was the one `reason` value in the enum no assertion reached and `unknown`
+the one `sent` value — the card's own "worst failure this feature has", undriven. Added the fourth
+outcome: confirmation succeeds, `send` is then invoked and fails or times out → `502`,
+`reason=send_failed`, `sent=unknown`.
+
+**`gates/split-half-sync` — I recommended the wrong fix, the user accepted it, and I caught it
+before acting.** I had read `feature_tasks.compare` as demanding the checklist be duplicated across
+both halves, and recommended changing the checker on the grounds that `rules/gates.md` said
+otherwise. Wrong. `identity()` splits on the em dash and keys on the leading token — the **task
+number alone**. The precedent card duplicates nothing; it carries terse one-liners in the `.md` and
+the same numbers with full rationale in the `.spec.md`. That is exactly what ADR 0017:78-80
+prescribes. The checker and the rulebook never disagreed.
+
+What had actually gone wrong is that this card split along a different axis: all per-task detail
+stayed in the `.md`, which is why the checker complained *and* why the `.md` sat at 347 lines against
+ADR 0017's 200. One cause, two symptoms. Re-split along the prescribed axis — 256 lines moved
+verbatim into a spec-half `## Tasks`, diffed against the original at zero deletions. `.md` 347 → 112;
+`.spec.md` 993 → 1261 (its own 800 limit was already breached and is now further out — recorded, not
+fixed). `compare` exit 3 → 0; the analyzer's "Which half is right?" question gone; 53 tests pass.
+
+The clean sync result was falsified before being trusted: deleting task 12 from the spec half alone
+brings the question straight back, restoring clears it.
+
+**Two lessons worth the cost.** First, the second recommendation was only right because I ran the
+checker and read its comparison key instead of inferring intent from its error message — an error
+message describes a symptom, never the rule that produced it. Second, when a tool and a rule appear
+to contradict each other, that is a hypothesis, not a finding; here both were right and the document
+between them was wrong.
+
+**Process:** the user twice asked for plain English, both times about `AskUserQuestion` wording
+rather than the prose around it. Saved as a memory — the decision points are the one place the
+reader must parse the words to answer correctly, and they were the densest thing on screen.
