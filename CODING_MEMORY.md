@@ -5146,3 +5146,48 @@ between them was wrong.
 **Process:** the user twice asked for plain English, both times about `AskUserQuestion` wording
 rather than the prose around it. Saved as a memory — the decision points are the one place the
 reader must parse the words to answer correctly, and they were the densest thing on screen.
+
+---
+
+## Session 59 — 2026-08-11 — round 11 judged, both violations closed, round 12 skipped
+
+Compliance round 11 and the paired advisory read were dispatched at `7ba5e0f`; verdicts in `cbf9c91`.
+**FAIL, two violations, both new ids**, nothing waived for the eleventh consecutive round. All three
+round-10 findings were re-verified closed *from source* — including deleting a task from one half to
+prove the sync check can still fail — and `good-bad-edge-cases` was not re-cited, so no escalation.
+
+**`adr-0017/spec-half-size-budget`** (closed `2c66fab`). Rounds 7, 8 and 10 had declined the growth on
+`core-conduct`'s Code Style limit and on `gates.md` making the split a MAY. None cited ADR 0017, which
+is the decision that *created* the pair shape and states `≤200`/`≤800` as part of it — it could not
+bind until the card became a pair. The finding was never the length; it was that nobody had recorded
+the length as a decision. **User accepted the overrun 2026-08-11**, on the ground that the figure the
+pair shape exists to control is session-start load, and that one went 326 → 112.
+
+**`core-conduct/ui-error-boundary`** (closed `224827a`). The card specified every server response and
+never what the *page* does with one. The lone "the UI must surface the failure" clause covered
+`reanalyze_failed`, was owned by no task and asserted by no criterion — so a button that posts,
+receives the stale-token `403` that §Security itself calls the normal case, and silently returns to
+rest passed all fourteen criteria. Fixed as a triple, because a rule with no owner and no test is how
+the gap existed: §Design 3's "What the page does with a failure" table (`409` and a dead socket are
+**terminal** — stop offering the button), criterion 15 asserting each row *and the absence of the
+success state*, and task 10 owning both plus a node-guarded `test_ui_commands.py` that, unlike
+criterion 5, has no unguarded Python sibling.
+
+**Two judges, two scopes, one blind spot.** Compliance reported "all 67 `§` references resolve" —
+true, and blind: it walked references *inside* the pair. The advisory judge found five references
+*into* the card left dangling by the re-split. Both were right. ADRs 0022/0023 are repointed;
+`PORTS.md:26` and two test docstrings are the same defect and sit outside `phase-guard.sh:288-290`'s
+exempt list, so they wait for implementation rather than being worked around.
+
+**The expensive lesson, three failures in one paragraph.** Writing this file's own line count into it
+is self-invalidating: `1,261` was false on save (the paragraph is 12 lines), `1,273` false three lines
+later (the correction is 3), and the retreat to a ratio (~1.6×) lasted until the next commit made it
+1.67. Only the *direction* is stable. Compounding it, the prescribed re-derivation command was written
+without ever being run — `tracking-feature-state.*.md` needs a middle dot segment and silently matches
+the spec half alone, a one-file answer to a two-file question. A wrong-scoped command fails cleanly,
+which is exactly why it survives review. The file's own line-20 preamble already forbade all of it.
+
+**Round 12 is skipped — the user's call**, to spend the tokens on the review gate instead. The
+consequence, recorded rather than glossed: **the compliance gate has no passing verdict.** The last on
+record is round 11's FAIL, and both ids are closed in text no judge has read. Next step is the user
+review gate, not another dispatch.
