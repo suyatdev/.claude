@@ -1238,8 +1238,18 @@ forbids editing a spec.
         that varies with the host's `/etc/mime.types` is a rendering failure that reproduces on one
         machine and not the next.
       - This file carries bind + token + static serving + allowlist + header check + surface
-        re-resolution + subprocess, and will land near the 400-line target. If it crosses, the split
-        is `task-tracker/serve_static.py`; raise it rather than taking it as a drive-by.
+        re-resolution + subprocess. **It is built and it crossed** — `wc -l task-tracker/server.py`
+        reads over the 400-line target, under the 800 hard max. The earlier text here predicted it
+        "will land near the 400-line target" and was left in the future tense after the task closed,
+        so the contingency it described ("if it crosses, raise it") never converted into a decision.
+        The clean split is a `task-tracker/serve_static.py` holding the static-serving half.
+        **Not scheduled** — same call, and the same reason, as task 3's `analyze.py`: a structural
+        split is human-owned, not a drive-by. Raise it if the file grows again.
+      - ⚠️ **This task is closed but owes one edit.** The `confirm_timeout` fix recorded under task 9
+        below changes *this* file — `confirm_surface()` must split the `TimeoutExpired` case out of
+        the shared `"unrunnable"` state so the reason becomes emittable. It lands as its own
+        `server.py` commit **before** task 9's test, never in the same step. Task 8's tick covers the
+        wire contract as built; it does not cover that edit.
 - [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**, including every
       negative case and each status code in the contract table. A test that only proves the happy path
       does not close this task — **and neither does one that only proves refusals**, which is the
@@ -1298,11 +1308,25 @@ forbids editing a spec.
           statuses collapse multiple reasons (`403`, `500` and `502` each do), so no one-to-one
           pairing exists to assert, and a test written to the word "bijection" would assert a
           property the design deliberately does not have. **No multiplicity is pinned here**; derive
-          it, per this card's standing rule:
-          `grep -oE '_fail\([0-9]+, "[a-z_]+", "[a-z_]+"' task-tracker/server.py | sed -E 's/_fail\(([0-9]+), "[a-z_]+", "([a-z_]+)"/\1 \2/' | sort -u`
-          — and note that this derivation reads the **emitting** side, so a reason named only in this
-          document will be absent from it, which is a finding rather than a miscount. Assert **total
-          coverage in both directions** instead — walk the contract
+          it, per this card's standing rule. **There are two emitting shapes, and a derivation that
+          reads only the first undercounts** — most reasons go out through `_fail(...)`, but at least
+          one (`502`/`send_failed`) is emitted by calling `audit(...)` directly, so both must be read:
+          ```sh
+          { grep -oE '_fail\([0-9]+, "[a-z_]+", "[a-z_]+"' task-tracker/server.py \
+              | sed -E 's/_fail\(([0-9]+), "[a-z_]+", "([a-z_]+)"/\1 \2/'
+            grep -oE 'audit\("[a-z]+", [0-9]+, reason="[a-z_]+"' task-tracker/server.py \
+              | sed -E 's/audit\("[a-z]+", ([0-9]+), reason="([a-z_]+)"/\1 \2/'
+          } | sort -u
+          ```
+          ⚠️ **The `_fail`-only form was written into this document on 2026-08-11 and was wrong**: it
+          returns 14 pairs where the server emits 15, silently dropping `502 send_failed`. Worse, the
+          sentence that followed it pre-rationalized its own blind spot — it said a reason absent from
+          the derivation "is a finding rather than a miscount", which would have led an implementer to
+          conclude `send_failed` is unimplemented when it is implemented. **A derivation that explains
+          away its own gaps is worse than a pinned number**, because it launders a miscount as a
+          discovery. Re-derive the count from the block above rather than trusting either figure in
+          this paragraph; if a third emitting shape is ever added, this command undercounts again.
+          Assert **total coverage in both directions** — walk the contract
           table, require each row's `reason` to be a defined value, and, for every value, **drive an
           actual request that produces it** and assert the audit line the server emits carries that
           value. Not "reachable" by reading the source: a value that only a code path mentions is

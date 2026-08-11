@@ -5589,3 +5589,37 @@ edit lands as its own commit **before** the test, never in the same step.
 The three fixes invalidated the round-3 pass on purpose. **Compliance re-enters at round 1** with both
 waived ids passed forward.
 
+
+## Session 67 — 2026-08-11 — the re-entry round fails on a stale prediction, and a fresh derivation is caught undercounting
+
+Compliance round 1 (re-entry) and the observability architecting read went out in parallel, both to
+panes. Round 3's pass was already invalid by design — `686057d` and `01f0c45` moved the `.spec.md`
+half from blob `41a4d263` to `9260312665`, and the `.md` half was byte-identical throughout.
+
+**Round 1 (re-entry): FAIL, one violation** — `core-conduct/file-size-decision-unsurfaced`. Task 8's
+§Tasks entry still read "will land near the 400-line target. If it crosses, the split is…" — future
+tense, on a task ticked closed, with `server.py` built at 694 lines (`wc -l task-tracker/server.py`).
+The contingency never converted into a decision. Task 3's `analyze.py` entry is the precedent that
+did make the transition: actual count, explicit present-tense "**Not scheduled**", human-owned.
+Rewritten to match it. Verified from source before accepting the finding, not taken on the verdict's
+word.
+
+**The advisory read found the sharper defect, in the fix from the round before.** The `_fail`-only
+reason-coverage derivation added at `686057d` reads one emitting shape and there are two: most
+reasons go out through `_fail(...)`, but `502`/`send_failed` is emitted by calling `audit(...)`
+directly (`task-tracker/server.py:582`). The command returned 14 pairs where the server emits 15.
+
+**The failure mode is worse than a miscount, and it is new.** The sentence following the command
+pre-rationalized its own blind spot — a reason absent from the derivation "is a finding rather than a
+miscount" — which would have led an implementer to conclude `send_failed` is *unimplemented* when it
+is implemented. **A derivation that explains away its own gaps launders a miscount as a discovery,
+and is worse than the pinned number it replaced.** This card adopted "store the derivation, not the
+number" precisely to kill stale figures; this is that rule's own failure mode, found one round after
+it was applied. The replacement reads both shapes and yields 15 — run before writing it down, and it
+re-confirms `403`→five reasons and `502`→two independently.
+
+Task 8 also gained a visible marker in both halves: ticked, but owing the `confirm_timeout` split in
+`confirm_surface()` as its own `server.py` commit ahead of task 9's test.
+
+**Next: compliance round 2.** All three fixes are spec-text only; both waived ids
+(`adr-0017/md-half-size-budget`, `adr-0017/spec-half-size-budget`) still pass forward.

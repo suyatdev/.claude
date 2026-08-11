@@ -1654,3 +1654,94 @@ None this round.
   default.
 - Toolchain versions in `§Toolchain` were read, not re-verified against this host this round (no
   code changed since round 2's toolchain re-verification); no drift is implied by that.
+
+## Round 1 (re-entry) — 2026-08-11T18:34:03Z — **FAIL** (1 violation)
+
+`head_sha` `01f0c45ba7e998448183b175a438156203b33dd0` · branch `feat/tracking-feature-state` ·
+spec blobs `c8f8cd7c4172752e392ab4714feb271157d374a6` (`.md`, byte-identical to round 3's pass) /
+`9260312665dd622dd33b3feae0b32fbb11ae2fb2` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+Round 3 of the last cycle passed clean. Since then, two more commits touched only the `.spec.md`
+half, which invalidates that pass under the freshness rule and restarts the counter here at round 1.
+The first commit (`686057d`) fixed three real wording defects the observability judge had caught two
+days earlier and that had survived a full compliance round unfixed: a `405` table row that could be
+misread as making `POST /command` — the one state-changing route — a `405`; a claim that a failed
+`cmux send`'s exit code is "logged server-side" when the structured audit line actually carries no
+such field (it goes out as a separate `stderr.write`); and a "bijection" label for the
+reason-to-status relationship where the code actually emits five reasons for `403` and two for `502`,
+not one each. I re-read the server's routing logic and its `_fail`/`audit` calls directly rather than
+trusting the corrected prose, and all three now match the code exactly. The second commit (`01f0c45`)
+recorded a genuinely new finding from that same re-derivation exercise: the audit value
+`confirm_timeout`, named in four places including a test task 9 must drive an actual request for,
+cannot currently be emitted — `confirm_surface()` collapses a non-zero exit and a timeout into one
+`"unrunnable"` state. I confirmed this against `task-tracker/server.py:236-253` directly: no code path
+produces `confirm_timeout`. The spec handles this correctly — it names the gap as a **blocking
+prerequisite**, records the user's decision that the code changes (split the state) before the
+assertion is written, and requires that edit to land as its own commit ahead of the test. That is not
+cited as a violation; it is exactly the human-owned-decision discipline this card asks for elsewhere.
+
+One real gap survived the fix pass, and it is not new: the observability judge flagged it on
+2026-08-11 (its "what I'd double-check" item 3) and the fix commit that closed three sibling findings
+from the same list did not touch it. Task 8 (`server.py`) is ticked done, and the file measures **694
+lines** (`wc -l`, re-derived) — 73% past the 400-line soft target this card applies to itself. Its own
+task-8 entry still reads in the future tense — "will land near the 400-line target. If it crosses,
+the split is `serve_static.py`; raise it rather than taking it as a drive-by" — as if the crossing
+were still hypothetical. Task 3's entry for `analyze.py` (792 lines, the same over-400-under-800
+territory) shows what this card's own convention requires once the number is known: an explicit,
+present-tense "not scheduled — a structural split is a human-owned call" note recording the actual
+decision. `server.py`'s entry never made that transition. The decision itself may well be "defer,
+same as `analyze.py`" — but the card doesn't say so, and this is the one component it calls the
+highest-value target in the repo.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `core-conduct/file-size-decision-unsurfaced` | `rules/core-conduct.md` | Code Style: "Many small, focused files (<400 lines, 800 max) over few large ones"; Existing and New Work: "Architecture trade-offs … stay human-owned — implement once decided, don't decide." | `tracking-feature-state.spec.md` §Tasks, task 8 detail | Task 8 is ticked complete and `task-tracker/server.py` measures 694 lines (`wc -l`, re-derived 2026-08-11), well past the 400-line soft target, yet its entry still reads in future/hypothetical tense ("will land near the 400-line target. If it crosses…") rather than recording the actual count and an explicit present-tense human decision to split or defer — the treatment task 3's analogous `analyze.py` overrun (792 lines) received. The same standard this card applies to one file is unapplied to the other, for the component it itself calls the highest-value target in the repo. |
+
+### Verified clean, re-derived from source (not from prior verdicts)
+
+| Claim | Method | Result |
+|---|---|---|
+| `405` table now matches the server's routing | Read `do_GET`/`do_OPTIONS`/`do_POST` (`server.py:384-411`) against the table's "other than" wording and precedence note | Exact match: `GET /command`→405, `POST /`→405, `POST` on a manifest path→405, `OPTIONS` on any non-`/command` path→405, `POST /command` and `OPTIONS /command` are not 405, unknown path is 404 regardless of method |
+| Exit-code claim now matches the audit format | Read `audit()` (`server.py:125-138`) and the `cmux send exited %d` write (`server.py:273`) | The structured line carries no exit-code field; the exit code goes to a separate `stderr.write`, exactly as the corrected prose now states |
+| "Bijection" replaced with the accurate property | Derived `grep -oE '_fail\([0-9]+, "[a-z_]+", "[a-z_]+"' task-tracker/server.py \| sed ... \| sort -u` plus the `send_failed` audit call outside `_fail` | `403`→5 reasons, `500`→2, `502`→2 (`confirm_failed`, `send_failed`); no one-to-one pairing exists, matching "total coverage in both directions," not a bijection |
+| `confirm_timeout` cannot be emitted (the recorded blocking prerequisite) | Read `confirm_surface()` (`server.py:236-253`) and its call site (`server.py:568-575`) | Confirmed: both a non-zero `cmux tree` exit and a `TimeoutExpired` return `"unrunnable"`, mapped to `reason="confirm_failed"` only — no path emits `confirm_timeout`. Matches the spec's own claim exactly |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` in the spec half | **15**, matching the `.md` half's stated figure |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py <.md> <.spec.md> tracking-feature-state` | exit **0** |
+| Cross-file pointers (`PORTS.md`, ADR 0022, ADR 0023) | grepped each for the `.spec.md` filename | All three correctly point at `tracking-feature-state.spec.md` |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`placeholder`/`/Users/`/`/home/` | The two `placeholder` hits are narrative references to a past, since-replaced row — not live placeholders. Nothing else found |
+| Security territory (`writing-secure-code`) | Re-read §Security, the wire contract, and the corresponding `server.py` handlers | Unchanged clean read: single-key allowlist body, no error-body echo, memory-only token compared with `hmac.compare_digest`, every subprocess call carries a timeout, `Origin`/`Host`/CSP checks present and matching the code |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half unchanged at 216 lines (byte-identical blob to round 3's pass) against ADR 0017's `≤200`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; **re-confirmed 2026-08-11 at commit `686057d`** after the observability judge measured the growth since the accepting commit (1,278 → then further, now 1,506 lines, `wc -l`) and put it back to the user, who left the waiver standing on the ground that it was never about this half's size, only the session-start half staying small. Not re-cited. |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` size continues to grow past the figure it was last re-confirmed against.** At
+  `686057d` (the re-confirmation commit) the file was smaller than its current 1,506 lines — this
+  round's own edits (the `confirm_timeout` paragraph) added to it further. The waiver's *ground*
+  (session-start half staying small) still holds — the `.md` half is unchanged — so this is not raised
+  as a violation, per the dispatch instructions. Flagging for the user's awareness only: if this
+  becomes a pattern where every fix pass adds more to the half than it removes, the "re-confirm on
+  request" model may need to become "re-confirm above a stated delta" instead.
+- Several acceptance criteria (e.g. 2, 3) still collapse an explicit `When` clause into `Given`,
+  consistent with every prior round's non-blocking treatment (token economy, intent stays
+  unambiguous). Not cited, per that standing precedent.
+- The `confirm_timeout` blocking-prerequisite paragraph is a model instance of this card's own
+  discipline: it names the gap, cites the exact code line, records the human decision, and orders the
+  code change ahead of the test that depends on it in its own commit — the same shape task 8's entry
+  is missing for its own file-size question.
+- Phase/branch documentation (`gates/phase-branch-mismatch`, closed round 2 of the prior cycle) is
+  unchanged and still correct on independent re-check: the preamble's claim that every other
+  `phase: planning` card carries `branch: none` and zero ticked tasks still holds
+  (`grep -m1 '^phase:\|^branch:' docs/features/*.md`).
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md`
+  + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/` default.
+
