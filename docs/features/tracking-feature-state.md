@@ -51,7 +51,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 7 — `PORTS.md` entry for the control server, before any bind. Port is **8422**.
 - [ ] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.**
 - [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**. Not criterion 13.
-- [ ] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists.
+- [ ] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists. **Owns criterion 15** — the page's own failure behaviour, which no server test can reach.
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch.
 - [ ] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`.
 - [ ] 13 — Run every suite, record before/after counts in `## Verification` below.
@@ -101,6 +101,13 @@ verified, not unverified. What goes missing is the independent JavaScript-engine
 U+2028/U+2029 class of bug that `store.dumps`'s own docstring names as the reason it escapes them.
 Task 13 must record `node --version` beside the counts, and report a skip of these three as
 **"criterion 5 verified without a JS-engine oracle"** rather than either a clean pass or a failure.
+
+⚠️ **Criterion 15's tests are node-guarded too, and they degrade worse.** Task 10 adds
+`task-tracker/test_ui_commands.py` under the same guard — re-derive the count with
+`grep -c skipif task-tracker/*.py` rather than assuming it is still three. Criterion 5 keeps an
+unguarded Python sibling, so a node-less host still verifies it partially; criterion 15 has none,
+because the behaviour is browser JS end to end. On such a host task 13 reports criterion 15
+**not verified** — not passed, and not skipped-therefore-fine.
 
 ⚠️ **Task 13 must record before-counts per suite, captured before touching anything**, so a
 pre-existing failure is not read as a regression introduced by this feature.

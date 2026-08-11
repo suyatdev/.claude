@@ -40,8 +40,10 @@ falsified by its own paragraph: the first draft quoted the judge's 1,261 and was
 it saved, the correction quoting the re-measured figure was wrong again three lines later. Run
 `wc -l docs/features/tracking-feature-state*.md` for both halves — note the glob has **no dot before
 the star**, or it matches the spec half alone — and compare against ADR 0017:39's
-`≤200` / `≤800` row. As of 2026-08-11 the `.md` half is inside its cap and this half is roughly 1.6×
-over its own — a ratio, unlike a count, that a paragraph cannot invalidate by existing. Compliance round 11 cited the overrun as
+`≤200` / `≤800` row. As of 2026-08-11 the `.md` half is inside its cap and this half is over its
+own. Not even the *ratio* is pinned here: the first attempt said ~1.6×, which the very next round of
+edits to this file pushed to 1.67. Only the **direction** is stable, and if a re-derivation ever
+puts this half back under 800 the honest move is to delete this paragraph, not to update it. Compliance round 11 cited the overrun as
 `adr-0017/spec-half-size-budget` and closed by handing the call to a human, which is the right
 posture: cutting ~460 lines out of §Tasks and §Design 3 is a structural edit, and those are the two
 sections an implementer actually builds from. **The user accepted the overrun on 2026-08-11**, on
@@ -406,6 +408,35 @@ confirmation runs **before** any send is attempted — the refusal happens on th
 socket, so nothing reaches the focused tab; its three outcomes and their codes are tabulated once, in
 §Security, rather than restated here. `reanalyze` failure is `500`; the store is
 left at its previous valid state, never truncated and never half-written.
+
+#### What the page does with a failure
+
+Everything above is what the **server** returns. This is what the **page** must do with it, and it is
+a contract, not a suggestion: a button that posts, receives a `403` and silently returns to its
+resting state satisfies every server-side criterion in this card while being the exact failure the
+audit log exists to catch. Three rules govern all of it.
+
+1. **No response leaves the button looking like nothing happened.** Every outcome below reaches a
+   visible state. Silence is never an outcome.
+2. **The page never renders any text from the response.** It maps the `error` *code* to its own
+   fixed string and displays that. The server already refuses to echo request content; the page must
+   not reintroduce the gadget from the other side, and the CSP gives it no second chance.
+3. **`sent=unknown` must never read as `sent`.** A `502` may mean the keystroke landed. Anything that
+   resolves it to "failed" is a lie in the direction that loses the operator's trust.
+
+| Outcome | What the page shows | Recoverable? |
+|---|---|---|
+| `200` | The command's success state | — |
+| `403 forbidden` | "This page's token is stale — reload to reconnect." **The normal case**, not an anomaly: §Security ties the token to one server lifetime, so any page left open across a restart lands here | Yes — reload `GET /` |
+| `409 unresolved_surface` | "The session this page controls has ended." Nothing was sent | **No.** The channel is dead for this page; fall back to the criterion-8 copyable text rather than offering a retry that cannot work |
+| `502 send_failed` | "The command may or may not have reached the session — check it before retrying." Never "failed", never "sent" | Operator's call, not the page's |
+| `500 reanalyze_failed` | "Analysis failed; the data below is from the previous run" — and the displayed `analyzedAt` **stays at the old value**, because the stale timestamp is the only on-screen signal that the view is stale | Yes — retry |
+| `400`/`413`/`415` | "Unexpected error" | These are the page's own bugs, not the operator's; the page cannot produce them by following this contract, so reaching one means the wiring is wrong |
+| **`fetch` rejects** (server exited on idle or with its parent, port closed) | "The control server is no longer running." | **No** — same terminal state as `409`; offer the copyable text |
+
+The two terminal rows matter most. `409` and a dead socket are the states where the page must
+*stop offering the button*, because a retry loop against a session that no longer exists is how an
+operator concludes the feature is broken rather than that the thing it controlled is gone.
 
 #### Audit log
 
@@ -935,6 +966,24 @@ and nothing above would notice.
     All three clauses, because a lifetime control that is present in the code and inert is the failure
     this criterion exists for: detached, `getppid()` never changes and the shutdown silently never
     fires; with `stderr` redirected, the audit log exists and reaches nobody. Both leave a green suite.
+15. **Given** the page wired by task 10, **when** each row of §Design 3's "What the page does with a
+    failure" table is driven in turn, **then** the page reaches that row's visible state and — the
+    clause that carries the criterion — **never also** reaches the `200` success state. Four rows
+    carry an extra assertion because each is a distinct way to be wrong while looking right:
+    - `502` — the displayed text resolves the outcome to **neither** "sent" nor "failed". A handler
+      that picks either one is asserting something the server explicitly does not know.
+    - `500` — the displayed `analyzedAt` is **byte-identical** to its value before the request. It is
+      the only on-screen signal that the data is stale, and refreshing it is how a failed re-analysis
+      comes to look like a successful one.
+    - `409` and a rejected `fetch` — the command button is **no longer offered**, and the criterion-8
+      copyable text is. Drive the `fetch` rejection by **stopping the server**, not by mocking one:
+      the server exiting under an open page is the normal end of every session, not an edge case.
+    - An `error` code that is **not** in the table — the page shows its fixed "unexpected" string and
+      **not** the code. This is the falsifier for rule 2: a handler that renders the server's text
+      passes every other row here and fails only this one.
+
+    "Shows an error" and "does not also show success" are two assertions, not one. A handler that
+    sets both states passes the first, and the operator reads the second.
 
 ## Out of scope
 
@@ -1158,6 +1207,16 @@ forbids editing a spec.
 - [ ] 10 — Wire the UI's command buttons to `POST /command` per the contract, reading the token from
       the injected `<meta name="tracker-token">`. Where `terminal-detect.sh` prints `none`, render the
       same three commands as copyable text instead (criterion 8).
+      - **Owns §Design 3's "What the page does with a failure" table and criterion 15.** Every row is
+        the page's behaviour, so no server test can reach any of it — this is the one task that can.
+        Handle each row explicitly; there is no default branch, because a default branch is how a
+        `403` becomes a button that does nothing.
+      - The assertions go in `task-tracker/test_ui_commands.py`, driving the handler through `node`
+        the way `test_store.py` drives `store.dumps` — same `@pytest.mark.skipif(NODE is None, ...)`
+        guard, and therefore the same obligation on task 13: a node-less host must report criterion
+        15 as **not verified**, not as passed. Unlike criterion 5, this one has **no unguarded Python
+        sibling** — the behaviour is browser JS end to end, so there is nothing to partially verify.
+        Say so plainly rather than letting a green suite imply coverage.
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`, following
       `skills/_standards/authoring-skills-and-agents.md`. Points at `managing-session-memory`; does
       not restate phase rules.
