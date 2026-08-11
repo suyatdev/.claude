@@ -5460,3 +5460,36 @@ touch the two revised bullets.
 
 Next: **task 9** — `task-tracker/test_server.py`, criteria 6, 7, 9, 10, 11, 12 and 14, plus the new
 manifest sweep. Not criterion 13. Then 10, 11, 12, 13.
+
+## Session 65 — 2026-08-11 — round 1 came back FAIL; escalated instead of self-revising
+
+Restored clean: frontmatter matched reality (`phase: implementation`, branch checked out), but two
+`coding-memory/compliance-judge/` files were uncommitted — the round-1 verdict session 64 dispatched,
+written mid-run while `ab799e1` landed under it. Reconciled per restore discipline: read in full,
+then committed as-is (`e20dfb0`), before starting task 9.
+
+**Verdict is FAIL, 4 violations, all of them spec/checklist prose:** (1) `adr-0017/md-half-size-budget`
+— the `.md` half is 215 lines against ADR 0017's ≤200 cap; (2) `writing-specs/stale-recorded-claim` —
+the spec half still claims "112 lines, inside cap" and the `.md` still claims "phase: planning, task
+14 unticked," both false since `ab799e1`; (3) `gates/split-half-sync` — the pointer half says "fourteen
+acceptance criteria" nine lines above its own "Owns criterion 15"; (4)
+`writing-specs/good-bad-edge-cases` — task 9's manifest-sweep bullet asserts `GET /vendor/babel.min.js`
+→ `200` but nothing asserts `vendor-resources.js` maps `BABEL_URL` to the local copy, the other half of
+what vendoring means, and the one violation that lands inside task 9's own scope.
+
+**Did not self-revise.** `running-the-compliance-judge`'s normal step 3 ("you revise the spec, then
+re-dispatch") is the exact action `phase: implementation` forbids — no hook stops it, it is
+judgment-only, and the discipline holds anyway. All four violations need a `docs/features/*.md` or
+`.spec.md` edit, so this is the `core-conduct` "spec proves wrong or incomplete" case: stop, don't
+work around it silently, escalate as **GATE: Spec change needed** rather than run the judge's usual
+auto-revise loop. Round 1 also doesn't meet the judge-loop's own escalation threshold (2 consecutive
+citations or round 3) — moot here, since self-revision was never available in this phase to begin with.
+
+Session also crossed the 78k-token freshness watch mid-restore; this entry and the push below satisfy
+that checkpoint in the same pass rather than a separate one.
+
+Next: **user decides** whether to switch tier now to fix the spec (all four violations, three of which
+are one-sentence corrections; the size-cap question in violation 1 may need their call, not a revision)
+or defer and let task 9 proceed now on the criteria untouched by violation 4 (6, 7, 9, 10, 11, 12, 14
+minus the babel/`vendor-resources.js` manifest-sweep assertion), matching the risk they already accepted
+in session 64 ("a FAIL costs only the tests that touch the two revised bullets").
