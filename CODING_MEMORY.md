@@ -5733,3 +5733,53 @@ words) before concluding a string is not there.
 `gate confirmed` plus its own model-switch checkpoint, with the `confirm_timeout` split in
 `confirm_surface()` first in the queue, then tasks 9-13. Next step is the **user review gate** — the
 spec now carries a fresh PASS, which is the precondition that gate exists to guarantee.
+
+## Session 70 — 2026-08-11 — the gate reopens, and the transition moves the hash it was measured against
+
+**Restore was verified from source, not from the handoff.** Branch, phase, HEAD and tree state all
+matched. The handoff's freshness claim for the compliance PASS was re-derived rather than copied:
+`.md` `4bccdca9`, `.spec.md` `ca31bb8d`, pair `2da12308`, last-touching commits `bd73da6` / `c4c3349`
+— all four exact. The PASS was genuinely live, so nothing needed re-judging.
+
+**`.claude/session-state.md` trimmed 90 → 69 lines** against the live-handoff directive's 60-line
+target. The target was not reached, and the shortfall was reported rather than papered over. What was
+cut is archaeology — why superseded ledger rows were wrong, a stale commit-message correction already
+archived in session 68. What stayed is the set a cold session cannot re-derive: the two waived
+violation ids with their sign-off commits, the `confirm_timeout` decision, PR #51's do-not-merge, and
+the verdict write-path override. Reaching 60 meant deleting one of those.
+
+**The ≥75k context nudge was declined, with reasons.** `context-handoff-watch.sh` fired at 76.8k
+tokens, but nearly all of that was static preamble that reloads identically in a fresh session; the
+session had produced two tool calls of new conversation and had nothing uncommitted. A clear there
+would have archived an empty session. The nudge measures *total* context, the freshness checkpoint
+measures *new conversation*, and the two diverge hardest at session start.
+
+**The model-switch checkpoint was asked separately, and it mattered.** The user sent `gate confirmed`
+without having switched tiers — the system prompt still reported Opus 5, which is live evidence no
+`/model` had landed, since that line is regenerated per request. Two readings were equally live: a
+deliberate choice to stay high, or an overlooked step. Asking returned "lower tier", so
+`model_tier: low` is recorded rather than guessed. This is precisely the shape the gates' "each is its
+own ask; an earlier answer never satisfies a later one" exists for.
+
+**`phase-guard.sh` would not have blocked, and that was confirmed before it was promised.** Two
+unrelated cards sit at `phase: planning` (`falsify-harness-signatures.md`,
+`verification-marker-gate.md`), which looked like it might freeze source writes repo-wide. It does
+not: step 9 walks `claimed_branches` and `exit 0`s on the first exact string match against the
+current branch (`sed -n '505,525p' hooks/phase-guard.sh`), so a single `implementation` card naming
+this branch suffices. Permission is branch-scoped, not repo-scoped.
+
+**The transition invalidated the hash the PASS was measured against — by its own act.** Flipping
+`phase`/`model_tier` rewrites the `.md` half, and the preamble paragraph explaining "why a `planning`
+card carries a real branch and ticked tasks" became false the instant the frontmatter read
+`implementation`. Both were edited in the same commit, while still in `planning`, because
+`implementation` forbids spec edits. The diff is two hunks in one file (`@@ -2,2` and `@@ -9,9`); no
+design, security, task or criterion text moved, and `.spec.md` is byte-identical.
+
+- pair `2da12308` → `511b6d5e` · `.md` `4bccdca9` → `2ab92441` · `.spec.md` `ca31bb8d` unchanged
+
+**Recorded as a judgment call, not a rule:** the compliance judge was not re-run for this. Its gate
+blocks `superpowers:writing-plans` ahead of the user review gate, and that gate is passed. A genuine
+spec revision during implementation still forces re-entry at round 1.
+
+**Next step:** the `confirm_timeout` split in `confirm_surface()` (`task-tracker/server.py`), as its
+own commit before any task-9 test, then tasks 9-13.

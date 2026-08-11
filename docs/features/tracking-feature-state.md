@@ -1,20 +1,20 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: feat/tracking-feature-state
 ---
 
 # Feature-state tracking with a browser UI
 
-⚠️ **Reading `phase: planning` above while `branch:` names a real branch and tasks below are ticked
-means this card is mid-implementation and *temporarily* returned to planning for a spec revision** —
-the only phase in which spec edits are permitted. It is **not** a fresh planning card, and the branch
-is retained deliberately rather than reset to `none`. Reopening implementation takes the literal
-`gate confirmed`; until then `phase-guard.sh` correctly blocks writes to source, which is the point.
-Compliance round 2 cited the ambiguity as `gates/phase-branch-mismatch` — every other `planning` card
-in this repo carries `branch: none` and zero ticked tasks (`grep -m1 '^phase:\|^branch:' docs/features/*.md`).
-The three-state `phase` field cannot express "paused for revision", so the convention is written down
-here rather than by inventing a fourth state.
+⚠️ **This card returned to `phase: planning` once mid-implementation for a spec revision** — the only
+phase in which spec edits are permitted — and reopened to `implementation` on 2026-08-11 on the
+literal `gate confirmed`. The convention is recorded here because the three-state `phase` field
+cannot express "paused for revision": across such a pause the card keeps its real branch and its
+ticked tasks rather than resetting `branch:` to `none`, which is what every other `planning` card in
+this repo carries (`grep -m1 '^phase:\|^branch:' docs/features/*.md`). Compliance round 2 cited that
+ambiguity as `gates/phase-branch-mismatch`; the answer was to write the convention down rather than
+invent a fourth state. Should another revision be needed the same pause applies — and while it is
+paused `phase-guard.sh` correctly blocks writes to source, which is the point.
 
 **The spec half of this feature lives in `tracking-feature-state.spec.md`** — design, the injection
 route, security, and every acceptance criterion. Re-derive the count rather than trusting a number
