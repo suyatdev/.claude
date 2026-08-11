@@ -1200,11 +1200,13 @@ forbids editing a spec.
         starts filtering on frontmatter; "some question was raised" would have passed on the
         delimiter branch too, a different bug. Falsified both ways against a deliberately broken
         analyzer before being trusted (`grep -n 'a_card_without_a_phase_key' task-tracker/test_analyze.py`).
-      - ⚠️ **This entry went on describing that work as unfinished for six commits after it landed**,
-        while the `.md` half already recorded it closed — and the `grep` it cited to prove the
-        fixture "cannot express the case" had by then started proving the opposite. The two halves
-        are one document: when they disagree, re-derive from source rather than believing either
-        one's prose.
+      - ⚠️ **This entry went on describing that work as unfinished from `3d5a2ff`, which landed it,
+        all the way to `b2ed7bb`** — size the gap with
+        `git rev-list --count 3d5a2ff..b2ed7bb -- docs/features/tracking-feature-state.spec.md`
+        rather than trusting a figure written here — while the `.md` half already recorded it closed,
+        and the `grep` this entry cited to prove the fixture "cannot express the case" had by then
+        started proving the opposite. The two halves are one document: when they disagree, re-derive
+        from source rather than believing either one's prose.
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader and the
       "undetectable dependency becomes a question" rule.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`: atomic emit of `tracker-data.js`,
