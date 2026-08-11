@@ -5247,3 +5247,32 @@ the spec's changed-cell matrix, carve-out-bounds table, and round-3 judge-findin
 `2ac4d2d`, pushed. Next is checklist step 2 (state helpers in `hooks/git-guard.test.sh`) — see
 `.claude/session-state.md` for the corrected step ordering (the prior handoff had steps 2 and 3
 swapped relative to the feature file's actual checklist).
+
+## Session 59 — git-guard-detached-head: checklist step 2, ten self-asserting fixtures
+
+Restored from the session-58 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean. Ran checklist step 2 — state helpers in `hooks/git-guard.test.sh`, beside `on_branch()`.
+
+Landed `assert_symref`/`assert_marker`/`assert_headname` (hard-abort assertions matching
+`on_branch`'s own "HARNESS —" fail-loud convention) plus `mk_dir_repo` and eight fixture builders:
+`detached`, `nonrepo_dir`, `unborn_repo`, `rebase_edit_stopped`, `cherry_pick_conflict`,
+`named_main_merge_conflict`, `rebase_apply_stopped`, `master_repo`. Two of them —
+`rebase_edit_stopped` and `rebase_apply_stopped` — take the starting branch as a parameter, which is
+what lets ten checklist-listed states (rows 5/7, 8/15, 17/19) come from eight functions rather than
+ten. Directory-returning helpers build under the suite's own `$TMP` so its existing `EXIT` trap
+cleans them up, and print the repo path on stdout for the next step's `run_case_in` to consume —
+nothing is wired into `run_case` yet, by design; the checklist puts that in step 3 because `run_case`
+hardcodes `cd "$REPO"` and six of the nineteen rows need their own directory.
+
+Given `feedback_fixture_must_not_pre_create_state` and `feedback_confirm_the_check_can_fail` from
+session 58's own findings, verified both directions before calling this done, outside the committed
+suite (these helpers aren't reachable from `run_case` yet, so nothing in the suite itself could
+prove this): extracted the new function block into a scratch file, sourced it against a throwaway
+`$TMP`/`$REPO`, and invoked all ten helper calls — none hit a `HARNESS —` abort. Then fed
+`assert_symref` a deliberately wrong branch name against a real repo and confirmed it aborts with
+the mismatch reported, rather than passing silently — the falsifier check the session-58 note flagged
+as what actually proves an assertion can fail. `bash hooks/git-guard.test.sh` still reports 77
+passed, 0 failed, unchanged, since the new helpers are unwired.
+
+Committed `0e124ab`, pushed. Next is checklist step 3 — add a `run_case_in <dir> <desc> <want-exit>
+<cmd>` variant beside `run_case`, needed before any of these fixtures can actually feed a test row.
