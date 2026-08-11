@@ -5375,5 +5375,38 @@ off-manifest paths under `vendor/` still `404`. 54 passed, unchanged.
 **Still open and unresolved — carried forward, not fixed here:** the `path_escape` spec gap above
 still blocks task 9, and the compliance gate still has no passing verdict.
 
+## Session 63 — 2026-08-11 — criterion 13 ran; it fails on one row, and task 14 stays open
+
+Both runs are recorded in `§Verification` of the `.md` half with their request lists, the view used
+and the Chrome version. **Seventeen of eighteen rows match in both directions**, including the two
+that four rounds of greps had missed: run (a) really does `404` `tracker-data.js` and pull
+`tracker-data.sample.js`, and run (b) really does omit the sample entirely.
+
+**The one failure is `/vendor/babel.min.js`: expected `200`, never requested — in either run.** It is
+**not** a vendoring defect. The file is vendored, on the manifest, and serves `200 text/javascript` on
+demand. `support.js` loads babel **lazily** from `ensureBabel()`, reachable only from
+`load(kind === "jsx", …)`, and the page has **zero** `x-import` occurrences — so no view can produce
+the request and no differently-driven run rescues it. The nine rows were pinned in advance so the
+implementation could not edit the target afterwards; that discipline held, and it is what caught this.
+**Fixing it is a spec edit — escalated to the user, not worked around.** This is the second open spec
+gap on the card, alongside `path_escape`.
+
+**⚠️ The criterion's own named instrument misreported a status.** `read_network_requests` returned
+**`503`** for run (a)'s `tracker-data.js`; the server audit log, `curl -s -D -`, and the page's own
+`fetch()` all returned **`404`** with `{"ok": false, "error": "not_found"}`. The server was right and
+the tool was wrong. Criterion 13 names that tool as the mechanism, so **its status column has to be
+corroborated** — a run that trusts it alone reads a correct server as a broken one. The check that
+caught it was asking what the instrument could not see, then going to three oracles that could.
+
+**`/favicon.ico` is not observable by the criterion's own mechanism.** Capture cannot start until
+`read_network_requests` has been called once, which needs a page already loaded — so the instrumented
+load is always at least the second, and Chrome has cached the negative by then. It was captured on the
+first, uninstrumented load *by the server log*. The source-map hazard did **not** materialise: no
+`.map` row appeared in either run.
+
+Four `chrome-extension://…` rows appear in every enumeration — the extension injecting its own
+scripts. Observer artefacts, not page requests, and named in `§Verification` so a later run does not
+read them as a manifest widening.
+
 Next: **criterion 13**, both store states, with a regular *and* a fill icon on screen; record both
 request lists, the view used, and the Chrome version in `§Verification`. Then task 9.
