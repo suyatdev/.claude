@@ -399,7 +399,7 @@ back** — an error body that reflects input is a free XSS gadget:
 | Status | `error` | Cause |
 |---|---|---|
 | `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
-| `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch, **or** a `Host` header that is not `127.0.0.1:<port>` — the DNS-rebinding guard above, logged as `host_mismatch`. It collapses into this same `403` for the same reason as the other three: the caller learns nothing about which check it failed. Applies to `GET /` as well as `/command`, since `GET /` is the route that hands out the token |
+| `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch, **or** a `Host` header that is not `127.0.0.1:<port>` — the DNS-rebinding guard above, logged as `host_mismatch` — **or** a request path that, once symlinks are resolved, lands outside `task-tracker/`, logged as **`path_escape`** (the traversal rule stated in §Design 3 above; criterion 11's first half is what proves it). All five collapse into this one `403` for the same reason: the caller learns nothing about which check it failed. Applies to `GET /` as well as `/command`, since `GET /` is the route that hands out the token |
 | `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it, `tracker-data.js` before the first analysis, and **`/favicon.ico`**, which every browser requests unprompted and which is deliberately not served. Both of those paths are **expected** `404`s and appear as such in criterion 13's run-(a) table; they are the only two |
 | `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
 | `409` | `unresolved_surface` | The UUID bound at startup (§Security) is **confirmed absent** from `cmux tree` at send time — the session ended. This is criterion 9's "refuses and reports" |
@@ -409,8 +409,13 @@ back** — an error body that reflects input is a free XSS gadget:
 | `500` | `reanalyze_failed` | `id` was `reanalyze` and the analyzer aborted, **exceeded its 60-second timeout** (`TASK_TRACKER_ANALYZE_SECS` overrides, minimum 5s, may not be disabled), or the store write failed. The previous `tracker-data.js` is left intact (§Design 2's atomic write guarantees this) and the UI must surface the failure rather than silently continue displaying stale data. The timeout is stated because `reanalyze` was the **one** subprocess boundary here without one, against this card's own standard — and it is the slowest, since it walks every card and every worktree, so "it will finish" is exactly the assumption that hangs a request forever |
 | `502` | `send_failed` | `cmux send` exited non-zero or exceeded its 5-second timeout; **or** the send-time surface confirmation could not be *run* — non-zero exit or timeout — which refuses before any send, logged as `confirm_failed`/`confirm_timeout` (§Security). Unconfirmable is refused, never assumed fine |
 
-**The single `403` is deliberate.** Bad token, unknown id, and bad origin are indistinguishable to
-the caller, so the endpoint cannot be used to enumerate the allowlist or confirm a guessed token.
+**The single `403` is deliberate.** Bad token, unknown id, bad origin, bad host, and an escaping path
+are indistinguishable to the caller, so the endpoint cannot be used to enumerate the allowlist or
+confirm a guessed token. **The path-escape case has its own reason to collapse:** a `403` that is
+distinguishable from the `404` an off-manifest path returns tells a prober that its traversal
+*resolved to something real*, turning the status code into an oracle for the filesystem outside the
+serving root. The operator still gets the distinction, in `reason`, on a stream the prober cannot
+read — which is the entire division of labour the `reason` field exists for.
 
 `OPTIONS /command` returns `204` and **no `Access-Control-Allow-*` header of any kind**. The server
 never emits CORS headers, so a genuine cross-origin preflight fails in the browser by construction —
@@ -480,10 +485,10 @@ filesystem path, which would leak the serving root into a log the operator may p
   incident report, and an operator who cannot distinguish *a hostile page probing the allowlist* from
   *my own UI holding a stale token after a restart* will investigate the wrong one. The log is
   server-side, on a stream the attacker cannot read, so the two needs do not conflict. Values:
-  `bad_token`, `unknown_id`, `origin_mismatch`, `host_mismatch`, `malformed`, `too_large`,
-  `unsupported_media_type`, **`not_found`**, **`method_not_allowed`**, **`asset_unreadable`**,
-  `unresolved_surface`, **`confirm_failed`**, **`confirm_timeout`**, `send_failed`,
-  `reanalyze_failed`, or `-` on success. The two `confirm_*` values share the `502` the wire shows
+  `bad_token`, `unknown_id`, `origin_mismatch`, `host_mismatch`, **`path_escape`**, `malformed`,
+  `too_large`, `unsupported_media_type`, **`not_found`**, **`method_not_allowed`**,
+  **`asset_unreadable`**, `unresolved_surface`, **`confirm_failed`**, **`confirm_timeout`**,
+  `send_failed`, `reanalyze_failed`, or `-` on success. The two `confirm_*` values share the `502` the wire shows
   for `send_failed`, and separating them here is the point of the whole `reason` field: "the send
   failed" and "the target could not be confirmed, so nothing was sent" are the same wire code and
   completely different incidents.
@@ -496,6 +501,16 @@ filesystem path, which would leak the serving root into a log the operator may p
   only evidence anyone ever probed the endpoint. Logged as `-`, that evidence does not exist. **The
   enum and the status table are checked against each other in task 9 — every row has a value, every
   value has a row.**
+
+  ⚠️ **`path_escape` was the fourth instance, and it failed in the *other* direction — which is why
+  reading the spec was never going to find it.** The first three were rows with no value. This one was
+  a **value with no row**: §Design 3 mandated `403` for a path resolving outside the serving root, the
+  implementation emitted `reason=path_escape`
+  (`grep -n path_escape task-tracker/server.py`), and neither the status table nor this enum defined
+  it. Both halves of task 9's check exist because a `reason` the code emits and the spec never names
+  is exactly as untestable as a row with no value — the assertion gets written from the code either
+  way. It was found by an implementation session hitting it, not by review, and it is recorded here as
+  the standing argument for keeping *both* directions of that check rather than the intuitive one.
 - **`surface` and `sent` together record where the keystrokes went, not what the server intended.**
   `surface` is the ref the send resolved to at send time, never the one requested. `sent` is what makes
   the dangerous case reconstructable: re-resolution can succeed and the surface can still die between
@@ -919,10 +934,9 @@ and nothing above would notice.
     | `/tracker-data.js` | **`404`** — absent is the normal first-run path, the stated exception to `asset_unreadable` in §Design 3 |
     | `/tracker-data-fallback.js` | `200` |
     | `/tracker-data.sample.js` | `200` — requested **only** here, via the shim's `document.write` |
-    | `/favicon.ico` | `404` — every browser requests it unprompted, it is on no manifest, and the contract's default correctly refuses it |
+    | `/favicon.ico` | `404` — every browser requests it unprompted, it is on no manifest, and the contract's default correctly refuses it. **Verified from the server's audit log, not the browser enumeration** — see the note below |
     | `/vendor/react.production.min.js` | `200` |
     | `/vendor/react-dom.production.min.js` | `200` |
-    | `/vendor/babel.min.js` | `200` |
     | `/vendor/phosphor/regular/style.css` | `200` |
     | `/vendor/phosphor/regular/Phosphor.woff2` | `200` |
     | `/vendor/phosphor/fill/style.css` | `200` |
@@ -931,6 +945,18 @@ and nothing above would notice.
     | `/vendor/inter/inter-latin.woff2` | `200` |
 
     …and `window.TRACKER_DATA_SOURCE === 'sample'`, with the UI rendering the sample.
+
+    ⚠️ **The `/favicon.ico` row is scored against the server's audit log, and is the one row exempt
+    from the browser enumeration's set equality — because the mechanism cannot observe it.** The
+    extension begins capturing only when `read_network_requests` is first called, which requires a
+    page already loaded, so the instrumented load is always at least the *second*; by then Chrome has
+    cached the negative result and does not re-request. The 2026-08-11 run confirmed both halves: the
+    server logged `refused status=404 reason=not_found` for it on the first, uninstrumented load, and
+    it was absent from every instrumented enumeration afterwards. **Its absence from the observed set
+    is therefore expected and is not a failure; its presence is also not one.** What must hold is the
+    server's answer, which `curl` and the audit log both give directly. Stated because the earlier
+    wording made a correct server fail on a browser-caching artefact — the same species of defect as
+    the babel row below, and found in the same run.
 
     ⚠️ **The three font rows assert *rendering*, not vendoring, and that is the stronger claim.** A
     browser fetches a `@font-face` file only when a glyph in that face is actually laid out, so an
@@ -955,12 +981,31 @@ and nothing above would notice.
     four rounds of greps missed. A runtime check with the wrong precondition reproduces the greps'
     blind spot in a shape that looks stronger.
 
-    **The nine `vendor/` rows are fixed here and in the §Design 3 manifest, not appended by task 14
-    when it finishes.** Through round 8 this was a single placeholder row that task 14 was to
-    complete with "the exact paths it wrote" — which makes the acceptance test a transcript of
-    whatever the implementation happened to do, and cannot fail. The two lists are now written in
-    advance and must match each other and the observed set; task 14 vendoring a tenth file, or eight,
+    **The `vendor/` rows are fixed here and in the §Design 3 manifest, not appended by task 14 when
+    it finishes.** Through round 8 this was a single placeholder row that task 14 was to complete
+    with "the exact paths it wrote" — which makes the acceptance test a transcript of whatever the
+    implementation happened to do, and cannot fail. The lists are written in advance and must match
+    the observed set; task 14 vendoring a file this table does not name, or omitting one it does,
     fails the run.
+
+    ⚠️ **Task 14 vendors nine files; exactly eight of them appear above, and `babel.min.js` is the
+    one that does not — deliberately.** It is vendored and it is on the §Design 3 manifest, but the
+    page never requests it on load: `support.js` loads Babel **lazily** from `ensureBabel()`
+    (`grep -n 'function ensureBabel' task-tracker/support.js`), reachable only from
+    `load(kind === "jsx", …)`, and the page contains **zero** `x-import` occurrences
+    (`grep -c 'x-import' 'task-tracker/Task Tracker.dc.html' task-tracker/_ds/*/_ds_bundle.js`). No
+    view can produce that request, so **listing it here would make this criterion unpassable by any
+    correct implementation** — which is what the 2026-08-11 run demonstrated, failing on that row
+    alone with the other seventeen exact.
+
+    **The manifest entry is still required, and this is the distinction the table encodes: being
+    vendored and being requested-on-load are different properties.** `babel.min.js` is vendored so
+    that if a jsx `x-import` is ever added, it resolves to `127.0.0.1` instead of `unpkg.com` — the
+    manifest is what makes the CDN unreachable, not the request count. A criterion that conflated the
+    two would force an eager load of a large asset the page does not use, purely to satisfy the test.
+    **Task 9 asserts the manifest row directly** (`GET /vendor/babel.min.js` → `200` with its
+    `Content-Type`), which is where a serve-side fact belongs; criterion 13 asserts only what the
+    browser actually does.
 
     **Mechanism — an agent-run verification, not a `pytest` test, and the card says so rather than
     implying otherwise.** Drive the page with the Claude browser extension and enumerate requests with
@@ -972,6 +1017,21 @@ and nothing above would notice.
     operator with the extension connected. Record both runs in §Verification with the request list and
     the browser version, the same way `node --version` is recorded — the evidence is the enumeration,
     not the conclusion.
+
+    ⚠️ **`read_network_requests` reports the request *set* reliably and the *status* unreliably —
+    corroborate every non-`200` before scoring it a mismatch.** On 2026-08-11 it returned **`503`**
+    for run (a)'s `/tracker-data.js` while the server's audit log, `curl -s -D -`, and the page's own
+    `fetch()` all returned **`404`** with `{"ok": false, "error": "not_found"}`. The server was
+    correct and the instrument was wrong. Because this criterion scores *status for status*, an
+    uncorroborated status column reads a correct server as a broken one. Cross-check against the
+    audit log — which this server writes for every request, making it the cheapest second oracle
+    available — and with `curl -s -D -` over `GET`, never `-I`: `HEAD` is a `405`, so `-I` returns
+    the 405's headers and reads `0` for CSP and `no-store` for that reason alone.
+
+    ⚠️ **The extension injects its own scripts into the page, and they appear in the enumeration.**
+    The 2026-08-11 run saw four `chrome-extension://…` rows. They are observer artefacts, not page
+    requests, and not `http` requests to any host — **exclude them from the observed set before
+    scoring, and do not read them as the manifest widening.**
 14. **Given** a server launched as §Security specifies — a non-detached child of the session process
     with `stderr` inherited — **when** its parent exits, **then** the server exits within
     `TASK_TRACKER_POLL_SECS` + one second and its port is free; **and when** it instead sits idle with
@@ -1157,6 +1217,15 @@ forbids editing a spec.
       **Criterion 13 is deliberately not in that list** — it is an agent-run browser verification, not
       a pytest test, and belongs to task 14. Do not write a source-search stand-in for it here; that
       stand-in is the thing four rounds of judging removed.
+      - **Every row of the §Design 3 manifest must be asserted served** — `200`, with the
+        `Content-Type` the map assigns it, table-driven over the manifest rather than a hand-listed
+        subset, so a row added later is covered without editing the test. ⚠️ **This exists because
+        criterion 13 does not cover all of them.** Criterion 13 enumerates what the browser *requests
+        on load*, and `vendor/babel.min.js` is vendored, on the manifest, and never requested —
+        lazily loaded, see criterion 13's note. Removing it from that criterion's table without
+        adding it here would leave a manifest row that **nothing** asserts, which is precisely the
+        "written down and checked by nothing" pattern the four bullets below catalogue. The
+        serve-side fact belongs in a server test; criterion 13 asserts only what the browser does.
       - **The contract table carries two `500` rows** — `reanalyze_failed` and `asset_unreadable` —
         so "each status code" is satisfied by neither on its own. Assert `asset_unreadable`
         separately: make a manifest member unreadable, require `500`, an audit line whose `path=`
@@ -1273,8 +1342,10 @@ forbids editing a spec.
       on while unproven.
 
       Vendor **all six** remote assets — which is **nine local files**, because three of the six are
-      stylesheets with a second hop; the §Design 3 manifest names all nine and criterion 13 asserts
-      exactly them. **Criterion 13 is the
+      stylesheets with a second hop. The §Design 3 manifest names all nine; **criterion 13 asserts
+      eight of them**, because `babel.min.js` is lazily loaded and never requested on load — task 9's
+      manifest sweep is what covers the ninth, and the split between the two is explained in
+      criterion 13's own note. **Criterion 13 is the
       proof, not the grep** — the grep below drafts the list, and a clean grep has twice been a wrong
       answer that looked right:
       ```sh

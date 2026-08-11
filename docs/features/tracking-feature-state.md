@@ -1,6 +1,6 @@
 ---
-phase: implementation
-model_tier: low
+phase: planning
+model_tier: high
 branch: feat/tracking-feature-state
 ---
 
@@ -188,6 +188,24 @@ The extension also injects its own scripts into the page — four `chrome-extens
 in every enumeration (`hook-exec.js`, `detector-exec.js`, `detector.js`, `popups-script.js`). They are
 observer artefacts, not page requests, and not `http` requests to any host; they are named here so a
 later run does not read them as a manifest widening.
+
+**RESOLUTION 2026-08-11 — the spec was revised, and the run above now matches it exactly.** The
+failure record is left standing above rather than rewritten: it is the evidence, and it is what
+justified the revision. Both escalated gaps were closed in the spec half (`path_escape` added to the
+`reason` enum and the `403` row; `babel.min.js` removed from criterion 13's expected set with task 9
+picking up the manifest assertion), plus the `/favicon.ico` row scoped to the audit log and the two
+instrument caveats recorded on the criterion itself.
+
+Re-scored against the revised tables, **using the enumerations already recorded above — no new run**:
+
+| Run | Observed distinct `http` paths | Revised expectation | Match |
+|---|---|---|---|
+| (a) | 16 (`tracker-data.js` appears twice; `chrome-extension://` rows excluded) | 17 rows − `/favicon.ico` (audit-log-scored) = 16 | **exact** |
+| (b) | 15 | (a)'s 16 − `/tracker-data.sample.js` = 15 | **exact** |
+
+So criterion 13 now passes on the evidence already on file. **Task 14's box is still unticked here**
+because ticking it is implementation-phase bookkeeping and the card is at `phase: planning` for the
+revision — it belongs to the first action after the gate reopens, not to this edit.
 
 Content-Type was verified separately, over `GET` because `HEAD` is a `405`
 (`for p in …; do curl -s -D - -o /dev/null "http://127.0.0.1:8422/$p"; done`, 2026-08-11): every path
