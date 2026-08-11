@@ -5623,3 +5623,48 @@ Task 8 also gained a visible marker in both halves: ticked, but owing the `confi
 
 **Next: compliance round 2.** All three fixes are spec-text only; both waived ids
 (`adr-0017/md-half-size-budget`, `adr-0017/spec-half-size-budget`) still pass forward.
+
+## Session 68 — 2026-08-11 — the gate clears at its cap, and then the passing verdict blesses a number I invented
+
+Rounds 2 and 3 both ran, each with the advisory observability read in parallel, all four to panes.
+
+**Round 2: FAIL, one new violation** — `writing-specs/stale-recorded-claim`. Task 4's §Tasks detail
+still read as an open problem ("these two assertions are the whole of what is missing") long after
+`3d5a2ff` landed both halves of the fix, while the `.md` half already recorded it closed. Verified
+against source before accepting: `repo.card(phase=None)` omits the key
+(`grep -n 'if phase is not None' task-tracker/test_analyze.py` → 104, so the emission is *inside* a
+branch) and the converse direction is asserted by name
+(`grep -n 'a_card_without_a_phase_key' task-tracker/test_analyze.py` → 181).
+
+**The sharpest part of the finding was a rotted citation, not the stale prose.** That paragraph
+cited `grep -n 'phase: %s' task-tracker/test_analyze.py` to prove the fixture "cannot express the
+case". Run today, the same command proves the opposite — its one hit now sits under
+`if phase is not None:`. **A stored derivation can rot into proving the negation of the claim it was
+stored to support**, and it does so silently, because the command still returns a hit. "Store the
+derivation, not the number" survives this, but only with the follow-on: check what the derivation
+*proves* now, not merely that it still resolves.
+
+**Round 3: PASS, zero violations.** Round 1's and round 2's ids were both confirmed closed and
+neither was re-cited, so nothing was in a persistence state; the gate cleared at its cap.
+
+**Then the PASS verdict's own notes reproduced this card's dominant failure mode.** My round-2
+revision had written that the two halves disagreed "for six commits". I never counted it. No reading
+of the log yields six — 18 commits in `3d5a2ff..b2ed7bb`, 17 without the fixing commit, 11 touching
+the spec pair, 10 without it. The verdict did not cite the number, but its notes defended it as
+"accurate under one reasonable way of counting (excluding both the commit that landed the fix and
+the commit that caught it stale)" — a reading that gives 16 or 9. **A fabricated number recruited a
+fabricated justification**, from a judge, in a PASS verdict, inside the one paragraph whose entire
+point is that prose must not be trusted over source. The standing rule was "verify a judge's finding
+against source before accepting it"; it now also covers the notes attached to a verdict that agrees
+with you. **A verdict that passes gets read for its errors too — agreement is not verification.**
+
+Fixed at `c4c3349` by deleting the number rather than recounting it: the sentence names both SHAs and
+carries the command that sizes the gap. **No new explanatory layer was added** — the same round's
+advisory read warned that another "here is why the last explanation was wrong" paragraph is the
+signal to compress the passage, not extend it, and that warning applied to this very fix.
+
+**That commit moves the `.spec.md` blob, so it invalidates the round-3 PASS under the freshness
+rule.** A re-entry restarts the compliance loop at **round 1**; both waived ids still pass forward.
+Everything else is unchanged: implementation stays closed, and reopening still takes the literal
+`gate confirmed` plus its own model-switch checkpoint, with the `confirm_timeout` split in
+`confirm_surface()` first in the queue.

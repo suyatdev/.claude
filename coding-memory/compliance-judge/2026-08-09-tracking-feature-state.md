@@ -1831,3 +1831,141 @@ since round 11 of the previous cycle, six commits ago. It has never been cited b
   unchanged and still correct on independent re-check.
 - Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md`
   + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/` default.
+
+---
+
+## Round 3 — 2026-08-11T20:06:36Z — **PASS** (0 violations)
+
+`head_sha` `b2ed7bbd0a1e425624cd901920b81fa709d1ff2f` · branch `feat/tracking-feature-state` ·
+spec blobs `4bccdca99153217c7a8e1d42ffa23f4997f25a5b` (`.md`, byte-identical to round 2 — unchanged) /
+`5f0ed55c73136678e68a1f72b9fc4eac4201e9f5` (`.spec.md`) · confidence **high** · **round 3, the
+escalation cap for this re-entry**
+
+### Layman summary
+
+This round checks one specific fix (round 2's `writing-specs/stale-recorded-claim`) and one
+specific addition (a second blind-spot caveat on the reason-coverage derivation), then re-derives
+the rest of the card from source rather than trusting either the prose or the prior verdicts, per
+this dispatch's standing instruction. Only `docs/features/tracking-feature-state.spec.md` changed
+at this commit — confirmed via `git show --stat`; the `.md` half is byte-identical to round 2's.
+
+**The rewrite closes the violation, and I checked the parts of it that weren't handed to me.**
+Task 4's detail now reads in past tense against the landed test: `test_analyze.py:104`
+(`if phase is not None:`) really is the `phase=None`-omits-the-key branch the paragraph describes,
+`test_criterion_1_a_card_without_a_phase_key_is_still_a_card` really is at line 181 and asserts the
+converse direction by branch, and `analyze.py:266,528,530` really do split into the two
+branches ("not-a-known-phase" vs. "unread-frontmatter") the paragraph names. One claim in the new
+text wasn't handed to me pre-verified: "Falsified both ways against a deliberately broken analyzer
+before being trusted." I checked the commit that landed the fix rather than taking the sentence's
+word for it — `3d5a2ff`'s own message states exactly that ("Both assertions were falsified against
+a deliberately broken analyzer before being trusted, and `analyze.py` restored from HEAD
+afterwards"), so the claim is grounded in the historical record, not invented for this rewrite.
+
+**The closing ⚠️ line earns its place.** It states a fact ("this entry went on describing that work
+as unfinished for six commits after it landed") and derives an instruction from it ("the two halves
+are one document: when they disagree, re-derive from source rather than believing either one's
+prose") rather than just narrating the miss. On the number itself: counting commits that touched
+`tracking-feature-state.spec.md` strictly between `3d5a2ff` (the commit that landed the fix) and
+`bd73da6` (the commit round 2 judged and where the staleness was caught) gives exactly six
+(`01f0c45`, `686057d`, `1d54816`, `6e17fd9`, `e24727d`, `b2e9bab` — re-derived with
+`git log --oneline 3d5a2ff..bd73da6 -- docs/features/tracking-feature-state.spec.md`, which returns
+seven including `bd73da6` itself, the catching commit). That is a defensible reading, not an
+inflated one, so this is not cited — flagged in Notes since it rests on which endpoint is excluded.
+
+**The second addition is honest, not padding.** I independently ran the exact two-shape derivation
+from task 9's bullet against current `server.py` and got **15** distinct `(status, reason)` pairs,
+matching both the `.md` half's stated figure and the derivation's own claim — so there is no live
+undercounting bug today; the new "wrapped call" clause is a forward-looking limitation of `grep`
+(line-based matching cannot see a call whose status and `reason` land on different source lines),
+not a description of a defect that currently exists. I manually enumerated every `_fail(...)` and
+`audit(...)` call site in `server.py` (34 call sites, 15 distinct failure pairs after excluding the
+four `reason="-"` success paths) and the automated derivation matches the manual one exactly. The
+caveat is true, concise, and ties to the card's own established pattern of naming a derivation's
+blind spot before it bites — not merely longer for its own sake.
+
+**Everything else was re-derived from source, not read off prior verdicts.** Acceptance-criteria
+count is **15** (`awk` over `## Acceptance criteria`). Task-number sync is clean
+(`python3 hooks/lib/feature_tasks.py <.md> <.spec.md> tracking-feature-state` → exit 0). File sizes
+match exactly what the card claims: `server.py` **694** lines, `analyze.py` **792** lines (`wc -l`),
+both with present-tense, human-owned "not scheduled" decisions recorded (task 8 / task 3). No
+`TBD`/`TODO`/`FIXME`/placeholder markers outside historical narrative, no absolute paths, no leaked
+secrets. All five toolchain pins match this host exactly: `Python 3.9.6`, `uv 0.11.28`,
+`cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0` (pytest unchanged since round 2's verification, not
+re-run this round — no toolchain-relevant edit occurred). `server.py` itself did not change this
+round, so the security territory (allowlist-id-only wire, memory-only token via
+`hmac.compare_digest`, every subprocess call timed, Origin/Host/CSP checks, `confirm_timeout` still
+correctly marked as a pending, human-decided code edit rather than a false completion claim) is
+unchanged from round 2's clean read and was not re-audited line-by-line this round.
+
+**Nothing is outstanding.** Round 1's `core-conduct/file-size-decision-unsurfaced` and round 2's
+`writing-specs/stale-recorded-claim` are both closed on independent re-derivation, no new violation
+surfaced, and this is round 3 — the cap. The escalation tripwire does not fire.
+
+### Violations
+
+None this round.
+
+### Closed since round 2 — verified, not assumed
+
+| id | how it was verified |
+|---|---|
+| `writing-specs/stale-recorded-claim` | Re-read the rewritten task 4 detail against `task-tracker/test_analyze.py` and `task-tracker/analyze.py` directly (lines 96-105, 104, 181-208, 266, 528, 530 — all re-grepped, not trusted from the spec's own citations). Also checked the one claim not handed to me pre-verified — "falsified both ways against a deliberately broken analyzer" — against commit `3d5a2ff`'s own message, which states the same thing independently. The paragraph now reads in past tense and matches the shipped code and the `.md` half's "Round-11 reopen closed" note. |
+
+### Verified clean, re-derived from source (not from prior verdicts)
+
+| Claim | Method | Result |
+|---|---|---|
+| Reason-coverage derivation still returns 15, and no wrapped call currently undercounts it | Ran the exact two-shape command from task 9's bullet against current `server.py`; independently hand-enumerated all `_fail(...)`/`audit(...)` call sites | **15** distinct `(status, reason)` pairs from both methods; no discrepancy, so the new "wrapped call" caveat is a true, currently-latent limitation, not a live bug |
+| Acceptance-criteria count | `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` | **15**, matching the `.md` half |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` | exit **0** |
+| `server.py` / `analyze.py` line counts, against the "not scheduled" decisions | `wc -l task-tracker/server.py task-tracker/analyze.py` | **694** / **792**, matching the spec's present-tense claims exactly |
+| Toolchain pins | `python3 -V`, `uv --version`, `cmux --version`, `node --version` | `Python 3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `v26.5.0` — all four match `§Toolchain` exactly |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`XXX`/`placeholder`/`/Users/`/`/home/` | Zero live hits; the two `placeholder` matches are narrative references to a past, since-replaced row |
+| Only the `.spec.md` half changed at `b2ed7bb` | `git show --stat b2ed7bb` | Confirms the `.md` half (blob `4bccdca9…`) is untouched since round 2 |
+| `confirm_timeout` still correctly marked pending, not falsely complete | grepped every occurrence across both halves | All five mentions (lines 428, 513, 830, 1251, 1367-1381 of `.spec.md`; the `.md` task-8 marker) are consistent with the still-outstanding `confirm_surface()` split — no false completion claim |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half unchanged at **216 lines** (byte-identical blob to rounds 1 and 2) against ADR 0017's `≤200`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; re-confirmed 2026-08-11 at commit `686057d`. Not re-cited — see Notes for the growth figure since the last two rounds. |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` half grew again — the growth figure, re-derived, not trusted from any prior
+  round:** `wc -l` currently reads **1,535** lines. Against the re-confirmation commit
+  (`git show 686057d:docs/features/tracking-feature-state.spec.md | wc -l` = **1,493**), that is
+  **+42** since the waiver was last re-confirmed. Against round 2's own figure
+  (`git show bd73da6:...spec.md | wc -l` = **1,530**), that is **+5** this round — a small addition,
+  consistent with the task 4 rewrite and the new wrapped-call clause, not a growth spike. Against the
+  original acceptance commit (`git show 2c66fab:...spec.md | wc -l` = **1,278**), the half has grown
+  **+257** lines total since the waiver was first granted. The `.md` half — what the waiver's ground
+  actually depends on (session-start load) — is unchanged at 216 lines across all three rounds, so
+  the ground still holds and this stays a note, not a violation, per the dispatch's instruction that
+  this observation is on its way to the user alongside the verdict regardless.
+- **The "six commits" figure in the new ⚠️ line is defensible but boundary-sensitive.** It matches
+  exactly when the count excludes both the landing commit (`3d5a2ff`) and the catching commit
+  (`bd73da6`, the commit round 2 was judged against and where the staleness was actually found) —
+  `git log --oneline 3d5a2ff..bd73da6 -- docs/features/tracking-feature-state.spec.md` returns seven
+  commits including `bd73da6`. Not cited, because `bd73da6` is plausibly read as the discovery event
+  rather than another silent pass-through — but a future round should re-derive this the same way
+  before trusting the number if it is ever referenced again.
+- **Security territory not re-audited line-by-line this round.** `server.py` did not change at
+  `b2ed7bb` (confirmed via `git show --stat`); round 2 already did a full re-read of the wire
+  contract against the code. This round limited its security-relevant check to the reason-coverage
+  derivation (§Security-adjacent, task 9) and the `confirm_timeout` consistency check, both above.
+- **Gherkin shape**, as in every prior round across both cycles: several criteria still fold `When`
+  into `Given`. Not cited, same reasoning as every prior round (token economy, intent stays
+  unambiguous).
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer
+  (`rules/gates.md` + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/`
+  default.
+- Read Acceptance criteria (846-1097), Security (675-845), Out of scope (1098-1115) and Toolchain
+  (1116-1158) in full this round, not just the two sections the dispatch named — no new defect found
+  in any of them; all match what rounds 1-2 (and, transitively, the prior cycle's rounds) already
+  verified.
+
+### Waivers
+
+Same two as above — no new waiver requested or granted this round.
