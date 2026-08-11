@@ -954,3 +954,54 @@ wrong about its own state, both worth knowing because they are how a close-out f
 so the main-branch allowlist never evaluates, and nothing guards a non-force `git push origin
 HEAD:main`. The docs-only scope of this commit was honoured by hand, not by hook. Recorded as a gap,
 not fixed here: a rule change belongs behind `triaging-new-instructions`.
+
+## `.claude` — `feat/tracking-feature-state` → PR #51 (**OPEN**, not mergeable yet)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `feat/tracking-feature-state` · **base:** `main` · **worktree:**
+  `~/.claude/.claude/worktrees/tracking-feature-state` (not the primary checkout)
+- **PR:** https://github.com/suyatdev/.claude/pull/51 — **created 2026-08-11T04:19:19Z**, author
+  `suyatdev`. 23 commits, first `c2c2542`, head `de79a30` at time of writing (PR head == local HEAD,
+  confirmed by `gh pr view 51 --json headRefOid` vs `git rev-parse HEAD`).
+- **Feature-scale** — implementation state lives in `docs/features/tracking-feature-state.md`
+  (frontmatter + checklist + `## Verification`), with the spec half split into
+  `tracking-feature-state.spec.md`. `phase: implementation`. **8 of 14 boxes ticked.**
+- **session_origin (created): NOT this session, and not any recorded one.** Its timestamp falls
+  *after* session 63's handoff was written (04:17:52Z) and *before* that session's first command
+  (04:22:23Z), so it was opened out-of-band. No session ran `gh pr create`; the title was the
+  branch-name slug `Feat/tracking feature state` and the body was **empty**, which is what GitHub's
+  web "Compare & pull request" flow produces. Recorded as inference with its evidence, not as fact.
+- **session_origin (last push):** session 63.
+
+⚠️ **A PR opened in the GitHub UI never touches `judge-guard.sh`.** The gate matches the *command*
+`gh pr create`, so it can only intercept a PR opened from a hooked session. This one was not, which is
+why it exists with no passing verdict behind it. Not a bypass and not a defect in the hook — a
+coverage boundary worth knowing before treating "the gate would have caught it" as a guarantee.
+
+**Title and description written in session 63** (2026-08-11), at the user's request, against an empty
+body. Title changed from the slug to
+`feat(task-tracker): repo survey, versioned store, and a localhost control server`. The body leads
+with a **not-ready-to-merge** banner and carries the full open list; it is written to be reviewed, not
+landed.
+
+**Why it must not merge yet** — all four independently disqualifying:
+
+- **6 of 14 checklist boxes open** (9, 10, 11, 12, 13, 14).
+- **Acceptance criterion 13 fails.** Ran 2026-08-11, both browser runs recorded in `## Verification`.
+  17 of 18 rows match; `/vendor/babel.min.js` is expected `200` and is **never requested** —
+  `ensureBabel()` in `support.js` is reachable only from `load(kind === "jsx")` and the page has zero
+  `x-import` occurrences. Not a vendoring defect; fixing it is a **spec** edit.
+- **Two spec gaps escalated and unanswered** — the babel row above, and `path_escape` (a `403` reason
+  the implementation emits that the spec's status table and `reason` enum never define).
+- **Neither judge has a passing verdict on this code.** Compliance's last record is round 11 **FAIL**;
+  the observability judge has not run against the task-8 or task-14 code.
+
+**Suite at time of writing:** `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` →
+**54 passed in 4.09s, 2026-08-11, with `node v26.5.0` present** so none of the node-guarded tests were
+skipped. A dated measurement, not a contract — re-run it.
+
+⚠️ **The criterion's own instrument was caught misreporting.** `read_network_requests` returned `503`
+for a response the server audit log, `curl -s -D -`, and the page's own `fetch()` all reported as
+`404`. Criterion 13 names that tool as its mechanism, so **its status column must be corroborated**;
+a run that trusts it alone reads a correct server as a broken one. Same species as every other defect
+this feature's review rounds found — a derivation nobody asked what it could not see.

@@ -5408,5 +5408,13 @@ Four `chrome-extension://…` rows appear in every enumeration — the extension
 scripts. Observer artefacts, not page requests, and named in `§Verification` so a later run does not
 read them as a manifest widening.
 
+**PR #51 (https://github.com/suyatdev/.claude/pull/51) — OPEN, not mergeable, detail:
+`coding-memory/pr-tracking.md` §`feat/tracking-feature-state`.** It was **opened out-of-band** at
+04:19:19Z — after this session's handoff was written and before its first command — with the
+branch-slug title and an empty body. Title and description written here at the user's request; the
+body leads with a not-ready-to-merge banner and the full open list. ⚠️ **A PR opened in the GitHub UI
+never touches `judge-guard.sh`**, which matches the *command* `gh pr create` — which is why this one
+exists with no passing verdict behind it. A coverage boundary, not a bypass.
+
 Next: **criterion 13**, both store states, with a regular *and* a fill icon on screen; record both
 request lists, the view used, and the Chrome version in `§Verification`. Then task 9.
