@@ -1,6 +1,6 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: feat/tracking-feature-state
 ---
 
