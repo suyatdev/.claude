@@ -41,6 +41,176 @@ on_branch() {
   }
 }
 
+# ---------------------------------------------------------------------------
+# State helpers for the git-guard-detached-head matrix
+# (docs/features/git-guard-detached-head.md). Each builds exactly ONE
+# branchless or sequencer state and asserts it was reached before handing
+# back control -- a fixture that silently misses its target state makes
+# every row built on it report a real-looking pass for the wrong reason,
+# which is exactly what writing real assertions into step 1's measurement
+# scripts caught twice. Directory-returning helpers print the repo path on
+# stdout and build it under $TMP, so the file's EXIT trap cleans it up.
+# Nothing here is wired into run_case yet -- that starts with run_case_in,
+# the next checklist item, because run_case hardcodes `cd "$REPO"` and most
+# of these states need their own directory.
+# ---------------------------------------------------------------------------
+
+assert_symref() { # $1 dir, $2 wanted `symbolic-ref --short HEAD` (may be empty)
+  local dir="$1" want="$2" got
+  got="$(cd "$dir" && git symbolic-ref --short HEAD 2>/dev/null)"
+  [ "$got" = "$want" ] || {
+    printf 'HARNESS — %s: wanted symbolic-ref [%s], got [%s]\n' "$dir" "$want" "$got" >&2
+    exit 1
+  }
+}
+
+assert_marker() { # $1 dir, $2 marker name, $3 yes|no
+  local dir="$1" marker="$2" want="$3" got
+  got=$( ( cd "$dir" && [ -e "$(git rev-parse --git-path "$marker" 2>/dev/null)" ] ) && echo yes || echo no )
+  [ "$got" = "$want" ] || {
+    printf 'HARNESS — %s: wanted %s marker=%s, got %s\n' "$dir" "$marker" "$want" "$got" >&2
+    exit 1
+  }
+}
+
+assert_headname() { # $1 dir, $2 marker dir (rebase-merge|rebase-apply), $3 wanted head-name
+  local dir="$1" marker="$2" want="$3" got
+  got="$(cd "$dir" && cat "$(git rev-parse --git-path "$marker")/head-name" 2>/dev/null)"
+  [ "$got" = "$want" ] || {
+    printf 'HARNESS — %s: wanted %s head-name [%s], got [%s]\n' "$dir" "$marker" "$want" "$got" >&2
+    exit 1
+  }
+}
+
+mk_dir_repo() { # $1 initial branch -> fresh configured repo dir under $TMP, prints its path
+  local dir br="$1"
+  dir="$(mktemp -d "$TMP/repo.XXXXXX")"
+  git -C "$dir" init -q -b "$br"
+  git -C "$dir" config user.email test@example.com
+  git -C "$dir" config user.name  test
+  printf '%s' "$dir"
+}
+
+# Plain detached HEAD in the SHARED $REPO, no sequencer operation running
+# (rows 1, 2, 6). Detaches at whatever commit is currently checked out --
+# call on_branch first to choose which history it detaches from.
+detached() {
+  git -C "$REPO" checkout -q --detach HEAD || {
+    printf 'HARNESS — could not detach HEAD (dirty worktree?)\n' >&2
+    exit 1
+  }
+  assert_symref "$REPO" ""
+}
+
+# A directory that is not a git repository at all (rows 3, 4).
+nonrepo_dir() {
+  local dir
+  dir="$(mktemp -d "$TMP/nonrepo.XXXXXX")"
+  git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 && {
+    printf 'HARNESS — %s unexpectedly is a git repository\n' "$dir" >&2
+    exit 1
+  }
+  printf '%s' "$dir"
+}
+
+# A branch with no commits yet -- `symbolic-ref` names it, but HEAD does not
+# resolve (rows 5, 7).
+unborn_repo() { # $1 branch name
+  local dir br="$1"
+  dir="$(mk_dir_repo "$br")"
+  assert_symref "$dir" "$br"
+  git -C "$dir" rev-parse HEAD >/dev/null 2>&1 && {
+    printf 'HARNESS — %s: HEAD resolves, branch is not unborn\n' "$dir" >&2
+    exit 1
+  }
+  printf '%s' "$dir"
+}
+
+# `git rebase -i` stopped at an `edit` step, HEAD detached, head-name
+# pointing at whichever branch the rebase was started from (rows 8, 15).
+rebase_edit_stopped() { # $1 branch to rebase FROM
+  local dir br="$1" i
+  dir="$(mk_dir_repo main)"
+  printf 'seed\n' > "$dir/seed.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm seed
+  [ "$br" = main ] || git -C "$dir" checkout -q -b "$br"
+  for i in 1 2 3; do
+    printf '%s\n' "$i" > "$dir/f$i.sh"
+    git -C "$dir" add -A
+    git -C "$dir" commit -qm "c$i"
+  done
+  ( cd "$dir" && GIT_SEQUENCE_EDITOR="sed -i '' '1s/^pick/edit/'" git rebase -i HEAD~2 ) >/dev/null 2>&1
+  assert_symref "$dir" ""
+  assert_headname "$dir" rebase-merge "refs/heads/$br"
+  printf '%s' "$dir"
+}
+
+# A cherry-pick stopped on a conflict, HEAD detached (row 9).
+cherry_pick_conflict() {
+  local dir
+  dir="$(mk_dir_repo main)"
+  printf 'base\n' > "$dir/app.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm base
+  git -C "$dir" checkout -q -b other
+  printf 'other\n' > "$dir/app.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm other
+  git -C "$dir" checkout -q main
+  printf 'mainline\n' > "$dir/app.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm mainline
+  git -C "$dir" checkout -q --detach main
+  ( cd "$dir" && git cherry-pick other ) >/dev/null 2>&1
+  assert_symref "$dir" ""
+  assert_marker "$dir" CHERRY_PICK_HEAD yes
+  printf '%s' "$dir"
+}
+
+# A merge stopped on a conflict while a NAMED main is checked out -- not
+# detached at all (row 16), the case that pins `sequencer_in_progress` as
+# consulted only from the branchless arm of `on_main`.
+named_main_merge_conflict() {
+  local dir
+  dir="$(mk_dir_repo main)"
+  printf 'base\n' > "$dir/app.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm base
+  git -C "$dir" checkout -q -b other
+  printf 'other\n' > "$dir/app.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm other
+  git -C "$dir" checkout -q main
+  printf 'mainline\n' > "$dir/app.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm mainline
+  ( cd "$dir" && git merge other ) >/dev/null 2>&1
+  assert_symref "$dir" main
+  assert_marker "$dir" MERGE_HEAD yes
+  printf '%s' "$dir"
+}
+
+# `git rebase --apply` stopped on a conflict, HEAD detached, head-name
+# pointing at whichever branch the rebase was started from (rows 17, 19).
+rebase_apply_stopped() { # $1 branch to rebase FROM
+  local dir br="$1" i
+  dir="$(mk_dir_repo main)"
+  printf 'seed\n' > "$dir/seed.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm seed
+  [ "$br" = main ] || git -C "$dir" checkout -q -b "$br"
+  for i in 1 2 3; do
+    printf '%s\n' "$i" > "$dir/h$i.sh"
+    git -C "$dir" add -A
+    git -C "$dir" commit -qm "h$i"
+  done
+  git -C "$dir" checkout -q -b tmp HEAD~2
+  printf 'conflict\n' > "$dir/h2.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm conf
+  git -C "$dir" checkout -q "$br"
+  ( cd "$dir" && git rebase --apply tmp ) >/dev/null 2>&1
+  assert_symref "$dir" ""
+  assert_headname "$dir" rebase-apply "refs/heads/$br"
+  printf '%s' "$dir"
+}
+
+# A repo whose checked-out branch is literally `master` (row 18) -- nothing
+# in the existing 77 cases, nor any other new row, ever feeds that string to
+# on_main's `case`.
+master_repo() {
+  local dir
+  dir="$(mk_dir_repo main)"
+  printf 'seed\n' > "$dir/seed.sh"; git -C "$dir" add -A; git -C "$dir" commit -qm seed
+  git -C "$dir" branch master
+  git -C "$dir" checkout -q master
+  assert_symref "$dir" master
+  printf '%s' "$dir"
+}
+
 stage() { # $@ = paths to create and stage; no args = stage nothing
   git -C "$REPO" reset -q
   local f

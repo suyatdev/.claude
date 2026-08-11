@@ -632,7 +632,7 @@ assertion. They are still cases and still run.
         correct for every absence check (the wrong-cwd lookup just happens to also find nothing) and
         silently wrong for presence checks. Fixed by wrapping the whole test in one subshell:
         `( cd "$d" && [ -e "$(git rev-parse --git-path M)" ] )`.
-- [ ] Add state helpers to `hooks/git-guard.test.sh` beside `on_branch()`: `detached()`, a
+- [x] Add state helpers to `hooks/git-guard.test.sh` beside `on_branch()`: `detached()`, a
       non-repository cwd, an unborn branch (`git init -b <name>`, no commit), a `rebase -i` stopped at
       an `edit` step **started from a feature branch**, the same **started from `main`** (row 15), a
       cherry-pick stopped on a conflict, a named-`main` merge conflict (row 16), a
@@ -643,6 +643,22 @@ assertion. They are still cases and still run.
       backend).
       Each helper must assert the state it claims to have built — a fixture that silently fails to
       reach its state makes every row it feeds meaningless while still reporting success. Tests only.
+      - Landed as `assert_symref`/`assert_marker`/`assert_headname` (hard-abort assertions, matching
+        `on_branch`'s existing "HARNESS —" fail-loud style) plus `mk_dir_repo` and eight state
+        builders: `detached`, `nonrepo_dir`, `unborn_repo`, `rebase_edit_stopped`, `cherry_pick_conflict`,
+        `named_main_merge_conflict`, `rebase_apply_stopped`, `master_repo`. `rebase_edit_stopped` and
+        `rebase_apply_stopped` are parameterized on the starting branch, covering both the
+        feature-branch/row-8 and `main`-or-`master`/row-15/17/19 cases the checklist lists separately.
+      - Directory-returning helpers build under `$TMP` (the suite's existing EXIT trap cleans them up)
+        and print the repo path on stdout for the next checklist step to capture.
+      - Verified standalone, outside the repo (these aren't wired into `run_case` until the next
+        step): extracted the new function block, sourced it against a throwaway `$TMP`/`$REPO`, and
+        called all ten helper invocations — none hit a `HARNESS —` abort, matching the state each
+        claims (row numbers as listed above). Separately confirmed the assertions are not vacuously
+        true: fed `assert_symref` a deliberately wrong expected branch name against a real repo and
+        confirmed it aborts with the mismatch reported, rather than passing silently.
+      - `bash hooks/git-guard.test.sh` still reports **77 passed, 0 failed** — the new helpers are
+        unwired so far and change no existing behavior.
 - [ ] **First add a `run_case_in <dir> <desc> <want-exit> <cmd>` variant.** The existing `run_case`
       hardcodes `( cd "$REPO" && … )` (`hooks/git-guard.test.sh:55`), so rows 3, 4, 5, 7, 18 and 19
       **cannot be expressed with it** — a non-repository cwd, an unborn-branch repo, a named-`master`
