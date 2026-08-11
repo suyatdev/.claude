@@ -40,16 +40,23 @@ falsified by its own paragraph: the first draft quoted the judge's 1,261 and was
 it saved, the correction quoting the re-measured figure was wrong again three lines later. Run
 `wc -l docs/features/tracking-feature-state*.md` for both halves — note the glob has **no dot before
 the star**, or it matches the spec half alone — and compare against ADR 0017:39's
-`≤200` / `≤800` row. As of 2026-08-11 the `.md` half is inside its cap and this half is over its
-own. Not even the *ratio* is pinned here: the first attempt said ~1.6×, which the very next round of
+`≤200` / `≤800` row. As of 2026-08-11 **both halves are over their caps** — this one substantially,
+the `.md` half by a handful of lines (see the warning at the end of this paragraph). Not even the *ratio* is pinned here: the first attempt said ~1.6×, which the very next round of
 edits to this file pushed to 1.67. Only the **direction** is stable, and if a re-derivation ever
 puts this half back under 800 the honest move is to delete this paragraph, not to update it. Compliance round 11 cited the overrun as
 `adr-0017/spec-half-size-budget` and closed by handing the call to a human, which is the right
 posture: cutting ~460 lines out of §Tasks and §Design 3 is a structural edit, and those are the two
 sections an implementer actually builds from. **The user accepted the overrun on 2026-08-11**, on
-the ground that the number the pair shape exists to control is the session-start load, and that one
-moved the right way — the `.md` half is 112 lines against the same ADR row's `≤200`, its lowest
-ever. Trimming this half is therefore a scheduling decision to raise, **not** a drive-by to perform;
+the ground that the number the pair shape exists to control is the session-start load, and that one had
+moved the right way — the re-split cut the `.md` half from 326 lines to well under its `≤200`.
+⚠️ **That acceptance covers this half only, and the ground it stood on has since changed:** the
+`.md` half rose back over its own cap as `## Verification` absorbed the criterion-13 run, which
+compliance round 1 (re-entry) cited as `adr-0017/md-half-size-budget`. A 2026-08-11 compression pass
+deleted the duplication and recovered part of it; the residue is a **standing question for the user**,
+not something a further revision should shave, because task 13 must still append per-suite counts to
+that same section and ADR 0017 deliberately keeps it in the `.md` half. Re-derive both halves with
+the `wc -l` above rather than trusting any figure in this paragraph.
+Trimming this half is therefore a scheduling decision to raise, **not** a drive-by to perform;
 the precedent is task 3's `analyze.py` split, deferred the same way for the same reason. If this
 file grows again, raise it again rather than letting the acceptance quietly cover the new size.
 
@@ -1000,12 +1007,19 @@ and nothing above would notice.
 
     **The manifest entry is still required, and this is the distinction the table encodes: being
     vendored and being requested-on-load are different properties.** `babel.min.js` is vendored so
-    that if a jsx `x-import` is ever added, it resolves to `127.0.0.1` instead of `unpkg.com` — the
-    manifest is what makes the CDN unreachable, not the request count. A criterion that conflated the
-    two would force an eager load of a large asset the page does not use, purely to satisfy the test.
-    **Task 9 asserts the manifest row directly** (`GET /vendor/babel.min.js` → `200` with its
-    `Content-Type`), which is where a serve-side fact belongs; criterion 13 asserts only what the
-    browser actually does.
+    that if a jsx `x-import` is ever added, it resolves to `127.0.0.1` instead of `unpkg.com`. A
+    criterion that conflated the two would force an eager load of a large asset the page does not
+    use, purely to satisfy the test.
+
+    ⚠️ **Three separate things keep Babel local, and naming them precisely matters, because an
+    earlier revision of this paragraph credited the wrong one** ("the manifest is what makes the CDN
+    unreachable") and that error is why the gap below went unnoticed for a round. (1) The **manifest**
+    makes the local copy *servable*. (2) The CSP's `script-src 'self'` makes `unpkg.com`
+    *unreachable* — but **only on the served page**; criterion 8's `file://` path has no CSP at all.
+    (3) `window.__resources` in `vendor-resources.js` is what actually *redirects the URL*, and it
+    fails **open** — a missing or mistyped key silently goes back to `unpkg.com`. React and ReactDOM
+    are covered by criterion 13 because the browser really fetches them; Babel's entry is exercised
+    by nothing, so **task 9 must assert both halves** — the manifest row *and* the mapping.
 
     **Mechanism — an agent-run verification, not a `pytest` test, and the card says so rather than
     implying otherwise.** Drive the page with the Claude browser extension and enumerate requests with
@@ -1226,6 +1240,19 @@ forbids editing a spec.
         adding it here would leave a manifest row that **nothing** asserts, which is precisely the
         "written down and checked by nothing" pattern the four bullets below catalogue. The
         serve-side fact belongs in a server test; criterion 13 asserts only what the browser does.
+      - **Assert the `vendor-resources.js` mapping too — serving the file is only half of what
+        "vendored" means.** A row can be served and still never used, because `window.__resources`
+        fails *open*: a missing or mistyped key silently falls back to `unpkg.com`, and on
+        criterion 8's `file://` path there is no CSP to catch it. Parse
+        `task-tracker/vendor-resources.js` and require that **every** CDN URL `support.js` can
+        request is a key in the map, resolving to the vendored path — derived from the source, not
+        hand-listed, so a fourth CDN script added later is covered:
+        `grep -n 'REACT_URL\|REACT_DOM_URL\|BABEL_URL' task-tracker/support.js` yields the URLs
+        (`BABEL_URL` is at `support.js:1147`), and each value must name a file that is itself a
+        manifest row. ⚠️ **Falsify it before trusting it** — mutate one key by a character and
+        confirm the test fails; a mapping test that reads both sides from the same file can pass
+        while asserting nothing. This is the third of the three hooks named in criterion 13's note,
+        and it was the one checked by nobody.
       - **The contract table carries two `500` rows** — `reanalyze_failed` and `asset_unreadable` —
         so "each status code" is satisfied by neither on its own. Assert `asset_unreadable`
         separately: make a manifest member unreadable, require `500`, an audit line whose `path=`
@@ -1343,9 +1370,9 @@ forbids editing a spec.
 
       Vendor **all six** remote assets — which is **nine local files**, because three of the six are
       stylesheets with a second hop. The §Design 3 manifest names all nine; **criterion 13 asserts
-      eight of them**, because `babel.min.js` is lazily loaded and never requested on load — task 9's
-      manifest sweep is what covers the ninth, and the split between the two is explained in
-      criterion 13's own note. **Criterion 13 is the
+      eight of them**, because `babel.min.js` is lazily loaded and never requested on load — task 9
+      covers the ninth from two directions (the manifest sweep, and the `vendor-resources.js` mapping
+      that criterion 13 cannot reach for it), and the split is explained in criterion 13's own note. **Criterion 13 is the
       proof, not the grep** — the grep below drafts the list, and a clean grep has twice been a wrong
       answer that looked right:
       ```sh

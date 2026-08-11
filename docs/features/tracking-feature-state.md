@@ -1,13 +1,16 @@
 ---
-phase: implementation
-model_tier: low
+phase: planning
+model_tier: high
 branch: feat/tracking-feature-state
 ---
 
 # Feature-state tracking with a browser UI
 
 **The spec half of this feature lives in `tracking-feature-state.spec.md`** — design, the injection
-route, security, and all fourteen acceptance criteria. The analyzer skips it **by filename** — the
+route, security, and every acceptance criterion. Re-derive the count rather than trusting a number
+here — `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'`
+over the spec half, which reads **15** on 2026-08-11. An earlier revision pinned "fourteen" and was
+still saying it nine lines above its own reference to criterion 15. The analyzer skips it **by filename** — the
 card set is `docs/features/*.md` minus anything ending `.spec.md`
 (`grep -n 'SPEC_SUFFIX' task-tracker/analyze.py`). Frontmatter has nothing to do with the selection,
 in either direction: a `.spec.md` half is skipped even when it *does* carry a `phase:` key, and a
@@ -33,11 +36,9 @@ date and their reproducing command instead of being stated bare.** That third cl
 trusting any derivation, ask what it cannot see** — a wrongly-scoped one returns cleanly and looks
 exactly like a correct result.
 
-The full statement of that rule — the defect history behind it, and the three scope failures that
-cost this feature the most rounds — is the preamble of `tracking-feature-state.spec.md`, which is
-**authoritative if the two ever read differently**. It is deliberately not restated here: an earlier
-revision did restate it, and the copy had already drifted, dropping the stamped-measurement clause
-that the section below depends on.
+That rule's full statement — the defect history, and the three scope failures that cost this feature
+the most rounds — is the spec half's preamble, **authoritative if the two ever read differently**.
+Not restated here: an earlier revision did, and the copy had already drifted.
 
 ## Tasks
 
@@ -118,16 +119,15 @@ pre-existing failure is not read as a regression introduced by this feature.
 
 `task-tracker/` carries **no pytest configuration of any kind** — the repo's only `pyproject.toml`
 governs `memsearch/` alone (`find . -name pyproject.toml`), so no `addopts` and no mark deselection
-applies here. Stated because an earlier revision warned about exactly that, having read a different
-package's config as this one's.
+applies. An earlier revision warned otherwise, having read a different package's config as this one's.
 
-**Criterion 13 — the two browser runs. Ran 2026-08-11. Result: one row fails, in both runs, and
-task 14 is therefore not ticked.** Chrome `151.0.0.0` (`navigator.userAgent`, macOS), extension
-`read_network_requests`. Server started from the worktree with the scratchpad `cmux` shim
-(`CMUX_BIN`/`CMUX_SURFACE_ID`/`FAKE_SURFACE`), which is why every `surface=` in the log below is the
-fake UUID. View driven: the default **Overview** — 45 regular and 1 fill phosphor glyph laid out
-(`document.querySelectorAll('[class*="ph-"]…').length`), and `document.fonts` reported `Phosphor` and
-`Phosphor-Fill` both `loaded`, which is the two-face condition the criterion demands.
+**Criterion 13 — the two browser runs. Ran 2026-08-11; scored one row a failure against the table as
+it then stood, and passes on the re-score below.** Chrome `151.0.0.0` (`navigator.userAgent`, macOS),
+extension `read_network_requests`. Server started from the worktree with the scratchpad `cmux` shim
+(`CMUX_BIN`/`CMUX_SURFACE_ID`/`FAKE_SURFACE`), which is why every `surface=` below is the fake UUID.
+View driven: the default **Overview** — 45 regular and 1 fill phosphor glyph
+(`document.querySelectorAll('[class*="ph-"]…').length`), with `document.fonts` reporting `Phosphor`
+and `Phosphor-Fill` both `loaded`, the two-face condition the criterion demands.
 
 | Path | (a) store moved aside | (b) store restored | Criterion |
 |---|---|---|---|
@@ -142,7 +142,7 @@ fake UUID. View driven: the default **Overview** — 45 regular and 1 fill phosp
 | `/favicon.ico` | 404 (first load only — see below) | absent | see below |
 | `/vendor/react.production.min.js` | 200 | 200 | matches |
 | `/vendor/react-dom.production.min.js` | 200 | 200 | matches |
-| **`/vendor/babel.min.js`** | **never requested** | **never requested** | **FAILS — expected 200** |
+| **`/vendor/babel.min.js`** | **never requested** | **never requested** | **failed the original table (expected 200); matches the revised one, which drops the row — see RESOLUTION** |
 | `/vendor/phosphor/regular/style.css` | 200 | 200 | matches |
 | `/vendor/phosphor/regular/Phosphor.woff2` | 200 | 200 | matches |
 | `/vendor/phosphor/fill/style.css` | 200 | 200 | matches |
@@ -156,45 +156,37 @@ returns before setting it — and the footer timestamps differ between the runs 
 host other than `127.0.0.1`, and **no `/vendor/babel.min.js.map` was requested**, so the source-map
 hazard did not materialise.
 
-**Why the babel row fails, and why it is not a vendoring defect.** The file is vendored, is on the
-manifest (`grep -n 'babel' task-tracker/server.py`), and serves `200 text/javascript` on demand — the
-`curl` sweep below confirms it. The page simply never asks for it: `support.js` loads babel **lazily**
-from `ensureBabel()` (`grep -n 'function ensureBabel' task-tracker/support.js`), which is reachable
-only from `load(kind === "jsx", …)`, and the page contains **zero** `x-import` occurrences
-(`grep -c 'x-import' 'task-tracker/Task Tracker.dc.html' task-tracker/_ds/*/_ds_bundle.js` → `0`, `0`).
-No view can produce the request, so no differently-driven run rescues it. The criterion pinned nine
-`vendor/` rows in advance precisely so the implementation could not edit the target after the fact;
-that discipline held and is what surfaced this. **Resolving it edits the spec, so it is escalated, not
-worked around.**
+**Why the babel row was scored a failure, and why it is not a vendoring defect.** The file is
+vendored, on the manifest (`grep -n 'babel' task-tracker/server.py`), and serves `200 text/javascript`
+on demand. The page simply never asks for it: `ensureBabel()`
+(`grep -n 'function ensureBabel' task-tracker/support.js`) is reachable only from
+`load(kind === "jsx", …)`, and the page has **zero** `x-import` occurrences
+(`grep -c 'x-import' 'task-tracker/Task Tracker.dc.html' task-tracker/_ds/*/_ds_bundle.js` → `0`, `0`),
+so no view can produce the request and no differently-driven run rescues it. **The full reasoning is
+criterion 13's own note in the spec half, which is authoritative and is not restated here** — this
+card has already been bitten once by a duplicated paragraph that drifted.
 
-⚠️ **The criterion's own named instrument misreported a status, and three oracles caught it.** For
-run (a)'s `/tracker-data.js`, `read_network_requests` reported **`503`**; the server's audit log
-(`refused status=404 reason=not_found path=tracker-data.js`), a `curl -s -D -` (`HTTP/1.1 404 Not
-Found`), and the page's own `fetch('/tracker-data.js')` (`status: 404`, body
-`{"ok": false, "error": "not_found"}`) all report **`404`**. The server is correct and the extension's
-status is wrong. Recorded because criterion 13 names `read_network_requests` as the mechanism: its
-status column must be corroborated, and a future run that trusts it alone will read a correct server
-as a broken one.
+⚠️ **Two instrument caveats — the measurements stay here, the reasoning moved onto the criterion.**
+(1) For run (a)'s `/tracker-data.js`, `read_network_requests` reported **`503`** while three oracles
+reported **`404`**: the server's audit log (`refused status=404 reason=not_found path=tracker-data.js`),
+a `curl -s -D -` (`HTTP/1.1 404 Not Found`), and the page's own `fetch('/tracker-data.js')`
+(`status: 404`, body `{"ok": false, "error": "not_found"}`). The server is correct and the extension's
+status column is wrong, so that column must be corroborated — a run trusting it alone reads a correct
+server as a broken one. (2) `/favicon.ico` is observable only on a first, uninstrumented load: capture
+cannot start until `read_network_requests` has been called once, which needs a page already loaded,
+and Chrome caches the negative by then. It was captured by the server's audit log
+(`refused status=404 reason=not_found path=-`, `04:22:46Z`), which is how the criterion now scores it.
 
-⚠️ **`/favicon.ico` is observable only on the first load into a profile-fresh origin.** Chrome caches
-the negative result, and the extension cannot begin capturing until `read_network_requests` has been
-called once, which needs a page already loaded — so the instrumented load is always at least the
-second, by which time the favicon is not re-requested. It was captured on the first, uninstrumented
-load by the server's audit log (`refused status=404 reason=not_found path=-`, `04:22:46Z`). Stated
-rather than tidied away: as written, the favicon row cannot be observed by the criterion's own
-mechanism on the run that the criterion enumerates.
-
-The extension also injects its own scripts into the page — four `chrome-extension://…` rows appeared
-in every enumeration (`hook-exec.js`, `detector-exec.js`, `detector.js`, `popups-script.js`). They are
-observer artefacts, not page requests, and not `http` requests to any host; they are named here so a
-later run does not read them as a manifest widening.
+The extension also injects four `chrome-extension://…` scripts (`hook-exec.js`, `detector-exec.js`,
+`detector.js`, `popups-script.js`) into every enumeration. Observer artefacts, not page requests and
+not `http` to any host; named so a later run does not read them as a manifest widening.
 
 **RESOLUTION 2026-08-11 — the spec was revised, and the run above now matches it exactly.** The
-failure record is left standing above rather than rewritten: it is the evidence, and it is what
-justified the revision. Both escalated gaps were closed in the spec half (`path_escape` added to the
-`reason` enum and the `403` row; `babel.min.js` removed from criterion 13's expected set with task 9
-picking up the manifest assertion), plus the `/favicon.ico` row scoped to the audit log and the two
-instrument caveats recorded on the criterion itself.
+failure record is left standing rather than rewritten: it is the evidence, and it is what justified
+the revision. Both escalated gaps were closed in the spec half (`path_escape` added to the `reason`
+enum and the `403` row; `babel.min.js` removed from criterion 13's expected set, with task 9 picking
+up **both** the manifest row and the `vendor-resources.js` mapping), plus the `/favicon.ico` row
+scoped to the audit log and the two instrument caveats recorded on the criterion itself.
 
 Re-scored against the revised tables, **using the enumerations already recorded above — no new run**:
 
@@ -203,9 +195,8 @@ Re-scored against the revised tables, **using the enumerations already recorded 
 | (a) | 16 (`tracker-data.js` appears twice; `chrome-extension://` rows excluded) | 17 rows − `/favicon.ico` (audit-log-scored) = 16 | **exact** |
 | (b) | 15 | (a)'s 16 − `/tracker-data.sample.js` = 15 | **exact** |
 
-So criterion 13 now passes on the evidence already on file. **Task 14's box is still unticked here**
-because ticking it is implementation-phase bookkeeping and the card is at `phase: planning` for the
-revision — it belongs to the first action after the gate reopens, not to this edit.
+So criterion 13 passes on the evidence already on file, and **task 14 is ticked above** on that
+re-score.
 
 Content-Type was verified separately, over `GET` because `HEAD` is a `405`
 (`for p in …; do curl -s -D - -o /dev/null "http://127.0.0.1:8422/$p"; done`, 2026-08-11): every path
