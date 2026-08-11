@@ -1222,3 +1222,165 @@ territories in the current text and neither has reopened.
   path (`/Users/`, `/home/`) committed; `analyze.py` 792 lines; `feature_tasks.compare` exit 3 on this
   pair and exit 0 on `memory-system-split`; `feature-sync-guard.sh` present and registered in the live
   `$HOME/.claude/settings.json`.
+
+## Round 11 — 2026-08-11T02:04:51Z — **FAIL** (2 violations)
+
+`head_sha` `7ba5e0f13993c16b00ed5e7bb1b37b58530f694b` · branch `feat/tracking-feature-state` ·
+spec blobs `a164665959e9e58d56a3986aa747fd227c50d5ea` (`.md`) /
+`6ba15cf2cf9cf8974a3fcc9a535f9ddf31be5530` (`.spec.md`) · confidence **high**
+
+All three round-10 findings are **closed on the merits**, each re-verified against the code rather
+than against the commit message that claimed it. Both round-11 findings are new, and both rest on
+territory no earlier round examined: the first cites **ADR 0017**, a rule source that appears
+nowhere in the previous ten rounds of this file; the second is the *client* side of an error
+boundary whose server side was cited and closed five rounds ago.
+
+### Layman summary
+
+The re-split worked. The card is genuinely two files behaving as one document: the checklist half is
+112 lines, every cross-reference points at something that exists, and the machine check that keeps
+the two task lists equal both passes and — the part that matters — can still fail. I deleted a task
+from one half and it failed immediately with the right message, so the clean result is a real result
+and not a check that is blind by construction.
+
+Two things are still wrong, and neither is a re-run of an old finding.
+
+The first is size. The repo's own decision record, ADR 0017, is the document that *created* this
+two-file shape, and it sets a number for each half: the checklist file at most 200 lines, the spec
+file at most 800. The checklist half is comfortably inside its budget at 112. The spec half is
+**1,261** — over half again as long as the cap it is measured against, and longer than before the
+re-split, because the re-split moved per-task detail into it. Three earlier rounds looked at this
+card's length and declined to cite it, and they were right on the rules they used: the general
+"800 lines maximum" in `core-conduct.md` sits under **Code Style** and reads as a rule about code,
+and the split itself is permitted. But none of those rounds cited ADR 0017, and ADR 0017 is not
+about code — it is about exactly this artifact, and it only started binding when the card actually
+became a pair. The card knows how to handle an overrun properly: task 3 says `analyze.py` is past
+its 400-line target, names the clean split, and explicitly hands the decision to a human. The spec
+half extends itself no such courtesy — it is 58% over a documented cap with no recorded decision at
+all, which makes the overrun something the card decided quietly rather than something a person
+signed off.
+
+The second is the browser. This feature exists to let a button in a web page drive a Claude session,
+and the card specifies the server side of that conversation to an unusual standard — every status
+code, every audit field, what happens when a subprocess hangs. It never says what the *page* does
+when the answer comes back wrong. If the token is stale the server returns a deliberately vague
+`403`, and §Security itself points out that with parallel sessions this is the normal case, not an
+edge one, and that the operator will read it as a broken feature. The card stops there. There is one
+sentence telling the UI to surface a failed re-analysis, and it belongs to no task and is checked by
+no acceptance criterion. Nothing in the card says what a user sees when a `clear` is refused, when
+the session has ended, or when the fetch simply fails — and no criterion ever presses a button
+against a running server, so an implementer can ship a button that silently does nothing and pass
+every test in the document.
+
+Everything else I checked held. Five pinned tool versions re-read exactly as written on this host,
+`pytest==9.1.1` resolves, the suite reports the same 53 passed the card records, and `analyze.py` is
+unchanged at 792 lines.
+
+### What I re-verified from source (not from the commit messages)
+
+| Claim under test | Method | Result |
+|---|---|---|
+| Round 10 #1 `gates/split-half-sync` fixed | `python3 hooks/lib/feature_tasks.py <md> <spec.md> tracking-feature-state` | exit **0**, no output |
+| …and the check can still fail | same, with task 12 deleted from the `.md` copy only | exit **3**, "in …spec.md but missing from …md: 12" |
+| …and the split follows the prescribed axis | ADR 0017 decision 4 vs. the two halves | `.md` = frontmatter + terse list; `.spec.md` = spec + per-task rationale ✓ |
+| `feature-sync-guard.sh` registered | `grep -n feature-sync-guard settings.json` | line 29, registered ✓ |
+| Round 10 #2 `writing-specs/spec-code-drift` fixed | `grep -n SPEC_SUFFIX task-tracker/analyze.py`; read `_card_paths` (analyze.py:187-193) | selection is `glob("*.md")` minus `endswith(".spec.md")` — criterion 1's new wording matches the code exactly ✓ |
+| …both directions of that selector are real | ran the analyzer against two throwaway repos | a card with **no frontmatter** → in `features[]`, `questions[]` says "No closing `---` delimiter…"; a card with frontmatter but **no `phase:`** → in `features[]`, `questions[]` says "phase: ''" — both match §Design 1's failure table ✓ |
+| Round 10 #3 `writing-specs/good-bad-edge-cases` fixed | read task 9 (spec:1124-1132) against §Security's send-time table (spec:726-729) | the fourth outcome is genuinely **post-send** — "After a confirmation that *succeeded*, make the faked `cmux send` exit non-zero … require `502`, `reason=send_failed`, `sent=unknown`" — not a re-spelling of the pre-send `confirm_*` failure ✓ **Not cited again; no escalation fires.** |
+| Line counts | `wc -l`, and `git show <sha>:<path> \| wc -l` for the trend | `.md` **112** (cap 200 ✓, down from **326** at round 10 — over cap then) · `.spec.md` **1261** (cap 800 ✗; 986 → 993 → 1261 across `7be4aec`→`5b7cdcc`→`bbaae5b`) · `analyze.py` **792** (max 800 ✓, unchanged) |
+| Every `§` reference resolves | enumerated all 67 `§` references (58 in the spec half, 9 in the `.md`) against the heading list | all resolve; `§Verification` is the `.md`'s own section, as both halves state ✓ |
+| Task summaries agree across halves | compared all 14 `.md` bullets to their `§Tasks` entries | no disagreement ✓ |
+| Toolchain pins are real | `python3 -V`, `uv --version`, `node --version`, `cmux --version`, `uv run --with pytest==9.1.1 … --version` | `3.9.6`, `0.11.28`, `v26.5.0`, `0.64.20 (100) [14e3400b9]`, `pytest 9.1.1` — **all five exact** ✓ |
+| The recorded test count | `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` | **53 passed** in 4.35s — matches §Verification ✓ |
+| Manifest ↔ extension map | counted the 16 manifest rows' extensions | `.js` 9, `.css` 4, `.woff2` 3; `.html` covers **zero** rows (see notes) |
+| No secrets / absolute paths committed | `grep -nE '/Users/\|\$HOME\|/home/\|password\|api[_-]?key'` both halves | clean; the only `$HOME` is a generic warning, and the card deliberately records no export path ✓ |
+| Task 4's re-opened wording | read spec:1010-1017 against `test_analyze.py:157-172` and the `repo.card` helper | accurate — the fixture writes `phase:` on every card, so only the "skipped despite `phase:`" direction is pinned; the bullet names the missing assertion and both things it must require ✓ |
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `adr-0017/spec-half-size-budget` | `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md` | Size rule for the synced pair: "`<name>.md` ≤200 lines; `<name>.spec.md` ≤800" (three-artifact table); `rules/core-conduct.md` Code Style's "800 max" concurs | `tracking-feature-state.spec.md`, whole file — §Tasks (268 lines) and §Design 3 (274 lines) carry the bulk | The spec half is **1,261 lines against the ADR's ≤800 cap for exactly this artifact** — 58% over, and rising: 986 at round 10's head, 993 immediately before the re-split, 1,261 now — and no human-owned exception is recorded anywhere in the card, unlike the smaller `analyze.py` overrun that task 3 explicitly defers to a person. |
+| 2 | `core-conduct/ui-error-boundary` | `rules/core-conduct.md` | Code Style: "Handle errors explicitly, never swallow them" — at every boundary the design introduces | §Design 3 status table (`500 reanalyze_failed` row); §Tasks task 10; §Acceptance criteria | The browser→server edge this feature exists to create has **no stated client-side behaviour for `403`, `409`, `502` or a failed fetch**; the single "the UI must surface the failure" clause covers `reanalyze_failed` only, is owned by no task bullet and asserted by no criterion, so a button that silently does nothing on the stale-token `403` that §Security itself calls the normal case would pass every criterion in the card. |
+
+**Why violation 1 is not a reversal of rounds 7, 8 and 10.** Those rounds answered a different
+question with a different rule set. Round 7: "`core-conduct`'s 400/800 limit sits under **Code
+Style** and governs code files"; round 8 repeated it verbatim; round 10 recorded the growth as a
+trend note. All three are correct about `core-conduct` and about `gates.md` making the split a MAY.
+None of them cites ADR 0017, which appears **nowhere** in the previous ten rounds of this file
+(`grep -c 0017` = 0 before this section). ADR 0017 is not a code-style rule — it is the decision
+that created this exact two-file shape and it states a per-file line budget as part of the shape.
+It could not bind before the card was a pair; it binds now, and the half it governs is 1,261 lines.
+
+**Why violation 2 is not `core-conduct/explicit-error-handling` reopening.** That id was cited in
+rounds 1, 2, 5, 7 and 8 and closed in round 8. Every one of those citations was **server-side**:
+the analyzer's git/frontmatter failures (r1), `reanalyze`'s missing status code (r2), the static-read
+boundary (r5), `EADDRINUSE` (r7), send-time identity confirmation (r8). None touched the client. The
+territory here is task 10 and the page's response handling, which no round has examined; a new id
+keeps persistence detection honest in both directions.
+
+### Waivers
+
+**None.** No violation has ever been waived on this card, and nothing was waived this round. The
+`waived` array is empty for the eleventh consecutive round.
+
+### Notes (non-blocking)
+
+- **`.html` is in the extension map and matches no manifest row.** §Design 3 lists the map as `.js`,
+  `.css`, `.html`, `.woff2` and then claims "those four extensions cover every row above with none
+  left over, and that is a property to re-check rather than assume". I re-checked: the 16 manifest
+  rows are `.js`×9, `.css`×4, `.woff2`×3 — `.html` covers zero, because `GET /` is a dynamic route
+  that sets `text/html` directly. The sentence is true under the reading "no *row* is left
+  uncovered" and false under "no *extension* is left over", and the second is the informative one.
+  Nothing an implementer builds changes either way (the startup abort is one-directional, on
+  unmapped manifest rows), which is why this is a note and not a violation — but it is the third
+  round it has survived, and the fix is four words. Carried unchanged from rounds 9 and 10.
+- **Task 9's `reason`-bijection bullet still reads static-or-runtime**, and it is weaker than round
+  10 implied. "Walk the contract table … require every value to be reachable" (spec:1088) points at
+  runtime; §"Audit log"'s restatement, "every row has a value, every value has a row" (spec:435),
+  points at a documentary check. What rescues it is task 9's opening line — "including every
+  negative case and **each status code in the contract table**" — which forces the drives, so the
+  runtime reading is recoverable from the whole task. Not citable on that basis; still worth one
+  clause ("drive a request that produces each value").
+- **Criterion 14's idle clause costs ≥60 seconds of wall clock.** It says "drive both with short
+  overrides so the test does not take 30 minutes", while §Security fixes `TASK_TRACKER_IDLE_SECS`
+  at a 60s minimum that "may not be disabled". Satisfiable (60s ≪ 30 min) and therefore not cited,
+  but say the number out loud, or an implementer under time pressure lowers the floor to make the
+  suite fast and quietly weakens a lifetime control.
+- **The governing discipline preamble is duplicated across both halves in diverged wording**, and
+  the divergence has already produced one inconsistency. The `.md` copy (lines 28-36) drops the
+  spec half's reconciling clause — "measurements that must be recorded (test counts, tool versions)
+  are stamped with their date and their reproducing command" — so the `.md` flatly asserts "no
+  count, test total or phase tally is pinned anywhere" and then records "**53 passed** on
+  2026-08-09" fifty lines later in its own §Verification. The file already models the right fix one
+  section down: §Verification duplicates the canonical pytest invocation *and names §Toolchain
+  authoritative if the two disagree*. Do the same here, or copy the missing clause. This is the
+  duplication surface the pair shape creates, and it is the one the re-split left behind.
+- **Cross-file coherence otherwise holds.** All 67 `§` references resolve, all 14 task summaries
+  agree with their `§Tasks` detail, and the only other cross-half duplication (the pytest
+  invocation) carries an explicit authority rule. The re-split did not introduce a new instance of
+  the round-9 "the fix creates the next defect" pattern.
+- **Task 4 is stated precisely enough to implement.** One mechanical consequence the bullet does
+  not name: `repo.card(...)` writes `phase:` unconditionally, so the fixture helper must gain a way
+  to emit a card without it before the new assertion can be written. Also worth deciding
+  deliberately — "carrying no `phase:` key" has two distinct code paths (no frontmatter block at
+  all → the unclosed-delimiter question; well-formed frontmatter minus the key → the `phase: ''`
+  question). I ran both: each lands in `features[]` with its own `questions[]` entry, so either
+  satisfies the assertion's purpose, but naming which one is intended would stop two implementers
+  writing two different tests.
+- **Spec path** is `docs/features/`, not `writing-specs`' `docs/superpowers/specs/`. Not cited, for
+  the same reason as every prior round: `rules/gates.md`'s one-canonical-file discipline plus ADR
+  0017 are the repo layer and take precedence on conflict.
+- **Security territory re-checked** (external input, shell execution, a localhost server, a
+  credential). Nothing regressed: the wire still carries an allowlist id and never text, `--surface`
+  comes from a captured env UUID and never from a request, no error body echoes input, the token is
+  memory-only with the stderr clause asserted in criterion 10, boundary validation covers
+  method/content-type/size/schema/traversal/`Host`, every subprocess has a timeout, and the
+  `'unsafe-eval'` shortfall remains a stated human-owned trade backed by ADR 0024.
+- **`analyze.py` at 792 lines is unchanged**, eight under the hard max, with `git_facts.py` named as
+  the clean split and explicitly unscheduled as a human call. Correct posture; no source was touched
+  this round, as expected.
+- **Trend, stated plainly since two judges now track it.** Session-start load is 112 lines, which is
+  what the split was for and it delivered handsomely. Total across both halves is 1,373, up from
+  1,312 at round 10 — the ninth consecutive rise. Violation 1 is the point at which that trend stops
+  being a note and becomes a rule question, and the answer to it is a human's, not another revision.
