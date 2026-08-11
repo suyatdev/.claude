@@ -34,6 +34,23 @@ This adds a skill that derives that survey for a given repo, writes it as a vers
 file, and drives an **already-built** browser UI that renders it — with a control channel that lets
 the UI drive the Claude session that launched it.
 
+⚠️ **This half is over ADR 0017's `≤800`-line budget, and that is a decision a person made, not an
+oversight.** This paragraph deliberately pins **no line count**, because a count written *here* is
+falsified by its own paragraph: the first draft quoted the judge's 1,261 and was wrong the instant
+it saved, the correction quoting the re-measured figure was wrong again three lines later. Run
+`wc -l docs/features/tracking-feature-state*.md` for both halves — note the glob has **no dot before
+the star**, or it matches the spec half alone — and compare against ADR 0017:39's
+`≤200` / `≤800` row. As of 2026-08-11 the `.md` half is inside its cap and this half is roughly 1.6×
+over its own — a ratio, unlike a count, that a paragraph cannot invalidate by existing. Compliance round 11 cited the overrun as
+`adr-0017/spec-half-size-budget` and closed by handing the call to a human, which is the right
+posture: cutting ~460 lines out of §Tasks and §Design 3 is a structural edit, and those are the two
+sections an implementer actually builds from. **The user accepted the overrun on 2026-08-11**, on
+the ground that the number the pair shape exists to control is the session-start load, and that one
+moved the right way — the `.md` half is 112 lines against the same ADR row's `≤200`, its lowest
+ever. Trimming this half is therefore a scheduling decision to raise, **not** a drive-by to perform;
+the precedent is task 3's `analyze.py` split, deferred the same way for the same reason. If this
+file grows again, raise it again rather than letting the acceptance quietly cover the new size.
+
 ## Evidence this is the actual gap
 
 Derivations, not pinned line numbers — re-run them, they move:
