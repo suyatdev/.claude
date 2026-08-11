@@ -1488,3 +1488,88 @@ violation 1.
   node-guard wording is still accurate as of this round.
 - Trend: 1,657 lines across both halves, up from 1,373 at round 11 — the tenth consecutive rise, and
   the first round in which the *session-start* half is the one over its cap.
+
+---
+
+## Round 2 — 2026-08-11T14:21:10Z — **FAIL** (1 violation)
+
+`head_sha` `1d5481629feb6e6dde41f656bdf926d1809358d4` · branch `feat/tracking-feature-state` ·
+spec blobs `cf48cee15777ed282b5d71aca09dc08b6401aaf1` (`.md`) /
+`41a4d26348b00501226fcb9b51621e6cf042a11c` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+The four things this round was asked to check all check out. The mapping test task 9 gained —
+"every CDN URL `support.js` can request must be a `vendor-resources.js` key that resolves to a
+manifest row" — is real, not aspirational: I read `support.js` directly and its three URL
+constants (`REACT_URL`, `REACT_DOM_URL`, `BABEL_URL`) match `vendor-resources.js`'s
+`window.__resources` map key-for-key, byte-for-byte, and each value names a file that is on
+`server.py`'s static manifest and actually exists under `task-tracker/vendor/`. The spec also
+requires the test to be *falsified* (mutate one key by a character, confirm it fails), which is
+what keeps this from being another "written down and checked by nothing" control. The other two
+closures hold up under re-run: the acceptance-criteria count derivation returns exactly `15`, and
+`hooks/lib/feature_tasks.py` exits `0` on the current pair — the two halves' task lists genuinely
+match. I also diffed the `## Verification` compression (215 → 206 lines, confirmed by `wc -l`) line
+by line against its prior form: the babel-row reasoning, the `read_network_requests` 503-vs-404
+corroboration, and the `/favicon.ico` audit-log scoping are all still present, just consolidated —
+nothing measurable was cut.
+
+**One new defect, introduced by this round's own fix.** Closing the "task 14 still unticked … the
+card is at `phase: planning`" false claim (round 1's violation 2) was done two ways at once: the
+prose was corrected (it now just says "task 14 is ticked above," which is true), *and* the
+frontmatter's actual `phase:` value was changed from `implementation` to `planning` — a change the
+commit message explains ("implementation forbids spec edits, and this card's own revision set the
+precedent") but the document itself never states. Nothing else moved: `branch:` still names the real
+branch we are sitting in, and 9 of 14 checklist tasks are still ticked against real, tested, shipped
+code (`task-tracker/*.py`, nine vendored files under `vendor/`, 54 passing tests). I checked every
+other feature card in this repo: every single one with `phase: planning` also has `branch: none`
+and zero completed tasks (`falsify-harness-signatures.md`, `verification-marker-gate.md`); every
+card with any task done is `implementation` or `review` with a real branch. This card is now the
+sole exception — its own frontmatter answers "is this planning or nine tasks into implementation?"
+two different ways, in the same document, with nothing to reconcile them. Same species round 1
+already caught here twice (a recorded claim that stopped matching reality) in a new location:
+the field itself, not a sentence describing it.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `gates/phase-branch-mismatch` | `rules/gates.md` | Phase gate: frontmatter `phase` is "the single source of truth for what work is permitted"; Gate transition: branch creation happens "on confirmation" alongside phase becoming `implementation`, and reopening it "needs the literal `gate confirmed` again" | `docs/features/tracking-feature-state.md` frontmatter (lines 1-4) against `## Tasks` (lines 43-64, 9/14 done) and `branch:` (line 4) | This round's revision (`6e17fd9`) reverted `phase: implementation` → `planning` to justify editing the spec/checklist, but left `branch: feat/tracking-feature-state` populated and 9 of 14 tasks ticked against real shipped code (`task-tracker/*.py`, `vendor/*`, `uv run … pytest task-tracker/ -q` → 54 passed) — both of which, per this same rule, should exist only once the gate has been confirmed. Every other `phase: planning` card in `docs/features/*.md` pairs it with `branch: none` and zero completed tasks; this is the sole, unexplained exception, and nothing in the card's own text addresses the contradiction. |
+
+### Closed since round 1 (re-entry) — verified, not assumed
+
+| id | how it was verified |
+|---|---|
+| `writing-specs/stale-recorded-claim` | Grepped both halves for every stale figure named in round 1 and round 1's own closing commit (`112 lines`, `215 lines`, `fourteen`, bare `"passed"` claims without a date): none remain outside historical/explanatory context. The spec half now says "both halves are over their caps" with no false number; the `.md` RESOLUTION now says "task 14 is ticked above," which is true. |
+| `gates/split-half-sync` | Re-ran the card's own derivation: `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` over the spec half → `15`, matching the `.md`'s stated figure exactly. Independently ran `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` → exit `0`. |
+| `writing-specs/good-bad-edge-cases` | Read `task-tracker/support.js:1143,1145,1147` and `task-tracker/vendor-resources.js` directly: the three `window.__resources` keys are byte-identical to `REACT_URL`/`REACT_DOM_URL`/`BABEL_URL`, and each value (`vendor/react.production.min.js`, `vendor/react-dom.production.min.js`, `vendor/babel.min.js`) is both a real file under `task-tracker/vendor/` and a row of `server.py`'s static manifest. Task 9's falsification instruction ("mutate one key by a character, confirm the test fails") is present and would catch a test that reads both sides from the same source without asserting anything. |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. Re-verified: `.md` half is `206` lines (`wc -l`) against ADR 0017:39's `≤200`, down from `215` at round 1; the waiver text in the spec half correctly scopes it to the residue only, states it is not licence to move `## Verification` out or stop deleting duplication, and names an ADR amendment as the escalation if the gap widens. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab` (round-11 era). Unchanged this round; spec half is `1473` lines against the same ADR row's `≤800`. |
+
+### Notes (non-blocking)
+
+- **`model_tier` also changed, `low` → `high`, alongside the `phase` flip, unexplained in the text.**
+  Session-management metadata, not spec content — not cited, but it is the second frontmatter field
+  this round changed without a stated reason, both in the same edit.
+- **Test count moved and that is fine, by the card's own rule.** `uv run --with pytest==9.1.1
+  --no-project pytest task-tracker/ -q` now reports `54 passed`, not the recorded `53`. This is
+  exactly what the card's own discipline anticipates (a dated measurement, not a contract) — noted
+  here as evidence the discipline is working, not as a finding.
+- **Toolchain re-verified on this host:** Python `3.9.6`, `uv 0.11.28`, `node v26.5.0` all match
+  §Toolchain exactly.
+- **Criterion 15 has not reopened.** Diffed this round's edits against the prior blob: nothing
+  touches §Acceptance criteria's criterion 15 or §Design 3's "What the page does with a failure"
+  table. Still four assertions, still intact.
+- **No fourth stale claim found.** Searched both halves for residual hardcoded totals from earlier
+  rounds (`1,442`, `1,373`, `1,657`, `112 lines`, `215 lines`, `206 lines`) — none remain outside
+  this writeup itself.
+- Spec path under `docs/features/` is not cited: the repo layer (`rules/gates.md` + ADR 0017) takes
+  precedence over `writing-specs`' `docs/superpowers/specs/` default, as every prior round has held.
+- Security territory re-checked (external input, shell execution, a localhost server, a credential):
+  nothing regressed this round — the only functional change was task 9's mapping-check bullet, which
+  strengthens rather than weakens the boundary.
