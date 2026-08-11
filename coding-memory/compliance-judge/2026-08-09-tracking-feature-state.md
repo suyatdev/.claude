@@ -2065,3 +2065,115 @@ None.
 - **Gherkin shape**, as in every prior round across every cycle: several criteria still fold `When` into `Given`. Not cited, same reasoning as every prior round (token economy, intent stays unambiguous).
 - Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md` + ADR 0017's one-canonical-file discipline) takes precedence over `writing-specs`' `docs/superpowers/specs/` default, and project rules win on conflict.
 - Security territory (`writing-secure-code`) re-checked at the source level (external input, shell execution, a localhost server, a bearer credential) even though no `task-tracker/` source changed this round — see the spot-check row above. Nothing regressed.
+
+---
+
+## Round 1 (RE-ENTRY) — 2026-08-11T21:59:16Z — **FAIL** (1 violation)
+
+`head_sha` `15cc372b5deac779294ed7b613e2be26d7819212` · branch `feat/tracking-feature-state` ·
+`md_half_blob_sha` `2ab92441981445c399fe02859e9f1994c37bac6e` (moved by `15cc372`) ·
+`spec_half_blob_sha` `ca31bb8d53b38e7db4d88cb35fd1e4f54ff3795e` (byte-identical since `c4c3349`) ·
+`spec_blob_sha` (pair hash) `511b6d5e3977d03afb7ed6b1f8b7a0337c5ed245` · confidence **high**
+
+This restarts the loop a second time: the prior cycle passed clean at `2241742` (round 1 re-entry,
+2026-08-11T20:47:54Z), and `15cc372` then edited `.md` alone — the gate-transition commit
+(`phase: planning → implementation`, `model_tier: high → low`, and a rewrite of the preamble
+paragraph that would otherwise have gone stale the instant the frontmatter flipped) — moving the
+`.md` blob and invalidating that pass under the freshness rule. Judged as a genuine first round: every
+figure below was re-derived from source in this session, none carried over from a prior verdict's
+word, and the two ids named for reuse (`core-conduct/file-size-decision-unsurfaced`,
+`writing-specs/stale-recorded-claim`) were checked and neither recurs.
+
+### Layman summary
+
+The gate transition itself is clean. The frontmatter now reads `phase: implementation`,
+`model_tier: low`, `branch: feat/tracking-feature-state`, and `git log` confirms the history the new
+preamble claims: the card really did open implementation once (`ab799e1`), return to `planning` for a
+spec revision (`6e17fd9`) and sit there through eight fix commits, then reopen on `15cc372` — the
+paragraph's past/present/conditional tenses all match reality, so nothing here recreates the
+`gates/phase-branch-mismatch` ambiguity compliance round 2 of the first cycle found. `phase-guard.sh`
+was read directly (steps 7-10): during a `planning`-phase pause, this card's own frontmatter entry
+never populates `claimed_branches` (only `phase: implementation` entries do), so the write-blocking the
+paragraph credits to keeping the real branch happens regardless of whether `branch:` holds the real
+name or `none` — the retained branch is bookkeeping, not what makes the hook fire — but the paragraph's
+actual claim ("phase-guard.sh correctly blocks writes to source, which is the point") is still true at
+the precision it's stated.
+
+**One finding, and it was hiding in a sentence eight prior rounds all read as verified.** The rewritten
+preamble keeps the same parenthetical it has carried since round 2 of the first cycle:
+`grep -m1 '^phase:\|^branch:' docs/features/*.md`, cited as the derivation proving "every other
+`planning` card in this repo carries `branch: none`." I ran it. Because every card's frontmatter lists
+`phase:` before `branch:`, and `-m1` stops after the **first** matching line per file, the command
+emits exactly one `phase: <value>` line per file and **never once reaches a `branch:` line, for any
+file, ever** — its output is a phase census, not a branch check. The underlying claim is true (I
+independently confirmed all 15 cards' frontmatter by hand: both other `phase: planning` cards,
+`falsify-harness-signatures.md` and `verification-marker-gate.md`, do carry `branch: none` and zero
+ticked tasks), but the cited command cannot demonstrate that — a reader who does exactly what the
+card's own discipline asks ("re-derive the count rather than trusting a number here"; "every code
+citation carries the command that re-finds it") runs it, sees a clean list of `phase:` lines, and
+walks away no better informed about the one thing the sentence needed it to prove. This is the exact
+species this card's own preamble names as its dominant defect — "a wrong scope fails silently and
+looks exactly like a clean result" — just never previously caught in this specific sentence: it
+predates `15cc372` (the old wording carried the identical grep, `git show ab799e1^..b2ed7bb -- ...`
+confirms it was present through every round of both cycles), and every prior round that touched this
+paragraph — including the first cycle's own round-3 PASS, which ran this same command and separately
+verified branch values by other means without noticing the command itself couldn't — treated it as
+self-evidently correct.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/derivation-scope-mismatch` | `rules/core-conduct.md` (project layer) + `~/.claude/skills/writing-specs/SKILL.md` | Project core-conduct: "Verification precedes both the claim and the write-down — never state that something works … and never record that claim in a durable artifact … until you have actually run it and re-read the output"; writing-specs: "Maintain it with production rigor" / drift causes hallucination | `.md` preamble (lines 9-17), the parenthetical `(grep -m1 '^phase:\|^branch:' docs/features/*.md)` attached to the claim "which is what every other `planning` card in this repo carries [branch: none]" | Every card's frontmatter lists `phase:` on the line before `branch:`, and `grep -m1` stops after the first match per file — so the command, run exactly as written, prints one `phase: <value>` line per file and **never emits a `branch:` line for any file**. It cannot demonstrate the claim it is cited to prove. The claim itself happens to be true (independently re-verified against all 15 cards' raw frontmatter), so this is not a false statement, but it is an unverified one dressed as a verified one, in a durable artifact, matching this card's own named recurring defect ("a wrongly-scoped [derivation] returns cleanly and looks exactly like a correct result") — and it survived every prior round across both cycles, including a PASS, because no round had actually run the cited command and read its output. |
+
+### Resolved / not recurring — the two ids named for reuse
+
+| id | check performed | result |
+|---|---|---|
+| `core-conduct/file-size-decision-unsurfaced` | Read task 8's `.spec.md` entry again; `wc -l task-tracker/server.py` | Still closed: **694 lines**, present-tense, human-owned "not scheduled" decision recorded, unchanged since round 2 of the first cycle. `server.py` was not touched by `15cc372` (confirmed via `git diff --stat 2241742..15cc372`, which lists only `docs/features/tracking-feature-state.md` plus memory/judge files). |
+| `writing-specs/stale-recorded-claim` | Re-read task 4's `§Tasks` detail against `test_analyze.py` | Still closed: unchanged since `b2ed7bb`; the fix that closed it was never touched by this commit. |
+
+### Verified clean, re-derived from source (not from any prior verdict or from this prompt's own numbers)
+
+| Claim | Method | Result |
+|---|---|---|
+| Frontmatter history matches the rewritten paragraph's narrative | `git show <sha>:docs/features/tracking-feature-state.md \| sed -n '2p'` across `ab799e1, 6e17fd9, 1d54816, 128e79c, 686057d, 01f0c45, bd73da6, b2ed7bb, c4c3349, 15cc372` | `implementation → planning` at `6e17fd9`, held `planning` through eight commits, `→ implementation` at `15cc372` — exactly "returned to planning once … reopened … on 2026-08-11" |
+| `phase-guard.sh`'s branch-scoped permission, at the precision the paragraph claims | Read steps 7-10 (`hooks/phase-guard.sh:340-553`) directly | `claimed_branches` is populated only from entries where `file_phase == "implementation"` (line 387); a `planning`-phase entry — even one whose `branch:` holds a real name — never contributes a claim, so step 9's membership test denies the write regardless of whether `branch:` reads the real name or `none`. The paragraph's "phase-guard.sh correctly blocks writes to source" holds; the branch-retention convention is bookkeeping, not the enforcement mechanism |
+| `gates/phase-branch-mismatch` (closed, first cycle round 2) not reintroduced | Read current frontmatter + preamble tense together | Current state (`implementation` + real branch) is unambiguous on its own — no planning-with-real-branch state exists right now — and the paragraph's tenses (past for what happened, conditional for "should another revision be needed") do not imply the card is currently paused. No new or resurfaced ambiguity |
+| The underlying "branch: none" claim the broken grep was cited for | Full frontmatter dump, `sed -n '1,6p'`, on both other `phase: planning` cards; `grep -c '^\- \[[xX]\]'` on each | `falsify-harness-signatures.md`: `branch: none`, 0 ticked. `verification-marker-gate.md`: `branch: none`, 0 ticked. Claim is true; only its cited derivation is broken |
+| Acceptance-criteria count | `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` over the spec half | **15** |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` | exit **0** |
+| `.md` / `.spec.md` line counts | `wc -l` | **216** / **1537** — `.md` unchanged across the frontmatter+preamble edit (10 lines removed, 11 added, net constant); `.spec.md` byte-identical since `c4c3349` |
+| `SPEC_SUFFIX` claim | `grep -n 'SPEC_SUFFIX' task-tracker/analyze.py` | `= ".spec.md"` at line 36; selection-by-filename confirmed both directions (lines 192, 251-252) |
+| No `task-tracker/` source changed since the last PASS | `git diff --stat 2241742..15cc372` | Only `docs/features/tracking-feature-state.md` (+22/-14 lines across two hunks) plus memory/judge bookkeeping files |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`XXX`/`/Users/`/`/home/` | Zero live hits |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half is **216 lines** (`wc -l`) against ADR 0017:39's `≤200`, unchanged by this commit's edit (10 lines removed, 11 added). |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` on the ground that the waiver depends only on the session-start (`.md`) half staying small, not on this half's size. `.spec.md` is byte-identical to the last re-confirmation point (unchanged by `15cc372`); ground still holds. |
+
+### Notes (non-blocking)
+
+- **This defect predates the commit under judgment.** The broken `grep -m1` derivation was already
+  present in the paragraph before `15cc372` rewrote it (the old wording carried the identical
+  parenthetical), and it survived the first cycle's round-3 PASS and every round since. It is cited
+  now because this dispatch's re-derive-everything-from-source instruction is what actually ran the
+  command and read its output; no prior round is known to have done that specifically for this
+  sentence. Not held against the current commit's authorship — the rewrite inherited it unchanged —
+  but it is a live defect in the spec as it stands and belongs in this round regardless of origin.
+- **The correct derivation, for whoever fixes this:** two separate greps, one per field —
+  `grep -h '^branch:' docs/features/*.md | sort -u` (or per-file, to keep the pairing) actually shows
+  every card's branch value; `-m1` should be dropped entirely, or the pattern should be run twice.
+- **Line count stayed flat across the edit.** The frontmatter+preamble rewrite is a net-zero change
+  in `.md` line count (216 → 216), so neither waiver's ground moved.
+- **Gherkin shape**, as in every prior round across every cycle: several criteria still fold `When`
+  into `Given`. Not cited, same reasoning as every prior round.
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer
+  (`rules/gates.md` + ADR 0017's one-canonical-file discipline) takes precedence over `writing-specs`'
+  `docs/superpowers/specs/` default.
+- Security territory (`writing-secure-code`) not re-audited line-by-line this round: `server.py` and
+  the rest of `task-tracker/` did not change (confirmed via the diff-stat above), and round 2 of the
+  first cycle already did a full source-level read.
