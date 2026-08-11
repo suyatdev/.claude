@@ -5191,3 +5191,51 @@ which is exactly why it survives review. The file's own line-20 preamble already
 consequence, recorded rather than glossed: **the compliance gate has no passing verdict.** The last on
 record is round 11's FAIL, and both ids are closed in text no judge has read. Next step is the user
 review gate, not another dispatch.
+
+## Session 60 — 2026-08-11 — five carried-forward card defects folded in, before the review gate
+
+Phase still `planning`, no code touched, tree was clean at `a9a13c4`. The handoff carried five known
+card defects forward as "fold in" items; all five were verified still open in the text before editing,
+and all five are now closed. The task-number sync check passes (`exit=0`), which is the only automated
+check this pair has.
+
+**`.html` covered zero manifest rows — the third round it survived.** §Design 3's extension map lists
+four extensions and claimed they "cover every row above with none left over". Derived rather than
+eyeballed: the manifest uses `js`/`css`/`woff2` and no `html`. The claim was false in the one direction
+nothing tested. It survived three rounds because the map and the table sit a screen apart and each
+reads correctly alone — the same shape as every other defect on this card. Fixed by stating the check
+is **one-directional** (`manifest ⊆ map`; an unused entry is legal and must not abort), keeping `.html`
+for `GET /`'s substituted page, which is not a manifest row, and embedding the `awk` derivation that
+produced the answer. Re-ran it *after* the edit, because the command now lives in the file it greps.
+
+**"Reachable" was doing work it cannot do.** Task 9's bijection bullet asked that every `reason` value
+"be reachable" — satisfiable by reading the source, where a value the server can never emit is
+indistinguishable from one it emits routinely. Now: drive a request that produces each value and assert
+the emitted audit line carries it. Same species as the timeout bullet directly above it, which already
+said a timeout never made to fire is indistinguishable from no timeout.
+
+**Criterion 14's idle clause has a 60-second floor, and said nothing about it.** §Security floors
+`TASK_TRACKER_IDLE_SECS` at 60s and forbids disabling it, so the criterion's "drive both with short
+overrides" buys nothing on that clause — only the parent-death clause gets fast. Left unstated, the
+obvious way to speed up a minute-long test is to lower the floor, which deletes the control under test.
+The cost is now written down with that reasoning attached.
+
+**Task 4 could not have been implemented as written.** The re-opened assertion needs a card with no
+`phase:` key; `repo.card(...)` emits one unconditionally, so the fixture cannot express the case at all
+— the helper needs `phase=None` (no key) as distinct from `phase=""` (empty value) *before* the
+assertion is writable. And "raises a question" was ambiguous across two different analyzer branches: a
+card with intact delimiters and no `phase:` reads back `""` and lands on *not-a-known-phase*, while a
+card missing its closing `---` lands on *unread-frontmatter* with a different question. Asserting only
+"some question was raised" passes on the wrong branch. The card now names which.
+
+**The duplicated preamble is now a pointer, not a second copy.** Both halves carried the
+no-pinned-counts rule in wording that had already diverged — the `.md` copy had dropped the
+stamped-measurement clause that the same file's `## Verification` depends on to state "53 passed on
+2026-08-09" without self-contradiction. Deleted the duplicate rather than syncing it: the `.md` keeps
+the operative rule plus that one carve-out, and names the spec half authoritative on the rest.
+
+**State.** Tasks 1–3, 5–7 done; 4 re-opened with its blocker now specified; 8–14 unstarted. Compliance
+gate still has no passing verdict — round 11's FAIL is the last on record and round 12 was skipped by
+the user's call, so five more ids are now closed in text no judge has read. Three dangling pointers
+into the card (`PORTS.md:26`, two test docstrings) remain outside `phase-guard.sh`'s exempt list and
+are still the first job in implementation. Next step is the **user review gate**.

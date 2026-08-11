@@ -25,15 +25,19 @@ run into a data file, and drives an **already-built** browser UI that renders it
 channel that lets the UI drive the Claude session that launched it. `server.py` is the whole of the
 new trust boundary.
 
-⚠️ **The one discipline that governs both files, because it is the defect this feature keeps
-producing: no count, test total or phase tally is pinned anywhere, and every code citation carries
-the command that re-finds it.** Every audit and judge round here found defects overwhelmingly of one
-species — a stored result that had gone stale — twice inside the correction written to fix the
-previous round, and once inside a judge's own verdict. A derivation is only as good as its scope:
-twice this feature prescribed a `grep` narrowed to one file to answer a question about the whole
-page, and once counted *references* where the question was *files*, and was off by 4×. **Before
-trusting any derivation, ask what it cannot see** — a wrong scope returns cleanly and looks exactly
-like a correct result.
+⚠️ **The one discipline that governs both files: no count, test total or phase tally is pinned
+anywhere as a contract; every code citation carries the command that re-finds it; and the
+measurements that genuinely must be recorded — test counts, tool versions — are stamped with their
+date and their reproducing command instead of being stated bare.** That third clause is what lets
+`## Verification` below report "53 passed on 2026-08-09" without contradicting the first. **Before
+trusting any derivation, ask what it cannot see** — a wrongly-scoped one returns cleanly and looks
+exactly like a correct result.
+
+The full statement of that rule — the defect history behind it, and the three scope failures that
+cost this feature the most rounds — is the preamble of `tracking-feature-state.spec.md`, which is
+**authoritative if the two ever read differently**. It is deliberately not restated here: an earlier
+revision did restate it, and the copy had already drifted, dropping the stamped-measurement clause
+that the section below depends on.
 
 ## Tasks
 

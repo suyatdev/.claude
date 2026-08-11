@@ -317,9 +317,24 @@ comes from a **fixed extension map in the source** (`.js` → `text/javascript`,
 depends on the host's `/etc/mime.types` and would make the served type a property of the machine. A
 manifest row whose extension is absent from that map is a programming error and **aborts at startup**,
 not a `500` at request time — the failure should surface when the manifest is wrong rather than when a
-user first loads the page. Those four extensions cover every row above with none left over, and that
-is a property to re-check rather than assume: **widening the manifest without widening the map is a
-server that will not start**, which is the intended direction of the error.
+user first loads the page.
+
+**That check is one-directional, and the map is deliberately wider than the manifest** — the table
+above uses three extensions, not four. Re-derive rather than trust it:
+
+```
+awk '/^\| Path \| Requested by/,/^$/' docs/features/tracking-feature-state.spec.md \
+  | grep '^| `' | sed 's/^| `\([^`]*\)`.*/\1/' | sed 's/.*\.//' | sort | uniq -c
+```
+
+`js`, `css`, `woff2` — no `html` — on 2026-08-11. `.html` is in the map because `GET /` serves the
+substituted page as `text/html` and that constant deserves a single source, but `GET /` is **not** a
+manifest row, so no row exercises the entry. Startup therefore asserts **manifest ⊆ map** only:
+**widening the manifest without widening the map is a server that will not start**, which is the
+intended direction of the error, while an unused map entry is legal and must not abort. An earlier
+revision claimed the four extensions covered every row "with none left over" — false in the one
+direction nothing tested, and it survived three review rounds because the map and the table sit a
+screen apart and each reads correctly on its own.
 
 **`vendor-resources.js` is a file this feature writes, and it has to be a file.** Task 14 points the
 three CDN scripts at local copies by defining `window.__resources` before `support.js` reads it
@@ -963,6 +978,11 @@ and nothing above would notice.
     no request, **then** it exits within `TASK_TRACKER_IDLE_SECS` (drive both with short overrides so
     the test does not take 30 minutes); **and when** a line is written to the audit log, **then** it
     appears on the stderr the parent captures.
+    ⚠️ **The idle clause costs at least 60 seconds of wall clock, and no override makes it cheaper.**
+    §Security floors `TASK_TRACKER_IDLE_SECS` at 60s and forbids disabling it, so "short overrides"
+    buys nothing here — it is the parent-death clause that gets fast. Stated because the obvious way
+    to make a minute-long test quick is to lower the floor, which deletes the control the test exists
+    to prove. Mark it slow if the suite needs it; do not change the minimum.
     All three clauses, because a lifetime control that is present in the code and inert is the failure
     this criterion exists for: detached, `getppid()` never changes and the shutdown silently never
     fires; with `stderr` redirected, the audit log exists and reaches nobody. Both leave a green suite.
@@ -1077,10 +1097,21 @@ forbids editing a spec.
         `test_criterion_1_n_cards_in_n_features_out` builds its `.spec.md` half through
         `repo.card(...)`, which always writes a `phase:` key, so it already proves a spec half is
         skipped *despite* carrying one. Nothing asserts the converse: that a non-`.spec.md` file
-        carrying **no** `phase:` key is still a card. Add it — require the file to appear in
-        `features[]` **and** to raise a `questions[]` entry naming it, so the test breaks if the
-        analyzer ever starts filtering on frontmatter. Everything else in this task stands; this one
-        assertion is the whole of what is missing.
+        carrying **no** `phase:` key is still a card. Two things have to change, and the first is not
+        optional — **the fixture cannot express the case today**: `repo.card(...)` emits `phase:`
+        unconditionally (`grep -n 'phase: %s' task-tracker/test_analyze.py`), so give it a way to omit
+        the key outright — `phase=None` meaning *no key*, distinct from `phase=""` meaning an empty
+        value — before writing the assertion that needs it.
+      - **Name the path, because there are two and they are not interchangeable.** A card with intact
+        `---` delimiters but no `phase:` key reads back as `""` (`grep -n 'frontmatter.get("phase"'
+        task-tracker/analyze.py`) and lands on the *not-a-known-phase* branch, whose question is
+        "What phase is `<name>` in?"; a card missing its closing delimiter lands on the earlier
+        *unread-frontmatter* branch instead, with a different question. Re-find both with
+        `grep -n 'No closing\|not in PHASE_MAP' task-tracker/analyze.py`. The new test must assert the
+        **first**: the file appears in `features[]` **and** raises exactly that question naming it, so
+        the test breaks if the analyzer ever starts filtering on frontmatter. Asserting only "some
+        question was raised" would pass on the delimiter branch too, which is a different bug.
+        Everything else in this task stands; these two assertions are the whole of what is missing.
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader and the
       "undetectable dependency becomes a question" rule.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`: atomic emit of `tracker-data.js`,
@@ -1152,8 +1183,11 @@ forbids editing a spec.
           request to actually return rather than hanging with it. A timeout that is never made to
           fire is indistinguishable from no timeout, which is the state this one was in.
         - **`reason` covers every status row.** Assert the two are in bijection — walk the contract
-          table, require each row's `reason` to be a defined value, and require every value to be
-          reachable. `404`, `405` and `asset_unreadable` had no value for three rounds, so the audit
+          table, require each row's `reason` to be a defined value, and, for every value, **drive an
+          actual request that produces it** and assert the audit line the server emits carries that
+          value. Not "reachable" by reading the source: a value that only a code path mentions is
+          indistinguishable, on inspection, from one the server can never emit — which is this
+          bullet's entire failure mode. `404`, `405` and `asset_unreadable` had no value for three rounds, so the audit
           assertions naming them had nothing to compare against. Include a traversal probe from
           criterion 11 and require `reason=not_found` rather than `-`: §"Audit log" claims refusals
           are the only evidence a hostile page probed the endpoint, and an undefined `reason` makes
