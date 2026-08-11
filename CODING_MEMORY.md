@@ -5834,3 +5834,45 @@ the rule binds hardest on `AskUserQuestion` text, not the prose around it. Recor
 
 **State:** `phase: planning`, `model_tier: high`, HEAD `88d524a`. Reopening implementation takes a
 fresh `gate confirmed` plus its own model-switch checkpoint. Task order unchanged.
+
+## Session 71 — 2026-08-11 — task 8's owed edit lands, and `confirm_timeout` becomes emittable
+
+Restored into the reopened gate (`phase: implementation`, `model_tier: low`, HEAD `53f09a9`). The
+handoff's first-action pointer held: **not task 9**, but the `server.py` edit task 8 owed.
+
+**The defect.** `confirm_surface()` returned one `"unrunnable"` state for both a non-zero `cmux tree`
+exit and a `TimeoutExpired`, and `_run_send` mapped that single state to `reason="confirm_failed"`.
+`confirm_timeout` is specified in four places in the spec half and **no request could produce it** —
+so task 9's "drive an actual request for every reason value" rule was unsatisfiable for that value,
+not merely unwritten. User decision 2026-08-11: the code changes, not the spec.
+
+**The fix** (`8e16f74`, its own commit ahead of any test): `TimeoutExpired` returns a new `"timeout"`
+state; `CONFIRM_REFUSAL_REASONS = {"unrunnable": "confirm_failed", "timeout": "confirm_timeout"}`
+keys both refusal states to their audit reason, and the handler tests membership rather than one
+literal. Wire behaviour is unchanged and deliberately so — both are `502 send_failed`, `sent=no`; the
+audit stream is the only place "cmux hung" and "cmux errored" separate. The mapping is a dict rather
+than an inline conditional so task 9 can drive both values from it instead of a hand-listed pair.
+
+**Verified before the claim, not after.** Five paths driven against fake `cmux` binaries in the
+scratchpad (`probe_confirm.py` + `fakebin/`): ok → `present`, wrong surface → `absent`, `exit 3` →
+`unrunnable`, `sleep 30` past a 1s timeout → `timeout`, missing binary → `unrunnable`; reasons
+`confirm_failed` and `confirm_timeout` respectively. Suite `54 passed` — unchanged from the
+2026-08-11 measurement (`uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q`).
+
+**A phase-gate call worth recording.** The card's task-8 bullet said "owes one edit" in *both* halves.
+`managing-session-memory`'s phase table permits ticking a task and updating its completion note in
+place during `implementation`, and forbids modifying the spec — so the `.md` checklist half was
+updated and `.spec.md` §Tasks 8 was left alone. It still reads "owes one edit". That is **not** a
+`GATE: Spec change needed`: the sentence states a requirement that has now been met, and the
+checklist is what tracks satisfaction. **Outstanding for the `review` phase:** correct that sentence.
+
+**State:** `phase: implementation`, `model_tier: low`, HEAD `8e16f74`. Next is task 9 —
+`task-tracker/test_server.py`, criteria 6, 7, 9, 10, 11, 12 and 14, with `confirm_timeout` now
+drivable. **Compliance PASS at `88d524a`, and a freshness subtlety that needs to be in writing.** No spec edit
+was made — the spec half is byte-identical at blob `ca31bb8` from `88d524a` through HEAD
+(`for c in 88d524a 53f09a9 HEAD; do git show $c:docs/features/tracking-feature-state.spec.md | git hash-object --stdin; done`).
+But the **pair hash has moved twice**: `63bb9e3` → `7e90d82` at `53f09a9`'s frontmatter phase flip →
+`785ebaa` at this session's task-8 note. So a freshness check keyed on the pair
+(`cat <md> <spec> | git hash-object --stdin`) reads **stale** while the judged artifact is unchanged —
+*every* `.md` edit the phase gate explicitly permits trips it, including a checkbox tick. I did not
+re-run compliance on that basis; decide which key the gate actually wants before spending a round.
