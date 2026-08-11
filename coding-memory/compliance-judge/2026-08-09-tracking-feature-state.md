@@ -1745,3 +1745,89 @@ highest-value target in the repo.
 - Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md`
   + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/` default.
 
+
+## Round 2 — 2026-08-11T20:02:15Z — **FAIL** (1 violation)
+
+`head_sha` `bd73da6060fc6483e42d85a8c6b700e6576deaf2` · branch `feat/tracking-feature-state` ·
+spec blobs `4bccdca99153217c7a8e1d42ffa23f4997f25a5b` (`.md`) /
+`53b1caab39d9f580540af952f21d1959e1d27e8f` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+This round checks whether commit `bd73da6` actually closed round 1's one violation, and separately
+audits the two other changes the same commit made that nobody asked for. The file-size finding is
+closed: task 8's entry now states the measured line count in the present tense and records an
+explicit, human-owned "not scheduled" decision, in the same words and shape task 3 already uses for
+`analyze.py` — I re-measured `server.py` at **694 lines** (`wc -l`, over the 400 target, under the 800
+hard max) rather than trusting the spec's own number, and it matches. The confirm_timeout residual
+marker on task 8 is honest bookkeeping, not a defect: I read `confirm_surface()` directly
+(`server.py:236-253`) and confirmed the split genuinely has not landed yet, so the "ticked but owes
+one edit" note is a true statement, stated in both halves, not a false completion claim. The corrected
+reason-coverage derivation is also right — I re-ran the exact two-shape command from task 9's bullet
+myself rather than taking the spec's re-run number on faith, and got the same **15** pairs (`403`→5,
+`502`→2) it claims.
+
+But auditing the surface rather than only the cited item found a second, unrelated defect the dispatch
+did not ask about: task 4's `§Tasks` detail in the `.spec.md` half is stale. It still reads as an open
+problem — "Nothing asserts the converse," "give it a way to omit the key outright... before writing
+the assertion that needs it," "these two assertions are the whole of what is missing" — but that work
+was already done, in commit `3d5a2ff` (2026-08-10), which ticked the box in *both* halves and added the
+`.md` half's own note, "Round-11 reopen closed." I confirmed the fix is real and matches what the stale
+paragraph describes as missing: `test_analyze.py:181-208` (`test_criterion_1_a_card_without_a_phase_key_is_still_a_card`)
+asserts exactly the converse direction, by branch, and the fixture's `card()` helper
+(`test_analyze.py:96-105`) already has the `phase=None`-omits-the-key branch the paragraph says does
+not exist yet. The paragraph even cites its own falsifier — `grep -n 'phase: %s' task-tracker/test_analyze.py`
+— and running that grep now lands inside the `if phase is not None:` guard, contradicting the
+paragraph's own word "unconditionally." This is exactly the species of defect this card's preamble
+names as its dominant failure mode (a stored result gone stale), just in a spot nobody had re-checked
+since round 11 of the previous cycle, six commits ago. It has never been cited before.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/stale-recorded-claim` | `~/.claude/skills/writing-specs/SKILL.md` | "Maintain it with production rigor... Drift causes hallucination: when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists" (The Spec Is the Source of Truth); "no placeholders, TBDs, or requirements readable two ways" (What a Spec Must Contain) | `tracking-feature-state.spec.md` §Tasks, task 4 detail (the "Re-opened in round 11" bullets), against `tracking-feature-state.md`'s task 4 line ("Round-11 reopen closed") and `task-tracker/test_analyze.py:96-105,181-208` | The `.spec.md` half's task 4 detail still describes criterion 1's converse-direction assertion as unwritten and the fixture as unable to express the case ("Nothing asserts the converse," "the fixture cannot express the case today... emits `phase:` unconditionally," "these two assertions are the whole of what is missing"), in present-tense, imperative language with no historical framing. Commit `3d5a2ff` (2026-08-10) closed this for real — it ticked the box in both halves, added the `.md` half's "Round-11 reopen closed" note, and landed `test_criterion_1_a_card_without_a_phase_key_is_still_a_card` plus the `phase=None`-aware fixture — but never touched this paragraph. A reader who follows the `.md`'s own instruction to read task detail in `§Tasks` for task 4 gets told the opposite of what the `.md` half and the shipped code both say. |
+
+### Verified clean, re-derived from source (not from prior verdicts)
+
+| Claim | Method | Result |
+|---|---|---|
+| Round-1 violation (`core-conduct/file-size-decision-unsurfaced`) is closed | Read task 8's current `.spec.md` entry; `wc -l task-tracker/server.py` | `server.py` measures **694 lines**; the entry states this in the present tense and records an explicit "Not scheduled — same call, and the same reason, as task 3's `analyze.py`" decision, matching task 3's own already-accepted "not scheduled" pattern for `analyze.py` (792 lines, `wc -l`, under the 800 hard max) |
+| `confirm_timeout` residual marker is a true statement, not a false completion claim | Read `confirm_surface()` (`server.py:236-253`) | Confirmed: a non-zero `cmux tree` exit and a `TimeoutExpired` both still return `"unrunnable"`, mapped only to `reason="confirm_failed"` — the split has genuinely not landed. Task 8's "ticked but owes one edit" note in both halves is accurate, and the project's own local `rules/core-conduct.md` addition ("write what you checked and what you did not — an explicit gap is cheap, a false certainty is not") is exactly what this note does. Not a violation |
+| Corrected reason-coverage derivation (`403`→5, `502`→2, 15 total) | Re-ran the two-shape command from task 9's bullet verbatim against current `server.py` | **15** distinct `(status, reason)` pairs; `403` has 5 (`bad_token`, `host_mismatch`, `origin_mismatch`, `path_escape`, `unknown_id`); `502` has 2 (`confirm_failed`, `send_failed`) — both captured because `_fail(502, "send_failed", "confirm_failed", ...)` (`server.py:575`) matches the `_fail`-shape grep and the direct `audit("failed", 502, reason="send_failed", ...)` (`server.py:582`) matches the `audit`-shape grep. Matches the spec's claimed re-run exactly |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py <.md> <.spec.md> tracking-feature-state` | exit **0** |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` in the spec half | **15**, matching the `.md` half's stated figure |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`FIXME`/`placeholder`/`/Users/`/`/home/` | Both `placeholder` hits are narrative references to a past, since-replaced row (unchanged from round 1's finding); nothing else found |
+| Security territory (`writing-secure-code`) | Re-read §Security and the wire contract against `server.py`'s `_fail`/`audit`/header-check code | Unchanged clean read: single-key allowlist body, no error-body echo, memory-only token (`secrets.token_urlsafe(32)`) compared with `hmac.compare_digest`, `Host`/`Origin`/CSP/`nosniff` checks present and matching the code, `PORTS.md:26` correctly documents port 8422 and the bind posture |
+| ADRs 0022/0023/0024 exist | `ls docs/decisions/ \| grep -E '0022\|0023\|0024'` | All three present |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half unchanged at 216 lines against ADR 0017's `≤200`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; re-confirmed 2026-08-11 at commit `686057d`. Not re-cited — see Notes for a growth observation since the re-confirmation commit. |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` half grew ~37 lines since the `686057d` re-confirmation** (1,493 lines at that
+  commit, `git show 686057d:...spec.md | wc -l`, vs. 1,530 now) — beyond the waiver's own stated
+  threshold of "a handful of lines" before it should be raised again. The `.md` half, which is what the
+  waiver's ground actually depends on (session-start load), is unchanged at 216 lines across both
+  commits, so the ground itself still holds and this is not raised as a violation — flagged only so the
+  user can decide whether the spec half's growth trend needs its own check-in.
+- The residual-work marker on task 8 (the `confirm_timeout` split, "owed" not "done") was explicitly
+  asked about in the dispatch. Judged honest bookkeeping, not a checklist-integrity defect: both halves
+  carry the same warning, the remaining edit is precisely scoped and already user-decided, and it is
+  the same "state what you checked and what you didn't" discipline the project's local `core-conduct.md`
+  asks for. See the Verified-clean table above for the source-level confirmation.
+- The task-4 staleness found this round was not caught by any of the 14 prior rounds across both
+  cycles; it survived because commit `3d5a2ff` updated the tick and the `.md` half's note but not the
+  `.spec.md` detail underneath it, and nothing since has had reason to re-open task 4. Worth a targeted
+  grep for the same shape ("re-opened," "not yet," "nothing asserts," "must" language under an already-
+  ticked task) across the other seven ticked tasks before the next round — I checked tasks 1, 2, 3, 5,
+  6, 7 and 14 this round and found none of the same shape, but did not exhaustively re-read every line.
+- Phase/branch documentation (`gates/phase-branch-mismatch`, closed round 2 of the prior cycle) is
+  unchanged and still correct on independent re-check.
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md`
+  + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/` default.

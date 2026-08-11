@@ -1183,25 +1183,28 @@ forbids editing a spec.
         grows again.
 - [x] 4 — `task-tracker/test_analyze.py`: criteria 1 and 2 against a fixture repo, not this one.
       (Named `test_*.py`, not `*.test.py` — pytest collects only the former.)
-      - **Re-opened in round 11 — criterion 1's selector is asserted in one direction only.**
-        `test_criterion_1_n_cards_in_n_features_out` builds its `.spec.md` half through
-        `repo.card(...)`, which always writes a `phase:` key, so it already proves a spec half is
-        skipped *despite* carrying one. Nothing asserts the converse: that a non-`.spec.md` file
-        carrying **no** `phase:` key is still a card. Two things have to change, and the first is not
-        optional — **the fixture cannot express the case today**: `repo.card(...)` emits `phase:`
-        unconditionally (`grep -n 'phase: %s' task-tracker/test_analyze.py`), so give it a way to omit
-        the key outright — `phase=None` meaning *no key*, distinct from `phase=""` meaning an empty
-        value — before writing the assertion that needs it.
-      - **Name the path, because there are two and they are not interchangeable.** A card with intact
-        `---` delimiters but no `phase:` key reads back as `""` (`grep -n 'frontmatter.get("phase"'
-        task-tracker/analyze.py`) and lands on the *not-a-known-phase* branch, whose question is
-        "What phase is `<name>` in?"; a card missing its closing delimiter lands on the earlier
-        *unread-frontmatter* branch instead, with a different question. Re-find both with
-        `grep -n 'No closing\|not in PHASE_MAP' task-tracker/analyze.py`. The new test must assert the
-        **first**: the file appears in `features[]` **and** raises exactly that question naming it, so
-        the test breaks if the analyzer ever starts filtering on frontmatter. Asserting only "some
-        question was raised" would pass on the delimiter branch too, which is a different bug.
-        Everything else in this task stands; these two assertions are the whole of what is missing.
+      - **Round-11 reopen — closed at `3d5a2ff`.** Criterion 1's selector was asserted in one
+        direction only: `test_criterion_1_n_cards_in_n_features_out` proves a `.spec.md` half is
+        skipped *despite* carrying a `phase:` key, and nothing asserted the converse — that a
+        non-`.spec.md` file carrying **no** `phase:` key is still a card. Both halves of the fix
+        landed. The fixture can express the case: `repo.card(...)` writes `phase:` only when given
+        one, `phase=None` omitting the key outright, distinct from `phase=""` which still writes an
+        empty value (`grep -n 'if phase is not None' task-tracker/test_analyze.py`).
+      - **The assertion names its path, because there are two and they are not interchangeable.** A
+        card with intact `---` delimiters but no `phase:` key reads back as `""`
+        (`grep -n 'frontmatter.get("phase"' task-tracker/analyze.py`) and lands on the
+        *not-a-known-phase* branch, whose question is "What phase is `<name>` in?"; a card missing
+        its closing delimiter lands on the earlier *unread-frontmatter* branch, with a different
+        question (`grep -n 'No closing\|not in PHASE_MAP' task-tracker/analyze.py`). The landed test
+        asserts the first is raised **and** the second is not, so it breaks if the analyzer ever
+        starts filtering on frontmatter; "some question was raised" would have passed on the
+        delimiter branch too, a different bug. Falsified both ways against a deliberately broken
+        analyzer before being trusted (`grep -n 'a_card_without_a_phase_key' task-tracker/test_analyze.py`).
+      - ⚠️ **This entry went on describing that work as unfinished for six commits after it landed**,
+        while the `.md` half already recorded it closed — and the `grep` it cited to prove the
+        fixture "cannot express the case" had by then started proving the opposite. The two halves
+        are one document: when they disagree, re-derive from source rather than believing either
+        one's prose.
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader and the
       "undetectable dependency becomes a question" rule.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`: atomic emit of `tracker-data.js`,
@@ -1325,7 +1328,9 @@ forbids editing a spec.
           conclude `send_failed` is unimplemented when it is implemented. **A derivation that explains
           away its own gaps is worse than a pinned number**, because it launders a miscount as a
           discovery. Re-derive the count from the block above rather than trusting either figure in
-          this paragraph; if a third emitting shape is ever added, this command undercounts again.
+          this paragraph. Two things still make it undercount silently, and both are invisible in a
+          clean result: a third emitting shape, and a **wrapped call** — `grep` is line-based, so an
+          emitting call whose status and `reason` fall on different lines is not seen at all.
           Assert **total coverage in both directions** — walk the contract
           table, require each row's `reason` to be a defined value, and, for every value, **drive an
           actual request that produces it** and assert the audit line the server emits carries that
