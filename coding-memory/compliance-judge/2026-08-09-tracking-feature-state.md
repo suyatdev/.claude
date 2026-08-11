@@ -1573,3 +1573,84 @@ the field itself, not a sentence describing it.
 - Security territory re-checked (external input, shell execution, a localhost server, a credential):
   nothing regressed this round — the only functional change was task 9's mapping-check bullet, which
   strengthens rather than weakens the boundary.
+
+---
+
+## Round 3 — 2026-08-11T15:35:59Z — **PASS** (0 violations)
+
+`head_sha` `128e79c0f3d5a243252262b41ab6001f71d41875` · branch `feat/tracking-feature-state` ·
+spec blobs `c8f8cd7c4172752e392ab4714feb271157d374a6` (`.md`) /
+`41a4d26348b00501226fcb9b51621e6cf042a11c` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+This is round 3, the cap for this re-entry — whatever is still outstanding when this round ends
+goes to the user rather than to a round 4. Round 2 found exactly one problem: the card's frontmatter
+said `phase: planning` (normally a fresh, unstarted card) while also carrying a real branch and 9 of
+14 tasks ticked — a combination no other `planning` card in the repo has, and nothing in the text
+explained it. The fix under judgment this round is a ~10-line warning block added to the top of the
+`.md` half: it states plainly that this is not a fresh planning card but an implementation paused
+mid-stream for a legal spec revision, names the enforcement mechanism that makes that safe
+(`phase-guard.sh` blocking source writes), names the literal exit condition (`gate confirmed`), and
+explains why a fourth phase state wasn't invented for it. I did not take that explanation on faith —
+I independently grepped `phase:`/`branch:` across all 15 feature cards in `docs/features/*.md` and
+confirmed the two other `planning` cards (`falsify-harness-signatures.md`,
+`verification-marker-gate.md`) do carry `branch: none` and zero ticked tasks, exactly as the new
+paragraph claims. The underlying rule this closes against (`rules/gates.md`'s phase gate and gate
+transition) is explicitly a judgment-based checkpoint, not a hard invariant with one textual
+reading — its own header calls these "judgment-based checkpoints," and its forward-direction wording
+("until [gate confirmed]: no branch, no first task") describes a fresh feature's first pass through
+the gate, not a card revisiting planning after already passing it once. Given that, removing the
+ambiguity by documenting the state, its mechanism, and its exit condition is the correct way to close
+a judgment-grounded finding — changing the frontmatter itself was never the ask. I re-read both
+halves in full this round (not just the diff) and reran the load-bearing derivations myself rather
+than trusting the prose: the acceptance-criteria count is exactly 15, the two halves' task-number
+sets are identical (1–14 in both), `SPEC_SUFFIX = ".spec.md"` in `analyze.py` matches what the card
+describes, no `TBD`/`TODO`/`FIXME`/placeholder markers remain outside historical narrative context,
+and no absolute path or hardcoded secret leaked into either file. Nothing new surfaced. **Verdict:
+pass — nothing is outstanding, so the round-3 escalation tripwire does not fire.**
+
+### Violations
+
+None this round.
+
+### Closed since round 2 — verified, not assumed
+
+| id | how it was verified |
+|---|---|
+| `gates/phase-branch-mismatch` | Read the new preamble (`.md` lines 9–17) added in `128e79c`. Independently ran `grep -m1 '^phase:\|^branch:' docs/features/*.md` across all 15 cards: confirmed the two other `phase: planning` cards (`falsify-harness-signatures.md`, `verification-marker-gate.md`) both carry `branch: none` and `grep -c '^\- \[[xX]\]'` returns `0` for each, exactly as the preamble states. The rule cited (`rules/gates.md` Phase gate / Gate transition) is a judgment-based checkpoint whose "until [gate confirmed]: no branch, no first task" wording governs a fresh feature's first pass through the gate, not a card reopening planning after already passing it — so documenting the paused-for-revision state, its enforcing mechanism (`phase-guard.sh` blocking writes to source while unconfirmed), and its exit condition (the literal phrase `gate confirmed`) is a legitimate closure, not a workaround. The preamble also correctly declines to invent a fourth phase state for a single-card edge case, which is the YAGNI-consistent choice `rules/core-conduct.md` Code Style would favor over a speculative schema change. |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. The round-2 fix (`128e79c`) added ~10 lines to the `.md` half (now 216 lines, `wc -l`), so the overrun against ADR 0017's `≤200` is slightly larger than when waived. The waiver text still stands per the escalation instructions; not re-cited. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; accepted on the ground that the figure the pair shape exists to control is the session-start load. Spec half is 1,473 lines (`wc -l`) against the same `≤800` row. Unchanged this round. |
+
+### Notes (non-blocking)
+
+- **Escalation tripwire, stated explicitly per instructions:** round 3 was the cap for this
+  re-entry. Verdict is `pass` with zero outstanding violations, so there is nothing to hand to the
+  user for a decision — the tripwire does not fire.
+- Re-derived the acceptance-criteria count myself: `awk` over `## Acceptance criteria` in the spec
+  half returns `15`, matching the `.md` half's stated figure.
+- Re-derived task-number sync myself rather than trusting `hooks/lib/feature_tasks.py`'s prior
+  clean exit: both halves' checklists enumerate exactly `1..14` with no gaps or extras.
+- Confirmed `task-tracker/analyze.py:36` defines `SPEC_SUFFIX = ".spec.md"` and every citation of it
+  in the card (selection-by-filename, both directions) matches the source at the lines quoted.
+- Scanned both halves for `TBD`/`TODO`/`FIXME`/`placeholder`/`XXX`: the only two hits are narrative
+  references to a *past* placeholder row that was since replaced with a real, enumerated table — not
+  a live placeholder.
+- Scanned both halves for `/Users/`/`/home/` and secret-shaped strings: none found beyond the
+  design's own references to `secrets.token_urlsafe` and the `X-Tracker-Token` header name, both of
+  which are mechanism descriptions, not literal values.
+- Security territory re-checked against `writing-secure-code` (external input, shell execution, a
+  localhost server, a bearer credential): unchanged from round 2's clean read — allowlist-id-only
+  wire, no error echoes input, token is memory-only with an explicit no-disk/no-argv/no-log-line
+  guarantee, every subprocess call carries a timeout, path traversal and the `path_escape` reason
+  are both defined and cross-checked against the status table.
+- Spec path under `docs/features/` is not cited, as every prior round has held: the repo layer
+  (`rules/gates.md` + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/`
+  default.
+- Toolchain versions in `§Toolchain` were read, not re-verified against this host this round (no
+  code changed since round 2's toolchain re-verification); no drift is implied by that.

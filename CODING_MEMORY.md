@@ -5522,3 +5522,43 @@ the *declared* one; as in session 64, the switch was not independently observabl
 
 Round 2 **not dispatched yet**, deliberately: it would re-cite violation 1 (206 > 200) and spend a
 round on a question already sitting with the user. Dispatch it with their decision in hand.
+
+## 2026-08-11 — session 66: compliance clears at the cap, and the advisory read reopens the size question
+
+Restore verified clean before any work: frontmatter `phase: planning` / `branch: feat/tracking-feature-state`
+matched `git branch --show-current`, tree clean, HEAD `128e79c`. The **handoff header was stale and said so
+itself** — it read `implementation` while the card read `planning`; the card won, as the restore rule requires.
+
+**Round 3 dispatched to both judges in parallel**, panes `surface:226` / `surface:227`, with the round-2
+violation and both waived ids passed forward so the judge would record rather than re-cite them.
+
+**Compliance round 3: `pass`, `violations: []`.** Verdict row `ts 2026-08-11T15:35:59Z`, and its
+`md_half_blob_sha` `c8f8cd7` / `spec_half_blob_sha` `41a4d26` **match `git hash-object` on both halves at
+HEAD** — checked, not assumed, so the verdict is genuinely fresh rather than merely recent.
+`gates/phase-branch-mismatch` is closed: the judge re-ran the cross-card grep itself rather than trusting
+the new preamble's claim, and confirmed the other two `planning` cards really do carry `branch: none` and
+zero ticked tasks. **The escalation tripwire did not fire** — round 3 was the cap, and nothing was
+outstanding when it completed.
+
+⚠️ **Any further spec edit invalidates this verdict and restarts the loop at round 1**, re-passing both
+waivers. That cost is now the deciding factor in whether a cosmetic fix is worth making.
+
+**Observability advisory** (`stage: architecting`, `verdict: null`, `risk=low confidence=high`,
+`head_sha 128e79c`). Stage checked explicitly on disk: it is *not* an implementation verdict, so it cannot
+wrongly satisfy `judge-guard.sh` at `gh pr create`. Four concerns raised; I re-measured the ones that are
+measurable rather than relaying them on the judge's word:
+
+- **The size waiver is now stale in fact, not just in form.** Verified: the spec half was **1,278** lines
+  at the waiver commit `2c66fab` and is **1,473** today — **+195, +15.3%**, unre-confirmed. The `.md` half
+  moved 206 → 216 over the same span, all of it the round-2 closure. The judge's figures were exact.
+- **`server.py` is 694 lines against a 400 preferred / 800 max**, with no written justification, where
+  `analyze.py` (792) has one. Verified both counts. Splits and waivers here are human-owned.
+- **`test_server.py` still does not exist** — task 9, the next task when implementation reopens, covering
+  the one file that is the whole new trust boundary.
+- **Three wording defects a review caught two days ago are reportedly still unfixed.** I verified **one**:
+  `spec.md:1285` still says the `reason` values and the status rows are in **bijection**, while the
+  assertion it actually prescribes is total-and-onto coverage, not a one-to-one pairing. **I did not
+  independently confirm the other two** (a logging claim with no matching field; an ambiguous status-code
+  row) — they are the judge's claim, not a measurement of mine. The bijection line matters more than its
+  size suggests: it is an instruction telling task 9 what to assert, and task 9 is next.
+
