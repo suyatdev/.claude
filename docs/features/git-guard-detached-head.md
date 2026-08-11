@@ -612,12 +612,26 @@ assertion. They are still cases and still run.
 - [ ] Cut the branch from **fetched** `origin/main`. Do not trust a stored count of how far behind
       this worktree is — derive it at the moment of use: `git fetch && git rev-list --count HEAD..origin/main`.
       Record the branch in this file's `branch:` and set `phase: implementation`.
-- [ ] **Land the planning measurement scripts in the repository first**, beside the test suite under
+- [x] **Land the planning measurement scripts in the repository first**, beside the test suite under
       `hooks/` (they cannot be added during `phase: planning` — `phase-guard` exempts `docs/*` but not
       `hooks/*`). Each must assert the state it builds — head-name value, marker presence, and marker
       *absence* for the no-operation fixture — rather than printing for a human to eyeball; the
       planning versions did not, and every provenance claim in this spec rests on them. Until this
       step lands, the tables above are reports, not reproducible evidence.
+      - Landed as `hooks/measure-matrix.sh`, `hooks/measure-headname.sh`, `hooks/verify-carveout-hole.sh`.
+        Each now asserts the state it builds (branchless, head-name value, marker presence/absence) and
+        exits non-zero on any failed assertion; all three ran clean (`bash hooks/<script>.sh`, exit 0)
+        and reproduce every number in the tables above.
+      - The scratchpad original of `measure-matrix.sh` patched the hook with the *loose* carve-out
+        (pre-bound-1, no head-name clause), so its own `rebase_edit` fixture reported the rebase-from-
+        `main` cell as `0 → 0`. Rewritten to patch with the final tight design; that cell now correctly
+        reports `0 → 2`, matching the changed-cell matrix above.
+      - Writing real assertions caught a second, unrelated bug in the rewrite itself, not the hook:
+        `[ -e "$(cd "$d" && git rev-parse --git-path M)" ]` resolves the path relative to the *caller's*
+        cwd, not `$d`, because the `cd` only lives inside the command-substitution subshell. It read as
+        correct for every absence check (the wrong-cwd lookup just happens to also find nothing) and
+        silently wrong for presence checks. Fixed by wrapping the whole test in one subshell:
+        `( cd "$d" && [ -e "$(git rev-parse --git-path M)" ] )`.
 - [ ] Add state helpers to `hooks/git-guard.test.sh` beside `on_branch()`: `detached()`, a
       non-repository cwd, an unborn branch (`git init -b <name>`, no commit), a `rebase -i` stopped at
       an `edit` step **started from a feature branch**, the same **started from `main`** (row 15), a
