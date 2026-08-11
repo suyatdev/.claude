@@ -52,10 +52,14 @@ moved the right way — the re-split cut the `.md` half from 326 lines to well u
 ⚠️ **That acceptance covers this half only, and the ground it stood on has since changed:** the
 `.md` half rose back over its own cap as `## Verification` absorbed the criterion-13 run, which
 compliance round 1 (re-entry) cited as `adr-0017/md-half-size-budget`. A 2026-08-11 compression pass
-deleted the duplication and recovered part of it; the residue is a **standing question for the user**,
-not something a further revision should shave, because task 13 must still append per-suite counts to
-that same section and ADR 0017 deliberately keeps it in the `.md` half. Re-derive both halves with
-the `wc -l` above rather than trusting any figure in this paragraph.
+deleted the duplication and recovered part of it. **The user waived the residue on 2026-08-11**, on
+the ground that ADR 0017 itself requires `## Verification` to live in the `.md` half — task 13 writes
+into it during implementation, when the phase gate forbids editing a spec — so that section grows by
+design and any figure met today is broken by the next measurement it is *supposed* to record. The
+waiver covers the overrun only; it is **not** licence to move `## Verification` out, nor to stop
+deleting genuine duplication. Re-derive both halves with the `wc -l` above rather than trusting any
+figure in this paragraph. If the gap widens much beyond a handful of lines, raise the cap in an ADR
+amending 0017 rather than letting this waiver quietly cover an unbounded section.
 Trimming this half is therefore a scheduling decision to raise, **not** a drive-by to perform;
 the precedent is task 3's `analyze.py` split, deferred the same way for the same reason. If this
 file grows again, raise it again rather than letting the acceptance quietly cover the new size.
