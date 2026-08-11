@@ -66,7 +66,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`. Criteria 3-5.
 - [x] 7 — `PORTS.md` entry for the control server, before any bind. Port is **8422**.
-- [x] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.** Every route, refusal and startup abort smoke-verified against a cmux shim; task 9 is what pins them as tests. ⚠️ **Ticked but owes one edit:** the `confirm_timeout` split in `confirm_surface()` lands in this file, as its own commit before task 9's test — §Tasks 8.
+- [x] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.** Every route, refusal and startup abort smoke-verified against a cmux shim; task 9 is what pins them as tests. ⚠️ **The owed edit landed** (2026-08-11, its own commit ahead of task 9): `confirm_surface()` returns `timeout` separately from `unrunnable`, and `CONFIRM_REFUSAL_REASONS` maps the two states to `confirm_timeout`/`confirm_failed` — `grep -n CONFIRM_REFUSAL_REASONS task-tracker/server.py`. §Tasks 8 in the spec half still reads "owes one edit"; correcting that is a spec edit, so it waits for `review`.
 - [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**. Not criterion 13.
 - [ ] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists. **Owns criterion 15** — the page's own failure behaviour, which no server test can reach.
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch.

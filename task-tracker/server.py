@@ -233,11 +233,20 @@ def bind_surface(environ=None, timeout=CMUX_TIMEOUT_SECS):
 # ----------------------------------------------------------------- send path
 
 
-def confirm_surface(surface, timeout=CMUX_TIMEOUT_SECS):
-    """Re-resolve the bound UUID before any send. Returns 'present'|'absent'|'unrunnable'.
+# The two unconfirmable states refuse identically on the wire -- 502 send_failed, nothing
+# sent -- so the audit reason is the only place an operator can tell "cmux hung" from "cmux
+# errored", and a stuck control channel needs a different response from a broken one. Keyed
+# by state so task 9 can drive every value from the mapping rather than a hand-listed pair.
+CONFIRM_REFUSAL_REASONS = {"unrunnable": "confirm_failed", "timeout": "confirm_timeout"}
 
-    "Could not confirm" is not "confirmed absent" and must never be read as "probably
-    fine" -- the third outcome refuses, and it is the one that is silent when wrong.
+
+def confirm_surface(surface, timeout=CMUX_TIMEOUT_SECS):
+    """Re-resolve the bound UUID before any send.
+
+    Returns 'present'|'absent'|'unrunnable'|'timeout'. "Could not confirm" is not
+    "confirmed absent" and must never be read as "probably fine" -- the last two outcomes
+    refuse, and they are the ones that are silent when wrong. They are separate states
+    only so the audit stream keeps them apart; see CONFIRM_REFUSAL_REASONS.
     """
     try:
         tree = subprocess.run(
@@ -245,7 +254,7 @@ def confirm_surface(surface, timeout=CMUX_TIMEOUT_SECS):
             capture_output=True, text=True, timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        return "unrunnable"
+        return "timeout"
     except OSError:
         return "unrunnable"
     if tree.returncode != 0:
@@ -571,9 +580,9 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
             # reaches the focused tab.
             return self._fail(409, "unresolved_surface", "unresolved_surface",
                               command_id=command_id)
-        if state == "unrunnable":
-            return self._fail(502, "send_failed", "confirm_failed", command_id=command_id,
-                              outcome="failed")
+        if state in CONFIRM_REFUSAL_REASONS:
+            return self._fail(502, "send_failed", CONFIRM_REFUSAL_REASONS[state],
+                              command_id=command_id, outcome="failed")
 
         ok, sent = send_keys(surface, SEND_COMMANDS[command_id])
         if not ok:
