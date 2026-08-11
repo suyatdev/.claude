@@ -5212,3 +5212,38 @@ addressed but **unjudged** — the user chose one structural pass then the revie
 round 6, on the advisory judge's recommendation to stop iterating prose and let the next judge run
 the harness and read `$?`. The file is now **892 lines**, past the 800 ceiling; a `.spec.md` split is
 open but was deliberately not done mid-pass.
+
+## Session 58 — git-guard-detached-head: checklist step 1, and two bugs the assertions caught
+
+`docs/features/git-guard-detached-head.md` entered implementation on branch
+`fix/git-guard-detached-head` (spec exited its compliance gate at round 6 still `fail`, by explicit
+user decision — see that file's Gate record section). This session ran checklist step 1: land the
+three planning measurement scripts under `hooks/` with real assertions instead of the `printf`-only
+diagnostics they were written with in a now-collected planning sandbox.
+
+The scratchpad copies of `measure-matrix.sh`, `measure-headname.sh`, and `verify-carveout-hole.sh`
+still existed (a different session's scratchpad than this one's — path varies per session id) and
+were rewritten in place rather than hunted down further, per the prior handoff's own instruction to
+treat the spec as ground truth. Doing so surfaced two real bugs, neither in the hook itself:
+
+1. `measure-matrix.sh`'s patched hook, as scratchpaded, used the *loose* carve-out — no head-name
+   clause — which predates bound 1 in the spec. Its `rebase_edit` fixture (a rebase started FROM
+   `main`) therefore reported `0 → 0` for that cell, but the spec's own changed-cell matrix claims
+   `0 → 2` for exactly that state (the fix bound 1 exists to enforce). Landing the script unmodified
+   would have shipped an artifact contradicting the spec it's supposed to support. Fixed by patching
+   with the final tight design; the cell now correctly measures `0 → 2`.
+2. Writing the state-assertions themselves introduced a fresh bug:
+   `[ -e "$(cd "$d" && git rev-parse --git-path M)" ]` resolves the git-path string relative to the
+   *caller's* cwd, not `$d`, because the `cd` only lives inside the command-substitution subshell. It
+   silently read as correct on every absence assertion (the wrong-cwd lookup also finds nothing) and
+   failed for real on the one presence assertion it touched first (`CHERRY_PICK_HEAD`). Fixed by
+   wrapping the whole test in one subshell: `( cd "$d" && [ -e "$(git rev-parse --git-path M)" ] )`.
+   Recorded as a live instance of `feedback_confirm_the_check_can_fail` — the presence check is what
+   proved the assertion could fail at all; every absence check alone would have shipped silently
+   wrong.
+
+All three scripts now exit non-zero on any failed assertion and, run clean, reproduce every number in
+the spec's changed-cell matrix, carve-out-bounds table, and round-3 judge-findings numbers. Committed
+`2ac4d2d`, pushed. Next is checklist step 2 (state helpers in `hooks/git-guard.test.sh`) — see
+`.claude/session-state.md` for the corrected step ordering (the prior handoff had steps 2 and 3
+swapped relative to the feature file's actual checklist).
