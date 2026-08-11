@@ -5418,3 +5418,45 @@ exists with no passing verdict behind it. A coverage boundary, not a bypass.
 
 Next: **criterion 13**, both store states, with a regular *and* a fill icon on screen; record both
 request lists, the view used, and the Chrome version in `§Verification`. Then task 9.
+
+## Session 64 — 2026-08-11 — the gate reopens, and the compliance loop restarts at round 1
+
+The user gave the literal phrase `gate confirmed`, reopening the planning → implementation gate that
+the 2026-08-11 spec revision had closed. Frontmatter moved to `phase: implementation` /
+`model_tier: low`.
+
+⚠️ **The gate was answered while this session was running on Opus 5 (1M context) — a high tier.** The
+procedure expects the switch down to happen *before* the phrase. Rather than write `model_tier: low`
+as an unobserved claim, the discrepancy was put to the user, who elected to switch down; the
+frontmatter therefore records the **declared** tier, and implementation work still landing on a
+frontier model is drift, not the plan. Recorded because a tier field nobody checks is a field that
+quietly stops being true.
+
+**Task 14 ticked.** No new browser run was made and none was needed: the re-score already in
+`§Verification` matches both runs against the revised expectation exactly — run (a) 16 distinct
+`http` paths against 17 rows minus the audit-log-scored `/favicon.ico`, run (b) 15 against (a)'s 16
+minus `/tracker-data.sample.js`. The failing-babel record above it was deliberately left standing:
+it is the evidence that justified the revision, and rewriting it would destroy the reason the edit
+was legitimate.
+
+**Compliance restarted at round 1, not 12.** The spec edit (`e24727d`) invalidates every prior
+verdict — the freshness contract is `spec_blob_sha == git hash-object <spec_path>` — and
+`running-the-compliance-judge` restarts a re-entry at round 1, carrying waived ids forward.
+`adr-0017/spec-half-size-budget` was passed in as **waived** (user decision 2026-08-11, commit
+`2c66fab`); round 11's other id, `core-conduct/ui-error-boundary`, closed in `224387a` and is now
+criterion 15. Round 11's ids were also passed forward so a recurrence reuses them and persistence
+detection stays sound.
+
+The dispatch names the highest-value finding in advance: **edit 2 removed `babel.min.js` from
+criterion 13 and handed the ninth vendor row to a new manifest-sweep bullet in task 9.** Removing a
+check without replacing it is this card's signature failure shape, so the judge was asked to verify
+that replacement is real and sufficient before anything else.
+
+Judge dispatched to pane `surface:224` (`compliance-judge`, `--cwd` the worktree, with an explicit
+override sending verdicts to the worktree's `coding-memory/compliance-judge/` rather than the
+`$HOME/.claude` path the agent definition hardcodes). It runs **parallel to task 9** by the user's
+choice: the judge is read-only on the spec, task 9 writes tests, so a FAIL costs only the tests that
+touch the two revised bullets.
+
+Next: **task 9** — `task-tracker/test_server.py`, criteria 6, 7, 9, 10, 11, 12 and 14, plus the new
+manifest sweep. Not criterion 13. Then 10, 11, 12, 13.

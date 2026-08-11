@@ -1,6 +1,6 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: feat/tracking-feature-state
 ---
 
@@ -59,7 +59,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [ ] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch.
 - [ ] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`.
 - [ ] 13 — Run every suite, record before/after counts in `## Verification` below.
-- [ ] 14 — Vendor all six remote assets — nine local files. **Runs right after task 8**; owns criterion 13.
+- [x] 14 — Vendor all six remote assets — nine local files. **Runs right after task 8**; owns criterion 13. Closed on the re-score in `§Verification` — both runs match the revised expectation exactly, on the enumerations already recorded; no new browser run was made.
 
 ## Verification
 
