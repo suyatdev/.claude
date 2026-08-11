@@ -5562,3 +5562,30 @@ measurable rather than relaying them on the judge's word:
   row) — they are the judge's claim, not a measurement of mine. The bijection line matters more than its
   size suggests: it is an instruction telling task 9 what to assert, and task 9 is next.
 
+**Session 66, continued — the fix pass, and what it turned up.**
+
+User chose to fix all three carried-forward spec-text defects (`686057d`) and to re-confirm
+`adr-0017/spec-half-size-budget` unchanged. The waiver's ground never depended on this half's size,
+only on the session-start half staying small, so the +15% growth doesn't touch it; recorded as a
+re-confirmation of the **decision**, with a derivation rather than a number.
+
+⚠️ **The observability verdict's supporting counts were wrong, and I committed them before checking.**
+It cited `403`→"four" reasons and `502`→"three" to justify the bijection finding. The emitting side
+reads **five** for `403` (`bad_token`, `host_mismatch`, `origin_mismatch`, `path_escape`,
+`unknown_id`) and **two** for `502`. The finding was real; its evidence was not. Rather than
+substitute corrected numbers that would go stale the same way, the line now stores the derivation —
+this card's own standing rule, applied to the card.
+
+**That re-derivation is what exposed the real defect: `confirm_timeout` cannot be emitted.**
+`confirm_surface()` collapses a non-zero exit and a `TimeoutExpired` into the single `"unrunnable"`
+state, which the handler maps to `reason="confirm_failed"`. The spec names `confirm_timeout` in four
+places, one of them the list task 9 must **drive an actual request for** — so task 9 as specified
+could not pass. This is criterion 12's own failure mode inverted: not a value only a code path
+mentions, but one only the *document* mentions. **User decision 2026-08-11: the code changes, not the
+spec** — the audit log exists to keep operator-side distinctions the caller is denied, and four
+consistent spec mentions are intent, not a slip. Recorded at task 9's §Tasks entry; the `server.py`
+edit lands as its own commit **before** the test, never in the same step.
+
+The three fixes invalidated the round-3 pass on purpose. **Compliance re-enters at round 1** with both
+waived ids passed forward.
+

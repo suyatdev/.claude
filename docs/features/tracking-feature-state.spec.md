@@ -1338,7 +1338,20 @@ forbids editing a spec.
         unrunnable → `502` with `confirm_failed`/`confirm_timeout`; **`send` itself failing → `502`
         with `send_failed`**). Drive the unrunnable case by making
         the faked `cmux tree` exit non-zero and, separately, hang past the timeout; require `cmux
-        send` to be invoked **zero** times in both, and the audit line to read `sent=no`. An
+        send` to be invoked **zero** times in both, and the audit line to read `sent=no`.
+        ⚠️ **Blocking prerequisite: `confirm_timeout` is specified here and in three other places
+        but the server cannot currently emit it.** `confirm_surface()` returns the single state
+        `"unrunnable"` for *both* a non-zero exit and a `TimeoutExpired`
+        (`grep -n 'TimeoutExpired' task-tracker/server.py`), and the handler maps that one state to
+        `reason="confirm_failed"`. So the two sub-cases this bullet tells you to drive separately are
+        indistinguishable in the audit stream, and the "for every value, drive an actual request that
+        produces it" rule below cannot be satisfied for `confirm_timeout` at all.
+        **User decision, 2026-08-11: the code changes, not the spec** — the audit log exists to keep
+        operator-side distinctions that the caller is deliberately denied, and "cmux hung" and "cmux
+        errored" need different responses from whoever is debugging a stuck control channel. Split
+        the timeout into its own state and emit `confirm_timeout` **before** writing this assertion;
+        that edit belongs to `server.py`, so it lands as its own commit ahead of the test, never in
+        the same step. An
         unconfirmable target that gets sent to anyway is the one bug this control exists to stop,
         and it is invisible from the wire — both refusals look identical to a caller.
         ⚠️ **The fourth outcome carries `sent=unknown`, and nothing drove it until round 11.** After
