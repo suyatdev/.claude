@@ -1384,3 +1384,107 @@ keeps persistence detection honest in both directions.
   what the split was for and it delivered handsomely. Total across both halves is 1,373, up from
   1,312 at round 10 — the ninth consecutive rise. Violation 1 is the point at which that trend stops
   being a note and becomes a rule question, and the answer to it is a human's, not another revision.
+
+## Round 1 (re-entry) — 2026-08-11T05:45:33Z — **FAIL** (4 violations)
+
+`head_sha` `ab799e102894d470abe99dc4d3efac6356582a9d` · branch `feat/tracking-feature-state` ·
+spec blobs `2adcec23a1db0034562416650f84f966d70014d6` (`.md`) /
+`788a8aaed0fbdaaa8f694da0cfb48a1a98fbc45f` (`.spec.md`) · confidence **high**
+
+Round numbering restarts here: `e24727d` invalidated every prior verdict under the
+`spec_blob_sha` freshness contract, so this is round 1 of a new loop, not round 12. The tree
+moved under this judgement — the `.md` edits were uncommitted when the run started and landed as
+`ab799e1` (`phase: implementation`, task 14 ticked) mid-run; identity was re-derived at the moment
+of writing and the blob judged is the blob recorded.
+
+### Layman summary
+
+The spec revision this round was asked to check does what it claimed. Removing `babel.min.js` from
+the browser criterion was the right call and is not a hole: the file genuinely cannot be requested
+by any view (both the page and the design-system bundle contain zero `x-import` occurrences, so the
+lazy `ensureBabel()` path is unreachable), which means the row was unpassable by any correct
+implementation and was verifying nothing. The replacement is real — task 9 now sweeps every manifest
+row and asserts `GET /vendor/babel.min.js` → `200` with its `Content-Type`. What the replacement
+does *not* carry is the other half of what vendoring means: nothing anywhere asserts that
+`vendor-resources.js` actually points Babel's CDN URL at the local copy. React and ReactDOM get that
+for free because the browser fetches them; Babel's entry is now checked by nobody, on a page whose
+`file://` mode has no CSP to catch the fallback.
+
+The other three findings are all one species, and it is this card's signature one: a number written
+down that stopped being true. The checklist half has grown to **215 lines** against ADR 0017's
+**≤200** cap for that artifact — and the spec half, in the very paragraph recording the user's
+waiver of the *other* half's overrun, still says the checklist half "is inside its cap" at
+"112 lines". That figure was true at `bbaae5b` and has nearly doubled since; it is also the ground
+the user accepted the waiver on, so its falsification is not cosmetic. In the same file, the
+paragraph explaining why task 14's box is unticked survives next to a ticked box and a frontmatter
+that no longer says `planning`. And the pointer at the top still advertises "fourteen acceptance
+criteria" nine lines above its own reference to criterion 15.
+
+None of the four needs a design change. Three are sentences to correct or delete; one is a clause to
+add to task 9. The size overrun is the only one that may need a human — see the note under
+violation 1.
+
+### Violations
+
+| # | id | Rule source | Where | Why |
+|---|---|---|---|---|
+| 1 | `adr-0017/md-half-size-budget` | `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md` (repo layer, via `rules/gates.md` one-canonical-file discipline) | `docs/features/tracking-feature-state.md` — whole file; `## Verification` (lines 64-215) carries all of the growth | The checklist half is 215 lines against ADR 0017:39's `≤200` for exactly this artifact, and it crossed the cap in the same pair of commits that recorded the user's acceptance of the *spec* half's overrun on the ground that this half had moved the right way. |
+| 2 | `writing-specs/stale-recorded-claim` | `~/.claude/skills/writing-specs/SKILL.md` — "Maintain it with production rigor … updates when reality changes"; "Drift causes hallucination" | `.spec.md` preamble, ADR-0017 size paragraph (lines 43, 49-52); `.md` `## Verification` RESOLUTION paragraph (lines 206-208) against frontmatter line 2 and task 14 (line 62) | Two recorded claims are false at this revision: the spec half states "As of 2026-08-11 the `.md` half is inside its cap" and pins it at "112 lines" when `wc -l` reads 215, and the `.md` states "Task 14's box is still unticked here … the card is at `phase: planning`" while the box is ticked and the frontmatter reads `implementation`. |
+| 3 | `gates/split-half-sync` | `rules/gates.md` (one-canonical-file discipline) + ADR 0017 | `.md` half preamble, line 10, against `.spec.md` §Acceptance criteria (1-15) and the `.md`'s own task 10 entry (line 58) | The pointer half advertises "all fourteen acceptance criteria" in the half that carries fifteen — nine lines above its own "Owns criterion 15" — so a reader who trusts the index stops one criterion short of the contract. |
+| 4 | `writing-specs/good-bad-edge-cases` | `~/.claude/skills/writing-specs/SKILL.md` — "state explicitly what correct looks like … anything you leave implicit, the agent infers" | Criterion 13's babel note (`.spec.md` 991-1008), task 9's manifest-sweep bullet (1220-1228), task 14's `window.__resources` bullet (1354-1360) | The replacement for the removed babel row covers the serve-side fact only; nothing asserts that `vendor-resources.js` maps `BABEL_URL` to `vendor/babel.min.js`, so the third of three vendoring hooks is written down and checked by nothing — the exact pattern task 9's own bullet list exists to close. |
+
+### Verification of the revision under judgement (what the caller asked to be checked hardest)
+
+- **Babel removal — replacement is real and sufficient for what it replaces.** Re-derived, not
+  read: `grep -c 'x-import' 'task-tracker/Task Tracker.dc.html' task-tracker/_ds/*/_ds_bundle.js`
+  → `0`, `0`. `ensureBabel()` is reachable only from `load(kind === "jsx")`, so no view can produce
+  the request and the row was unpassable — removing it loses no live check, because there was none.
+  Task 9's manifest sweep (spec 1220-1228) plus criterion 13's own pointer (1006) plus task 14's
+  restatement (1345-1347) all name the same assertion, and it is table-driven over the manifest
+  rather than a hand-list, so it does not rot. **The gap is one step to the left of where the
+  revision looked** — see violation 4.
+- **The spec's stated mechanism for keeping Babel local is wrong**, which is probably why the gap
+  survived the edit: "the manifest is what makes the CDN unreachable, not the request count"
+  (spec 1002-1004). The manifest makes the *local copy servable*; the CSP `script-src 'self'` is
+  what makes `unpkg.com` unreachable on the served page; and `window.__resources` is what redirects
+  the URL. On criterion 8's `file://` path there is no CSP at all, so the map is the only thing
+  between a future `x-import` and a live remote fetch.
+- **`path_escape` closes the enum both ways.** Walked the bijection by hand: every row of the
+  §Design 3 status table now has a `reason` value and every value has a row (`403` fans out to
+  `bad_token`/`unknown_id`/`origin_mismatch`/`host_mismatch`/`path_escape`; `502` to
+  `send_failed`/`confirm_failed`/`confirm_timeout`). The fourth-instance defect — a value with no
+  row — is genuinely closed.
+- **The re-score arithmetic reproduces.** §Design 3 manifest = 16 rows; criterion 13(a) = 17 rows;
+  17 − `/favicon.ico` (audit-log-scored) = 16 observed; 16 − `/tracker-data.sample.js` = 15 for
+  run (b). Both match the recorded enumerations. The `/favicon.ico` scoping and the two
+  `read_network_requests` caveats are each stated with the falsifying evidence beside them.
+- **No spec-code drift in the manifest.** `STATIC_MANIFEST` in `task-tracker/server.py` is the same
+  16 paths in the same order as the spec table; `EXTENSION_TYPES` is the deliberate one-directional
+  superset the spec describes, `.html` unused by any row exactly as stated.
+
+### Notes (non-blocking)
+
+- **Violation 1 may be a human's call, not a revision's.** All 151 lines of growth are
+  `## Verification`, which ADR 0017 deliberately keeps in the `.md` half because task 13 writes into
+  it while the phase gate forbids editing a spec. Trimming it means deleting evidence; moving it
+  means breaking the ADR's own division. The honest options are (a) compress the criterion-13
+  narrative now that it resolves, or (b) raise the cap question with the user the way the spec-half
+  overrun was raised. Recommend (a) first — the standing "FAILS — expected 200" table plus its
+  RESOLUTION paragraph is the largest single block and is now describing a closed finding.
+- The `.md` §Verification's babel row still reads **"FAILS — expected 200"** in its status column.
+  It is explicitly framed two paragraphs down as retained evidence and is not cited on that basis,
+  but a reader skimming the table alone reads a live failure in a card whose task 14 is ticked.
+- Waiver honoured: **`adr-0017/spec-half-size-budget`** is recorded as waived (user decision
+  2026-08-11, commit `2c66fab`) and is not re-cited. The spec half measures 1,442 lines; violation 1
+  is a different half against a different row of the same ADR and is not covered by that waiver.
+- Spec path under `docs/features/` is not cited, for the same reason as every prior round: the repo
+  layer (`rules/gates.md` + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/`.
+- Security territory re-checked against `writing-secure-code` (external input, shell execution, a
+  localhost server, a credential). Nothing regressed this revision: the wire still carries an
+  allowlist id and never text, `--surface` still comes from a captured env UUID, no error body
+  echoes input, the token remains memory-only with the stderr clause in criterion 10, every
+  subprocess carries a timeout, and the traversal rule now has both a `403` row and a `reason`.
+- `grep -c skipif task-tracker/*.py` → `test_store.py:3`, everything else `0`, so §Verification's
+  node-guard wording is still accurate as of this round.
+- Trend: 1,657 lines across both halves, up from 1,373 at round 11 — the tenth consecutive rise, and
+  the first round in which the *session-start* half is the one over its cap.
