@@ -49,6 +49,13 @@ posture: cutting ~460 lines out of §Tasks and §Design 3 is a structural edit, 
 sections an implementer actually builds from. **The user accepted the overrun on 2026-08-11**, on
 the ground that the number the pair shape exists to control is the session-start load, and that one had
 moved the right way — the re-split cut the `.md` half from 326 lines to well under its `≤200`.
+**Re-confirmed on 2026-08-11, after this half had grown further.** The observability read measured
+the growth since the accepting commit and put it back to the user, who left the waiver standing
+unchanged: the ground it rested on never depended on *this* half's size, only on the session-start
+half staying small, and that is still true — this half is read on demand, when a task sends you here.
+Re-derive the growth with `git show 2c66fab:docs/features/tracking-feature-state.spec.md | wc -l`
+against a current `wc -l` rather than trusting any figure; what was re-confirmed is the **decision**,
+not a number.
 ⚠️ **That acceptance covers this half only, and the ground it stood on has since changed:** the
 `.md` half rose back over its own cap as `## Verification` absorbed the criterion-13 run, which
 compliance round 1 (re-entry) cited as `adr-0017/md-half-size-budget`. A 2026-08-11 compression pass
@@ -412,7 +419,7 @@ back** — an error body that reflects input is a free XSS gadget:
 | `400` | `malformed` | Body is not a JSON object, `id` missing or not a string, or any key other than `id` present |
 | `403` | `forbidden` | Missing/invalid token, **or** `id` not in the allowlist, **or** `Origin`/`Sec-Fetch-Site` mismatch, **or** a `Host` header that is not `127.0.0.1:<port>` — the DNS-rebinding guard above, logged as `host_mismatch` — **or** a request path that, once symlinks are resolved, lands outside `task-tracker/`, logged as **`path_escape`** (the traversal rule stated in §Design 3 above; criterion 11's first half is what proves it). All five collapse into this one `403` for the same reason: the caller learns nothing about which check it failed. Applies to `GET /` as well as `/command`, since `GET /` is the route that hands out the token |
 | `404` | `not_found` | Any path that is neither `/`, nor `/command`, nor a row of the static manifest above — including paths inside `task-tracker/` that are not on it, `tracker-data.js` before the first analysis, and **`/favicon.ico`**, which every browser requests unprompted and which is deliberately not served. Both of those paths are **expected** `404`s and appear as such in criterion 13's run-(a) table; they are the only two |
-| `405` | `method_not_allowed` | Any method other than `GET` on `/` or on a static-closure path, or `POST`/`OPTIONS` on `/command` |
+| `405` | `method_not_allowed` | Any method/path pair outside the allowed set. **Read "other than" as governing the whole set, not just the first clause:** the allowed pairs are `GET` on `/` or on a static-closure path, and `POST` **or** `OPTIONS` on `/command`. The `405`s are therefore `GET /command`, `POST /`, `POST` on a manifest path, and `OPTIONS` on any path other than `/command`. **`POST /command` is the state-changing route and `OPTIONS /command` is the `204` preflight — neither is a `405`**, though an earlier phrasing of this row could be parsed as saying both were. **The `404` row takes precedence on an unknown path:** a `POST` to a path that is neither `/`, nor `/command`, nor on the manifest is `404`, because the path failing to exist settles the request before its method does |
 | `409` | `unresolved_surface` | The UUID bound at startup (§Security) is **confirmed absent** from `cmux tree` at send time — the session ended. This is criterion 9's "refuses and reports" |
 | `413` | `too_large` | Body over 1 KiB. Read at most that much; never buffer an unbounded body |
 | `415` | `unsupported_media_type` | `Content-Type` is not `application/json` |
@@ -434,7 +441,12 @@ there is no allow-list of origins to get wrong, because there is no allow-list a
 
 **Failure behaviour.** `cmux send` runs with a 5-second timeout and its exit code is checked; a
 timeout is killed and reported as `502`, never awaited indefinitely and never assumed to have
-succeeded. A non-zero exit is `502` with the exit code logged server-side (not returned). Surface
+succeeded. A non-zero exit is `502`; the exit code is written to stderr as its own
+diagnostic line (`grep -n 'cmux send exited' task-tracker/server.py`), **not** as a field of the
+structured audit line in §"Audit log" — that format carries no exit-code field, and saying "logged
+server-side" without the distinction invites a test asserting against the audit line, where the value
+has never been. It is not returned to the caller either way. Making the exit code auditable
+per-request is an audit-format change with a criterion behind it, not a wording fix. Surface
 confirmation runs **before** any send is attempted — the refusal happens on the near side of the
 socket, so nothing reaches the focused tab; its three outcomes and their codes are tabulated once, in
 §Security, rather than restated here. `reanalyze` failure is `500`; the store is
@@ -1282,7 +1294,15 @@ forbids editing a spec.
           `reanalyze_failed`, the previous `tracker-data.js` byte-identical afterwards, and the
           request to actually return rather than hanging with it. A timeout that is never made to
           fire is indistinguishable from no timeout, which is the state this one was in.
-        - **`reason` covers every status row.** Assert the two are in bijection — walk the contract
+        - **`reason` covers every status row.** The relation is **not** a bijection — several
+          statuses collapse multiple reasons (`403`, `500` and `502` each do), so no one-to-one
+          pairing exists to assert, and a test written to the word "bijection" would assert a
+          property the design deliberately does not have. **No multiplicity is pinned here**; derive
+          it, per this card's standing rule:
+          `grep -oE '_fail\([0-9]+, "[a-z_]+", "[a-z_]+"' task-tracker/server.py | sed -E 's/_fail\(([0-9]+), "[a-z_]+", "([a-z_]+)"/\1 \2/' | sort -u`
+          — and note that this derivation reads the **emitting** side, so a reason named only in this
+          document will be absent from it, which is a finding rather than a miscount. Assert **total
+          coverage in both directions** instead — walk the contract
           table, require each row's `reason` to be a defined value, and, for every value, **drive an
           actual request that produces it** and assert the audit line the server emits carries that
           value. Not "reachable" by reading the source: a value that only a code path mentions is
