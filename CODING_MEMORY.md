@@ -5333,3 +5333,47 @@ because they were missing. Re-checked with `curl -D -` on a GET: both present.
 
 Next: **task 14** (vendor the six remote assets, nine files) — it runs before 9 and 10. Nine `vendor/`
 manifest rows currently 500 by design until it lands.
+
+## Session 62 — 2026-08-11 — task 14 vendored (287f23c), criterion 13 still unrun
+
+All nine files are under `task-tracker/vendor/`, `vendor-resources.js` is served ahead of
+`support.js`, and the five in-place rewrites landed. **Task 14 is NOT ticked**: criterion 13 — the
+browser run that is this task's actual proof — has not been run, and the grep it replaces is
+explicitly not a substitute. The checklist box stays open until it has.
+
+**The SRI check moved to vendor time rather than disappearing.** Vendoring makes `cdnScriptFor`
+return `{src}` with no `integrity`, so the browser stops checking the three scripts. Each file's
+`sha384` was therefore compared to the constant already in `support.js` before installing —
+and the comparison was **shown to reject a 3-byte append** before being trusted. Same discipline as
+everything else on this card: name the falsifier first.
+
+**⚠️ `babel.min.js` ends with a real `//# sourceMappingURL=babel.min.js.map` comment.** With devtools
+open and source maps enabled, Chrome will request `/vendor/babel.min.js.map` — which is off-manifest,
+so it is a local `404`, confirmed by probe. It therefore **cannot** violate criterion 13's
+"no host other than `127.0.0.1`" clause, but it **will** break set equality by adding a row, for a
+reason that has nothing to do with the server. **Disable source maps for the criterion-13 runs, or
+the run fails on an artefact of how it was driven.** The bytes were deliberately left intact — editing
+them would break the SRI correspondence just established, which is worth more.
+
+Both of the card's Inter numbers reproduced exactly (28 references, 7 distinct files), and all four
+`latin` blocks were confirmed to name the *same* URL — the variable-font claim, checked rather than
+inherited. The four `unicode-range` descriptors were copied by transform and `diff`ed against
+upstream, not retyped.
+
+**Grep shape that matters here:** `grep -rn 'https\?://' task-tracker/` is unusable — `babel.min.js`
+and `react-dom.production.min.js` contain http strings in minified one-liners and drown the output.
+`grep -rl` (filenames only) is the readable form, and the result that counts is that **neither
+`.dc.html`, nor `nocturne.css`, nor `_ds/.../styles.css` appears** — those four are what actually
+drive fetches. A path-resolution check (each reference resolved from its *referencing* file) is the
+stronger test and is what would catch a wrong relative path; its one "MISSING" is `{{ t.prHref }}`,
+a template placeholder, not a reference.
+
+Headless probe (not criterion 13, and not a substitute for it — it proves the server *will* serve,
+not that the browser *does* request): all ten new rows return their assigned `Content-Type`, and
+off-manifest paths under `vendor/` still `404`. 54 passed, unchanged.
+
+**Still open and unresolved — carried forward, not fixed here:** the `path_escape` spec gap above
+still blocks task 9, and the compliance gate still has no passing verdict.
+
+Next: **criterion 13**, both store states, with a regular *and* a fill icon on screen; record both
+request lists, the view used, and the Chrome version in `§Verification`. Then task 9.
