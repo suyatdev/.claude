@@ -6053,3 +6053,54 @@ the before-counts first** (the point is that a failure already present on `main`
 feature's regression), with `node --version` beside them and the node-guarded tests reported in
 §Verification's own words: criterion 5 "verified without a JS-engine oracle", criterion 15 **not
 verified**, if `node` is absent. No suite has been run this session — the 159 figure is session 73's.
+
+## Session 75 — 2026-08-12 — task 13 closes, and the baseline is fetched rather than argued
+
+**Task 13 (`96e3374`) is closed, and implementation is complete — all 14 tasks tick.** Three suites,
+both sides, **zero failures either side**: `task-tracker/` 53 → 159 passed, `memsearch/` 74
+passed/23 deselected identically, `hooks/` 11 of 11 files exit 0 identically.
+
+**The before-counts could not be taken here, and that is the whole mechanism.** This worktree already
+carries the feature's committed code, so any run in it is an *after* count by definition — "that
+failure was already there" would have been an argument, not a measurement. The baseline came from a
+throwaway detached checkout, `git worktree add --detach <scratchpad>/baseline-main main` at
+`1b983d9`. `main` came back green on all three, so **none of the 159 can be excused as pre-existing**
+and nothing had to be adjudicated.
+
+**The count columns are not meant to match, and only the failure column is load-bearing.** `main`
+already carries `analyze.py`, `store.py` and their two test files but no `server.py`,
+`test_server.py`, `test_server_lifetime.py` or `test_ui_commands.py`, so 53 → 159 is the feature
+arriving, not a discrepancy. Reading the baseline as a count comparison would have invented a problem.
+
+**`node` v26.5.0 was present and the run reports `159 passed` with no `skipped` term at all** — so
+every node-guarded test executed, criterion 5 got its independent JS-engine oracle, and criterion 15
+is verified. §Verification's degraded wordings ("verified without a JS-engine oracle"; **not
+verified**) are the node-less branch and did not apply. Recording *which* branch was taken matters
+more than the totals: the same "159 passed" on a node-less host would have meant something weaker.
+
+**The spec's own re-derivation command overcounts, caught by running it rather than trusting it.**
+`grep -c skipif task-tracker/*.py` totals **15**, but `test_server.py:556` guards on
+`os.geteuid() == 0` — root, not `node`. The node-guarded figure is **14** (3 in `test_store.py`, 11 in
+`test_ui_commands.py`), and it is decorators, not tests. A third correction queued for `review`,
+joining §Tasks 8's "owes one edit" and §Tasks 9's `reason` count.
+
+**`memsearch`'s 23 deselected are configuration, not failures.** `memsearch/pyproject.toml` sets
+`addopts = "-m 'not golden and not measurement'"`, so the real-index tests never ran on either side.
+Deselected is neither passed nor failed; the *symmetry* across before/after is what makes the
+comparison sound, not their absence.
+
+**The carried-forward analyzer figure was stale, and a direct count is what settled it.** The handoff
+said 12/14 while also listing 13 tasks done. After ticking 13: `grep -c` gives **14 ticked, 0
+unticked**, and the analyzer agrees at **14/14**; the halves comparer still exits 0. I did not
+establish why the earlier figure read 12 — the two were never re-derived at the same commit, and no
+explanation is recorded here rather than a guessed one.
+
+**State:** `phase: implementation` (unchanged — the transition to `review` is the user's model-switch
+gate, not mine), `model_tier: low`, branch `feat/tracking-feature-state`, HEAD `96e3374`. **All 14
+tasks done.** Compliance PASS still stands at `88d524a`, spec half byte-untouched. PR #51 open at
+`c811f0d`, unmerged, still with **no `implementation`-stage observability verdict** — `judge-guard.sh`
+will block `gh pr create` until one exists at the current HEAD.
+
+**Next: the implementation → review boundary** — its own model-switch ask, then the observability
+judge at `implementation` stage, then the three queued spec corrections once `phase: review` makes
+spec edits legal again.
