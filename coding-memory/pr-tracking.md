@@ -1137,15 +1137,19 @@ this feature's review rounds found — a derivation nobody asked what it could n
 
 ---
 
-## `.claude` — `docs/readme-roadmap-task-tracker` → PR #53 (OPEN 2026-08-12)
+## `.claude` — `docs/readme-roadmap-task-tracker` → PR #53 (**MERGED** 2026-08-12, merge commit `94eecfe`)
 
 - **Repo:** `suyatdev/.claude` · **remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
 - **Branch:** `docs/readme-roadmap-task-tracker` · **base:** `main`
-- **PR:** https://github.com/suyatdev/.claude/pull/53 · **state:** OPEN
+- **PR:** https://github.com/suyatdev/.claude/pull/53 · **state:** MERGED 2026-08-12T21:55:04Z by
+  `suyatdev`, merge commit `94eecfe`
 - **session_origin (created):** session 79 · **session_origin (last push):** session 79
-- **Card:** `docs/features/readme-roadmap-upkeep.md` (`phase: review`)
-- **Scope:** 2 commits, +61 / −2 — three `## 🗺️ Roadmap` lines in `README.md`, plus the card
-  `phase-guard.sh` required before it would permit the write.
+- **Card:** `docs/features/readme-roadmap-upkeep.md` (`phase: review`, both tasks closed)
+- **Scope as merged:** 3 commits, +262 / −2 across 6 files — of which `README.md` is **+3 / −2**
+  (three `## 🗺️ Roadmap` lines). The rest is the card `phase-guard.sh` required before it would
+  permit the write, the judge verdict, and the session/PR memory records.
+- **Calibration:** the `implementation` verdict at `c443d01` is backfilled `outcome: clean` — one
+  row, the only verdict on this branch, and only its `outcome` field changed.
 
 **This closes the open item session 78 left explicitly undone** — the Roadmap had no entry for the
 feature-state tracker, and root `README.md` is not covered by the default-branch docs exception
@@ -1164,3 +1168,20 @@ dispatch prompt had to state the absolute path and the four match fields (`repo`
 **Verdict committed only after the PR was open.** `judge-guard.sh` requires `head_sha == HEAD`, so
 committing the verdict first would have moved HEAD and invalidated the verdict that was about to
 authorize the PR.
+
+### MERGED 2026-08-12T21:55:04Z — merge commit `94eecfe`
+
+**Landed content verified on `origin/main`, not inferred from the PR state.** All six files present;
+the three Roadmap lines read correctly in `git show origin/main:README.md`; `332e026` confirmed an
+ancestor of `origin/main`.
+
+**Conflict-marker scan derived from `git config merge.conflictStyle` (`zdiff3`), so all four forms**
+(`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) were checked — a three-form scan swallows `||||||| base`
+and passes a file with a live marker. Zero hits across all six files, and the grep was falsified
+against synthetic marker text first (returned 4) so the zero is an observation, not a blind pass.
+
+⚠️ **Post-merge docs did not go through the `main` checkout.** `main` was checked out in the
+`statusline-followups` worktree and stale at `1b983d9`; touching another worktree's checkout is
+forbidden by the parallel-agent invariants. Branched from `origin/main` in this worktree instead and
+pushed `docs/post-merge-53:main` — permitted for `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`
+under the default-branch docs exception.

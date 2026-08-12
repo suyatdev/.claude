@@ -6468,3 +6468,45 @@ real, and its own change. The remaining `- [ ]` item (files describing the retir
 `coding-memory/branches/<branch>.md` workflow) was not verified in either direction and is untouched.
 
 **PR #52 (`fix/git-guard-detached-head`) remains another worktree's branch — untouched.**
+
+---
+
+## Session 79 (post-merge) — 2026-08-12 — PR #53 merges; the marker scan is falsified before it is trusted
+
+**PR #53 MERGED** 2026-08-12T21:55:04Z, merge commit `94eecfe`. The README Roadmap now matches the
+repo: tracker listed (#51), pane-split policy (#28) and `phase-guard.sh` (#30) checked off.
+
+**Content verified on `origin/main`, not inferred from the merge pointer** — the same discipline
+session 78 used for PR #51. All six files present, the three Roadmap lines read back correctly, and
+`332e026` confirmed an ancestor of `origin/main`.
+
+**The conflict-marker scan was falsified before its result was believed.** The marker set was derived
+from `git config merge.conflictStyle` → `zdiff3`, which has **four** forms; a three-form scan swallows
+`||||||| base` into "ours" and passes a file containing a live marker. Before trusting a `0`, the grep
+was run against synthetic marker text and returned `4`. **A check that cannot fail proves nothing** —
+naming the falsifier first is what makes the zero evidence.
+
+**Calibration backfilled and counted, not asserted.** One verdict exists on this branch
+(`implementation`, `c443d01`, `risk=low`) → `outcome: clean`. Verified by asserting the match set was
+exactly one row before writing, then diffing: `1 insertion, 1 deletion`, with only `outcome` differing
+between the before and after JSON. The prior failure this guards against is claiming "all N rows got
+X" without recounting.
+
+⚠️ **`main` is checked out in the `statusline-followups` worktree and was stale at `1b983d9`.** The
+parallel-agent invariants forbid touching another worktree's checkout, so the post-merge docs were
+made on `docs/post-merge-53` branched from `origin/main` here and pushed `HEAD:main` — permitted for
+`CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md` under the default-branch docs exception. **Checking
+`git worktree list` before reaching for `main` is the step that avoided this**, and it is not
+something the hooks would have caught.
+
+**A zsh word-splitting bug ate a verification loop, visibly.** `for f in $FILES` does not word-split
+in zsh, so a six-file scan ran once against one six-filename-long string and reported `MISSING`. It
+failed loudly rather than silently passing — but the same shape with an inverted test would have
+printed six confident, meaningless `present` lines. **Loops over file lists get literal arguments in
+zsh, not an unquoted variable.**
+
+**Still open, unchanged by this PR:** `## What's in here` has no `task-tracker/` row and no `skills/`
+row. The remaining `- [ ]` Roadmap item (files describing the retired
+`coding-memory/branches/<branch>.md` workflow) was never verified in either direction.
+
+**PR #52 (`fix/git-guard-detached-head`) remains another worktree's branch — untouched.**
