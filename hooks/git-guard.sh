@@ -90,13 +90,55 @@ has_fact() {
 }
 
 current_branch() {
-  git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""
+  git symbolic-ref --short HEAD 2>/dev/null || echo ""
+}
+
+# Git is replaying or completing work that already exists and is waiting on a
+# command to finish it. Refusing here strands the operator mid-operation with
+# advice they cannot follow -- `git switch -c` refuses while a sequencer runs.
+#
+# EXCEPT a rebase whose head-name is the default branch. That rebase MOVES that
+# branch onto the replayed commits when it finishes, so a commit made during it
+# really is reaching main, and the guard must stay on. Measured: without this
+# clause a source file committed during a rebase started from main IS on main
+# after --continue. Both backends write head-name (merge and apply alike).
+sequencer_in_progress() {
+  local marker dir
+  for marker in rebase-merge rebase-apply; do
+    dir="$(git rev-parse --git-path "$marker" 2>/dev/null)"
+    [ -e "$dir" ] || continue
+    case "$(cat "$dir/head-name" 2>/dev/null)" in
+      refs/heads/main|refs/heads/master) return 1 ;;
+    esac
+    return 0
+  done
+  # Cherry-pick, revert and merge move no branch: finishing one leaves the
+  # commit on the detached HEAD it was already on.
+  #
+  # `git am` stopped on a conflict from a DETACHED HEAD does reach this arm --
+  # it writes rebase-apply with no head-name, so the case above falls through to
+  # `return 0` and the guard stands down. That is safe for the cherry-pick
+  # reason, not the reason an earlier draft gave: an `am` replaying onto a
+  # detached HEAD updates no branch, so nothing it commits reaches main. An `am`
+  # on a NAMED branch never gets here, because symbolic-ref answers.
+  for marker in CHERRY_PICK_HEAD REVERT_HEAD MERGE_HEAD; do
+    [ -e "$(git rev-parse --git-path "$marker" 2>/dev/null)" ] && return 0
+  done
+  return 1
 }
 
 on_main() {
   local b
   b="$(current_branch)"
-  [ "$b" = "main" ] || [ "$b" = "master" ]
+  case "$b" in
+    main|master) return 0 ;;
+    # Empty means HEAD names no branch: a detached checkout, or not a repository
+    # at all. Cannot-tell, and this guard fails CLOSED (see the file header) --
+    # except while git has an operation in progress, which it is waiting on the
+    # operator to finish. See the carve-out above.
+    "")          sequencer_in_progress && return 1; return 0 ;;
+    *)           return 1 ;;
+  esac
 }
 
 # Describes the observed checkout for a refusal message. Distinguishing "detached"

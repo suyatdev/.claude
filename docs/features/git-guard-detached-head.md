@@ -723,10 +723,28 @@ assertion. They are still cases and still run.
         'main', where commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*,
         docs/*.md).` followed by `Create a feature branch instead (git switch -c <name>), or stage
         only documentation.`
-- [ ] Rewrite `current_branch()` to use `symbolic-ref`, add `sequencer_in_progress()` **including the
+- [x] Rewrite `current_branch()` to use `symbolic-ref`, add `sequencer_in_progress()` **including the
       `head-name` clause with both `main` and `master`**, and rewrite `on_main()` to the `case` form.
       Run the suite: rows 1–5, 15 and 17 go green, 6–14 and 16 stay green, all 77 existing cases stay
       green.
+      - Landed both functions verbatim from the spec's "Decision" section. `bash hooks/git-guard.test.sh`
+        now reports **96 passed, 0 failed** — rows 1–5, 15 and 17 flipped to green, everything else
+        (6–14, 16, 18, 19, all 77 original cases) stayed green. This is the fix: the guard's actual
+        admit/deny behavior changed for the first time on this branch.
+      - Re-verified all three carve-out bounds live, by mutation, rather than trusting the suite's
+        green result at face value:
+        - Removed the `head-name` clause from `sequencer_in_progress()` → rows **15 and 17** both go
+          red (`want 2, got 0`), confirming bound 1 (a rebase that will move `main`/`master` stays
+          guarded) is load-bearing, not decorative.
+        - Hoisted `sequencer_in_progress` above `on_main()`'s `case` → row **16** goes red (`want 2,
+          got 0`), confirming bound 2 (a named `main`/`master` checkout stays guarded regardless of a
+          sequencer marker) actually depends on the call staying inside the `""` arm.
+        - Dropped `rebase-apply` from the marker loop → **only row 19** goes red (`want 0, got 2`);
+          rows 15/16/17/18 stay green because the guard became *stricter*, matching the spec's
+          corrected claim (an earlier draft wrongly said row 17 would also catch this) rather than
+          re-trusting the prose.
+        - Restored the file after each mutation and confirmed `diff` against the pre-mutation copy
+          was empty before re-running the suite (96/0 each time).
 - [ ] Add the stderr assertions to the test suite, including the third `checkout_desc` rendering on
       rows 15 and 17, the remedy line per state, and one assertion on the empty-index message. **Then
       prove each assertion can fail:** revert one `printf` in the hook, confirm the matching assertion
