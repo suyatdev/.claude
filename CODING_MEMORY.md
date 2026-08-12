@@ -6328,3 +6328,54 @@ both judges passed. PR #51 open, **unmerged**, head lagging until the next push.
 zero deletions — line arithmetic balancing is not proof), then **re-run the observability judge at the
 final HEAD**, since every commit since `a6e64b1` has made the passing verdict stale relative to what
 would actually merge.
+
+## Session 77 — 2026-08-12 — PR #51 becomes mergeable, and the union check that nearly passed while broken
+
+**User instruction: PR #51 is updated and merged first; PR #52 (`fix/git-guard-detached-head`) is a
+different worktree's branch and was not touched.** #51 is now **MERGEABLE** at `9482349`.
+
+**The merge conflicts were audit-file only** — `CODING_MEMORY.md`, both judges' `verdicts.jsonl`,
+`coding-memory/pr-tracking.md`; zero in `task-tracker/`, `skills/`, `docs/features/`. Detect without
+touching the tree, which matters when verdicts sit uncommitted:
+`git merge-tree --write-tree --name-only main HEAD`.
+
+**Two defects in my own resolution, both caught by verification rather than by reading:**
+
+1. **This repo uses `zdiff3`, so a conflict has FOUR marker forms** — `<<<<<<<`, `|||||||`, `=======`,
+   `>>>>>>>`. My parser knew three, so it swallowed `||||||| base` into "ours" and **shipped a literal
+   conflict marker into a JSONL file**. The marker grep missed it for the same reason: it searched
+   three forms. The lesson generalizes past this repo — **derive the marker set from the configured
+   conflict style (`git config merge.conflictStyle`), never from memory.**
+2. **A naive union duplicated a record.** One verdict existed on both sides: `main` had backfilled
+   `outcome: null → "clean"` (the calibration step the judge skill prescribes) while this branch left
+   it untouched. Resolved by keying on `ts` with main's version winning — correct precisely *because*
+   ours was byte-identical to base, which is the check that licenses taking theirs.
+
+**The line-level check flagged 5 "missing" lines that were not missing.** They were the same backfill:
+same records, edited text. Raw-line multiset comparison is the wrong invariant for a record log —
+**key on the record identity, then compare.** Both invariants were run in the end: zero records lost
+or duplicated, zero deletions from either parent in the markdown halves, 267 records parsing, no
+marker of any form.
+
+**A number in an immutable commit message was wrong, and the correction lives elsewhere.** `011c344`
+says *one* verdict differed across both sides. It is **6 observability and 5 compliance**; only one
+fell inside a conflict block and git auto-merged the other ten. The resolution was right everywhere.
+Correction recorded in `pr-tracking.md`'s UPDATE section, not by rewriting history.
+
+**The observability judge found the thing I would not have.** `pr-tracking.md`'s PR #51 entry still
+read "6 of 14 boxes open" and "neither judge has a passing verdict" — false since this session, and
+sitting in the exact file a reader consults to answer "is this ready". Same species this branch spent
+the day correcting. Now struck through with an authoritative UPDATE, not deleted.
+
+**Both judges pass at the merged tree.** Observability re-run at `011c344` (`risk=low`,
+`confidence=high`; it rebuilt the merge union independently and re-ran all three suites itself);
+compliance round 4 PASS at `d142643`. Suites on the merged tree: **159 / 74+23 deselected / 11-of-11**,
+unchanged by the merge.
+
+**PR body rewritten** — the old one led with "Not ready to merge, six boxes open, one criterion
+known-failing". Now records how each blocker closed rather than deleting the history. ⚠️ **A `<<PY`
+heredoc is not quoted**: backticks inside it were command-substituted and silently ate a filename out
+of the replacement text. Use `<<'PY'`.
+
+**State:** `phase: review`, HEAD `9482349`, clean, pushed. PR #51 OPEN + MERGEABLE, **unmerged — the
+user merges through the GitHub UI.**
