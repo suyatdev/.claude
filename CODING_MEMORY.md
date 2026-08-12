@@ -5989,10 +5989,23 @@ above confirms they bite.
 **State:** `phase: implementation`, `model_tier: low`, branch `feat/tracking-feature-state`.
 **159 passed, 2026-08-12** (`uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q`, ~108s)
 against 144 before — the 15 new ones are this task's. `node --version` is **v26.5.0**.
-**Task 10 is deliberately still unticked, and this is the only thing it owes: the page has not been
-loaded in a browser since the wiring.** `node --check` accepts the whole `x-dc` block and the marker
-pair is exactly one, but neither sees a `{{ binding }}` that resolves to nothing — and this card's own
-history says a text check cannot answer a runtime question. Load `GET /` and confirm the three
-buttons render, then tick it. Compliance PASS still stands at `88d524a`, spec half untouched this
-session. PR #51 remains open at `c811f0d`, unmerged, with no `implementation`-stage observability
-verdict.
+**Task 10 is closed** (`c29e409`). The browser load it owed was done in this same session, headlessly
+against the real server, because the Chrome extension was not connected — Chrome's own
+`--headless=new --dump-dom` renders the page with JS and needs no extension. Served: three command
+buttons in the header, **zero** copy chips, the token once. Over `file://`: **zero** buttons, three
+copy chips (`/clear`, `/handoff`, `python3 task-tracker/analyze.py .`). No unresolved `{{ }}` in
+either. Strip the `<script type="text/x-dc">` block from the dump before counting anything — the
+template's own source contains every string being searched for, and a naive `grep` reports a copy
+chip that is not rendered.
+
+**Two operational gotchas, both found by being bitten.** `nohup python3 server.py … &` **kills this
+server**: orphaning it changes `getppid()` and the parent-death shutdown fires within the poll
+interval, logging `server: parent session ended; exiting`. That is criterion 14's control working —
+but it is why the first headless run captured Chrome's "site can't be reached" page and 187 KB of
+error DOM that briefly read like a render. Use a live parent. And **macOS has no `timeout`(1)**
+(`rc=127`), so a headless run's bound has to come from `subprocess.run(..., timeout=…)`; the first
+unbounded attempt hung for three minutes.
+
+Compliance PASS still stands at `88d524a`, spec half untouched this session. PR #51 remains open at
+`c811f0d`, unmerged, with no `implementation`-stage observability verdict. **Next: task 11** — the
+skill, which owns the two launch-time security controls.
