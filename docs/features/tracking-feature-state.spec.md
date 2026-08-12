@@ -1250,11 +1250,13 @@ forbids editing a spec.
         The clean split is a `task-tracker/serve_static.py` holding the static-serving half.
         **Not scheduled** — same call, and the same reason, as task 3's `analyze.py`: a structural
         split is human-owned, not a drive-by. Raise it if the file grows again.
-      - ⚠️ **This task is closed but owes one edit.** The `confirm_timeout` fix recorded under task 9
-        below changes *this* file — `confirm_surface()` must split the `TimeoutExpired` case out of
-        the shared `"unrunnable"` state so the reason becomes emittable. It lands as its own
-        `server.py` commit **before** task 9's test, never in the same step. Task 8's tick covers the
-        wire contract as built; it does not cover that edit.
+      - ✅ **The owed edit landed at `8e16f74`, as its own `server.py` commit ahead of task 9's test.**
+        `confirm_surface()` splits the `TimeoutExpired` case out of the shared `"unrunnable"` state,
+        and `CONFIRM_REFUSAL_REASONS` maps the two states to `confirm_failed`/`confirm_timeout`
+        (`grep -n CONFIRM_REFUSAL_REASONS task-tracker/server.py` → the mapping at line 240 and its
+        use at 583-584), so the reason is emittable. Nothing is outstanding on task 8. This bullet
+        described it as owed for the whole of implementation, because the phase gate forbade editing
+        the spec half to say otherwise.
 - [ ] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**, including every
       negative case and each status code in the contract table. A test that only proves the happy path
       does not close this task — **and neither does one that only proves refusals**, which is the
@@ -1324,7 +1326,11 @@ forbids editing a spec.
           } | sort -u
           ```
           ⚠️ **The `_fail`-only form was written into this document on 2026-08-11 and was wrong**: it
-          returns 14 pairs where the server emits 15, silently dropping `502 send_failed`. Worse, the
+          returns **13** pairs where the server emits **16**, silently dropping `502 send_failed`,
+          which is emitted through the `audit(…, reason="send_failed")` shape at `server.py:591`.
+          (An earlier revision of this warning said "14 pairs" and "15" — both wrong, and the 14 was
+          borrowed from the *corrected* block below rather than the broken form it was describing.
+          Derived 2026-08-12: `_fail`-only → 13, the two-grep block → 14, the true enum → 16.) Worse, the
           sentence that followed it pre-rationalized its own blind spot — it said a reason absent from
           the derivation "is a finding rather than a miscount", which would have led an implementer to
           conclude `send_failed` is unimplemented when it is implemented. **A derivation that explains
@@ -1333,6 +1339,12 @@ forbids editing a spec.
           this paragraph. Two things still make it undercount silently, and both are invisible in a
           clean result: a third emitting shape, and a **wrapped call** — `grep` is line-based, so an
           emitting call whose status and `reason` fall on different lines is not seen at all.
+          ✅ **The third shape has since been found, and it is a computed reason.** `_run_send` passes
+          `CONFIRM_REFUSAL_REASONS[state]` (`server.py:584`) — a dict lookup, not a string literal, so
+          no literal-matching `grep` can see it. That is why the two-grep block returns 14 against a
+          16-value enum: the two it misses are `confirm_failed` and `confirm_timeout`, and both are
+          reachable only through that mapping. `test_server.py`'s `reasons_emitted_in_source()` is the
+          authoritative derivation — the two greps **plus** `set(server.CONFIRM_REFUSAL_REASONS.values())`.
           Assert **total coverage in both directions** — walk the contract
           table, require each row's `reason` to be a defined value, and, for every value, **drive an
           actual request that produces it** and assert the audit line the server emits carries that
