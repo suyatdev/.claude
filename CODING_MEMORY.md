@@ -6009,3 +6009,47 @@ unbounded attempt hung for three minutes.
 Compliance PASS still stands at `88d524a`, spec half untouched this session. PR #51 remains open at
 `c811f0d`, unmerged, with no `implementation`-stage observability verdict. **Next: task 11** — the
 skill, which owns the two launch-time security controls.
+
+## Session 74 — 2026-08-12 — the skill lands, and its two controls are launch-shaped, not code-shaped
+
+**Task 11 (`ddf3a5b`) and task 12 (`0e82499`) are closed.** `skills/tracking-feature-state/SKILL.md`
+is the survey's entry point — when to run the analyzer, how to read what it proposes, how to launch
+and stop the UI — and it carries the two security controls §Security assigns to the launcher rather
+than to `server.py`: **never detach** (`nohup`/`setsid`/`&` into a disowned shell) and **never
+redirect `stderr`**. Each is written with its failure mode beside it, because that is the only thing
+that makes them survivable: detached, `getppid()` never changes again and the parent-death check is
+inert; redirected, the per-request audit line — the one record of where keystrokes went — is gone.
+Neither failure is visible to a code reader or to the test suite, which is exactly why they cannot
+live as bare imperatives.
+
+**The documented launch line was run, not reasoned about.** `python3 task-tracker/server.py --repo
+"$PWD"` under the harness's background mode bound this session's real surface, answered `GET /` with
+`200` plus the CSP, and wrote `server: http://127.0.0.1:8422/ surface=… idle=1800s poll=5s` followed
+by one audit line to captured stderr. `ps -o ppid=` walked the chain — **server → zsh → claude** — so
+the background mode is genuinely non-detached and `getppid()` remains able to change. That chain walk
+is the check worth repeating; "it started fine" would have looked identical under `nohup`.
+
+**Stated as unverified rather than assumed:** trigger-routing accuracy. The skill is not discoverable
+until it reaches `main`, and `skills/_standards/authoring-skills-and-agents.md` records that this repo
+has **no eval harness** — six trigger phrases are written and none are tested.
+
+**Catalog placement is by activity, not alphabet** — the new row sits after `managing-session-memory`
+because both answer "where does this work stand". `CLAUDE.md` is the *only* catalog; every other file
+naming a skill references it in prose, checked by grepping a long-standing skill name repo-wide for a
+second list that could drift. There is none.
+
+**Only the `.md` half's checkbox moves.** Tasks 9, 10 and 14 are all ticked there and unticked in the
+spec half — that is the established convention while the gate is open, not an oversight to fix.
+
+**State:** `phase: implementation`, `model_tier: low`, branch `feat/tracking-feature-state`, HEAD
+`0e82499`. Tasks 1–12 and 14 done; the halves comparer
+(`python3 hooks/lib/feature_tasks.py <md> <spec> tracking-feature-state`) exits 0 and the analyzer
+reads the card as **12/14** with no parse question raised. Compliance PASS still stands at `88d524a`,
+spec half untouched. PR #51 open at `c811f0d`, unmerged, still with no `implementation`-stage
+observability verdict.
+
+**Next: task 13** — run every suite and record before/after counts in `## Verification`, **capturing
+the before-counts first** (the point is that a failure already present on `main` is not read as this
+feature's regression), with `node --version` beside them and the node-guarded tests reported in
+§Verification's own words: criterion 5 "verified without a JS-engine oracle", criterion 15 **not
+verified**, if `node` is absent. No suite has been run this session — the 159 figure is session 73's.
