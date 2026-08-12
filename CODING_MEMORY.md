@@ -5276,3 +5276,29 @@ passed, 0 failed, unchanged, since the new helpers are unwired.
 
 Committed `0e124ab`, pushed. Next is checklist step 3 — add a `run_case_in <dir> <desc> <want-exit>
 <cmd>` variant beside `run_case`, needed before any of these fixtures can actually feed a test row.
+
+## 2026-08-12 — session 60: git-guard-detached-head, checklist step 3, `run_case_in`
+
+Restored from the session-59 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean, nothing uncommitted. Ran checklist step 3 — the `run_case_in <dir> <desc> <want-exit>
+<cmd>` variant that lets a test row target its own fixture directory instead of the suite's shared
+`$REPO`.
+
+Rather than duplicate `run_case`'s body, factored the shared pass/fail bookkeeping into
+`_run_case_common <dir> <desc> <want-exit> <cmd>`; `run_case` now calls it with `"$REPO"` and
+`run_case_in` calls it with a caller-supplied directory. `run_case`'s behavior is unchanged —
+`bash hooks/git-guard.test.sh` still reports 77 passed, 0 failed — and no row calls `run_case_in`
+yet (that's checklist step 4).
+
+Verified the new helper against real hook behavior rather than just confirming it parses: built a
+throwaway non-repository directory and called `run_case_in` against it with the row-3 command,
+expecting the *post-fix* exit code (`2`). It reported `FAIL — want 2, got 0`, which is correct today
+— the fix itself doesn't land until checklist step 6, and `0` is exactly what row 3's "Before" cell
+in the spec's changed-cell matrix documents. Then called it again on the same fixture expecting `0`
+(the current real behavior) and got `ok`, confirming the pass/FAIL paths track the hook's actual
+exit code rather than one being a dead branch — the same falsifier discipline session 58 and 59
+applied to their own new assertions.
+
+Committed `9d8d128`, pushed. Next is checklist step 4 — add all 19 matrix rows as `run_case`/
+`run_case_in` lines and confirm rows 1–5, 15 and 17 fail while 6–14, 16, 18 and 19 pass (the fix
+hasn't landed yet, so the first group is expected red at this point).
