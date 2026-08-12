@@ -6104,3 +6104,57 @@ will block `gh pr create` until one exists at the current HEAD.
 **Next: the implementation → review boundary** — its own model-switch ask, then the observability
 judge at `implementation` stage, then the three queued spec corrections once `phase: review` makes
 spec edits legal again.
+
+## Session 76 — 2026-08-12 — the review phase opens, both judges pass, and a queued "spec edit" was never one
+
+**Review-phase work, continuing session 75.** Card is `phase: review`; the implementation → review
+model-switch checkpoint was asked as its own gate and answered **stay low tier**.
+
+**The `implementation`-stage observability judge ran for the first time on this card and PASSED** —
+`risk=low`, `confidence=high`, 4 concerns, 9/10 dimensions pass, `context_budget` the lone concern
+(the already-waived doc size budget). All 19 prior verdicts for this branch were `architecting`;
+verified by filtering `verdicts.jsonl` on stage rather than trusting the handoff. It re-ran all three
+suites itself and reproduced 159 / 74+23 deselected / 11-of-11. Its two honest reservations are
+recorded rather than smoothed: the never-detach and never-redirect-stderr rules live in prose with
+nothing to flag a violation, and it did not re-run the 13 mutations.
+
+**One of the three "queued spec corrections" was never a spec edit, and I had recorded it wrongly.**
+The `grep -c skipif` re-derivation lives only in the **`.md` half** (§Verification); the spec half has
+no such command. So it was editable under the phase gate the whole time and cost no compliance
+re-judge. Task 13's own note claimed the opposite. The lesson is narrow and repeatable: **before
+deferring an edit as gate-blocked, grep for which half actually contains the text** — deferring costs
+a whole judge cycle, and I nearly paid it for nothing.
+
+**The two genuine corrections were both "a met requirement described as outstanding"** — the same
+species twice. Task 8's ⚠️ said it "owes one edit"; that edit landed at `8e16f74` mid-implementation.
+Task 9's warning said the broken `_fail`-only derivation "returns 14 pairs where the server emits 15".
+Re-derived from source: **`_fail`-only → 13, the two-grep block → 14, the enum → 16**. The instructive
+part is *how* the old number was wrong — the 14 had been borrowed from the **corrected** block rather
+than the broken form the sentence was describing, so it looked plausible beside its own counterexample.
+`send_failed` was never dropped; it is emitted through `audit(…, reason="send_failed")` at
+`server.py:591`.
+
+**The spec's predicted-but-unnamed "third emitting shape" is now named:** a **computed** reason,
+`CONFIRM_REFUSAL_REASONS[state]` at `server.py:584`, invisible to any literal-matching grep and
+accounting for exactly the two missing values. Leaving a now-knowable thing described as unknown is
+the same defect as the task 8 bullet, which is why it was fixed in the same pass.
+
+**Compliance round 4 = PASS, zero violations, at `d142643`** — and it did not rubber-stamp: it
+confirmed by diff that the three passages were the only change since `88d524a`, then re-derived
+13/14/16 from source independently. Verdict written to **this worktree's** `coding-memory/`, since
+`compliance-judge.md` still hardcodes `$HOME/.claude` — the override has to be stated in the prompt.
+
+**PR #51 is `CONFLICTING` and the conflicts are all audit files.** Branch is 11 behind / 63 ahead,
+merge-base `fe55b2d5`. `git merge-tree --write-tree --name-only main HEAD` (non-destructive — no
+working-tree change, which matters when judge verdicts are sitting uncommitted) names exactly four:
+`CODING_MEMORY.md`, both judges' `verdicts.jsonl`, and `coding-memory/pr-tracking.md`. **Zero conflicts
+in `task-tracker/`, `skills/` or `docs/features/`** — every one is "both sides appended to the same
+end". Unresolved, deliberately: it is a merge, and the union must be verified against both parents.
+
+**State:** `phase: review`, `model_tier: low`, HEAD `db58715`. All 14 tasks done, three suites green,
+both judges passed. PR #51 open, **unmerged**, head lagging until the next push.
+
+**Next:** resolve the four append-only conflicts (union, then diff against **both** parents requiring
+zero deletions — line arithmetic balancing is not proof), then **re-run the observability judge at the
+final HEAD**, since every commit since `a6e64b1` has made the passing verdict stale relative to what
+would actually merge.
