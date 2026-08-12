@@ -71,7 +71,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists. **Owns criterion 15** — the page's own failure behaviour, which no server test can reach. Handler `0fd5bcd`, buttons `8fe330a`, tests `75b3108` (written and run red first — twelve failures on the absent marker pair). Criterion 15 is 15 tests in `test_ui_commands.py`, falsified by seven handler mutations of which seven were caught. ⚠️ **The handler could not go in a new `.js` file**: the servable set is a closed sixteen-row list pinned in *both* `server.py` and §Design 3, so a new row is a spec edit and reopens criterion 13; an inline `<script>` dies on the CSP's missing `'unsafe-inline'`. It lives fenced inside the `text/x-dc` block and the test slices it out to load in `node`. **Both render modes were confirmed by an actual headless render, not by inspection** — served, the header shows three command buttons, zero copy chips and the token once; over `file://`, zero buttons and three copy chips (`/clear`, `/handoff`, `python3 task-tracker/analyze.py .`). No unresolved `{{ }}` binding in either.
 - [x] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch. Both are written with their failure mode beside them: detaching leaves the parent-death check inert, redirecting `stderr` discards the audit log, and neither shows up in a code read. **The documented launch line was run, not reasoned about** (2026-08-12): `python3 task-tracker/server.py --repo "$PWD"` under the harness's background mode bound this session's real surface, served `/` at `200`, and wrote its startup and audit lines to captured `stderr`; `ps -o ppid=` walked the chain to `server → zsh → claude`, which is what keeps `getppid()` able to change. **Not verified, and not verifiable here:** trigger-routing accuracy — the skill is not discoverable from this worktree, and `skills/_standards/authoring-skills-and-agents.md` records that no eval harness exists in this repo.
 - [x] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`. One row, placed after `managing-session-memory` because both answer "where does this work stand"; the catalog is grouped by activity, not alphabetised. `CLAUDE.md` is the only catalog — every other file mentioning a skill name references it in prose (`grep -rln 'verifying-subagent-commits' --include='*.md' .`), so there is no second list to drift.
-- [ ] 13 — Run every suite, record before/after counts in `## Verification` below.
+- [x] 13 — Run every suite, record before/after counts in `## Verification` below. All three ran 2026-08-12, **zero failures before or after**; the before-counts came from a throwaway detached checkout of `main` at `1b983d9`, since a run in this tree is an *after* count by definition. `node --version` = v26.5.0, and the `task-tracker/` run reports **no skips at all** — so criterion 5 got its JS-engine oracle and criterion 15 is verified, not degraded. ⚠️ **The spec's guard re-derivation overcounts by one**: `grep -c skipif` totals 15, but `test_server.py:556` guards on `os.geteuid() == 0`, not `node` — the node-guarded figure is 14. Correcting that command is a spec edit, queued for `review`.
 - [x] 14 — Vendor all six remote assets — nine local files. **Runs right after task 8**; owns criterion 13. Closed on the re-score in `§Verification` — both runs match the revised expectation exactly, on the enumerations already recorded; no new browser run was made.
 
 ## Verification
@@ -215,4 +215,47 @@ Content-Type was verified separately, over `GET` because `HEAD` is a `405`
 above returned the manifest's type — `text/html`, `text/javascript`, `text/css`, `font/woff2`, and
 `application/json` for the two refusals. This pass is server-side and issues its own requests, so it
 was run **after** both enumerations, never during one.
+
+**Task 13 — every suite, before and after. Ran 2026-08-12. Zero failures on either side.**
+
+The before-counts could not come from this worktree: the feature's code is already committed here, so
+a run in this tree is an *after* count by definition. They were taken from a throwaway detached
+checkout of `main` at `1b983d9` (`git worktree add --detach <scratchpad>/baseline-main main`), which
+is the only way the claim "not a pre-existing failure" is measured rather than reasoned about.
+
+| Suite | Invocation | Before (`main` @ `1b983d9`) | After (branch @ `578438e`) |
+|---|---|---|---|
+| `task-tracker/` | `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` | **53 passed**, 3.86s | **159 passed**, 108.29s |
+| `memsearch/` | `cd memsearch && uv run pytest -q` | **74 passed, 23 deselected**, 0.55s | **74 passed, 23 deselected**, 0.55s |
+| `hooks/` | each `hooks/*.test.sh` and `hooks/lib/*.test.py` run directly, exit code checked | **11 of 11 files exit 0** | **11 of 11 files exit 0** |
+
+`node --version` = **v26.5.0** on the host for both sides.
+
+**The two count columns are not meant to match, and only one comparison is load-bearing.**
+`task-tracker/`'s before-count is smaller because `main` carries only part of this feature —
+`analyze.py`, `store.py` and their two test files, but no `server.py`, `test_server.py`,
+`test_server_lifetime.py` or `test_ui_commands.py` (`git ls-tree --name-only main task-tracker/`).
+The baseline's job is the **failure** column, not the total: `main` is green, so none of the 159 can be
+excused as pre-existing and no failure had to be argued about. The other two suites are untouched by
+this branch and their identical figures are the evidence of that.
+
+**Criterion 5 has its JS-engine oracle, and criterion 15 is verified — because nothing skipped.** The
+`task-tracker/` run reports `159 passed` with no `skipped` term at all, so every node-guarded test
+executed. §Verification's degraded wordings above ("criterion 5 verified without a JS-engine oracle";
+criterion 15 **not verified**) are the node-less-host branch and did **not** apply to this run.
+
+⚠️ **The guard count re-derivation needs one filter the spec's command does not carry.**
+`grep -c skipif task-tracker/*.py` totals **15**, but one of them —
+`test_server.py:556`, `skipif(os.geteuid() == 0, …)` — guards on **root**, not on `node`. The
+node-guarded figure is **14** (`grep -h 'skipif(NODE is None' task-tracker/*.py | wc -l`): 3 in
+`test_store.py`, 11 in `test_ui_commands.py`. Read literally, the spec's `grep -c skipif` overcounts
+the node guards by one; correcting that command is a spec edit, so it is queued for `review` with the
+other two. The number is decorators, not tests — that distinction does not matter here only because
+the skip count was zero.
+
+**`memsearch`'s golden and measurement tests did not run on either side, by configuration.**
+`memsearch/pyproject.toml` sets `addopts = "-m 'not golden and not measurement'"`, which is where the
+**23 deselected** comes from. Those are the real-index tests, so this pass says nothing about them in
+either direction — deselected is neither passed nor failed, and the symmetry across before/after is
+what makes the comparison sound, not their absence.
 
