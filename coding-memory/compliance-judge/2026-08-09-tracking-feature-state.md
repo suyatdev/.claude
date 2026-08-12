@@ -2397,3 +2397,88 @@ one file `88d524a` touched (`git show --stat` above), and were last independentl
 - Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
 
 ---
+
+## Round 4 — 2026-08-12T16:41:59Z — **PASS** (0 violations)
+
+`head_sha` `d142643dd12bbb31cff3cb7c9fea441693a4a59a` · branch `feat/tracking-feature-state` ·
+`spec_blob_sha` `f5dd6f8bd7ced22de97a2e2a8a4b3df421d13162` · confidence **high**
+
+### Layman summary
+
+The spec half sat byte-identical from round 3's PASS (`88d524a`) through the entire implementation
+phase — the phase gate only let it move again once the card reached `review` today. This round judges
+exactly that move: two ⚠️ warnings that had been sitting in `§Tasks` as open risk got corrected to
+match what implementation actually found, and a third prediction ("there's an emitting shape here
+somewhere, un-named") got named. I did not take the correction's word for it — I re-ran the counts
+against `task-tracker/server.py` and `test_server.py` myself, from scratch, using both the spec's own
+shell commands and an independent Python re-implementation, and every number in the new text is right:
+the naive `_fail`-only grep really does return **13**, the two-grep block the spec had been
+recommending really does return **14**, and the true count — literal calls, `audit()` calls, and the
+`CONFIRM_REFUSAL_REASONS` dict values unioned together — really is **16**, matching
+`test_server.py`'s own `REASON_STATUS` table row for row. `send_failed` really is emitted (at
+`server.py:591`, via `audit(..., reason="send_failed")`, not dropped as the old wrong "14 of 15" text
+implied). The named "third shape" — `CONFIRM_REFUSAL_REASONS[state]` passed as a computed value at
+`server.py:584` rather than a string literal a grep could match — is real and is exactly what explains
+the 14-vs-16 gap. The task 8 checkbox correction is equally solid: `CONFIRM_REFUSAL_REASONS` is defined
+at line 240 and used at 583–584, exactly as cited, closing out the `confirm_timeout` split that had
+been recorded as owed for the whole of implementation.
+
+`git diff 88d524a..d142643 -- docs/features/tracking-feature-state.spec.md` confirms these three
+passages are the *only* change to the judged file — nothing else drifted while I wasn't looking.
+Task-number sync between the two halves still exits `0`, the acceptance-criteria count is still **15**,
+no TBD/placeholder/absolute-path text was introduced, and both halves' line counts moved in the
+direction the standing waivers already accounted for (`.md` **269**, `.spec.md` **1549** — both still
+over ADR 0017's caps, both still covered by the user's standing 2026-08-11 waiver, neither re-raised).
+
+### What I independently re-derived (not trusted from the spec's own prose)
+
+| Claim in the edited passages | How I checked | Result |
+|---|---|---|
+| `_fail`-only grep → 13 pairs | Ran the spec's own `grep -oE '_fail\(...'` command directly | **13**, exact match |
+| Two-grep block (`_fail` + `audit`) → 14 pairs | Ran the spec's own two-command block directly | **14**, exact match |
+| True enum → 16 values | Independent Python `re.findall` reimplementation of `reasons_emitted_in_source()` (literal ∪ audited ∪ `CONFIRM_REFUSAL_REASONS.values()`) run directly against `server.py` | **16** — `{'confirm_timeout','confirm_failed'}` (2) are disjoint from the 14-value union, landing at 16 |
+| `test_server.py`'s `REASON_STATUS` table has 16 entries and agrees | Parsed the dict literal directly from `test_server.py` | 16 keys, set-identical to the 16 derived above |
+| `send_failed` is emitted via `audit(..., reason="send_failed")` at `server.py:591` | `grep -n 'reason="send_failed"' task-tracker/server.py` | Line **591**, exact |
+| `CONFIRM_REFUSAL_REASONS` mapping at line 240, used at 583–584 | `grep -n CONFIRM_REFUSAL_REASONS task-tracker/server.py` | Definition at **240**; used at **583** (`if state in ...`) and **584** (`CONFIRM_REFUSAL_REASONS[state]` passed to `_fail`) — exact |
+| `confirm_surface()` genuinely splits `unrunnable`/`timeout` (task 8's "owed edit landed" claim) | Read the mapping and its two keys (`"unrunnable"`, `"timeout"`) directly | Two distinct states, two distinct reasons — the split is real, not aspirational |
+| Diff scope — these three passages are the only spec-half change since the last PASS | `git diff 88d524a..d142643 -- docs/features/tracking-feature-state.spec.md` | Exactly two hunks, matching the invocation's description precisely; nothing else moved |
+| Task-number sync | `hooks/lib/feature_tasks.py` on both halves | exit `0` |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` | **15**, unchanged |
+| No TBD/TODO/FIXME/XXX/absolute-path text | grepped the spec half | none |
+| Line counts | `wc -l` | `.md` **269**, `.spec.md` **1549** |
+
+### Violations
+
+None. All three edited passages hold up under independent re-derivation, not just internal
+consistency — this closes the loop the round's own framing asked about ("since the whole point of the
+edit was accuracy").
+
+### Not re-audited this round (unchanged territory, already covered)
+
+`§Design`, `§Security`, `§Toolchain`, and all 15 acceptance criteria are byte-identical to round 3's
+PASS (confirmed by the diff above touching only the two §Tasks hunks), so CSP/secrets/injection-route/
+error-handling territory already covered by rounds 1–3 of both prior cycles was not re-walked
+line-by-line here.
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, re-confirmed since. `.md` half is **269 lines** against ADR 0017:39's `≤200`. Not re-raised per the standing instruction — the accepted ground (session-start load, not this file's size) is untouched. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, re-confirmed since. `.spec.md` half is **1549 lines** against `≤800`. Not re-raised, same reasoning. |
+
+### Notes (non-blocking)
+
+- **The remaining "wrapped call" caveat is still latent, not live.** The spec still flags that a
+  `grep`-based derivation could silently miss a call whose status and `reason` land on different
+  source lines. I checked: my Python re-derivation (which, unlike a line-based `grep -oE`, would catch
+  a wrapped call via `\s*`) returned the identical 14-value union as the two-grep bash block, so no
+  such wrapped call exists in `server.py` today. The caveat remains an honest, currently-unrealized
+  risk rather than a live undercount — same conclusion as round 3 of the first cycle reached on the
+  prior (now-superseded) numbers.
+- **`.md`'s task 9 line ("queued for `review`") is not stale, it's fulfilled.** The checklist half
+  (context only, not judged here) recorded the spec correction as queued for the `review` phase; this
+  round's commit is that queued edit landing. No inconsistency between the two halves as of this
+  round.
+- Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
+
