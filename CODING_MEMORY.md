@@ -5877,7 +5877,7 @@ But the **pair hash has moved twice**: `63bb9e3` → `7e90d82` at `53f09a9`'s fr
 *every* `.md` edit the phase gate explicitly permits trips it, including a checkbox tick. I did not
 re-run compliance on that basis; decide which key the gate actually wants before spending a round.
 
-## 2026-08-12 — session 72: task 9 lands, and six mutations prove the suite can fail
+## Session 72 — 2026-08-12 — task 9 lands, and six mutations prove the suite can fail
 
 **Task 9 is closed** (`c5daf5b`). `task-tracker/` gains four files: `test_server.py` (wire
 contract — criteria 6, 7, 9, 10, 11, 12), `test_server_lifetime.py` (criterion 14 and every
@@ -5922,3 +5922,54 @@ server can never emit.
 `task-tracker/test_ui_commands.py` under the `node` guard. Compliance PASS still stands at
 `88d524a`; the pair-hash divergence recorded in session 71 is unchanged and this session's
 checkbox tick moves it again, on the same reasoning.
+
+## Session 73 — 2026-08-12 — task 10 has one legal home for its handler, and it is not a new file
+
+**No code was written this session.** It restored, verified the card against reality, and spent
+itself deriving one constraint that task 10 would otherwise have discovered by writing the wrong
+thing first. Recording it is the whole output.
+
+**Where task 10's command handler may live is decided by two independent walls, not by taste.**
+The obvious shape — a new `task-tracker/tracker-commands.js`, imported by the page and loaded in
+`node` by the test exactly as `test_store.py` loads a generated store — is **unavailable**:
+
+- The servable set is a closed list that exists in **two** places, `STATIC_MANIFEST`
+  (`server.py:72-89`) and §Design 3's table (`.spec.md:302-318`), sixteen rows each. Adding a row
+  is therefore a **spec edit**, which `phase: implementation` forbids — it is a
+  `GATE: Spec change needed`, never a quiet append to the tuple. It would also reopen **criterion
+  13**, which task 14 closed on set-equality against the current enumeration; a new requested file
+  makes the observed set wider than the manifest by construction.
+- A plain inline `<script>` fails separately, on the CSP: `script-src 'self' 'unsafe-eval'`
+  (`server.py:102`) carries no `'unsafe-inline'`, so the browser refuses it on the served origin
+  even though it would run fine over `file://` — the criterion-8 path would pass while the primary
+  path silently lost every button.
+
+**The one place page logic already lives and runs** is the `<script type="text/x-dc" data-dc-script>`
+block, `Task Tracker.dc.html:298-484` (the live `<x-dc>` subtree is 10-297). It survives the CSP
+because it is **not** browser-executed JS: it is text the `_ds_bundle.js` runtime compiles through
+babel, which is the entire reason `'unsafe-eval'` is in the policy. That mechanism is **spec-stated
+and dated 2026-08-10 by §Design 3's author; this session did not re-verify it** — it read the two
+walls, not the runtime.
+
+**What that placement then costs, stated before the code exists rather than after.** The handler must
+be self-contained and dependency-free — no React, no dc runtime — and fenced by stable marker
+comments, because `test_ui_commands.py` cannot load an HTML file: it must slice the handler's source
+out and evaluate it in `node`, where `load_via_node` (`test_store.py:66`) had a real `.js` file to
+point at. And `fetch` must be a **parameter**, not a global, because the rows split two ways: the
+rejection row is driven by a genuinely stopped server (§Design 3 forbids mocking it), while
+`400`/`413`/`415` and the not-in-the-table `error` code are rows the real server *cannot* produce and
+that only a stub can reach.
+
+**A retrieval failure in this file, hit rather than reasoned about.** `grep '^## Session 7'` returned
+70 and 71 and missed 72, whose heading was written date-first and lowercase
+(`## 2026-08-12 — session 72:`) against the `## Session N — <date> — <title>` shape of 67-71. The
+archive was intact; only the key was. Both formats are long-standing — 44 date-first against 18 of
+the newer shape — so this is not a general cleanup, and the file is read **by grep, never whole**,
+which is exactly what makes a one-off heading invisible rather than merely untidy. Session 72's
+heading is normalized here, in the session that hit it; the other 43 are left alone.
+
+**State:** `phase: implementation`, `model_tier: low`, branch `feat/tracking-feature-state`, clean.
+Tasks 1-9 and 14 done; **task 10 not started** — the constraint above is its starting point, and
+`.claude/session-state.md` carries the same text as the handoff. Compliance PASS still stands at
+`88d524a`, spec half untouched this session. PR #51 remains open at `c811f0d`, unmerged, with no
+`implementation`-stage observability verdict.
