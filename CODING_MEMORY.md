@@ -6574,3 +6574,44 @@ Committed `b68e513`, pushed. Next is checklist step 6 — rewrite `current_branc
 `master`), and rewrite `on_main()` to the `case` form. This is the step that actually changes
 behavior: run the suite afterward and confirm rows 1–5, 15 and 17 flip to green while everything
 else — including the 12 rows added in session 61 — stays green.
+
+## 2026-08-12 — session 63: git-guard-detached-head, PR #52 updated after #51 merged, checklist step 6 (the fix)
+
+User reported PR #51 (task-tracker, a different worktree/feature) had merged in another session, and
+asked to update PR #52 — which turned out to be *this* branch's own PR, opened directly by the user
+with an empty body. Wrote its description from the house template (plain-language summary, why,
+related PRs, testing instructions, risk table), with an honest "not ready to merge" banner matching
+PR #51's own convention, and set it to draft — 6 of 11 checklist items were still open at that point.
+
+**Caught and corrected my own false claim.** The first description draft said `git merge-tree` showed
+no conflict with `main` after #51. That check ran against a **stale local `main`**, two commits behind
+`origin/main`. Posted a PR comment flagging the error, fetched properly, and re-checked: real conflict
+on three append-only files both branches had independently appended to — `CODING_MEMORY.md` and both
+judge `verdicts.jsonl` logs. Resolved by union, reading git's index stages directly (`git show
+:1/:2/:3:<path>`) rather than hand-splitting `<<<<<<<`/`=======`/`>>>>>>>` markers — this repo uses
+diff3-style conflicts (an extra `|||||||` merge-base section), and a naive two-way marker split had
+already silently mis-extracted the CODING_MEMORY.md conflict once before the stage-based approach
+caught it. Verified counts rather than trusting a clean exit: compliance-judge 89 (shared) + 16
+(theirs) + 6 (ours) = 111 rows, observability-judge 148 + 15 + 6 = 169 rows, both parsing as JSON in
+full. Merged as `dada49b`, pushed; `bash hooks/git-guard.test.sh` unaffected (still 89 passed, 7
+failed — the merge touched no file under `hooks/`). Judge-verdict row citations elsewhere shifted:
+compliance rows 90→**106–111**, observability rows 149→**164–169**.
+
+User then said go ahead with checklist step 6 — the step that actually changes the guard's behavior.
+Landed `current_branch()` → `git symbolic-ref --short HEAD 2>/dev/null || echo ""`, `sequencer_in_progress()`
+with the `head-name` clause for both `main` and `master`, and `on_main()` rewritten to the `case` form
+— all verbatim from the spec's "Decision" section. `bash hooks/git-guard.test.sh`: **96 passed, 0
+failed** (was 89/7) — rows 1–5, 15 and 17 flipped green, everything else, including all 77 original
+cases, stayed green.
+
+Re-verified the three carve-out bounds live by mutation rather than trusting the green suite:
+removing the `head-name` clause reopened rows 15 and 17; hoisting `sequencer_in_progress` above the
+named-branch `case` reopened row 16; dropping `rebase-apply` from the marker loop was caught only by
+row 19 (the guard becomes *stricter*, not looser, matching the spec's own corrected claim about an
+earlier draft that got this wrong). Each mutation was restored and diffed clean against a backup
+before re-running the suite.
+
+Committed `4294728`, pushed. Next is checklist step 7 — add stderr assertions to the test suite (the
+third `checkout_desc` rendering on rows 15/17, the remedy line per state, one empty-index assertion),
+then prove each assertion can fail by reverting one `printf` in the hook and confirming the matching
+assertion goes red before restoring it. No hook edits beyond that revert.
