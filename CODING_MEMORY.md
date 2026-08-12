@@ -6379,3 +6379,34 @@ of the replacement text. Use `<<'PY'`.
 
 **State:** `phase: review`, HEAD `9482349`, clean, pushed. PR #51 OPEN + MERGEABLE, **unmerged — the
 user merges through the GitHub UI.**
+
+## Session 78 — 2026-08-12 — PR #51 merges; calibration backfilled honestly, not completely
+
+**PR #51 merged at `06e7c9d`** (user, GitHub UI — no session ran `gh pr merge`). The
+`feat/tracking-feature-state` feature is done: repo survey, versioned store, localhost control server,
+vendored UI, and the `tracking-feature-state` skill.
+
+**Landed content was verified on `origin/main`, not inferred from the PR state** — every source and
+test file present, **9** vendored assets, the skill's catalog row in `CLAUDE.md`, and no conflict
+marker of any form. "Merged" is a statement about a pointer; it is not evidence the content arrived.
+
+**Calibration backfilled deliberately incompletely.** The two `implementation`-stage observability
+verdicts (`a6e64b1`, `011c344`) are now `outcome: clean`. The **14 `architecting` verdicts for this
+branch were left `null` on purpose**: they were followed by real spec rework across many rounds, while
+this field is PR-result-shaped, and only the `implementation` stage gates a PR
+(`coding-memory/observability-judge/README.md`). Filling all 16 would have looked tidier and would
+have poisoned the risk-vs-outcome signal the field exists to produce — **an incomplete honest record
+beats a complete invented one.**
+
+**A count I had reported was loose, and the exact filter changed it.** Earlier sessions said "19
+architecting verdicts for this branch", from a substring match on the branch field. Exact equality on
+`feat/tracking-feature-state` gives **14**; the other five belong to differently-named branches whose
+names contain the same substring. Both numbers were "right" for their query — which is the point:
+state the predicate, not just the total.
+
+**Open, and deliberately not done unilaterally:** the README's `## 🗺️ Roadmap` has no entry for this
+feature and `## What's in here` has no `task-tracker/` row. Root `README.md` is **not** covered by the
+default-branch docs exception (which is `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`), so it
+needs its own branch and PR rather than a direct commit to `main`.
+
+**PR #52 (`fix/git-guard-detached-head`) remains open** — a different worktree's branch, untouched.

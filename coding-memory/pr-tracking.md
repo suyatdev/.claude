@@ -1033,7 +1033,7 @@ committing that file from there would silently revert this backfill *and* drop t
   the detached-HEAD `git-guard` gap above. **Both are still open and belong in one
   `triaging-new-instructions` pass** — the most actionable work left in this repo.
 - **Worktree:** `~/.claude/.claude/worktrees/verify-rule` — clean after merge, removable.
-## `.claude` — `feat/tracking-feature-state` → PR #51 (**OPEN**, MERGEABLE, ready for review)
+## `.claude` — `feat/tracking-feature-state` → PR #51 (**MERGED** 2026-08-12)
 
 - **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
 - **branch:** `feat/tracking-feature-state` · **base:** `main` · **worktree:**
@@ -1075,6 +1075,27 @@ The original list is kept because the *way* two of them closed is the record wor
   the implementation emits that the spec's status table and `reason` enum never define).
 - ~~**Neither judge has a passing verdict on this code.**~~ Compliance's last record was round 11 **FAIL**;
   the observability judge had not run against the task-8 or task-14 code.
+
+### MERGED 2026-08-12T20:05:13Z — merge commit `06e7c9d`
+
+Merged by the user through the GitHub UI, as intended — no session ran `gh pr merge`
+(`merge-guard.sh` blocks it). Landed content verified on `origin/main` rather than inferred from the
+PR state: `server.py`, all three server/UI test files, `SKILL.md`, both feature-file halves, **9**
+vendored assets, the skill's catalog row in `CLAUDE.md`, and **no conflict marker of any form**
+anywhere in the tree.
+
+**Calibration backfilled:** the two `implementation`-stage observability verdicts for this branch
+(`a6e64b1`, `011c344`) are now `outcome: clean` — the PR merged with no defect escaping and neither
+verdict proved wrong. **The 14 `architecting` verdicts for this branch were deliberately left `null`.**
+They were followed by genuine spec rework across many rounds, and this schema's `outcome` is
+PR-result-shaped; guessing a value would corrupt the very risk-vs-outcome signal the field exists to
+provide. Only the `implementation` stage gates a PR
+(`coding-memory/observability-judge/README.md`).
+
+**Now verifiable that was not before:** the skill's trigger-routing accuracy. It was recorded as
+explicitly unverified for the whole feature because the skill is not discoverable until it reaches
+`main`. It has now reached `main` — the repo still has no eval harness, so this remains untested, but
+it is no longer *untestable*.
 
 ### UPDATE 2026-08-12 — all four blockers closed; PR is **MERGEABLE** and ready for review
 
