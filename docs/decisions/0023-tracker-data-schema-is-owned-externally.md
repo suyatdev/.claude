@@ -2,7 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-09
-- **Context:** `docs/features/tracking-feature-state.md` §"The output contract already exists";
+- **Context:** `docs/features/tracking-feature-state.spec.md` §"The output contract already exists" —
+  the **spec half**; that section moved there when the card was split into a synced pair (ADR 0017),
+  so a pointer at the `.md` no longer resolves;
   `task-tracker/` (the vendored Nocturne export, `task-tracker v0.4.1`, schema `version: 1`);
   `hooks/lib/feature_tasks.py`. Standalone — does not amend a prior ADR.
 

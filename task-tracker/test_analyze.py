@@ -1,4 +1,6 @@
-"""Acceptance tests for analyze.py — criteria 1 and 2 of docs/features/tracking-feature-state.md.
+"""Acceptance tests for analyze.py — criteria 1 and 2, in §Acceptance criteria of
+docs/features/tracking-feature-state.spec.md (the spec half; the `.md` half carries only
+the task list and §Verification).
 
 Every test builds a throwaway git repo under pytest's `tmp_path`. Nothing here reads the
 repo it ships in, deliberately: this repo's card set changes while parallel agents work,
@@ -93,10 +95,15 @@ class Repo:
 
     def card(self, name, tasks=(), phase="implementation", branch="none",
              model_tier="high", body="", depends_on=None, suffix=".md"):
-        """Write docs/features/<name><suffix> and return its text."""
-        lines = [
-            "---",
-            "phase: %s" % phase,
+        """Write docs/features/<name><suffix> and return its text.
+
+        phase=None omits the key entirely; phase="" writes it with an empty value.
+        The two are different inputs to the analyzer and must stay distinguishable.
+        """
+        lines = ["---"]
+        if phase is not None:
+            lines.append("phase: %s" % phase)
+        lines += [
             "model_tier: %s" % model_tier,
             "branch: %s" % branch,
             "---",
@@ -169,6 +176,34 @@ def test_criterion_1_n_cards_in_n_features_out(repo):
     assert {f["name"] for f in run["features"]} == {"alpha", "beta", "gamma"}
     assert len(run["features"]) == 3, "a .spec.md half must not count as a second card"
     assert _independent_total(alpha, "alpha.md") == 4
+
+
+def test_criterion_1_a_card_without_a_phase_key_is_still_a_card(repo):
+    """The converse selector direction: filename decides, frontmatter never filters.
+
+    The test above proves a `.spec.md` half is skipped *despite* carrying a `phase:` key.
+    This proves the other direction — no `phase:` key, still a card. The two together pin
+    the selector; either alone passes while the analyzer filters on frontmatter.
+    """
+    text = repo.card("alpha", tasks=[(False, "one")], phase=None)
+    repo.commit("cards")
+
+    # The fixture must actually produce the input under test: no phase key, and a
+    # frontmatter block that still closes — otherwise this exercises the delimiter branch.
+    assert "phase:" not in text
+    assert text.splitlines()[:1] == ["---"] and "---" in text.splitlines()[1:]
+
+    run = analyzer.analyze(repo.root)
+
+    assert "alpha" in {f["name"] for f in run["features"]}, "a card with no phase: key is still a card"
+
+    # Name the branch. A missing key reads back as "" and lands on not-a-known-phase
+    # (`grep -n 'No closing\|not in PHASE_MAP' task-tracker/analyze.py`); a card missing its
+    # closing `---` lands on unread-frontmatter instead. Asserting "some question was
+    # raised" would pass on either, and they are different bugs.
+    asked = [q["q"] for q in _questions_mentioning(run, "alpha")]
+    assert "What phase is `alpha` in?" in asked
+    assert "Does `alpha` have valid frontmatter?" not in asked
 
 
 def test_criterion_1_meta_matches_feature_tasks_own_count(repo):

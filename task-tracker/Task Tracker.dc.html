@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./vendor-resources.js"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -10,8 +11,8 @@
 <helmet data-dc-atomics>
 <link rel="stylesheet" href="_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/styles.css">
 <script src="_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/_ds_bundle.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
-<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="vendor/phosphor/regular/style.css">
+<link rel="stylesheet" href="vendor/phosphor/fill/style.css">
 <script src="tracker-data.js"></script>
 <script src="tracker-data-fallback.js"></script>
 <style>
@@ -87,7 +88,13 @@ body{margin:0;background:var(--color-bg)}
         <input class="input" ref="{{ searchRef }}" value="{{ q }}" onChange="{{ setQ }}" placeholder="Search tasks, branches, PRs…  ( / )" style="width:clamp(170px,22vw,270px);min-height:34px;padding-left:32px;font-size:13px">
       </div>
       <button class="btn btn-secondary" onClick="{{ toggleAgent }}" style="font-size:13px"><i class="ph ph-robot"></i>Agent</button>
-      <button class="btn btn-primary" style="font-size:13px"><i class="ph ph-arrows-clockwise"></i>Re-analyze</button>
+      <div style="flex:none;font-size:11.5px;line-height:1.35;max-width:300px;text-align:right;color:{{ cmdMsgC }}">{{ cmdMsg }}</div>
+      <sc-for list="{{ cmdButtons }}" as="c">
+        <button class="{{ c.cls }}" onClick="{{ c.go }}" title="{{ c.title }}" style="font-size:13px"><i class="{{ c.icon }}"></i>{{ c.label }}</button>
+      </sc-for>
+      <sc-for list="{{ cmdCopies }}" as="c">
+        <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid rgba(255,255,255,.08)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
+      </sc-for>
     </div>
     <div style="padding:24px 32px {{ mainPB }};max-width:1560px">
       <div id="sec-overview" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:10px">
@@ -315,9 +322,120 @@ function copyText(s){
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(s).catch(()=>{});return}
   const ta=document.createElement('textarea');ta.value=s;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(_){}document.body.removeChild(ta);
 }
+// <<< tracker-command-handler: node-loadable slice begins >>>
+// Task 10 / criterion 15. test_ui_commands.py cuts this region out of this file verbatim
+// and loads it in node, so it must stay dependency-free: no React, no DCLogic, no
+// document, no window. It cannot live in its own .js file (the servable set is a closed
+// manifest pinned in both server.py and the spec half, so a new row is a spec change and
+// reopens criterion 13) and it cannot be an inline <script> (the CSP carries no
+// 'unsafe-inline' for scripts). `fetch` arrives as an argument for the same reason: one
+// row is driven by genuinely stopping the server, the rest by a stub.
+var TRACKER_COMMAND_IDS=['clear','handoff','reanalyze'];
+var TRACKER_COPY_TEXT={
+  clear:'/clear',
+  handoff:'/handoff',
+  // No keystroke equivalent exists — reanalyze is server-side. This is the manual command
+  // that reproduces the analysis half; the store write is the server's own.
+  reanalyze:'python3 task-tracker/analyze.py .'};
+var TRACKER_MESSAGES={
+  success:'Sent.',
+  stale_token:"This page's token is stale — reload to reconnect.",
+  session_ended:'The session this page controls has ended.',
+  // Never "sent", never "failed": a 502 may mean the keystroke landed, and resolving it
+  // either way asserts something the server explicitly does not know.
+  send_unknown:'The command may or may not have reached the session — check it before retrying.',
+  analysis_failed:'Analysis failed; the data below is from the previous run.',
+  page_bug:'Unexpected error.',
+  unexpected:'Unexpected error.',
+  server_gone:'The control server is no longer running.'};
+// Every row of §Design 3's failure table, by `error` code. There is deliberately no
+// default branch: a code with no entry here resolves to `unexpected` below, which is a
+// decision, where a fall-through would be a button that does nothing.
+var TRACKER_ERROR_OUTCOMES={
+  forbidden:'stale_token',
+  unresolved_surface:'session_ended',
+  send_failed:'send_unknown',
+  reanalyze_failed:'analysis_failed',
+  malformed:'page_bug',
+  too_large:'page_bug',
+  unsupported_media_type:'page_bug'};
+// `409` and a dead socket are the two states where a retry cannot work, so the button
+// stops being offered and the copyable text takes its place.
+var TRACKER_TERMINAL_OUTCOMES={session_ended:true,server_gone:true};
+
+function trackerIdleView(analyzedAt){
+  return {analyzedAt:analyzedAt,outcome:'idle',message:'',
+          offersButton:true,offersCopyText:false,shouldReload:false};
+}
+function trackerViewFor(view,outcome,id){
+  var terminal=TRACKER_TERMINAL_OUTCOMES[outcome]===true;
+  return {
+    // Carried forward untouched. The stale timestamp is the only on-screen signal that
+    // the data is old; only a reload after a successful reanalyze may move it.
+    analyzedAt:view.analyzedAt,
+    outcome:outcome,
+    message:TRACKER_MESSAGES[outcome],
+    offersButton:!terminal,
+    offersCopyText:terminal,
+    shouldReload:outcome==='success'&&id==='reanalyze'};
+}
+function trackerOutcomeForBody(body){
+  var code=body&&typeof body.error==='string'?body.error:null;
+  // hasOwnProperty, not a bare lookup: an `error` of "constructor" or "toString" would
+  // otherwise inherit a truthy value off the prototype and pick someone else's row.
+  if(code!==null&&Object.prototype.hasOwnProperty.call(TRACKER_ERROR_OUTCOMES,code))
+    return TRACKER_ERROR_OUTCOMES[code];
+  // A code this page has never heard of maps to its own fixed string — never to the
+  // server's bytes. The server refuses to echo request content; rendering its text here
+  // would reintroduce that gadget from the other side.
+  return 'unexpected';
+}
+function trackerApplyCommand(view,opts){
+  return opts.fetchImpl(opts.url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Tracker-Token':opts.token},
+    body:JSON.stringify({id:opts.id})
+  }).then(function(response){
+    return response.json().then(function(body){
+      if(response.status===200)
+        return trackerViewFor(view,body&&body.ok===true?'success':'unexpected',opts.id);
+      return trackerViewFor(view,trackerOutcomeForBody(body),opts.id);
+    },function(){
+      // A body that is not JSON is still an outcome. Silence is never one.
+      return trackerViewFor(view,'unexpected',opts.id);
+    });
+  },function(){
+    // fetch rejected: there was no response at all, so there is no code to map. The
+    // server exiting under an open page is the normal end of a session, not an edge case.
+    return trackerViewFor(view,'server_gone',opts.id);
+  });
+}
+if(typeof module!=='undefined'&&module.exports){
+  module.exports={IDS:TRACKER_COMMAND_IDS,COPY_TEXT:TRACKER_COPY_TEXT,
+                  MESSAGES:TRACKER_MESSAGES,idleView:trackerIdleView,
+                  applyCommand:trackerApplyCommand};
+}
+// <<< tracker-command-handler: node-loadable slice ends >>>
+
+// Presentation only, and deliberately outside the slice: the node tests load behaviour,
+// not labels, and a slice that grows chrome stops being loadable without a DOM.
+const CMD_LABELS={clear:'Clear',handoff:'Handoff',reanalyze:'Re-analyze'};
+const CMD_ICONS={clear:'ph ph-eraser',handoff:'ph ph-hand-arrow-down',reanalyze:'ph ph-arrows-clockwise'};
+const CMD_TITLES={clear:'Send /clear to the session',handoff:'Send /handoff to the session',
+                  reanalyze:'Re-run the analyzer and reload'};
+const CMD_TONES={idle:'transparent',success:'var(--ok)',stale_token:'var(--warn)',
+                 session_ended:'var(--bad)',send_unknown:'var(--warn)',
+                 analysis_failed:'var(--bad)',page_bug:'var(--bad)',
+                 unexpected:'var(--bad)',server_gone:'var(--bad)'};
+
 class Component extends DCLogic {
-  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null};
+  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
   componentDidMount(){
+    // The token exists only when server.py served this page. Over file://, or on a host
+    // where no injection route exists, there is no meta tag and the UI runs in copy mode
+    // — a supported runtime mode, not a degradation (criterion 8).
+    const meta=document.querySelector('meta[name="tracker-token"]');
+    if(meta&&meta.content)this.setState({cmdToken:meta.content});
     let tries=0;const tick=()=>{
       if(window.TRACKER_DATA)this.setState({data:window.TRACKER_DATA});
       else if(++tries<14)this._pt=setTimeout(tick,150);
@@ -354,6 +472,41 @@ class Component extends DCLogic {
     const mv=ev=>{const h=Math.min(Math.max(startH+(startY-ev.clientY),160),Math.max(220,window.innerHeight-120));this.setState({agentH:h});};
     const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);lsSet('taskTracker.agentH',String(this.state.agentH));};
     window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);};
+  commandProps(S,run){
+    // `runAnalyzed` above stays bound to the store, never to this view: a failed
+    // reanalyze does not rewrite the store, so the stale timestamp survives by
+    // construction rather than by anyone remembering not to touch it.
+    const view=S.cmdView||trackerIdleView(run.analyzedAt);
+    const hasChannel=!!S.cmdToken;
+    // Copy mode is every command, always, when there is no channel — and the fallback for
+    // the two outcomes where a retry cannot work.
+    const showCopies=!hasChannel||view.offersCopyText;
+    return {
+      cmdMsg:view.message,cmdMsgC:CMD_TONES[view.outcome]||'var(--bad)',
+      cmdButtons:(hasChannel&&view.offersButton)?TRACKER_COMMAND_IDS.map(id=>({
+        key:id,label:CMD_LABELS[id],icon:CMD_ICONS[id],title:CMD_TITLES[id],
+        cls:id==='reanalyze'?'btn btn-primary':'btn btn-secondary',
+        go:()=>this.runCommand(id)})):[],
+      cmdCopies:showCopies?TRACKER_COMMAND_IDS.map(id=>({
+        key:id,text:TRACKER_COPY_TEXT[id],icon:'ph ph-copy',c:'var(--color-neutral-300)',
+        title:'Copy: '+TRACKER_COPY_TEXT[id],
+        copy:()=>copyText(TRACKER_COPY_TEXT[id])})):[]};
+  }
+  runCommand=id=>{
+    const S=this.state;
+    if(!S.cmdToken)return;
+    const view=S.cmdView||trackerIdleView(null);
+    // A terminal outcome has already withdrawn the button; a stray call must not revive
+    // the channel behind it. The guard is here as well as in the render for that reason.
+    if(!view.offersButton)return;
+    trackerApplyCommand(view,{fetchImpl:(u,o)=>fetch(u,o),url:'/command',
+                              token:S.cmdToken,id:id})
+      .then(next=>{
+        this.setState({cmdView:next});
+        // Only a successful reanalyze rewrote the store, so only it has new data to show.
+        if(next.shouldReload)location.reload();
+      });
+  };
   sendAgent=()=>{const q=this.state.agentQ.trim();if(!q)return;const base=this.state.agentMsgs||this._sample||[];
     this.setState({agentMsgs:[...base,{r:'you',t:q},{r:'agent',t:'Static snapshot — re-run the task-tracker skill for live answers. Ordering rationale is under Merge order; blockers under the Blocked filter and the hard constraints.'}],agentQ:''});};
   renderVals(){
@@ -467,6 +620,7 @@ class Component extends DCLogic {
       agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'rgba(255,255,255,.03)':'transparent',
       collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:S.collapsed?'56px':'236px',
       toggleSidebar:()=>{const v=!S.collapsed;lsSet('taskTracker.sidebar',v?'1':'0');this.setState({collapsed:v})},
+      ...this.commandProps(S,run),
       runName:run.name,runDir:run.dir,runAnalyzed:run.analyzedAt,repoCount:String(repoCount),wtCount:String(wtCount),
       q:S.q,setQ:e=>this.setState({q:e.target.value}),searchRef:el=>{this._search=el},
       stats,pctW:pct+'%',pctLabel:merged+' / '+total+' merged · '+pct+'%',

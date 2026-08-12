@@ -2,7 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-08-09
-- **Context:** `docs/features/tracking-feature-state.md` §Design 3 and §Security;
+- **Context:** `docs/features/tracking-feature-state.spec.md` §Design 3 and §Security — the **spec
+  half**; both sections moved there when the card was split into a synced pair (ADR 0017), so a
+  pointer at the `.md` no longer resolves;
   `coding-memory/compliance-judge/2026-08-09-tracking-feature-state.md` rounds 1–2;
   `panes/adapters/cmux.sh`. Standalone — does not amend a prior ADR.
 

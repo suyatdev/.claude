@@ -1,6 +1,7 @@
 """Tests for store.py — atomic emit of tracker-data.js and run upsert by id.
 
-Covers acceptance criteria 3, 4 and 5 of docs/features/tracking-feature-state.md:
+Covers acceptance criteria 3, 4 and 5, in §Acceptance criteria of
+docs/features/tracking-feature-state.spec.md (the spec half):
 
   3. Two analyses of different directories both persist in runs[]; switching
      between them changes no data on disk.

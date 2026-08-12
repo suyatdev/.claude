@@ -1033,3 +1033,83 @@ committing that file from there would silently revert this backfill *and* drop t
   the detached-HEAD `git-guard` gap above. **Both are still open and belong in one
   `triaging-new-instructions` pass** — the most actionable work left in this repo.
 - **Worktree:** `~/.claude/.claude/worktrees/verify-rule` — clean after merge, removable.
+## `.claude` — `feat/tracking-feature-state` → PR #51 (**OPEN**, MERGEABLE, ready for review)
+
+- **repo:** `.claude` (`suyatdev/.claude`) · **remote:** `origin` git@github.com:suyatdev/.claude.git
+- **branch:** `feat/tracking-feature-state` · **base:** `main` · **worktree:**
+  `~/.claude/.claude/worktrees/tracking-feature-state` (not the primary checkout)
+- **PR:** https://github.com/suyatdev/.claude/pull/51 — **created 2026-08-11T04:19:19Z**, author
+  `suyatdev`. 23 commits, first `c2c2542`, head `de79a30` at time of writing (PR head == local HEAD,
+  confirmed by `gh pr view 51 --json headRefOid` vs `git rev-parse HEAD`).
+- **Feature-scale** — implementation state lives in `docs/features/tracking-feature-state.md`
+  (frontmatter + checklist + `## Verification`), with the spec half split into
+  `tracking-feature-state.spec.md`. ~~`phase: implementation`. **8 of 14 boxes ticked.**~~ → now
+  `phase: review`, **14 of 14 boxes ticked** (see UPDATE below).
+- **session_origin (created): NOT this session, and not any recorded one.** Its timestamp falls
+  *after* session 63's handoff was written (04:17:52Z) and *before* that session's first command
+  (04:22:23Z), so it was opened out-of-band. No session ran `gh pr create`; the title was the
+  branch-name slug `Feat/tracking feature state` and the body was **empty**, which is what GitHub's
+  web "Compare & pull request" flow produces. Recorded as inference with its evidence, not as fact.
+- **session_origin (last push):** session 63.
+
+⚠️ **A PR opened in the GitHub UI never touches `judge-guard.sh`.** The gate matches the *command*
+`gh pr create`, so it can only intercept a PR opened from a hooked session. This one was not, which is
+why it exists with no passing verdict behind it. Not a bypass and not a defect in the hook — a
+coverage boundary worth knowing before treating "the gate would have caught it" as a guarantee.
+
+**Title and description written in session 63** (2026-08-11), at the user's request, against an empty
+body. Title changed from the slug to
+`feat(task-tracker): repo survey, versioned store, and a localhost control server`. The body leads
+with a **not-ready-to-merge** banner and carries the full open list; it is written to be reviewed, not
+landed.
+
+**Why it must not merge yet** — ⚠️ **all four were resolved on 2026-08-12; see the UPDATE below.**
+The original list is kept because the *way* two of them closed is the record worth having.
+
+- ~~**6 of 14 checklist boxes open** (9, 10, 11, 12, 13, 14).~~
+- ~~**Acceptance criterion 13 fails.**~~ Ran 2026-08-11, both browser runs recorded in `## Verification`.
+  17 of 18 rows match; `/vendor/babel.min.js` is expected `200` and is **never requested** —
+  `ensureBabel()` in `support.js` is reachable only from `load(kind === "jsx")` and the page has zero
+  `x-import` occurrences. Not a vendoring defect; fixing it was a **spec** edit.
+- ~~**Two spec gaps escalated and unanswered**~~ — the babel row above, and `path_escape` (a `403` reason
+  the implementation emits that the spec's status table and `reason` enum never define).
+- ~~**Neither judge has a passing verdict on this code.**~~ Compliance's last record was round 11 **FAIL**;
+  the observability judge had not run against the task-8 or task-14 code.
+
+### UPDATE 2026-08-12 — all four blockers closed; PR is **MERGEABLE** and ready for review
+
+Head is now `011c344`; `phase: review`. This section is the authoritative state — the bullets above
+are history, struck through rather than deleted.
+
+- **14 of 14 boxes ticked**, 0 open (`grep -c '^- \[x\] ' docs/features/tracking-feature-state.md`).
+  The analyzer and the halves comparer agree.
+- **Criterion 13 passes on the re-score**, against the *revised* tables, using the enumerations
+  already on file — no new browser run. The failing record stays in `## Verification` because it is
+  the evidence that justified revising the criterion.
+- **Both spec gaps closed in the spec**, not worked around: `path_escape` added to the `reason` enum
+  and the `403` row; the babel row dropped from criterion 13's expected set.
+- **Both judges pass.** Observability at `implementation` stage — `risk=low`, `confidence=high`, 9/10
+  dimensions, `context_budget` the lone concern (waived under ADR 0017); re-run after the merge and
+  passed again. Compliance **round 4: PASS, zero violations**.
+- **All three suites green**, re-run on the merged tree: `task-tracker/` **159 passed**, `memsearch/`
+  **74 passed / 23 deselected**, hooks **11 of 11**. Baseline from a detached `main` checkout was
+  green on all three, so nothing here can be excused as pre-existing.
+- **`mergeable: MERGEABLE`.** The four conflicts were append-only audit files only — no feature code
+  conflicted — resolved in `011c344` as a verified union (zero records lost, zero duplicated).
+
+⚠️ **Correction to `011c344`'s own commit message.** It says *one* verdict existed on both sides with
+differing content. The real figure is **6 observability and 5 compliance records**; only one of the
+eleven fell inside a conflict block, and git auto-merged the other ten — correctly taking `main`'s
+`outcome` backfill, since this branch's copies were byte-identical to base. The resolution was right
+everywhere; the message understated the scope. Caught by the observability judge's independent
+rebuild, not by the merge audit that wrote the message.
+
+**Suite at time of writing:** `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` →
+**54 passed in 4.09s, 2026-08-11, with `node v26.5.0` present** so none of the node-guarded tests were
+skipped. A dated measurement, not a contract — re-run it.
+
+⚠️ **The criterion's own instrument was caught misreporting.** `read_network_requests` returned `503`
+for a response the server audit log, `curl -s -D -`, and the page's own `fetch()` all reported as
+`404`. Criterion 13 names that tool as its mechanism, so **its status column must be corroborated**;
+a run that trusts it alone reads a correct server as a broken one. Same species as every other defect
+this feature's review rounds found — a derivation nobody asked what it could not see.
