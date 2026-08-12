@@ -5876,3 +5876,49 @@ But the **pair hash has moved twice**: `63bb9e3` → `7e90d82` at `53f09a9`'s fr
 (`cat <md> <spec> | git hash-object --stdin`) reads **stale** while the judged artifact is unchanged —
 *every* `.md` edit the phase gate explicitly permits trips it, including a checkbox tick. I did not
 re-run compliance on that basis; decide which key the gate actually wants before spending a round.
+
+## 2026-08-12 — session 72: task 9 lands, and six mutations prove the suite can fail
+
+**Task 9 is closed** (`c5daf5b`). `task-tracker/` gains four files: `test_server.py` (wire
+contract — criteria 6, 7, 9, 10, 11, 12), `test_server_lifetime.py` (criterion 14 and every
+startup abort), `conftest.py` (three shared fixtures), `server_harness.py` (fake `cmux`, tree
+copy, launcher). Split at the repo's 800-line ceiling along the seam §Tasks 9 itself draws when
+it calls bind failure "a launch property rather than a wire property"; a pointer in
+`test_server.py`'s docstring names the sibling, because the spec names *this* file for
+criterion 14 and a reader should not have to discover the move.
+
+**Suites: 144 passed, 2026-08-12** — `uv run --with pytest==9.1.1 --no-project pytest
+task-tracker/ -q`, ~105s, dominated by the idle clause's 60s floor and two 5s `cmux` timeouts.
+The prior dated measurement was 54 (2026-08-11). Task 13 still owns the per-suite before/after
+record; these are only the totals it reconciles against.
+
+**The green suite was not trusted until it was made to go red.** Six deliberate defects were
+reverted one at a time into a throwaway copy under the scratchpad, never the real tree —
+`confirm_timeout` collapsed back into `confirm_failed`; the send-failure audit logging `sent=no`
+instead of `unknown`; `nosniff` dropped; an off-manifest path answering `403` instead of `404`;
+an absent surface sent to anyway; the index served without its CSP and `no-store`. **All six were
+caught.** Each reverts a control the card lists as "written down and checked by nothing", so the
+mutation run is the evidence that list is now actually closed — including task 8's split, which
+now has a test that dies without it.
+
+**Finding: §Tasks 9's `reason` derivation undercounts by two, and its stated figures are stale.**
+The spec supplies a two-grep block and warns it can undercount via "a third emitting shape" it
+could not name. That shape is now identified: `_run_send` passes `CONFIRM_REFUSAL_REASONS[state]`
+— a **computed** reason, invisible to any grep for string literals. The block returns 14 pairs
+against a 16-value enum; the spec's own "returns 14 where the server emits 15" is stale on the
+second number. `reasons_emitted_in_source()` in `test_server.py` reads the mapping's values
+instead of the text of the call. Correcting the spec half is a spec edit — **queued for `review`,
+alongside §Tasks 8's "owes one edit" sentence.**
+
+**Coverage is assembled from what ran, not from a list.** `OBSERVED_REASONS` is populated by
+`assert_reason` as each test drives a real request, and `test_zz_every_reason_value_was_driven`
+compares it against the §Design 3 enum — skipping itself under `-k`/`-m`, since a partial run
+cannot support a coverage claim. The alternative the spec rejects, and the reason for this
+shape: a value only a code path mentions is indistinguishable, on inspection, from one the
+server can never emit.
+
+**State:** `phase: implementation`, `model_tier: low`, HEAD `c5daf5b`, pushed, clean. Next is
+**task 10** — wire the UI's command buttons to `POST /command`; it owns criterion 15 and adds
+`task-tracker/test_ui_commands.py` under the `node` guard. Compliance PASS still stands at
+`88d524a`; the pair-hash divergence recorded in session 71 is unchanged and this session's
+checkbox tick moves it again, on the same reasoning.
