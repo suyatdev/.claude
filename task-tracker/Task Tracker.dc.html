@@ -88,7 +88,13 @@ body{margin:0;background:var(--color-bg)}
         <input class="input" ref="{{ searchRef }}" value="{{ q }}" onChange="{{ setQ }}" placeholder="Search tasks, branches, PRs…  ( / )" style="width:clamp(170px,22vw,270px);min-height:34px;padding-left:32px;font-size:13px">
       </div>
       <button class="btn btn-secondary" onClick="{{ toggleAgent }}" style="font-size:13px"><i class="ph ph-robot"></i>Agent</button>
-      <button class="btn btn-primary" style="font-size:13px"><i class="ph ph-arrows-clockwise"></i>Re-analyze</button>
+      <div style="flex:none;font-size:11.5px;line-height:1.35;max-width:300px;text-align:right;color:{{ cmdMsgC }}">{{ cmdMsg }}</div>
+      <sc-for list="{{ cmdButtons }}" as="c">
+        <button class="{{ c.cls }}" onClick="{{ c.go }}" title="{{ c.title }}" style="font-size:13px"><i class="{{ c.icon }}"></i>{{ c.label }}</button>
+      </sc-for>
+      <sc-for list="{{ cmdCopies }}" as="c">
+        <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid rgba(255,255,255,.08)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
+      </sc-for>
     </div>
     <div style="padding:24px 32px {{ mainPB }};max-width:1560px">
       <div id="sec-overview" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:10px">
@@ -411,9 +417,25 @@ if(typeof module!=='undefined'&&module.exports){
 }
 // <<< tracker-command-handler: node-loadable slice ends >>>
 
+// Presentation only, and deliberately outside the slice: the node tests load behaviour,
+// not labels, and a slice that grows chrome stops being loadable without a DOM.
+const CMD_LABELS={clear:'Clear',handoff:'Handoff',reanalyze:'Re-analyze'};
+const CMD_ICONS={clear:'ph ph-eraser',handoff:'ph ph-hand-arrow-down',reanalyze:'ph ph-arrows-clockwise'};
+const CMD_TITLES={clear:'Send /clear to the session',handoff:'Send /handoff to the session',
+                  reanalyze:'Re-run the analyzer and reload'};
+const CMD_TONES={idle:'transparent',success:'var(--ok)',stale_token:'var(--warn)',
+                 session_ended:'var(--bad)',send_unknown:'var(--warn)',
+                 analysis_failed:'var(--bad)',page_bug:'var(--bad)',
+                 unexpected:'var(--bad)',server_gone:'var(--bad)'};
+
 class Component extends DCLogic {
-  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null};
+  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
   componentDidMount(){
+    // The token exists only when server.py served this page. Over file://, or on a host
+    // where no injection route exists, there is no meta tag and the UI runs in copy mode
+    // — a supported runtime mode, not a degradation (criterion 8).
+    const meta=document.querySelector('meta[name="tracker-token"]');
+    if(meta&&meta.content)this.setState({cmdToken:meta.content});
     let tries=0;const tick=()=>{
       if(window.TRACKER_DATA)this.setState({data:window.TRACKER_DATA});
       else if(++tries<14)this._pt=setTimeout(tick,150);
@@ -450,6 +472,41 @@ class Component extends DCLogic {
     const mv=ev=>{const h=Math.min(Math.max(startH+(startY-ev.clientY),160),Math.max(220,window.innerHeight-120));this.setState({agentH:h});};
     const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);lsSet('taskTracker.agentH',String(this.state.agentH));};
     window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);};
+  commandProps(S,run){
+    // `runAnalyzed` above stays bound to the store, never to this view: a failed
+    // reanalyze does not rewrite the store, so the stale timestamp survives by
+    // construction rather than by anyone remembering not to touch it.
+    const view=S.cmdView||trackerIdleView(run.analyzedAt);
+    const hasChannel=!!S.cmdToken;
+    // Copy mode is every command, always, when there is no channel — and the fallback for
+    // the two outcomes where a retry cannot work.
+    const showCopies=!hasChannel||view.offersCopyText;
+    return {
+      cmdMsg:view.message,cmdMsgC:CMD_TONES[view.outcome]||'var(--bad)',
+      cmdButtons:(hasChannel&&view.offersButton)?TRACKER_COMMAND_IDS.map(id=>({
+        key:id,label:CMD_LABELS[id],icon:CMD_ICONS[id],title:CMD_TITLES[id],
+        cls:id==='reanalyze'?'btn btn-primary':'btn btn-secondary',
+        go:()=>this.runCommand(id)})):[],
+      cmdCopies:showCopies?TRACKER_COMMAND_IDS.map(id=>({
+        key:id,text:TRACKER_COPY_TEXT[id],icon:'ph ph-copy',c:'var(--color-neutral-300)',
+        title:'Copy: '+TRACKER_COPY_TEXT[id],
+        copy:()=>copyText(TRACKER_COPY_TEXT[id])})):[]};
+  }
+  runCommand=id=>{
+    const S=this.state;
+    if(!S.cmdToken)return;
+    const view=S.cmdView||trackerIdleView(null);
+    // A terminal outcome has already withdrawn the button; a stray call must not revive
+    // the channel behind it. The guard is here as well as in the render for that reason.
+    if(!view.offersButton)return;
+    trackerApplyCommand(view,{fetchImpl:(u,o)=>fetch(u,o),url:'/command',
+                              token:S.cmdToken,id:id})
+      .then(next=>{
+        this.setState({cmdView:next});
+        // Only a successful reanalyze rewrote the store, so only it has new data to show.
+        if(next.shouldReload)location.reload();
+      });
+  };
   sendAgent=()=>{const q=this.state.agentQ.trim();if(!q)return;const base=this.state.agentMsgs||this._sample||[];
     this.setState({agentMsgs:[...base,{r:'you',t:q},{r:'agent',t:'Static snapshot — re-run the task-tracker skill for live answers. Ordering rationale is under Merge order; blockers under the Blocked filter and the hard constraints.'}],agentQ:''});};
   renderVals(){
@@ -563,6 +620,7 @@ class Component extends DCLogic {
       agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'rgba(255,255,255,.03)':'transparent',
       collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:S.collapsed?'56px':'236px',
       toggleSidebar:()=>{const v=!S.collapsed;lsSet('taskTracker.sidebar',v?'1':'0');this.setState({collapsed:v})},
+      ...this.commandProps(S,run),
       runName:run.name,runDir:run.dir,runAnalyzed:run.analyzedAt,repoCount:String(repoCount),wtCount:String(wtCount),
       q:S.q,setQ:e=>this.setState({q:e.target.value}),searchRef:el=>{this._search=el},
       stats,pctW:pct+'%',pctLabel:merged+' / '+total+' merged · '+pct+'%',
