@@ -695,12 +695,34 @@ assertion. They are still cases and still run.
         non-repository directory it prints nothing and exits 128. Both leave `current_branch()`
         returning something other than `main`/`master`, which is why rows 3–5's "Before" is 0 — matches
         the table without needing to trust it blind.
-- [ ] Add `checkout_desc()` (three cases) and `rebase_head_name()`, and replace the stderr paths and
+- [x] Add `checkout_desc()` (three cases) and `rebase_head_name()`, and replace the stderr paths and
       the state-dependent remedy lines with the exact text in the message contract. **Messages before
       logic, deliberately:** this step is behavior-neutral, whereas doing it after the logic step
       leaves a window where the guard blocks detached commits while still printing "blocked while
       main/master is checked out" — false, and precisely the confusion the contract exists to remove.
       No test edits in this step.
+      - Landed `checkout_desc()` and `rebase_head_name()` verbatim from the spec. Safe to add ahead of
+        the `symbolic-ref` rewrite: `on_main()` still only returns true for a literally-named
+        `main`/`master` checkout, so `checkout_desc` is only ever invoked with `$1` = `"main"` or
+        `"master"` today — its detached/non-repo arms are unreachable until step 6 changes
+        `current_branch()`, and are exercised for the first time by step 7's assertions.
+      - The remedy-line table needs one fact `checkout_desc` doesn't carry: whether an operation
+        marker is present while sitting on a *named* `main`/`master` (the row 16 shape). Added
+        `operation_in_progress()` — a plain existence check over all five markers — kept deliberately
+        separate from `sequencer_in_progress()` (step 6's function): that one's `head-name` special
+        case answers a *gating* question that doesn't apply once the branch is already named. Both
+        consult the same on-disk markers so they can never disagree about what git is doing.
+      - All three refusal sites (`PUSH_LEASE`, Guard 1's disallowed-path, Guard 1's empty-index path)
+        now render `checkout_desc "$(current_branch)"` into the observed-state sentence, and the two
+        commit/push refusal sites append `remedy_line commit|push "$checkout_branch"`. `current_branch()`
+        is captured once per guard body and reused, rather than shelling out twice.
+      - Verified behavior-neutral: `bash hooks/git-guard.test.sh` still reports **89 passed, 7 failed**,
+        the identical 7 rows (1, 2, 3, 4, 5, 15, 17) — no exit code changed. Manually ran the hook
+        against a real named-`main` repo with a source file staged and confirmed the rendered text
+        matches the contract exactly: `git-guard: refusing this commit -- the checkout is branch
+        'main', where commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*,
+        docs/*.md).` followed by `Create a feature branch instead (git switch -c <name>), or stage
+        only documentation.`
 - [ ] Rewrite `current_branch()` to use `symbolic-ref`, add `sequencer_in_progress()` **including the
       `head-name` clause with both `main` and `master`**, and rewrite `on_main()` to the `case` form.
       Run the suite: rows 1–5, 15 and 17 go green, 6–14 and 16 stay green, all 77 existing cases stay
