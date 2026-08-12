@@ -5302,3 +5302,34 @@ applied to their own new assertions.
 Committed `9d8d128`, pushed. Next is checklist step 4 — add all 19 matrix rows as `run_case`/
 `run_case_in` lines and confirm rows 1–5, 15 and 17 fail while 6–14, 16, 18 and 19 pass (the fix
 hasn't landed yet, so the first group is expected red at this point).
+
+## 2026-08-12 — session 61: git-guard-detached-head, checklist step 4, all 19 matrix rows
+
+Restored from the session-60 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean, nothing uncommitted. Ran checklist step 4 — wired all 19 matrix rows from
+`docs/features/git-guard-detached-head.md` into `hooks/git-guard.test.sh` as `run_case`/`run_case_in`
+lines, in a new section after the orphan-classifier cases.
+
+Rows 1, 2, 6, 11–14 reuse the shared `$REPO` via `on_branch`/`detached`/`stage` and plain `run_case`;
+the other twelve get their own directory from the session-59 fixture builders (`nonrepo_dir`,
+`unborn_repo`, `rebase_edit_stopped`, `cherry_pick_conflict`, `named_main_merge_conflict`,
+`rebase_apply_stopped`, `master_repo`) via `run_case_in`. Each row's want-exit is the spec table's
+**After** column, not necessarily today's behavior — that's deliberate: rows 1–5, 15 and 17 are
+supposed to fail right now.
+
+Before writing fixtures, checked empirically (not assumed) how the *current*, unfixed
+`current_branch()` reads two of the new states, since the table's "Before" column depends on it:
+`git rev-parse --abbrev-ref HEAD` on an unborn branch prints the literal string `HEAD` to stdout (not
+the branch name) and exits 128; in a non-repository directory it prints nothing and exits 128. Both
+leave `current_branch()` returning something other than `main`/`master`, confirming rows 3–5 really
+are allowed today rather than trusting the table's claim unverified.
+
+`bash hooks/git-guard.test.sh` reports **89 passed, 7 failed**. The 7 failures are exactly rows 1, 2,
+3, 4, 5, 15 and 17 (`want 2, got 0` each); the other 12 new rows (6–14, 16, 18, 19) are green —
+77 pre-existing + 12 new = 89. This is exactly the split the checklist requires; the fix in checklist
+step 6 is what turns the 7 red rows green without disturbing anything else.
+
+Committed `e356ebf`, pushed. Next is checklist step 5 — add `checkout_desc()` and
+`rebase_head_name()`, and replace the stderr paths and remedy lines with the message contract's exact
+text. Deliberately messages-before-logic: no hook behavior changes in this step, only strings, so
+there's no window where the guard blocks but prints the old message.
