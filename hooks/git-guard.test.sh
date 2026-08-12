@@ -539,5 +539,115 @@ orphan_case "no classifier, commit -> FAIL CLOSED"           2 'git commit -m ms
 orphan_case "no classifier, unrelated command -> FAIL CLOSED" 2 'ls -la'
 
 # ---------------------------------------------------------------------------
+# Detached-HEAD / sequencer-state matrix (docs/features/git-guard-detached-head.md)
+#
+# Each want-exit below is the table's "After" column -- the behavior the fix
+# in a later checklist step must produce -- not necessarily today's exit code.
+# Rows 1-5, 15 and 17 are therefore EXPECTED TO FAIL here: their Before and
+# After differ and the fix has not landed. Rows 6-14, 16, 18 and 19 have no
+# gap between Before and After and must already be green. A row in the first
+# group that passes now is testing nothing -- see the checklist.
+# ---------------------------------------------------------------------------
+on_branch main
+git -C "$REPO" reset -q --hard
+git -C "$REPO" clean -fdq
+
+# Rows 1, 2, 6 — plain detached HEAD in the shared $REPO.
+detached
+stage src/app.sh
+run_case "row 1: detached, source staged -> block"            2 'git commit -m msg'
+run_case "row 2: detached, force-with-lease -> block"         2 'git push --force-with-lease origin HEAD:main'
+stage docs/notes.md
+run_case "row 6: detached, docs only staged -> allow"         0 'git commit -m msg'
+
+# Rows 3, 4 — not a git repository at all.
+NONREPO_DIR="$(nonrepo_dir)"
+run_case_in "$NONREPO_DIR" "row 3: non-repository, commit -- src/app.sh -> block" 2 'git commit -m msg -- src/app.sh'
+run_case_in "$NONREPO_DIR" "row 4: non-repository, force-with-lease -> block"     2 'git push --force-with-lease'
+
+# Row 5 — unborn main, source staged.
+UNBORN_MAIN_DIR="$(unborn_repo main)"
+mkdir -p "$UNBORN_MAIN_DIR/src"
+printf 'x\n' > "$UNBORN_MAIN_DIR/src/app.sh"
+git -C "$UNBORN_MAIN_DIR" add -- src/app.sh
+run_case_in "$UNBORN_MAIN_DIR" "row 5: unborn main, source staged -> block" 2 'git commit -m msg'
+
+# Row 7 — unborn feat/x, source staged.
+UNBORN_FEAT_DIR="$(unborn_repo feat/x)"
+mkdir -p "$UNBORN_FEAT_DIR/src"
+printf 'x\n' > "$UNBORN_FEAT_DIR/src/app.sh"
+git -C "$UNBORN_FEAT_DIR" add -- src/app.sh
+run_case_in "$UNBORN_FEAT_DIR" "row 7: unborn feat/x, source staged -> allow" 0 'git commit -m msg'
+
+# Row 8 — rebase -i stopped at edit, started from a feature branch, amended.
+REBASE_EDIT_FEAT_DIR="$(rebase_edit_stopped feat/x)"
+mkdir -p "$REBASE_EDIT_FEAT_DIR/src"
+printf 'x\n' > "$REBASE_EDIT_FEAT_DIR/src/app.sh"
+git -C "$REBASE_EDIT_FEAT_DIR" add -- src/app.sh
+run_case_in "$REBASE_EDIT_FEAT_DIR" "row 8: rebase-edit stop (feat/x), amend -> allow" 0 'git commit --amend --no-edit'
+
+# Row 15 — the same stop, but started from main: the carve-out's merge-backend bound.
+REBASE_EDIT_MAIN_DIR="$(rebase_edit_stopped main)"
+mkdir -p "$REBASE_EDIT_MAIN_DIR/src"
+printf 'x\n' > "$REBASE_EDIT_MAIN_DIR/src/app.sh"
+git -C "$REBASE_EDIT_MAIN_DIR" add -- src/app.sh
+run_case_in "$REBASE_EDIT_MAIN_DIR" "row 15: rebase-edit stop (main), source staged -> block" 2 'git commit -m msg'
+
+# Row 9 — cherry-pick stopped on a conflict, HEAD detached, conflict resolved and staged.
+CHERRY_DIR="$(cherry_pick_conflict)"
+printf 'resolved\n' > "$CHERRY_DIR/app.sh"
+git -C "$CHERRY_DIR" add -- app.sh
+run_case_in "$CHERRY_DIR" "row 9: cherry-pick conflict, source staged -> allow" 0 'git commit -m msg'
+
+# Row 10 — mid-rebase; the classifier raises no fact for `rebase --continue` itself.
+REBASE_CONTINUE_DIR="$(rebase_edit_stopped feat/x)"
+run_case_in "$REBASE_CONTINUE_DIR" "row 10: detached mid-rebase, add + continue -> allow" 0 'git add -- src/app.sh && git rebase --continue'
+
+# Rows 11-13 — a plainly named feature branch, off which the guard has no opinion.
+on_branch feature
+git -C "$REPO" reset -q --hard
+git -C "$REPO" clean -fdq
+stage src/app.sh
+run_case "row 11: feature branch, source staged -> allow"     0 'git commit -m msg'
+run_case "row 12: feature branch, force-with-lease -> allow"  0 'git push --force-with-lease'
+run_case "row 13: feature branch, bare force -> block"        2 'git push --force'
+
+# Row 14 — named main, docs only staged.
+on_branch main
+git -C "$REPO" reset -q --hard
+git -C "$REPO" clean -fdq
+stage docs/notes.md
+run_case "row 14: main, docs only staged -> allow"            0 'git commit -m msg'
+
+# Row 16 — named main mid-merge conflict: sequencer_in_progress must stay
+# reachable only from the branchless arm, never override a plainly named branch.
+MERGE_CONFLICT_DIR="$(named_main_merge_conflict)"
+printf 'resolved\n' > "$MERGE_CONFLICT_DIR/app.sh"
+git -C "$MERGE_CONFLICT_DIR" add -- app.sh
+run_case_in "$MERGE_CONFLICT_DIR" "row 16: named main mid-merge, source staged -> block" 2 'git commit -m msg'
+
+# Row 17 — rebase --apply stopped, started from master: the carve-out's apply-backend bound.
+REBASE_APPLY_MASTER_DIR="$(rebase_apply_stopped master)"
+mkdir -p "$REBASE_APPLY_MASTER_DIR/src"
+printf 'x\n' > "$REBASE_APPLY_MASTER_DIR/src/app.sh"
+git -C "$REBASE_APPLY_MASTER_DIR" add -- src/app.sh
+run_case_in "$REBASE_APPLY_MASTER_DIR" "row 17: rebase --apply stop (master), source staged -> block" 2 'git commit -m msg'
+
+# Row 18 — a checked-out branch literally named master.
+MASTER_DIR="$(master_repo)"
+mkdir -p "$MASTER_DIR/src"
+printf 'x\n' > "$MASTER_DIR/src/app.sh"
+git -C "$MASTER_DIR" add -- src/app.sh
+run_case_in "$MASTER_DIR" "row 18: named master, source staged -> block" 2 'git commit -m msg'
+
+# Row 19 — rebase --apply stopped, started from feat/x: the only row that can
+# see a dropped rebase-apply clause, because it is the only one expecting 0.
+REBASE_APPLY_FEAT_DIR="$(rebase_apply_stopped feat/x)"
+mkdir -p "$REBASE_APPLY_FEAT_DIR/src"
+printf 'x\n' > "$REBASE_APPLY_FEAT_DIR/src/app.sh"
+git -C "$REBASE_APPLY_FEAT_DIR" add -- src/app.sh
+run_case_in "$REBASE_APPLY_FEAT_DIR" "row 19: rebase --apply stop (feat/x), source staged -> allow" 0 'git commit -m msg'
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

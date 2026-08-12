@@ -675,10 +675,26 @@ assertion. They are still cases and still run.
         matrix above (the fix lands in checklist step 6). Confirmed the helper isn't vacuous by also
         asserting `want 0` against the same fixture, which reported **ok** — proving both the
         pass and FAIL paths reflect the hook's real exit code rather than a fixed result.
-- [ ] Add all **19** matrix rows as `run_case`/`run_case_in` lines. **Run them and confirm rows 1–5,
+- [x] Add all **19** matrix rows as `run_case`/`run_case_in` lines. **Run them and confirm rows 1–5,
       15 and 17 fail while 6–14, 16, 18 and 19 pass**, capturing the output; a row in the "must fail"
       block that passes immediately is testing nothing, and that is exactly how two rows were misfiled
       at round 2.
+      - Landed as a new section at the end of `hooks/git-guard.test.sh`, after the orphan-classifier
+        cases. Reused `detached`/`on_branch`/`stage` against the shared `$REPO` for rows 1, 2, 6, 11–14
+        (`run_case`); used `run_case_in` against the dedicated dirs from `nonrepo_dir`, `unborn_repo`,
+        `rebase_edit_stopped`, `cherry_pick_conflict`, `named_main_merge_conflict`,
+        `rebase_apply_stopped` and `master_repo` for the rest — each want-exit is the table's **After**
+        column, not today's behavior.
+      - `bash hooks/git-guard.test.sh` reports **89 passed, 7 failed**. The 7 failures are exactly
+        rows 1, 2, 3, 4, 5, 15, 17 (all `want 2, got 0`); all other new rows (6–14, 16, 18, 19, 12 of
+        them) are green, matching 77 pre-existing + 12 new = 89. Confirms the red/green split the
+        checklist requires — the fix (checklist step 6) is what turns rows 1–5/15/17 green.
+      - One empirical check made before writing fixtures, since it decides whether `current_branch()`
+        currently reads an unborn `main` as `""` or as `main`: `git rev-parse --abbrev-ref HEAD` on an
+        unborn branch prints the literal string `HEAD` to stdout (not `main`) and exits 128; on a
+        non-repository directory it prints nothing and exits 128. Both leave `current_branch()`
+        returning something other than `main`/`master`, which is why rows 3–5's "Before" is 0 — matches
+        the table without needing to trust it blind.
 - [ ] Add `checkout_desc()` (three cases) and `rebase_head_name()`, and replace the stderr paths and
       the state-dependent remedy lines with the exact text in the message contract. **Messages before
       logic, deliberately:** this step is behavior-neutral, whereas doing it after the logic step
