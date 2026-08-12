@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: docs/readme-roadmap-task-tracker
 ---
@@ -45,7 +45,14 @@ assumed:
   - "Proposes a merge order" checked against source, not the skills catalog: `_layer()` +
     `_build_waves()` in `task-tracker/analyze.py:482-494` derive waves from `## Depends on` edges
     with cycle detection.
-- [ ] 2 — Observability judge at `implementation` stage, then open the PR.
+- [x] 2 — Observability judge at `implementation` stage, then open the PR.
+  - Verdict at `c443d01`: **`risk=low`, `confidence=high`**. Written to the **worktree** store, not
+    `$HOME/.claude` — `judge-guard.sh:239-249` resolves the store from `git rev-parse --show-toplevel`
+    of the judged repo, so the agent's hardcoded default would have missed the gate entirely.
+  - PR **#53** opened while the verdict was still uncommitted; committing it first would move HEAD and
+    invalidate it (`head_sha` must equal HEAD).
+  - The judge caught a factual error in my own dispatch brief: I wrote "one commit" when the branch
+    carries two (`d5c00bb` card, `c443d01` edit). Verdict unaffected — it read the real diff.
 
 ## Verification
 

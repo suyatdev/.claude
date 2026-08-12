@@ -6410,3 +6410,61 @@ default-branch docs exception (which is `CODING_MEMORY.md`, `coding-memory/*`, `
 needs its own branch and PR rather than a direct commit to `main`.
 
 **PR #52 (`fix/git-guard-detached-head`) remains open** — a different worktree's branch, untouched.
+
+---
+
+## Session 79 — 2026-08-12 — the Roadmap catches up, and the verdict store follows the worktree
+
+**PR #53 opened:** https://github.com/suyatdev/.claude/pull/53 — `docs/readme-roadmap-task-tracker`,
+2 commits, +61 / −2. Three `## 🗺️ Roadmap` lines in `README.md`: the feature-state tracker added as
+`- [x]` (#51), the per-session pane-split policy (#28) and `phase-guard.sh` (#30) checked off.
+**This closes the item session 78 recorded as deliberately not done unilaterally.**
+
+**Every claim re-derived, none carried from the card** — the card's own `## Verification` forbids
+copying its conclusions. `gh pr view 51` → `MERGED` at `06e7c9d`; `set-policy` a real command branch
+at `panes/dispatch-pane-agent.sh:494`; `phase-guard.sh` a live registration at `settings.json:42-50`.
+`git fetch origin main` first, because another session's PR #52 had moved `main`.
+
+**Two checks were made stronger than the card specified, and one of them mattered.** A bare
+`grep -c phase-guard settings.json` returns `1` whether the hit is a hook registration or a comment
+naming the file — the count alone cannot tell a live hook from a mention. Reading the surrounding
+lines is what turned that `1` into evidence. Same shape as the recurring lesson on file: **state the
+predicate beside the number.**
+
+**A catalog entry is prose, not a measurement.** The new Roadmap line says the tracker "proposes a
+merge order." `CLAUDE.md`'s skills catalog asserts exactly that, and quoting it would have been
+circular — the README would then cite a doc, not the code. Confirmed in source instead: `_layer()` +
+`_build_waves()` in `task-tracker/analyze.py:482-494` derive waves from `## Depends on` edges with
+explicit cycle detection.
+
+⚠️ **The observability verdict store is per-repo, and this branch lives in a worktree.**
+`judge-guard.sh:239-249` resolves the store from `git rev-parse --show-toplevel` of the *judged* repo
+— here `/Users/marksuyat/.claude/.claude/worktrees/tracking-feature-state` — while the judge agent
+defaults to `$HOME/.claude`. Those coincide only for the main checkout. The dispatch prompt had to
+name the absolute path **and** the four fields the guard matches (`repo`, `branch`, `head_sha`,
+`stage`), then all four were verified against `git rev-parse` output before `gh pr create` was
+attempted. This is the same hardcoding already recorded for `compliance-judge.md`; it is not
+judge-specific, it is store-resolution-specific.
+
+**Order matters and is counterintuitive: open the PR *before* committing the verdict.** The guard
+requires `head_sha == HEAD`. Committing the verdict moves HEAD, which invalidates the very verdict
+about to authorize the PR.
+
+**The judge caught a factual error in my own dispatch brief.** I told it the change was "one commit,
+`c443d01`"; the branch carries two (`d5c00bb` created the card, `c443d01` made the edit). It read the
+real diff and said so. The brief was wrong, not the verdict — but a brief that miscounts commits is a
+brief that could have miscounted anything, and nothing in the pipeline checks a prompt's claims
+against the repo.
+
+**Why a feature card exists for a three-line README edit.** `phase-guard.sh` denies source writes
+while any card sits at `phase: planning` unless a card at `phase: implementation` records the current
+branch. Two unrelated cards (`falsify-harness-signatures`, `verification-marker-gate`) sit at
+`planning` with `branch: none` and belong to other sessions. **Advancing or deleting them was
+rejected as a workaround**, as was writing the file through Bash to dodge a `PreToolUse` guard.
+`docs/*` is exempt, which is why the card could be written at all. The card is the honest minimum.
+
+**Still open, deliberately:** `## What's in here` has no `task-tracker/` row and no `skills/` row —
+real, and its own change. The remaining `- [ ]` item (files describing the retired
+`coding-memory/branches/<branch>.md` workflow) was not verified in either direction and is untouched.
+
+**PR #52 (`fix/git-guard-detached-head`) remains another worktree's branch — untouched.**

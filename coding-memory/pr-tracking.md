@@ -1134,3 +1134,33 @@ for a response the server audit log, `curl -s -D -`, and the page's own `fetch()
 `404`. Criterion 13 names that tool as its mechanism, so **its status column must be corroborated**;
 a run that trusts it alone reads a correct server as a broken one. Same species as every other defect
 this feature's review rounds found — a derivation nobody asked what it could not see.
+
+---
+
+## `.claude` — `docs/readme-roadmap-task-tracker` → PR #53 (OPEN 2026-08-12)
+
+- **Repo:** `suyatdev/.claude` · **remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
+- **Branch:** `docs/readme-roadmap-task-tracker` · **base:** `main`
+- **PR:** https://github.com/suyatdev/.claude/pull/53 · **state:** OPEN
+- **session_origin (created):** session 79 · **session_origin (last push):** session 79
+- **Card:** `docs/features/readme-roadmap-upkeep.md` (`phase: review`)
+- **Scope:** 2 commits, +61 / −2 — three `## 🗺️ Roadmap` lines in `README.md`, plus the card
+  `phase-guard.sh` required before it would permit the write.
+
+**This closes the open item session 78 left explicitly undone** — the Roadmap had no entry for the
+feature-state tracker, and root `README.md` is not covered by the default-branch docs exception
+(`CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`), so it needed its own branch and PR rather than a
+direct commit to `main`. The `## What's in here` rows for `task-tracker/` and `skills/` remain open and
+were deliberately not swept in.
+
+**Judge:** observability, `implementation` stage, at `c443d01` — **`risk=low`, `confidence=high`**.
+
+⚠️ **The verdict store is per-repo, and this is a worktree.** `judge-guard.sh:239-249` resolves it from
+`git rev-parse --show-toplevel` of the *judged* repo, so the verdict had to land in the worktree's
+`coding-memory/observability-judge/`, not the `$HOME/.claude` path the judge agent defaults to. The
+dispatch prompt had to state the absolute path and the four match fields (`repo`, `branch`,
+`head_sha`, `stage`) explicitly. Same species as the compliance-judge hardcoding already on file.
+
+**Verdict committed only after the PR was open.** `judge-guard.sh` requires `head_sha == HEAD`, so
+committing the verdict first would have moved HEAD and invalidated the verdict that was about to
+authorize the PR.
