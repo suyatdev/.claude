@@ -6510,3 +6510,57 @@ row. The remaining `- [ ]` Roadmap item (files describing the retired
 `coding-memory/branches/<branch>.md` workflow) was never verified in either direction.
 
 **PR #52 (`fix/git-guard-detached-head`) remains another worktree's branch — untouched.**
+
+## Session 80 — 2026-08-12 — a fresh handoff with a stale body, and two cards that never left implementation
+
+**The `session-state.md` handoff was stale while looking current, and would have caused merged work to
+be redone.** Its `written:` header read `2026-08-12T21:58:43Z` — **three minutes after PR #53 merged at
+`21:55:04Z`** — yet its Current Focus described the pre-gate `planning` state on
+`docs/readme-roadmap-task-tracker` and instructed the next session to make the README edit and wait for
+`gate confirmed`. Restoring from it obediently would have redone PR #53.
+
+**A fresh mtime is not evidence of a fresh body.** The one thing that caught it was cross-checking the
+handoff against `git log` before acting: git, GitHub (`gh pr view 53` → `MERGED`) and the
+`readme-roadmap-upkeep` card (`phase: review`, 2/2) all agreed with each other, and only the handoff
+disagreed. **A lone dissenter among four sources is the dissenter's problem** — but the restore
+procedure treats the handoff as the entry point, so nothing forces that comparison. Corrected in place,
+with the near-miss recorded in the file itself so the next reader learns the check rather than the fact.
+
+**Two cards sat at `phase: implementation` with every task ticked and no branch anywhere.**
+`falsifier-base-pin` (6/6, merged **PR #39** `cbb9f60`) and `shell-segments-redirects` (10/10, merged
+**PR #38** `cc035d2`). Neither branch existed locally or on `origin`. Both corrected to
+`phase: review` / `branch: none`. **Two cards with one defect is a process gap, not two slips: nothing
+in the merge path moves a card out of `implementation`.** The cost is not cosmetic — `phase-guard.sh`
+reads `phase` to decide what may be written, and the tracker reported both as live work.
+
+**The analyzer's `ahead` counts were measured against a stale local `main`.** `main` was `1b983d9`, **78
+behind `origin/main`**, so `docs/post-merge-53` showed "ahead 78" when it was in fact *identical* to
+`origin/main` (`git rev-list --left-right --count origin/main...HEAD` → `0 0`). **`ahead` is only
+meaningful once you know what it is ahead of.** Fast-forwarded `main` to `a0cae40` inside the
+`statusline-followups` worktree that holds it — git refuses to move a branch checked out elsewhere, and
+the parallel-agent invariants forbid editing another worktree's files, but a `--ff-only` merge on a
+verified-clean checkout neither invents nor discards a commit.
+
+**Branch tips recorded before any deletion, so "abandoned" stayed recoverable:**
+
+| branch | tip | unmerged commits |
+|---|---|---|
+| `docs/post-merge-53` | `a0cae407f9bae76443badcd27b7229a5f675ec94` | 0 (fully merged) |
+| `docs/readme-roadmap-task-tracker` | `332e0267bfb3b9a7af74b75bc88f22526da80cba` | 0 (fully merged) |
+| `backup-calibration-policy-propagation` | `a25c43ccd2cceee420e4305d78169d422bad8448` | 1 |
+| `feature/cmux-version-gate` | `27d387784e57c965c940d501e137d38f980194fc` | 3 |
+| `feature/judge-terminal-enforcement` | `f933cca7b04424ac679fb2bd87881a9a49cf6fa2` | 13 |
+
+**User decision:** delete the three abandoned branches **locally only** — their `origin` copies stay as
+the real safety net, since a SHA in a document survives only until git garbage-collects the object.
+Merge status was re-derived with `git merge-base --is-ancestor` **at the moment of deletion**, not
+reused from the survey run minutes earlier.
+
+**Deletion order was load-bearing.** `docs/post-merge-53` is the branch this worktree is on, so removing
+it means going to a detached HEAD — and `git-guard.sh` **fails closed on a detached HEAD it cannot
+name** (that is exactly what open draft PR #52 fixes). Committing and pushing *first*, deleting *last*,
+is what kept the guard from blocking this session's own record.
+
+**Still open:** `falsify-harness-signatures` (0/11) and `verification-marker-gate` (0/15) remain at
+`phase: planning` with `branch: none`, which is why **every source write in this repo is currently
+denied**. Neither was started. `## What's in here` still has no `task-tracker/` or `skills/` row.

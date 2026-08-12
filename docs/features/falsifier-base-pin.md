@@ -1,8 +1,16 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
-branch: fix/falsifier-base-pin
+branch: none  # merged via PR #39 (cbb9f60); fix/falsifier-base-pin deleted
 ---
+
+> **Frontmatter correction (2026-08-12):** this card read `phase: implementation` /
+> `branch: fix/falsifier-base-pin` for every session since the work merged as **PR #39** (`cbb9f60`),
+> with all 6 tasks ticked. The named branch existed in neither the local repo nor `origin`. A card
+> claiming to be mid-implementation on a branch that does not exist is the shape the phase gate is
+> least able to survive: the survey reported it as live work, and `phase-guard.sh` reads `phase` to
+> decide what may be written. Corrected to `review` / `none`. Verified with
+> `git log origin/main --merges --grep=falsifier-base-pin` and a local+remote `rev-parse` of the branch.
 
 # The falsifier's baseline moved when its own fix merged
 

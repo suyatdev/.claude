@@ -1,8 +1,16 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
-branch: fix/shell-segments-redirects
+branch: none  # merged via PR #38 (cc035d2); fix/shell-segments-redirects deleted
 ---
+
+> **Frontmatter correction (2026-08-12):** this card read `phase: implementation` /
+> `branch: fix/shell-segments-redirects` for every session since the work merged as **PR #38**
+> (`cc035d2`), with all 10 tasks ticked. The named branch existed in neither the local repo nor
+> `origin`. Corrected to `review` / `none` in the same pass as `falsifier-base-pin.md`, which had
+> drifted identically — two cards with the same defect is a process gap, not two slips: **nothing in
+> the merge path moves a card out of `implementation`.** Verified with
+> `git log origin/main --merges --grep=shell-segments-redirects` and a local+remote `rev-parse`.
 
 # `shell_segments.py` misreads redirections as command separators
 
