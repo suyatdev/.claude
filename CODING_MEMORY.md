@@ -5333,3 +5333,38 @@ Committed `e356ebf`, pushed. Next is checklist step 5 — add `checkout_desc()` 
 `rebase_head_name()`, and replace the stderr paths and remedy lines with the message contract's exact
 text. Deliberately messages-before-logic: no hook behavior changes in this step, only strings, so
 there's no window where the guard blocks but prints the old message.
+
+## 2026-08-12 — session 62: git-guard-detached-head, checklist step 5, message contract
+
+Restored from the session-61 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean, nothing uncommitted, in sync with `origin/fix/git-guard-detached-head`. Ran checklist
+step 5 — landed `checkout_desc()` and `rebase_head_name()` from the spec verbatim, and swapped in the
+message contract's exact text at all three `hooks/git-guard.sh` refusal sites (`PUSH_LEASE`, Guard
+1's disallowed-path, Guard 1's empty-index path).
+
+`checkout_desc()` is safe to add ahead of the `symbolic-ref` rewrite: `on_main()` still only returns
+true for a literally-named `main`/`master` checkout today, so `checkout_desc` is only ever called
+with `$1` = `"main"` or `"master"` — its detached/non-repo arms sit unreachable until checklist step
+6 changes `current_branch()`.
+
+The remedy-line table needed one more fact than `checkout_desc` carries: whether an operation marker
+is present while sitting on a *named* `main`/`master` (row 16's shape — a merge conflict on a
+literally-checked-out `main`). Added `operation_in_progress()`, a plain five-marker existence check,
+kept deliberately separate from `sequencer_in_progress()` (checklist step 6's function): that one's
+`head-name` special case answers a *gating* question ("will finishing this move main?") that doesn't
+apply once the branch is already named — the two functions consult the same on-disk markers so they
+can never describe git's state differently, but they answer different questions.
+
+Verified behavior-neutral rather than trusting the diff by inspection: `bash hooks/git-guard.test.sh`
+still reports **89 passed, 7 failed**, the identical 7 rows (1, 2, 3, 4, 5, 15, 17) as session 61 —
+no exit code moved. Also built a real named-`main` repo by hand, staged a source file, and ran the
+hook directly to confirm the rendered text matches the contract exactly, not just that *a* string
+came out: `git-guard: refusing this commit -- the checkout is branch 'main', where commits are
+restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).` followed by `Create a
+feature branch instead (git switch -c <name>), or stage only documentation.`
+
+Committed `b68e513`, pushed. Next is checklist step 6 — rewrite `current_branch()` to
+`symbolic-ref`, add `sequencer_in_progress()` (with the `head-name` clause for both `main` and
+`master`), and rewrite `on_main()` to the `case` form. This is the step that actually changes
+behavior: run the suite afterward and confirm rows 1–5, 15 and 17 flip to green while everything
+else — including the 12 rows added in session 61 — stays green.
