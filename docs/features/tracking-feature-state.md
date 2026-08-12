@@ -71,7 +71,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists. **Owns criterion 15** — the page's own failure behaviour, which no server test can reach. Handler `0fd5bcd`, buttons `8fe330a`, tests `75b3108` (written and run red first — twelve failures on the absent marker pair). Criterion 15 is 15 tests in `test_ui_commands.py`, falsified by seven handler mutations of which seven were caught. ⚠️ **The handler could not go in a new `.js` file**: the servable set is a closed sixteen-row list pinned in *both* `server.py` and §Design 3, so a new row is a spec edit and reopens criterion 13; an inline `<script>` dies on the CSP's missing `'unsafe-inline'`. It lives fenced inside the `text/x-dc` block and the test slices it out to load in `node`. **Both render modes were confirmed by an actual headless render, not by inspection** — served, the header shows three command buttons, zero copy chips and the token once; over `file://`, zero buttons and three copy chips (`/clear`, `/handoff`, `python3 task-tracker/analyze.py .`). No unresolved `{{ }}` binding in either.
 - [x] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch. Both are written with their failure mode beside them: detaching leaves the parent-death check inert, redirecting `stderr` discards the audit log, and neither shows up in a code read. **The documented launch line was run, not reasoned about** (2026-08-12): `python3 task-tracker/server.py --repo "$PWD"` under the harness's background mode bound this session's real surface, served `/` at `200`, and wrote its startup and audit lines to captured `stderr`; `ps -o ppid=` walked the chain to `server → zsh → claude`, which is what keeps `getppid()` able to change. **Not verified, and not verifiable here:** trigger-routing accuracy — the skill is not discoverable from this worktree, and `skills/_standards/authoring-skills-and-agents.md` records that no eval harness exists in this repo.
 - [x] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`. One row, placed after `managing-session-memory` because both answer "where does this work stand"; the catalog is grouped by activity, not alphabetised. `CLAUDE.md` is the only catalog — every other file mentioning a skill name references it in prose (`grep -rln 'verifying-subagent-commits' --include='*.md' .`), so there is no second list to drift.
-- [x] 13 — Run every suite, record before/after counts in `## Verification` below. All three ran 2026-08-12, **zero failures before or after**; the before-counts came from a throwaway detached checkout of `main` at `1b983d9`, since a run in this tree is an *after* count by definition. `node --version` = v26.5.0, and the `task-tracker/` run reports **no skips at all** — so criterion 5 got its JS-engine oracle and criterion 15 is verified, not degraded. ⚠️ **The spec's guard re-derivation overcounts by one**: `grep -c skipif` totals 15, but `test_server.py:556` guards on `os.geteuid() == 0`, not `node` — the node-guarded figure is 14. Correcting that command is a spec edit, queued for `review`.
+- [x] 13 — Run every suite, record before/after counts in `## Verification` below. All three ran 2026-08-12, **zero failures before or after**; the before-counts came from a throwaway detached checkout of `main` at `1b983d9`, since a run in this tree is an *after* count by definition. `node --version` = v26.5.0, and the `task-tracker/` run reports **no skips at all** — so criterion 5 got its JS-engine oracle and criterion 15 is verified, not degraded. ⚠️ **The guard re-derivation overcounted by one, and is now fixed in place**: `grep -c skipif` totals 15, but `test_server.py:556` guards on `os.geteuid() == 0`, not `node` — the node-guarded figure is 14, via `grep -h 'skipif(NODE is None' task-tracker/*.py | wc -l`. This lived in the `.md` half, **not** the spec half, so it was never a spec edit; an earlier revision of this note said otherwise and was wrong.
 - [x] 14 — Vendor all six remote assets — nine local files. **Runs right after task 8**; owns criterion 13. Closed on the re-score in `§Verification` — both runs match the revised expectation exactly, on the enumerations already recorded; no new browser run was made.
 
 ## Verification
@@ -121,7 +121,11 @@ Task 13 must record `node --version` beside the counts, and report a skip of the
 
 ⚠️ **Criterion 15's tests are node-guarded too, and they degrade worse.** Task 10 adds
 `task-tracker/test_ui_commands.py` under the same guard — re-derive the count with
-`grep -c skipif task-tracker/*.py` rather than assuming it is still three. Criterion 5 keeps an
+`grep -h 'skipif(NODE is None' task-tracker/*.py | wc -l` rather than assuming it is still three.
+**Filter on `NODE`, not on `skipif`:** a bare `grep -c skipif` returns **15** and overcounts, because
+`test_server.py:556` guards on `os.geteuid() == 0` — root, not `node`. The node-guarded figure is
+**14** (3 in `test_store.py`, 11 in `test_ui_commands.py`), and it counts decorators, not tests.
+Criterion 5 keeps an
 unguarded Python sibling, so a node-less host still verifies it partially; criterion 15 has none,
 because the behaviour is browser JS end to end. On such a host task 13 reports criterion 15
 **not verified** — not passed, and not skipped-therefore-fine.
@@ -244,14 +248,18 @@ this branch and their identical figures are the evidence of that.
 executed. §Verification's degraded wordings above ("criterion 5 verified without a JS-engine oracle";
 criterion 15 **not verified**) are the node-less-host branch and did **not** apply to this run.
 
-⚠️ **The guard count re-derivation needs one filter the spec's command does not carry.**
-`grep -c skipif task-tracker/*.py` totals **15**, but one of them —
+⚠️ **The guard count re-derivation needed one filter the original command did not carry, and it has
+been fixed in place above.** `grep -c skipif task-tracker/*.py` totals **15**, but one of them —
 `test_server.py:556`, `skipif(os.geteuid() == 0, …)` — guards on **root**, not on `node`. The
 node-guarded figure is **14** (`grep -h 'skipif(NODE is None' task-tracker/*.py | wc -l`): 3 in
-`test_store.py`, 11 in `test_ui_commands.py`. Read literally, the spec's `grep -c skipif` overcounts
-the node guards by one; correcting that command is a spec edit, so it is queued for `review` with the
-other two. The number is decorators, not tests — that distinction does not matter here only because
-the skip count was zero.
+`test_store.py`, 11 in `test_ui_commands.py`. The number is decorators, not tests — that distinction
+does not matter here only because the skip count was zero.
+
+**This correction was *not* a spec edit, and an earlier revision of this section wrongly said it was.**
+The `grep -c skipif` instruction lives only in this `.md` half; the spec half contains no such command
+(`grep -n 'skipif' <spec>` returns two unrelated lines, one of which correctly scopes "three
+`test_store.py` tests"). So it was always editable under the phase gate and cost no compliance
+re-judge — unlike the two genuine spec corrections still queued.
 
 **`memsearch`'s golden and measurement tests did not run on either side, by configuration.**
 `memsearch/pyproject.toml` sets `addopts = "-m 'not golden and not measurement'"`, which is where the
