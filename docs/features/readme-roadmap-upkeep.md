@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
-branch: none
+branch: docs/readme-roadmap-task-tracker
 ---
 
 # README Roadmap upkeep after PR #51
@@ -38,7 +38,13 @@ assumed:
 
 ## Tasks
 
-- [ ] 1 — Edit the three Roadmap lines in `README.md`. No other file.
+- [x] 1 — Edit the three Roadmap lines in `README.md`. No other file.
+  - All three re-derived, not carried: PR #51 `MERGED` at `06e7c9d`; `phase-guard.sh` is a live
+    `Edit|Write|NotebookEdit` registration at `settings.json:42-50` on `origin/main`, not a mention;
+    `set-policy` is a real command branch at `panes/dispatch-pane-agent.sh:494`.
+  - "Proposes a merge order" checked against source, not the skills catalog: `_layer()` +
+    `_build_waves()` in `task-tracker/analyze.py:482-494` derive waves from `## Depends on` edges
+    with cycle detection.
 - [ ] 2 — Observability judge at `implementation` stage, then open the PR.
 
 ## Verification
