@@ -6615,3 +6615,38 @@ Committed `4294728`, pushed. Next is checklist step 7 — add stderr assertions 
 third `checkout_desc` rendering on rows 15/17, the remedy line per state, one empty-index assertion),
 then prove each assertion can fail by reverting one `printf` in the hook and confirming the matching
 assertion goes red before restoring it. No hook edits beyond that revert.
+
+## 2026-08-12 — session 64: git-guard-detached-head, checklist step 7 — stderr assertions, and the fixture bug they caught
+
+Restored on the same branch, `55a7140` clean, PR #52 still open/draft. Frontmatter (`phase:
+implementation`, `model_tier: low`, `branch: fix/git-guard-detached-head`) matched reality; nothing to
+reconcile. Context-handoff-watch fired at 75.7k tokens immediately on restore (system-prompt/skill
+overhead, not conversation growth) — offered the user a clear-first option, they chose to continue in
+this session instead.
+
+Added `assert_stderr()` to `hooks/git-guard.test.sh` — reruns the hook against the same fixture/command
+a `run_case`/`run_case_in` call just used and checks stderr, since those two only ever checked the exit
+code. 12 calls: the new mid-rebase `checkout_desc` rendering plus its state-4 remedy on rows 15 and 17
+(main and master), the remedy line for the other four observed states (rows 1, 2, 3, 4, 16, plus the
+named-branch/no-sequencer rows already in the suite), and the empty-index message.
+
+**The assertions caught a real, pre-existing fixture bug on the very first run — not a typo in their own
+text.** Row 1 passed on exit code alone (2) but for the wrong reason: the "tracked, COMMITTED pair" setup
+(added back in `e356ebf`, the row-15/17 measurement-scripts commit) committed whatever was in the index
+without resetting first. A leftover staged `src/app.sh`, left over from an earlier `stage src/app.sh`
+call on the `feature` branch, rode along into that commit and became permanently tracked. Every later
+`stage src/app.sh` writes identical content (keyed off the script's PID), so `git add` became a no-op —
+the guard was silently hitting the empty-index path instead of the disallowed-file path row 1 claims to
+exercise, and no test before this one could see it because none checked stderr. Root-cause fix: one
+`git -C "$REPO" reset -q` before the tracked-pair commit, scoping it to the two paths it actually names.
+
+**Mutation-proved all 9 backing printfs one at a time** (`hooks/git-guard.sh` lines 163, 209, 216, 221,
+222, 228, 233, 234, 305): corrupt one word, run the suite, confirm *exactly* the expected assertion(s)
+go red and nothing else, `git checkout -- hooks/git-guard.sh` to restore, confirm back to 108 passed/0
+failed before the next line. All 9 rounds isolated cleanly — no cross-talk between assertions, no
+unrelated exit-code row moved, `git diff hooks/git-guard.sh` empty after the last restore.
+
+Committed `f0e2405` (test file + feature-file checklist update together, satisfying doc-guard), pushed.
+Next is checklist step 8 — write ADR 0026, including the rebase-replay residual hole — then step 9
+(`rules/gates.md` stubs) and step 10 (observability judge, then the already-open PR #52; the verdict
+must stay uncommitted until the PR is open since `judge-guard` compares `head_sha` to HEAD).
