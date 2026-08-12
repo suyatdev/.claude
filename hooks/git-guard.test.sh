@@ -221,15 +221,27 @@ stage() { # $@ = paths to create and stage; no args = stage nothing
   done
 }
 
-run_case() { # $1 desc, $2 want-exit, $3 command string
-  local desc="$1" want="$2" cmd="$3" got
-  ( cd "$REPO" && payload "$cmd" | bash "$HOOK" >/dev/null 2>&1 )
+_run_case_common() { # $1 dir, $2 desc, $3 want-exit, $4 command string
+  local dir="$1" desc="$2" want="$3" cmd="$4" got
+  ( cd "$dir" && payload "$cmd" | bash "$HOOK" >/dev/null 2>&1 )
   got=$?
   if [ "$got" -eq "$want" ]; then
     printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
   else
     printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1))
   fi
+}
+
+run_case() { # $1 desc, $2 want-exit, $3 command string
+  _run_case_common "$REPO" "$1" "$2" "$3"
+}
+
+# Like run_case, but against a caller-supplied directory instead of the
+# module-level $REPO -- needed for rows whose fixture is its own repository
+# (a non-repo cwd, an unborn branch, a named-master checkout, an
+# apply-backend rebase) rather than a checkout state of $REPO.
+run_case_in() { # $1 dir, $2 desc, $3 want-exit, $4 command string
+  _run_case_common "$1" "$2" "$3" "$4"
 }
 
 # ---------------------------------------------------------------------------

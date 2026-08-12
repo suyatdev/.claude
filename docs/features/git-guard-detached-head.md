@@ -659,12 +659,22 @@ assertion. They are still cases and still run.
         confirmed it aborts with the mismatch reported, rather than passing silently.
       - `bash hooks/git-guard.test.sh` still reports **77 passed, 0 failed** — the new helpers are
         unwired so far and change no existing behavior.
-- [ ] **First add a `run_case_in <dir> <desc> <want-exit> <cmd>` variant.** The existing `run_case`
+- [x] **First add a `run_case_in <dir> <desc> <want-exit> <cmd>` variant.** The existing `run_case`
       hardcodes `( cd "$REPO" && … )` (`hooks/git-guard.test.sh:55`), so rows 3, 4, 5, 7, 18 and 19
       **cannot be expressed with it** — a non-repository cwd, an unborn-branch repo, a named-`master`
       repo and an apply-backend rebase all need their own directory. Written against plain `run_case`,
       row 3 would silently execute inside `$REPO` on `main` with source staged, exit 2, and **pass for
       entirely the wrong reason**. Tests only.
+      - Landed by factoring `run_case`'s body into `_run_case_common <dir> <desc> <want-exit> <cmd>`;
+        `run_case` now calls it with `"$REPO"` and `run_case_in` calls it with a caller-supplied `$1`.
+        Behavior of `run_case` is unchanged — `bash hooks/git-guard.test.sh` still reports **77
+        passed, 0 failed**, and no row yet calls `run_case_in` (that's checklist step 4).
+      - Verified standalone against a real non-repository directory (mechanism, not row-wiring): with
+        the hook unmodified, `run_case_in "$NONREPO" ... 2 'git commit -m msg -- src/app.sh'` reports
+        **FAIL — want 2, got 0**, exactly matching row 3's documented "Before" cell in the changed-cell
+        matrix above (the fix lands in checklist step 6). Confirmed the helper isn't vacuous by also
+        asserting `want 0` against the same fixture, which reported **ok** — proving both the
+        pass and FAIL paths reflect the hook's real exit code rather than a fixed result.
 - [ ] Add all **19** matrix rows as `run_case`/`run_case_in` lines. **Run them and confirm rows 1–5,
       15 and 17 fail while 6–14, 16, 18 and 19 pass**, capturing the output; a row in the "must fail"
       block that passes immediately is testing nothing, and that is exactly how two rows were misfiled
