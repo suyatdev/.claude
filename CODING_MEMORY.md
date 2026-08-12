@@ -6541,20 +6541,37 @@ meaningful once you know what it is ahead of.** Fast-forwarded `main` to `a0cae4
 the parallel-agent invariants forbid editing another worktree's files, but a `--ff-only` merge on a
 verified-clean checkout neither invents nor discards a commit.
 
-**Branch tips recorded before any deletion, so "abandoned" stayed recoverable:**
+**Branch tips recorded before any deletion, so "abandoned" stayed recoverable.** Every row was
+re-resolved after the deletions: the six deleted ones all still resolve (five via their surviving
+`origin/` ref, `backup-calibration-policy-propagation` via reflog, being local-only). **The one row
+that failed re-resolution was the branch that was *not* deleted** — `docs/post-merge-53` moved to
+`fc049ce` when this very entry was committed onto it. A recorded tip is a snapshot, and it is only
+stable for a branch nothing can still commit to; recording a *live* branch's tip in a recovery table
+was the category error. Struck through rather than updated, since the number was never the point.
 
 | branch | tip | unmerged commits |
 |---|---|---|
-| `docs/post-merge-53` | `a0cae407f9bae76443badcd27b7229a5f675ec94` | 0 (fully merged) |
+| `docs/post-merge-53` | ~~`a0cae407…`~~ **NOT DELETED — see below; tip has since moved past this** | 0 (fully merged) |
 | `docs/readme-roadmap-task-tracker` | `332e0267bfb3b9a7af74b75bc88f22526da80cba` | 0 (fully merged) |
 | `backup-calibration-policy-propagation` | `a25c43ccd2cceee420e4305d78169d422bad8448` | 1 |
 | `feature/cmux-version-gate` | `27d387784e57c965c940d501e137d38f980194fc` | 3 |
 | `feature/judge-terminal-enforcement` | `f933cca7b04424ac679fb2bd87881a9a49cf6fa2` | 13 |
+| `feat/tracking-feature-state` | `529456dc2e4be61f3a1cd4e77a25ce3749a21998` | 0 (fully merged) |
+| `docs/verify-before-claiming` | `23b7302ecae5c08dc66f7ea6eb2451b187ca69ce` | 0 (fully merged) |
 
 **User decision:** delete the three abandoned branches **locally only** — their `origin` copies stay as
 the real safety net, since a SHA in a document survives only until git garbage-collects the object.
 Merge status was re-derived with `git merge-base --is-ancestor` **at the moment of deletion**, not
 reused from the survey run minutes earlier.
+
+**I under-counted the merged branches when putting the choice to the user — said two, there were
+four.** `feat/tracking-feature-state` and `docs/verify-before-claiming` were also fully merged with
+zero unmerged commits; the survey's `branches[]` showed them, and I read `ahead 71` / `ahead 0` as
+distinguishing when both were measured against the stale local `main`. Reported as a correction rather
+than folded in silently, and deleted on a follow-up instruction. **An options list is a claim about
+the world, and it inherits every measurement error upstream of it** — the same stale baseline that
+inflated the `ahead` numbers also decided which branches got offered. Both deleted with `git branch -d`
+(not `-D`), so git itself would have refused had the merged claim been wrong.
 
 **Deletion order was load-bearing.** `docs/post-merge-53` is the branch this worktree is on, so removing
 it means going to a detached HEAD — and `git-guard.sh` **fails closed on a detached HEAD it cannot
