@@ -244,6 +244,20 @@ run_case_in() { # $1 dir, $2 desc, $3 want-exit, $4 command string
   _run_case_common "$1" "$2" "$3" "$4"
 }
 
+# Re-runs the hook against the same fixture/command a run_case/run_case_in call
+# just used, and checks stderr instead of the exit code -- neither of those checks
+# it. Written AFTER git-guard.sh already renders this text (docs/features/
+# git-guard-detached-head.md, "The message contract"), so each call below is only
+# trustworthy once proven able to fail -- see the checklist's mutation round.
+assert_stderr() { # $1 dir, $2 desc, $3 command string, $4 expected substring
+  local dir="$1" desc="$2" cmd="$3" want="$4" got
+  got="$(cd "$dir" && payload "$cmd" | bash "$HOOK" 2>&1 1>/dev/null)"
+  case "$got" in
+    *"$want"*) printf 'ok   — %s\n' "$desc"; pass=$((pass+1)) ;;
+    *) printf 'FAIL — %s\n  want (substring): %s\n  got:\n%s\n' "$desc" "$want" "$got"; fail=$((fail+1)) ;;
+  esac
+}
+
 # ---------------------------------------------------------------------------
 # Guard 1 — default-branch commit
 # ---------------------------------------------------------------------------
@@ -251,6 +265,8 @@ on_branch main
 stage src/app.sh
 
 run_case "plain commit, source staged on main -> block"      2 'git commit -m msg'
+assert_stderr "$REPO" "  ...remedy line matches state 1 (named branch, no sequencer), commit" \
+  'git commit -m msg' 'Create a feature branch instead (git switch -c <name>), or stage only documentation.'
 run_case "CHAINED commit, source staged on main -> block"    2 'git add -- src/app.sh && git commit -m msg'
 run_case "chained with ; separator -> block"                 2 'git add -- src/app.sh ; git commit -m msg'
 run_case "chained with || separator -> block"                2 'false || git commit -m msg'
@@ -312,6 +328,17 @@ on_branch main
 # A tracked, COMMITTED pair. `stage`-created files are untracked, and neither
 # `commit -a` nor `--amend` ever picks an untracked file up -- so without this
 # the -a cases below would pass for the wrong reason.
+#
+# reset FIRST: the prior section's `stage src/app.sh` (feature branch) leaves
+# that path staged, and a checkout to main carries a staged addition over
+# rather than dropping it. A bare `add -- src/tracked.sh docs/tracked.md`
+# commits the WHOLE index, not just the two paths named -- so without this
+# reset, src/app.sh rides along into this commit and becomes permanently
+# tracked with the exact content every later `stage src/app.sh` writes,
+# making every such call a no-op forever after. Caught by row 1's stderr
+# assertion: exit 2 was "correct" by accident (empty-index and
+# disallowed-path both exit 2), but the wrong one was firing.
+git -C "$REPO" reset -q
 mkdir -p "$REPO/src" "$REPO/docs"
 printf 'v1\n' > "$REPO/src/tracked.sh"
 printf 'v1\n' > "$REPO/docs/tracked.md"
@@ -360,6 +387,8 @@ run_case "chain stages source, commit names only docs -> allow"          0 'git 
 empty_index docs/tracked.md
 
 run_case "bare commit, empty index -> block"                             2 'git commit -m msg'
+assert_stderr "$REPO" "  ...message names the checkout and the empty index" 'git commit -m msg' \
+  "git-guard: the checkout is branch 'main', and nothing is staged -- so this commit is judged by the paths it names, and it names none that can be checked."
 run_case "commit -a, only docs modified, empty index -> block"           2 'git commit -a -m msg'
 run_case "chain stages DOCS, commit takes no pathspec -> block"          2 'git add -- docs/tracked.md && git commit -m msg'
 run_case "chain stages docs with -A -> block"                            2 'git add -A && git commit -m msg'
@@ -495,6 +524,8 @@ run_case "a file named PUSH_FORCE is not a force push -> allow" 0 'git commit -m
 
 on_branch main
 run_case "--force-with-lease on main -> block"               2 'git push --force-with-lease'
+assert_stderr "$REPO" "  ...remedy line matches state 1, push" \
+  'git push --force-with-lease' 'Push from a feature branch instead (git switch -c <name>).'
 run_case "--force-with-lease CHAINED on main -> block"       2 'git fetch && git push --force-with-lease'
 run_case "plain push on main -> allow"                       0 'git push'
 
@@ -556,14 +587,22 @@ git -C "$REPO" clean -fdq
 detached
 stage src/app.sh
 run_case "row 1: detached, source staged -> block"            2 'git commit -m msg'
+assert_stderr "$REPO" "  row 1: remedy line matches state 2 (plain detached), commit" \
+  'git commit -m msg' 'Create a feature branch first: git switch -c <name>. Commits made here belong to no branch.'
 run_case "row 2: detached, force-with-lease -> block"         2 'git push --force-with-lease origin HEAD:main'
+assert_stderr "$REPO" "  row 2: remedy line matches state 2, push" \
+  'git push --force-with-lease origin HEAD:main' 'Create a feature branch first: git switch -c <name>, then push it.'
 stage docs/notes.md
 run_case "row 6: detached, docs only staged -> allow"         0 'git commit -m msg'
 
 # Rows 3, 4 — not a git repository at all.
 NONREPO_DIR="$(nonrepo_dir)"
 run_case_in "$NONREPO_DIR" "row 3: non-repository, commit -- src/app.sh -> block" 2 'git commit -m msg -- src/app.sh'
+assert_stderr "$NONREPO_DIR" "  row 3: remedy line matches state 5 (not a repository)" \
+  'git commit -m msg -- src/app.sh' 'git-guard cannot judge this command from here. Run it from inside the target repository.'
 run_case_in "$NONREPO_DIR" "row 4: non-repository, force-with-lease -> block"     2 'git push --force-with-lease'
+assert_stderr "$NONREPO_DIR" "  row 4: remedy line matches state 5, push side" \
+  'git push --force-with-lease' 'git-guard cannot judge this command from here. Run it from inside the target repository.'
 
 # Row 5 — unborn main, source staged.
 UNBORN_MAIN_DIR="$(unborn_repo main)"
@@ -592,6 +631,10 @@ mkdir -p "$REBASE_EDIT_MAIN_DIR/src"
 printf 'x\n' > "$REBASE_EDIT_MAIN_DIR/src/app.sh"
 git -C "$REBASE_EDIT_MAIN_DIR" add -- src/app.sh
 run_case_in "$REBASE_EDIT_MAIN_DIR" "row 15: rebase-edit stop (main), source staged -> block" 2 'git commit -m msg'
+assert_stderr "$REBASE_EDIT_MAIN_DIR" "  row 15: checkout_desc names the mid-rebase branch (main)" \
+  'git commit -m msg' "a detached HEAD mid-rebase that will update 'main'"
+assert_stderr "$REBASE_EDIT_MAIN_DIR" "  row 15: remedy line matches state 4 (mid-rebase moving main), commit" \
+  'git commit -m msg' 'Let the rebase make this commit: git rebase --continue. Committing by hand here puts unreviewed work on main.'
 
 # Row 9 — cherry-pick stopped on a conflict, HEAD detached, conflict resolved and staged.
 CHERRY_DIR="$(cherry_pick_conflict)"
@@ -625,6 +668,8 @@ MERGE_CONFLICT_DIR="$(named_main_merge_conflict)"
 printf 'resolved\n' > "$MERGE_CONFLICT_DIR/app.sh"
 git -C "$MERGE_CONFLICT_DIR" add -- app.sh
 run_case_in "$MERGE_CONFLICT_DIR" "row 16: named main mid-merge, source staged -> block" 2 'git commit -m msg'
+assert_stderr "$MERGE_CONFLICT_DIR" "  row 16: remedy line matches state 3 (operation in progress), commit" \
+  'git commit -m msg' 'Finish the operation first (git rebase --continue, or git merge --continue); do not switch branches -- git will refuse.'
 
 # Row 17 — rebase --apply stopped, started from master: the carve-out's apply-backend bound.
 REBASE_APPLY_MASTER_DIR="$(rebase_apply_stopped master)"
@@ -632,6 +677,10 @@ mkdir -p "$REBASE_APPLY_MASTER_DIR/src"
 printf 'x\n' > "$REBASE_APPLY_MASTER_DIR/src/app.sh"
 git -C "$REBASE_APPLY_MASTER_DIR" add -- src/app.sh
 run_case_in "$REBASE_APPLY_MASTER_DIR" "row 17: rebase --apply stop (master), source staged -> block" 2 'git commit -m msg'
+assert_stderr "$REBASE_APPLY_MASTER_DIR" "  row 17: checkout_desc names the mid-rebase branch (master)" \
+  'git commit -m msg' "a detached HEAD mid-rebase that will update 'master'"
+assert_stderr "$REBASE_APPLY_MASTER_DIR" "  row 17: remedy line matches state 4 (mid-rebase moving master), commit" \
+  'git commit -m msg' 'Let the rebase make this commit: git rebase --continue. Committing by hand here puts unreviewed work on master.'
 
 # Row 18 — a checked-out branch literally named master.
 MASTER_DIR="$(master_repo)"
