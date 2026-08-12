@@ -655,3 +655,1830 @@ is now the part that is wrong.
 ### Waivers
 
 None. No violation has ever been waived for this spec.
+
+## Round 7 — 2026-08-10T01:58:16Z — **FAIL** (3 violations)
+
+- **Spec:** `docs/features/tracking-feature-state.md` (blob `ce97b6972cf226cac1f94136741c5b15b062a6a3`, 933 lines)
+- **Branch:** `feat/tracking-feature-state` @ `fe55b2d5052d85deb87283eab6c6545e17b56e40`
+- **Rule sources read:** `rules/core-conduct.md`, `rules/gates.md`, `CLAUDE.md`,
+  `skills/writing-specs/SKILL.md`, `skills/writing-secure-code/SKILL.md` (no `.claude/project-standards.md` in this repo)
+
+### Summary in plain language
+
+**Round 6's violation is fixed, and the class behind it is fixed too.** Criterion 13's pass condition
+is now set equality against two explicit path→status tables, `/tracker-data.js` → `404` sits in run
+(a)'s table where it belongs, and a correctly built server now passes. Set equality also closes the
+direction the old negative wording never covered. I rebuilt both tables from the real files and every
+row that is spelled out is right: the four `200`s, the two deliberate `404`s (`/tracker-data.js` in run
+(a), `/favicon.ico` in both) are the only `404`s, and run (b)'s two changes are correct — I confirmed
+`tracker-data-fallback.js:16` returns early when `window.TRACKER_DATA` is set, so
+`tracker-data.sample.js` genuinely drops out of the observed set. `writing-specs/good-bad-edge-cases`
+is **closed**.
+
+The bad news is that the same defect species surfaced one hop further out, and this time it is on the
+side of the closure the card has never examined: **not what the page requests, but what task 14's own
+vendoring work adds to the servable set, and what headers those responses need.** Three concrete gaps,
+all in the manifest the card insists is "an explicit list, not a grep":
+
+1. **Static assets have no `Content-Type`.** The card specifies `Content-Type: text/html` for `GET /`
+   and nothing at all for the six static rows. Chrome refuses to apply a stylesheet served with a
+   non-CSS MIME type, so criterion 13's own "with the UI rendering the sample" clause depends on a
+   header the contract never states. Everything else about these responses is pinned to the byte; this
+   is the one field missing.
+2. **The file that defines `window.__resources` is on no list.** §Security's vendoring mechanism says
+   "define that map before `support.js` loads", and I verified the hook works exactly as described
+   (`support.js:1149-1153`, `cdnScriptFor` reads `window.__resources[url]`). But the obvious
+   implementation — an inline `<script>` in `Task Tracker.dc.html` — is **forbidden by the card's own
+   CSP**: `script-src 'self' 'unsafe-eval'` carries no nonce and no `'unsafe-inline'`, so an inline
+   script is blocked. The map must therefore live in a separate served file, and that file appears
+   neither on the §Design 3 manifest nor in either criterion 13 table. It is not covered by the
+   *"(task 14's vendored assets)"* row either — it is a new first-party shim, the same species as
+   `tracker-data-fallback.js`, which the card lists as its own explicit row.
+3. **Task 14 stops one hop short on the Inter font.** For `@phosphor-icons` the card correctly says
+   "the icon font files they reference must come along, or the CSS resolves to nothing". For Google
+   Fonts it says only "rewrite the `@import`" — but that `@import` fetches a stylesheet from
+   `fonts.googleapis.com` whose `@font-face` rules point at `fonts.gstatic.com` woff2 files, so Inter
+   is a **two**-hop asset where phosphor is one. Rewriting only the `@import` leaves the page still
+   fetching fonts from a third-party host, failing criterion 13's "no request goes to a host other
+   than `127.0.0.1`". This is verbatim the failure the card documents at lines 278-284: *"One hop was
+   followed, the next was not."*
+
+None of the three is silent — criterion 13 catches all of them, which is the design working. But they
+are unbuildable-as-written instructions handed to task 14, and the card's standard is that the
+implementer has nothing left to guess at.
+
+**Second finding: the card now contradicts an ADR it defers to.** §Security:478-480 says the
+parent-death check runs "on the same timer that drives the idle check". ADR 0024:38-41 says it "gets
+its own interval **rather than riding the 30-minute idle timer**" — and explicitly records that "on the
+idle timer" was a first-draft error it corrected. Rounds 5 and 6 both noted this as a reconcilable
+wording split and did not cite it. Having now read the ADR, it is not reconcilable: the ADR names that
+exact phrasing as a bug it fixed, and the card kept it. The card says at lines 123-125 that the ADRs
+hold the *why* and the card holds the *what*; here the two *whats* disagree, and the card's own next
+paragraph warns that the 30-minute reading "would have made the worst case half an hour of an orphaned
+full-permission control channel". The card contains both the error and the warning against it, six
+lines apart. **Cited this round** — this is the card's signature defect (a fact corrected in one copy
+and not the other), and it has now survived two rounds as a note.
+
+**Third finding: the bind boundary has no error behaviour.** Every other boundary in this card is
+exhaustive — eleven wire-error rows, five analyzer-failure rows, a `cmux send` timeout, a store-write
+failure. The first boundary the server crosses, `bind()`, has none. Port 8422 already in use is not
+exotic here: `core-conduct`'s parallel-agent invariants state that multiple sessions run concurrently
+in worktrees, and two sessions each running the skill collide on a fixed port. The failure is also
+confusing rather than clean — the second launch dies while the user's browser still reaches the *first*
+server on `http://127.0.0.1:8422/`, holding a different in-memory token, so the UI loads and every
+button `403`s with the card's deliberately uninformative collapsed error.
+
+**On the card's size, which I was asked to judge directly: no rule is breached, and I am not citing
+it.** `rules/gates.md` makes a single `docs/features/<name>.md` the default and makes the `.spec.md`
+split a MAY; `core-conduct`'s 400/800 limit sits under **Code Style** and governs code files. But the
+trend is real — 933 lines, up from 901, 851 and 813, growing every round — and roughly 110-120 lines
+(~12%) is now forensic narrative about earlier judge rounds rather than buildable requirement:
+lines 18-29, 240-254, 270-289, part of 503-517, 627-630, 644-653, 676-685, 905-912, and the 20-line
+§Revision history at 914-933 that exists to explain why an 86-line narrative was deleted.
+`writing-specs` pulls both ways here — it calls the human review gate "the whole point" and warns that
+"bloat degrades reasoning" — and the card's defence (warnings belong beside the thing that would
+produce the error again) is genuinely sound for the two `grep`-scope corrections and the
+`rename-tab`-vs-`send` distinction. It is much weaker for §Revision history, which narrates a deletion,
+and for the round-by-round histories now duplicated in the verdict files the card itself points at.
+Recommendation: trim §Revision history to two sentences and cut the round-attribution prose from
+criterion 13 and §Design 3, keeping the substantive warnings. That is ~60 lines with no loss of
+buildable content.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | Database schemas and API contracts — give the agent the real interface boundaries instead of letting it improvise shapes | §Design 3 "Wire contract" static manifest (card:256-291), criterion 13 runs (a)/(b) (card:655-685), task 14 (card:796-816), against the CSP at card:208 | The static-serving contract is incomplete in three ways that criterion 13's set equality cannot be run against: no `Content-Type` is specified for any static asset (only for `GET /`), though the criterion asserts the UI renders; the file that must define `window.__resources` is absent from the manifest and both expected sets, and the card's own CSP (`script-src 'self' 'unsafe-eval'`, no nonce) forbids the inline alternative; and task 14 names the phosphor font files as required but omits the equivalent second hop for Inter, whose Google Fonts stylesheet resolves to `fonts.gstatic.com` woff2 files. |
+| 2 | `writing-specs/ambiguous-requirement` | `skills/writing-specs/SKILL.md` | Maintain the spec with production rigor; drift causes hallucination — a requirement must not be readable two ways | §Security, bounded-lifetime bullet (card:478-480) vs. `docs/decisions/0024-the-control-server-must-be-accountable.md:38-41` | The card says the parent-death check runs "on the same timer that drives the idle check" while ADR 0024 — which the card names as authoritative for this decision — says it "gets its own interval rather than riding the 30-minute idle timer" and records that exact phrasing as a first-draft error it corrected, so the two authoritative documents now disagree on the control's tick length. |
+| 3 | `core-conduct/explicit-error-handling` | `rules/core-conduct.md` | Handle errors explicitly, never swallow them; validate all input at system boundaries | §Security bind bullet (card:446), port allocation (card:544), task 8 (card:732-741) | The server's first boundary has no stated failure behaviour for a port already in use, which `core-conduct`'s parallel-agent invariants make a normal case on a fixed port, and the resulting state is misleading rather than clean — the second launch dies while the browser still reaches the first server holding a different in-memory token, so every button returns the deliberately collapsed `403`. |
+
+**`writing-specs/api-contracts` is a recurrence of the class closed at round 5** (cited rounds 1-4 for
+the manifest being a `grep` rather than a table). The table fixed *how* the manifest is derived; this
+round finds the table itself short three entries and one field. **`core-conduct/explicit-error-handling`
+was cited at round 5 and closed at round 6** in a different territory (`500 asset_unreadable`); this is
+a new instance of the same rule, not the old one reopened.
+
+### Notes
+
+- **Round 6's violation is closed and so is its class.** Set equality is the right instrument and both
+  tables are correct as far as they are enumerated. Verified by hand: `Task Tracker.dc.html` lines
+  6, 11, 12, 15, 16 are the five parser-inserted requests; `tracker-data-fallback.js:19` is the sixth
+  via `document.write`, gated by the early return at line 16.
+- **The `_ds/` two-file enumeration is still correct**, and the three excluded files really are
+  unrequested — `find _ds -type f` returns exactly five: `styles.css` and `_ds_bundle.js` (both on the
+  manifest) plus `_ds_manifest.json`, `_adherence.oxlintrc.json` and `readme.md` (correctly off it).
+  `nocturne.css`'s exclusion remains correct: only the unserved Directions file loads it.
+  `_ds_bundle.js` contains no `url(`, no `http`, no `fetch` — it adds no further requests.
+- **Defining `window.__resources` has a side effect the card does not mention.** `support.js:158-163`
+  issues a second `GET /` (`fetch(location.href)`, a template refresh) **only when
+  `window.__resources` is falsy**. So task 14 suppresses it, which is what makes round 6's "out of
+  scope" call correct — after task 14 there is exactly one `GET /`, matching criterion 13's tables. But
+  the card presents the `__resources` hook as resolving scripts "with no edit to vendored code" and
+  does not note that it also disables a runtime behaviour. Benign; worth one clause.
+- **`base-uri`/`form-action` — downgrading this from a standing note to closed-as-low-value.** I
+  checked the actual attack surface: `grep -c '<form'` on the served page is **0**, so `form-action`
+  guards nothing, and a `<base>`-tag redirect would send relative fetches to a foreign origin where
+  `default-src`/`script-src 'self'` already blocks them. Two tokens of defence-in-depth, not a gap.
+- **Static-error body shape (standing note) will be resolved by violation 1.** The
+  `{"ok": false, "error": "<code>"}` envelope is introduced under `POST /command` but the `404`/`405`/
+  `500` rows govern static `GET`s too, so a browser receives JSON for `/favicon.ico`. Harmless, and
+  specifying `Content-Type` per response class closes the ambiguity in the same edit.
+- **CSP vs. the vendored page's inline attributes — unverified, and I am not claiming either way.**
+  `Task Tracker.dc.html` carries one `<script type="text/x-dc">` data block (line 297) and many
+  `onClick="{{ … }}"` content attributes. The data block is a non-executable script type, so CSP does
+  not gate it. The `onClick` attributes are template syntax the DS runtime consumes, but the browser
+  parses them as inline event handlers, which `script-src` without `'unsafe-inline'` refuses to run;
+  whether Chrome compiles them before the runtime replaces the `<x-dc>` subtree I did not test.
+  Criterion 13's "the UI renders" clause is what would catch it — recommend the operator reads the
+  console during that run, not only the request list.
+- **The `405` row is readable two ways** (card:323): "Any method other than `GET` on `/` or on a
+  static-closure path, or `POST`/`OPTIONS` on `/command`" can parse as `405`-ing the only working
+  route. Criterion 12 and card:334 resolve it unambiguously, so not cited — but it is a five-word fix.
+- **`_ds/nocturne-<uuid>/` is never expanded in the card.** The real value is
+  `73641b21-c7ad-488a-8264-a28262dfe83e`; the "explicit list" therefore still needs one `ls`. Consistent
+  with the card's derivations discipline, so acceptable.
+- **Claims re-verified against source this round, all exact:** the six remote assets across nine
+  reference sites (react 1, react-dom 1, babel 1, phosphor regular 2, phosphor fill 2, Google Fonts 2)
+  ✓; `new Function` in `support.js` is exactly **2** ✓; `REACT_URL`/`REACT_DOM_URL`/`BABEL_URL` at
+  `support.js:1143/1145/1147` each carry a `sha384` SRI ✓; `cdnScriptFor` behaves as described (and
+  drops `integrity` when a local `src` is substituted, which is correct) ✓; ADRs 0022, 0023, 0024 all
+  exist ✓; `analyze.py` is **792** lines ✓.
+- **`analyze.py` at 792 lines has eight lines of headroom** under `core-conduct`'s 800 hard max, and
+  both tasks that write it (3 and 5) are complete, so that is its final size. The card's posture —
+  split named (`git_facts.py`), explicitly not scheduled, human-owned — is correct and not a violation.
+  But "raise it if the file grows again" has effectively already fired: the next edit breaches the cap.
+- **Gherkin shape**, seventh round running: several criteria fold `When` into `Given`. Still not cited.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
+
+---
+
+## Round 8 — 2026-08-10T02:44:28Z — **FAIL** (2 violations)
+
+- **Spec:** `docs/features/tracking-feature-state.md` (blob `566da22a005bf0edc466ba4a836e2740d24c52e4`, 1080 lines)
+- **Branch:** `feat/tracking-feature-state` @ `ca3e07943756df628a02bd636069e4ef36a7bef0`
+- **Rule sources read:** `rules/core-conduct.md`, `rules/gates.md`, `CLAUDE.md`,
+  `skills/writing-specs/SKILL.md`, `skills/writing-secure-code/SKILL.md`
+  (no `.claude/project-standards.md` in this repo)
+- Round 7's three: **2 closed, 1 re-cited on the surface one hop past where it was fixed.**
+  1 new instance of a previously-cited rule, on the control this revision introduced. Waived: none, ever.
+
+### Summary in plain language
+
+**Two of round 7's three are properly closed, and I checked them against the sources rather than
+against the card's own account of itself.**
+
+The ADR contradiction is gone. `docs/decisions/0024-…:38-41` says the parent-death check gets "its own
+`5`-second poll (`TASK_TRACKER_POLL_SECS`, minimum 1s, may not be disabled)" and records "on the idle
+timer" as a first-draft error; the card now says exactly that and names the ADR as authoritative in the
+same sentence. `writing-specs/ambiguous-requirement` is **closed**.
+
+The bind boundary is gone too. `EADDRINUSE` is a startup abort naming the port, explicitly with no
+probing for a free one, any other bind error aborts naming the `errno`, and task 9 asserts it the way
+that matters — second server exits non-zero having served nothing, *first server still answers with its
+original token*. The reasoning for refusing to fall back (two servers, browser on the first, token from
+the second, every button returning the deliberately collapsed `403`) is the right reasoning. That
+instance is **closed**.
+
+Every fresh factual claim in this revision reproduces. `support.js` really is the page's first script,
+at `Task Tracker.dc.html:6`, with nothing above it — so `vendor-resources.js` genuinely has to load
+ahead of it. The CSP genuinely carries no nonce and no `'unsafe-inline'` in `script-src`, so the
+inline-block alternative really is forbidden by the card's own policy. I fetched the Google Fonts
+stylesheet with the browser UA the card specifies: **28** woff2 URLs, `4 cyrillic, 4 cyrillic-ext,
+4 greek, 4 greek-ext, 4 latin, 4 latin-ext, 4 vietnamese` — 7 subsets × 4 weights, and `latin` is
+exactly 4 of them. `vendor-resources.js` appears in all five places a reader would look (manifest row,
+§Design 3 prose, §Security vendoring mechanism, criterion 13 run (a), task 14) and contradicts itself
+nowhere. All four re-checkable toolchain pins match this host exactly (`3.9.6`, `0.11.28`,
+`0.64.20 (100) [14e3400b9]`, `v26.5.0`). `tracker-data-fallback.js:16`/`:19` are as described.
+
+**The static contract is still not completable, and it failed at the one hop the card fixed for Inter
+and not for phosphor.** §Security's own ⚠️ names both second hops in one sentence — "the phosphor icon
+font files, and Inter's **28** `fonts.gstatic.com` woff2 URLs" — then task 14 gives Inter a measured
+count, a reproducing command and an explicit `latin`-only scope decision, and gives phosphor the same
+one-line instruction it had before: "the icon font files they reference must come along". I fetched
+both phosphor stylesheets. Each declares **four** `src` formats for its family:
+
+```
+url("./Phosphor.woff2") format("woff2"), url("./Phosphor.woff") format("woff"),
+url("./Phosphor.ttf") format("truetype"), url("./Phosphor.svg#Phosphor") format("svg")
+```
+
+and `fill/style.css` is the same shape for `Phosphor-Fill`. So the literal instruction adds **eight**
+files, and two independent rules in this card break on them:
+
+1. **Six of the eight carry `.woff`, `.ttf` or `.svg`,** none of which is in the fixed extension map
+   (`.js`, `.css`, `.html`, `.woff2`). The card's rule for that case is not a `500` — it is
+   "**aborts at startup**". Built to the card as written, the server does not start.
+2. **A browser fetches exactly one format from a `src:` list** — the first it supports, i.e. the
+   woff2. So six vendored files are never requested, while criterion 13's expected set says
+   "each of task 14's vendored assets | `200`". The pass condition is set equality. **A correct
+   implementation fails criterion 13.** That is verbatim the round-6 shape ("a correctly built server
+   cannot pass criterion 13 run (a)"), relocated from the store state to the vendored rows. The same
+   hazard applies to Inter: `@font-face` files are fetched lazily per weight actually rendered, so
+   four vendored latin weights are not four guaranteed requests.
+
+Two smaller members of the same gap: the rewritten Inter `@import` has no stated target — a served
+`inter.css` (a new manifest row, needing a `Content-Type`) or `@font-face` blocks inlined into
+`styles.css` are different servers — and the vendored assets have no stated paths, so the row that
+completes the manifest cannot be predicted, only discovered.
+
+**The second finding is the newest control in the card, and it arrived the way the audit log, the
+parent-death check and `asset_unreadable` each arrived: described in prose, absent from every table.**
+Task 1's fourth probe was the important one — a ref that resolved, at exit 0, with `OK` on stdout, to
+the **wrong live Claude session**. The card draws the right conclusion and promotes send-time
+**identity** confirmation to the primary control, demoting criterion 9's re-resolution to defence in
+depth. But that control introduces a new subprocess boundary — reading the target surface — and it has:
+
+- **no status row.** The table's `409 unresolved_surface` is defined as "ref did not re-resolve"; the
+  failure this control exists for is a ref that *does* re-resolve. There is no code for it.
+- **no audit `reason` value.** The enumeration is `bad_token, unknown_id, origin_mismatch,
+  host_mismatch, malformed, too_large, unsupported_media_type, unresolved_surface, send_failed,
+  reanalyze_failed, -`. The log's stated purpose is letting an operator tell one refusal from another,
+  and the single most important refusal this card added cannot be written down.
+- **no behaviour when the read itself fails** — non-zero exit, or a timeout (`cmux send` has a
+  5-second one; the read has none). The card documents at line 456 that `read-screen` exits 1 against
+  an `agent-session` surface, so this is a case it has already met and not routed.
+- **no comparison basis.** "Verify it is the intended session" does not say what is compared, nor
+  where the intended target comes from. §Verification records that `cmux identify` returned
+  `surface_ref: null` on this host, which removes the obvious mechanism; §"Injection route" mentions
+  `$CMUX_SURFACE_ID` is inherited but only as the *default* an omitted `--surface` falls back to.
+  Task 9 says "assert the identity confirmation itself" — with no definition, two implementers write
+  two different checks and both pass their own test.
+
+**On card size, asked directly: no rule is breached and I am not citing it, for the third round
+running.** `rules/gates.md` makes `docs/features/<name>.md` the default and the `.spec.md` split a
+**MAY**; `core-conduct`'s 400/800 limit sits under **Code Style** and governs code files. But 1080
+lines is +147 this round and the sixth consecutive rise, and I now put the round-attribution and
+forensic-narrative content near ~130 lines. The author's reasoning for keeping the two `grep`-scope
+warnings and the `rename-tab`-vs-`send` distinction beside the code that would reproduce them is
+sound and I would keep those. §Revision history (20 lines narrating a deletion) and the round
+attributions inside criterion 13 and §Design 3 are a third copy of what these verdict files and the
+commit messages already hold. `writing-specs` calls the human review gate "the whole point" — the
+argument for trimming is that a reviewer must finish the document, not that the document is illegal.
+Recommendation unchanged from round 7: ~60 lines, no buildable content lost.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/api-contracts` | `skills/writing-specs/SKILL.md` | Database schemas and API contracts — give the agent the real interface boundaries instead of letting it improvise shapes | §Design 3 static manifest + fixed extension map (card:256-275), criterion 13 runs (a)/(b) (card:741-772), task 14 phosphor bullet (card:921-922), §Security asset table ⚠️ (card:618-623) | The phosphor second hop is still unenumerated while Inter's now is: each `@phosphor-icons/web@2.1.1` stylesheet declares four `src` formats (`.woff2`, `.woff`, `.ttf`, `.svg` — verified live 2026-08-10), so task 14's literal "the icon font files they reference must come along" adds eight rows, six of them carrying extensions absent from the fixed `Content-Type` map — which the card says **aborts the server at startup** — and six of them never requested by a browser, which fails criterion 13's set equality against "each of task 14's vendored assets → `200`" for a *correct* implementation; the rewritten Inter `@import`'s target file and the vendored assets' served paths are likewise unnamed, so the manifest still cannot be completed before the work rather than during it. |
+| 2 | `core-conduct/explicit-error-handling` | `rules/core-conduct.md` | Handle errors explicitly, never swallow them; validate all input at system boundaries | §"Injection route" identity paragraph (card:441-451), §Security "Confirm the target surface at send time" (card:627-628), §Design 3 status table (card:339-349) and audit `reason` enumeration (card:383-384), task 8 (card:830-832), task 9 (card:867-875) | Send-time identity confirmation — promoted this revision to the primary safety control — introduces a new subprocess boundary with no stated failure behaviour: no status row (`409 unresolved_surface` covers a ref that did **not** resolve, not one that resolves to the wrong session), no `reason` value so the log cannot record this card's most important refusal, no timeout and no stated outcome when the read exits non-zero (which the card itself documents happens against an `agent-session` surface), and no definition of what "the intended session" is compared against — the mechanism the card's own §Verification rules out (`cmux identify` returning `surface_ref: null`) being the obvious one. |
+
+**Recurrence, stated plainly for the escalation decision.** Both ids are second consecutive citations,
+and neither is the round-7 instance reopened:
+
+- `writing-specs/api-contracts` — cited rounds 1-4 (manifest derived by `grep`), closed round 5,
+  re-cited round 7 (no `Content-Type`, missing `__resources` file, Inter's second hop), all three of
+  which are **fixed and verified fixed**. This round is the *fourth* distinct instance of one class:
+  the static-asset contract is complete for everything the page requests today and incomplete for
+  everything task 14 will add. The territory is identical, so the id is reused.
+- `core-conduct/explicit-error-handling` — cited round 5 (`asset_unreadable`), closed round 6;
+  cited round 7 (bind), **closed this round**; cited now on the send-path identity check. Three
+  instances, three different boundaries, one class: a control lands in prose in the round that
+  introduces it and reaches the tables a round later. Id reused for that class, per the round-7
+  precedent in this file.
+
+Closed this round and not re-cited: `writing-specs/ambiguous-requirement` (round 7 — card now defers
+to ADR 0024 explicitly and the wording matches). Still closed: `writing-specs/good-bad-edge-cases`
+(round 7), `writing-specs/pinned-versions` (round 6), `writing-secure-code/csp` (round 4),
+`core-conduct/secrets-not-client-side`, `core-conduct/no-absolute-paths`,
+`writing-specs/no-placeholders`, `writing-specs/diagrams` (rounds 1-2).
+
+### Notes
+
+- **The round-7 UNVERIFIED CSP note is now resolved, and it resolves benign.** `support.js:318` maps
+  `onclick → onClick` inside `encodeCase`, the `<x-dc>` subtree is lifted via `template.innerHTML`
+  (`support.js:468-470`) and compiled through Babel into `React.createElement` calls
+  (`support.js:1211-1218`), so the handlers the user actually clicks are React props, not DOM inline
+  handlers — `script-src` without `'unsafe-inline'` does not gate them. What the browser *will* do is
+  refuse to compile the literal `onClick="{{ … }}"` content attributes it parsed, emitting CSP
+  violations to the console for markup that is template source and is replaced before it matters
+  (and `{{ t.toggle }}` is not valid JS anyway, so nothing is lost). **Worth one clause in the card:**
+  criterion 13's operator will see red console errors on a passing run, and an unexplained console
+  error is how a correct run gets reported as a failure.
+- **`base-uri`/`form-action` — reconfirmed closed as low-value**, on the same evidence as round 7: no
+  `<form>` on the served page, and a `<base>` redirect sends relative fetches to an origin
+  `default-src`/`script-src 'self'` already blocks.
+- **Static-error body shape (standing note) is now half-resolved.** Violation 1's `Content-Type` work
+  landed for the success path; the `404`/`405`/`500` rows still govern static `GET`s, so
+  `/favicon.ico` receives a JSON envelope. Harmless, one sentence to state.
+- **Set equality has a lazy-fetch assumption the card should state once**, beyond violation 1: font
+  files are requested per weight/format actually rendered, so any expected-set row for a font is a
+  claim about rendering, not about vendoring. Naming that is what stops the next round rediscovering
+  it from the other side.
+- **`.svg` deserves a decision, not a map entry.** If phosphor's SVG fallback is vendored and served
+  from the token-bearing origin, `image/svg+xml` from `'self'` is script-capable markup on the origin
+  that holds the credential. Dropping the `.svg` and `.ttf` sources (rewriting the `src:` list to
+  woff2-only) is the smaller-surface answer and matches the Inter `latin`-only precedent.
+- **Claims re-verified against source this round, all exact:** `support.js` is the first script,
+  `Task Tracker.dc.html:6` ✓; `_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/` is the single
+  `_ds` directory, `styles.css` + `_ds_bundle.js` requested at lines 11-12 ✓; CSP has no nonce and no
+  `'unsafe-inline'` in `script-src` ✓; Inter = 28 woff2, 7 subsets × 4 weights, `latin` = 4 ✓;
+  `tracker-data-fallback.js:16` early return, `:19` `document.write` of `tracker-data.sample.js` ✓;
+  `window.TRACKER_DATA_SOURCE = 'sample'` at `:18`, matching criterion 13(a) ✓; ADR 0024's 5-second
+  own-poll wording ✓; Python `3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0` ✓.
+- **`analyze.py` remains at 792 lines**, eight under the hard max, split named and explicitly
+  unscheduled as a human-owned call. Correct posture, unchanged.
+- **Gherkin shape**, eighth round running: several criteria fold `When` into `Given`. Still not cited.
+
+### Waivers
+
+None. No violation has ever been waived for this spec.
+
+---
+
+## Round 9 — 2026-08-10 — **PASS** (terminal round, user-authorised)
+
+`head_sha` `4775afd4e09392415a074a4c2dde6e34db6f0521` · branch `feat/tracking-feature-state` ·
+spec blob `716548b733199ec75719163774aed75b389a938e` · confidence **high**
+
+### Layman summary
+
+Both problems the last round found are genuinely fixed, and I checked them by re-running the
+measurements myself rather than reading the card's word for it.
+
+The first problem was that the spec's own pass/fail test was impossible to pass. It told the
+implementer to bring along "the icon font files" a stylesheet references, and left the list of those
+files blank for a later task to fill in — so a developer who followed the instruction exactly would
+ship eight font files when the test only expected two, and would fail. The spec now names all nine
+files up front, and makes an explicit decision to ship only the modern `.woff2` format. I fetched the
+real stylesheets to check: the icon stylesheet does list four formats in one line as claimed, and the
+Google Fonts stylesheet really does contain 28 references that resolve to only 7 actual files — the
+card's earlier "4 files, one per weight" was wrong and the corrected "one file" is right. I then
+diffed the spec's two copies of the file list against each other: identical.
+
+The second problem was the safety control that stops the server typing into the wrong Claude session.
+Last round it said "confirm the target" without saying what the target was compared *against*, what
+happens if the check errors, or how long to wait. The fix is better than a patch — it deletes the
+guesswork entirely. The server now takes the session's own ID from the environment it was launched
+in, rather than trying to work out which session it belongs to. I confirmed that environment variable
+is set and holds the right kind of value. Every failure now has a stated outcome: three ways the
+server refuses to even start, three ways a send is refused, each with an HTTP code, a log reason, and
+a matching test in the same task that builds it. Critically, "I couldn't check" is treated as "refuse",
+not "probably fine" — which is the failure that would otherwise be silent.
+
+The card grew again (1080 → 1204 lines), the seventh straight round. I am not scoring that a
+violation, and I say why below rather than leaving it implied.
+
+### Violations
+
+**None.** Both persistent ids from round 8 are closed on the merits.
+
+| Prior id | Status | Evidence I re-measured |
+|---|---|---|
+| `writing-specs/api-contracts` | **closed** | Phosphor `regular/style.css`: exactly 1 `@font-face`, 4 `src` formats (`./Phosphor.woff2`, `.woff`, `.ttf`, `.svg#Phosphor`) — the card's "delete the three non-woff2 `src` entries so the relative `./` resolves unchanged" is exactly right. Inter: 28 `woff2` references / **7** distinct files / 28 `@font-face` blocks, and the `latin` subset is **one** file shared by all four weights. `diff` of the §Design 3 manifest (16 rows) against criterion 13 run (a) (18 rows) minus `/` and `/favicon.ico`: **identical**. All manifest extensions (`.js`/`.css`/`.woff2`) present in the fixed map. Six remote assets across nine reference sites; phosphor `<link>`s at `*.dc.html:13-14` in **both** files; Inter `@import` at line 2 of **both** `nocturne.css` and `_ds/nocturne-<uuid>/styles.css`. A correctly built server now passes criterion 13. |
+| `core-conduct/explicit-error-handling` | **closed** | The basis of comparison now exists: `$CMUX_SURFACE_ID` verified live in this environment as a bare UUID (`7C0A4E33-…`), inherited rather than inferred. Three startup aborts (unset/empty; `read-screen` non-zero, which folds in the `agent-session` case; probe >5s), each naming its cause and serving nothing. Three send-time outcomes tabulated with wire code + audit `reason` + `sent` value; `confirm_failed`/`confirm_timeout` added to the `reason` enumeration (card:400) and to the `502` row (card:364). Could-not-confirm is **refused**, not assumed fine (card:700-703) — the one branch whose absence would have been silent. Six matching assertions in task 9 (card:966-977), in the same task that builds the control. |
+
+### Notes (non-blocking)
+
+- **Card growth, scored plainly: not a violation, and here is the honest arithmetic.** 1080 → 1204,
+  a seventh consecutive rise. `writing-specs` §"Tokenization Is a Hard Constraint" names *redundant
+  `Given/When/Then` blocks* as the offender it is aimed at; this growth is ~180 lines of two
+  enumerated **contracts** — the nine `vendor/` rows written into both lists, and the two
+  surface-check tables — which were the literal substance of both cited violations. Neither is
+  boilerplate, and removing either re-opens a violation. Against that, ~55 lines of round-forensics
+  prose came out. Net verdict: length earned. **But the trend now warrants a human call rather than
+  another judge round**: `rules/gates.md`'s `.spec.md` split is a MAY keyed to "the checklist file
+  stops reading comfortably in one pass", and at 1204 lines that threshold is arguably met. The
+  standing trim candidate is unchanged — the ⚠️ paragraphs narrating how prior rounds got things
+  wrong (roughly card:240-251, 272-279, 302-325, 802-808, 835-859) are ~120 lines of forensics that
+  a `.spec.md` half could carry.
+- **Gherkin shape — DROPPED, permanently, with reasoning; future rounds should not carry it.**
+  Criteria 2, 3, 4 and 5 fold `When` into `Given`. I decline to cite it, and this is a resolution
+  rather than another deferral: in all four the trigger is unambiguous from context (the analyzer
+  running; the re-analysis; the interrupted write, whose `When` sits in its own assert clause), so
+  the rule's stated purpose — "the format exposes the gap while it is still cheap to close" — is
+  already served. `writing-specs` simultaneously names redundant `Given/When/Then` as the primary
+  token offender, so enforcing the literal shape here would trade tokens for zero correctness gain.
+  Eight rounds of carrying it as a note was the wrong disposition; it is closed.
+- **CSP `onClick` — now VERIFIED (round 8 left it inferred), and the card should say one sentence.**
+  `<x-dc>` at `Task Tracker.dc.html:9` is a **live element in the body**, not a
+  `<script type="text/x-dc">` — that type appears only at line 297, on a nested props block — so the
+  HTML parser does parse the 20 `onClick` attributes into `onclick` inline handlers on real DOM.
+  Under this card's CSP (no `'unsafe-inline'` in `script-src`) Chrome refuses them and logs console
+  violations. `support.js:318` maps `onclick → onClick` in `encodeCase` and the subtree is lifted via
+  `template.innerHTML` (`:468-470`) and compiled through Babel (`:1211`), so the *live* handlers are
+  React props and the UI works — the violations are console noise only. Recommend one clause in
+  criterion 13 so the operator does not report a passing run as a failure.
+- **Host-mismatch has an audit `reason` but no wire status row.** Card:231 states the behaviour
+  ("Reject any request whose `Host` header is not `127.0.0.1:<port>`") and card:399 lists
+  `host_mismatch` among audit reasons, but the §Design 3 `403 forbidden` row enumerates a **closed**
+  list of three causes that does not include it. `403` is safely inferable from the neighbouring
+  reasons; the gap is that the table claims completeness. One-word fix, not cited.
+- **`reanalyze` is the one subprocess boundary the tightening pass did not reach.** `cmux send`,
+  `read-screen` and `cmux tree` each carry an explicit 5-second bound; the analyzer invoked by
+  `reanalyze` carries none, so a wedged `git` (plausible in a repo that deliberately runs parallel
+  agents across worktrees) hangs the request. The card's own standard argues for a bound —
+  "never awaited indefinitely" (card:375) and "an unbounded probe is a server that neither starts nor
+  reports why" (card:685). Low materiality: a hang is visible to the operator, not silent, which is
+  why it is a note and not a citation.
+- **`.html` in the fixed extension map is unused.** No manifest row is `.html` (`GET /` sets
+  `text/html` directly at card:201), so "those four extensions cover every row above with none left
+  over" (card:290) holds in one direction only. Harmless.
+- **Inter `unicode-range` is unstated.** Task 14 (card:1074-1075) says to write four `@font-face`
+  blocks pointing at the single latin file, but omits `unicode-range`. Without it the face claims
+  every codepoint and non-Latin glyphs render as tofu rather than "falling back to the system stack",
+  which is the outcome card:1071 says to expect. Google's own latin block — which the card's `curl`
+  reproducer already prints — carries the range verbatim.
+- **Round 8's own note was wrong where the card was wrong.** It recorded "Inter = 28 woff2, 7 subsets
+  × 4 weights, `latin` = 4 ✓" — the `latin = 4` half repeated the card's error rather than catching
+  it. `sort -u` on the live stylesheet returns **one** latin file. Recorded because it is this
+  card's documented failure species (a stored result reproduced from the artifact under review)
+  reappearing inside the judge's own audit trail.
+- **Claims re-verified live today, all exact:** `support.js` first script at `Task Tracker.dc.html:6`;
+  single `_ds` directory `nocturne-73641b21-c7ad-488a-8264-a28262dfe83e`; `analyze.py` at **792**
+  lines, eight under the hard max, split named and explicitly unscheduled as a human-owned call —
+  correct posture, unchanged; no `TBD`/`TODO`/`FIXME`/placeholder anywhere in the card; no absolute
+  path (`/Users/`, `/home/`) committed.
+- **Spec path:** `docs/features/` rather than `writing-specs`' `docs/superpowers/specs/`. Not cited —
+  `rules/gates.md`'s one-canonical-file discipline is the repo layer and takes precedence on conflict.
+
+### Waivers
+
+**None.** No violation has been waived for this spec in any of the nine rounds, and none is needed:
+round 9 passes clean, so the waiver conversation the user pre-authorised does not arise.
+
+---
+
+## Round 10 — 2026-08-10T22:17:22Z — **FAIL** (3 violations)
+
+`head_sha` `7be4aec8b2337bf1b67190e16f96a72e5046cd45` · branch `feat/tracking-feature-state` ·
+spec blobs `772e5fc1f8d35a4af11dcbfb90212fb1714d7954` (`.md`) /
+`e41e1f8bf2ad35be5e4731f1c526acef535953dd` (`.spec.md`) · confidence **high**
+
+First round judging the pair as one document, and a fresh judgement of the current text rather than a
+re-litigation. Round 9's two closed ids stay closed — I checked both territories and neither reopened.
+All three findings below are new, and **two were introduced by the split itself**. (A first round-10
+run died on a spend limit before writing anything; this is the only round-10 verdict.)
+
+### Layman summary
+
+The card was cut into two files so a session no longer has to load 1,204 lines at start-up. That part
+worked — start-up reading is now 326 lines. But the cut was made in a shape this repo has a *live
+hook* to forbid, and the reasoning written down to justify the cut is factually wrong about the tool
+it names.
+
+**One.** This repo already allows a feature to live in two files, but only on one condition: the two
+halves must list the same tasks, so they cannot silently drift apart. That condition is not advice —
+it is enforced by `hooks/feature-sync-guard.sh`, which is registered and running in the live settings
+file, and which blocks any `git commit` that would record a mismatched pair. This split put all
+fourteen tasks in one half and none in the other. I ran the exact comparison the hook runs: it exits
+3 and reports all fourteen ids missing from the spec half, which means the hook exits 2 and blocks.
+The repo's only other split pair, `memory-system-split`, carries the same task ids in both halves and
+compares clean — that is the house shape, and this split did the opposite of it. There is a second
+symptom that needs no hook: the analyzer this very feature builds already flags its own card in
+`questions[]` as *"Which half of `tracking-feature-state` is right?"*.
+
+**Two.** Both halves explain that the spec half is safe from being double-counted because it "carries
+no `phase:` key, so it is not a card and the analyzer skips it". I built a throwaway repo and ran the
+shipped analyzer against it. A feature file with no frontmatter at all is **not** skipped — it comes
+out in `features[]` like any other card. What actually excludes the spec half is its *filename*: the
+analyzer drops `*.spec.md` by suffix. So the stated safety mechanism is not the real one, and the
+card's own acceptance criterion 1 describes a rule the code it says is already built and tested does
+not implement. This is the card's signature defect — a confident claim about behaviour that nobody
+re-ran — sitting inside the paragraph that justifies this round's biggest change.
+
+**Three.** The card is unusually good at hunting down "controls written in prose that nothing tests",
+and this round closed four of them. One is left, one field over from the one just fixed. The audit
+log records `sent=yes|no|unknown`, and the card says `unknown` — meaning the keystroke command was
+actually launched and then failed or timed out — is "the value that keeps [the log] honest", covering
+"the worst failure this feature has". No acceptance criterion and no task-9 assertion ever produces
+it: the only failing-send test drives the *pre-send* check, which the card fixes at `sent=no`.
+
+Nothing security-relevant regressed, no content was lost in the move, and every cross-file `§`
+reference resolves. The fixes are small: give the spec half the matching task ids (or fold back),
+correct one sentence about how the analyzer excludes files, and add one test.
+
+### Violations
+
+| id | Rule source | Where | Why | Evidence I ran |
+|---|---|---|---|---|
+| `gates/split-half-sync` | `rules/gates.md` — one-canonical-file discipline: "A **synced** `<name>.spec.md` half **MAY** be split off"; the sync condition is encoded in `hooks/lib/feature_tasks.py:compare` and the registered Tier-1 `hooks/feature-sync-guard.sh` | the split itself — `tracking-feature-state.spec.md` (zero task lines) against `tracking-feature-state.md` §Tasks (ids 1–14) | The pair shape is permitted only while the two halves' task lists cannot silently diverge, and this pair's lists disagree on every id, so a registered blocking hook now stands between this card and every future commit. | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` → **exit 3**, "in `tracking-feature-state.md` but missing from `tracking-feature-state.spec.md`: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14" (`feature-sync-guard.sh:204-226` turns status 3 into exit 2 + block). `$HOME/.claude/hooks/feature-sync-guard.sh` exists and is **REGISTERED LIVE** in `$HOME/.claude/settings.json` (`PreToolUse`/`Bash`); on `main` since `7f9bb6f`. The same call inside `analyze.py:568-577` already emits *"Which half of `tracking-feature-state` is right?"* when the analyzer is run against this worktree. Contrast `memory-system-split`: task ids `- [x] 1 …`, `- [x] 11 …` present in **both** halves, compare **exit 0**. Neither half mentions `feature-sync-guard`, `FEATURE_SYNC_EXEMPT`, or the sync contract anywhere, so this is unacknowledged rather than an accepted trade. |
+| `writing-specs/spec-code-drift` | `skills/writing-specs/SKILL.md` — "Drift causes hallucination: when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists. Keeping them aligned is not tidiness; it is correctness." | criterion 1's parenthetical; §Design 1 failure table row "Frontmatter malformed or unparseable"; the header note at `.md:9-12` and the `.spec.md` HTML comment | Both halves stake the split's no-double-count guarantee on a rule the shipped analyzer does not implement, and the criterion stating that rule is already ticked `[x]` as closed by tasks 3–4. | Fixture repo `/tmp/cj10fix` with `docs/features/orphan-nophase.md` (no frontmatter at all) → `python3 task-tracker/analyze.py` emits `features: [('orphan-nophase', '0/1', …), ('real-card', '1/2', …)]` — the phase-less file **is** a card, not skipped; it only raises a question. The actual exclusion is by filename: `SPEC_SUFFIX = ".spec.md"` (`analyze.py:36`) filtered in `_card_paths` (`analyze.py:192`), present since the analyzer's first commit `37a8e38`, and the same filename convention is used by `phase-guard.sh:372`. So adding a `phase:` key to the spec half would **not** make it a second card, and no test in `test_analyze.py` covers a card without a `phase:` key (the fixture helper at `test_analyze.py:94` always writes one). |
+| `writing-specs/good-bad-edge-cases` | `skills/writing-specs/SKILL.md` — "state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from." | §Design 3 status table `502 send_failed` row + §"Audit log" `sent=<yes\|no\|unknown>`, against task 9's assertion list and criterion 12 | The one path that yields `sent=unknown` — a `cmux send` that was actually invoked and then exited non-zero or hit its 5-second timeout — has no criterion and no task-9 assertion, so the value the card calls the record of "the worst failure this feature has" is produced by nothing. | `grep -n 'sent=' docs/features/*.md`: the only prescribed assertions are `sent=yes` (criterion 12), `sent=no` (criterion 12's `reanalyze`, task 9's two confirm failures). Task 9's only `502` driver is the **pre-send** confirmation failure, which §Security fixes at `sent=no`; `reason=send_failed` is likewise never driven. The card's own precedent forbids leaning on "each status code" here — it already rules that the two `500` rows are "satisfied by neither on its own", and the `502` row carries two causes with different `sent` values. Same species as the four controls closed this round, one field over from the `reason` enum that was just fixed. |
+
+### Waivers
+
+**None.** No violation has been waived for this spec in any of the ten rounds, and the waived-id list
+is still empty. Round 9's two long-running ids (`writing-specs/api-contracts`,
+`core-conduct/explicit-error-handling`) were closed on the merits and remain closed — I checked both
+territories in the current text and neither has reopened.
+
+### Notes (non-blocking)
+
+- **`§Verification` staying in the `.md` is the right call** and is *not* what trips the sync guard —
+  the guard compares task ids only. `gates.md` assigns the `.md` "frontmatter + task list"; a
+  measurement record is neither that nor spec/Gherkin detail, and task 13 writes into it during
+  implementation, when the phase gate forbids editing a spec. Keep it where it is.
+- **Nothing was lost in the move.** Of the 1,204 lines at `4775afd`, 11 are absent from the union of
+  the two halves at `3ca4daf`, and all 11 are lines that same commit deliberately rewrote (the `403`
+  row, the `reanalyze` row, the audit-log format, task 9's `asset_unreadable` bullet, task 14's
+  subset paragraph). Zero unintended loss.
+- **Every cross-file reference resolves.** All `§Design 1–4`, `§Security`, `§"Injection route"`,
+  `§"Audit log"` (a `####` heading), `§Out of scope`, `§Toolchain` map to headings in the spec half;
+  `§Verification` maps to the `.md`. No dangling pointer in either direction.
+- **Duplication across halves is small and mostly well-handled.** Only two substantive lines appear
+  verbatim in both files: the wide `grep -rn 'https\?://'` derivation and the canonical
+  `uv run --with pytest==9.1.1 …` invocation — and the second names `§Toolchain` authoritative on
+  disagreement, which is the correct way to duplicate. The governing "no pinned counts / check your
+  derivation's scope" preamble is restated in both halves in *different words* and has already
+  drifted slightly (the `.md` adds "once inside a judge's own verdict"; the spec half omits it).
+  Acceptable for a two-reader document, but that paragraph is the drift surface to watch.
+- **The `.md` preamble contradicts its own `§Verification`.** "no count, test total or phase tally is
+  pinned anywhere" is falsified ~270 lines later by "It reported **53 passed** on 2026-08-09" and by
+  task 13's mandate to record counts. The spec half's phrasing carves out exactly that exception
+  ("measurements that must be recorded … are stamped with their date and their reproducing command").
+  Copy the spec half's sentence into the `.md`.
+- **Task 9's `reason` bijection instruction is readable two ways.** "require every value to be
+  reachable" suggests a runtime exercise; the spec half restates it as "every row has a value, every
+  value has a row" — a static table↔enum check. Under the static reading `host_mismatch`,
+  `send_failed` and both `confirm_*` values are never exercised. One clarifying clause fixes it, and
+  the runtime reading would also close most of violation 3.
+- **Criterion 14's idle clause implies a ≥60-second test.** It says "drive both with short overrides",
+  while §Security fixes `TASK_TRACKER_IDLE_SECS` at a 60s minimum that "may not be disabled". Not a
+  contradiction (60s ≪ 30 min), but state the expected runtime so nobody weakens the minimum to make
+  the suite fast.
+- **Extension map still carries `.html` with no manifest row** (`GET /` sets `text/html` directly), so
+  "those four extensions cover every row above with none left over" holds in one direction only.
+  Same harmless imprecision recorded in round 9; unchanged.
+- **Spec path** is `docs/features/` rather than `writing-specs`' `docs/superpowers/specs/`. Not cited —
+  `rules/gates.md`'s one-canonical-file discipline is the repo layer and takes precedence.
+- **Security territory re-checked** (the design touches external input, shell execution, a localhost
+  server and a credential): no request data reaches a command line (allowlist id only; `--surface`
+  from a captured env UUID), no error body echoes input, the token stays memory-only with the stderr
+  clause asserted in criterion 10, boundary validation covers method/content-type/size/schema/
+  traversal, and the `'unsafe-eval'` CSP shortfall remains a stated human-owned trade with ADR 0024
+  behind it. Nothing new, nothing regressed.
+- **Context trend, honestly.** Session-start load 1,204 → **326** lines, which is what the split was
+  for and it delivered. But the two halves total **1,312**, ~108 lines *more* than the pre-split card,
+  so the document is still growing round over round — the eighth consecutive rise in total size. Not
+  cited (the growth is enumerated contract and assertions, not boilerplate), but the trend is now the
+  single best argument for a human to call a trim rather than another judge round.
+- **`analyze.py` is 792 lines** against the 800 hard max, with `task-tracker/git_facts.py` named as
+  the clean split and explicitly unscheduled as a human-owned call — correct posture, unchanged.
+- **Re-verified live at `7be4aec`:** no `TBD`/`TODO`/`FIXME`/placeholder in either half; no absolute
+  path (`/Users/`, `/home/`) committed; `analyze.py` 792 lines; `feature_tasks.compare` exit 3 on this
+  pair and exit 0 on `memory-system-split`; `feature-sync-guard.sh` present and registered in the live
+  `$HOME/.claude/settings.json`.
+
+## Round 11 — 2026-08-11T02:04:51Z — **FAIL** (2 violations)
+
+`head_sha` `7ba5e0f13993c16b00ed5e7bb1b37b58530f694b` · branch `feat/tracking-feature-state` ·
+spec blobs `a164665959e9e58d56a3986aa747fd227c50d5ea` (`.md`) /
+`6ba15cf2cf9cf8974a3fcc9a535f9ddf31be5530` (`.spec.md`) · confidence **high**
+
+All three round-10 findings are **closed on the merits**, each re-verified against the code rather
+than against the commit message that claimed it. Both round-11 findings are new, and both rest on
+territory no earlier round examined: the first cites **ADR 0017**, a rule source that appears
+nowhere in the previous ten rounds of this file; the second is the *client* side of an error
+boundary whose server side was cited and closed five rounds ago.
+
+### Layman summary
+
+The re-split worked. The card is genuinely two files behaving as one document: the checklist half is
+112 lines, every cross-reference points at something that exists, and the machine check that keeps
+the two task lists equal both passes and — the part that matters — can still fail. I deleted a task
+from one half and it failed immediately with the right message, so the clean result is a real result
+and not a check that is blind by construction.
+
+Two things are still wrong, and neither is a re-run of an old finding.
+
+The first is size. The repo's own decision record, ADR 0017, is the document that *created* this
+two-file shape, and it sets a number for each half: the checklist file at most 200 lines, the spec
+file at most 800. The checklist half is comfortably inside its budget at 112. The spec half is
+**1,261** — over half again as long as the cap it is measured against, and longer than before the
+re-split, because the re-split moved per-task detail into it. Three earlier rounds looked at this
+card's length and declined to cite it, and they were right on the rules they used: the general
+"800 lines maximum" in `core-conduct.md` sits under **Code Style** and reads as a rule about code,
+and the split itself is permitted. But none of those rounds cited ADR 0017, and ADR 0017 is not
+about code — it is about exactly this artifact, and it only started binding when the card actually
+became a pair. The card knows how to handle an overrun properly: task 3 says `analyze.py` is past
+its 400-line target, names the clean split, and explicitly hands the decision to a human. The spec
+half extends itself no such courtesy — it is 58% over a documented cap with no recorded decision at
+all, which makes the overrun something the card decided quietly rather than something a person
+signed off.
+
+The second is the browser. This feature exists to let a button in a web page drive a Claude session,
+and the card specifies the server side of that conversation to an unusual standard — every status
+code, every audit field, what happens when a subprocess hangs. It never says what the *page* does
+when the answer comes back wrong. If the token is stale the server returns a deliberately vague
+`403`, and §Security itself points out that with parallel sessions this is the normal case, not an
+edge one, and that the operator will read it as a broken feature. The card stops there. There is one
+sentence telling the UI to surface a failed re-analysis, and it belongs to no task and is checked by
+no acceptance criterion. Nothing in the card says what a user sees when a `clear` is refused, when
+the session has ended, or when the fetch simply fails — and no criterion ever presses a button
+against a running server, so an implementer can ship a button that silently does nothing and pass
+every test in the document.
+
+Everything else I checked held. Five pinned tool versions re-read exactly as written on this host,
+`pytest==9.1.1` resolves, the suite reports the same 53 passed the card records, and `analyze.py` is
+unchanged at 792 lines.
+
+### What I re-verified from source (not from the commit messages)
+
+| Claim under test | Method | Result |
+|---|---|---|
+| Round 10 #1 `gates/split-half-sync` fixed | `python3 hooks/lib/feature_tasks.py <md> <spec.md> tracking-feature-state` | exit **0**, no output |
+| …and the check can still fail | same, with task 12 deleted from the `.md` copy only | exit **3**, "in …spec.md but missing from …md: 12" |
+| …and the split follows the prescribed axis | ADR 0017 decision 4 vs. the two halves | `.md` = frontmatter + terse list; `.spec.md` = spec + per-task rationale ✓ |
+| `feature-sync-guard.sh` registered | `grep -n feature-sync-guard settings.json` | line 29, registered ✓ |
+| Round 10 #2 `writing-specs/spec-code-drift` fixed | `grep -n SPEC_SUFFIX task-tracker/analyze.py`; read `_card_paths` (analyze.py:187-193) | selection is `glob("*.md")` minus `endswith(".spec.md")` — criterion 1's new wording matches the code exactly ✓ |
+| …both directions of that selector are real | ran the analyzer against two throwaway repos | a card with **no frontmatter** → in `features[]`, `questions[]` says "No closing `---` delimiter…"; a card with frontmatter but **no `phase:`** → in `features[]`, `questions[]` says "phase: ''" — both match §Design 1's failure table ✓ |
+| Round 10 #3 `writing-specs/good-bad-edge-cases` fixed | read task 9 (spec:1124-1132) against §Security's send-time table (spec:726-729) | the fourth outcome is genuinely **post-send** — "After a confirmation that *succeeded*, make the faked `cmux send` exit non-zero … require `502`, `reason=send_failed`, `sent=unknown`" — not a re-spelling of the pre-send `confirm_*` failure ✓ **Not cited again; no escalation fires.** |
+| Line counts | `wc -l`, and `git show <sha>:<path> \| wc -l` for the trend | `.md` **112** (cap 200 ✓, down from **326** at round 10 — over cap then) · `.spec.md` **1261** (cap 800 ✗; 986 → 993 → 1261 across `7be4aec`→`5b7cdcc`→`bbaae5b`) · `analyze.py` **792** (max 800 ✓, unchanged) |
+| Every `§` reference resolves | enumerated all 67 `§` references (58 in the spec half, 9 in the `.md`) against the heading list | all resolve; `§Verification` is the `.md`'s own section, as both halves state ✓ |
+| Task summaries agree across halves | compared all 14 `.md` bullets to their `§Tasks` entries | no disagreement ✓ |
+| Toolchain pins are real | `python3 -V`, `uv --version`, `node --version`, `cmux --version`, `uv run --with pytest==9.1.1 … --version` | `3.9.6`, `0.11.28`, `v26.5.0`, `0.64.20 (100) [14e3400b9]`, `pytest 9.1.1` — **all five exact** ✓ |
+| The recorded test count | `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` | **53 passed** in 4.35s — matches §Verification ✓ |
+| Manifest ↔ extension map | counted the 16 manifest rows' extensions | `.js` 9, `.css` 4, `.woff2` 3; `.html` covers **zero** rows (see notes) |
+| No secrets / absolute paths committed | `grep -nE '/Users/\|\$HOME\|/home/\|password\|api[_-]?key'` both halves | clean; the only `$HOME` is a generic warning, and the card deliberately records no export path ✓ |
+| Task 4's re-opened wording | read spec:1010-1017 against `test_analyze.py:157-172` and the `repo.card` helper | accurate — the fixture writes `phase:` on every card, so only the "skipped despite `phase:`" direction is pinned; the bullet names the missing assertion and both things it must require ✓ |
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `adr-0017/spec-half-size-budget` | `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md` | Size rule for the synced pair: "`<name>.md` ≤200 lines; `<name>.spec.md` ≤800" (three-artifact table); `rules/core-conduct.md` Code Style's "800 max" concurs | `tracking-feature-state.spec.md`, whole file — §Tasks (268 lines) and §Design 3 (274 lines) carry the bulk | The spec half is **1,261 lines against the ADR's ≤800 cap for exactly this artifact** — 58% over, and rising: 986 at round 10's head, 993 immediately before the re-split, 1,261 now — and no human-owned exception is recorded anywhere in the card, unlike the smaller `analyze.py` overrun that task 3 explicitly defers to a person. |
+| 2 | `core-conduct/ui-error-boundary` | `rules/core-conduct.md` | Code Style: "Handle errors explicitly, never swallow them" — at every boundary the design introduces | §Design 3 status table (`500 reanalyze_failed` row); §Tasks task 10; §Acceptance criteria | The browser→server edge this feature exists to create has **no stated client-side behaviour for `403`, `409`, `502` or a failed fetch**; the single "the UI must surface the failure" clause covers `reanalyze_failed` only, is owned by no task bullet and asserted by no criterion, so a button that silently does nothing on the stale-token `403` that §Security itself calls the normal case would pass every criterion in the card. |
+
+**Why violation 1 is not a reversal of rounds 7, 8 and 10.** Those rounds answered a different
+question with a different rule set. Round 7: "`core-conduct`'s 400/800 limit sits under **Code
+Style** and governs code files"; round 8 repeated it verbatim; round 10 recorded the growth as a
+trend note. All three are correct about `core-conduct` and about `gates.md` making the split a MAY.
+None of them cites ADR 0017, which appears **nowhere** in the previous ten rounds of this file
+(`grep -c 0017` = 0 before this section). ADR 0017 is not a code-style rule — it is the decision
+that created this exact two-file shape and it states a per-file line budget as part of the shape.
+It could not bind before the card was a pair; it binds now, and the half it governs is 1,261 lines.
+
+**Why violation 2 is not `core-conduct/explicit-error-handling` reopening.** That id was cited in
+rounds 1, 2, 5, 7 and 8 and closed in round 8. Every one of those citations was **server-side**:
+the analyzer's git/frontmatter failures (r1), `reanalyze`'s missing status code (r2), the static-read
+boundary (r5), `EADDRINUSE` (r7), send-time identity confirmation (r8). None touched the client. The
+territory here is task 10 and the page's response handling, which no round has examined; a new id
+keeps persistence detection honest in both directions.
+
+### Waivers
+
+**None.** No violation has ever been waived on this card, and nothing was waived this round. The
+`waived` array is empty for the eleventh consecutive round.
+
+### Notes (non-blocking)
+
+- **`.html` is in the extension map and matches no manifest row.** §Design 3 lists the map as `.js`,
+  `.css`, `.html`, `.woff2` and then claims "those four extensions cover every row above with none
+  left over, and that is a property to re-check rather than assume". I re-checked: the 16 manifest
+  rows are `.js`×9, `.css`×4, `.woff2`×3 — `.html` covers zero, because `GET /` is a dynamic route
+  that sets `text/html` directly. The sentence is true under the reading "no *row* is left
+  uncovered" and false under "no *extension* is left over", and the second is the informative one.
+  Nothing an implementer builds changes either way (the startup abort is one-directional, on
+  unmapped manifest rows), which is why this is a note and not a violation — but it is the third
+  round it has survived, and the fix is four words. Carried unchanged from rounds 9 and 10.
+- **Task 9's `reason`-bijection bullet still reads static-or-runtime**, and it is weaker than round
+  10 implied. "Walk the contract table … require every value to be reachable" (spec:1088) points at
+  runtime; §"Audit log"'s restatement, "every row has a value, every value has a row" (spec:435),
+  points at a documentary check. What rescues it is task 9's opening line — "including every
+  negative case and **each status code in the contract table**" — which forces the drives, so the
+  runtime reading is recoverable from the whole task. Not citable on that basis; still worth one
+  clause ("drive a request that produces each value").
+- **Criterion 14's idle clause costs ≥60 seconds of wall clock.** It says "drive both with short
+  overrides so the test does not take 30 minutes", while §Security fixes `TASK_TRACKER_IDLE_SECS`
+  at a 60s minimum that "may not be disabled". Satisfiable (60s ≪ 30 min) and therefore not cited,
+  but say the number out loud, or an implementer under time pressure lowers the floor to make the
+  suite fast and quietly weakens a lifetime control.
+- **The governing discipline preamble is duplicated across both halves in diverged wording**, and
+  the divergence has already produced one inconsistency. The `.md` copy (lines 28-36) drops the
+  spec half's reconciling clause — "measurements that must be recorded (test counts, tool versions)
+  are stamped with their date and their reproducing command" — so the `.md` flatly asserts "no
+  count, test total or phase tally is pinned anywhere" and then records "**53 passed** on
+  2026-08-09" fifty lines later in its own §Verification. The file already models the right fix one
+  section down: §Verification duplicates the canonical pytest invocation *and names §Toolchain
+  authoritative if the two disagree*. Do the same here, or copy the missing clause. This is the
+  duplication surface the pair shape creates, and it is the one the re-split left behind.
+- **Cross-file coherence otherwise holds.** All 67 `§` references resolve, all 14 task summaries
+  agree with their `§Tasks` detail, and the only other cross-half duplication (the pytest
+  invocation) carries an explicit authority rule. The re-split did not introduce a new instance of
+  the round-9 "the fix creates the next defect" pattern.
+- **Task 4 is stated precisely enough to implement.** One mechanical consequence the bullet does
+  not name: `repo.card(...)` writes `phase:` unconditionally, so the fixture helper must gain a way
+  to emit a card without it before the new assertion can be written. Also worth deciding
+  deliberately — "carrying no `phase:` key" has two distinct code paths (no frontmatter block at
+  all → the unclosed-delimiter question; well-formed frontmatter minus the key → the `phase: ''`
+  question). I ran both: each lands in `features[]` with its own `questions[]` entry, so either
+  satisfies the assertion's purpose, but naming which one is intended would stop two implementers
+  writing two different tests.
+- **Spec path** is `docs/features/`, not `writing-specs`' `docs/superpowers/specs/`. Not cited, for
+  the same reason as every prior round: `rules/gates.md`'s one-canonical-file discipline plus ADR
+  0017 are the repo layer and take precedence on conflict.
+- **Security territory re-checked** (external input, shell execution, a localhost server, a
+  credential). Nothing regressed: the wire still carries an allowlist id and never text, `--surface`
+  comes from a captured env UUID and never from a request, no error body echoes input, the token is
+  memory-only with the stderr clause asserted in criterion 10, boundary validation covers
+  method/content-type/size/schema/traversal/`Host`, every subprocess has a timeout, and the
+  `'unsafe-eval'` shortfall remains a stated human-owned trade backed by ADR 0024.
+- **`analyze.py` at 792 lines is unchanged**, eight under the hard max, with `git_facts.py` named as
+  the clean split and explicitly unscheduled as a human call. Correct posture; no source was touched
+  this round, as expected.
+- **Trend, stated plainly since two judges now track it.** Session-start load is 112 lines, which is
+  what the split was for and it delivered handsomely. Total across both halves is 1,373, up from
+  1,312 at round 10 — the ninth consecutive rise. Violation 1 is the point at which that trend stops
+  being a note and becomes a rule question, and the answer to it is a human's, not another revision.
+
+## Round 1 (re-entry) — 2026-08-11T05:45:33Z — **FAIL** (4 violations)
+
+`head_sha` `ab799e102894d470abe99dc4d3efac6356582a9d` · branch `feat/tracking-feature-state` ·
+spec blobs `2adcec23a1db0034562416650f84f966d70014d6` (`.md`) /
+`788a8aaed0fbdaaa8f694da0cfb48a1a98fbc45f` (`.spec.md`) · confidence **high**
+
+Round numbering restarts here: `e24727d` invalidated every prior verdict under the
+`spec_blob_sha` freshness contract, so this is round 1 of a new loop, not round 12. The tree
+moved under this judgement — the `.md` edits were uncommitted when the run started and landed as
+`ab799e1` (`phase: implementation`, task 14 ticked) mid-run; identity was re-derived at the moment
+of writing and the blob judged is the blob recorded.
+
+### Layman summary
+
+The spec revision this round was asked to check does what it claimed. Removing `babel.min.js` from
+the browser criterion was the right call and is not a hole: the file genuinely cannot be requested
+by any view (both the page and the design-system bundle contain zero `x-import` occurrences, so the
+lazy `ensureBabel()` path is unreachable), which means the row was unpassable by any correct
+implementation and was verifying nothing. The replacement is real — task 9 now sweeps every manifest
+row and asserts `GET /vendor/babel.min.js` → `200` with its `Content-Type`. What the replacement
+does *not* carry is the other half of what vendoring means: nothing anywhere asserts that
+`vendor-resources.js` actually points Babel's CDN URL at the local copy. React and ReactDOM get that
+for free because the browser fetches them; Babel's entry is now checked by nobody, on a page whose
+`file://` mode has no CSP to catch the fallback.
+
+The other three findings are all one species, and it is this card's signature one: a number written
+down that stopped being true. The checklist half has grown to **215 lines** against ADR 0017's
+**≤200** cap for that artifact — and the spec half, in the very paragraph recording the user's
+waiver of the *other* half's overrun, still says the checklist half "is inside its cap" at
+"112 lines". That figure was true at `bbaae5b` and has nearly doubled since; it is also the ground
+the user accepted the waiver on, so its falsification is not cosmetic. In the same file, the
+paragraph explaining why task 14's box is unticked survives next to a ticked box and a frontmatter
+that no longer says `planning`. And the pointer at the top still advertises "fourteen acceptance
+criteria" nine lines above its own reference to criterion 15.
+
+None of the four needs a design change. Three are sentences to correct or delete; one is a clause to
+add to task 9. The size overrun is the only one that may need a human — see the note under
+violation 1.
+
+### Violations
+
+| # | id | Rule source | Where | Why |
+|---|---|---|---|---|
+| 1 | `adr-0017/md-half-size-budget` | `docs/decisions/0017-session-state-restore-and-synced-pair-feature-files.md` (repo layer, via `rules/gates.md` one-canonical-file discipline) | `docs/features/tracking-feature-state.md` — whole file; `## Verification` (lines 64-215) carries all of the growth | The checklist half is 215 lines against ADR 0017:39's `≤200` for exactly this artifact, and it crossed the cap in the same pair of commits that recorded the user's acceptance of the *spec* half's overrun on the ground that this half had moved the right way. |
+| 2 | `writing-specs/stale-recorded-claim` | `~/.claude/skills/writing-specs/SKILL.md` — "Maintain it with production rigor … updates when reality changes"; "Drift causes hallucination" | `.spec.md` preamble, ADR-0017 size paragraph (lines 43, 49-52); `.md` `## Verification` RESOLUTION paragraph (lines 206-208) against frontmatter line 2 and task 14 (line 62) | Two recorded claims are false at this revision: the spec half states "As of 2026-08-11 the `.md` half is inside its cap" and pins it at "112 lines" when `wc -l` reads 215, and the `.md` states "Task 14's box is still unticked here … the card is at `phase: planning`" while the box is ticked and the frontmatter reads `implementation`. |
+| 3 | `gates/split-half-sync` | `rules/gates.md` (one-canonical-file discipline) + ADR 0017 | `.md` half preamble, line 10, against `.spec.md` §Acceptance criteria (1-15) and the `.md`'s own task 10 entry (line 58) | The pointer half advertises "all fourteen acceptance criteria" in the half that carries fifteen — nine lines above its own "Owns criterion 15" — so a reader who trusts the index stops one criterion short of the contract. |
+| 4 | `writing-specs/good-bad-edge-cases` | `~/.claude/skills/writing-specs/SKILL.md` — "state explicitly what correct looks like … anything you leave implicit, the agent infers" | Criterion 13's babel note (`.spec.md` 991-1008), task 9's manifest-sweep bullet (1220-1228), task 14's `window.__resources` bullet (1354-1360) | The replacement for the removed babel row covers the serve-side fact only; nothing asserts that `vendor-resources.js` maps `BABEL_URL` to `vendor/babel.min.js`, so the third of three vendoring hooks is written down and checked by nothing — the exact pattern task 9's own bullet list exists to close. |
+
+### Verification of the revision under judgement (what the caller asked to be checked hardest)
+
+- **Babel removal — replacement is real and sufficient for what it replaces.** Re-derived, not
+  read: `grep -c 'x-import' 'task-tracker/Task Tracker.dc.html' task-tracker/_ds/*/_ds_bundle.js`
+  → `0`, `0`. `ensureBabel()` is reachable only from `load(kind === "jsx")`, so no view can produce
+  the request and the row was unpassable — removing it loses no live check, because there was none.
+  Task 9's manifest sweep (spec 1220-1228) plus criterion 13's own pointer (1006) plus task 14's
+  restatement (1345-1347) all name the same assertion, and it is table-driven over the manifest
+  rather than a hand-list, so it does not rot. **The gap is one step to the left of where the
+  revision looked** — see violation 4.
+- **The spec's stated mechanism for keeping Babel local is wrong**, which is probably why the gap
+  survived the edit: "the manifest is what makes the CDN unreachable, not the request count"
+  (spec 1002-1004). The manifest makes the *local copy servable*; the CSP `script-src 'self'` is
+  what makes `unpkg.com` unreachable on the served page; and `window.__resources` is what redirects
+  the URL. On criterion 8's `file://` path there is no CSP at all, so the map is the only thing
+  between a future `x-import` and a live remote fetch.
+- **`path_escape` closes the enum both ways.** Walked the bijection by hand: every row of the
+  §Design 3 status table now has a `reason` value and every value has a row (`403` fans out to
+  `bad_token`/`unknown_id`/`origin_mismatch`/`host_mismatch`/`path_escape`; `502` to
+  `send_failed`/`confirm_failed`/`confirm_timeout`). The fourth-instance defect — a value with no
+  row — is genuinely closed.
+- **The re-score arithmetic reproduces.** §Design 3 manifest = 16 rows; criterion 13(a) = 17 rows;
+  17 − `/favicon.ico` (audit-log-scored) = 16 observed; 16 − `/tracker-data.sample.js` = 15 for
+  run (b). Both match the recorded enumerations. The `/favicon.ico` scoping and the two
+  `read_network_requests` caveats are each stated with the falsifying evidence beside them.
+- **No spec-code drift in the manifest.** `STATIC_MANIFEST` in `task-tracker/server.py` is the same
+  16 paths in the same order as the spec table; `EXTENSION_TYPES` is the deliberate one-directional
+  superset the spec describes, `.html` unused by any row exactly as stated.
+
+### Notes (non-blocking)
+
+- **Violation 1 may be a human's call, not a revision's.** All 151 lines of growth are
+  `## Verification`, which ADR 0017 deliberately keeps in the `.md` half because task 13 writes into
+  it while the phase gate forbids editing a spec. Trimming it means deleting evidence; moving it
+  means breaking the ADR's own division. The honest options are (a) compress the criterion-13
+  narrative now that it resolves, or (b) raise the cap question with the user the way the spec-half
+  overrun was raised. Recommend (a) first — the standing "FAILS — expected 200" table plus its
+  RESOLUTION paragraph is the largest single block and is now describing a closed finding.
+- The `.md` §Verification's babel row still reads **"FAILS — expected 200"** in its status column.
+  It is explicitly framed two paragraphs down as retained evidence and is not cited on that basis,
+  but a reader skimming the table alone reads a live failure in a card whose task 14 is ticked.
+- Waiver honoured: **`adr-0017/spec-half-size-budget`** is recorded as waived (user decision
+  2026-08-11, commit `2c66fab`) and is not re-cited. The spec half measures 1,442 lines; violation 1
+  is a different half against a different row of the same ADR and is not covered by that waiver.
+- Spec path under `docs/features/` is not cited, for the same reason as every prior round: the repo
+  layer (`rules/gates.md` + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/`.
+- Security territory re-checked against `writing-secure-code` (external input, shell execution, a
+  localhost server, a credential). Nothing regressed this revision: the wire still carries an
+  allowlist id and never text, `--surface` still comes from a captured env UUID, no error body
+  echoes input, the token remains memory-only with the stderr clause in criterion 10, every
+  subprocess carries a timeout, and the traversal rule now has both a `403` row and a `reason`.
+- `grep -c skipif task-tracker/*.py` → `test_store.py:3`, everything else `0`, so §Verification's
+  node-guard wording is still accurate as of this round.
+- Trend: 1,657 lines across both halves, up from 1,373 at round 11 — the tenth consecutive rise, and
+  the first round in which the *session-start* half is the one over its cap.
+
+---
+
+## Round 2 — 2026-08-11T14:21:10Z — **FAIL** (1 violation)
+
+`head_sha` `1d5481629feb6e6dde41f656bdf926d1809358d4` · branch `feat/tracking-feature-state` ·
+spec blobs `cf48cee15777ed282b5d71aca09dc08b6401aaf1` (`.md`) /
+`41a4d26348b00501226fcb9b51621e6cf042a11c` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+The four things this round was asked to check all check out. The mapping test task 9 gained —
+"every CDN URL `support.js` can request must be a `vendor-resources.js` key that resolves to a
+manifest row" — is real, not aspirational: I read `support.js` directly and its three URL
+constants (`REACT_URL`, `REACT_DOM_URL`, `BABEL_URL`) match `vendor-resources.js`'s
+`window.__resources` map key-for-key, byte-for-byte, and each value names a file that is on
+`server.py`'s static manifest and actually exists under `task-tracker/vendor/`. The spec also
+requires the test to be *falsified* (mutate one key by a character, confirm it fails), which is
+what keeps this from being another "written down and checked by nothing" control. The other two
+closures hold up under re-run: the acceptance-criteria count derivation returns exactly `15`, and
+`hooks/lib/feature_tasks.py` exits `0` on the current pair — the two halves' task lists genuinely
+match. I also diffed the `## Verification` compression (215 → 206 lines, confirmed by `wc -l`) line
+by line against its prior form: the babel-row reasoning, the `read_network_requests` 503-vs-404
+corroboration, and the `/favicon.ico` audit-log scoping are all still present, just consolidated —
+nothing measurable was cut.
+
+**One new defect, introduced by this round's own fix.** Closing the "task 14 still unticked … the
+card is at `phase: planning`" false claim (round 1's violation 2) was done two ways at once: the
+prose was corrected (it now just says "task 14 is ticked above," which is true), *and* the
+frontmatter's actual `phase:` value was changed from `implementation` to `planning` — a change the
+commit message explains ("implementation forbids spec edits, and this card's own revision set the
+precedent") but the document itself never states. Nothing else moved: `branch:` still names the real
+branch we are sitting in, and 9 of 14 checklist tasks are still ticked against real, tested, shipped
+code (`task-tracker/*.py`, nine vendored files under `vendor/`, 54 passing tests). I checked every
+other feature card in this repo: every single one with `phase: planning` also has `branch: none`
+and zero completed tasks (`falsify-harness-signatures.md`, `verification-marker-gate.md`); every
+card with any task done is `implementation` or `review` with a real branch. This card is now the
+sole exception — its own frontmatter answers "is this planning or nine tasks into implementation?"
+two different ways, in the same document, with nothing to reconcile them. Same species round 1
+already caught here twice (a recorded claim that stopped matching reality) in a new location:
+the field itself, not a sentence describing it.
+
+### Violations
+
+| # | id | rule_source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `gates/phase-branch-mismatch` | `rules/gates.md` | Phase gate: frontmatter `phase` is "the single source of truth for what work is permitted"; Gate transition: branch creation happens "on confirmation" alongside phase becoming `implementation`, and reopening it "needs the literal `gate confirmed` again" | `docs/features/tracking-feature-state.md` frontmatter (lines 1-4) against `## Tasks` (lines 43-64, 9/14 done) and `branch:` (line 4) | This round's revision (`6e17fd9`) reverted `phase: implementation` → `planning` to justify editing the spec/checklist, but left `branch: feat/tracking-feature-state` populated and 9 of 14 tasks ticked against real shipped code (`task-tracker/*.py`, `vendor/*`, `uv run … pytest task-tracker/ -q` → 54 passed) — both of which, per this same rule, should exist only once the gate has been confirmed. Every other `phase: planning` card in `docs/features/*.md` pairs it with `branch: none` and zero completed tasks; this is the sole, unexplained exception, and nothing in the card's own text addresses the contradiction. |
+
+### Closed since round 1 (re-entry) — verified, not assumed
+
+| id | how it was verified |
+|---|---|
+| `writing-specs/stale-recorded-claim` | Grepped both halves for every stale figure named in round 1 and round 1's own closing commit (`112 lines`, `215 lines`, `fourteen`, bare `"passed"` claims without a date): none remain outside historical/explanatory context. The spec half now says "both halves are over their caps" with no false number; the `.md` RESOLUTION now says "task 14 is ticked above," which is true. |
+| `gates/split-half-sync` | Re-ran the card's own derivation: `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` over the spec half → `15`, matching the `.md`'s stated figure exactly. Independently ran `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` → exit `0`. |
+| `writing-specs/good-bad-edge-cases` | Read `task-tracker/support.js:1143,1145,1147` and `task-tracker/vendor-resources.js` directly: the three `window.__resources` keys are byte-identical to `REACT_URL`/`REACT_DOM_URL`/`BABEL_URL`, and each value (`vendor/react.production.min.js`, `vendor/react-dom.production.min.js`, `vendor/babel.min.js`) is both a real file under `task-tracker/vendor/` and a row of `server.py`'s static manifest. Task 9's falsification instruction ("mutate one key by a character, confirm the test fails") is present and would catch a test that reads both sides from the same source without asserting anything. |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. Re-verified: `.md` half is `206` lines (`wc -l`) against ADR 0017:39's `≤200`, down from `215` at round 1; the waiver text in the spec half correctly scopes it to the residue only, states it is not licence to move `## Verification` out or stop deleting duplication, and names an ADR amendment as the escalation if the gap widens. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab` (round-11 era). Unchanged this round; spec half is `1473` lines against the same ADR row's `≤800`. |
+
+### Notes (non-blocking)
+
+- **`model_tier` also changed, `low` → `high`, alongside the `phase` flip, unexplained in the text.**
+  Session-management metadata, not spec content — not cited, but it is the second frontmatter field
+  this round changed without a stated reason, both in the same edit.
+- **Test count moved and that is fine, by the card's own rule.** `uv run --with pytest==9.1.1
+  --no-project pytest task-tracker/ -q` now reports `54 passed`, not the recorded `53`. This is
+  exactly what the card's own discipline anticipates (a dated measurement, not a contract) — noted
+  here as evidence the discipline is working, not as a finding.
+- **Toolchain re-verified on this host:** Python `3.9.6`, `uv 0.11.28`, `node v26.5.0` all match
+  §Toolchain exactly.
+- **Criterion 15 has not reopened.** Diffed this round's edits against the prior blob: nothing
+  touches §Acceptance criteria's criterion 15 or §Design 3's "What the page does with a failure"
+  table. Still four assertions, still intact.
+- **No fourth stale claim found.** Searched both halves for residual hardcoded totals from earlier
+  rounds (`1,442`, `1,373`, `1,657`, `112 lines`, `215 lines`, `206 lines`) — none remain outside
+  this writeup itself.
+- Spec path under `docs/features/` is not cited: the repo layer (`rules/gates.md` + ADR 0017) takes
+  precedence over `writing-specs`' `docs/superpowers/specs/` default, as every prior round has held.
+- Security territory re-checked (external input, shell execution, a localhost server, a credential):
+  nothing regressed this round — the only functional change was task 9's mapping-check bullet, which
+  strengthens rather than weakens the boundary.
+
+---
+
+## Round 3 — 2026-08-11T15:35:59Z — **PASS** (0 violations)
+
+`head_sha` `128e79c0f3d5a243252262b41ab6001f71d41875` · branch `feat/tracking-feature-state` ·
+spec blobs `c8f8cd7c4172752e392ab4714feb271157d374a6` (`.md`) /
+`41a4d26348b00501226fcb9b51621e6cf042a11c` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+This is round 3, the cap for this re-entry — whatever is still outstanding when this round ends
+goes to the user rather than to a round 4. Round 2 found exactly one problem: the card's frontmatter
+said `phase: planning` (normally a fresh, unstarted card) while also carrying a real branch and 9 of
+14 tasks ticked — a combination no other `planning` card in the repo has, and nothing in the text
+explained it. The fix under judgment this round is a ~10-line warning block added to the top of the
+`.md` half: it states plainly that this is not a fresh planning card but an implementation paused
+mid-stream for a legal spec revision, names the enforcement mechanism that makes that safe
+(`phase-guard.sh` blocking source writes), names the literal exit condition (`gate confirmed`), and
+explains why a fourth phase state wasn't invented for it. I did not take that explanation on faith —
+I independently grepped `phase:`/`branch:` across all 15 feature cards in `docs/features/*.md` and
+confirmed the two other `planning` cards (`falsify-harness-signatures.md`,
+`verification-marker-gate.md`) do carry `branch: none` and zero ticked tasks, exactly as the new
+paragraph claims. The underlying rule this closes against (`rules/gates.md`'s phase gate and gate
+transition) is explicitly a judgment-based checkpoint, not a hard invariant with one textual
+reading — its own header calls these "judgment-based checkpoints," and its forward-direction wording
+("until [gate confirmed]: no branch, no first task") describes a fresh feature's first pass through
+the gate, not a card revisiting planning after already passing it once. Given that, removing the
+ambiguity by documenting the state, its mechanism, and its exit condition is the correct way to close
+a judgment-grounded finding — changing the frontmatter itself was never the ask. I re-read both
+halves in full this round (not just the diff) and reran the load-bearing derivations myself rather
+than trusting the prose: the acceptance-criteria count is exactly 15, the two halves' task-number
+sets are identical (1–14 in both), `SPEC_SUFFIX = ".spec.md"` in `analyze.py` matches what the card
+describes, no `TBD`/`TODO`/`FIXME`/placeholder markers remain outside historical narrative context,
+and no absolute path or hardcoded secret leaked into either file. Nothing new surfaced. **Verdict:
+pass — nothing is outstanding, so the round-3 escalation tripwire does not fire.**
+
+### Violations
+
+None this round.
+
+### Closed since round 2 — verified, not assumed
+
+| id | how it was verified |
+|---|---|
+| `gates/phase-branch-mismatch` | Read the new preamble (`.md` lines 9–17) added in `128e79c`. Independently ran `grep -m1 '^phase:\|^branch:' docs/features/*.md` across all 15 cards: confirmed the two other `phase: planning` cards (`falsify-harness-signatures.md`, `verification-marker-gate.md`) both carry `branch: none` and `grep -c '^\- \[[xX]\]'` returns `0` for each, exactly as the preamble states. The rule cited (`rules/gates.md` Phase gate / Gate transition) is a judgment-based checkpoint whose "until [gate confirmed]: no branch, no first task" wording governs a fresh feature's first pass through the gate, not a card reopening planning after already passing it — so documenting the paused-for-revision state, its enforcing mechanism (`phase-guard.sh` blocking writes to source while unconfirmed), and its exit condition (the literal phrase `gate confirmed`) is a legitimate closure, not a workaround. The preamble also correctly declines to invent a fourth phase state for a single-card edge case, which is the YAGNI-consistent choice `rules/core-conduct.md` Code Style would favor over a speculative schema change. |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. The round-2 fix (`128e79c`) added ~10 lines to the `.md` half (now 216 lines, `wc -l`), so the overrun against ADR 0017's `≤200` is slightly larger than when waived. The waiver text still stands per the escalation instructions; not re-cited. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; accepted on the ground that the figure the pair shape exists to control is the session-start load. Spec half is 1,473 lines (`wc -l`) against the same `≤800` row. Unchanged this round. |
+
+### Notes (non-blocking)
+
+- **Escalation tripwire, stated explicitly per instructions:** round 3 was the cap for this
+  re-entry. Verdict is `pass` with zero outstanding violations, so there is nothing to hand to the
+  user for a decision — the tripwire does not fire.
+- Re-derived the acceptance-criteria count myself: `awk` over `## Acceptance criteria` in the spec
+  half returns `15`, matching the `.md` half's stated figure.
+- Re-derived task-number sync myself rather than trusting `hooks/lib/feature_tasks.py`'s prior
+  clean exit: both halves' checklists enumerate exactly `1..14` with no gaps or extras.
+- Confirmed `task-tracker/analyze.py:36` defines `SPEC_SUFFIX = ".spec.md"` and every citation of it
+  in the card (selection-by-filename, both directions) matches the source at the lines quoted.
+- Scanned both halves for `TBD`/`TODO`/`FIXME`/`placeholder`/`XXX`: the only two hits are narrative
+  references to a *past* placeholder row that was since replaced with a real, enumerated table — not
+  a live placeholder.
+- Scanned both halves for `/Users/`/`/home/` and secret-shaped strings: none found beyond the
+  design's own references to `secrets.token_urlsafe` and the `X-Tracker-Token` header name, both of
+  which are mechanism descriptions, not literal values.
+- Security territory re-checked against `writing-secure-code` (external input, shell execution, a
+  localhost server, a bearer credential): unchanged from round 2's clean read — allowlist-id-only
+  wire, no error echoes input, token is memory-only with an explicit no-disk/no-argv/no-log-line
+  guarantee, every subprocess call carries a timeout, path traversal and the `path_escape` reason
+  are both defined and cross-checked against the status table.
+- Spec path under `docs/features/` is not cited, as every prior round has held: the repo layer
+  (`rules/gates.md` + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/`
+  default.
+- Toolchain versions in `§Toolchain` were read, not re-verified against this host this round (no
+  code changed since round 2's toolchain re-verification); no drift is implied by that.
+
+## Round 1 (re-entry) — 2026-08-11T18:34:03Z — **FAIL** (1 violation)
+
+`head_sha` `01f0c45ba7e998448183b175a438156203b33dd0` · branch `feat/tracking-feature-state` ·
+spec blobs `c8f8cd7c4172752e392ab4714feb271157d374a6` (`.md`, byte-identical to round 3's pass) /
+`9260312665dd622dd33b3feae0b32fbb11ae2fb2` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+Round 3 of the last cycle passed clean. Since then, two more commits touched only the `.spec.md`
+half, which invalidates that pass under the freshness rule and restarts the counter here at round 1.
+The first commit (`686057d`) fixed three real wording defects the observability judge had caught two
+days earlier and that had survived a full compliance round unfixed: a `405` table row that could be
+misread as making `POST /command` — the one state-changing route — a `405`; a claim that a failed
+`cmux send`'s exit code is "logged server-side" when the structured audit line actually carries no
+such field (it goes out as a separate `stderr.write`); and a "bijection" label for the
+reason-to-status relationship where the code actually emits five reasons for `403` and two for `502`,
+not one each. I re-read the server's routing logic and its `_fail`/`audit` calls directly rather than
+trusting the corrected prose, and all three now match the code exactly. The second commit (`01f0c45`)
+recorded a genuinely new finding from that same re-derivation exercise: the audit value
+`confirm_timeout`, named in four places including a test task 9 must drive an actual request for,
+cannot currently be emitted — `confirm_surface()` collapses a non-zero exit and a timeout into one
+`"unrunnable"` state. I confirmed this against `task-tracker/server.py:236-253` directly: no code path
+produces `confirm_timeout`. The spec handles this correctly — it names the gap as a **blocking
+prerequisite**, records the user's decision that the code changes (split the state) before the
+assertion is written, and requires that edit to land as its own commit ahead of the test. That is not
+cited as a violation; it is exactly the human-owned-decision discipline this card asks for elsewhere.
+
+One real gap survived the fix pass, and it is not new: the observability judge flagged it on
+2026-08-11 (its "what I'd double-check" item 3) and the fix commit that closed three sibling findings
+from the same list did not touch it. Task 8 (`server.py`) is ticked done, and the file measures **694
+lines** (`wc -l`, re-derived) — 73% past the 400-line soft target this card applies to itself. Its own
+task-8 entry still reads in the future tense — "will land near the 400-line target. If it crosses,
+the split is `serve_static.py`; raise it rather than taking it as a drive-by" — as if the crossing
+were still hypothetical. Task 3's entry for `analyze.py` (792 lines, the same over-400-under-800
+territory) shows what this card's own convention requires once the number is known: an explicit,
+present-tense "not scheduled — a structural split is a human-owned call" note recording the actual
+decision. `server.py`'s entry never made that transition. The decision itself may well be "defer,
+same as `analyze.py`" — but the card doesn't say so, and this is the one component it calls the
+highest-value target in the repo.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `core-conduct/file-size-decision-unsurfaced` | `rules/core-conduct.md` | Code Style: "Many small, focused files (<400 lines, 800 max) over few large ones"; Existing and New Work: "Architecture trade-offs … stay human-owned — implement once decided, don't decide." | `tracking-feature-state.spec.md` §Tasks, task 8 detail | Task 8 is ticked complete and `task-tracker/server.py` measures 694 lines (`wc -l`, re-derived 2026-08-11), well past the 400-line soft target, yet its entry still reads in future/hypothetical tense ("will land near the 400-line target. If it crosses…") rather than recording the actual count and an explicit present-tense human decision to split or defer — the treatment task 3's analogous `analyze.py` overrun (792 lines) received. The same standard this card applies to one file is unapplied to the other, for the component it itself calls the highest-value target in the repo. |
+
+### Verified clean, re-derived from source (not from prior verdicts)
+
+| Claim | Method | Result |
+|---|---|---|
+| `405` table now matches the server's routing | Read `do_GET`/`do_OPTIONS`/`do_POST` (`server.py:384-411`) against the table's "other than" wording and precedence note | Exact match: `GET /command`→405, `POST /`→405, `POST` on a manifest path→405, `OPTIONS` on any non-`/command` path→405, `POST /command` and `OPTIONS /command` are not 405, unknown path is 404 regardless of method |
+| Exit-code claim now matches the audit format | Read `audit()` (`server.py:125-138`) and the `cmux send exited %d` write (`server.py:273`) | The structured line carries no exit-code field; the exit code goes to a separate `stderr.write`, exactly as the corrected prose now states |
+| "Bijection" replaced with the accurate property | Derived `grep -oE '_fail\([0-9]+, "[a-z_]+", "[a-z_]+"' task-tracker/server.py \| sed ... \| sort -u` plus the `send_failed` audit call outside `_fail` | `403`→5 reasons, `500`→2, `502`→2 (`confirm_failed`, `send_failed`); no one-to-one pairing exists, matching "total coverage in both directions," not a bijection |
+| `confirm_timeout` cannot be emitted (the recorded blocking prerequisite) | Read `confirm_surface()` (`server.py:236-253`) and its call site (`server.py:568-575`) | Confirmed: both a non-zero `cmux tree` exit and a `TimeoutExpired` return `"unrunnable"`, mapped to `reason="confirm_failed"` only — no path emits `confirm_timeout`. Matches the spec's own claim exactly |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` in the spec half | **15**, matching the `.md` half's stated figure |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py <.md> <.spec.md> tracking-feature-state` | exit **0** |
+| Cross-file pointers (`PORTS.md`, ADR 0022, ADR 0023) | grepped each for the `.spec.md` filename | All three correctly point at `tracking-feature-state.spec.md` |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`placeholder`/`/Users/`/`/home/` | The two `placeholder` hits are narrative references to a past, since-replaced row — not live placeholders. Nothing else found |
+| Security territory (`writing-secure-code`) | Re-read §Security, the wire contract, and the corresponding `server.py` handlers | Unchanged clean read: single-key allowlist body, no error-body echo, memory-only token compared with `hmac.compare_digest`, every subprocess call carries a timeout, `Origin`/`Host`/CSP checks present and matching the code |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half unchanged at 216 lines (byte-identical blob to round 3's pass) against ADR 0017's `≤200`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; **re-confirmed 2026-08-11 at commit `686057d`** after the observability judge measured the growth since the accepting commit (1,278 → then further, now 1,506 lines, `wc -l`) and put it back to the user, who left the waiver standing on the ground that it was never about this half's size, only the session-start half staying small. Not re-cited. |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` size continues to grow past the figure it was last re-confirmed against.** At
+  `686057d` (the re-confirmation commit) the file was smaller than its current 1,506 lines — this
+  round's own edits (the `confirm_timeout` paragraph) added to it further. The waiver's *ground*
+  (session-start half staying small) still holds — the `.md` half is unchanged — so this is not raised
+  as a violation, per the dispatch instructions. Flagging for the user's awareness only: if this
+  becomes a pattern where every fix pass adds more to the half than it removes, the "re-confirm on
+  request" model may need to become "re-confirm above a stated delta" instead.
+- Several acceptance criteria (e.g. 2, 3) still collapse an explicit `When` clause into `Given`,
+  consistent with every prior round's non-blocking treatment (token economy, intent stays
+  unambiguous). Not cited, per that standing precedent.
+- The `confirm_timeout` blocking-prerequisite paragraph is a model instance of this card's own
+  discipline: it names the gap, cites the exact code line, records the human decision, and orders the
+  code change ahead of the test that depends on it in its own commit — the same shape task 8's entry
+  is missing for its own file-size question.
+- Phase/branch documentation (`gates/phase-branch-mismatch`, closed round 2 of the prior cycle) is
+  unchanged and still correct on independent re-check: the preamble's claim that every other
+  `phase: planning` card carries `branch: none` and zero ticked tasks still holds
+  (`grep -m1 '^phase:\|^branch:' docs/features/*.md`).
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md`
+  + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/` default.
+
+
+## Round 2 — 2026-08-11T20:02:15Z — **FAIL** (1 violation)
+
+`head_sha` `bd73da6060fc6483e42d85a8c6b700e6576deaf2` · branch `feat/tracking-feature-state` ·
+spec blobs `4bccdca99153217c7a8e1d42ffa23f4997f25a5b` (`.md`) /
+`53b1caab39d9f580540af952f21d1959e1d27e8f` (`.spec.md`) · confidence **high**
+
+### Layman summary
+
+This round checks whether commit `bd73da6` actually closed round 1's one violation, and separately
+audits the two other changes the same commit made that nobody asked for. The file-size finding is
+closed: task 8's entry now states the measured line count in the present tense and records an
+explicit, human-owned "not scheduled" decision, in the same words and shape task 3 already uses for
+`analyze.py` — I re-measured `server.py` at **694 lines** (`wc -l`, over the 400 target, under the 800
+hard max) rather than trusting the spec's own number, and it matches. The confirm_timeout residual
+marker on task 8 is honest bookkeeping, not a defect: I read `confirm_surface()` directly
+(`server.py:236-253`) and confirmed the split genuinely has not landed yet, so the "ticked but owes
+one edit" note is a true statement, stated in both halves, not a false completion claim. The corrected
+reason-coverage derivation is also right — I re-ran the exact two-shape command from task 9's bullet
+myself rather than taking the spec's re-run number on faith, and got the same **15** pairs (`403`→5,
+`502`→2) it claims.
+
+But auditing the surface rather than only the cited item found a second, unrelated defect the dispatch
+did not ask about: task 4's `§Tasks` detail in the `.spec.md` half is stale. It still reads as an open
+problem — "Nothing asserts the converse," "give it a way to omit the key outright... before writing
+the assertion that needs it," "these two assertions are the whole of what is missing" — but that work
+was already done, in commit `3d5a2ff` (2026-08-10), which ticked the box in *both* halves and added the
+`.md` half's own note, "Round-11 reopen closed." I confirmed the fix is real and matches what the stale
+paragraph describes as missing: `test_analyze.py:181-208` (`test_criterion_1_a_card_without_a_phase_key_is_still_a_card`)
+asserts exactly the converse direction, by branch, and the fixture's `card()` helper
+(`test_analyze.py:96-105`) already has the `phase=None`-omits-the-key branch the paragraph says does
+not exist yet. The paragraph even cites its own falsifier — `grep -n 'phase: %s' task-tracker/test_analyze.py`
+— and running that grep now lands inside the `if phase is not None:` guard, contradicting the
+paragraph's own word "unconditionally." This is exactly the species of defect this card's preamble
+names as its dominant failure mode (a stored result gone stale), just in a spot nobody had re-checked
+since round 11 of the previous cycle, six commits ago. It has never been cited before.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/stale-recorded-claim` | `~/.claude/skills/writing-specs/SKILL.md` | "Maintain it with production rigor... Drift causes hallucination: when the spec and the code fall out of sync, the agent starts describing and extending behavior that no longer exists" (The Spec Is the Source of Truth); "no placeholders, TBDs, or requirements readable two ways" (What a Spec Must Contain) | `tracking-feature-state.spec.md` §Tasks, task 4 detail (the "Re-opened in round 11" bullets), against `tracking-feature-state.md`'s task 4 line ("Round-11 reopen closed") and `task-tracker/test_analyze.py:96-105,181-208` | The `.spec.md` half's task 4 detail still describes criterion 1's converse-direction assertion as unwritten and the fixture as unable to express the case ("Nothing asserts the converse," "the fixture cannot express the case today... emits `phase:` unconditionally," "these two assertions are the whole of what is missing"), in present-tense, imperative language with no historical framing. Commit `3d5a2ff` (2026-08-10) closed this for real — it ticked the box in both halves, added the `.md` half's "Round-11 reopen closed" note, and landed `test_criterion_1_a_card_without_a_phase_key_is_still_a_card` plus the `phase=None`-aware fixture — but never touched this paragraph. A reader who follows the `.md`'s own instruction to read task detail in `§Tasks` for task 4 gets told the opposite of what the `.md` half and the shipped code both say. |
+
+### Verified clean, re-derived from source (not from prior verdicts)
+
+| Claim | Method | Result |
+|---|---|---|
+| Round-1 violation (`core-conduct/file-size-decision-unsurfaced`) is closed | Read task 8's current `.spec.md` entry; `wc -l task-tracker/server.py` | `server.py` measures **694 lines**; the entry states this in the present tense and records an explicit "Not scheduled — same call, and the same reason, as task 3's `analyze.py`" decision, matching task 3's own already-accepted "not scheduled" pattern for `analyze.py` (792 lines, `wc -l`, under the 800 hard max) |
+| `confirm_timeout` residual marker is a true statement, not a false completion claim | Read `confirm_surface()` (`server.py:236-253`) | Confirmed: a non-zero `cmux tree` exit and a `TimeoutExpired` both still return `"unrunnable"`, mapped only to `reason="confirm_failed"` — the split has genuinely not landed. Task 8's "ticked but owes one edit" note in both halves is accurate, and the project's own local `rules/core-conduct.md` addition ("write what you checked and what you did not — an explicit gap is cheap, a false certainty is not") is exactly what this note does. Not a violation |
+| Corrected reason-coverage derivation (`403`→5, `502`→2, 15 total) | Re-ran the two-shape command from task 9's bullet verbatim against current `server.py` | **15** distinct `(status, reason)` pairs; `403` has 5 (`bad_token`, `host_mismatch`, `origin_mismatch`, `path_escape`, `unknown_id`); `502` has 2 (`confirm_failed`, `send_failed`) — both captured because `_fail(502, "send_failed", "confirm_failed", ...)` (`server.py:575`) matches the `_fail`-shape grep and the direct `audit("failed", 502, reason="send_failed", ...)` (`server.py:582`) matches the `audit`-shape grep. Matches the spec's claimed re-run exactly |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py <.md> <.spec.md> tracking-feature-state` | exit **0** |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` in the spec half | **15**, matching the `.md` half's stated figure |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`FIXME`/`placeholder`/`/Users/`/`/home/` | Both `placeholder` hits are narrative references to a past, since-replaced row (unchanged from round 1's finding); nothing else found |
+| Security territory (`writing-secure-code`) | Re-read §Security and the wire contract against `server.py`'s `_fail`/`audit`/header-check code | Unchanged clean read: single-key allowlist body, no error-body echo, memory-only token (`secrets.token_urlsafe(32)`) compared with `hmac.compare_digest`, `Host`/`Origin`/CSP/`nosniff` checks present and matching the code, `PORTS.md:26` correctly documents port 8422 and the bind posture |
+| ADRs 0022/0023/0024 exist | `ls docs/decisions/ \| grep -E '0022\|0023\|0024'` | All three present |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half unchanged at 216 lines against ADR 0017's `≤200`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; re-confirmed 2026-08-11 at commit `686057d`. Not re-cited — see Notes for a growth observation since the re-confirmation commit. |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` half grew ~37 lines since the `686057d` re-confirmation** (1,493 lines at that
+  commit, `git show 686057d:...spec.md | wc -l`, vs. 1,530 now) — beyond the waiver's own stated
+  threshold of "a handful of lines" before it should be raised again. The `.md` half, which is what the
+  waiver's ground actually depends on (session-start load), is unchanged at 216 lines across both
+  commits, so the ground itself still holds and this is not raised as a violation — flagged only so the
+  user can decide whether the spec half's growth trend needs its own check-in.
+- The residual-work marker on task 8 (the `confirm_timeout` split, "owed" not "done") was explicitly
+  asked about in the dispatch. Judged honest bookkeeping, not a checklist-integrity defect: both halves
+  carry the same warning, the remaining edit is precisely scoped and already user-decided, and it is
+  the same "state what you checked and what you didn't" discipline the project's local `core-conduct.md`
+  asks for. See the Verified-clean table above for the source-level confirmation.
+- The task-4 staleness found this round was not caught by any of the 14 prior rounds across both
+  cycles; it survived because commit `3d5a2ff` updated the tick and the `.md` half's note but not the
+  `.spec.md` detail underneath it, and nothing since has had reason to re-open task 4. Worth a targeted
+  grep for the same shape ("re-opened," "not yet," "nothing asserts," "must" language under an already-
+  ticked task) across the other seven ticked tasks before the next round — I checked tasks 1, 2, 3, 5,
+  6, 7 and 14 this round and found none of the same shape, but did not exhaustively re-read every line.
+- Phase/branch documentation (`gates/phase-branch-mismatch`, closed round 2 of the prior cycle) is
+  unchanged and still correct on independent re-check.
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md`
+  + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/` default.
+
+---
+
+## Round 3 — 2026-08-11T20:06:36Z — **PASS** (0 violations)
+
+`head_sha` `b2ed7bbd0a1e425624cd901920b81fa709d1ff2f` · branch `feat/tracking-feature-state` ·
+spec blobs `4bccdca99153217c7a8e1d42ffa23f4997f25a5b` (`.md`, byte-identical to round 2 — unchanged) /
+`5f0ed55c73136678e68a1f72b9fc4eac4201e9f5` (`.spec.md`) · confidence **high** · **round 3, the
+escalation cap for this re-entry**
+
+### Layman summary
+
+This round checks one specific fix (round 2's `writing-specs/stale-recorded-claim`) and one
+specific addition (a second blind-spot caveat on the reason-coverage derivation), then re-derives
+the rest of the card from source rather than trusting either the prose or the prior verdicts, per
+this dispatch's standing instruction. Only `docs/features/tracking-feature-state.spec.md` changed
+at this commit — confirmed via `git show --stat`; the `.md` half is byte-identical to round 2's.
+
+**The rewrite closes the violation, and I checked the parts of it that weren't handed to me.**
+Task 4's detail now reads in past tense against the landed test: `test_analyze.py:104`
+(`if phase is not None:`) really is the `phase=None`-omits-the-key branch the paragraph describes,
+`test_criterion_1_a_card_without_a_phase_key_is_still_a_card` really is at line 181 and asserts the
+converse direction by branch, and `analyze.py:266,528,530` really do split into the two
+branches ("not-a-known-phase" vs. "unread-frontmatter") the paragraph names. One claim in the new
+text wasn't handed to me pre-verified: "Falsified both ways against a deliberately broken analyzer
+before being trusted." I checked the commit that landed the fix rather than taking the sentence's
+word for it — `3d5a2ff`'s own message states exactly that ("Both assertions were falsified against
+a deliberately broken analyzer before being trusted, and `analyze.py` restored from HEAD
+afterwards"), so the claim is grounded in the historical record, not invented for this rewrite.
+
+**The closing ⚠️ line earns its place.** It states a fact ("this entry went on describing that work
+as unfinished for six commits after it landed") and derives an instruction from it ("the two halves
+are one document: when they disagree, re-derive from source rather than believing either one's
+prose") rather than just narrating the miss. On the number itself: counting commits that touched
+`tracking-feature-state.spec.md` strictly between `3d5a2ff` (the commit that landed the fix) and
+`bd73da6` (the commit round 2 judged and where the staleness was caught) gives exactly six
+(`01f0c45`, `686057d`, `1d54816`, `6e17fd9`, `e24727d`, `b2e9bab` — re-derived with
+`git log --oneline 3d5a2ff..bd73da6 -- docs/features/tracking-feature-state.spec.md`, which returns
+seven including `bd73da6` itself, the catching commit). That is a defensible reading, not an
+inflated one, so this is not cited — flagged in Notes since it rests on which endpoint is excluded.
+
+**The second addition is honest, not padding.** I independently ran the exact two-shape derivation
+from task 9's bullet against current `server.py` and got **15** distinct `(status, reason)` pairs,
+matching both the `.md` half's stated figure and the derivation's own claim — so there is no live
+undercounting bug today; the new "wrapped call" clause is a forward-looking limitation of `grep`
+(line-based matching cannot see a call whose status and `reason` land on different source lines),
+not a description of a defect that currently exists. I manually enumerated every `_fail(...)` and
+`audit(...)` call site in `server.py` (34 call sites, 15 distinct failure pairs after excluding the
+four `reason="-"` success paths) and the automated derivation matches the manual one exactly. The
+caveat is true, concise, and ties to the card's own established pattern of naming a derivation's
+blind spot before it bites — not merely longer for its own sake.
+
+**Everything else was re-derived from source, not read off prior verdicts.** Acceptance-criteria
+count is **15** (`awk` over `## Acceptance criteria`). Task-number sync is clean
+(`python3 hooks/lib/feature_tasks.py <.md> <.spec.md> tracking-feature-state` → exit 0). File sizes
+match exactly what the card claims: `server.py` **694** lines, `analyze.py` **792** lines (`wc -l`),
+both with present-tense, human-owned "not scheduled" decisions recorded (task 8 / task 3). No
+`TBD`/`TODO`/`FIXME`/placeholder markers outside historical narrative, no absolute paths, no leaked
+secrets. All five toolchain pins match this host exactly: `Python 3.9.6`, `uv 0.11.28`,
+`cmux 0.64.20 (100) [14e3400b9]`, `node v26.5.0` (pytest unchanged since round 2's verification, not
+re-run this round — no toolchain-relevant edit occurred). `server.py` itself did not change this
+round, so the security territory (allowlist-id-only wire, memory-only token via
+`hmac.compare_digest`, every subprocess call timed, Origin/Host/CSP checks, `confirm_timeout` still
+correctly marked as a pending, human-decided code edit rather than a false completion claim) is
+unchanged from round 2's clean read and was not re-audited line-by-line this round.
+
+**Nothing is outstanding.** Round 1's `core-conduct/file-size-decision-unsurfaced` and round 2's
+`writing-specs/stale-recorded-claim` are both closed on independent re-derivation, no new violation
+surfaced, and this is round 3 — the cap. The escalation tripwire does not fire.
+
+### Violations
+
+None this round.
+
+### Closed since round 2 — verified, not assumed
+
+| id | how it was verified |
+|---|---|
+| `writing-specs/stale-recorded-claim` | Re-read the rewritten task 4 detail against `task-tracker/test_analyze.py` and `task-tracker/analyze.py` directly (lines 96-105, 104, 181-208, 266, 528, 530 — all re-grepped, not trusted from the spec's own citations). Also checked the one claim not handed to me pre-verified — "falsified both ways against a deliberately broken analyzer" — against commit `3d5a2ff`'s own message, which states the same thing independently. The paragraph now reads in past tense and matches the shipped code and the `.md` half's "Round-11 reopen closed" note. |
+
+### Verified clean, re-derived from source (not from prior verdicts)
+
+| Claim | Method | Result |
+|---|---|---|
+| Reason-coverage derivation still returns 15, and no wrapped call currently undercounts it | Ran the exact two-shape command from task 9's bullet against current `server.py`; independently hand-enumerated all `_fail(...)`/`audit(...)` call sites | **15** distinct `(status, reason)` pairs from both methods; no discrepancy, so the new "wrapped call" caveat is a true, currently-latent limitation, not a live bug |
+| Acceptance-criteria count | `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` | **15**, matching the `.md` half |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` | exit **0** |
+| `server.py` / `analyze.py` line counts, against the "not scheduled" decisions | `wc -l task-tracker/server.py task-tracker/analyze.py` | **694** / **792**, matching the spec's present-tense claims exactly |
+| Toolchain pins | `python3 -V`, `uv --version`, `cmux --version`, `node --version` | `Python 3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `v26.5.0` — all four match `§Toolchain` exactly |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`XXX`/`placeholder`/`/Users/`/`/home/` | Zero live hits; the two `placeholder` matches are narrative references to a past, since-replaced row |
+| Only the `.spec.md` half changed at `b2ed7bb` | `git show --stat b2ed7bb` | Confirms the `.md` half (blob `4bccdca9…`) is untouched since round 2 |
+| `confirm_timeout` still correctly marked pending, not falsely complete | grepped every occurrence across both halves | All five mentions (lines 428, 513, 830, 1251, 1367-1381 of `.spec.md`; the `.md` task-8 marker) are consistent with the still-outstanding `confirm_surface()` split — no false completion claim |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half unchanged at **216 lines** (byte-identical blob to rounds 1 and 2) against ADR 0017's `≤200`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`; re-confirmed 2026-08-11 at commit `686057d`. Not re-cited — see Notes for the growth figure since the last two rounds. |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` half grew again — the growth figure, re-derived, not trusted from any prior
+  round:** `wc -l` currently reads **1,535** lines. Against the re-confirmation commit
+  (`git show 686057d:docs/features/tracking-feature-state.spec.md | wc -l` = **1,493**), that is
+  **+42** since the waiver was last re-confirmed. Against round 2's own figure
+  (`git show bd73da6:...spec.md | wc -l` = **1,530**), that is **+5** this round — a small addition,
+  consistent with the task 4 rewrite and the new wrapped-call clause, not a growth spike. Against the
+  original acceptance commit (`git show 2c66fab:...spec.md | wc -l` = **1,278**), the half has grown
+  **+257** lines total since the waiver was first granted. The `.md` half — what the waiver's ground
+  actually depends on (session-start load) — is unchanged at 216 lines across all three rounds, so
+  the ground still holds and this stays a note, not a violation, per the dispatch's instruction that
+  this observation is on its way to the user alongside the verdict regardless.
+- **The "six commits" figure in the new ⚠️ line is defensible but boundary-sensitive.** It matches
+  exactly when the count excludes both the landing commit (`3d5a2ff`) and the catching commit
+  (`bd73da6`, the commit round 2 was judged against and where the staleness was actually found) —
+  `git log --oneline 3d5a2ff..bd73da6 -- docs/features/tracking-feature-state.spec.md` returns seven
+  commits including `bd73da6`. Not cited, because `bd73da6` is plausibly read as the discovery event
+  rather than another silent pass-through — but a future round should re-derive this the same way
+  before trusting the number if it is ever referenced again.
+- **Security territory not re-audited line-by-line this round.** `server.py` did not change at
+  `b2ed7bb` (confirmed via `git show --stat`); round 2 already did a full re-read of the wire
+  contract against the code. This round limited its security-relevant check to the reason-coverage
+  derivation (§Security-adjacent, task 9) and the `confirm_timeout` consistency check, both above.
+- **Gherkin shape**, as in every prior round across both cycles: several criteria still fold `When`
+  into `Given`. Not cited, same reasoning as every prior round (token economy, intent stays
+  unambiguous).
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer
+  (`rules/gates.md` + ADR 0017) takes precedence over `writing-specs`' `docs/superpowers/specs/`
+  default.
+- Read Acceptance criteria (846-1097), Security (675-845), Out of scope (1098-1115) and Toolchain
+  (1116-1158) in full this round, not just the two sections the dispatch named — no new defect found
+  in any of them; all match what rounds 1-2 (and, transitively, the prior cycle's rounds) already
+  verified.
+
+### Waivers
+
+Same two as above — no new waiver requested or granted this round.
+
+---
+
+## Round 1 (re-entry) — 2026-08-11T20:47:54Z — **PASS** (0 violations)
+
+`head_sha` `224174247735630246d0a71d348217fcad533240` · branch `feat/tracking-feature-state` ·
+`md_half_blob_sha` `4bccdca99153217c7a8e1d42ffa23f4997f25a5b` (unchanged since `bd73da6`) ·
+`spec_half_blob_sha` `ca31bb8d53b38e7db4d88cb35fd1e4f54ff3795e` (moved by `c4c3349`) ·
+`spec_blob_sha` (pair hash, `cat .md .spec.md | git hash-object --stdin`)
+`2da123086a59b4ec1de278a5cc3324b61202fe98` · confidence **high**
+
+This restarts the loop: the prior cycle passed clean at `b2ed7bb` (round 3, 2026-08-11T20:06:36Z),
+and `c4c3349` then edited `.spec.md` alone, moving its blob and invalidating that pass under the
+freshness rule. Judged as a genuine first round, not a continuation — every figure below was
+re-derived from source in this session, none carried over from a prior verdict's word.
+
+### Layman summary
+
+The one change since the last clean pass is a single-hunk docs-only edit to task 4's closing bullet
+in `§Tasks`, and it does what its commit message says: it deletes a number that was never counted
+(the previous "six commits" claim) and replaces it with the two commits that bound the gap plus a
+command that sizes it. I ran that exact command rather than taking the sentence's word for it.
+
+`git rev-list --count 3d5a2ff..b2ed7bb -- docs/features/tracking-feature-state.spec.md` returns
+**8** on this checkout — a number that appears nowhere in the fix commit's own working notes (which
+computed 18 for the full range, 17 minus the fixing commit, 11 restricted to both halves of the
+pair, 10 minus the fixing commit restricted to the pair). That mismatch was worth chasing down
+before trusting the embedded command, given this card's history of a derivation that quietly answers
+a neighbouring question. It resolves cleanly: the sentence attaches to "this entry," which lives
+only in `.spec.md`, so scoping the count to that one file is the *more* precise reading, not a wrong
+one — and I confirmed `b2ed7bb` really is the commit that rewrote the entry from present-tense "open
+problem" language to past-tense "closed" language (`git show b2ed7bb -- docs/features/...spec.md`
+shows exactly that rewrite, plus the addition of the very bullet under discussion). That also
+corrects something the round-3 PASS got wrong in its own reasoning: round 3's notes sized the same
+gap against `bd73da6` (the commit that merely *caught* the staleness) instead of `b2ed7bb` (the
+commit that actually *fixed* it), which is why round 3 landed on "six, defensible" — a smaller,
+slightly-wrong-endpoint number that happened to read as plausible. The new text names both SHAs
+explicitly and lets the reader run the command, so no wrong number is asserted either way; this is
+not cited, but it is worth recording precisely, since a derivation that quietly returns 8 instead of
+an expected 18/17/11/10 is exactly the shape this card has been burned by before, and it deserved
+the same scrutiny as a number that turned out wrong.
+
+I also checked whether this bullet has crossed from instruction into narration, since it is a
+correction *about* the card's own documentation history, and this card's own "Revision history"
+section says that kind of content belongs in git, not the spec — except where it teaches a lesson
+that stays "beside the thing that would produce it again." This one does: it tells a future reader
+what to do when the two halves disagree ("re-derive from source rather than believing either one's
+prose"), which is instruction, not just a chronicle of round numbers. The edit under judgment does
+not add a new layer — it rewrites the existing bullet in place (7 insertions, 5 deletions, same
+bullet count) — so the "another such layer is the signal to compress" warning from the round-3
+notes does not fire here. Not cited.
+
+Everything else was re-derived from source rather than read off any prior verdict, including this
+prompt's own numbers: acceptance-criteria count, task-number sync, every pinned toolchain version,
+every file line count, `pytest`'s output, the phase/branch precedent across all 14 other feature
+cards, and a spot-check of the security-relevant code (`server.py` did not change since the last
+line-by-line audit at round 2 of the prior cycle — confirmed via `git diff --stat b2ed7bb..HEAD`,
+which touches only `.spec.md` and memory/judge bookkeeping files).
+
+### Violations
+
+None.
+
+### Waivers (carried forward from the prior cycle, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. Re-verified: `.md` half is **216 lines** (`wc -l`) against ADR 0017:39's `≤200`, unchanged across every round since the waiver. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` on the ground that the waiver depends only on the session-start (`.md`) half staying small, not on this half's size. Re-verified that ground still holds: `.md` half unchanged at 216 lines. See Notes for the growth figure. |
+
+### Verified clean, re-derived from source (not from any prior verdict or from this prompt's own numbers)
+
+| Claim | Method | Result |
+|---|---|---|
+| The `c4c3349` derivation, checked against the SHAs it names | `git show 3d5a2ff --stat`; `git show b2ed7bb -- docs/features/tracking-feature-state.spec.md` | `3d5a2ff` is genuinely the commit that landed the round-11 fix (its own message: "test(tracker): close task 4"); `b2ed7bb` is genuinely the commit that rewrote the stale bullet to past tense *and* added the bullet under discussion — both SHAs the new text names are the right two |
+| The embedded command's actual output | `git rev-list --count 3d5a2ff..b2ed7bb -- docs/features/tracking-feature-state.spec.md` | **8** — a number that appears in neither the doc nor the fix commit's message; judged a defensible, correctly-scoped reading (see summary), not a fabrication |
+| Only `.spec.md` (plus memory/judge files) changed since the last PASS | `git diff --stat b2ed7bb..HEAD` | `docs/features/tracking-feature-state.spec.md` (+12/-5, one hunk), `CODING_MEMORY.md`, two judge-memory files, two `verdicts.jsonl` — no `task-tracker/` source touched |
+| Acceptance-criteria count | `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` over the spec half | **15** |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` | exit **0** |
+| `.md` / `.spec.md` / `server.py` / `analyze.py` line counts | `wc -l` | **216** / **1537** / **694** / **792** — matches every present-tense claim the card makes about them |
+| Toolchain pins | `python3 -V`, `uv --version`, `cmux --version`, `node --version` | `Python 3.9.6`, `uv 0.11.28`, `cmux 0.64.20 (100) [14e3400b9]`, `v26.5.0` — all four match §Toolchain exactly |
+| Test suite | `uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q` | **54 passed** — the card's own "53 passed on 2026-08-09... re-run it rather than trusting it" framing is honest; the number has moved and the card said it would |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`XXX`/`/Users/`/`/home/` | Zero live hits |
+| `confirm_timeout` still correctly marked as an open, human-decided prerequisite (not falsely complete) | Read `confirm_surface()` (`server.py:236-253`) | Both `TimeoutExpired` and a non-zero/OSError still collapse into one `"unrunnable"` state — task 8's "ticked but owes one edit" marker in both halves is still true, not stale |
+| Token/CSP/traversal/no-store spot-check | `grep -n 'compare_digest\|token_urlsafe\|Content-Security-Policy\|frame-ancestors\|path_escape\|no-store' task-tracker/server.py` | All present and matching §Design 3 / §Security as described; unchanged since the last full audit, consistent with the diff-stat showing no source edit |
+| Phase/branch precedent (the `.md` preamble's central claim) | `grep -m1 '^phase:\|^branch:' docs/features/*.md`; `grep -c '^\- \[[xX]\]'` on the two other `planning` cards | Both other `phase: planning` cards (`falsify-harness-signatures.md`, `verification-marker-gate.md`) carry `branch: none` and 0 ticked tasks, exactly as the preamble states |
+| PORTS.md / ADR cross-references | `grep -n '8422' PORTS.md`; `grep -rn 'tracking-feature-state.spec.md' docs/decisions/0022-*.md docs/decisions/0023-*.md` | All three correctly point at the `.spec.md` filename and the port entry |
+
+### Notes (non-blocking)
+
+- **The `.spec.md` half has grown again since the last re-confirmation.** `git show 686057d:docs/features/tracking-feature-state.spec.md | wc -l` → **1493**; current `wc -l` → **1537** — **+44** since the ground the waiver was re-confirmed on. The `.md` half, which is what that waiver's ground actually depends on (session-start load staying small), is unchanged at **216** lines. So the ground still holds and this is not raised as a violation, per the waiver's own terms — flagged only as the observation the dispatch asked for.
+- **The `c4c3349` derivation's scope is worth a future round re-checking the same way before trusting it further.** It answers a real, well-defined question (commits touching the one file the stale entry lives in, inclusive of the commit that fixed it), but it is a fifth distinct scoping of "the gap" beyond the four the fix commit's own message worked through, and none of those four matches it. Not cited — no number is asserted in the prose itself, only a command — but this is precisely the kind of derivation that has silently answered a neighbouring question before on this card, so it should not be trusted a second time without re-running it.
+- **Narration-vs-instruction check, on request.** Task 4's closing bullet is meta-commentary about the card's own documentation history, which is the category this card's "Revision history" section says belongs in git, not the spec. It earns its place anyway because it ends in an instruction ("re-derive from source... rather than believing either one's prose"), not just a chronicle — and this edit compressed nothing further but also added no new layer. If a future edit adds a fourth "here is why the last correction was itself wrong" layer to this same bullet, that is the signal to delete the bullet and let git carry the history, per the card's own stated policy.
+- **Gherkin shape**, as in every prior round across every cycle: several criteria still fold `When` into `Given`. Not cited, same reasoning as every prior round (token economy, intent stays unambiguous).
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer (`rules/gates.md` + ADR 0017's one-canonical-file discipline) takes precedence over `writing-specs`' `docs/superpowers/specs/` default, and project rules win on conflict.
+- Security territory (`writing-secure-code`) re-checked at the source level (external input, shell execution, a localhost server, a bearer credential) even though no `task-tracker/` source changed this round — see the spot-check row above. Nothing regressed.
+
+---
+
+## Round 1 (RE-ENTRY) — 2026-08-11T21:59:16Z — **FAIL** (1 violation)
+
+`head_sha` `15cc372b5deac779294ed7b613e2be26d7819212` · branch `feat/tracking-feature-state` ·
+`md_half_blob_sha` `2ab92441981445c399fe02859e9f1994c37bac6e` (moved by `15cc372`) ·
+`spec_half_blob_sha` `ca31bb8d53b38e7db4d88cb35fd1e4f54ff3795e` (byte-identical since `c4c3349`) ·
+`spec_blob_sha` (pair hash) `511b6d5e3977d03afb7ed6b1f8b7a0337c5ed245` · confidence **high**
+
+This restarts the loop a second time: the prior cycle passed clean at `2241742` (round 1 re-entry,
+2026-08-11T20:47:54Z), and `15cc372` then edited `.md` alone — the gate-transition commit
+(`phase: planning → implementation`, `model_tier: high → low`, and a rewrite of the preamble
+paragraph that would otherwise have gone stale the instant the frontmatter flipped) — moving the
+`.md` blob and invalidating that pass under the freshness rule. Judged as a genuine first round: every
+figure below was re-derived from source in this session, none carried over from a prior verdict's
+word, and the two ids named for reuse (`core-conduct/file-size-decision-unsurfaced`,
+`writing-specs/stale-recorded-claim`) were checked and neither recurs.
+
+### Layman summary
+
+The gate transition itself is clean. The frontmatter now reads `phase: implementation`,
+`model_tier: low`, `branch: feat/tracking-feature-state`, and `git log` confirms the history the new
+preamble claims: the card really did open implementation once (`ab799e1`), return to `planning` for a
+spec revision (`6e17fd9`) and sit there through eight fix commits, then reopen on `15cc372` — the
+paragraph's past/present/conditional tenses all match reality, so nothing here recreates the
+`gates/phase-branch-mismatch` ambiguity compliance round 2 of the first cycle found. `phase-guard.sh`
+was read directly (steps 7-10): during a `planning`-phase pause, this card's own frontmatter entry
+never populates `claimed_branches` (only `phase: implementation` entries do), so the write-blocking the
+paragraph credits to keeping the real branch happens regardless of whether `branch:` holds the real
+name or `none` — the retained branch is bookkeeping, not what makes the hook fire — but the paragraph's
+actual claim ("phase-guard.sh correctly blocks writes to source, which is the point") is still true at
+the precision it's stated.
+
+**One finding, and it was hiding in a sentence eight prior rounds all read as verified.** The rewritten
+preamble keeps the same parenthetical it has carried since round 2 of the first cycle:
+`grep -m1 '^phase:\|^branch:' docs/features/*.md`, cited as the derivation proving "every other
+`planning` card in this repo carries `branch: none`." I ran it. Because every card's frontmatter lists
+`phase:` before `branch:`, and `-m1` stops after the **first** matching line per file, the command
+emits exactly one `phase: <value>` line per file and **never once reaches a `branch:` line, for any
+file, ever** — its output is a phase census, not a branch check. The underlying claim is true (I
+independently confirmed all 15 cards' frontmatter by hand: both other `phase: planning` cards,
+`falsify-harness-signatures.md` and `verification-marker-gate.md`, do carry `branch: none` and zero
+ticked tasks), but the cited command cannot demonstrate that — a reader who does exactly what the
+card's own discipline asks ("re-derive the count rather than trusting a number here"; "every code
+citation carries the command that re-finds it") runs it, sees a clean list of `phase:` lines, and
+walks away no better informed about the one thing the sentence needed it to prove. This is the exact
+species this card's own preamble names as its dominant defect — "a wrong scope fails silently and
+looks exactly like a clean result" — just never previously caught in this specific sentence: it
+predates `15cc372` (the old wording carried the identical grep, `git show ab799e1^..b2ed7bb -- ...`
+confirms it was present through every round of both cycles), and every prior round that touched this
+paragraph — including the first cycle's own round-3 PASS, which ran this same command and separately
+verified branch values by other means without noticing the command itself couldn't — treated it as
+self-evidently correct.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/derivation-scope-mismatch` | `rules/core-conduct.md` (project layer) + `~/.claude/skills/writing-specs/SKILL.md` | Project core-conduct: "Verification precedes both the claim and the write-down — never state that something works … and never record that claim in a durable artifact … until you have actually run it and re-read the output"; writing-specs: "Maintain it with production rigor" / drift causes hallucination | `.md` preamble (lines 9-17), the parenthetical `(grep -m1 '^phase:\|^branch:' docs/features/*.md)` attached to the claim "which is what every other `planning` card in this repo carries [branch: none]" | Every card's frontmatter lists `phase:` on the line before `branch:`, and `grep -m1` stops after the first match per file — so the command, run exactly as written, prints one `phase: <value>` line per file and **never emits a `branch:` line for any file**. It cannot demonstrate the claim it is cited to prove. The claim itself happens to be true (independently re-verified against all 15 cards' raw frontmatter), so this is not a false statement, but it is an unverified one dressed as a verified one, in a durable artifact, matching this card's own named recurring defect ("a wrongly-scoped [derivation] returns cleanly and looks exactly like a correct result") — and it survived every prior round across both cycles, including a PASS, because no round had actually run the cited command and read its output. |
+
+### Resolved / not recurring — the two ids named for reuse
+
+| id | check performed | result |
+|---|---|---|
+| `core-conduct/file-size-decision-unsurfaced` | Read task 8's `.spec.md` entry again; `wc -l task-tracker/server.py` | Still closed: **694 lines**, present-tense, human-owned "not scheduled" decision recorded, unchanged since round 2 of the first cycle. `server.py` was not touched by `15cc372` (confirmed via `git diff --stat 2241742..15cc372`, which lists only `docs/features/tracking-feature-state.md` plus memory/judge files). |
+| `writing-specs/stale-recorded-claim` | Re-read task 4's `§Tasks` detail against `test_analyze.py` | Still closed: unchanged since `b2ed7bb`; the fix that closed it was never touched by this commit. |
+
+### Verified clean, re-derived from source (not from any prior verdict or from this prompt's own numbers)
+
+| Claim | Method | Result |
+|---|---|---|
+| Frontmatter history matches the rewritten paragraph's narrative | `git show <sha>:docs/features/tracking-feature-state.md \| sed -n '2p'` across `ab799e1, 6e17fd9, 1d54816, 128e79c, 686057d, 01f0c45, bd73da6, b2ed7bb, c4c3349, 15cc372` | `implementation → planning` at `6e17fd9`, held `planning` through eight commits, `→ implementation` at `15cc372` — exactly "returned to planning once … reopened … on 2026-08-11" |
+| `phase-guard.sh`'s branch-scoped permission, at the precision the paragraph claims | Read steps 7-10 (`hooks/phase-guard.sh:340-553`) directly | `claimed_branches` is populated only from entries where `file_phase == "implementation"` (line 387); a `planning`-phase entry — even one whose `branch:` holds a real name — never contributes a claim, so step 9's membership test denies the write regardless of whether `branch:` reads the real name or `none`. The paragraph's "phase-guard.sh correctly blocks writes to source" holds; the branch-retention convention is bookkeeping, not the enforcement mechanism |
+| `gates/phase-branch-mismatch` (closed, first cycle round 2) not reintroduced | Read current frontmatter + preamble tense together | Current state (`implementation` + real branch) is unambiguous on its own — no planning-with-real-branch state exists right now — and the paragraph's tenses (past for what happened, conditional for "should another revision be needed") do not imply the card is currently paused. No new or resurfaced ambiguity |
+| The underlying "branch: none" claim the broken grep was cited for | Full frontmatter dump, `sed -n '1,6p'`, on both other `phase: planning` cards; `grep -c '^\- \[[xX]\]'` on each | `falsify-harness-signatures.md`: `branch: none`, 0 ticked. `verification-marker-gate.md`: `branch: none`, 0 ticked. Claim is true; only its cited derivation is broken |
+| Acceptance-criteria count | `awk '/^## Acceptance criteria/{f=1;next} f&&/^## /{exit} f&&/^[0-9]+\. /{n++} END{print n}'` over the spec half | **15** |
+| Task-number sync | `python3 hooks/lib/feature_tasks.py docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md tracking-feature-state` | exit **0** |
+| `.md` / `.spec.md` line counts | `wc -l` | **216** / **1537** — `.md` unchanged across the frontmatter+preamble edit (10 lines removed, 11 added, net constant); `.spec.md` byte-identical since `c4c3349` |
+| `SPEC_SUFFIX` claim | `grep -n 'SPEC_SUFFIX' task-tracker/analyze.py` | `= ".spec.md"` at line 36; selection-by-filename confirmed both directions (lines 192, 251-252) |
+| No `task-tracker/` source changed since the last PASS | `git diff --stat 2241742..15cc372` | Only `docs/features/tracking-feature-state.md` (+22/-14 lines across two hunks) plus memory/judge bookkeeping files |
+| No placeholders/TBD/secrets/absolute paths | grepped both halves for `TBD`/`TODO`/`FIXME`/`XXX`/`/Users/`/`/home/` | Zero live hits |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, recorded in commit `1d54816`. `.md` half is **216 lines** (`wc -l`) against ADR 0017:39's `≤200`, unchanged by this commit's edit (10 lines removed, 11 added). |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, recorded in commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` on the ground that the waiver depends only on the session-start (`.md`) half staying small, not on this half's size. `.spec.md` is byte-identical to the last re-confirmation point (unchanged by `15cc372`); ground still holds. |
+
+### Notes (non-blocking)
+
+- **This defect predates the commit under judgment.** The broken `grep -m1` derivation was already
+  present in the paragraph before `15cc372` rewrote it (the old wording carried the identical
+  parenthetical), and it survived the first cycle's round-3 PASS and every round since. It is cited
+  now because this dispatch's re-derive-everything-from-source instruction is what actually ran the
+  command and read its output; no prior round is known to have done that specifically for this
+  sentence. Not held against the current commit's authorship — the rewrite inherited it unchanged —
+  but it is a live defect in the spec as it stands and belongs in this round regardless of origin.
+- **The correct derivation, for whoever fixes this:** two separate greps, one per field —
+  `grep -h '^branch:' docs/features/*.md | sort -u` (or per-file, to keep the pairing) actually shows
+  every card's branch value; `-m1` should be dropped entirely, or the pattern should be run twice.
+- **Line count stayed flat across the edit.** The frontmatter+preamble rewrite is a net-zero change
+  in `.md` line count (216 → 216), so neither waiver's ground moved.
+- **Gherkin shape**, as in every prior round across every cycle: several criteria still fold `When`
+  into `Given`. Not cited, same reasoning as every prior round.
+- Spec path under `docs/features/` is not cited, per every prior round: the repo layer
+  (`rules/gates.md` + ADR 0017's one-canonical-file discipline) takes precedence over `writing-specs`'
+  `docs/superpowers/specs/` default.
+- Security territory (`writing-secure-code`) not re-audited line-by-line this round: `server.py` and
+  the rest of `task-tracker/` did not change (confirmed via the diff-stat above), and round 2 of the
+  first cycle already did a full source-level read.
+
+## Round 2 — 2026-08-11T22:10:21Z — **FAIL** (1 violation — recurrence, escalate)
+
+### Plain-English summary
+
+The fix in `22cae86` does repair the specific thing round 1 broke. I ran both new commands
+(`grep -m1 '^phase:' docs/features/*.md` and `grep -m1 '^branch:' docs/features/*.md`) myself: the
+first isolates the three `planning` cards, the second now genuinely prints a `branch:` value per file
+— unlike the old single-pattern `-m1`, which I re-ran too and confirmed still returns only `phase:`
+lines. I also checked the stated reason for not simply dropping `-m1`: without it,
+`grep -n '^branch:' docs/features/falsifier-base-pin.md` really does pick up a body line at 144
+("`branch:` `git-guard.sh`, ..."), so keeping `-m1` per field is the correct call, not a stylistic
+choice. The phase-coupling defect is also genuinely gone — the new paragraph never states the card's
+current phase, points the reader at the frontmatter instead, and that framing can't go stale at the
+next transition the way the old narrated version did twice.
+
+But the same sentence that got fixed also grew a new, uncited half. It now reads "every other
+`planning` card in this repo carries `branch: none` **and zero ticked tasks**; re-derive that with
+two commands" — and then names exactly the two commands above, neither of which touches a checklist.
+I ran `grep -c '^\s*-\s\[[xX]\]' docs/features/falsify-harness-signatures.md
+docs/features/verification-marker-gate.md` myself: both are `0`, so the claim is true. But a reader
+who does exactly what the sentence tells them to do — run the two named commands — gets zero evidence
+for the "zero ticked tasks" conjunct, the same way round 1's reader got zero evidence for `branch:`
+from the old single grep. This is not carried-over debt: "and zero ticked tasks" is new text this
+commit added (round 1's flagged version didn't claim it), most likely lifted from round 1's own
+verdict, which had independently checked ticked-task counts as part of its own verification — but
+that check never made it into a citation, only into the prose.
+
+Per the dispatch's own tripwire: this is `writing-specs/derivation-scope-mismatch`, in the same
+paragraph, on the same sentence, in two consecutive rounds. That is a real recurrence, not a
+relabeling of the closed part of round 1's finding — the `branch: none` half is genuinely fixed; the
+new `zero ticked tasks` half is the same species of defect, freshly introduced by the fix itself.
+Per the escalation rule this goes to the user rather than into a round 3.
+
+### What else I checked in this commit (`22cae86`, `.md`-only, confirmed via `git show --stat`)
+
+- **Frontmatter vs. reality:** `phase: planning`, `branch: feat/tracking-feature-state`,
+  `model_tier: high` — consistent with the documented convention paragraph directly below it (a
+  mid-implementation spec revision returns to `planning`, keeps its real branch), and consistent
+  with the phase gate itself: the fix this commit makes *is* a spec edit, which `implementation`
+  forbids, so `planning` is the only phase that permits this commit to exist. No mismatch.
+- **The dropped sentence** ("`phase-guard.sh` correctly blocks writes to source" while paused): this
+  was accurate (round 1 of the first cycle independently verified it against `phase-guard.sh:340-553`
+  and it hasn't changed since), and it duplicated content already stated precisely in `rules/gates.md`
+  ("denies writes to source while an un-superseded `planning` feature file exists..."). Removing a
+  true-but-duplicated sentence to stop the paragraph accreting layers is the right call, not a loss —
+  no violation, and I'd have flagged it as a miss if it had stayed.
+- **Line growth (9 → 12 lines):** re-counted directly off `git diff 15cc372 22cae86`. Most of the
+  growth is earned — the two-command split necessarily costs more than one line, and the new
+  "Read `phase:` above..." sentence is what actually closes the phase-narration defect. The part that
+  isn't earned is exactly the violation above: one clause added with no matching derivation.
+- **No other files changed** (`git show --stat 22cae86`: 1 file, 15 insertions, 11 deletions, all in
+  `docs/features/tracking-feature-state.md`). `task-tracker/server.py` and the rest of the security
+  territory are untouched since the first cycle's round-2 full audit; not re-audited this round.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|----|-------------|------|-------|-----|
+| 1 | `writing-specs/derivation-scope-mismatch` | `rules/core-conduct.md` (project layer) + `~/.claude/skills/writing-specs/SKILL.md` | Project core-conduct: "Verification precedes both the claim and the write-down — never state that something works … and never record that claim in a durable artifact … until you have actually run it and re-read the output"; writing-specs: a spec must leave nothing readable two ways or resting on an unstated inference | `.md` preamble, the ⚠️ paragraph beginning "This card has passed the planning→implementation gate more than once" (`docs/features/tracking-feature-state.md`, lines 9-21) | The sentence "Every other `planning` card in this repo carries `branch: none` **and zero ticked tasks**; re-derive that with two commands" cites exactly `grep -m1 '^phase:'` and `grep -m1 '^branch:'` — both real, both correctly scoped, and together sufficient to re-derive the `branch: none` half (verified by running them). Neither command counts checklist items, so the "zero ticked tasks" half has no re-derivable citation at all. The underlying fact is true (independently re-verified: both other `planning` cards show 0 ticked tasks), but that is exactly round 1's finding restated — a true claim with a citation that cannot demonstrate it — and this specific clause is new text this fix commit introduced, not inherited debt. |
+
+**Recurrence:** same id as round 1 (`22cae86` cites itself as closing round 1's finding), same
+paragraph, same sentence. Two consecutive rounds on `writing-specs/derivation-scope-mismatch` — per
+the compliance-judge escalation rule this is reported to the user rather than sent back for a round 3.
+
+### Resolved / not recurring
+
+| id | check performed | result |
+|---|---|---|
+| `core-conduct/file-size-decision-unsurfaced` | Not touched by `22cae86` (diff is `.md`-only, this id's territory is task 8's `.spec.md` entry / `server.py`) | Still closed, unchanged since round 2 of the first cycle |
+| `writing-specs/stale-recorded-claim` | Not touched by `22cae86` (this id's territory is task 4's `§Tasks` entry / `test_analyze.py`) | Still closed, unchanged since `b2ed7bb` |
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, commit `1d54816`. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` — ground is the session-start (`.md`) half staying small, not this half's size. |
+
+### Line counts, re-derived (observation, not a violation — per dispatch instruction)
+
+`wc -l docs/features/tracking-feature-state.md docs/features/tracking-feature-state.spec.md`:
+**220** / **1537**. The `.md` half grew from round 1's **216** to **220** (net +4, matching the
+dispatch's own figure), still over ADR 0017:39's `≤200` — covered by `adr-0017/md-half-size-budget`.
+The `.spec.md` half is unchanged at **1537**, still over `≤800` — covered by
+`adr-0017/spec-half-size-budget`. Neither waiver's stated ground (session-start-half-stays-small)
+depended on either exact number, so neither waiver is disturbed by this movement; flagging the growth
+here is purely so the trend is visible, per the dispatch's explicit request.
+
+### Notes (non-blocking)
+
+- Acceptance-criteria count (`awk` over `## Acceptance criteria` in the spec half) still **15**;
+  `.spec.md` is byte-identical to the last count (blob `ca31bb8d…`, unmoved since `c4c3349`).
+- Security territory (`writing-secure-code`) not re-audited line-by-line this round: no file under
+  `task-tracker/` changed in `22cae86`.
+- Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
+## Round 3 — 2026-08-11T22:30:31Z — **PASS** (0 violations) — the oscillation cap
+
+`head_sha` `88d524a08466e77be22613a2d460c8ceadc36364` · branch `feat/tracking-feature-state` ·
+`md_half_blob_sha` `3c16087eda0ac2758d96fffb3d08634ed833d01f` · `spec_half_blob_sha`
+`ca31bb8d53b38e7db4d88cb35fd1e4f54ff3795e` (byte-identical since `c4c3349`) · `spec_blob_sha`
+(pair hash, `cat <md> <spec> | git hash-object --stdin`) `63bb9e388d253632f0ecb253ed0501ea79d89a93`
+· confidence **high**
+
+### Layman summary
+
+Two straight rounds failed the same sentence for citing a command that couldn't actually prove what
+it claimed, even though the underlying fact was true both times. This round's fix (`88d524a`) took
+the harder, better option: instead of patching the citation a third time, it deleted the half of the
+claim nothing backed ("and zero ticked tasks") and replaced the fragile two-command citation with a
+single `head -5` that shows each card's frontmatter under its own name — no pairing across two
+command outputs required, which matters because I confirmed grep's file ordering actually does shift
+between runs on this host (see below). I ran every command in the paragraph myself rather than
+reading it, and the paragraph now says only what it can prove. **`writing-specs/derivation-scope-mismatch`
+is closed**, three commits and three rounds after it first surfaced.
+
+### What I verified, from source, not from any prior verdict's word
+
+| Claim in the paragraph | How I checked | Result |
+|---|---|---|
+| `head -5 docs/features/*.md` shows `branch:` for every card | Ran it directly | `branch:` appears in the printed block for all 14 real cards, `verification-marker-gate.md` included (its extra `revision:` key sits *after* `branch:`, on line 5, so it doesn't push `branch:` out) |
+| Every other `planning` card carries `branch: none` | `grep -l '^phase: planning' docs/features/*.md` then read each one's `branch:` directly | The only two other `phase: planning` cards, `falsify-harness-signatures.md` and `verification-marker-gate.md`, both read `branch: none`. This card itself (`tracking-feature-state.md`) is the named exception and is correctly excluded by "every *other*" |
+| `grep -m1 '^phase:\|^branch:' docs/features/*.md` returns only `phase:` lines | Ran it directly, all 14 output lines are `phase: <value>`, zero are `branch:` | Confirmed — the paragraph's warning against reverting to this form is accurate |
+| "and zero ticked tasks" is gone | Read the current paragraph (lines 9-19) | Confirmed deleted, not merely reworded |
+| `git-guard-chained-command`/`falsifier-base-pin` ordering instability (commit message's stated reason for dropping the two-grep pairing) | Ran `grep -m1 '^phase:\|^branch:' docs/features/*.md` three times back-to-back | Two runs matched, the third reordered (`git-guard-chained-command` moved ahead of `git-guard-empty-index`) — file ordering is genuinely not stable on this host, so the commit's stated reason for abandoning positional pairing is real, not a plausible-sounding excuse |
+| Paragraph length 13 → 11 lines | `git show 22cae86:docs/features/tracking-feature-state.md \| sed -n '9,21p'` (13 lines) vs. current lines 9-19 (11 lines) | Exact |
+| `.md` half 220 → 218 lines | `wc -l` | Exact (`218`) |
+| `.spec.md` half unchanged | `wc -l` → `1537`; blob `ca31bb8d…` matches every prior round back to `c4c3349` | Unchanged |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` | **15**, unchanged |
+| Task-number sync | `hooks/lib/feature_tasks.py` on both halves | exit `0` |
+| No TBD/TODO/FIXME/XXX/absolute-path hits | grep both halves | none |
+| Diff scope of `88d524a` | `git show --stat` | 1 file, `docs/features/tracking-feature-state.md`, `+4/-6` — nothing under `task-tracker/` changed, so security territory is not re-audited line-by-line this round (full source-level reads already stand from round 2 of the first cycle and round 1 re-entry of the second) |
+
+Every sentence of the paragraph checked out, not only the one cited in rounds 1 and 2: the
+`gates/phase-branch-mismatch` back-reference names the right round, "Read `phase:` above" is accurate
+(the card's own frontmatter reads `planning` and this round's diff doesn't touch it), and the
+`§Verification`/`§Tasks` cross-references two paragraphs down are unchanged and were already verified
+in the immediately prior round.
+
+### Answering the dispatch's specific questions
+
+1. **Does `head -5` demonstrate the claim, and does it invite a misreading?** Yes, and no more than
+   any multi-file `head` invocation does. One soft imprecision: the glob `docs/features/*.md` also
+   matches the two `.spec.md` halves in this repo (`memory-system-split.spec.md`,
+   `tracking-feature-state.spec.md` itself), and those carry no frontmatter by design — the paragraph's
+   "prints each card's frontmatter under its own filename" is very slightly broader than literally true,
+   since two of the printed blocks aren't frontmatter at all. I'm not citing this: a reader scanning for
+   `phase: planning` lines simply finds nothing to match in those two blocks and moves on, so the
+   imprecision doesn't manufacture false confidence about the one fact the sentence needs to prove — it's
+   different in kind from round 1/2's defect, where the cited command *structurally could not* produce
+   the needed line no matter how carefully it was read. Marginal, noted for the record only.
+2. **Is `branch:` reliably within the first five lines, and is the sixth-line fragility worth citing?**
+   Verified true for all 14 current cards, `verification-marker-gate.md`'s extra `revision:` key
+   included (it lands after `branch:`, not before). The fragility is real in the sense that a future
+   card adding two keys before `branch:` would push it past line 5 and `head -5` would go silently
+   quiet on that file — but that is a hypothetical about a file this spec doesn't own edits to, not a
+   present scope mismatch. Every other derivation in this document (the acceptance-criteria `awk`, the
+   task-sync script, the extension-map `awk`) carries the identical shape of forward fragility to a
+   format change elsewhere in the repo, and this card's own standing discipline has never asked for
+   citations to be hardened against changes nobody has made yet — only for citations to be honest about
+   what they show *today*. Judged **acceptable, not a violation** — flagged here as a note in case a
+   future frontmatter convention change makes it worth a one-clause defensive comment.
+3. **Every other claim in the paragraph, checked against source, not just the cited one:** all confirmed
+   (table above plus the cross-reference check). No new defect found anywhere else in the paragraph.
+4. **Length and altitude:** both moved the right direction and by the amount claimed (13→11, 220→218).
+   The trimmed phase-restatement rationale is not missed: round 2 of the first cycle already found it
+   duplicated `rules/gates.md`'s own wording almost verbatim and removed a near-identical sentence for
+   that reason, so this round's cut is the same call applied a second time, correctly. Nothing a future
+   editor needs was lost — the mechanism (`phase-guard.sh`'s write-block) is documented once, in
+   `rules/gates.md`, and this card correctly no longer duplicates it.
+
+### Violations
+
+None.
+
+### Resolved this round
+
+| id | how it was verified |
+|---|---|
+| `writing-specs/derivation-scope-mismatch` | Cited rounds 1 and 2 of this re-entry cycle on the same sentence. This round's fix deletes the unbacked "zero ticked tasks" clause outright and replaces the two-command citation (whose positional pairing I confirmed is unsafe — grep's file ordering shifted across three consecutive runs on this host) with a single `head -5` invocation, independently verified above to demonstrate the surviving claim for all 14 cards. Not a narrower patch of the same defect — the class of defect (a citation that cannot produce the evidence it's cited for) is absent from the current text. |
+
+### Not recurring (unrelated to this diff, not re-verified line-by-line)
+
+`core-conduct/file-size-decision-unsurfaced` and `writing-specs/stale-recorded-claim`: both territories
+(task 8's `.spec.md` entry / `server.py`; task 4's `§Tasks` entry / `test_analyze.py`) are outside the
+one file `88d524a` touched (`git show --stat` above), and were last independently re-verified in round
+1 of this re-entry cycle.
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, commit `1d54816`. `.md` half is **218 lines** against ADR 0017:39's `≤200` — over by 18, moved the right way from round 2's 220. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, commit `2c66fab`, re-confirmed 2026-08-11 at `686057d` — ground is the session-start (`.md`) half staying small, not this half's size. `.spec.md` is unchanged at **1537** lines, still over `≤800`; ground unmoved since `.spec.md` wasn't touched. |
+
+### Notes (non-blocking, includes the two marginal items above)
+
+- **`head -5`'s sixth-line fragility** (question 2 above): real, forward-looking, not cited as a
+  violation. Worth a one-clause defensive comment if this repo's frontmatter convention ever grows,
+  not worth blocking on today.
+- **The glob also prints two non-card `.spec.md` blocks** (question 1 above): softens "prints each
+  card's frontmatter" from literally true to descriptively true; does not create a false reading of
+  the load-bearing claim. Not cited.
+- **Grep file-ordering instability, independently confirmed.** Ran the old single-`-m1` grep three
+  times back to back; two runs matched, the third reordered two filenames. This directly supports the
+  commit message's stated reason for replacing the two-command citation rather than re-pairing it, and
+  is why `head -5`'s per-file self-contained blocks are a structurally safer shape than two greps
+  "read together," independent of whether the two-grep version was otherwise correct.
+- **This is the second cycle's third round, and the escalation cap is reached with zero violations
+  outstanding.** Per the dispatch's own framing, that means nothing here is being handed to the user
+  as an open finding — the two items flagged above are explicitly marginal observations, not
+  suppressed violations.
+- Acceptance-criteria count (`awk` over `## Acceptance criteria` in the spec half) still **15**;
+  `.spec.md` byte-identical to every prior round back to `c4c3349`.
+- Security territory (`writing-secure-code`) not re-audited line-by-line this round: no file under
+  `task-tracker/` changed in `88d524a`; full source-level reads stand from round 2 of the first cycle
+  and round 1 of this re-entry cycle.
+- Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
+
+---
+
+## Round 4 — 2026-08-12T16:41:59Z — **PASS** (0 violations)
+
+`head_sha` `d142643dd12bbb31cff3cb7c9fea441693a4a59a` · branch `feat/tracking-feature-state` ·
+`spec_blob_sha` `f5dd6f8bd7ced22de97a2e2a8a4b3df421d13162` · confidence **high**
+
+### Layman summary
+
+The spec half sat byte-identical from round 3's PASS (`88d524a`) through the entire implementation
+phase — the phase gate only let it move again once the card reached `review` today. This round judges
+exactly that move: two ⚠️ warnings that had been sitting in `§Tasks` as open risk got corrected to
+match what implementation actually found, and a third prediction ("there's an emitting shape here
+somewhere, un-named") got named. I did not take the correction's word for it — I re-ran the counts
+against `task-tracker/server.py` and `test_server.py` myself, from scratch, using both the spec's own
+shell commands and an independent Python re-implementation, and every number in the new text is right:
+the naive `_fail`-only grep really does return **13**, the two-grep block the spec had been
+recommending really does return **14**, and the true count — literal calls, `audit()` calls, and the
+`CONFIRM_REFUSAL_REASONS` dict values unioned together — really is **16**, matching
+`test_server.py`'s own `REASON_STATUS` table row for row. `send_failed` really is emitted (at
+`server.py:591`, via `audit(..., reason="send_failed")`, not dropped as the old wrong "14 of 15" text
+implied). The named "third shape" — `CONFIRM_REFUSAL_REASONS[state]` passed as a computed value at
+`server.py:584` rather than a string literal a grep could match — is real and is exactly what explains
+the 14-vs-16 gap. The task 8 checkbox correction is equally solid: `CONFIRM_REFUSAL_REASONS` is defined
+at line 240 and used at 583–584, exactly as cited, closing out the `confirm_timeout` split that had
+been recorded as owed for the whole of implementation.
+
+`git diff 88d524a..d142643 -- docs/features/tracking-feature-state.spec.md` confirms these three
+passages are the *only* change to the judged file — nothing else drifted while I wasn't looking.
+Task-number sync between the two halves still exits `0`, the acceptance-criteria count is still **15**,
+no TBD/placeholder/absolute-path text was introduced, and both halves' line counts moved in the
+direction the standing waivers already accounted for (`.md` **269**, `.spec.md` **1549** — both still
+over ADR 0017's caps, both still covered by the user's standing 2026-08-11 waiver, neither re-raised).
+
+### What I independently re-derived (not trusted from the spec's own prose)
+
+| Claim in the edited passages | How I checked | Result |
+|---|---|---|
+| `_fail`-only grep → 13 pairs | Ran the spec's own `grep -oE '_fail\(...'` command directly | **13**, exact match |
+| Two-grep block (`_fail` + `audit`) → 14 pairs | Ran the spec's own two-command block directly | **14**, exact match |
+| True enum → 16 values | Independent Python `re.findall` reimplementation of `reasons_emitted_in_source()` (literal ∪ audited ∪ `CONFIRM_REFUSAL_REASONS.values()`) run directly against `server.py` | **16** — `{'confirm_timeout','confirm_failed'}` (2) are disjoint from the 14-value union, landing at 16 |
+| `test_server.py`'s `REASON_STATUS` table has 16 entries and agrees | Parsed the dict literal directly from `test_server.py` | 16 keys, set-identical to the 16 derived above |
+| `send_failed` is emitted via `audit(..., reason="send_failed")` at `server.py:591` | `grep -n 'reason="send_failed"' task-tracker/server.py` | Line **591**, exact |
+| `CONFIRM_REFUSAL_REASONS` mapping at line 240, used at 583–584 | `grep -n CONFIRM_REFUSAL_REASONS task-tracker/server.py` | Definition at **240**; used at **583** (`if state in ...`) and **584** (`CONFIRM_REFUSAL_REASONS[state]` passed to `_fail`) — exact |
+| `confirm_surface()` genuinely splits `unrunnable`/`timeout` (task 8's "owed edit landed" claim) | Read the mapping and its two keys (`"unrunnable"`, `"timeout"`) directly | Two distinct states, two distinct reasons — the split is real, not aspirational |
+| Diff scope — these three passages are the only spec-half change since the last PASS | `git diff 88d524a..d142643 -- docs/features/tracking-feature-state.spec.md` | Exactly two hunks, matching the invocation's description precisely; nothing else moved |
+| Task-number sync | `hooks/lib/feature_tasks.py` on both halves | exit `0` |
+| Acceptance-criteria count | `awk` over `## Acceptance criteria` | **15**, unchanged |
+| No TBD/TODO/FIXME/XXX/absolute-path text | grepped the spec half | none |
+| Line counts | `wc -l` | `.md` **269**, `.spec.md` **1549** |
+
+### Violations
+
+None. All three edited passages hold up under independent re-derivation, not just internal
+consistency — this closes the loop the round's own framing asked about ("since the whole point of the
+edit was accuracy").
+
+### Not re-audited this round (unchanged territory, already covered)
+
+`§Design`, `§Security`, `§Toolchain`, and all 15 acceptance criteria are byte-identical to round 3's
+PASS (confirmed by the diff above touching only the two §Tasks hunks), so CSP/secrets/injection-route/
+error-handling territory already covered by rounds 1–3 of both prior cycles was not re-walked
+line-by-line here.
+
+### Waivers (carried forward, not re-cited)
+
+| id | attribution |
+|---|---|
+| `adr-0017/md-half-size-budget` | User decision 2026-08-11, re-confirmed since. `.md` half is **269 lines** against ADR 0017:39's `≤200`. Not re-raised per the standing instruction — the accepted ground (session-start load, not this file's size) is untouched. |
+| `adr-0017/spec-half-size-budget` | User decision 2026-08-11, re-confirmed since. `.spec.md` half is **1549 lines** against `≤800`. Not re-raised, same reasoning. |
+
+### Notes (non-blocking)
+
+- **The remaining "wrapped call" caveat is still latent, not live.** The spec still flags that a
+  `grep`-based derivation could silently miss a call whose status and `reason` land on different
+  source lines. I checked: my Python re-derivation (which, unlike a line-based `grep -oE`, would catch
+  a wrapped call via `\s*`) returned the identical 14-value union as the two-grep bash block, so no
+  such wrapped call exists in `server.py` today. The caveat remains an honest, currently-unrealized
+  risk rather than a live undercount — same conclusion as round 3 of the first cycle reached on the
+  prior (now-superseded) numbers.
+- **`.md`'s task 9 line ("queued for `review`") is not stale, it's fulfilled.** The checklist half
+  (context only, not judged here) recorded the spec correction as queued for the `review` phase; this
+  round's commit is that queued edit landing. No inconsistency between the two halves as of this
+  round.
+- Gherkin shape and spec path under `docs/features/`: not cited, same reasoning as every prior round.
+
