@@ -5925,9 +5925,9 @@ checkbox tick moves it again, on the same reasoning.
 
 ## Session 73 — 2026-08-12 — task 10 has one legal home for its handler, and it is not a new file
 
-**No code was written this session.** It restored, verified the card against reality, and spent
-itself deriving one constraint that task 10 would otherwise have discovered by writing the wrong
-thing first. Recording it is the whole output.
+**This entry was written mid-session and opened "no code was written this session", which the
+second half then falsified — corrected here rather than left standing.** The session restored,
+derived the constraint below, and then built task 10 on top of it.
 
 **Where task 10's command handler may live is decided by two independent walls, not by taste.**
 The obvious shape — a new `task-tracker/tracker-commands.js`, imported by the page and loaded in
@@ -5968,8 +5968,31 @@ the newer shape — so this is not a general cleanup, and the file is read **by 
 which is exactly what makes a one-off heading invisible rather than merely untidy. Session 72's
 heading is normalized here, in the session that hit it; the other 43 are left alone.
 
-**State:** `phase: implementation`, `model_tier: low`, branch `feat/tracking-feature-state`, clean.
-Tasks 1-9 and 14 done; **task 10 not started** — the constraint above is its starting point, and
-`.claude/session-state.md` carries the same text as the handoff. Compliance PASS still stands at
-`88d524a`, spec half untouched this session. PR #51 remains open at `c811f0d`, unmerged, with no
-`implementation`-stage observability verdict.
+**Task 10 was then built on that constraint, test-first.** `test_ui_commands.py` was written and run
+**red before the handler existed** — twelve failures, all reading `found 0 start / 0 end`, the absent
+marker pair rather than a broken bridge. Then the handler (`0fd5bcd`), then the buttons (`8fe330a`).
+Every row of the failure table carries **two** assertions: its own visible state, and that it never
+*also* reaches the `200` success state.
+
+**Seven mutations, seven caught** — the evidence that the suite can fail, run the same way task 9's
+was: drop the prototype-chain guard, fall every error through to success, render the server's own
+text, refresh the timestamp on failure, resolve an unknown send to "failed", keep offering the button
+in a terminal state, mistake a dead socket for an unknown code. Re-run by mutating one control and
+requiring its test to fail.
+
+**A control shipped without its test, caught by the standing rule and closed in the same sitting.**
+The `error`-code lookup uses `Object.prototype.hasOwnProperty.call`, because a bare `TABLE[code]` is
+truthy for `constructor` and `toString` — a body carrying either would resolve to a row nobody wrote.
+That guard initially had nothing asserting it; three parametrized cases now do, and the mutation
+above confirms they bite.
+
+**State:** `phase: implementation`, `model_tier: low`, branch `feat/tracking-feature-state`.
+**159 passed, 2026-08-12** (`uv run --with pytest==9.1.1 --no-project pytest task-tracker/ -q`, ~108s)
+against 144 before — the 15 new ones are this task's. `node --version` is **v26.5.0**.
+**Task 10 is deliberately still unticked, and this is the only thing it owes: the page has not been
+loaded in a browser since the wiring.** `node --check` accepts the whole `x-dc` block and the marker
+pair is exactly one, but neither sees a `{{ binding }}` that resolves to nothing — and this card's own
+history says a text check cannot answer a runtime question. Load `GET /` and confirm the three
+buttons render, then tick it. Compliance PASS still stands at `88d524a`, spec half untouched this
+session. PR #51 remains open at `c811f0d`, unmerged, with no `implementation`-stage observability
+verdict.
