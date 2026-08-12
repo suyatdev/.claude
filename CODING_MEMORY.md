@@ -5042,6 +5042,176 @@ judges have now flagged the trend — a compaction pass is owed before the branc
 checkout's three misrouted `statusline-followups` verdict rows are still unreconciled, deferred by
 the user until the card passes.
 
+## 2026-08-09 — session 56: two PRs merged past their own gates, and the outcome that isn't a value
+
+**Session numbering: the collision the last handoff warned about is now materialised inside one
+file.** `main` carries *two* `## 2026-08-09 — session 48`, *two* `session 49`, and *two* `session 50`
+headings (lines 4608/4796, 4708/4829, 4778/4872) — one from each lane, with different content, fused
+by PR #48's merge. **56 is chosen as `max(all lanes) + 1`, not `mine + 1`.** Anyone numbering the next
+entry should grep the whole file, not their own lane's tail.
+
+Both PRs that were open at the end of session 50 merged while the session was down, one minute apart:
+**PR #48** (`feat/tracking-feature-state`) at `e4f873e` 01:48:16Z, **PR #50**
+(`docs/verify-before-claiming`) at `fe55b2d` 01:49:51Z. Zero PRs are open now. Neither had a
+`pr-tracking.md` section; both do now — that file is where the detail lives, and this entry is only
+the part worth carrying forward.
+
+**Both merges are true unions, and the check that proved it was falsified first.** #48: `git diff
+dd69033 e4f873e` empty, base→merge **+11886 / −0 across 35 files**. #50: base→merge **+142 / −2**,
+and both deletions were *read* — the rewritten `core-conduct.md` line and a rebase-staled SHA — not
+assumed benign. The conflict-marker grep returned rc=1 on the merged tree, and the same pattern
+returned rc=0 against a string known to match. **A clean probe means nothing until you have watched
+it come back dirty**; that is the lesson from session 50 applied rather than restated.
+
+**The finding: PR #48 merged past both judge gates.** Compliance ran **six rounds, every one `fail`,
+with no round 7** — the last recorded judgment on that branch is a failure. Observability has **six
+verdicts, all stage `architecting`, and zero stage `implementation`** — the stage `judge-guard`
+actually gates `gh pr create` on — with the final architecting verdict at `risk: high`. Its feature
+card on `main` still reads `phase: planning` against a merged 35-file implementation. None of this is
+a criticism of the merge, which is the user's call; it is a record-keeping fact that twelve `null`
+rows would otherwise have left looking like the question was never asked.
+
+**`outcome` has no honest value for a change that shipped over a `fail`, so it keeps `null` — with
+prose.** Rounds 1–5 in both stores are backfilled `rework`, and that is *derivable*: each round's
+successor carries a different `head_sha`, so a revision provably followed. Round 6 shipped
+**unchanged** past a failing verdict, where `clean` (judged fine, shipped fine) and `rework` (revised
+after) are both false. The enum has no third value, so the row stays `null` and `pr-tracking.md` says
+why — otherwise it is indistinguishable from the 77 rows that are merely un-backfilled. **A missing
+value with a written reason beats a plausible value with none**; this is `outcome: null` used as a
+statement rather than a gap. Net: 83 → 77 null, six rows changed, count verified from disk.
+
+**PR #50's row is `clean` — the first non-`rework` in eleven** — and that too was measured: `git diff
+--stat 31840d8 23b7302` touches the verdict card, `verdicts.jsonl`, ADR 0025 and one
+`CODING_MEMORY.md` line, but **not `rules/core-conduct.md`**, the file under judgment. What shipped is
+what was judged. The prior ten `rework`s made `rework` the reflex; the diff is what stopped it.
+
+**Wrong-checkout near-miss, caught by an assertion rather than by luck.** The first backfill script
+ran against `/Users/marksuyat/.claude` — the primary checkout, which is pinned to
+`feature/memsearch-freshness` @ `2296e3c` and therefore holds *old* file contents. It reported `0 rows
+matched` for both stores and edited nothing. The earlier reads had come from `git show origin/main:…`,
+which masked the difference. **A repo path is not a content version**; the working tree of a checkout
+on a stale branch is stale, and only the row-count assertion distinguished "no matches" from "silently
+patched the wrong file".
+
+**A parallel session began round 7 minutes after the close-out was pushed.** The
+`tracking-feature-state` worktree was clean when its section was drafted and dirty when re-checked —
+an untracked round-7 verdict card and a modified `verdicts.jsonl`. So **"no round 7" is a statement
+about `84ed83c`, not about tomorrow**, and it is written down that way rather than left to age into a
+falsehood. Its worktree was *not* removed (only `verify-rule` was); its append will land adjacent to a
+line this commit rewrote, so the resolution is recorded in `pr-tracking.md` before the conflict
+happens: **take both sides.** Re-checking a precondition immediately before acting on it is what
+turned a destructive step into a two-line note.
+
+**Still open at the end of session 56:** the two blind guards — `git-guard`'s allowlist never
+evaluating from a detached HEAD (`on_main()` reads `--abbrev-ref`, gets `HEAD`), and `judge-guard`
+resolving repo/branch/head_sha from the ambient cwd so a cross-worktree verdict is invisible — both
+still unfixed, both owed one `triaging-new-instructions` pass, and the first of them is the very path
+this entry was pushed through. `docs/features/pane-dispatch-model-flag.md` still awaits `gate
+confirmed`, and `falsify-harness-signatures` compliance round 3 (`fail`) is still uncommitted; both
+live *only* in the primary checkout's working tree, whose `compliance-judge/verdicts.jsonl` is 81 rows
+against `main`'s 84 — **a naive commit there would revert this backfill.** 77 `outcome: null` rows
+remain across the observability store.
+
+## Session 57 — the differential table was measured in two directions, and revision 4 fell out of it
+
+Picked up `falsify-harness-signatures` at `phase: planning`, revision 3, with the previous session's
+closing commit (`8d79094`) instructing that **revision 4 be designed from the measured table** — and
+reopening two questions it declined to settle.
+
+**Re-measured everything first, rather than designing on the table.** Three revisions running had
+shipped worked examples that did not exist in the suite, so the table itself was the last artifact
+that deserved trust by inheritance. All nine baselines reproduced exactly (stubs 24/23/31/30,
+versions 19/20/28/33/32), as did `vacuous = 31/68` and the `must_pass` pools. Differential rows 1-3
+reproduced exactly: 1/0, 9/2, 5/0.
+
+**Row 4 did not.** It read `1`; measured in the same direction as the other three it is **0**.
+`e882659` is a *regression* — nothing was fixed there — so "fails on the version, passes on the
+version that fixed it" is empty for it, and the `1` came from the opposite relation. Revision 3's §4
+made an empty signature a hard error, so the design as written would have hard-errored on that
+version **for being a regression**. One table, two relations, one column heading.
+
+**Two traps invalidate the obvious way to measure any of this**, and both were hit before being
+understood: a *failing* case prints a diagnostic rather than its name (`baseline segments missing:
+…` vs `baseline renders model and context-bar segments`), and a *passing* description embeds
+measured values (`esc=10<=10` on the working tree, `esc=0<=0` against a stub). The first attempt's
+alignment check compared description strings and declared the ordinals misaligned — the check was
+wrong, not the data. The valid proof, which all ten runs pass: every run emits exactly 68 results,
+**and** every *passing* ordinal's normalized description matches the working tree's at that ordinal.
+Alignment cannot be checked on failing ordinals at all. A third independent reason §1's stable ids
+are needed.
+
+**The finding that produced the new design.** 53 of 68 assertions never change state across any
+version. The discriminating set is 15 — and `[47] all-control cwd falls through to a stripped $PWD`
+is the only assertion in the suite that flips more than once, tracking the `$PWD` defect through
+clean/clean/broken/fixed/broken (`P P . P .`). A per-version *list* has to name a direction for each
+transition; a per-id *row* just is the defect's history. Both user decisions followed the data:
+**adopt the flip matrix** (which also makes `must_pass` unnecessary — it pins passes too, so it
+anchors itself), and **report rather than fix** the vacuous assertions. 13 of the 15 load-bearing
+assertions are vacuous and three of four transitions rest entirely on them (1/1, 7/9, 5/5, 1/1); the
+harness prints those fractions beside its verdict, and strengthening them becomes its own follow-up
+rather than editing the suite this harness exists to measure.
+
+**Rebase collision, resolved as a verified union.** Another session had pushed 21 verdict rows to
+`main` while this one worked. The conflict was diff3-style, and the first resolution attempt crashed
+on the `|||||||` base marker rather than silently mis-parsing it. Resolution asserted zero
+deletions against all three sides, then confirmed against the remote: origin's 143 rows all present
+in HEAD's 146. `git show origin/main:<file>` is the check; a balanced line count is not.
+
+**Still open.** Judges have not seen revision 4 — compliance round 3 returned `fail` against
+revision 3 and **is still uncommitted in the primary checkout**, whose `compliance-judge/
+verdicts.jsonl` is behind `main`, so a naive commit there reverts the backfill. Rounds 4 of both
+judges are the next step, in panes. Tasks 10-12 of `statusline-wrap-worktree.md` (the "unknown"
+worktree rendering, int64 `COLUMNS` noise, the environment-dependent row assertion) remain untouched.
+
+## Session 57 (cont.) — judge rounds 4 and 5, and the point where correcting became the defect
+
+Ran both judges twice, in panes, on `falsify-harness-signatures`. **Both `wait` calls timed out at
+540s while the judge was still alive** — twice the verdict was already persisted to its card and
+`verdicts.jsonl` before the `RESULT_FILE` contract line appeared. Read the card directly rather than
+trusting the timeout; `wait` exit 2 means *inspect*, and the artifact is the verdict, not the result
+file.
+
+**Round 4.** Compliance `fail`, 6 violations, all new ids. Observability `risk=medium` — but it
+built a **working exploit**: 8 bytes of injection slack on ords 43-46 leaves floor, closure, rows,
+column and vacuity lists all green and the harness prints `falsification intact`. It works because
+the ratchet is *saturated* on 13 of 15 pinned ids, so only two can ever trip. User decision: written
+non-goal, carried by task 10, and the banner renamed to `measured`.
+
+**Round 5.** Compliance `fail`, 2 violations — the **first recurrence** in this spec
+(`writing-specs/exit-path-enumeration`), which is the escalation trigger. The recurrence is the
+lesson: one fact (an exit code) lived in seven places, round 4 synced them and missed three, and the
+Gherkin block ended up with two scenarios sharing a `Given` and asserting different codes. Syncing
+was the wrong repair. §5's table now carries condition ids `E1a`-`E3a`, every other site cites an
+id, and the contradictory scenario was **deleted, not fixed**.
+
+**The finding worth carrying forward.** The observability judge: *"two of the five repairs each
+introduced a new fault about the size of the one they fixed… the corrections are now the defect
+source."* Concretely, one sentence — what catches a wholesale collapse — was wrong in revision 4
+(credited the full-count assertion), wrong again after the round-4 correction (credited the
+empty-column guard), and only right when the attribution was **deleted**: measured, 13 of 15 pinned
+ids pass against the silent stub so the column is never empty, and the matrix catches it with 12 of
+15 row mismatches. Two independent judges verified every *number* in that document across five
+rounds and both missed that *sentence* twice. Recorded as
+`feedback_delete_the_claim_when_the_correction_is_wrong_too`.
+
+Also fixed in the structural pass: the floor run could not certify its own length (its count came
+from itself, and the suite's tally denominator is `pass+fail`, so a run truncated at 30 all-passing
+prints `30/30 passed`) — three length-independent signals now gate adoption. Closure split by
+direction: a *new* discriminating id is `E3a`/exit 3, a *pinned* id that stopped discriminating is
+`E1c`/exit 1, because revision 4 filed the second under the calmest label in the table.
+
+**Verdict stores.** Compliance rounds 1-3 were stranded in the primary checkout by the judge's
+hardcoded `$HOME/.claude` write path, on a branch behind `main`. Migrated as a verified union
+(84→87, zero pre-existing rows lost), and every round-4/5 dispatch overrode the write path
+explicitly. **Confirmed live:** `git rev-parse <sha>:<path>` from the Bash tool returns the *commit*
+object — the rtk-proxy rewrite the harness docstring warns about — so the five pinned blob SHAs had
+to be computed from Python.
+
+**State:** spec at `099a3e0`, still `phase: planning`, `branch: none`. Round 5's two violations are
+addressed but **unjudged** — the user chose one structural pass then the review gate rather than a
+round 6, on the advisory judge's recommendation to stop iterating prose and let the next judge run
+the harness and read `$?`. The file is now **892 lines**, past the 800 ceiling; a `.spec.md` split is
+open but was deliberately not done mid-pass.
 ## 2026-08-09 — sessions 56–57: task 1's probes close the transport question, round 7 fails, round 8 in flight
 
 **Session 56 closed task 1** (`c2c2542`) with four live `cmux send` probes — the spike that five
