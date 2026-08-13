@@ -6748,3 +6748,31 @@ the spec keeps its acceptance scenarios and contract tables.
 unsatisfiable at this feature's scope.** History was never the bulk; the design is. Recorded here
 rather than resolved silently, because picking which constraint gives is a user decision. Do not open
 a round-2 judge dispatch until it is answered: the size id will be re-cited verbatim and burn a round.
+
+**USER DECISION 2026-08-13 — the size fix is a scope cut, not more deleting.** Shrink the *feature*, so
+there is less to specify, rather than relocating text. Chosen over an ADR move (relocates bulk — the
+same objection that killed the split), a size waiver, and cutting acceptance scenarios.
+
+**Deferred out of v1** (each becomes a follow-up feature, named in §Follow-ups):
+
+- **The decision log in full** — `<repo>/hooks/state/test-marker.log`, the four-field table, the
+  machine-local storage decision, the `0600`/`0700` modes on the log, and its four scenarios. The
+  marker store keeps its own modes; only the log goes. ~70 lines + 4 scenarios.
+- **`--status`** — ACTIVE/INERT, decision counts, pair count, and the "inertness must be observable"
+  rationale. Task 14's arming check pipes a real payload instead. ~30 lines + 1 scenario.
+- **`INCLUDE` as a door of its own** — `-i`/`--include` and `--pathspec-from-file` still **block**,
+  folded into `UNSUPPORTED`. Loses one door, one form value, one resolution row and the specific
+  remedy string.
+
+⚠️ **`FOREIGN` keeps its behaviour — do not read the option label as licence to drop the block.**
+Reading another repo's markers is the worst failure this gate has; a `cd`/`-C`/`--git-dir`/`--work-tree`
+commit must still refuse. What gets cut is the *elaboration*: its dedicated door and message, and the
+accepted-cost analysis of the same-repo `cd "$HOME/.claude"` false block. Fold the trigger into
+`UNSUPPORTED` so the block survives and the prose does not. Same test for anything else on the
+deferral list: **cut the elaboration, never the fail-closed behaviour.**
+
+Knock-ons the next pass must carry through, or it re-opens the class round 7 just closed: doors
+14 → ~11, allow paths 10 → 9 (no `TEST_EXEMPT` log line to describe, exemption itself stays as the
+escape hatch), mutation floor recomputed from both, budgets still four, and §Testing requirements plus
+tasks 6, 9, 10, 12 and 14 all re-derived. Expect ~650-750 lines. **Do the cut in one pass** — a
+half-applied scope cut leaves two descriptions of one feature, which is the defect being fixed.
