@@ -6704,6 +6704,12 @@ fail-closed contract, and the logging section.
   archaeology ("Round 2 named eleven — and miscounted its own table…") which is *history*, belonging to
   git and the judge ledger, not to a spec an agent builds from.
 
+**USER DECISION 2026-08-13 — how O3 gets done: cut the round-by-round history, do NOT split.** Delete
+the archaeology, keep the design. The ADR-0017 `.md`/`.spec.md` split was **considered and rejected**:
+it relocates bulk rather than reducing it, and the one feature that used it needed explicit user waivers
+for *both* halves anyway. **No size waiver is to be sought for this spec.** Target under 800; <400 is the
+standard. This attacks the size itself, which is the judge's stated cause of the defect class.
+
 **Also still open, from observability (advisory):** the `>=56ms` python3-startup figure attributed to
 that judge is **the third different number it has recorded for the same quantity** across three dates
 (56.3ms 08-02 → 20-30ms 08-04 → ~40ms measured 08-13). Round 6's "closed all seven" framing does not
