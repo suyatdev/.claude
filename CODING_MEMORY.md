@@ -6776,3 +6776,68 @@ Knock-ons the next pass must carry through, or it re-opens the class round 7 jus
 escape hatch), mutation floor recomputed from both, budgets still four, and §Testing requirements plus
 tasks 6, 9, 10, 12 and 14 all re-derived. Expect ~650-750 lines. **Do the cut in one pass** — a
 half-applied scope cut leaves two descriptions of one feature, which is the defect being fixed.
+
+## 2026-08-13 — marker-gate revision 8: the scope cut landed, and it does not reach 800 either
+
+Applied in one pass on `docs/post-merge-53`. All four deferrals went in together; **nothing is
+half-cut.** Counts re-derived from the flowchart rather than inherited, and every one of the three
+predictions in the round-7 note turned out wrong in the direction that mattered.
+
+**What the cut removed.** The decision log in full (`test-marker.log`, its four-field table, the
+machine-local storage decision, the `0600`/`0700` modes on the log, five scenarios that asserted log
+lines); `--status` and its scenario; `INCLUDE` and `FOREIGN` as forms of their own. The marker store
+keeps its own `0700`/`0600` modes — only the log's went. **Every deferred trigger still blocks**:
+`-i`/`--include`, `--pathspec-from-file`, and `cd`/`-C`/`--git-dir`/`--work-tree` all fold into
+`UNSUPPORTED`, and `MSG_UNSUPPORTED_FORM`'s message now names which of the four fired so the remedies
+stay distinguishable.
+
+**Three round-7 predictions were wrong, each verified rather than carried:**
+
+- **Doors 14 → 13, not "~11".** Only `MSG_FOREIGN_REPO` disappears. `INCLUDE` was never its own door —
+  it already shared `MSG_UNSUPPORTED_FORM` — so folding it removes a *form value* and a resolution
+  row, not a door. Verified: door table 13 rows, flowchart 13 distinct `MSG_*` constants, equal.
+- **Allow paths stay 10, not 9.** The note reasoned "no `TEST_EXEMPT` log line to describe", but
+  logging was never an allow path — deferring the log changed what an exemption *records*, never that
+  it allows. Verified by counting edges into the flowchart's `P` node: 9 bare `--> P` plus the
+  pre-filter edge that declares the node = 10.
+- **Mutation floor 25 → 24** (13 + 10 + 1), which coincidentally returns to the pre-round-7 figure for
+  an unrelated reason. Task 9 now carries an instruction to re-derive it from the flowchart rather
+  than trust the written number, because inheriting it across a revision is exactly how it went stale.
+
+**⚠️ The size finding — 800 is unreachable, and this is now measured twice.** 1,448 → **1,380**, a net
+**68 lines**: the deferrals took ~103 out, and the notes that keep them honest (the accepted cost of
+shipping no `--status`, the `UNSUPPORTED` fold, the follow-up register) put ~35 back. Composition
+measured with `wc`/`grep`, not estimated:
+
+| component | lines |
+|---|---|
+| Gherkin, 52 scenarios | 337 |
+| contract + measurement table rows | 114 |
+| code blocks (mermaid, sh, python, json) | 67 |
+| blank | 223 |
+| **non-prose floor** | **741** |
+| prose | 639 |
+
+**The floor is the whole finding.** Deleting every line of prose leaves **741**, so an 800-line version
+has a total prose budget of **59 lines** against the 639 the spec currently needs for its contracts,
+orderings and measured hazards. Round 7 measured the same floor at ~740 and read it as "prose deletion
+cannot close this"; revision 8 proves the stronger claim — **scope cutting cannot close it either**,
+because the bulk is Gherkin and contract tables, and cutting those is precisely what the user rejected
+when choosing the scope cut over them. `core-conduct/file-size-convention` stays **OPEN** and is
+reported as open in the spec's own header. **Do not shave at this file again**; the three constraints
+(under 800, do not split, seek no waiver) are jointly unsatisfiable and which one gives is a user
+decision.
+
+**One guarantee was genuinely lost, and it is stated rather than dropped.** Revision 7 argued
+"inertness must be observable, or the gate becomes decorative without anyone noticing"
+(`judge-guard.sh:204` is that exact failure in this family). `--status` was the answer; deferring it
+means v1 ships **no way to query whether the gate is armed**. Task 14 becomes the only arming proof —
+a one-off install-time check that pipes real payloads (plain, `-am`, and `rtk`-wrapped) into the
+installed hook — and the residual risk is the gate going inert *later*, silently. `--status` is
+follow-up 1 for that reason, and task 12 must say so in `rules/gates.md` and `hooks/README.md` so the
+next reader does not read the missing subcommand as a stale doc.
+
+**Next:** re-dispatch **both** judges at **round 2** of the re-entry cycle, passing the round-1 ids
+(`writing-specs/opt-in-fail-closed-conflict`, `core-conduct/file-size-convention`) so recurring ones
+keep their id. Expect the size id to be re-cited — the spec now answers it with a measurement and a
+"this is a user decision" rather than a fix, which is the honest position, not a fixable violation.
