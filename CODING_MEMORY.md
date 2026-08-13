@@ -7120,3 +7120,48 @@ Pin the log write to `printf` and name `echo` as the trap, **exactly parallel to
 treats the locale pin**; make the arming check inspect field contents, not line presence; add the
 permission-ordering test. ⚠️ Applying any of this **invalidates the round-5 PASS** (pinned to blob
 `e3f25495`) and requires round 6. That is the freshness rule working, not a defect.
+
+## 2026-08-13 — marker-gate revision 13: the `printf` pin, and a contradiction the third fix exposed
+
+Applied all three round-5 advisories. Card now `revision: 13`, still `phase: planning`, branch
+`docs/post-merge-53`. **The round-5 PASS is now invalidated** — the spec blob moved off `e3f25495` —
+so round 6 is owed before the user review gate. Expected, not a defect.
+
+### Re-derived rather than trusted, and it mattered
+
+The prior session marked the `echo`/`printf` finding "settled, do not re-derive." I ran it anyway on
+`/bin/bash` 3.2.57 before writing it into the spec, because this feature's entire defect history is
+probes run against the wrong interpreter. It reproduced exactly: `od -c` shows literal `\` `t` bytes,
+`cut -f2` returns **the whole line**, `awk -F'\t'` returns **empty**. Cheap to confirm, and the one
+check that would have caught revisions 11 and 12 before they shipped.
+
+Second measurement, this one **new** and not in the handoff: `mkdir -p -m 0700` against a directory
+that already exists at `0755` **exits 0 and leaves it `0755`**. `-m` applies only when the call
+actually creates the directory. So the second component to arrive can neither fail nor repair — a
+loose mode is permanent and silent. The spec now requires `mkdir -p -m` **and** a following `chmod`,
+which is idempotent and makes call order stop mattering.
+
+### The third advisory was mis-scoped in the handoff, and reading it properly found more
+
+The handoff framed it as "no test covers both orderings of the permission race." True, but reading
+both paragraphs together showed the spec **contradicted itself**: §Marker store said "the writer is
+the only component that creates it, so the mode is set in exactly one place," while §Decision logging
+said "both the writer and the gate can be the first to create it." The second is correct — the gate
+appends its decision line to the same directory and reaches it first in any repo where a commit is
+blocked before a marker was ever written, i.e. the *normal* first encounter with a newly armed gate.
+
+Fixed per `feedback_delete_the_duplicate_dont_sync_it`: §Decision logging is now the **single
+authority** for directory creation; the §Marker store bullet governs only marker-file `0600` and
+points at it. **A missing test was the symptom; two paragraphs disagreeing was the cause.**
+
+### The line-count trap, avoided deliberately
+
+Added the O3 row with the literal token `PENDING`, measured `wc -l` → 1,721, then swapped `PENDING`
+for `1,721` — a same-line substitution that cannot change the count. Verified after the edit: actual
+1,721, recorded 1,721. This is the exact failure that shipped wrong numbers in revisions 8 and 9.
+
+### Still open
+
+Round 6 (both judges) is owed. Waivers unchanged and not to be re-litigated:
+`writing-specs/command-grammar`, `core-conduct/file-size-convention` (non-prose floor now above 867
+against an 800 ceiling — the file grew again, to 1,721).

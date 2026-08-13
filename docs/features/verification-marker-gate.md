@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 12
-revision_status: complete  # round-4 fail closed: locale-pin mechanism stated; task 14 gains the positive path
+revision: 13
+revision_status: complete  # round-5 advisories: log write pinned to printf; state-dir race resolved
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -324,8 +324,14 @@ A failed marker write **fails the suite**. A silent no-marker would surface late
 - **`<repo>/hooks/state/` is `0700` and each marker file is `0600`** — core-conduct's default-deny for
   a generated store. The real defence is read-side validation, but the store is the sole authority for
   letting a commit through and there is no reason for it to be world-readable. **This feature creates
-  `hooks/state/`; it does not exist in this repo today**, and the writer is the only component that
-  creates it, so the mode is set in exactly one place.
+  `hooks/state/`; it does not exist in this repo today.** Two components can be the first to create
+  it — the writer and the gate — so **directory creation is specified once, in §Decision logging, and
+  this bullet governs only the marker files' own `0600`.** Revision 13 corrected this: the bullet
+  previously claimed "the writer is the only component that creates it, so the mode is set in exactly
+  one place," which contradicted §Decision logging outright and was the false half — the gate appends
+  its decision line to the same directory and reaches it first in any repo where a commit is blocked
+  or exempted before a marker has ever been written, which is the *normal* first encounter with a
+  newly armed gate.
 - Already gitignored by `/hooks/state/` at `.gitignore:17` — no new ignore rule needed.
 
 **Marker schema** (JSON; two levels deep, so YAML buys nothing here):
@@ -1342,6 +1348,36 @@ non-trivial decision.
 | 3 | the validated `TEST_EXEMPT` reason, or the `MSG_*` constant that fired |
 | 4 | `<subject>\|<test>` for the pair that failed, or **`-`** when the decision was reached before any pair was formed |
 
+**How the line is written — this is part of the requirement, not an implementation detail** (revision
+13). The separator is a literal tab, and in bash 3.2.57 only `printf` produces one from an escape.
+`echo` does not, and it fails **silently** — it writes the two characters `\` and `t`, a line that
+still looks tab-separated in a terminal that renders nothing special for a backslash:
+
+```sh
+# WRONG — measured on bash 3.2.57 with od -c: writes the bytes \ t, not a tab.
+# There is no `echo -e` rescue worth specifying either: it is not POSIX, and
+# xpg_echo/shopt make bare `echo` behave differently across shells and hosts.
+echo "$ts\t$verdict\t$reason\t$pair" >> "$LOG"
+
+# CORRECT — printf's format string is the only portable source of a real tab.
+printf '%s\t%s\t%s\t%s\n' "$ts" "$verdict" "$reason" "$pair" >> "$LOG"
+```
+
+The cost of getting this wrong is not a cosmetic one, and it lands on the two readers this section
+specifies: against an `echo`-written log, **`cut -f2` returns the entire line** (it finds no
+delimiter, and `cut` prints the whole line when the field separator is absent) and **`awk -F'\t'`
+returns the empty string**. Neither errors, so the erosion counts come back confidently wrong — a
+`sort | uniq -c` over whole lines shows one bucket per distinct commit rather than an `EXEMPT`/`BLOCK`
+split, and the bypass-rate query silently reports nothing at all.
+
+> **Same defect class as revisions 11 and 12, one layer further out**, and stated here for the same
+> reason: this spec keeps naming a *behaviour* — "tab-separated" — without pinning the *command* that
+> produces it, and each instance has been found inside the fix for the one before it. Revision 11 was
+> a regex written in Python syntax and executed by bash; revision 12 was a locale pin written as an
+> assignment prefix, invalid before `[[`. Revision 13 is the format itself. The check that would have
+> caught all three is the same one: **ask which interpreter the artifact meets in production before
+> trusting any probe of it.**
+
 **Field 4 is total, and the `-` is the reason.** Counted against the **thirteen** doors, not inherited
 from a superseded revision: exactly four — `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`,
 `MSG_STALE_TEST` — run after pair formation and can name a pair. **Eight** write `-`, as does every
@@ -1379,9 +1415,11 @@ awk -F'\t' '$2=="BLOCK" {print $3}' "$LOG" | sort | uniq -c
 ```
 
 **`wc -l` alone is NOT sufficient and naming it here was an error** — it cannot separate `EXEMPT` from
-`BLOCK`, which is the entire question. The field separator is a literal tab, which is why `cut -f2`
-and `awk -F'\t'` are safe: `[[:print:]]` admits no control character, so no reason string can contain
-a tab or newline and forge an extra field or line. That exclusion is load-bearing for the log's
+`BLOCK`, which is the entire question. Both commands above depend on the `printf` pin: they are
+correct only against a log whose separator is a real tab, and **both fail silently rather than loudly
+if it is not** (see the write pin above). Given a real tab, `cut -f2` and `awk -F'\t'` are then safe
+because `[[:print:]]` admits no control character, so no reason string can contain a tab or newline
+and forge an extra field or line. That exclusion is load-bearing for the log's
 parseability, not only for its display — and until revision 11 it was resting on a regex that never
 compiled, so the property was asserted rather than enforced.
 
@@ -1432,8 +1470,25 @@ never survives a fresh clone. That is deliberate:
 default-deny reason. On a permissive umask the alternative publishes a trail naming every commit
 someone chose to bypass the gate for. **This feature creates `hooks/state/` — it does not exist in this
 repo today — and both the writer and the gate can be the first to create it, so whichever runs first
-sets the mode for both.** Stating it in only one of the two places is how it ends up depending on call
-order.
+sets the mode for both.** **This paragraph is the single authority for directory creation**; the
+§Marker store bullet governs only the `0600` on marker files and points here (revision 13, which
+corrected that bullet's contradicting claim that the writer creates the directory alone).
+
+**The mode must be set by whichever component wins, because the loser cannot repair it.** Measured on
+this machine, `mkdir -p -m 0700` against a directory that already exists at `0755` **exits 0 and
+leaves it at `0755`** — `-m` applies only to a directory the call actually creates, so the
+second-arriving component neither fails nor fixes anything, and a loose mode set by the first is
+permanent and silent. Both components therefore run the same two statements, in this order:
+
+```sh
+# `-m` covers the create case; the chmod covers the "already exists, wrongly" case.
+# Neither alone is sufficient, and the pair is idempotent, so call order stops mattering.
+mkdir -p -m 0700 "$STATE_DIR" || { printf 'state dir FAILED\n' >&2; exit 1; }
+chmod 0700 "$STATE_DIR" || { printf 'state dir mode FAILED\n' >&2; exit 1; }
+```
+
+Stating it in only one of the two places, or specifying `mkdir` without the `chmod`, is how it ends up
+depending on call order.
 
 ## Pinned versions
 
@@ -1493,7 +1548,15 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       plus the two opt-in-ordering scenarios, plus the four `UNSUPPORTED` triggers each asserted by the
       trigger its message names rather than by the shared constant alone, plus the `test-marker.log`
       line wherever a scenario names one — **including the two that assert no line is written**, since
-      a logger that appends on every path passes every positive assertion.
+      a logger that appends on every path passes every positive assertion. Every log assertion reads
+      **by field** (`awk -F'\t'`/`cut -f2`), never by `grep`: a `grep EXEMPT` passes against an
+      `echo`-written log in which no reader can reach field 2 (revision 13).
+      **Plus the `hooks/state/` creation race, both orderings, as two cases** — gate-first-then-writer
+      and writer-first-then-gate — each asserting `0700` on the directory afterwards. One ordering
+      proves nothing: the bug is that whichever component runs second cannot repair a loose mode, so a
+      suite that only ever exercises the winning order passes while the other order ships `0755`.
+      Include the third case that actually fails today: pre-create `hooks/state/` at `0755`, run
+      either component, assert it ends `0700` — this is the one `mkdir -p -m` alone does not satisfy.
 - [ ] 7. Green: `hooks/test-marker-guard.sh`.
 - [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
       this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
@@ -1547,7 +1610,12 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       the installed copy. `judge-guard` shipped with this untested and the installed copy had no
       `lib/` at all.
       **Then the positive path, which every case above omits:** pipe a payload carrying a *valid*
-      `TEST_EXEMPT` reason and expect **exit 0 with an `EXEMPT` line appended to the log**. Added
+      `TEST_EXEMPT` reason and expect **exit 0 with an `EXEMPT` line appended to the log**. Assert it
+      **by field, with the same reader the erosion queries use** — `awk -F'\t' 'END{print NF}'` is
+      `4` and `cut -f2` is exactly `EXEMPT` — never by `grep EXEMPT` or a line count. Added
+      revision 13: a line-presence assertion passes against an `echo`-written log, where field 2 is
+      unreachable and every erosion query silently returns nothing, so the weaker form would confirm
+      the arming of a gate whose only instrumentation is already unreadable. Added
       revision 12 on the round-4 observability advisory, and it is not symmetry for its own sake —
       every other case in this task asserts the door *shuts*, so the whole arming check passes with
       the escape hatch dead. That is not hypothetical: it is exactly the state revisions 1–10 shipped,
@@ -1586,6 +1654,7 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | revision 10 | round-3 advisory fixes: log read commands, as-of caveat, Unicode disclosure | 1,576 |
   | revision 11 | exemption regex repaired — Python syntax in a bash gate — plus the locale pin | 1,614 |
   | revision 12 | round-4 fail closed: pin mechanism stated, task 14 gains its positive path | 1,652 |
+  | revision 13 | round-5 advisories: `printf` pin, state-dir race, task 6/14 assertions by field | 1,721 |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
