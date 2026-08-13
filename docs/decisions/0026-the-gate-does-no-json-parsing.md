@@ -54,14 +54,58 @@ Rejected alternatives, and why:
   measurement — the merged entry point does not exist yet. The latency budget table must be
   re-measured against the real implementation, not updated from this prediction.
 - **The opt-in ordering rule must be re-verified against the merged entry point.** The spec requires
-  the classifier to run before repo-state checks so an un-opted-in repo is never touched; folding
-  marker reading into the same process puts both behind one call, and that ordering is now internal
-  to Python rather than enforced by call sequence in bash. This is the highest-risk consequence of
-  this decision and is explicitly open work for revision 14.
+  the **opt-in check to run before the classifier** — node `G` sits *above* it — so a repo that has
+  not installed the writer cannot be blocked by any door but `MSG_NO_PYTHON`. Folding marker reading
+  into the same process puts both behind one call, and that ordering is now internal to Python rather
+  than enforced by call sequence in bash. This is the highest-risk consequence of this decision and is
+  explicitly open work for revision 14.
+
+  > **Correction (2026-08-13, revision 14).** This bullet originally read "the spec requires the
+  > classifier to run before repo-state checks so an un-opted-in repo is never touched" — which states
+  > the ordering **backwards**. The spec's contract is the reverse and is unambiguous about it
+  > (§Scope, §Fail-closed contract → "Which doors are machine-global", checklist tasks 6 and 14). An
+  > ADR is read as settled, so a reversed contract here would have propagated into the rewrite it
+  > exists to direct. Corrected in place rather than footnoted, with the original quoted above.
 - The `MSG_NO_PYTHON` door grows in importance: with one Python call carrying the whole decision, its
   failure mode is the whole gate's failure mode.
 - Validation of the unsanitised `exempt` value moves inside Python, where a real schema check is
   available — which is what `writing-secure-code` asks for at a boundary handling adversarial input.
+
+## Amendment — how far the merge goes (user decision, 2026-08-13)
+
+The decision above named "classification and marker reading" without saying where **path collection
+and pairing** live. They sit *between* those two in the flow, so the question was not optional: any
+answer that leaves them in bash needs a third `python3` start to read markers afterwards — the option
+this ADR already rejected.
+
+**Resolved: the whole decision runs in Python.** The single entry point classifies, collects the path
+set, pairs each path with its sibling test, reads and validates the markers, and compares blobs,
+returning the verdict as tab-separated lines. Bash keeps only what must precede it:
+
+```
+bash:  pre-filter (no "commit" substring -> exit 0)
+         -> python3 #1: read cwd from the payload
+         -> git rev-parse --show-toplevel
+         -> test -r <toplevel>/hooks/lib/write-test-marker.py     <-- the opt-in boundary
+         -> python3 #2: the whole decision  --TSV-->  read, print MSG_*, exit
+```
+
+Two consequences that revision 14 must carry, both accepted with the decision:
+
+- **The git collection and hashing commands move into Python.** The measured behaviours recorded in
+  §"Which paths, and which content" (notably `git diff --cached --name-only` exiting **129** with
+  empty stdout outside a repo) are properties of the commands, not of bash, so they survive the move
+  — but the *specified* call sites change, and `MSG_GIT_FAILED` is raised from Python.
+- **The `TEST_EXEMPT` check moves with it.** Revisions 11 and 12 pinned it as a bash ERE evaluated in
+  an `LC_ALL=C` subshell; under this decision that text describes a check that no longer runs in bash.
+  It must be re-specified in Python — preserving the two properties those revisions were about,
+  identical answers on every machine and a **byte**-counted `1,200` bound — and the superseded bash
+  form must be **removed, not left standing beside it.** Leaving both is the recurring defect class
+  this spec keeps hitting, in its most direct form.
+
+**The opt-in boundary is unchanged by this amendment**: it is still enforced by bash call sequence,
+because `test -r` runs before the one decision call. What moves inside Python is ordering *after*
+that boundary.
 
 ## Status of the spec
 
