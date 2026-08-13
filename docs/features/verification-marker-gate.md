@@ -16,8 +16,12 @@ version its test suite has never passed against.
 > had closed the opt-in ordering defect but measured 1,448 lines against an 800 ceiling, and showed
 > that deleting every line of prose still left ~740 — so the size fix had to shrink the *feature*, not
 > relocate its text. Three things left v1: the decision log, `--status`, and `INCLUDE`/`FOREIGN` as
-> forms of their own. **Every one of those still blocks; only the elaboration went.** Each is named
-> under §Follow-ups.
+> forms of their own. **Every one of those still blocks; only the elaboration went.**
+>
+> **Revision 9 then put the decision log back** (2026-08-13), after the size ceiling was waived — which
+> removed the only reason it was cut — and the round-2 observability judge ranked its absence the more
+> damaging of the two omissions: `TEST_EXEMPT` was validated and then discarded, leaving bypass rate
+> permanently unmeasurable. `--status` and the `INCLUDE`/`FOREIGN` fold stand; both are in §Follow-ups.
 >
 > ⚠️ **The cut worked and was not nearly enough: 1,448 → 1,402 lines, a net 46.**
 > `core-conduct/file-size-convention` is therefore **WAIVED for this file** (user decision,
@@ -121,14 +125,16 @@ machine before this feature exists. (`doc-guard.sh:54` is the family's one fail-
 door — including the three that depend on this feature's own new classifier file — is downstream of
 the writer-installed check and therefore cannot reach a repo that has not opted in.
 
-> ⚠️ **Accepted cost of the v1 scope cut: inertness is NOT observable in v1, and that is a known
-> weakness rather than an oversight.** A hook that allows is silent, so nothing distinguishes
-> "allowed, verified" from "allowed, inert" — `judge-guard.sh:204` records exactly this failure in
-> exactly this family. Revision 7 answered it with a `--status` subcommand; revision 8 defers that to
-> a follow-up. What replaces it in v1 is **task 14**, which pipes a real payload into the *installed*
-> hook and requires a readable `exit 2` — a one-off arming proof at install time instead of a
-> queryable one. The residual risk is that the gate goes inert *later*, silently. Restoring `--status`
-> is the first follow-up for that reason.
+> ⚠️ **Accepted cost: inertness is only PARTLY observable in v1, and the asymmetry is the point.** A
+> hook that allows is silent, so nothing in a normal commit distinguishes "allowed, verified" from
+> "allowed, inert" — `judge-guard.sh:204` records exactly this failure in exactly this family.
+> Revision 7 answered it with a `--status` subcommand, which remains deferred (follow-up 1). What v1
+> has instead is two partial answers: **task 14**, a one-off arming proof at install time, and the
+> **decision log**, whose contents are asymmetric evidence — *a non-empty log proves the gate is armed
+> and firing; an empty one proves nothing*, since "armed and nothing has gone wrong" and "armed but
+> silently never pairing" look identical. The residual risk is therefore narrower than revision 8 left
+> it but real: a gate that goes inert *later*, in a repo where nothing has tripped it, is still
+> invisible until someone re-runs task 14 by hand.
 
 ### Which files the gate covers
 
@@ -1028,18 +1034,51 @@ Scenario: an empty exemption is not an exemption
    When "TEST_EXEMPT= git commit -m msg" runs
    Then the hook exits 2 with MSG_NO_MARKER
 
-Scenario: an explicit exemption is honoured
+Scenario: an explicit exemption is honoured and logged to a file
   Given hooks/foo.sh is staged with no marker
    When "TEST_EXEMPT=vendored upstream git commit -m msg" runs
    Then the hook exits 0
-   # parsed out of the command STRING — a VAR=x prefix never reaches a hook's environment
+    And one EXEMPT line is appended to <repo>/hooks/state/test-marker.log with "-" in field 4
+   # parsed out of the command STRING — a VAR=x prefix never reaches a hook's environment;
+   # the exemption is decided before any pair is formed, so field 4 has no pair to name
 
 Scenario: an exemption rescues a commit aimed at another repo
   Given the command targets another repo
    When "TEST_EXEMPT=other repo cd /other/repo && git commit -m msg" runs
    Then the hook exits 0
+    And one EXEMPT line is appended to <repo>/hooks/state/test-marker.log
    # the exemption check precedes the form decision; the reverse order would make this
    # unreachable while MSG_UNSUPPORTED_FORM's own message recommends it
+
+Scenario: a block is logged with the message constant that fired
+  Given hooks/foo.sh is staged with no marker
+   When "git commit -m msg" runs
+   Then the hook exits 2 with MSG_NO_MARKER
+    And one BLOCK line naming MSG_NO_MARKER and the pair is appended to the log
+
+Scenario: a block with no pair still writes a well-formed line
+  Given the repo has opted in and hooks/foo.sh is staged
+   When "git commit -m msg -i -- docs/notes.md" runs
+   Then the hook exits 2 with MSG_UNSUPPORTED_FORM
+    And one BLOCK line is appended with "-" in field 4
+   # nine of the thirteen doors fire before a pair exists, and eight of those can still write a
+   # line (MSG_NO_PYTHON knows no repo); field 4 is total because it has a defined value for
+   # them, not because every door reaches one
+
+Scenario: an allowed commit writes no log line
+  Given docs/notes.md is staged and has no sibling test
+   When "git commit -m msg" runs
+   Then the hook exits 0
+    And <repo>/hooks/state/test-marker.log is unchanged
+   # logging every allow would bury the two rates the log exists to expose
+
+Scenario: the door that fires before a repo is known writes no line at all
+  Given python3 is missing or not executable
+   When "git commit -m msg" runs in any repo
+   Then the hook exits 2 with MSG_NO_PYTHON
+    And no log line is written anywhere
+   # no toplevel has been resolved, so there is no <repo>/hooks/state/ to append to; the
+   # block is announced on stderr instead, which is why this is not a silent failure
 
 Scenario: a deletion needs no test run
   Given hooks/foo.sh and hooks/foo.test.sh are both staged as deletions
@@ -1229,6 +1268,71 @@ two-mutant minimum against thirteen doors establishes nothing about the other el
 `MSG_NO_MARKER`'s remedy string is derived from the suite path and its extension — `bash <path>` for
 `.sh`, `python3 <path>` for `.py` — never hardcoded to `bash`.
 
+### Decision logging — exemptions *and* blocks
+
+> **Restored to v1 on 2026-08-13, after the round-2 observability read.** Revision 8 deferred this
+> section for one reason: getting under 800 lines. That ceiling is now waived, so the reason is gone —
+> and the judge's objection stands on its own merits. `TEST_EXEMPT` was validated for shape and then
+> **discarded**, making bypass rate permanently unmeasurable, which hollows out the feature's own
+> justification: this gate exists because a soft warning gets rationalised past, and an invisible
+> escape hatch is exactly as rationalisable as the warning it replaced.
+
+"How often is this gate bypassed" and "does this gate ever fire at all" are the same question about the
+same control, so they share one file: `<repo>/hooks/state/test-marker.log`, one tab-separated line per
+non-trivial decision.
+
+| field | value |
+|---|---|
+| 1 | ISO-8601 UTC timestamp |
+| 2 | `EXEMPT` or `BLOCK` |
+| 3 | the validated `TEST_EXEMPT` reason, or the `MSG_*` constant that fired |
+| 4 | `<subject>\|<test>` for the pair that failed, or **`-`** when the decision was reached before any pair was formed |
+
+**Field 4 is total, and the `-` is the reason.** Counted against the **thirteen** doors, not inherited
+from a superseded revision: exactly four — `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`,
+`MSG_STALE_TEST` — run after pair formation and can name a pair. **Eight** write `-`, as does every
+`EXEMPT` line, since the exemption is honoured at node `H` before the path set is collected. Collecting
+the path set early just to populate the field is rejected: it would spend git calls on a commit the
+user has already exempted, and could raise `MSG_GIT_FAILED` on one.
+
+**One door writes no line at all, and it is the thirteenth:** `MSG_NO_PYTHON` fires before any repo is
+known, so there is no `<repo>` to write to. That is a consequence of the opt-in ordering rather than an
+oversight, and it is not a silent failure — it announces itself on stderr and blocks outright. (The
+allow-on-unreadable-payload path also resolves no toplevel, but allows are not logged at all, so it
+never wanted a line. Revision 7 called these "two doors"; one of them was never a door.)
+
+Allowed commits are **not** logged: every `git commit` in a covered repo would append a line, the
+signal would drown, and both questions above are about the non-allow cases.
+
+⚠️ **v1 ships the writer of this log and no reader of it, and that is a stated gap.** Revision 7 paired
+the log with `hooks/test-marker-guard.sh --status` to print decision counts and a pair count — without
+which an empty log cannot distinguish "armed, and nothing has gone wrong" from "armed, but pairing
+silently never fires", since both look like an empty file forever. `--status` remains deferred
+(follow-up 2). Until it lands the log is read with `wc -l` and `cut`, which answers the erosion
+question — the one the judge ranked first — but not the arming question. **A log nothing reads is the
+same defect as no log**, so this is a real half-measure, recorded as one rather than presented as
+complete.
+
+**What this log is, and is not — the storage decision, made explicitly.** It is **machine-local**:
+`/hooks/state/` is gitignored at `.gitignore:17`, so the log is never committed, never shared, and
+never survives a fresh clone. That is deliberate:
+
+- Committing it would make every developer's bypass history a merge-conflict generator on a file with
+  no merge semantics, and would publish local paths and free-text reasons into repo history.
+- What it therefore delivers is **self-audit and a rate signal** — enough to answer "am I leaning on
+  `TEST_EXEMPT` weekly or hourly", which is the erosion path the control exists to catch.
+- What it does **not** deliver is organisational assurance. Nobody else can read it, and a developer
+  who wants to hide a bypass can delete it. It is instrumentation, not evidence, and any later claim
+  that this feature provides an audit trail should be read against this paragraph.
+
+**Both the log and its parent directory carry explicit modes: `<repo>/hooks/state/` is `0700` and
+`test-marker.log` is `0600`** — identical to the marker store, and for the same core-conduct
+default-deny reason. On a permissive umask the alternative publishes a trail naming every commit
+someone chose to bypass the gate for. **This feature creates `hooks/state/` — it does not exist in this
+repo today — and both the writer and the gate can be the first to create it, so whichever runs first
+sets the mode for both.** Stating it in only one of the two places is how it ends up depending on call
+order.
+
 ## Pinned versions
 
 Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — no associative arrays, no
@@ -1285,7 +1389,9 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
 - [ ] 5. Green: `hooks/lib/write-test-marker.py`.
 - [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
       plus the two opt-in-ordering scenarios, plus the four `UNSUPPORTED` triggers each asserted by the
-      trigger its message names rather than by the shared constant alone.
+      trigger its message names rather than by the shared constant alone, plus the `test-marker.log`
+      line wherever a scenario names one — **including the two that assert no line is written**, since
+      a logger that appends on every path passes every positive assertion.
 - [ ] 7. Green: `hooks/test-marker-guard.sh`.
 - [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
       this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
@@ -1365,7 +1471,8 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | `36a0880` | revision 7 — history cut | 1,448 |
   | `fa44399` | revision 8 — scope cut | 1,402 |
   | `0294809` | size waiver recorded | 1,413 |
-  | revision 9 | this round-2 correction | 1,434 |
+  | `17d2379` | revision 9 — round-2 count correction | 1,434 |
+  | revision 9 (cont.) | decision log restored to v1 | 1,539 |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
@@ -1386,19 +1493,19 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
 
   | component | lines |
   |---|---|
-  | Gherkin, 52 scenarios | 337 |
-  | contract and measurement table rows | 128 |
+  | Gherkin, 56 scenarios | 370 |
+  | contract and measurement table rows | 135 |
   | code blocks (mermaid, sh, python, json) | 72 |
-  | blank | 230 |
-  | **non-prose floor** | **767** |
-  | prose | 667 |
+  | blank | 245 |
+  | **non-prose floor** | **822** |
+  | prose | 717 |
 
-  **The floor is the finding, and it is robust to the drift above** — every re-measurement has moved
-  the floor *up*, never toward 800. Deleting every line of prose in this file leaves 767, so an
-  800-line version has a total prose budget of **33 lines** — for a spec that needs 667 to state its
-  contracts, orderings and measured hazards. No amount of editing closes that gap. Reaching 800
-  requires cutting Gherkin scenarios or contract tables, **both of which the user explicitly rejected**
-  when choosing the scope cut over them.
+  **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
+  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **822**, so **deleting
+  every line of prose in this file still leaves it over the ceiling.** The prose budget for an
+  800-line version is **negative 22**. This is no longer "800 is hard to reach"; it is arithmetically
+  unreachable while the spec keeps 56 acceptance scenarios and its contract tables, and cutting those
+  is what the user rejected when choosing the scope cut, and rejected again when restoring the log.
 
   **Resolved 2026-08-13: the constraint that gives is the ceiling.** Three constraints — under 800, do
   not split, seek no waiver — were jointly unsatisfiable at this feature's scope, measured twice rather
@@ -1406,19 +1513,17 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   not shave at this file further, and do not re-open the split**: both were considered against this
   measurement and rejected. The size is a recorded, accepted cost, not an open defect.
 
-**Follow-ups this feature deliberately does not do.** The first three are **deferrals made by the
-revision-8 scope cut** and are the first candidates for v2:
+**Follow-ups this feature deliberately does not do.** The first two are **deferrals left by the
+revision-8 scope cut** and are the first candidates for v2. A third — the decision log — was deferred
+and then **restored to v1 on 2026-08-13** once the size ceiling was waived and the round-2
+observability read ranked it the more damaging of the two omissions; it is specified above.
 
-1. **The decision log.** `<repo>/hooks/state/test-marker.log`, one tab-separated line per non-trivial
-   decision, answering "how often is this gate bypassed" and "does it ever fire at all". Revision 7
-   specified it in full — four fields, machine-local storage, `0700`/`0600` modes, and the honest note
-   that it is instrumentation rather than organisational evidence, since nobody else can read it and a
-   developer who wants to hide a bypass can delete it. **v1 ships no log**, so `TEST_EXEMPT` erosion is
-   currently unmeasurable. Recover the design from git history at revision 7 rather than rewriting it.
-2. **`--status`.** `ACTIVE`/`INERT`, the resolved toplevel, the reason, decision counts, and a pair
+1. **`--status`.** `ACTIVE`/`INERT`, the resolved toplevel, the reason, decision counts, and a pair
    count — the last of which is what tells "armed and quiet" apart from "armed but silently never
-   pairing". See the accepted cost under §Scope; task 14 is the one-off substitute.
-3. **`-i`/`--include` and `--pathspec-from-file` supported properly** rather than refused, which needs
+   pairing". **This is now the log's missing reader as well as the arming query**, which raises its
+   priority above where revision 8 left it: see the ⚠️ note in §Decision logging. Task 14 remains the
+   one-off substitute for arming; nothing substitutes for the counts.
+2. **`-i`/`--include` and `--pathspec-from-file` supported properly** rather than refused, which needs
    a union of two collectors with a different content source on each side.
 
 The rest are pre-existing and unchanged by the scope cut: rename `panes/adapters/cmux-exec.test.sh` to

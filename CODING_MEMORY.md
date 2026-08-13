@@ -6901,3 +6901,33 @@ re-ran the `python3 -I` derivation and confirmed the 23.8 ms figure.
 **Open decision for the user — do not dispatch round 3 until it is answered:** whether the decision log
 returns to v1. Restoring it changes the spec materially and would invalidate a round-3 verdict taken
 now. Round 3 otherwise only has to confirm a number correction.
+
+**USER DECISION 2026-08-13 — the decision log is RESTORED to v1.** Taken on the round-2 observability
+read. The reasoning that settled it: **the log was cut for exactly one reason — hitting 800 — and that
+ceiling is now waived, so the premise is gone.** The judge's independent argument was that
+`TEST_EXEMPT` was validated for shape and then discarded, making bypass rate permanently unmeasurable
+and hollowing out the feature's own justification (a gate built because soft warnings get rationalised
+past should not hand out an invisible escape hatch). Restored from `36a0880` via git rather than
+rewritten — the design was already judged sound.
+
+Counts re-derived for **13** doors rather than inherited from revision 7's 14: field 4 names a pair for
+**4** doors, writes `-` for **8**, and **1** (`MSG_NO_PYTHON`) writes no line at all because no repo is
+known yet. Revision 7 called that last case "two doors"; one of them was the unreadable-payload
+**allow**, which never wanted a line since allows are not logged. Added a scenario pinning the no-line
+door, which revision 7 never had.
+
+⚠️ **v1 now ships the log's writer and no reader** — `--status` stays deferred, so an empty log is
+still ambiguous between "armed and quiet" and "armed but never pairing". Recorded in §Decision logging
+as a stated half-measure, and `--status` is promoted to follow-up 1. The §Scope note was rewritten from
+"inertness is NOT observable" to the accurate asymmetry: **a non-empty log proves the gate is armed and
+firing; an empty one proves nothing.**
+
+**The size finding crossed a threshold and is now decisive rather than arguable.** 1,434 → **1,539**,
+and the **non-prose floor is 822** — *above* the 800 ceiling on its own. Deleting every line of prose
+still leaves the file over. The prose budget for an 800-line version is **negative 22**. Four
+re-measurements, every one moving the floor up; the waiver is no longer a judgement call.
+
+**Convergence method, now used twice and worth keeping:** a composition table counts itself, so
+measure → edit → measure loops forever. Get the structure final, measure, then **swap digits only** —
+a within-line edit is line-count-neutral, so it terminates. Two swaps were needed here because a
+one-line precision fix moved the Gherkin count.
