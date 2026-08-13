@@ -673,3 +673,85 @@ materialised inside this very revision, is not.
   and re-confirmed present in the artifact at the unresolved-callout under §"The command grammar"
   (l.531–547) and checklist task 2's cross-reference (l.1339–1341). Not re-argued; not counted toward
   this verdict.
+
+## Round 2 (re-entry, judged against spec revision 8) — 2026-08-13T03:56:18Z · **FAIL** (1 violation) · confidence: high
+
+HEAD `029480968e5e149abe8a7e8314a7c732a8774532` · spec blob `c32b5788eb2559fc524e32b66e2757a0f9fe2be9`
+· 1,413 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 1's finding is fixed, not just claimed fixed. I re-traced the flowchart node by node rather than
+trusting the "every door except MSG_NO_PYTHON is downstream of node G" callout as evidence of itself:
+the ordering is now pre-filter → python3 check → inline `cwd` JSON read → toplevel resolution → writer-
+installed check → classifier, and every one of the twelve remaining blocking doors sits after the
+writer-installed node. The door count (13), the allow-path count (10), and the mutation floor (24) all
+still agree with each other, with the flowchart, and with the checklist. `writing-specs/opt-in-fail-
+closed-conflict` is closed.
+
+Revision 8's scope cut — deferring the decision log, `--status`, and dedicated `INCLUDE`/`FOREIGN`
+forms, folding all three into existing structures — also held up under a line-by-line recheck. Nothing
+in the current text refers to any of the three deferred items as though they still ship; the fold left
+the foreign-repo trigger's refusal completely unchanged (it still blocks, still names itself in
+`MSG_UNSUPPORTED_FORM`, still carries its own scenario); and the loss of a queryable `--status` is
+disclosed rather than quietly dropped — flagged with warning callouts in §Scope, required reading in the
+gates.md/README entry at checklist task 12, and given a one-off substitute at task 14. That is adequate
+disclosure of an accepted cost, not a violation.
+
+What the recheck did surface is new, and it sits exactly where this spec's own house style says a
+defect like this hides: a stale number presented as a fresh measurement. §Standing decisions → O3
+states the file "landed at **1,380**" lines and gives a `wc`/`grep` composition table explicitly
+described as "measured... rather than estimated" — the same phrase the frontmatter comment repeats
+("size measured and reported, not claimed"). `wc -l` on the actual judged file returns **1,413**, a
+33-line gap the O3 section never re-measured. The internal arithmetic inside O3 is fine on its own
+terms; it just no longer describes the artifact it is embedded in. This file spends real ink telling
+its own implementer to re-derive rather than trust a remembered number (the `python3 -I` latency figure,
+re-measured after three prior values disagreed; the mutation floor, explicitly told to be re-derived
+"before running it rather than trusting this number") — and then does not hold its own size claim to
+that standard. It does not reopen the waiver (either number is far past 800, and the waiver is a
+settled user decision I'm not re-arguing), but it is a live, checkable inaccuracy in a durable artifact,
+which is exactly what the project's own core-conduct rule on verification-before-claim exists to catch.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `core-conduct/verify-before-claim` *(new)* | `rules/core-conduct.md` (project layer, this worktree) | "Verification precedes both the claim and the write-down — never record that claim in a durable artifact (ADR, memory file, commit message, PR body, handoff, spec), until you have actually run it and re-read the output" (§Session Defaults) | §Standing decisions → O3, "Composition of the 1,380, measured with `wc`/`grep` rather than estimated" | The O3 section presents a specific line-count total (1,380) and a component breakdown as a completed, re-runnable measurement backing the file-size waiver, but `wc -l docs/features/verification-marker-gate.md` on the judged blob (`c32b5788e...`) returns **1,413** — a 33-line drift never re-measured after later edits (plausibly the waiver-recording text itself) grew the file past the number the derivation reports. The arithmetic inside O3 is internally consistent (1,448 − 68 = 1,380; 103 − 35 = 68) but no longer matches the file it describes — a claim recorded as settled before being re-checked, the exact failure mode this file's own recurring "measured, not estimated" callouts elsewhere (§Latency's `python3 -I` re-derivation, checklist task 9's mutation-floor re-derivation warning) exist to prevent. |
+
+### Notes (non-blocking)
+
+- **Round-1 fix verified, not just re-read.** Traced every flowchart edge from `A` to each terminal
+  node: `D3` (`MSG_NO_PYTHON`) is the only block before node `G`; all of `D4`, `X`, `D5`, `D6`, `Y`,
+  `BE`, `UF`, `U`, `Z` (2 messages), `W` (2 messages) sit strictly downstream of `G`. 13 doors, 10 allow
+  paths, 24 mutation floor — all cross-checked against the door table, the allow-path enumeration, and
+  checklist tasks 6/9, no drift found.
+- **No surviving reference to deferred v2 items.** Grepped the whole file for `FOREIGN`, `INCLUDE`,
+  `--status`, and `test-marker.log` — every occurrence outside the revision-8 callout and the
+  §Follow-ups register is either historical narration or an explicit "deferred" statement; nothing
+  treats a cut feature as shipping.
+- **Foreign-repo behaviour unweakened by the fold.** The scenario "a commit aimed at another repo
+  cannot be verified, so it blocks" still exits 2 with `MSG_UNSUPPORTED_FORM` naming the foreign-repo
+  trigger; §"What `UNSUPPORTED` absorbs" states explicitly that "the folding is a prose change, never a
+  licence to allow."
+- **`--status` loss disclosed, not buried.** §Scope's accepted-cost callout, checklist task 12's
+  documentation requirement, and task 14's one-off installed-hook arming proof together make the gap
+  observable to the next reader rather than silently absent. Adequate.
+- **Cross-document counts all reconciled:** 52 Gherkin scenarios (counted directly, matches O3's
+  claim), 18 `kind`×field matrix cells (6 fields × 3 kinds), 14 paired suites (11 pre-existing + 3 new),
+  12 doors downstream of `G` (13 total − `MSG_NO_PYTHON`) — no arithmetic disagreement found anywhere
+  in the document except the one cited above.
+- Confidence is **high**: the cited violation is a direct `wc -l` measurement against the exact judged
+  blob, not an inference.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`) and confirmed present in the
+  artifact at the UNRESOLVED callout under §"The command grammar" and checklist task 2's cross-
+  reference. Not re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list, confirmed present in
+  the revision-8 callout at the top of the document and restated in §Standing decisions → Waivers and
+  O3. Not re-argued; not counted toward this verdict. Note for whoever next touches this file: the O3
+  measurement backing this waiver is the same one flagged stale above (1,380 claimed vs. 1,413 actual)
+  — the waiver itself is not in question (both figures clear 800 by a wide margin), but the next edit
+  to this section should re-run the `wc`/`grep` derivation rather than adjust the number by hand.

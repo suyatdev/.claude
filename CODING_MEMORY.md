@@ -6851,3 +6851,53 @@ splitting (considered a third time, still relocates bulk), and cutting Gherkin/c
 thing the scope cut was chosen over). The size is now a recorded accepted cost, not an open defect —
 **a judge citing this id is arguing with a settled decision**, and both the header and §Standing
 decisions say so. Round 2 can now be dispatched without burning itself on an unfixable id.
+
+## 2026-08-13 — marker-gate round 2 judged: the size paragraph went stale while being written
+
+Both judges pane-dispatched, both returned DONE. **Compliance = FAIL, 1 violation, and it is new, not
+a recurrence.** Observability = advisory, risk=medium.
+
+**Round 1's substantive id is confirmed closed.** The compliance judge re-traced the flowchart edge by
+edge rather than trusting the spec's own "fixed it" callout: the writer-installed check really does sit
+above every door but `MSG_NO_PYTHON`, and 13/10/24 agree everywhere they are stated. It also confirmed
+the scope cut left **no stale reference to a deferred feature** and did **not** weaken the foreign-repo
+refusal. `writing-specs/command-grammar` and `core-conduct/file-size-convention` were recorded as
+waived, not re-cited — passing the waivers in the prompt worked.
+
+**⚠️ `core-conduct/verify-before-claim` — my error, and verification found it was worse than cited.**
+The judge said the file claimed 1,380 lines but measured 1,413. Re-measuring rather than accepting the
+report turned up a **second** instance the judge could not see: `git show fa44399:<path> | wc -l` is
+**1,402**, so the scope-cut commit's own *message* also recorded 1,380. The 1,380 was a transient
+working-tree state that was measured, written down as settled, and then edited twice more before
+either the file or the commit message was finalised.
+
+**The mechanism is worth naming because it is self-referential: a composition table counts itself.**
+Adding the table added table rows and blank lines to the very counts it reported. Measuring, then
+editing, then committing without re-measuring is not a slip that attention fixes — the act of writing
+the measurement down changes the measured quantity. Every earlier "line count went stale inside its own
+paragraph" entry is this same shape.
+
+**Fix applied (revision 9), and it is the derivation, not the number.** The spec now carries the
+`wc`/`grep`/`awk` composition command inline, a git-measured progression table
+(`36a0880` 1,448 → `fa44399` 1,402 → `0294809` 1,413 → rev 9 1,434), and an explicit warning not to
+trust any line count in the file without re-running it. Convergence method that actually works, since
+editing changes the count: get the structure final, measure, then **swap digits only** — a within-line
+edit is line-count-neutral, so it terminates in one pass. Also fixed a flaw in the derivation itself:
+the awk fences were anchored `^```` and silently miscounted **indented** code blocks as prose.
+
+Re-measured composition as of revision 9: 337 Gherkin (52 scenarios), 128 table rows, 72 code, 230
+blank → **767 floor**, 667 prose, so an 800-line file has a **33-line** prose budget. Every
+re-measurement has moved the floor **up**, never toward 800 — the waiver's basis is unchanged and if
+anything stronger.
+
+**Observability (advisory, non-blocking) — the scope cut removed both observability surfaces, and the
+judge's ranking is that the LOG matters more than `--status`.** `TEST_EXEMPT` is validated for shape
+and then **discarded**, so bypass rate is permanently unmeasurable in v1 — which undercuts the
+feature's own justification, since the escape valve becomes exactly as invisible as the soft warning
+the gate was built to replace. `--status` at least has a partial substitute in task 14; the log has
+none. Judge recommends restoring **the log first**, before implementation starts. It also independently
+re-ran the `python3 -I` derivation and confirmed the 23.8 ms figure.
+
+**Open decision for the user — do not dispatch round 3 until it is answered:** whether the decision log
+returns to v1. Restoring it changes the spec materially and would invalidate a round-3 verdict taken
+now. Round 3 otherwise only has to confirm a number correction.

@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 8
-revision_status: complete  # scope cut applied in one pass; size measured and reported, not claimed
+revision: 9
+revision_status: complete  # round-2 compliance fix: line counts re-measured, derivation stored
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -19,7 +19,7 @@ version its test suite has never passed against.
 > forms of their own. **Every one of those still blocks; only the elaboration went.** Each is named
 > under §Follow-ups.
 >
-> ⚠️ **The cut worked and was not nearly enough: 1,448 → 1,380 lines, a net 68.**
+> ⚠️ **The cut worked and was not nearly enough: 1,448 → 1,402 lines, a net 46.**
 > `core-conduct/file-size-convention` is therefore **WAIVED for this file** (user decision,
 > 2026-08-13, recorded in the frontmatter) — not met, and not silently ignored either. The measurement
 > in §Standing decisions → O3 is the whole basis for the waiver: it shows the ceiling is unreachable
@@ -1356,25 +1356,46 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
      changed.** A third waiver is a user decision, not a drafting one.
 - **O3 — the size question is now answered by measurement, and the answer is that 800 is unreachable.**
   Revision 7 cut the round-by-round narrative (deletion, not splitting; an ADR-0017 `.md`/`.spec.md`
-  split was considered and rejected because it relocates bulk rather than reducing it) and landed at
-  1,448. Revision 8 cut **feature scope** on the user's decision and landed at **1,380** — a net 68
-  lines, because the deferred sections took ~103 lines out while the notes that keep the deferrals
-  honest (the accepted cost of no `--status`, the `UNSUPPORTED` fold, the follow-up register) put ~35
-  back.
+  split was considered and rejected because it relocates bulk rather than reducing it). Revision 8 cut
+  **feature scope** on the user's decision. Measured from git with
+  `git show <commit>:<path> | wc -l`, not from memory:
 
-  Composition of the 1,380, measured with `wc`/`grep` rather than estimated:
+  | commit | what it did | lines |
+  |---|---|---|
+  | `36a0880` | revision 7 — history cut | 1,448 |
+  | `fa44399` | revision 8 — scope cut | 1,402 |
+  | `0294809` | size waiver recorded | 1,413 |
+  | revision 9 | this round-2 correction | 1,434 |
+
+  ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
+  counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
+  transient **1,380**, then two more edits landed before the commit, so `fa44399` shipped **1,402** —
+  and both this table and that commit's own message recorded 1,380 as a settled, "measured rather
+  than estimated" fact. **The file grew while the paragraph describing its size was being written.**
+  The derivation is therefore the durable artifact and every number is a dated snapshot of it:
+
+  ```sh
+  f=docs/features/verification-marker-gate.md
+  tot=$(wc -l < "$f"); blank=$(grep -c '^$' "$f"); tbl=$(grep -c '^ *|' "$f")
+  gherkin=$(awk '/^ *```gherkin/{g=1;next} /^ *```$/{g=0} g' "$f" | wc -l)
+  code=$(awk '/^ *```(sh|python|json|mermaid)/{c=1;next} /^ *```$/{c=0} c' "$f" | wc -l)
+  echo "total=$tot floor=$((blank+gherkin+tbl+code)) prose=$((tot-blank-gherkin-tbl-code))"
+  ```
+
+  Composition **as of revision 9**, from that command:
 
   | component | lines |
   |---|---|
   | Gherkin, 52 scenarios | 337 |
-  | contract and measurement table rows | 114 |
-  | code blocks (mermaid, sh, python, json) | 67 |
-  | blank | 223 |
-  | **non-prose floor** | **741** |
-  | prose | 639 |
+  | contract and measurement table rows | 128 |
+  | code blocks (mermaid, sh, python, json) | 72 |
+  | blank | 230 |
+  | **non-prose floor** | **767** |
+  | prose | 667 |
 
-  **The floor is the finding.** Deleting every line of prose in this file leaves 741, so an 800-line
-  version has a total prose budget of **59 lines** — for a spec that currently needs 639 to state its
+  **The floor is the finding, and it is robust to the drift above** — every re-measurement has moved
+  the floor *up*, never toward 800. Deleting every line of prose in this file leaves 767, so an
+  800-line version has a total prose budget of **33 lines** — for a spec that needs 667 to state its
   contracts, orderings and measured hazards. No amount of editing closes that gap. Reaching 800
   requires cutting Gherkin scenarios or contract tables, **both of which the user explicitly rejected**
   when choosing the scope cut over them.
