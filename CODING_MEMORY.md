@@ -7076,3 +7076,47 @@ repo convention it followed is the better one. Check the diff, not the report.
 
 Composition re-derived at revision 12: total **1,652**, floor **867** (855 → 867), prose 785, 58
 scenarios. Floor still rising; the 800 waiver holds on stronger arithmetic each round.
+
+## 2026-08-13 — marker-gate round 5: compliance PASSES; a third instance of the class surfaces
+
+**Compliance round 5 = PASS, 0 violations, confidence high, pinned to spec blob `e3f25495` / HEAD
+`f95e94b`.** `writing-specs/locale-pin-mechanism` did **not** recur, so no escalation. The judge ran
+both revision-12 snippets on the pinned bash 3.2.57 rather than reading them (wrong form → exit 127;
+subshell form → correct, no locale leak), re-ran the line-count derivation cold (`total=1652
+floor=867`), pulled all 8 cited historical blobs, and diffed rev 11 → 12 to confirm nothing else moved.
+**The spec-compliance gate is satisfied.**
+
+**Observability round 5: risk=medium (up from low), confidence high — and it found the third
+instance of the defect class**, in the place I had explicitly told it my own sweep was blind:
+non-regex idiom mismatches.
+
+### The finding: the log write side is unpinned, so `echo` silently corrupts the log
+
+The decision log is TSV and the spec's own documented maintenance commands are `cut -f2` and
+`awk -F'\t'`. Nothing pins *how* the line is written. Reproduced here on bash 3.2.57:
+
+```
+echo "…Z\tEXEMPT\t…"   -> bytes are literal \ t   (bash 3.2 echo does not expand \t without -e)
+   cut -f2   -> returns THE ENTIRE LINE   (no tabs → one field)
+   awk -F'\t' -> returns EMPTY
+printf "…Z\tEXEMPT\t…\n" -> real tab bytes; cut -f2 -> EXEMPT
+```
+
+Both read commands fail **silently — no error, no warning, plausible-looking output.** That is the
+exact quietly-wrong failure mode this whole feature exists to prevent, and it is the third layer of
+the same species: rev 11 (regex written for Python, run in bash), rev 12 (locale pin written as an
+assignment prefix, invalid before `[[`), and now the log writer (`echo` where only `printf` is
+portable). **The pattern is not "a regex bug" — it is that this spec repeatedly names a behaviour
+without pinning the command that produces it.**
+
+Two smaller advisories, both real: the new task-14 positive path asserts only that a log line
+*appeared*, not that its fields are populated — so it would pass against an `echo`-corrupted log; and
+the claim that both creation paths yield identical `hooks/state/` permissions has no test covering
+both orderings.
+
+### Next revision (13) — advisory, not blocking
+
+Pin the log write to `printf` and name `echo` as the trap, **exactly parallel to how revision 12
+treats the locale pin**; make the arming check inspect field contents, not line presence; add the
+permission-ordering test. ⚠️ Applying any of this **invalidates the round-5 PASS** (pinned to blob
+`e3f25495`) and requires round 6. That is the freshness rule working, not a defect.

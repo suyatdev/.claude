@@ -921,3 +921,95 @@ cheapest to fix.
   spec's own table exactly, so the 800 ceiling remains arithmetically unreachable without cutting
   acceptance scenarios or contract tables — rejected twice already by the user. Not re-argued; not
   counted toward this verdict.
+
+## Round 5 (re-entry, judged against spec revision 12) — 2026-08-13T18:20:41Z · **PASS** (0 violations) · confidence: high
+
+HEAD `f95e94b42c2f914dde057f7f8eadefe8f7c46690` · spec blob `e3f25495ed482c125bf4133ef635061d340cefae`
+· 1,652 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 4's one finding, `writing-specs/locale-pin-mechanism`, is closed — and I did not accept revision
+12's snippet because it reads correctly, per the dispatch instruction. I typed both code blocks in
+verbatim and ran them on `/bin/bash`, which this machine reports as `GNU bash, version 3.2.57(1)-release
+(arm64-apple-darwin25)` — the exact version the spec pins.
+
+- **The WRONG form, run as written:** `LC_ALL=C [[ "$exempt" =~ $re ]]` → `bash: line 3: [[: command not
+  found`, exit **127**. Matches the spec's claim exactly, including the exact wording.
+- **The CORRECT form, run as written:** `if ( export LC_ALL=C; [[ "$exempt" =~ ^[[:print:]]{1,200}$ ]] );
+  then …` — matched a valid ASCII reason (exit 0) and rejected a byte-0x01 control character (falls to
+  the `else` branch), i.e. it does exactly what node H's contract requires.
+- **The stated reason for the subshell** — "the pin cannot leak into the rest of the gate" — I confirmed
+  mechanically: after the subshell returns, `$LC_ALL` in the parent shell is unset, as subshells always
+  imply for exported-then-forgotten variables.
+
+That closes the recurring id. I also re-ran the O3 composition derivation the spec embeds, cold, against
+the live file rather than trusting the table: `total=1652 floor=867 blank=256 tbl=138 gherkin=387
+code=86`, `grep -c "^Scenario:"` = `58` — every one of those numbers matches the spec's own table for
+"as of revision 12" exactly. I went further and pulled every historical commit the O3 table now cites
+with `git show <sha>:<path> | wc -l`: `36a0880`→1448, `fa44399`→1402, `0294809`→1413, `17d2379`→1434,
+`9251218`→1539, `df7c0ba` (revision 10)→1576, `33d9ff9` (revision 11)→1614, `f95e94b` (revision
+12, HEAD)→1652 — all eight match. The `core-conduct/file-size-convention` waiver's basis (non-prose
+floor 867 > 800 ceiling) is real, not stale.
+
+I diffed revision 11 → revision 12 directly (`git diff 33d9ff9 f95e94b -- docs/features/...`) rather
+than re-reading the whole 1,652-line document from scratch, since ten prior rounds have already
+line-by-line verified everything the diff does not touch. The diff is narrow and matches exactly what
+the dispatch prompt described: frontmatter (`revision: 12`), the node-H addition (WRONG/CORRECT snippet
++ rationale), the "nor does it distinguish user typo from broken checker" note under Decision logging,
+checklist task 14's new positive-`TEST_EXEMPT` case, and the O3 table/composition update. Nothing else
+in the file changed, so the ten previously-closed ids (`verified-scope-inventory`, `edge-cases`,
+`api-contracts`, `commit-form-coverage` ×4, `scope-boundary`, `writer-call-site-cwd` ×2,
+`pair-formation-rule`, `latency-budget-count`, `default-deny-store`, `opt-in-fail-closed-conflict`,
+`core-conduct/verify-before-claim`) all remain closed on the same text this ledger already verified them
+against.
+
+Per the dispatch's explicit ask, I looked for a **third instance** of the syntax-vs-execution-engine
+mismatch class in the places the earlier regex-only sweep could not see — exit-code semantics, JSON
+handling, quoting, `printf` format strings, option-parsing idioms — rather than trusting that the sweep
+already enumerated in the dispatch prompt was exhaustive. Checked: the `python3 -I` and `sys.executable
+-I` call sites (both valid in the pinned Python 3.9.6, no shell involved); the JSON field table's
+`json.dumps`/`json.loads` round trip (pure Python on both ends, no bash JSON parsing anywhere in the
+document); the doors-table log line's tab-separated `awk -F'\t'` read commands (bash/awk, consistent,
+no cross-engine claim); the store's `^([0-9a-f]{40}|[0-9a-f]{64})$` regex (already cleared in round 4 —
+no `\x` escapes, compiles identically as bash ERE and Python `re`); the percent-encoding order note
+(pure arithmetic, not language-specific); and the `[[:print:]]` regex itself, which is POSIX bracket-
+class syntax valid in both bash ERE and Python `re`, so no second engine-mismatch hides inside it. Found
+nothing. That is a negative result on a targeted search, not a certification that no such defect exists
+anywhere in 1,652 lines — noted as the residual gap.
+
+### Violations
+
+None.
+
+### Notes (non-blocking)
+
+- **`writing-specs/locale-pin-mechanism` — closed, verified by execution, not by reading.** Both
+  snippets run verbatim on the pinned bash 3.2.57, both produce exactly the result the spec claims for
+  them (exit 127 command-not-found for WRONG; correct match/reject for CORRECT), and the subshell's
+  locale isolation was independently checked, not assumed.
+- **O3 composition and historical line counts fully re-derived, not re-read**: 8 of 8 numbers (current
+  file + 7 historical blobs) match the spec's own table.
+- **Checklist task 14's positive path is a real control, not decorative.** It is the only case in the
+  task that can fail if the escape hatch is dead — exactly the state revisions 1–10 shipped
+  undetected — and the diff shows it was added exactly where the round-4 dispatch asked for it.
+- **Targeted third-instance sweep, negative result.** Checked call-site language pairing, JSON framing,
+  tab-separated log parsing, the marker-blob regex, and percent-encoding arithmetic for the
+  syntax-vs-execution-engine defect class; found none. This is a bounded check, not a proof of absence.
+- **Not re-derived this round, relied on prior rounds' verification since the governing text is
+  byte-identical:** the pairing predicate, the `kind`×field totality matrix, the ABSENT probe table, the
+  writer call-site cwd fix, the exemption log's `0700`/`0600` modes, and the `TEST_EXEMPT` control-
+  character exclusion from the log's own field/line separators (writing-secure-code territory: log
+  injection via a user-controlled string) — all confirmed present in the diff as untouched, not
+  re-measured from scratch.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived: [writing-specs/command-grammar,
+  core-conduct/file-size-convention]`), still present at the UNRESOLVED callout under §"The command
+  grammar" and checklist task 2's cross-reference. Not re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. Basis re-verified this
+  round: non-prose floor is now **867** (up from 855 at round 4), re-derived live and matching the
+  spec's own table, so the 800 ceiling remains arithmetically unreachable without cutting acceptance
+  scenarios or contract tables the user has rejected cutting three times now. Not re-argued; not counted
+  toward this verdict.
