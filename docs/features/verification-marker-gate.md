@@ -3,16 +3,17 @@ phase: planning
 model_tier: high
 branch: none
 revision: 6
-revision_status: in-progress  # round 6 is PARTIAL -- see "Round 6 status" below before judging
+revision_status: complete  # round 6 closed all 7 open items; ready for the compliance judge
 waived: [writing-specs/command-grammar]
 ---
 
-> ## Round 6 status — PARTIAL, do not dispatch the compliance judge yet
+> ## Round 6 status — COMPLETE, ready for the compliance judge
 >
 > Revision 5 was judged **`fail`** on 2026-08-04 (`00583c2`, 5 violations) and the spec then sat
 > untouched until 2026-08-12, so that failing verdict described the live document for eight days.
-> Round 6 is **in progress**; this note is the authoritative list of what it has and has not done.
-> **A judge dispatched now will fail on the two open items, and that would be a waste, not a finding.**
+> Round 6 closed **all seven** open items across two sittings. The standing exit criterion and the
+> waiver policy now live at the bottom of this file, next to the checklist, and
+> `docs/marker-gate-defect-checklist.md` has been folded in here and deleted — one document, not two.
 >
 > **Closed in round 6:**
 > - **D1 (fatal) — wrapper recognition.** `rtk` rewrites `git commit …` → `rtk git commit …` before any
@@ -25,19 +26,26 @@ waived: [writing-specs/command-grammar]
 > - **`writing-specs/api-contracts`** — `form` is now a total, **ordered** function of the command
 >   (rule 4's table), with `FOREIGN` and the new `UNSUPPORTED` given explicit positions.
 > - **`writing-specs/latency-budget-count`** — task 10 now says all three budgets.
-> - **`core-conduct/default-deny-store`** — `hooks/state/` `0700` and `test-exempt.log` `0600` stated.
+> - **`core-conduct/default-deny-store`** — `hooks/state/` `0700` and the log `0600` stated.
 > - **N2** — the stray `G10` citation dropped; it labelled a repo-state measurement, not a grammar case.
+> - **`writing-specs/commit-form-coverage`** — the merged `<base>` row is split in two. Re-measured on
+>   git 2.50.1 (M5, four cases): the disk clause is right for `ALL` and **produces a false block** for
+>   `PATHSPEC`, where a member outside the pathspec survives into the commit *even when its deletion is
+>   already staged*. Measured, not reasoned, as the round-5 note demanded.
+> - **`writing-specs/pair-formation-rule`** — the predicate is now stated in three steps, and stating
+>   it exposed a contradiction: §Scope said a file with no sibling test is never gated while the `-am`
+>   scenario forms a pair with an *untracked* test. The rule is **asymmetric** — subject→test tests
+>   index ∪ disk (fail-closed, always clearable), test→subject tests the index alone. A symmetric
+>   union would demand a marker the writer refuses to write and block that commit **forever**.
+> - **N1** — `git diff --cached` outside a repo is **129**, not 128, and for a different reason than
+>   recorded: git falls back to `--no-index`, which has no `--cached`. The fail-open hazard stands.
+> - **O1** — the 7↔13 revert pair is named, with its order (**13 then 7**). This corrected a live false
+>   claim: "reverting task 7 alone is harmless" stops being true once 13 lands.
+> - **D4/D5** — blocks are logged now, not just exemptions, in one file with a decision column, read
+>   back by `--status`; and the machine-local storage decision is stated as a decision, with what it
+>   does and does not deliver.
 >
-> **Still open — round 6 is not finished until these are closed:**
-> - **`writing-specs/commit-form-coverage`** — the ABSENT probe's disk condition is correct for `ALL`
->   and wrong for `PATHSPEC`. Needs re-measuring on git 2.50.1, not reasoning.
-> - **`writing-specs/pair-formation-rule`** — the predicate deciding whether a path in the path set
->   *has* a sibling test is still never stated.
-> - **N1** (`git diff --cached` outside a repo: spec says 128, re-measured **129**), **O1** (revert pair
->   7↔13 unnamed), **D4/D5** (blocks are never logged) — carried from the defect checklist.
-> - **O3 — the shrink.** At this size the spec's own diagnosis is that *prose consistency, not design*,
->   is what five rounds have failed on. Deliberately **not** bundled into round 6: rewriting and fixing
->   in one pass makes the result unreviewable. Its own task, after round 6 passes.
+> **Not in round 6, deliberately: O3, the shrink** — see "Standing decisions" at the bottom.
 
 # verification-marker gate
 
@@ -189,6 +197,12 @@ depths, which is why the call site cannot use a `$0`-relative path (see §1).
 - Every repo that has not installed the writer, per the opt-in rule above.
 - Every write path that is not a Bash `git commit` — `sed -i`, the Edit/Write tools, an editor outside
   the session. **This is a momentum guardrail, not a security boundary**, exactly like `judge-guard.sh`.
+- 🔴 **Test quality. The marker is a receipt, not a grade.** A blob hash proves the suite *ran against
+  this exact pair of versions* — never that the suite is any good. A test gutted to `exit 0`, or one
+  whose only assertion was commented out, earns a perfectly valid marker and sails through. This is the
+  ceiling on the entire feature and it is not fixable within it: certifying test *strength* is mutation
+  testing's job, which is why task 9 exists as a one-off floor rather than a gate. Anyone reading a
+  green marker as "this code is tested" has read it wrong; it says "this code was run past its suite".
 
 ## Architecture
 
@@ -651,11 +665,30 @@ makes the next case derivable instead of needing another round:
 |---|---|---|
 | index blob (`PLAIN`, any member) | `git ls-files --stage -- <path>` prints nothing | untracked (no index entry) and staged-for-deletion (entry removed) |
 | worktree blob (`PATHSPEC`, member *in* the pathspec) | the path does not exist on disk | a pathspec naming a deleted file commits the deletion |
-| `<base>` blob (`PATHSPEC` outside the pathspec; **`ALL` outside the path set**) | `git cat-file -e <base>:<path>` exits non-zero **or** the path does not exist on disk | untracked → no base entry → ABSENT; tracked but deleted in the worktree → `--diff-filter=d` keeps it out of the path set while `-a` still stages the deletion → ABSENT |
+| `<base>` blob (`PATHSPEC`, member *outside* the pathspec) | `git cat-file -e <base>:<path>` exits non-zero — **and nothing else** | untracked → no base entry → ABSENT. Disk and index are irrelevant here (M5) |
+| `<base>` blob (`ALL`, member *outside* the path set) | `git cat-file -e <base>:<path>` exits non-zero **or** the path does not exist on disk | untracked → no base entry → ABSENT; tracked but deleted in the worktree → `--diff-filter=d` keeps it out of the path set while `-a` still stages the deletion → ABSENT |
 
 The `ALL`-outside row is the only two-condition cell, and it is two conditions because two different
 states produce an empty tree entry there. Round 4's single disk check got the first wrong; round 3's
 single base check got the second wrong. Enumerating both is what closes the pair.
+
+**Measured (M5) — why the two `<base>` rows cannot share a condition.** Rounds 3–5 wrote them as one
+row carrying the disk clause, which is right for `ALL` and **wrong for `PATHSPEC`**, where it produces
+a false *block*. Four cases on git 2.50.1, base tree `foo.sh`, `bar.md`, `gone.md`:
+
+| # | form | state of `gone.md` | in the resulting tree? | correct verdict |
+|---|---|---|---|---|
+| A | `git commit -m x -- foo.sh` | deleted on disk, **not** staged | **yes** | not ABSENT |
+| B | `git commit -m x -- foo.sh` | deletion **staged** (`git rm --cached`) | **yes** | not ABSENT |
+| C | `git commit -a -m x` | deleted on disk, not staged | no | ABSENT (base present, disk missing) |
+| D | `git commit -a -m x` | *untracked* file present on disk | no | ABSENT (base missing, disk present) |
+
+A and B are the correction: the pathspec form builds its tree from `<base>` **plus the named paths**,
+consulting neither the worktree nor the index for anything else — so a member outside the pathspec
+survives into the commit even when its deletion is already staged. Under the merged row the gate would
+have called `gone.md` ABSENT and blocked with `MSG_STALE_TEST` on a pair whose test the commit
+preserves byte-for-byte at the version the marker certifies. C and D are why `ALL` keeps both
+conditions: each disjunct is the only one that catches its case.
 
 Under `ALL`, a member **in** the path set needs no ABSENT case at all: `--diff-filter=d` has already
 removed deletions, so every path the collector returns exists on disk.
@@ -717,9 +750,44 @@ literal argument and comparing toplevels — is deliberately rejected: it re-int
 
 **Pairing rule.** The unit is the `(subject, test)` pair, not the single file. If **either** member is
 in the path set, that pair needs a valid marker whose two blobs equal the post-commit content of both
-members. Pairing on the file alone would let a test file ship at a version that was never run. A test
-file whose derived subject is not tracked forms no pair — the gate's mirror of the writer's rule, so
-the two orphan suites are never gated rather than permanently unsatisfiable.
+members. Pairing on the file alone would let a test file ship at a version that was never run.
+
+**Pair formation — the predicate, stated.** Rounds 1–5 asserted "any path with a sibling test" and
+never said what *has a sibling test* means, which left two passages in this document disagreeing:
+§Scope says a file with no sibling test is never gated, while the `-am` scenario below forms a pair
+with a test that is **untracked**. Both are right; the rule that makes them consistent is in two steps
+and is **asymmetric by direction**.
+
+*Step 1 — classify the path.* Ordered, first match wins, against the basename of the repo-relative
+path. The order is what stops `foo.test.sh` falling through to the `.sh` arm:
+
+| # | basename ends | role | derived sibling |
+|---|---|---|---|
+| 1 | `.test.sh` | test | strip `.test.sh`, append `.sh` |
+| 2 | `.test.py` | test | strip `.test.py`, append `.py` |
+| 3 | `.sh` | subject | strip `.sh`, append `.test.sh` |
+| 4 | `.py` | subject | strip `.py`, append `.test.py` |
+| 5 | anything else | — | **forms no pair** |
+
+Every path gets exactly one role, so a path is never both a subject and a test.
+
+*Step 2 — does the derived sibling exist?* The source differs by direction, and the difference is
+**satisfiability**, not fastidiousness:
+
+- **Subject in the path set → its test.** Exists iff the test is in the index (`git ls-files
+  --error-unmatch -- <test>` exits 0) **or** present on disk. The union is fail-closed: an untracked
+  test on disk resolves to ABSENT and blocks, because the tree will not contain the file the marker
+  was written against. The remedy is `git add <test>`, so the block is always clearable — and the
+  writer will have written a marker, since a subject in the path set is by construction in the index.
+- **Test in the path set → its subject.** Exists iff the subject is **in the index**. Index only,
+  mirroring the writer's `--error-unmatch` check exactly. Widening this half to the union would be a
+  live defect: the writer refuses to write a marker for an untracked subject, so the gate would demand
+  a marker nothing can produce and block that commit forever, with `MSG_NO_MARKER`'s remedy re-running
+  a suite that correctly writes nothing. The two orphan suites are never gated for this reason, and
+  they must stay ungated even if someone drops an untracked `panes/adapters.sh` into the tree.
+
+*Step 3 — the pair set is a set.* When both members are in the path set the pair is formed once, not
+twice, and its marker is checked once.
 
 **Every git invocation is status-checked**, apart from the calls below, whose non-zero or empty
 result is a **defined answer** rather than a failure. Round 3 said "apart from the two" and was
@@ -730,11 +798,17 @@ already off by one; the set is enumerated here so the next count does not have t
 3. `ls-files --stage -- <path>` — empty output means ABSENT under an index source.
 4. `cat-file -e <base>:<path>` — non-zero means ABSENT under a base source.
 
-The worktree ABSENT test is a plain file-existence check and runs no git at all. Measured: outside a
-repo,
-`git diff --cached --name-only` prints **nothing** on stdout and exits 128 — indistinguishable from
-"no files to check" to any caller that reads only stdout, and therefore an allow. That is
-`judge-guard` fail-open #3 reborn in the one subsystem this hook adds. A non-zero exit from any other
+The worktree ABSENT test is a plain file-existence check and runs no git at all. Measured on git
+2.50.1: outside a repo, `git diff --cached --name-only` prints **nothing on stdout** and exits
+**129** — not the 128 rounds 1–5 recorded, and not for the reason they gave. With no repo, `git diff`
+falls back to `--no-index`, whose option table has no `--cached`, so the failure is `error: unknown
+option 'cached'` plus a usage dump **on stderr** — a usage error, not "not a git repository". The
+distinction matters twice: 128 is the code the *other* three probes in this list return, so recording
+129 as 128 collapses two different failures into one; and the usage dump means a caller that logs
+stderr sees a wall of text rather than a diagnosable line. What survives the correction is the hazard
+itself — stdout is empty either way, so any caller reading only stdout cannot tell this apart from
+"no files to check" and will allow. That is `judge-guard` fail-open #3 reborn in the one subsystem
+this hook adds. A non-zero exit from any other
 collection or hashing command → `MSG_GIT_FAILED` → block. Never pipe one of these into another
 command: the pipeline's status is the last stage's.
 
@@ -1017,16 +1091,30 @@ Scenario: an explicit exemption is honoured and logged to a file
   Given hooks/foo.sh is staged with no marker
    When "TEST_EXEMPT=vendored upstream git commit -m msg" runs
    Then the hook exits 0
-    And one line is appended to <repo>/hooks/state/test-exempt.log
+    And one EXEMPT line is appended to <repo>/hooks/state/test-marker.log
    # parsed out of the command STRING — a VAR=x prefix never reaches a hook's environment
 
 Scenario: an exemption rescues a foreign-repo commit
   Given the command targets another repo
    When "TEST_EXEMPT=other repo cd /other/repo && git commit -m msg" runs
    Then the hook exits 0
-    And one line is appended to <repo>/hooks/state/test-exempt.log
+    And one EXEMPT line is appended to <repo>/hooks/state/test-marker.log
    # the exemption check precedes the form decision; round 2's order made this unreachable
    # while MSG_FOREIGN_REPO's own message recommended it
+
+Scenario: a block is logged with the message constant that fired
+  Given hooks/foo.sh is staged with no marker
+   When "git commit -m msg" runs
+   Then the hook exits 2 with MSG_NO_MARKER
+    And one BLOCK line naming MSG_NO_MARKER is appended to <repo>/hooks/state/test-marker.log
+   # rounds 1-5 logged exemptions only, so "does this gate ever fire" had no answer at all
+
+Scenario: an allowed commit writes no log line
+  Given docs/notes.md is staged and has no sibling test
+   When "git commit -m msg" runs
+   Then the hook exits 0
+    And <repo>/hooks/state/test-marker.log is unchanged
+   # logging every allow would bury the two rates the log exists to expose
 
 Scenario: a Bash payload that mentions commit but has nothing runnable blocks
   Given a Bash payload that contains the substring "commit" somewhere
@@ -1164,16 +1252,43 @@ two-mutant minimum against fourteen doors establishes nothing about the other tw
 `MSG_NO_MARKER`'s remedy string is derived from the suite path and its extension — `bash <path>` for
 `.sh`, `python3 <path>` for `.py` — never hardcoded to `bash`.
 
-**Exemption logging.** `TEST_EXEMPT` appends one tab-separated line — ISO-8601 UTC, the validated
-reason, the pairs skipped — to `<repo>/hooks/state/test-exempt.log`, in addition to stderr. Stderr
-alone is what `judge-guard` does and is tolerable there because its exemptions are rare and human;
-here they will be routine, and an unauditable exemption count is the exact erosion path the control
-exists to prevent.
+**Decision logging — exemptions *and* blocks.** Rounds 1–5 logged only exemptions, which answers "how
+often is this gate bypassed" and leaves "does this gate ever fire at all" unanswerable. Those are the
+same question about the same control, so they share one file: `<repo>/hooks/state/test-marker.log`,
+one tab-separated line per non-trivial decision.
+
+| field | value |
+|---|---|
+| 1 | ISO-8601 UTC timestamp |
+| 2 | `EXEMPT` or `BLOCK` |
+| 3 | the validated `TEST_EXEMPT` reason, or the `MSG_*` constant that fired |
+| 4 | the pairs skipped (`EXEMPT`) or the pair that failed (`BLOCK`) |
+
+Allowed commits are **not** logged: every `git commit` in a covered repo would append a line, the
+signal would drown, and the questions above are both about the non-allow cases. A single file with a
+decision column rather than two parallel logs — the two records carry the same four fields, and the
+rate that matters is exemptions *as a fraction of* blocks.
+
+`hooks/test-marker-guard.sh --status` prints the count of each decision alongside `ACTIVE`/`INERT`. A
+log nothing reads is the same defect as no log, one indirection further away, and `--status` is
+already the command task 14 runs and `hooks/README.md` points at.
+
+**What this log is, and is not — the storage decision, made explicitly.** It is **machine-local**:
+`/hooks/state/` is gitignored at `.gitignore:17`, so the log is never committed, never shared, and
+never survives a fresh clone. That is deliberate, not an oversight to be fixed later:
+
+- Committing it would make every developer's bypass history a merge-conflict generator on a file with
+  no merge semantics, and would publish local paths and free-text reasons into repo history.
+- What it therefore delivers is **self-audit and a rate signal** — enough to answer "am I leaning on
+  `TEST_EXEMPT` weekly or hourly", which is the erosion path the control exists to catch.
+- What it does **not** deliver is organisational assurance. Nobody else can read it, and a developer
+  who wants to hide a bypass can delete it. It is instrumentation, not evidence, and any later claim
+  that this feature provides an audit trail should be read against this paragraph.
 
 **Both the log and its parent directory carry explicit modes: `<repo>/hooks/state/` is `0700` and
-`test-exempt.log` is `0600`** — identical to the marker store two sections up, and for the same
+`test-marker.log` is `0600`** — identical to the marker store two sections up, and for the same
 core-conduct default-deny reason. Round 5 gave the marker store its modes on those grounds and left
-this pair to the ambient umask, which on a permissive one publishes an audit trail naming every commit
+this pair to the ambient umask, which on a permissive one publishes a trail naming every commit
 someone chose to bypass the gate for. **This feature creates `hooks/state/` — it does not exist in this
 repo today — so whichever component runs first sets the mode for both**, and stating it in only one of
 the two places is how it ends up depending on call order.
@@ -1228,7 +1343,9 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
 - [ ] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
       schema, mode, failure exits. **No inventory assertion yet** — see task 8.
 - [ ] 5. Green: `hooks/lib/write-test-marker.py`.
-- [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code.
+- [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
+      plus the `test-marker.log` line where a scenario names one (including the two that assert **no**
+      line is written — a logger that appends on every path passes every positive assertion).
 - [ ] 7. Green: `hooks/test-marker-guard.sh`.
 - [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
       this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
@@ -1240,8 +1357,9 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       commit. **Own commit**, measured behaviour-neutral against the unmodified hook — never bundled
       with a green step. ⚠️ **Tasks 5 and 8 revert as a pair** — round 3 said 7 and 8 and had the
       wrong hazard. The **writer** is task 5, so reverting 5 without 8 leaves 14 suites calling a
-      deleted file; reverting the *hook* (task 7) alone is harmless. Reverting 8 alone is also safe;
-      it only disarms the wiring.
+      deleted file. Reverting 8 alone is safe; it only disarms the wiring. See the revert-pair table
+      under task 13 — **task 7 is half of the second pair**, and the claim earlier rounds made that
+      reverting it alone is harmless stops being true the moment task 13 lands.
 - [ ] 9. Mutation check — the 24-mutant floor (14 doors, 9 allow paths, emptied classifier); record
       the result in the checklist annotation.
 - [ ] 10. Measure the latency budgets and record **all three** numbers here — round 5 added the
@@ -1253,6 +1371,17 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
 - [ ] 12. Gate stub in `rules/gates.md`; `hooks/README.md` entry. Both must state the global-but-inert
       scope, or the next reader assumes `.claude`-only.
 - [ ] 13. Register in `settings.json` via `update-config`, preserving `"model": "opus[1m]"`.
+      ⚠️ **Tasks 7 and 13 revert as a pair, and this is the worse of the two pairs.** Registration
+      names `hooks/test-marker-guard.sh` to the harness; reverting **7 without 13** leaves a
+      registered-yet-missing hook, and a `PreToolUse` entry whose script cannot be executed fails
+      **every Bash tool call in the session**, not just commits — the blast radius is the whole
+      session, against 5↔8's fourteen suites. Revert **13 first, then 7**, never the reverse, and
+      never 7 alone. Reverting 13 alone is safe: it disarms the gate and leaves an inert script.
+
+      | pair | revert order | leaving one half behind costs |
+      |---|---|---|
+      | 5 ↔ 8 | 8 then 5 | 14 suites call a deleted writer |
+      | 7 ↔ 13 | **13 then 7** | **every Bash call in the session is blocked** |
 - [ ] 14. **First-arming check** — run `hooks/test-marker-guard.sh --status` and expect `ACTIVE` with
       the right toplevel; pipe a real `git commit` payload into the *installed* hook and expect a
       readable exit 2, not a silent 0 and not a hang; pipe a `git commit -am msg` payload and expect
@@ -1260,6 +1389,21 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       **without** the writer and expect `INERT` and exit 0. `judge-guard` shipped with this untested
       and the installed copy had no `lib/` at all.
 - [ ] 15. Obs judge (implementation stage) pinning the final HEAD → PR.
+
+**Standing decisions — carried in from the defect checklist that this file replaces.**
+
+- **Exit criterion.** If a judge round fails again with ids that have already recurred, **stop
+  specifying and build**: the remaining items become test cases in task 6, not another round of prose.
+  Rounds 1–5 failed on `api-contracts` and `commit-form-coverage` repeatedly, which is what this
+  criterion was written for — invoking it needs an explicit decision from the user, never a silent one.
+- **Waivers.** `writing-specs/command-grammar` is the only waiver this spec has ever carried, and it is
+  recorded in the frontmatter. A judge citing it is arguing with a settled decision. Nothing else is
+  waived; a second waiver is a user decision, not a drafting one.
+- **O3 — the shrink, still owed.** This file is well over the repo's <400-line standard. The diagnosis
+  that survived five rounds is that *prose consistency at this size*, not the design, is what keeps
+  failing: measurement narrative and round-by-round rationale should move to an ADR, leaving contracts,
+  the grammar outcome, scenarios, doors, and this checklist. Deliberately **not** bundled with a defect
+  round — rewriting and fixing in one pass makes the result unreviewable.
 
 **Follow-ups this feature deliberately does not do:** rename `panes/adapters/cmux-exec.test.sh` to
 match `cmux.sh` and close that coverage hole; bring `memsearch/tests/` under a sibling layout; give the

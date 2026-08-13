@@ -6581,3 +6581,76 @@ is what kept the guard from blocking this session's own record.
 **Still open:** `falsify-harness-signatures` (0/11) and `verification-marker-gate` (0/15) remain at
 `phase: planning` with `branch: none`, which is why **every source write in this repo is currently
 denied**. Neither was started. `## What's in here` still has no `task-tracker/` or `skills/` row.
+
+## Session 81 — 2026-08-12 — marker-gate round 6 finished, and three of its "gaps" were live wrong claims
+
+Closed the remaining **7** open items on `docs/features/verification-marker-gate.md` (revision 6,
+`revision_status: complete`), folded `docs/marker-gate-defect-checklist.md` into the card and **deleted
+it** — the one-canonical-file violation that file itself admitted to. Card is still `phase: planning`,
+`branch: none`, 0/15. Not yet judged.
+
+**The framing that turned out to be wrong: these were not missing paragraphs.** Three of the seven were
+*corrections to statements the spec asserted confidently*, and two of those failed in the dangerous
+direction — toward blocking work that should pass, or blocking it permanently.
+
+**`commit-form-coverage` — measured, not reasoned, and the reasoning would have been wrong.** Rounds
+3–5 wrote one `<base>` ABSENT row covering both `PATHSPEC`-outside-pathspec and `ALL`-outside-path-set,
+with the condition "`cat-file -e` fails **or** the path is missing on disk". Four cases on git 2.50.1
+(base tree `foo.sh`/`bar.md`/`gone.md`) settled it:
+
+| case | form | `gone.md` state | in resulting tree |
+|---|---|---|---|
+| A | `commit -m x -- foo.sh` | deleted on disk, unstaged | **yes** |
+| B | `commit -m x -- foo.sh` | deletion **staged** | **yes** |
+| C | `commit -a -m x` | deleted on disk | no |
+| D | `commit -a -m x` | untracked, on disk | no |
+
+The pathspec form builds its tree from `<base>` **plus the named paths** and consults neither worktree
+nor index for anything else — B is the sharp one, a *staged* deletion outside the pathspec still
+survives. So the disk clause is right for `ALL` and produces a **false block** for `PATHSPEC`, on a
+pair the commit preserves byte-for-byte at the certified version. Split into two rows.
+
+**`pair-formation-rule` — writing the predicate down is what exposed the contradiction.** The spec
+never said what "has a sibling test" means, and the two passages that implied an answer disagreed:
+§Scope ("a file with no sibling test is never gated") vs. the `-am` scenario, which forms a pair with an
+**untracked** test. The naive fix — a symmetric index ∪ disk union — is a **permanent block**: in the
+test→subject direction the writer refuses to write a marker for an untracked subject, so the gate would
+demand a marker nothing can produce, with `MSG_NO_MARKER`'s remedy re-running a suite that correctly
+writes nothing. Rule is therefore **asymmetric**: subject→test uses index ∪ disk (fail-closed, always
+clearable by `git add`), test→subject uses the index alone. **An unstated predicate is not neutral — it
+lets two halves of a document drift apart while both look right in isolation.**
+
+**N1 — the number *and* the mechanism were wrong.** `git diff --cached --name-only` outside a repo exits
+**129**, not 128: with no repo `git diff` falls back to `--no-index`, whose option table has no
+`--cached`, so it is a usage error with a usage dump on stderr — not "not a git repository". The three
+neighbouring 128s were separately re-measured and are all correct (`rev-parse --show-toplevel` outside a
+repo; `rev-parse --verify HEAD` and `diff --cached --name-only HEAD` on an unborn HEAD; `HEAD^` on a root
+commit). Bonus: *inside* a repo with unborn HEAD, `diff --cached --name-only` exits **0** with empty
+stdout — which is exactly why the stdout-only fail-open the section warns about is real.
+
+**O1 — deleting a false claim, not adding a missing one.** Task 8 said "reverting the *hook* (task 7)
+alone is harmless." That stops being true the moment task 13 registers the hook in `settings.json`: a
+`PreToolUse` entry whose script cannot be executed fails **every Bash call in the session**, not just
+commits. Now a two-row revert table with explicit order — 5↔8 revert 8-then-5; 7↔13 revert **13-then-7**.
+
+**D4/D5 — logged the blocks and made the storage decision a decision.** Exemptions were logged, blocks
+were not, so "how often is this bypassed" was answerable and "does this gate ever fire" was not. One
+file (`hooks/state/test-marker.log`, renamed from `test-exempt.log`, all 5 references updated and
+verified 0 remaining) with an `EXEMPT`/`BLOCK` column; allows deliberately unlogged; read back by
+`--status`, because a log nothing reads is the same defect one indirection away. D4 answered honestly
+rather than fixed: the log is gitignored and machine-local **by decision**, delivering self-audit and a
+rate signal, **not** organisational assurance — a developer can delete it. Written down so no later
+reader claims this feature provides an audit trail.
+
+**Also folded in from the checklist:** the accepted ceiling that was nowhere in the card — **the marker
+is a receipt, not a grade.** A blob hash proves the suite ran against this exact pair of versions, never
+that the suite is good; a test gutted to `exit 0` earns a valid marker. That is the ceiling on the whole
+feature. Plus the standing exit criterion (recurring ids → stop specifying and build, user decision
+only), the waiver policy (`command-grammar` is the only one, ever), and **O3, the shrink, still owed** —
+the file is now 1419 lines against a <400 standard, and its own diagnosis is that prose consistency at
+this size, not the design, is what five rounds failed on. Deliberately not bundled with a defect round.
+
+**Still open:** `falsify-harness-signatures` (0/11) and `verification-marker-gate` (0/15) both remain
+`phase: planning` / `branch: none`, so **every source write in this repo is still denied** by
+`phase-guard.sh`. The compliance judge has **not** been re-run — the failing 2026-08-04 verdict is still
+the latest on record, and re-judging is the next step.
