@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 13
-revision_status: complete  # round-5 advisories: log write pinned to printf; state-dir race resolved
+revision: 14
+revision_status: in-progress  # items 2-5 landed; the ADR 0026 rewrite (item 1) is NOT applied — see the callout below
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -29,6 +29,33 @@ version its test suite has never passed against.
 > in §Standing decisions → O3 is the whole basis for the waiver: it shows the ceiling is unreachable
 > at this feature's scope without deleting the acceptance scenarios and contract tables the spec
 > exists to supply. **A judge citing this id is arguing with a settled decision.**
+
+> ⚠️ **REVISION 14 IS INCOMPLETE, AND THE UNAPPLIED PART IS THE BLOCKING ONE.** Round 6 returned
+> compliance **FAIL** on two ids — `writing-specs/unpinned-json-parse-classifier-output` and
+> `writing-specs/unpinned-json-parse-marker-read` — whose fix is **ADR 0026**
+> (`docs/decisions/0026-the-gate-does-no-json-parsing.md`, Accepted, user decision 2026-08-13):
+> *no JSON crosses into bash*; classification and marker reading merge into **one `python3` entry
+> point returning plain tab-separated lines** that bash consumes with `read`.
+>
+> **That rewrite is not in this file yet.** Everything below describing node `CO` as parsing a JSON
+> object (§3 "Wire contract", the field and totality tables, "Validation order" step 1) and node `M`
+> as bash reading marker JSON (§2 "Marker schema" read-side validation, flowchart node `M`) is
+> **superseded text awaiting replacement**, not current design. Revision 14 so far applies only the
+> four independent round-6 findings: the log file's `0600` enforcement, the `os.makedirs` twin, the
+> percent-encoding order, and the text-processing version pins.
+>
+> **Two things ADR 0026 leaves genuinely open — neither may be written as settled:**
+> 1. **The opt-in ordering rule must be re-specified, not assumed to survive.** The contract below is
+>    that node `G` (writer installed?) sits *above* the classifier, so a repo that has not opted in
+>    cannot be blocked by any door but `MSG_NO_PYTHON`. Folding marker reading into the classifier's
+>    process does not by itself move that boundary — bash still runs the `cwd` read, `rev-parse` and
+>    `test -r` before the one call — but the ordering *inside* the merged entry point becomes a Python
+>    concern, and ADR 0026 names this its highest-risk consequence. (The ADR's own Consequences
+>    paragraph states this ordering backwards, as "the classifier runs before repo-state checks". The
+>    spec is the authority and says the opposite; whoever writes the rewrite should correct the ADR
+>    rather than inherit that sentence.)
+> 2. **"Fewer process starts" is a prediction, not a measurement.** The §Latency budget table must be
+>    re-measured against real code, not revised from the ADR's expectation.
 
 ```mermaid
 flowchart TD
@@ -317,7 +344,17 @@ A failed marker write **fails the suite**. A silent no-marker would surface late
 ### 2. `<repo>/hooks/state/test-markers/` — the store
 
 - **One file per subject**, so two concurrent sessions never read-modify-write the same file.
-- Filename is the repo-relative subject path, percent-encoded (`/`→`%2F`, `%`→`%25`).
+- **Filename is the repo-relative subject path, percent-encoded — `%`→`%25` first, then `/`→`%2F`,
+  and that order is normative** (revision 14). Applied in the order revisions 1–13 listed them, the
+  `%2F` the first substitution introduces is re-encoded by the second. **Measured with a two-step
+  `str.replace` chain, which is the shape an implementer reaches for: `hooks/judge-guard.sh` →
+  `hooks%252Fjudge-guard.sh`.** This needs no `%` in the path, so it corrupts the key of **every file
+  in the store**, and it contradicts this spec's own §Edges scenario requiring
+  `panes%2Fadapters%2Fcmux-layout.sh`. Encoding in a single pass over the characters is equivalent and
+  also correct; what is forbidden is the listed order. **A writer and a gate that both got this wrong
+  would agree with each other and pass every round-trip test** — that scenario is the only assertion
+  that catches it, which is why it is written against a literal expected key rather than against the
+  writer's own output.
 - Resolved from `git rev-parse --show-toplevel`, **never `$HOME`**. Reading `$HOME`'s copy instead of
   the target repo's was literally the bug `fix/judge-guard-verdict-lookup` existed to fix; a marker
   written inside a worktree must be read back inside that worktree.
@@ -1490,12 +1527,73 @@ chmod 0700 "$STATE_DIR" || { printf 'state dir mode FAILED\n' >&2; exit 1; }
 Stating it in only one of the two places, or specifying `mkdir` without the `chmod`, is how it ends up
 depending on call order.
 
+**The requirement binds the Python writer identically, so it is written here in both languages**
+(revision 14). Giving the rule only a shell form invites the reader to treat `os.makedirs` as the
+safe alternative it is not — **measured on this machine: `os.makedirs(path, mode=0o700,
+exist_ok=True)` against a directory already at `0755` returns without error and leaves it at
+`0755`**, exactly as `mkdir -p -m 0700` does:
+
+```python
+# the twin of the shell pair above; mode= applies only to directories this call creates
+os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+os.chmod(STATE_DIR, 0o700)
+```
+
+**The log file needs its own pair, and through revision 13 it had none** (revision 14, round-6
+observability finding). Its `0600` is asserted four times — the §Marker store bullet, the Unicode
+note, and twice in the paragraph above — and **no specified command ever set it.** The only write this
+spec pins is the `printf … >> "$LOG"` above, and `>>` creates a missing file at `0666 & ~umask`:
+**measured, `0644` under umask `022` and `0664` under `002`.** Neither is `0600`. The fix is symmetric
+to the directory's, for the same reason — the append cannot repair a mode it did not set:
+
+```sh
+# create-then-clamp, before the first append; idempotent, so call order stops mattering here too
+touch "$LOG" || { printf 'log FAILED\n' >&2; exit 1; }
+chmod 0600 "$LOG" || { printf 'log mode FAILED\n' >&2; exit 1; }
+```
+
+Measured: `touch` then `chmod 0600` under umask `022` yields `0600`.
+
+⚠️ **State the exposure accurately — it is not what a loose mode usually means.** `hooks/state/` is
+`0700`, so a `0644` log is **not** world-readable: the directory denies traversal to every other user,
+and no second account on this machine can open it. What the missing `chmod` costs is the second layer
+— the file stops being self-protecting the moment it is copied, archived, or the directory's mode is
+relaxed by anything — plus the plain fact that the spec claims `0600` four times and shipped nothing
+that produces it. Overstating this as a disclosure of bypass history would be the same error in the
+opposite direction.
+
+> **Fourth instance of this spec's recurring class, and the second found inside the fix for the one
+> before it.** Revision 13 specified the directory's `mkdir`+`chmod` pair and left the file's sibling
+> requirement two paragraphs below untouched. The sweep that finds these is not "check the written
+> commands for wrong ones" — that sweep came back clean in revision 13 and missed this. It is
+> **"which stated behaviours have no enforcing command at all?"**, asked against every `MUST`-shaped
+> sentence in the file.
+
 ## Pinned versions
 
 Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — no associative arrays, no
 `mapfile`, no `${var,,}`), **Python 3.9.6** (stdlib only; `-I` drops the script directory from
 `sys.path`, so no sibling imports), **git 2.50.1**, **shellcheck 0.11.0** (`/opt/homebrew/bin/shellcheck`
 — check sets differ across releases and it gates checklist task 11).
+
+**The text-processing four are pinned too, because revision 13 made real requirements depend on them**
+(added revision 14). The erosion queries in §Decision logging and the by-field assertions in checklist
+tasks 6 and 14 are specified as literal `awk -F'\t'`, `cut -f2` and `sort | uniq -c` commands, so
+their behaviour is part of the contract rather than incidental tooling:
+
+| tool | pinned at | how it was read |
+|---|---|---|
+| `awk` | **20200816** (BSD one-true-awk, not GNU `gawk`) | `awk --version` |
+| `sort` | **2.3-Apple (199)** | `sort --version` |
+| `cut` | **no version flag** — `cut --version` errors `illegal option`; pinned by the OS below | — |
+| `uniq` | **no version flag** — `uniq --version` errors `unrecognized option`; pinned by the OS below | — |
+
+`cut` and `uniq` are BSD builds that report no version at all, so **the honest pin for those two is
+the OS: macOS 26.5.2, build 25F84** (`sw_vers`). Recording a number they do not emit would be a
+fabricated measurement. The behaviour the spec actually leans on is `cut`'s: **a line containing no
+delimiter is printed whole rather than skipped**, which is what makes an `echo`-written log return
+confidently wrong counts instead of erroring — that claim is argued in §Decision logging and is the
+reason this row is a pin and not a footnote.
 
 ## Testing requirements
 
@@ -1557,6 +1655,13 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       suite that only ever exercises the winning order passes while the other order ships `0755`.
       Include the third case that actually fails today: pre-create `hooks/state/` at `0755`, run
       either component, assert it ends `0700` — this is the one `mkdir -p -m` alone does not satisfy.
+      **Plus the same two cases for `test-marker.log` itself** (revision 14), which the directory
+      cases do not cover and which nothing asserted through revision 13: (a) with no log present, run
+      the gate under **`umask 022`** and assert the file it creates is `0600` — under the specified
+      `>>` alone it is `0644`, so this case fails against the revision-13 text; (b) pre-create the log
+      at `0644`, run the gate, assert it ends `0600`. **Set the umask explicitly in both**: the mode
+      `>>` produces depends on it, so a suite inheriting a `0077` umask passes while the defect is
+      live — the same shape as asserting only the winning ordering above.
 - [ ] 7. Green: `hooks/test-marker-guard.sh`.
 - [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
       this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
@@ -1655,6 +1760,7 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | revision 11 | exemption regex repaired — Python syntax in a bash gate — plus the locale pin | 1,614 |
   | revision 12 | round-4 fail closed: pin mechanism stated, task 14 gains its positive path | 1,652 |
   | revision 13 | round-5 advisories: `printf` pin, state-dir race, task 6/14 assertions by field | 1,721 |
+  | revision 14 (partial) | round-6 items 2–5 only: log-file `0600`, `os.makedirs` twin, encode order, tool pins | 1,833 |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
@@ -1681,6 +1787,12 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | blank | 256 |
   | **non-prose floor** | **867** |
   | prose | 785 |
+
+  Re-run at revision 14 (partial), from the same command: **total 1,833, non-prose floor 912, prose
+  921** — the floor moved up another 45 while item 1 of that revision is still unapplied, so the
+  paragraph below understates the case rather than overstating it. ⚠️ Fourth instance of the trap this
+  callout warns about, and it took **two** corrections: 1,832/910/922, then 1,831/912/919, each
+  measured one edit before the edit that recorded it. Verify against the commit, not against this line.
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
   it *up*, never toward 800 — and it has now crossed: the non-prose floor is **867**, so **deleting
