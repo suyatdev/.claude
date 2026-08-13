@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/git-guard-detached-head
 ---
@@ -609,9 +609,18 @@ assertion. They are still cases and still run.
 
 ## Checklist
 
-- [ ] Cut the branch from **fetched** `origin/main`. Do not trust a stored count of how far behind
+- [x] Cut the branch from **fetched** `origin/main`. Do not trust a stored count of how far behind
       this worktree is — derive it at the moment of use: `git fetch && git rev-list --count HEAD..origin/main`.
       Record the branch in this file's `branch:` and set `phase: implementation`.
+      - This box was left unchecked through every prior session despite the branch clearly existing
+        and `branch:`/`phase:` already being recorded — a bookkeeping gap, caught by the round-8
+        observability judge. Checked now on verified current state rather than a reconstructed claim
+        about the original cut: `branch: fix/git-guard-detached-head` matches
+        `git branch --show-current`, and `git fetch && git rev-list --count HEAD..origin/main` reports
+        this branch 8 commits behind (2026-08-13) — normal drift over eight sessions, not a fresh-cut
+        question, and the 8 commits touch no file this branch also modifies
+        (`comm -12` against `git diff --name-only` from the merge-base returns only the two
+        append-only logs, `CODING_MEMORY.md` and `verdicts.jsonl`).
 - [x] **Land the planning measurement scripts in the repository first**, beside the test suite under
       `hooks/` (they cannot be added during `phase: planning` — `phase-guard` exempts `docs/*` but not
       `hooks/*`). Each must assert the state it builds — head-name value, marker presence, and marker
