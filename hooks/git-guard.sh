@@ -90,13 +90,151 @@ has_fact() {
 }
 
 current_branch() {
-  git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""
+  git symbolic-ref --short HEAD 2>/dev/null || echo ""
+}
+
+# Git is replaying or completing work that already exists and is waiting on a
+# command to finish it. Refusing here strands the operator mid-operation with
+# advice they cannot follow -- `git switch -c` refuses while a sequencer runs.
+#
+# EXCEPT a rebase whose head-name is the default branch. That rebase MOVES that
+# branch onto the replayed commits when it finishes, so a commit made during it
+# really is reaching main, and the guard must stay on. Measured: without this
+# clause a source file committed during a rebase started from main IS on main
+# after --continue. Both backends write head-name (merge and apply alike).
+sequencer_in_progress() {
+  local marker dir
+  for marker in rebase-merge rebase-apply; do
+    dir="$(git rev-parse --git-path "$marker" 2>/dev/null)"
+    [ -e "$dir" ] || continue
+    case "$(cat "$dir/head-name" 2>/dev/null)" in
+      refs/heads/main|refs/heads/master) return 1 ;;
+    esac
+    return 0
+  done
+  # Cherry-pick, revert and merge move no branch: finishing one leaves the
+  # commit on the detached HEAD it was already on.
+  #
+  # `git am` stopped on a conflict from a DETACHED HEAD does reach this arm --
+  # it writes rebase-apply with no head-name, so the case above falls through to
+  # `return 0` and the guard stands down. That is safe for the cherry-pick
+  # reason, not the reason an earlier draft gave: an `am` replaying onto a
+  # detached HEAD updates no branch, so nothing it commits reaches main. An `am`
+  # on a NAMED branch never gets here, because symbolic-ref answers.
+  for marker in CHERRY_PICK_HEAD REVERT_HEAD MERGE_HEAD; do
+    [ -e "$(git rev-parse --git-path "$marker" 2>/dev/null)" ] && return 0
+  done
+  return 1
 }
 
 on_main() {
   local b
   b="$(current_branch)"
-  [ "$b" = "main" ] || [ "$b" = "master" ]
+  case "$b" in
+    main|master) return 0 ;;
+    # Empty means HEAD names no branch: a detached checkout, or not a repository
+    # at all. Cannot-tell, and this guard fails CLOSED (see the file header) --
+    # except while git has an operation in progress, which it is waiting on the
+    # operator to finish. See the carve-out above.
+    "")          sequencer_in_progress && return 1; return 0 ;;
+    *)           return 1 ;;
+  esac
+}
+
+# Describes the observed checkout for a refusal message. Distinguishing "detached"
+# from "not a repository" is what lets the reader tell a true block from a false one.
+#
+# Safe to add ahead of the symbolic-ref/on_main rewrite: on_main() today only ever
+# returns true for a literally-named main/master checkout, so the only argument
+# this is ever called with while that holds is "main" or "master" -- the other
+# arms become reachable once current_branch() starts returning "" for a detached
+# HEAD instead of the literal string "HEAD".
+checkout_desc() {
+  local hn
+  case "$1" in
+    "")
+      git rev-parse --git-dir >/dev/null 2>&1 ||
+        { printf 'a directory that is not a git repository'; return; }
+      # Bound 1 refuses here while a plain detached HEAD also refuses -- without
+      # this case both render identically and the operator cannot see which rule
+      # caught them.
+      hn=$(rebase_head_name)
+      case "$hn" in
+        refs/heads/*) printf "a detached HEAD mid-rebase that will update '%s'" "${hn#refs/heads/}" ;;
+        *)            printf 'a detached HEAD (no branch checked out)' ;;
+      esac ;;
+    *) printf "branch '%s'" "$1" ;;
+  esac
+}
+
+# The head-name of an in-progress rebase, or nothing.
+#
+# NOT a substitute for sequencer_in_progress's own loop: empty here is ambiguous
+# (no rebase at all, vs. a `git am` whose rebase-apply carries no head-name), and
+# those two need opposite answers. The two must agree on the ONE thing they share
+# -- which marker directories exist and what head-name each holds -- so the fence
+# and the message can never describe different states. If one gains a marker, so
+# does the other.
+rebase_head_name() {
+  local marker dir
+  for marker in rebase-merge rebase-apply; do
+    dir="$(git rev-parse --git-path "$marker" 2>/dev/null)"
+    [ -e "$dir" ] && { cat "$dir/head-name" 2>/dev/null; return; }
+  done
+}
+
+# Any of the five sequencer/operation markers present, regardless of head-name.
+# Message-selection only -- never used to gate. Deliberately separate from
+# sequencer_in_progress() (added with the on_main() rewrite): that function's
+# head-name special case exists to answer a GATING question ("does finishing
+# this operation move main?"), which is irrelevant here -- a checkout that is
+# already a NAMED main/master needs only to know an operation is running, not
+# where it will land.
+operation_in_progress() {
+  local marker
+  for marker in rebase-merge rebase-apply CHERRY_PICK_HEAD REVERT_HEAD MERGE_HEAD; do
+    [ -e "$(git rev-parse --git-path "$marker" 2>/dev/null)" ] && return 0
+  done
+  return 1
+}
+
+# The remedy line appended after a refusal, keyed on what the guard observed.
+# $1 is "commit" or "push"; $2 is current_branch()'s raw value. Every branch
+# below is exact text from the message contract -- see the feature file.
+remedy_line() {
+  local kind="$1" b="$2" hn
+  case "$b" in
+    "")
+      git rev-parse --git-dir >/dev/null 2>&1 || {
+        printf 'git-guard cannot judge this command from here. Run it from inside the target repository.'
+        return
+      }
+      hn=$(rebase_head_name)
+      case "$hn" in
+        refs/heads/main|refs/heads/master)
+          case "$kind" in
+            commit) printf "Let the rebase make this commit: git rebase --continue. Committing by hand here puts unreviewed work on %s." "${hn#refs/heads/}" ;;
+            push)   printf 'Finish the rebase first: git rebase --continue.' ;;
+          esac ;;
+        *)
+          case "$kind" in
+            commit) printf 'Create a feature branch first: git switch -c <name>. Commits made here belong to no branch.' ;;
+            push)   printf 'Create a feature branch first: git switch -c <name>, then push it.' ;;
+          esac ;;
+      esac ;;
+    *)
+      if operation_in_progress; then
+        case "$kind" in
+          commit) printf 'Finish the operation first (git rebase --continue, or git merge --continue); do not switch branches -- git will refuse.' ;;
+          push)   printf 'Finish the operation first; do not switch branches -- git will refuse.' ;;
+        esac
+      else
+        case "$kind" in
+          commit) printf 'Create a feature branch instead (git switch -c <name>), or stage only documentation.' ;;
+          push)   printf 'Push from a feature branch instead (git switch -c <name>).' ;;
+        esac
+      fi ;;
+  esac
 }
 
 # The paths this commit names for ITSELF, or nothing at all.
@@ -144,12 +282,15 @@ if has_fact PUSH_FORCE; then
   exit 2
 fi
 if has_fact PUSH_LEASE && on_main; then
-  printf 'git-guard: --force-with-lease is blocked while main/master is checked out.\n' >&2
+  checkout_branch="$(current_branch)"
+  printf 'git-guard: refusing --force-with-lease -- the checkout is %s.\n' "$(checkout_desc "$checkout_branch")" >&2
+  printf '%s\n' "$(remedy_line push "$checkout_branch")" >&2
   exit 2
 fi
 
 # --- Guard 1: default-branch commit ---
 if has_fact COMMIT && on_main; then
+  checkout_branch="$(current_branch)"
   files=$(git diff --cached --name-only 2>/dev/null || echo "")
   label="Staged files"
 
@@ -161,7 +302,7 @@ if has_fact COMMIT && on_main; then
       # branch relaxed is above; this is main's behaviour, unchanged, and it is
       # what keeps the ten commands that fill an index blocked without the hook
       # having to know a single one of them.
-      printf 'git-guard: nothing is staged yet, so this commit is judged by the paths it names -- and it names none that can be checked.\n' >&2
+      printf 'git-guard: the checkout is %s, and nothing is staged -- so this commit is judged by the paths it names, and it names none that can be checked.\n' "$(checkout_desc "$checkout_branch")" >&2
       printf 'Name them after a separator: git commit -m msg -- <path>\n' >&2
       printf '(-a, --amend, -i/--include and an unseparated path all commit more than the paths given, so none of them can stand in for one.)\n' >&2
       exit 2
@@ -188,9 +329,9 @@ if has_fact COMMIT && on_main; then
     esac
   done <<< "$files"
   if [ "$allowed" -ne 1 ]; then
-    printf 'git-guard: commits to main/master are blocked except documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' >&2
+    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' "$(checkout_desc "$checkout_branch")" >&2
     printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2
-    printf 'Create a feature branch instead, or stage only documentation.\n' >&2
+    printf '%s\n' "$(remedy_line commit "$checkout_branch")" >&2
     exit 2
   fi
 fi
