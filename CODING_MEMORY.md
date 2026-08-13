@@ -6874,3 +6874,43 @@ is what kept the guard from blocking this session's own record.
 **Still open:** `falsify-harness-signatures` (0/11) and `verification-marker-gate` (0/15) remain at
 `phase: planning` with `branch: none`, which is why **every source write in this repo is currently
 denied**. Neither was started. `## What's in here` still has no `task-tracker/` or `skills/` row.
+
+---
+
+## 2026-08-13 — session 66: git-guard-detached-head, PR #52's second append-only conflict, resolved and re-verified mergeable
+
+Restored into `phase: review` on `fix/git-guard-detached-head` per the prior handoff — all 10
+checklist items already checked, nothing left on the feature file itself. The handoff's own
+instruction was to check `gh pr view 52 --json state,mergedAt` before assuming anything, rather than
+trust "ready for review" from the header. Doing so found the PR **still open**, but
+`gh pr view 52 --json mergeable,mergeStateStatus` returned `CONFLICTING` / `DIRTY` — new information
+the handoff didn't have, since `origin/main` had moved again (PR #53 + the session-80 housekeeping
+above) since the previous merge (`dada49b`).
+
+**Same conflict shape as before, confirmed before assuming it, not guessed from precedent.**
+`git merge-tree` against the fresh merge-base showed exactly two files "changed in both" —
+`CODING_MEMORY.md` and `coding-memory/observability-judge/verdicts.jsonl` — and reading the base side
+of each `zdiff3` hunk showed it empty: both sides purely appended past the same point, the same
+append-append shape as `dada49b`. Resolved the same way — union, both blocks kept in full, a merge
+note added explaining the two blocks' independent "Session N" counters (same pattern already on file
+from the first merge) — and this time verified two ways rather than one: `git diff` against **both**
+parents showed zero `-` lines of real content on either side, and exact line-count arithmetic
+(`base + ours-added + theirs-added == merged`) matched precisely for both files (171 = 163+7+1 for
+the JSONL; checked the same way for `CODING_MEMORY.md`). `bash hooks/git-guard.test.sh` still 108
+passed / 0 failed after the merge, unaffected — it touches no code, only the two data/doc files.
+
+Committed the merge (`a78d2b2`) and pushed. `gh pr view 52` then returned `MERGEABLE` / `CLEAN`.
+
+**PR description updated in place, not left describing the pre-merge state.** The "Related PRs"
+section only named the first merge (`dada49b`); it now names both and states the current mergeable
+status explicitly rather than leaving a reader to infer it. The risk-assessment section's claim that
+the observability judge "scored this change against the current HEAD" was true when written but went
+stale the moment the merge commit landed on top of it — corrected to name the exact SHA it was scored
+against (`ad9fb15`) and to say plainly that current HEAD (`a78d2b2`) was **not** independently
+re-judged, with the reasoning for why that's believed low-risk (two append-only files, no code,
+verified zero deletions) kept separate from the fact that it isn't a judge verdict.
+
+**This session's freshness checkpoint fires mid-task, not after it** — the merge-conflict resolution
+was finished, verified, committed and pushed before this entry was written, so nothing here is a
+save-in-progress. Nothing else was left open by the merge itself; PR #52 is mergeable now and waiting
+on human review, same status as before this session except the conflict is gone.
