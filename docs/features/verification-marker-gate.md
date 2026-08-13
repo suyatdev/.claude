@@ -2,9 +2,42 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 5
+revision: 6
+revision_status: in-progress  # round 6 is PARTIAL -- see "Round 6 status" below before judging
 waived: [writing-specs/command-grammar]
 ---
+
+> ## Round 6 status — PARTIAL, do not dispatch the compliance judge yet
+>
+> Revision 5 was judged **`fail`** on 2026-08-04 (`00583c2`, 5 violations) and the spec then sat
+> untouched until 2026-08-12, so that failing verdict described the live document for eight days.
+> Round 6 is **in progress**; this note is the authoritative list of what it has and has not done.
+> **A judge dispatched now will fail on the two open items, and that would be a waste, not a finding.**
+>
+> **Closed in round 6:**
+> - **D1 (fatal) — wrapper recognition.** `rtk` rewrites `git commit …` → `rtk git commit …` before any
+>   guard runs, and this spec had mentioned it **zero times**; the gate would have been dead on arrival
+>   with task 14's arming check green over it. Now rule 0, importing `WRAPPERS` from
+>   `hooks/lib/shell_segments.py:64` rather than re-spelling it.
+> - **D2/D3 — fail-closed recognition.** Round 3's "anything it cannot lex allows" is replaced by a
+>   closed whitelist of fully-spelled forms; `-p`/`--patch` and `--interactive` are refused on the
+>   ground that they select content *after* the hook returns.
+> - **`writing-specs/api-contracts`** — `form` is now a total, **ordered** function of the command
+>   (rule 4's table), with `FOREIGN` and the new `UNSUPPORTED` given explicit positions.
+> - **`writing-specs/latency-budget-count`** — task 10 now says all three budgets.
+> - **`core-conduct/default-deny-store`** — `hooks/state/` `0700` and `test-exempt.log` `0600` stated.
+> - **N2** — the stray `G10` citation dropped; it labelled a repo-state measurement, not a grammar case.
+>
+> **Still open — round 6 is not finished until these are closed:**
+> - **`writing-specs/commit-form-coverage`** — the ABSENT probe's disk condition is correct for `ALL`
+>   and wrong for `PATHSPEC`. Needs re-measuring on git 2.50.1, not reasoning.
+> - **`writing-specs/pair-formation-rule`** — the predicate deciding whether a path in the path set
+>   *has* a sibling test is still never stated.
+> - **N1** (`git diff --cached` outside a repo: spec says 128, re-measured **129**), **O1** (revert pair
+>   7↔13 unnamed), **D4/D5** (blocks are never logged) — carried from the defect checklist.
+> - **O3 — the shrink.** At this size the spec's own diagnosis is that *prose consistency, not design*,
+>   is what five rounds have failed on. Deliberately **not** bundled into round 6: rewriting and fixing
+>   in one pass makes the result unreviewable. Its own task, after round 6 passes.
 
 # verification-marker gate
 
@@ -38,7 +71,7 @@ flowchart TD
     H -- "yes, valid" --> Q[ALLOW, logged to file]
     H -- no --> I{form}
     I -- FOREIGN --> V[BLOCK: MSG_FOREIGN_REPO]
-    I -- "INCLUDE / pathspec-from-file" --> UF[BLOCK: MSG_UNSUPPORTED_FORM]
+    I -- "UNSUPPORTED (patch/interactive/whitelist miss) or INCLUDE" --> UF[BLOCK: MSG_UNSUPPORTED_FORM]
     I -- "INVALID, git refuses it" --> P
     I -- "PLAIN / PATHSPEC / ALL" --> J[Collect path set]
     J -- git error --> U[BLOCK: MSG_GIT_FAILED]
@@ -355,7 +388,7 @@ unit-testable, not less. The four reused fail-open defences survive intact; only
 | `v` | `1` | schema sentinel — status *and* shape, because three rounds on `judge-guard` showed a status check alone accepts a component that answers and then dies |
 | `tool` | string | `tool_name` from the payload; only ever used to settle what an **absent** command means |
 | `kind` | `COMMIT` \| `OTHER` \| `NOTHING_RUNNABLE` | `NOTHING_RUNNABLE` = command absent, empty, or only whitespace/control characters |
-| `form` | `PLAIN` \| `PATHSPEC` \| `ALL` \| `INCLUDE` \| `INVALID` \| `FOREIGN` \| `NONE` | see the resolution table; `NONE` is the value whenever `kind` is not `COMMIT` |
+| `form` | `PLAIN` \| `PATHSPEC` \| `ALL` \| `INCLUDE` \| `UNSUPPORTED` \| `INVALID` \| `FOREIGN` \| `NONE` | see the **ordered** resolution table under §The command grammar rule 4 — first match wins; `NONE` is the value whenever `kind` is not `COMMIT` |
 | `amend` | bool | `--amend` present |
 | `paths` | list of strings | the pathspec operands; empty unless `form` is `PATHSPEC` or `INCLUDE` |
 | `exempt` | the **raw** `TEST_EXEMPT` value, JSON-escaped, or `""` when unset or empty | parsed from the command **string** — a `VAR=x` prefix never reaches a hook's environment. **The classifier does not sanitise it** |
@@ -438,6 +471,16 @@ fixture *`foo.sh` committed `v1`, staged `v2`, worktree `v3`; `bar.md` modified 
 
 **The rules the classifier implements, in order:**
 
+0. **Strip wrappers before anything else, and do not invent the list.** The command string reaching a
+   `PreToolUse` hook in this environment may already carry a wrapper prefix — RTK rewrites
+   `git commit …` into `rtk git commit …` **before** any guard runs. A classifier that matches on a
+   leading literal `git` sees `rtk`, calls the payload `kind: OTHER`, and allows: **the gate would be
+   dead on arrival, and task 14's arming check would report `ACTIVE` over the top of it.** The set is
+   `WRAPPERS` at **`hooks/lib/shell_segments.py:64`** — `("rtk", "time", "eval", "command", "builtin",
+   "exec", "nohup")` — imported, never re-spelled here. Three sibling hooks already depend on it:
+   `git-guard.sh:31-33`, `doc-guard.sh:119`, and the regression at `judge-guard.test.sh:111-112`.
+   Segmentation of a `git add … && git commit …` chain comes from the same module, for the same
+   reason: **a second grammar in this file is how the two drift apart.**
 1. **Decompose bundles first.** A token matching `^-[A-Za-z]+` is a sequence of short flags. Walk it
    left to right; the first flag that takes a value consumes **the rest of that token** if any
    remains (G4), otherwise **the next token** (G5).
@@ -445,9 +488,22 @@ fixture *`foo.sh` committed `v1`, staged `v2`, worktree `v3`; `bar.md` modified 
 3. **Operands:** any token not consumed as a flag or a flag's value is a **pathspec operand**,
    whether or not a `--` preceded it (G2). A literal `--` token ends option parsing; a `--` inside a
    value is not one (G6).
-4. **Form, decided from the decomposed flags:** `-i`/`--include` or `--pathspec-from-file` →
-   `INCLUDE`; `-a`/`--all` **with** any operand → `INVALID` (G8, G9); `-a`/`--all` alone → `ALL`;
-   any operand, with or without `--`, including via `-o`/`--only` → `PATHSPEC`; otherwise `PLAIN`.
+4. **Form — a total function of the command, resolved in this order, first match wins.** Round 5 left
+   this as an unordered list holding five of the seven values, with `FOREIGN` defined 160 lines later
+   and no position at all, so a command firing two triggers had two legal answers with opposite
+   outcomes. **The order is the contract; ties are not resolved by reading order elsewhere.**
+
+   | # | form | trigger | outcome | why it sits here |
+   |---|---|---|---|---|
+   | 1 | `INVALID` | `-a`/`--all` together with any pathspec operand (G8, G9) | **allow** | **Git itself refuses the command — exit 128, nothing is committed.** Nothing downstream can matter, so this resolves before every block. |
+   | 2 | `FOREIGN` | a `cd`, `git -C`, `--git-dir` or `--work-tree` anywhere before the commit | block, `MSG_FOREIGN_REPO` | The target repo is unknowable, so *which* markers to read is unknowable. Telling someone to drop a flag is useless while the gate is reading the wrong repo. |
+   | 3 | `UNSUPPORTED` | `-p`/`--patch`, `--interactive`, or **any option not in the whitelist** | block, `MSG_UNSUPPORTED_FORM` | The content is unknowable — see the whitelist rule below. |
+   | 4 | `INCLUDE` | `-i`/`--include` or `--pathspec-from-file` | block, `MSG_UNSUPPORTED_FORM` | Kept distinct from `UNSUPPORTED` only so its message can name the specific remedy (drop `-i`). |
+   | 5 | `ALL` | `-a`/`--all` with **no** operand | proceed, worktree content | |
+   | 6 | `PATHSPEC` | any operand, with or without `--`, including via `-o`/`--only` | proceed, index content | |
+   | 7 | `PLAIN` | none of the above | proceed, index content | The default, reached only by exhausting the list. |
+
+   `NONE` is the value whenever `kind` is not `COMMIT`, and is not part of this resolution.
 
 **Value-taking flags must be known by name**, because mis-lexing one turns its value into a phantom
 pathspec (G5). Two groups, and the distinction is load-bearing:
@@ -479,8 +535,45 @@ pathspec (G5). Two groups, and the distinction is load-bearing:
 `--pathspec-from-file` is **refused**, not half-supported: it sources operands from a file the hook
 would have to read and re-resolve. It joins `INCLUDE` under `MSG_UNSUPPORTED_FORM`.
 
-Anything the classifier cannot lex under these rules stays on the accepted-open list and allows —
-unchanged from round 3, and the reason that list is enumerated rather than described.
+##### Recognition is a closed whitelist, and the default for a recognised commit is refuse
+
+**Round 6 replaces round 3's "anything it cannot lex allows".** That clause assumed the option grammar
+could be enumerated. It cannot — **measured on git 2.50.1, git accepts any *unique* abbreviation of a
+long option**:
+
+| spelling | result | what it establishes |
+|---|---|---|
+| `git commit --amend` | accepted | the full spelling |
+| `git commit --amen` / `--ame` / `--am` | **all accepted, and all genuinely amend** (commit count stayed at 2, subject became the new one) | **an exact-spelling table can never be complete.** A classifier keyed to `--amend` sees `--am` as an unknown option. |
+| `git commit --allow-em` | **rejected, exit 129** | ambiguous between `--allow-empty` and `--allow-empty-message` — so the rule is *unique* prefix, not *any* prefix. |
+
+The second row is why enumeration fails today; the third is why it also fails *tomorrow*. **Uniqueness
+is a property of git's option table, not of the spelling** — an abbreviation that is unique in 2.50.1
+becomes ambiguous the moment git adds an option sharing its prefix, so a parser pinned to exact
+spellings silently changes meaning across git releases without a line of it being edited.
+
+**Therefore the classifier recognises a closed whitelist of fully-spelled forms and refuses the rest
+with `MSG_UNSUPPORTED_FORM`.** Not "parses best-effort and allows on doubt" — every flag in the two
+value-taking groups above, in its full spelling, plus the forms named in rule 4; anything else in a
+command already recognised as a commit is **unsupported, and unsupported blocks**.
+
+**This also closes `-p`/`--patch` and `--interactive`, which parsing could never have fixed.** Both
+select their content *interactively, after* the `PreToolUse` hook has already returned — so there is no
+moment at which the hook could inspect what the commit will contain. They are refused on that ground,
+not on a lexing one, and no amount of grammar work changes it.
+
+> **Exactly what changed, because "fail-closed" is doing real work here.** The inversion applies **only
+> once a commit has been recognised** — a `kind: COMMIT` payload whose options do not lex against the
+> whitelist. The genuinely-accepted-open shapes are untouched and stay on their enumerated list: alias
+> and variable indirection (§Latency), and anything where no commit is recognised at all. **The gate
+> cannot block what it cannot see, and pretending otherwise is the failure mode this note exists to
+> prevent.**
+>
+> **The cost is real and belongs on the record:** a developer using `git commit --am -m msg` gets
+> blocked on a valid command. That is the intended trade — a false block is visible and one keystroke
+> from resolution via `TEST_EXEMPT`, whereas the fail-open it replaces is invisible by construction and
+> ships an unverified commit. **A gate that guesses is worse than one that refuses**, and this feature
+> exists because a silent pass is the expensive direction.
 
 #### Which paths, and which content — measured, not assumed
 
@@ -745,7 +838,7 @@ Scenario: the first commit in a writer-installed repo is not a git failure
   Given a repo with the writer installed, HEAD unborn, and hooks/foo.sh staged with a marker
    When "git commit -m msg" runs
    Then the hook exits 0
-   # measured G10: rev-parse --verify HEAD and git diff --cached HEAD both exit 128 on an
+   # measured: rev-parse --verify HEAD and git diff --cached HEAD both exit 128 on an
    # unborn HEAD; without the empty-tree base this would block every repo's first commit
 ```
 
@@ -1040,7 +1133,7 @@ figure was twelve; with the two this round adds it is **fourteen**.
 | 5 | `MSG_CLASSIFIER_FAILED` | the classifier exits non-zero **other than 3**, or exits 0 printing nothing |
 | 6 | `MSG_CLASSIFIER_BAD_OUTPUT` | output is not one JSON object passing every field check |
 | 7 | `MSG_BAD_EXEMPT` | a non-empty `TEST_EXEMPT` fails `^[^\x00-\x1f\x7f]{1,200}$` |
-| 8 | `MSG_UNSUPPORTED_FORM` | `form: INCLUDE` — `-i`/`--include` **or `--pathspec-from-file`**, whose contents the gate will not guess at |
+| 8 | `MSG_UNSUPPORTED_FORM` | `form: INCLUDE` — `-i`/`--include` **or `--pathspec-from-file`** — **or `form: UNSUPPORTED`: `-p`/`--patch`, `--interactive`, or any option outside the whitelist.** The gate will not guess at contents it cannot see. The message names which of the two applies, since the remedies differ |
 | 9 | `MSG_FOREIGN_REPO` | the commit's target repository cannot be determined |
 | 10 | `MSG_GIT_FAILED` | an unexpected non-zero exit from a collection or hashing command |
 | 11 | `MSG_NO_MARKER` | a pair is in the path set with no marker file |
@@ -1077,6 +1170,14 @@ alone is what `judge-guard` does and is tolerable there because its exemptions a
 here they will be routine, and an unauditable exemption count is the exact erosion path the control
 exists to prevent.
 
+**Both the log and its parent directory carry explicit modes: `<repo>/hooks/state/` is `0700` and
+`test-exempt.log` is `0600`** — identical to the marker store two sections up, and for the same
+core-conduct default-deny reason. Round 5 gave the marker store its modes on those grounds and left
+this pair to the ambient umask, which on a permissive one publishes an audit trail naming every commit
+someone chose to bypass the gate for. **This feature creates `hooks/state/` — it does not exist in this
+repo today — so whichever component runs first sets the mode for both**, and stating it in only one of
+the two places is how it ends up depending on call order.
+
 ## Pinned versions
 
 Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — no associative arrays, no
@@ -1112,8 +1213,14 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       global-but-inert scope decision, the `INCLUDE` refusal, the accepted-open shapes, and the
       `cmux.sh` coverage hole. Check the next free ADR number against `main` first.
 - [ ] 2. Red: `classify-commit-command.test.py` — **the grammar first** (G1-G9, bundles, value-taking
-      flags in both groups, `--opt=value`, `--` inside a value), then every `form`, `--amend`, raw
-      `exempt` passthrough, `FOREIGN` triggers, `INCLUDE`, exit 3, ignored and accepted-open shapes,
+      flags in both groups, `--opt=value`, `--` inside a value), **plus rule 0's wrapper stripping for
+      every member of `WRAPPERS` — `rtk git commit …` must classify exactly as `git commit …`, and that
+      case is the difference between an armed gate and a dead one** — and the closed whitelist:
+      an abbreviated-but-valid option (`--am`, measured accepted by git 2.50.1) must resolve to
+      `UNSUPPORTED` and **block**, not fall through to `PLAIN`. Then every `form` **in the order rule 4
+      fixes**, including a command firing two triggers at once, `--amend`, raw
+      `exempt` passthrough, `FOREIGN` triggers, `INCLUDE`, `-p`/`--interactive`, exit 3, ignored and
+      genuinely accepted-open shapes (alias and variable indirection only),
       **and all 18 cells of the `kind` × field totality matrix**. ⚠️ The grammar's rule 2 is
       user-waived and unresolved — see the callout in §"The command grammar". Do not encode rule 2
       literally; this task is blocked on the shared-lexer decision landing in `shell_segments.py`.
@@ -1137,8 +1244,10 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       it only disarms the wiring.
 - [ ] 9. Mutation check — the 24-mutant floor (14 doors, 9 allow paths, emptied classifier); record
       the result in the checklist annotation.
-- [ ] 10. Measure the latency budgets and record the two numbers here; revise the budget if a figure
-      exceeds it rather than dropping it.
+- [ ] 10. Measure the latency budgets and record **all three** numbers here — round 5 added the
+      `kind: OTHER` budget and updated the prose to "measures and records all three" but left this task
+      reading "the two numbers", so the new budget would have gone unmeasured by anyone working the
+      checklist. Revise a budget if a figure exceeds it rather than dropping it.
 - [ ] 11. `shellcheck -x` (0.11.0) clean apart from pre-existing findings; confirm which are
       pre-existing by blame **before** claiming it, not after.
 - [ ] 12. Gate stub in `rules/gates.md`; `hooks/README.md` entry. Both must state the global-but-inert
