@@ -3,7 +3,7 @@ phase: planning
 model_tier: high
 branch: none
 revision: 14
-revision_status: in-progress  # items 2-5 landed; the ADR 0026 rewrite (item 1) is NOT applied — see the callout below
+revision_status: complete  # all five items landed; ADR 0026 applied. Round 7 (both judges) is owed.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -30,32 +30,25 @@ version its test suite has never passed against.
 > at this feature's scope without deleting the acceptance scenarios and contract tables the spec
 > exists to supply. **A judge citing this id is arguing with a settled decision.**
 
-> ⚠️ **REVISION 14 IS INCOMPLETE, AND THE UNAPPLIED PART IS THE BLOCKING ONE.** Round 6 returned
-> compliance **FAIL** on two ids — `writing-specs/unpinned-json-parse-classifier-output` and
-> `writing-specs/unpinned-json-parse-marker-read` — whose fix is **ADR 0026**
-> (`docs/decisions/0026-the-gate-does-no-json-parsing.md`, Accepted, user decision 2026-08-13):
-> *no JSON crosses into bash*; classification and marker reading merge into **one `python3` entry
-> point returning plain tab-separated lines** that bash consumes with `read`.
+> **Revision 14 applies ADR 0026** (`docs/decisions/0026-the-gate-does-no-json-parsing.md`, Accepted,
+> user decision 2026-08-13), which closes the round-6 compliance FAIL on
+> `writing-specs/unpinned-json-parse-classifier-output` and `writing-specs/unpinned-json-parse-marker-read`.
+> **No JSON crosses into bash.** Classification, path collection, pairing, marker reading and blob
+> comparison run in **one `python3` process** whose stdout is **one tab-separated line**, which bash
+> consumes with `read`. §3 → "The decision call" is the replacement text; the JSON wire contract that
+> stood through revision 13 is **gone, not deprecated**, and so is the bash-ERE form of the
+> `TEST_EXEMPT` check, which now runs in Python.
 >
-> **That rewrite is not in this file yet.** Everything below describing node `CO` as parsing a JSON
-> object (§3 "Wire contract", the field and totality tables, "Validation order" step 1) and node `M`
-> as bash reading marker JSON (§2 "Marker schema" read-side validation, flowchart node `M`) is
-> **superseded text awaiting replacement**, not current design. Revision 14 so far applies only the
-> four independent round-6 findings: the log file's `0600` enforcement, the `os.makedirs` twin, the
-> percent-encoding order, and the text-processing version pins.
+> **The opt-in boundary did not move.** Node `G` still sits above the decision call, because bash runs
+> the `cwd` read, `rev-parse` and `test -r` before it. What became internal to Python is the ordering
+> *after* that boundary, and §"What the one call decides, in order" is where that ordering is now
+> normative. ADR 0026 named this its highest-risk consequence; it is specified, not assumed.
 >
-> **Two things ADR 0026 leaves genuinely open — neither may be written as settled:**
-> 1. **The opt-in ordering rule must be re-specified, not assumed to survive.** The contract below is
->    that node `G` (writer installed?) sits *above* the classifier, so a repo that has not opted in
->    cannot be blocked by any door but `MSG_NO_PYTHON`. Folding marker reading into the classifier's
->    process does not by itself move that boundary — bash still runs the `cwd` read, `rev-parse` and
->    `test -r` before the one call — but the ordering *inside* the merged entry point becomes a Python
->    concern, and ADR 0026 names this its highest-risk consequence. (The ADR's own Consequences
->    paragraph states this ordering backwards, as "the classifier runs before repo-state checks". The
->    spec is the authority and says the opposite; whoever writes the rewrite should correct the ADR
->    rather than inherit that sentence.)
-> 2. **"Fewer process starts" is a prediction, not a measurement.** The §Latency budget table must be
->    re-measured against real code, not revised from the ADR's expectation.
+> ⚠️ **One thing this revision does NOT settle, and it may not be written as settled.** ADR 0026
+> predicts *fewer* process starts. That is an expectation about code that does not exist yet — the
+> four budgets in §Latency remain **targets**, and checklist task 10 measures them against the real
+> implementation. Revising that table from the ADR's prediction is the failure this paragraph exists
+> to prevent.
 
 ```mermaid
 flowchart TD
@@ -69,40 +62,54 @@ flowchart TD
     F -- no --> P
     F -- yes --> G{Writer installed<br/>in that repo?}
     G -- "no, gate not adopted" --> P
-    G -- yes --> CM{Classifier present<br/>and readable?}
+    G -- yes --> CM{Decision entry point<br/>present and readable?}
     CM -- no --> D4[BLOCK: MSG_CLASSIFIER_MISSING]
-    CM -- yes --> CF{Classifier exit}
+    CM -- yes --> CF{python3 #2 exit<br/>— the decision call}
     CF -- "3 = unreadable payload" --> X[BLOCK: MSG_BAD_PAYLOAD]
     CF -- "other non-zero, or no output" --> D5[BLOCK: MSG_CLASSIFIER_FAILED]
-    CF -- "0 with one line" --> CO{Output valid on<br/>every field?}
+    CF -- "0 with one TSV line" --> CO{Four fields, none empty,<br/>fields 1 and 2 in domain?}
     CO -- no --> D6[BLOCK: MSG_CLASSIFIER_BAD_OUTPUT]
-    CO -- yes --> C{Runnable command?}
-    C -- "no, tool_name=Bash" --> Y[BLOCK: MSG_NOTHING_RUNNABLE]
-    C -- "no, other tool" --> P
+    CO -- yes --> DEC{field 1}
+    DEC -- ALLOW --> P
+    DEC -- EXEMPT --> LE[ALLOW, and log the EXEMPT line]
+    DEC -- BLOCK --> LB[BLOCK: the door named in field 2, logged]
+```
+
+**The opt-in check sits above the decision call, and that ordering is the contract, not an
+optimisation.** Every door except `MSG_NO_PYTHON` is downstream of node `G`, so a repo that has not
+installed the writer cannot be blocked by this hook — including by a missing or corrupt copy of the
+Python components this feature introduces. See §Fail-closed contract → "Which doors are machine-global".
+
+**What the one call decides, in order.** ADR 0026 moved this ordering from a bash call sequence into a
+single process, so it is specified here rather than left to emerge from the implementation. Each leaf
+is the value the call reports in the TSV line above — a `MSG_*` constant in field 2, or `ALLOW` /
+`EXEMPT` in field 1. **This chart is inside node `CF`; nothing in it can be reached by a repo that has
+not opted in**, because bash has already cleared nodes `RC`, `F` and `G` before the process starts.
+
+```mermaid
+flowchart TD
+    S[stdin: the same payload bash buffered] --> C{Runnable command?}
+    C -- "no, tool_name=Bash" --> Y[MSG_NOTHING_RUNNABLE]
+    C -- "no, other tool" --> P[ALLOW]
     C -- yes --> E{kind = COMMIT?}
     E -- no --> P
     E -- yes --> H{TEST_EXEMPT non-empty?}
-    H -- "yes, invalid" --> BE[BLOCK: MSG_BAD_EXEMPT]
-    H -- "yes, valid" --> P
+    H -- "yes, invalid" --> BE[MSG_BAD_EXEMPT]
+    H -- "yes, valid" --> EX[EXEMPT]
     H -- no --> I{form}
-    I -- UNSUPPORTED --> UF[BLOCK: MSG_UNSUPPORTED_FORM]
+    I -- UNSUPPORTED --> UF[MSG_UNSUPPORTED_FORM]
     I -- "INVALID, git refuses it" --> P
     I -- "PLAIN / PATHSPEC / ALL" --> J[Collect path set]
-    J -- git error --> U[BLOCK: MSG_GIT_FAILED]
+    J -- git error --> U[MSG_GIT_FAILED]
     J -- ok --> K[Pair each path with its sibling test]
     K --> L{Any pairs?}
     L -- no --> P
     L -- yes --> M{Marker readable and valid?}
-    M -- no --> Z[BLOCK: MSG_NO_MARKER / MSG_BAD_MARKER]
+    M -- no --> Z[MSG_NO_MARKER / MSG_BAD_MARKER]
     M -- yes --> N{Both blobs match<br/>post-commit content?}
-    N -- no --> W[BLOCK: MSG_STALE_SUBJECT / MSG_STALE_TEST]
+    N -- no --> W[MSG_STALE_SUBJECT / MSG_STALE_TEST]
     N -- yes --> P
 ```
-
-**The opt-in check sits above the classifier, and that ordering is the contract, not an optimisation.**
-Every door except `MSG_NO_PYTHON` is downstream of node `G`, so a repo that has not installed the
-writer cannot be blocked by this hook — including by a missing or corrupt `classify-commit-command.py`,
-a file this feature introduces. See §Fail-closed contract → "Which doors are machine-global".
 
 ## Background — why this exists
 
@@ -149,7 +156,7 @@ payload can be read at all. That single exception is not a new hazard: `git-guar
 `judge-guard.sh:44-48` and `merge-guard.sh:39-43` are all globally registered today and all `exit 2`
 with a message when `python3` is missing, so a broken interpreter already blocks every commit on this
 machine before this feature exists. (`doc-guard.sh:54` is the family's one fail-open.) Every other
-door — including the three that depend on this feature's own new classifier file — is downstream of
+door — including the three that depend on this feature's own new Python files — is downstream of
 the writer-installed check and therefore cannot reach a repo that has not opted in.
 
 > ⚠️ **Accepted cost: inertness is only PARTLY observable in v1, and the asymmetry is the point.** A
@@ -389,12 +396,26 @@ Read-side validation: `version == 1`, both `blob` values match `^([0-9a-f]{40}|[
 today, 64 leaves room for a SHA-256 repo), both `path` values equal the expected pair. Anything else →
 **INVALID → block**.
 
+**It is validated in Python, by the decision call, and bash never sees this JSON** (revision 14, ADR
+0026). `json.load` raising — a truncated or non-JSON file — is `MSG_BAD_MARKER`, the same door as a
+file that parses but fails a field check: both mean *this receipt cannot be trusted*, and splitting
+them would add a door with an identical remedy. The regex is a **Python** `re` pattern, not a bash ERE;
+the two dialects are not interchangeable here and §3 → "Validating the exemption in Python" measures
+what the naive port does. `errors="replace"` on the read, so an undecodable byte in a marker fails a
+field check rather than raising an exception the caller has to classify.
+
 ### 3. `hooks/test-marker-guard.sh` — the gate
 
-PreToolUse, matcher `Bash`. Classification lives in `hooks/lib/classify-commit-command.py`, importable
-and unit-tested.
+PreToolUse, matcher `Bash`. **The gate is a thin bash wrapper around one Python decision call**
+(revision 14, ADR 0026): bash owns the pre-filter, the `cwd` read, the toplevel resolution and the
+opt-in `test -r`; everything after that boundary — classification, path collection, pairing, marker
+reading, blob comparison — runs in `hooks/lib/decide-commit-gate.py`, which imports
+`hooks/lib/classify-commit-command.py`. Both are read from the **hook's own directory**
+(`$(cd "$(dirname "$0")" && pwd)/lib/…`, the shape `git-guard.sh:44` already uses), never from the
+target repo: the hook is registered globally, so the only file it consults *in* the target repo is the
+writer, and that one is the opt-in signal rather than executable input.
 
-**Which repo, and it is settled before the classifier runs.** The hook buffers the payload from stdin
+**Which repo, and it is settled before the decision call runs.** The hook buffers the payload from stdin
 once, then extracts **one field, `cwd`**, with an inline `python3` JSON read — the shape
 `git-guard.sh:59-72` already uses. It makes no attempt to parse the command; the classifier remains
 the sole command parser. Three outcomes:
@@ -408,113 +429,216 @@ the sole command parser. Three outcomes:
 3. **A toplevel resolves** → `test -r <toplevel>/hooks/lib/write-test-marker.py` decides adoption. Not
    readable → allow, gate not adopted.
 
-Only after (3) says *adopted* does the hook invoke `classify-commit-command.py`. The payload `cwd` is
+Only after (3) says *adopted* does the hook invoke the decision call. The payload `cwd` is
 the session's cwd, which is the cwd the command *starts* in; it is deliberately **not** used to follow
 a `cd` inside the command — see the foreign-repo trigger under §The command grammar.
 
-**Wire contract — one helper, one line of JSON.** One helper reading the payload and emitting one JSON
-object removes a desync class instead of defending against it, and is *more* unit-testable, not less.
+**Two files, one process.**
 
-- **stdin:** the buffered PreToolUse payload, decoded UTF-8 with `errors="replace"`.
-- **stdout:** exactly one line, a JSON object.
-- **exit:** `0` whenever it produced a line; **`3` — and only `3` — for an unreadable payload**; any
-  other non-zero, or exit 0 with no output, is a broken component. The dedicated code is what makes
-  `MSG_BAD_PAYLOAD` and `MSG_CLASSIFIER_FAILED` two distinguishable doors instead of one door with two
-  names. Since the hook has already parsed the same bytes at step 1, exit 3 now means **two reads of
-  one payload disagreed** — a component-liveness failure, which is the same class the `v` sentinel
-  guards and is asserted by stubbing the classifier to exit 3.
+| file | role |
+|---|---|
+| `hooks/lib/decide-commit-gate.py` | the entry point bash calls: reads the payload from stdin, drives the ordering charted above, prints one TSV line |
+| `hooks/lib/classify-commit-command.py` | classification only — a function over the command string, imported by the entry point and unit-tested directly |
 
-```json
-{ "v": 1, "tool": "Bash", "kind": "COMMIT",
-  "form": "PLAIN", "amend": false, "paths": [], "exempt": "" }
+Splitting them rather than folding classification into the entry point keeps the classifier's unit
+suite exactly what §Testing requirements specifies — direct assertions on a function, including the
+totality matrix — and keeps both files inside the size convention. The cost is the loader below, and
+**how the entry point loads the classifier is part of the requirement**: two measured facts rule out
+the obvious spelling.
+
+```python
+# WRONG, twice over, measured on Python 3.9.6:
+#  (a) a hyphen is not an identifier -- `import classify-commit-command` is a SyntaxError;
+#  (b) `-I` removes the script's own directory from sys.path, so even the underscore
+#      spelling would not resolve. Measured under -I: sys.path[0] is the stdlib zip.
+import classify_commit_command
+
+# CORRECT -- the construct hooks/lib/classify-git-command.test.py:18 already uses.
+# Resolved against this file's own realpath, never the cwd, so the shadowing that
+# -I exists to prevent stays prevented: exactly one directory is reachable, and it
+# is the hook's own lib/.
+import importlib.util, os
+_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "classify-commit-command.py")
+_SPEC = importlib.util.spec_from_file_location("classify_commit_command", _PATH)
+_CLASSIFIER = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_CLASSIFIER)
 ```
+
+**The classifier's contract is in-process, and it is a function, not a wire.** The entry point imports
+it and calls it; nothing is serialised between them. It returns one object with these fields:
 
 | field | domain | meaning |
 |---|---|---|
-| `v` | `1` | schema sentinel — status *and* shape, because three rounds on `judge-guard` showed a status check alone accepts a component that answers and then dies |
 | `tool` | string | `tool_name` from the payload; only ever used to settle what an **absent** command means |
 | `kind` | `COMMIT` \| `OTHER` \| `NOTHING_RUNNABLE` | `NOTHING_RUNNABLE` = command absent, empty, or only whitespace/control characters |
 | `form` | `PLAIN` \| `PATHSPEC` \| `ALL` \| `UNSUPPORTED` \| `INVALID` \| `NONE` | see the **ordered** resolution table under §The command grammar rule 4 — first match wins; `NONE` is the value whenever `kind` is not `COMMIT` |
 | `amend` | bool | `--amend` present |
 | `paths` | list of strings | the pathspec operands; empty unless `form` is `PATHSPEC` |
-| `exempt` | the **raw** `TEST_EXEMPT` value, JSON-escaped, or `""` when unset or empty | parsed from the command **string** — a `VAR=x` prefix never reaches a hook's environment. **The classifier does not sanitise it** |
+| `exempt` | the **raw** `TEST_EXEMPT` value, or `""` when unset or empty | parsed from the command **string** — a `VAR=x` prefix never reaches a hook's environment. **The classifier does not sanitise it** |
 
-**The contract is total over `kind`.** The hook validates **every field against its domain before it
-ever consults `kind`** — the flowchart's `CO` node precedes `E` — so a conforming classifier answering
-a payload like `ls` must have a legal value for every field or it trips `MSG_CLASSIFIER_BAD_OUTPUT` on
-the commonest input it will ever see. Every cell is defined:
+> **The `v` schema sentinel is deleted, and deleting it is not a weakening** (revision 14). It existed
+> because a JSON object crossing a process boundary can be well-formed and stale — three rounds on
+> `judge-guard` showed a status check alone accepts a component that answers and then dies. Across an
+> import there is no boundary to go stale over: a classifier too old to have the field the entry point
+> reads raises `AttributeError`/`KeyError` in-process, and the whole call exits non-zero onto
+> `MSG_CLASSIFIER_FAILED`. Keeping a version field that only one caller in one process ever checks
+> against itself would be ceremony, not a control. **The liveness question moved outward, to the TSV
+> line** — which is where a boundary still exists, and where the shape check below now carries it.
+
+**The contract is total over `kind`.** A conforming classifier answering a payload like `ls` must have
+a legal value for every field, so the entry point never needs a per-kind special case before it
+consults `kind`. Every cell is defined:
 
 | field | `kind: COMMIT` | `kind: OTHER` | `kind: NOTHING_RUNNABLE` |
 |---|---|---|---|
-| `v` | `1` | `1` | `1` |
 | `tool` | `tool_name`, verbatim | `tool_name`, verbatim | `tool_name`, verbatim |
 | `form` | one of the five commit forms | **`NONE`** | **`NONE`** |
 | `amend` | `--amend` present | **`false`** | **`false`** |
 | `paths` | operands; `[]` unless `PATHSPEC` | **`[]`** | **`[]`** |
 | `exempt` | raw `TEST_EXEMPT`, or `""` | raw `TEST_EXEMPT`, or `""` | **`""`** |
 
-`NONE` is a **value** of `form`, not an absence. No field is ever optional and no field is ever null,
-so the hook's domain check needs no per-kind special case. `exempt` is still reported under `OTHER`
+⚠️ **Totality is now enforced inside Python, and it needs a construct, because the old enforcement was
+bash's field check at the wire.** Every dispatch in the entry point over `kind` and `form` — the two
+fields with closed domains — **has no default-allow arm.** An unrecognised value raises, the process
+exits non-zero, and bash blocks with `MSG_CLASSIFIER_FAILED`. Written the natural way instead
+(`if form == "UNSUPPORTED": … elif …: … else: allow`) a `None` from a half-upgraded classifier lands in
+the `else` and **allows the commit** — a fail-open reached by writing the dispatch in the obvious
+order, which is why the requirement is the absence of that arm rather than a note to be careful.
+
+**Fifteen cells, five fields × three kinds** — recount it here rather than inheriting the number:
+revision 14 deleted the `v` row, and the count was 18 through revision 13. `NONE` is a **value** of
+`form`, not an absence. No field is ever optional and no field is ever null,
+so the entry point needs no per-kind special case. `exempt` is still reported under `OTHER`
 because `TEST_EXEMPT=x ls` lexes perfectly well and the hook, not the classifier, decides what an
 exemption is worth; under `NOTHING_RUNNABLE` there is no command string to parse one out of, so `""` is
 the only honest answer.
 
-**Validation order.** The hook applies exactly two checks, in this order, and this is the only place
-read-side validation of the classifier's output is specified:
+**The wire is one tab-separated line, and it is the only thing bash parses.**
 
-1. **Shape and domain, at node `CO`, for every payload regardless of `kind`:** output parses as one
-   JSON object, `v == 1`, every field present, each inside the domain above, `paths` a list of
-   strings, `exempt` a string. Anything else → `MSG_CLASSIFIER_BAD_OUTPUT` → block. This check never
-   inspects the *content* of `exempt`.
-2. **Exemption validity, at node `H`, only once `kind == COMMIT`:** a non-empty `exempt` must match
-   `^[[:print:]]{1,200}$` **evaluated under `LC_ALL=C`**, else **`MSG_BAD_EXEMPT`** — its own door,
-   because a malformed exemption reason is a user error, not a broken component. Over-length is
-   rejected, never silently truncated: a truncated reason is an unauditable exemption.
+- **stdin:** the buffered PreToolUse payload, decoded UTF-8 with `errors="replace"`. Bash hands over
+  the bytes it already read; the entry point does not re-read the tool's stdin.
+- **exit:** `0` whenever it produced a line; **`3` — and only `3` — for an unreadable payload**; any
+  other non-zero, or exit 0 with no output, is a broken component. The dedicated code is what makes
+  `MSG_BAD_PAYLOAD` and `MSG_CLASSIFIER_FAILED` two distinguishable doors instead of one door with two
+  names. Since bash has already parsed the same bytes at step 1, exit 3 means **two reads of one
+  payload disagreed** — a component-liveness failure, asserted by stubbing the entry point to exit 3.
+  **A failed import of the classifier lands on `MSG_CLASSIFIER_FAILED`**, because the entry point
+  itself was readable and that is exactly what node `CM` tested.
+- **stdout:** exactly one line, exactly four tab-separated fields, no trailing tab, no field empty.
 
-   > **The regex is a bash ERE and the locale pin is part of it, not decoration** (revision 11).
-   > Revisions 1–10 specified `^[^\x00-\x1f\x7f]{1,200}$`, which is Python syntax: bash ERE has no
-   > `\xNN` escape. Measured on bash 3.2.57, not read — `[[ "vendored upstream" =~ $re ]]` exits **2**
-   > (regcomp failure, distinct from 1/no-match) for *every* input, and `[[ ]]` reads a non-zero exit
-   > as false, so `MSG_BAD_EXEMPT` fired on every exemption and the escape hatch was inert. Dropping
-   > the `{1,200}` makes it compile and still reject every ordinary reason. The scenario at
-   > "an explicit exemption is honoured and logged to a file" could not have passed as specified.
-   > `[[:print:]]` is the POSIX-defined spelling; the `LC_ALL=C` pin makes the door answer identically
-   > on every machine and makes the `1,200` bound count bytes rather than characters. Its cost, stated
-   > plainly: a reason containing accented or other non-ASCII letters is rejected — under a UTF-8
-   > locale the same class admits them, and the point of pinning is that the gate must not depend on
-   > which of those is in force. Rejection is fail-closed and lands on `MSG_BAD_EXEMPT`, which names
-   > the problem, so the remedy is to rewrite the reason in ASCII.
+| # | field | domain |
+|---|---|---|
+| 1 | outcome | `ALLOW` \| `BLOCK` \| `EXEMPT` |
+| 2 | door | one of the **eight** `MSG_*` constants the call can report, or **`-`** when field 1 is not `BLOCK` |
+| 3 | detail | door-specific, below, or **`-`** |
+| 4 | pair | `<subject>\|<test>`, or **`-`** when the decision was reached before any pair was formed |
 
-   **How the pin is scoped — this is part of the requirement, not an implementation detail**
-   (revision 12, `writing-specs/locale-pin-mechanism`). `[[` is a bash **reserved word**, not a
-   command, and a variable-assignment prefix makes bash look for a command by that name. So the
-   spelling an engineer reaches for first is not merely wrong, it is a crash:
+| field 1 | field 2 | field 3 | field 4 |
+|---|---|---|---|
+| `ALLOW` | `-` | `-` | `-` |
+| `EXEMPT` | `-` | the validated `TEST_EXEMPT` reason | `-` |
+| `BLOCK` | `MSG_UNSUPPORTED_FORM` | the trigger that fired: `FOREIGN_REPO` \| `INCLUDE_OR_FROM_FILE` \| `PATCH_OR_INTERACTIVE` \| `OFF_WHITELIST` | `-` |
+| `BLOCK` | `MSG_NO_MARKER` | the remedy command, derived from the suite path and its extension | the pair |
+| `BLOCK` | `MSG_BAD_MARKER` \| `MSG_STALE_SUBJECT` \| `MSG_STALE_TEST` | `-` | the pair |
+| `BLOCK` | `MSG_NOTHING_RUNNABLE` \| `MSG_BAD_EXEMPT` \| `MSG_GIT_FAILED` | `-` | `-` |
 
-   ```sh
-   # WRONG — measured on bash 3.2.57: "[[: command not found", exit 127.
-   # An assignment prefix requires a command; [[ is a reserved word.
-   LC_ALL=C [[ "$exempt" =~ $re ]]
+⚠️ **`-` for "nothing here" is load-bearing, not tidiness — an empty field is unreadable in bash.** A
+tab is IFS *whitespace*, so `read` collapses runs of them and a genuinely empty field vanishes,
+silently shifting every field after it:
 
-   # CORRECT — a subshell so the pin cannot leak into the rest of the gate,
-   # which does its own locale-sensitive work (sorting, the marker regex).
-   if ( export LC_ALL=C; [[ "$exempt" =~ ^[[:print:]]{1,200}$ ]] ); then …
-   ```
+```sh
+# WRONG — measured on bash 3.2.57. Reading "MSG_STALE_TEST\t\thooks/foo.sh|hooks/foo.test.sh"
+# puts the PAIR into $f2 and leaves $f3 empty. A door name and a file pair swap places.
+IFS=$'\t' read -r f1 f2 f3 <<< "$out"
 
-   > Stating only "evaluated under `LC_ALL=C`" is what round 4 cited, and the citation is right: it is
-   > the **same defect class as revision 11 one layer down** — a requirement written in the idiom of
-   > one context and destined to execute in another. Revision 11 fixed the regex's engine mismatch and
-   > then re-introduced the species in the sentence describing the fix. The subshell is specified
-   > rather than a bare assignment because the gate's other comparisons must keep the caller's locale.
+# WRONG — no -r. [[:print:]] admits a backslash, and measured:
+# "vendored\upstream fix" arrives as "vendoredupstream fix".
+IFS=$'\t' read f1 f2 f3 f4 <<< "$out"
 
-Putting the regex at step 1 would let `TEST_EXEMPT=$'a\nb' ls` — a non-commit — block the session,
-which is why the order is load-bearing rather than incidental.
+# WRONG — a pipe runs `read` in a subshell; measured: f1..f4 are empty in the caller.
+printf '%s\n' "$out" | IFS=$'\t' read -r f1 f2 f3 f4
 
-**The classifier does not strip control characters.** A JSON string survives a newline intact, so
-sanitising buys nothing and makes the hook's re-validation unreachable. The contract is single-sourced:
-**the classifier reports, the hook decides.**
+# CORRECT — here-string, -r, and a contract in which no field is ever empty.
+out=$("$py" -I "$ENTRY") ; rc=$?
+IFS=$'\t' read -r f1 f2 f3 f4 <<< "$out"
+```
 
-**`python3 -I`** at every call site, so a stray `json.py` in the working directory cannot shadow the
-helper and block every Bash command.
+`$(…)` strips trailing newlines and a here-string over a value without one still returns 0 (measured),
+so the read needs no `|| true` — and adding one would hide a genuine failure.
+
+**Validation order.** Bash applies exactly two checks, in this order, and this is the only place
+read-side validation of the decision call's output is specified:
+
+1. **Shape, at node `CO`, before any field is believed.** Four pure-bash tests, no subprocess:
+   `$out` contains no newline (one line only); none of `$f1`…`$f4` is empty (too few fields, or a
+   collapsed one); `$f4` contains no tab (too many — `read` puts the whole remainder in the last
+   variable, tabs included, which is what makes a fifth field detectable at all); and `$f1` is one of
+   the three outcome values. Anything else → `MSG_CLASSIFIER_BAD_OUTPUT` → block.
+2. **Field 2's domain is checked by the `case` that prints the message, not beside it.** Bash must map
+   the constant to human text anyway; giving that `case` a `*)` arm that raises
+   `MSG_CLASSIFIER_BAD_OUTPUT` makes the door list and its validator **one construct**, so they cannot
+   drift apart. A constant bash does not know is indistinguishable from a corrupt line, and both are
+   the same failure: a component said something this version cannot act on.
+
+**The thirteen doors partition across the boundary, five and eight, and the split is checkable.**
+Bash raises `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED` and
+`MSG_CLASSIFIER_BAD_OUTPUT` — every one of them a statement about the decision call itself, which is
+why none can be reported *by* it. The other eight arrive in field 2. **No door is raised on both
+sides**, so §The doors stays a single table with a column this section does not duplicate.
+
+**Validating the exemption in Python.** A non-empty `exempt` must be **1 to 200 bytes, every byte in
+`0x20`–`0x7E`**, else **`MSG_BAD_EXEMPT`** — its own door, because a malformed reason is a user error,
+not a broken component. Over-length is rejected, never silently truncated: a truncated reason is an
+unauditable exemption. This check runs **only once `kind == COMMIT`** (node `H`, after node `E`);
+checking it earlier would let `TEST_EXEMPT=$'a\nb' ls` — a non-commit — block the session, so the
+order is load-bearing rather than incidental.
+
+> ⚠️ **The bound is 200 bytes.** The ERE quantifier revisions 11–13 wrote, `{1,200}`, means *between
+> 1 and 200*; ADR 0026's prose "a byte-counted `1,200` bound" quotes that quantifier and is not a bound
+> of 1,200. Stated as a number here so no implementation has to interpret a comma.
+
+**The construct is a `bytes` pattern, and this is part of the requirement** — the naive port of the
+bash ERE is not a syntax error in Python, it is a silently different check that rejects everything:
+
+```python
+# WRONG — measured on Python 3.9.6. Python's `re` has no POSIX classes: this is a
+# character class of [ : p r i n t followed by a literal ], and it emits only a
+# FutureWarning ("Possible nested set"). re.match on "vendored upstream" -> None.
+# Every exemption is refused. That is revision 11's dead escape hatch, one
+# interpreter over, reached by translating the text instead of the behaviour.
+EXEMPT_RE = re.compile(r"^[[:print:]]{1,200}$")
+
+# WRONG — a str pattern counts CHARACTERS. Measured: 150 × "é" is 300 bytes and
+# passes a {1,200} str bound, and under a UTF-8 build the class admits the accents
+# revision 11 decided to reject.
+EXEMPT_RE = re.compile(r"^[^\x00-\x1f\x7f]{1,200}$")
+
+# CORRECT — a bytes pattern over the printable-ASCII range. Measured: 200 bytes
+# pass, 201 fail, tab and newline are refused, backslash and space are admitted.
+EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")
+is_valid = EXEMPT_RE.match(exempt.encode("utf-8")) is not None
+```
+
+> **This deletes the `LC_ALL=C` mechanism rather than porting it, and that is the point.** Revisions 11
+> and 12 spent two rounds pinning a locale — first the regex dialect, then the subshell that scopes the
+> pin, because `LC_ALL=C [[ … ]]` is a crash (`[[` is a reserved word, not a command). Matching bytes
+> against an explicit `0x20`–`0x7E` range depends on **no locale at all**, so there is nothing left to
+> pin or to leak into the rest of the gate. The cost revision 11 accepted is unchanged and still
+> deliberate: a reason containing accented or other non-ASCII letters is rejected, fail-closed, onto a
+> door that names the problem — the remedy is to rewrite the reason in ASCII.
+>
+> ⚠️ Both superseded bash forms are **deleted, not left standing beside the Python one.** Two spellings
+> of one check is this spec's recurring defect class in its purest form, and ADR 0026's Amendment
+> called for the removal by name.
+
+**The classifier does not strip control characters.** It reports the raw value and the entry point
+decides — sanitising there would make the validation above unreachable and hide from the log what the
+user actually typed. The contract is single-sourced: **the classifier reports, the decision call
+decides, bash prints.**
+
+**`python3 -I`** at both call sites, so a stray `json.py` in the working directory cannot shadow the
+stdlib and block every Bash command. `-I` is also what makes the `importlib` loader above mandatory
+rather than stylistic: it removes the script's own directory from `sys.path`.
 
 **The command decides; `tool_name` only settles what an ABSENT command means.** Runnable command →
 classify it whatever the tool is called; `NOTHING_RUNNABLE` + `Bash` → block; `NOTHING_RUNNABLE` + any
@@ -661,6 +785,13 @@ command already recognised as a commit is **unsupported, and unsupported blocks*
 
 Every row below was reproduced on git 2.50.1 in a throwaway repo; checklist task 6 turns each into a
 test that commits for real rather than simulating.
+
+**These commands run inside the decision call, not in bash** (revision 14, ADR 0026), via
+`subprocess.run` with an argument **list** — never `shell=True`, so a path operand cannot re-lex. The
+measured behaviours below are properties of the *commands*, so they survive the move unchanged; what
+moved is the call site, and **`MSG_GIT_FAILED` is therefore reported in field 2 of the TSV line rather
+than raised by bash.** The one exception is `rev-parse --show-toplevel`, which bash still runs itself
+because it precedes the opt-in boundary.
 
 `<base>` is `HEAD`, with two measured exceptions, both resolving to the empty-tree oid
 `4b825dc642cb6eb9a060e54bf8d69288fbee4904`:
@@ -864,18 +995,25 @@ accepted-open list (alias and variable indirection).
 
 **Budgets — targets, not measurements; checklist task 10 measures and records all four.** The opt-in
 reorder is what makes this four rows rather than three: an adopting repo pays **two** `python3` starts,
-the inline `cwd` read and the classifier, and that cost is the price of the opt-in check sitting above
-the classifier.
+the inline `cwd` read and the decision call, and that cost is the price of the opt-in check sitting
+above the decision call.
 
 | payload | budget | what it pays for |
 |---|---|---|
 | no `commit` substring anywhere | **≤5 ms** | pure bash, no subprocess — the pre-filter exits 0 |
-| mentions `commit`, repo has **not** opted in | **≤50 ms** | one `python3 -I` start (the inline `cwd` read) plus `rev-parse` and one `test -r`; the classifier never runs |
-| mentions `commit` but is not one, in an adopting repo (`kind: OTHER` or `NOTHING_RUNNABLE`) | **≤110 ms** | the above plus a second `python3 -I` start and classification; no further git calls |
-| an actual `git commit` in an adopting repo | **≤200 ms** | the above plus the collection and hashing calls |
+| mentions `commit`, repo has **not** opted in | **≤50 ms** | one `python3 -I` start (the inline `cwd` read) plus `rev-parse` and one `test -r`; the decision call never runs |
+| mentions `commit` but is not one, in an adopting repo (`kind: OTHER` or `NOTHING_RUNNABLE`) | **≤110 ms** | the above plus a second `python3 -I` start and classification; no git calls beyond `rev-parse` |
+| an actual `git commit` in an adopting repo | **≤200 ms** | the above plus the collection, marker and hashing calls — all inside the same process |
 
-If a measured figure exceeds its budget, the number gets recorded and the budget revised; it does not
-get quietly dropped.
+⚠️ **Two `python3` starts is still the ceiling after ADR 0026, and the four figures above are still
+unmeasured.** The merge removed a *possible third* start, not one of these two: the classifier was
+already the second, and it is now an import inside it. ADR 0026's "process starts should go down"
+is an expectation about an implementation that does not exist — **re-measure all four against real
+code, and never revise a row from that prediction.** If a measured figure exceeds its budget, the
+number gets recorded and the budget revised; it does not get quietly dropped.
+
+The row that most deserves scepticism is the last one: it now carries marker reads and `hash-object`
+calls that revision 13 would have paid for in a separate process, so it may move in *either* direction.
 
 ## Scenarios
 
@@ -895,13 +1033,19 @@ Scenario: a repo that has not installed the writer is never gated
    Then the hook exits 0
    # global registration without this check would lock out every such repo
 
-Scenario: a missing classifier cannot block a repo that has not opted in
-  Given hooks/lib/classify-commit-command.py has been deleted or corrupted
+Scenario Outline: a missing Python component cannot block a repo that has not opted in
+  Given <file> has been deleted or corrupted
     And the payload cwd is a repo with no hooks/lib/write-test-marker.py
    When "git commit -m msg" runs there
    Then the hook exits 0
-   # the writer-installed check precedes the classifier, so a broken new file this
-   # feature adds cannot become a machine-global lockout
+   Examples:
+     | file                                  |
+     | hooks/lib/decide-commit-gate.py       |
+     | hooks/lib/classify-commit-command.py  |
+   # the writer-installed check precedes the decision call, so neither new file this
+   # feature adds can become a machine-global lockout. both rows, because the two
+   # files fail at different doors in an adopting repo and a single row would leave
+   # the other one's inertness asserted only by argument
 
 Scenario: an unreadable payload is not a machine-global block
   Given a PreToolUse payload that is not valid JSON, or carries no cwd
@@ -1070,12 +1214,23 @@ Scenario: a commit aimed at another repo cannot be verified, so it blocks
    # folding this trigger into UNSUPPORTED changed the message, never the refusal; reading
    # another repo's markers is the worst failure this gate has
 
-Scenario: a missing classifier blocks in a repo that HAS opted in
+Scenario: a missing entry point blocks in a repo that HAS opted in
   Given the repo has hooks/lib/write-test-marker.py installed
-    And hooks/lib/classify-commit-command.py has been deleted
+    And hooks/lib/decide-commit-gate.py has been deleted
    When "git commit -m msg" runs
    Then the hook exits 2 with MSG_CLASSIFIER_MISSING
    # the same broken file that is harmless in a non-adopting repo must still fail closed here
+
+Scenario: a missing classifier blocks at a DIFFERENT door in a repo that HAS opted in
+  Given the repo has hooks/lib/write-test-marker.py installed
+    And hooks/lib/classify-commit-command.py has been deleted
+   When "git commit -m msg" runs
+   Then the hook exits 2 with MSG_CLASSIFIER_FAILED
+   # not MSG_CLASSIFIER_MISSING: bash's test -r at node CM sees only the entry point,
+   # which is present. the import raises inside it and the process exits non-zero.
+   # asserting this pair separately is what keeps node CM's reach honest -- through
+   # revision 13 there was one file and one door, and merging the two assertions
+   # would hide which file the gate can actually see
 ```
 
 ### Edges
@@ -1092,10 +1247,20 @@ Scenario: a git failure is never read as "nothing to check"
    When "git commit -m msg" runs
    Then the hook exits 2 with MSG_GIT_FAILED
 
-Scenario: a classifier that answers with the wrong shape fails closed
-  Given classify-commit-command.py prints valid JSON whose "v" is not 1
+Scenario: a decision call that answers with the wrong shape fails closed
+  Given decide-commit-gate.py prints a line whose third field is empty
    When the hook runs
    Then it exits 2 with MSG_CLASSIFIER_BAD_OUTPUT
+   # the empty field is the shape this one asserts because it is the only malformed
+   # line bash could otherwise read as well-formed: `read` collapses the gap and the
+   # pair arrives in the door variable
+
+Scenario: a door this version of the gate does not know fails closed
+  Given decide-commit-gate.py names MSG_FROM_A_LATER_VERSION in field 2
+   When the hook runs
+   Then it exits 2 with MSG_CLASSIFIER_BAD_OUTPUT
+   # the `case` that prints the message is the domain check; an unmatched constant and
+   # a corrupt line are the same failure, so they share a door
 
 Scenario: an exemption reason carrying control characters is rejected
   Given the command sets TEST_EXEMPT to a value containing a newline
@@ -1108,23 +1273,61 @@ Scenario: an exemption reason carrying invisible or bidirectional characters is 
   Given the command sets TEST_EXEMPT to "routine cleanup" with U+202E embedded
    When the hook runs
    Then it exits 2 with MSG_BAD_EXEMPT
-   # same for U+200B and U+200D; [[:print:]] admits none of them under either locale.
-   # this scenario is the regression test for revision 11 — the previous regex could not
-   # have distinguished them, because it did not compile
+   # same for U+200B and U+200D: none of them encode to bytes inside 0x20-0x7E, so the
+   # byte-range check refuses them with no locale involved. this scenario is the regression
+   # test for revision 11 — the previous regex could not have distinguished them, because
+   # it did not compile
 
 Scenario: an ordinary ASCII exemption reason is accepted under a UTF-8 login locale
   Given hooks/foo.sh is staged with no marker
     And the invoking shell has LANG=en_US.UTF-8
    When "TEST_EXEMPT=vendored upstream git commit -m msg" runs
    Then the hook exits 0
-   # the hook pins LC_ALL=C for the comparison, so the caller's locale cannot change the verdict.
-   # asserted explicitly because the pin is invisible at the call site
+   # the check matches bytes against 0x20-0x7E, so no locale is consulted and the caller's
+   # cannot change the verdict. asserted explicitly because that independence is invisible
+   # at the call site — and because revisions 11-13 reached it by pinning a locale instead,
+   # a mechanism this scenario must keep passing without
 
 Scenario: an over-long exemption reason is rejected, not truncated
   Given the command sets TEST_EXEMPT to a 201-character value
    When the hook runs
    Then it exits 2 with MSG_BAD_EXEMPT
-   # 201 bytes, not characters: LC_ALL=C makes the bound byte-counted
+   # 201 bytes, not characters: the bound is counted on the utf-8 encoding, so a 150-char
+   # accented reason is over the bound at 300 bytes as well as outside the byte range
+
+Scenario: a non-ASCII exemption reason is rejected, and the cost is asserted not just disclosed
+  Given the command sets TEST_EXEMPT to "café upstream"
+   When the hook runs
+   Then it exits 2 with MSG_BAD_EXEMPT
+   # measured on Python 3.9.6: the byte range 0x20-0x7E excludes every byte of a utf-8
+   # accented letter. revisions 11-13 stated this cost in prose and asserted nothing, so
+   # a later "fix" widening the class would have passed the whole suite
+
+Scenario: an exemption reason containing a backslash reaches the log intact
+  Given hooks/foo.sh is staged with no marker
+   When "TEST_EXEMPT=vendored \upstream fix git commit -m msg" runs
+   Then the hook exits 0
+    And field 3 of the appended log line is exactly: vendored \upstream fix
+   # this is the enforcing case for the `read -r` pin in §3. without -r bash eats the
+   # backslash (measured), and every positive assertion in the suite still passes --
+   # the reason is merely wrong in the one record anyone would later audit
+
+Scenario: a classifier answering with a null form fails closed, not open
+  Given classify-commit-command.py returns form None for a COMMIT
+   When "git commit -m msg" runs in an adopting repo
+   Then the hook exits 2 with MSG_CLASSIFIER_FAILED
+   # the enforcing case for §3's no-default-allow rule. an entry point whose form
+   # dispatch ends in `else: allow` passes every other scenario in this file and ships
+   # a gate that a half-upgraded classifier switches off
+
+Scenario: a pathspec operand containing a space and a semicolon is one path
+  Given hooks/foo bar.sh is staged with a valid marker
+   When "git commit -m msg -- 'hooks/foo bar.sh'" runs
+   Then the hook exits 0
+   # the enforcing case for the argument-list rule in §Which paths: subprocess.run with a
+   # list never re-lexes an operand. with shell=True this collects two nonexistent paths,
+   # and the failure mode is a git error read as MSG_GIT_FAILED -- a block, so it fails
+   # closed, but on a commit that was always legitimate
 
 Scenario: an empty exemption is not an exemption
   Given hooks/foo.sh is staged with no marker
@@ -1223,8 +1426,8 @@ Scenario: a Bash payload with nothing runnable and no commit anywhere is allowed
    Then it exits 0
    # nothing in it can commit; paying python3 to confirm that would tax every Bash call
 
-Scenario: a classifier that cannot read the payload is not confused with a broken one
-  Given classify-commit-command.py exits 3
+Scenario: a decision call that cannot read the payload is not confused with a broken one
+  Given decide-commit-gate.py exits 3
    When the hook runs
    Then it exits 2 with MSG_BAD_PAYLOAD and not MSG_CLASSIFIER_FAILED
    # the hook already parsed the same bytes for cwd, so exit 3 here means two reads of one
@@ -1251,8 +1454,9 @@ Scenario: a payload that mentions commit without being one is fully classified a
    When the hook runs
    Then the classifier reports kind OTHER with form NONE, and the hook exits 0
    # the substring pre-filter cannot rule this out, so the contract must define every field for
-   # a non-commit; form NONE is a value, and a classifier emitting null here would trip
-   # MSG_CLASSIFIER_BAD_OUTPUT on the commonest input the gate sees
+   # a non-commit; form NONE is a value, and a classifier emitting null here trips
+   # MSG_CLASSIFIER_FAILED on the commonest input the gate sees -- see §3's no-default-allow
+   # rule. it was MSG_CLASSIFIER_BAD_OUTPUT through revision 13, when this crossed a wire
 
 Scenario: a malformed TEST_EXEMPT on a non-commit does not block
   Given a Bash payload that sets TEST_EXEMPT to a value containing a newline
@@ -1287,7 +1491,8 @@ Scoped honestly, because RUN 4 and RUN 5 both caught this hook family overclaimi
 header.
 
 **These block:** missing or unusable `python3`; a missing, empty, truncated, unreadable, or
-wrong-output classifier; a classifier that cannot read a payload the hook already parsed; a malformed
+wrong-output decision call, **and a classifier module it cannot import**; a decision call that cannot
+read a payload the hook already parsed; a malformed
 or over-long `TEST_EXEMPT` value; **every `UNSUPPORTED` trigger — a `cd`/`-C`/`--git-dir`/`--work-tree`
 commit, `-i`/`--include`, `--pathspec-from-file`, `-p`/`--patch`, `--interactive`, and any option
 outside the whitelist**; **a non-zero exit from any git command the gate runs except the four whose
@@ -1327,13 +1532,13 @@ literally true instead of approximately true.
 
 | # | constant | fires when |
 |---|---|---|
-| 1 | `MSG_BAD_PAYLOAD` | the classifier exits **3** — it cannot read a payload the hook already parsed |
+| 1 | `MSG_BAD_PAYLOAD` | the decision call exits **3** — it cannot read a payload bash already parsed |
 | 2 | `MSG_NOTHING_RUNNABLE` | `Bash` payload with no runnable command |
 | 3 | `MSG_NO_PYTHON` | `python3` missing or not executable — **the only machine-global door** |
-| 4 | `MSG_CLASSIFIER_MISSING` | the classifier file is absent or unreadable |
-| 5 | `MSG_CLASSIFIER_FAILED` | the classifier exits non-zero **other than 3**, or exits 0 printing nothing |
-| 6 | `MSG_CLASSIFIER_BAD_OUTPUT` | output is not one JSON object passing every field check |
-| 7 | `MSG_BAD_EXEMPT` | a non-empty `TEST_EXEMPT` fails `^[[:print:]]{1,200}$` under `LC_ALL=C` |
+| 4 | `MSG_CLASSIFIER_MISSING` | the decision entry point is absent or unreadable (bash's `test -r`, node `CM`) |
+| 5 | `MSG_CLASSIFIER_FAILED` | the decision call exits non-zero **other than 3**, or exits 0 printing nothing — **including a failed import of the classifier module**, which node `CM` cannot see |
+| 6 | `MSG_CLASSIFIER_BAD_OUTPUT` | the TSV line fails the shape check, **or** names a door in field 2 that this version of the gate has no `case` arm for |
+| 7 | `MSG_BAD_EXEMPT` | a non-empty `TEST_EXEMPT` is not 1–200 bytes of `0x20`–`0x7E` (checked in Python, §3) |
 | 8 | `MSG_UNSUPPORTED_FORM` | `form: UNSUPPORTED`. **The message names which trigger fired** — foreign repo, `-i`/`--pathspec-from-file`, `-p`/`--interactive`, or an off-whitelist option — because the remedies differ even though the refusal does not |
 | 9 | `MSG_GIT_FAILED` | an unexpected non-zero exit from a collection or hashing command |
 | 10 | `MSG_NO_MARKER` | a pair is in the path set with no marker file |
@@ -1341,8 +1546,12 @@ literally true instead of approximately true.
 | 12 | `MSG_STALE_SUBJECT` | the marker is valid but the subject blob does not match |
 | 13 | `MSG_STALE_TEST` | the marker is valid but the test blob does not match, or the test is ABSENT |
 
+**Five doors are bash's, eight are the decision call's, and no door is both** — the split is stated
+once, in §3 → "The thirteen doors partition across the boundary". Rows 3, 4, 1, 5 and 6 are bash's:
+each is a statement *about* the decision call, which is why the call itself cannot report them.
+
 **Each row names its trigger, and no row restates a rule specified elsewhere.** Rows 1 and 5 partition
-the classifier's exit codes and are the *only* place that mapping appears. Row 8's trigger is
+the decision call's exit codes and are the *only* place that mapping appears. Row 8's trigger is
 `form: UNSUPPORTED`, so adding a trigger to that door is a change to the resolution table, not to this
 one. **Anything a reviewer would otherwise have to keep in sync by hand lives in exactly one table,
 with the others pointing at it.**
@@ -1359,7 +1568,11 @@ command; a non-`COMMIT` command; a valid `TEST_EXEMPT`; `INVALID`; a path set co
 the happy path where every blob matches. **The scope cut removed no allow path**: deferring the log
 changed what an exemption *records*, never that it allows.
 
-**Mutation floor: 24** — one per door (13), one per allow path (10), plus emptying the classifier. A
+**Mutation floor: 25** — one per door (13), one per allow path (10), plus **two** component mutants,
+one per Python file: emptying the **entry point** (exit 0, no output → `MSG_CLASSIFIER_FAILED`) and
+emptying the **classifier** (the import succeeds, the call raises → `MSG_CLASSIFIER_FAILED`). It was 24
+through revision 13, when there was one file; the two mutants reach the same door by different routes,
+and a suite that only ever empties one of them never exercises the import path ADR 0026 introduced. A
 two-mutant minimum against thirteen doors establishes nothing about the other eleven.
 
 `MSG_NO_MARKER`'s remedy string is derived from the suite path and its extension — `bash <path>` for
@@ -1455,10 +1668,12 @@ awk -F'\t' '$2=="BLOCK" {print $3}' "$LOG" | sort | uniq -c
 `BLOCK`, which is the entire question. Both commands above depend on the `printf` pin: they are
 correct only against a log whose separator is a real tab, and **both fail silently rather than loudly
 if it is not** (see the write pin above). Given a real tab, `cut -f2` and `awk -F'\t'` are then safe
-because `[[:print:]]` admits no control character, so no reason string can contain a tab or newline
-and forge an extra field or line. That exclusion is load-bearing for the log's
+because the exemption check admits only bytes `0x20`–`0x7E`, so no reason string can contain a tab or
+newline and forge an extra field or line. That exclusion is load-bearing for the log's
 parseability, not only for its display — and until revision 11 it was resting on a regex that never
-compiled, so the property was asserted rather than enforced.
+compiled, so the property was asserted rather than enforced. **It is the same exclusion that keeps the
+TSV line in §3 parseable**, which is why the check has to be the byte-range one in both places rather
+than two spellings that agree today.
 
 **What this log is, and is not — the storage decision, made explicitly.** It is **machine-local**:
 `/hooks/state/` is gitignored at `.gitignore:17`, so the log is never committed, never shared, and
@@ -1484,15 +1699,20 @@ never survives a fresh clone. That is deliberate:
 > engine.** Revisions 1–10 disclosed this as an open user decision — that `^[^\x00-\x1f\x7f]{1,200}$`
 > blocked tab and newline but admitted U+200B, U+200D and U+202E (right-to-left override), so a reason
 > reading `routine cleanup` in a terminal could carry hidden content. That was verified by running the
-> regex **in Python**, where `\x00` is an escape. The gate is `hooks/test-marker-guard.sh`, which is
-> **bash**, where it is not one — so the finding described a regex that was never the one running. See
-> the node-`H` note above for what the specified regex actually did in bash.
+> regex **in Python**, where `\x00` is an escape. The gate was `hooks/test-marker-guard.sh`, which is
+> **bash**, where it is not one — so the finding described a regex that was never the one running.
+> ⚠️ Read that twice against revision 14, which moved this check **into Python**: the engine the
+> original finding assumed is now the engine that runs, and the finding was *still* wrong at the time,
+> because what matters is which interpreter the artifact meets — not which one is more familiar.
 >
-> The replacement settles the question rather than deferring it. Measured on bash 3.2.57 under both
-> `LC_ALL=C` and `en_US.UTF-8`, `^[[:print:]]{1,200}$` **rejects U+200B, U+200D and U+202E in both** —
-> zero-width and bidi characters are not printable under either classification — while admitting
-> `routine cleanup`. The pin to `C` is not what closes this gap; it settles the one row that did differ
-> between the two locales, accented letters. **No dependency on `hooks/scan-invisible-unicode.sh` is
+> **Still closed after revision 14, and re-measured against the engine that now runs it.** The check
+> moved into Python with ADR 0026, so the bash measurement that closed this no longer describes the
+> artifact — re-running it is the point, not a formality. Measured on Python 3.9.6,
+> `re.compile(rb"^[ -~]{1,200}$")` against the utf-8 encoding **rejects U+200B, U+200D and U+202E**
+> (each encodes to three bytes, none inside `0x20`–`0x7E`) while admitting `routine cleanup`. The
+> closure is now structural rather than classification-dependent: there is no locale and no character
+> class to disagree about, and the one row that ever differed between locales — accented letters —
+> falls out as rejected, which is the cost revision 11 accepted. **No dependency on `hooks/scan-invisible-unicode.sh` is
 > taken**, which matters because that hook is one of the four `rules/gates.md` lists as existing,
 > passing its tests, and **not registered in `settings.json`** — routing a live door through a dormant
 > control would have made this feature depend on wiring that is still open work.
@@ -1601,23 +1821,31 @@ reason this row is a pin and not a footnote.
   path. A hook tested only through its CLI path is a bug that has already shipped in this repo. Covers
   every `form` row against a real commit, not a simulated one, the inert-repo allow, **each of the four
   `UNSUPPORTED` triggers asserted by the trigger its message names**, **and the ordering itself: a repo
-  with no writer must allow with the classifier deleted, while the same deletion in an adopting repo
-  must block.** An ordering asserted only by reading the flowchart is not asserted.
+  with no writer must allow with either Python file deleted, while the same deletion in an adopting
+  repo must block — at `MSG_CLASSIFIER_MISSING` for the entry point and `MSG_CLASSIFIER_FAILED` for the
+  classifier.** An ordering asserted only by reading the flowchart is not asserted.
 - `hooks/lib/write-test-marker.test.py` — sibling derivation, `--full-name` normalisation from a
   subdirectory, the no-subject skip, atomic write, schema, file mode, failure exits. **The two
   repo-level inventory assertions are added at task 8**, not here at task 4, because until the 11
   pre-existing suites are wired the wiring assertion is legitimately red.
-- `hooks/lib/classify-commit-command.test.py` — direct unit assertions on the JSON contract: **one
+- `hooks/lib/classify-commit-command.test.py` — direct unit assertions on the **in-process** contract
+  (the module is loaded with `importlib.util.spec_from_file_location`, as
+  `classify-git-command.test.py:18` already does — the hyphen makes a plain `import` a SyntaxError):
+  **one
   case per grammar row G1-G9**, bundle decomposition with both attached and detached values, every
   value-taking flag in both groups, `--opt=value`, a `--` inside a value, every `form` including
   `NONE`, **every `UNSUPPORTED` trigger separately** (foreign-repo, `-i`, `--pathspec-from-file`,
   `-p`, `--interactive`, off-whitelist), `--amend`, the **unsanitised** `exempt` passthrough,
-  exit 3 for an unreadable payload, and the accepted-open shapes, so closing one later is a conscious
+  and the accepted-open shapes, so closing one later is a conscious
   decision with a failing test rather than drift. **Every cell of the `kind` × field totality matrix
-  gets its own assertion** — 18 cells, not just the `COMMIT` column. **This suite is where the two
+  gets its own assertion** — 15 cells, not just the `COMMIT` column. **This suite is where the two
   measured fail-opens are pinned; if any single file in this feature deserves over-testing, it is
-  this one.**
-- **Mutation check before the PR:** the 24 above.
+  this one.** Exit 3 is **not** asserted here: it belongs to the entry point, which owns stdin.
+- `hooks/lib/decide-commit-gate.py` has **no unit suite of its own**, deliberately. It is exercised
+  end-to-end by `test-marker-guard.test.sh`, which drives real commits, and at the TSV boundary by that
+  suite's stubs. A second suite asserting the same TSV line from the other side would be two artifacts
+  describing one contract, and the pair would drift.
+- **Mutation check before the PR:** the 25 above.
 
 ## Checklist
 
@@ -1635,10 +1863,13 @@ reason this row is a pin and not a footnote.
       fixes**, including a command firing two triggers at once, `--amend`, raw `exempt` passthrough,
       **each `UNSUPPORTED` trigger asserted separately so the fold cannot silently drop one**, exit 3,
       ignored and genuinely accepted-open shapes (alias and variable indirection only),
-      **and all 18 cells of the `kind` × field totality matrix**. ⚠️ The grammar's rule 2 is
+      **and all 15 cells of the `kind` × field totality matrix** — 15, not the 18 revisions 1–13 said:
+      revision 14 deleted the `v` sentinel row (§3). ⚠️ The grammar's rule 2 is
       user-waived and unresolved — see the callout in §"The command grammar". Do not encode rule 2
       literally; this task is blocked on the shared-lexer decision landing in `shell_segments.py`.
-- [ ] 3. Green: `hooks/lib/classify-commit-command.py`.
+- [ ] 3. Green: `hooks/lib/classify-commit-command.py` — **classification only, no I/O**. It is
+      imported, not executed: the entry point in task 7 owns stdin, the git calls, the markers and the
+      TSV line. A classifier that reads a payload or prints anything is the pre-ADR-0026 design.
 - [ ] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
       schema, mode, failure exits. **No inventory assertion yet** — see task 8.
 - [ ] 5. Green: `hooks/lib/write-test-marker.py`.
@@ -1662,7 +1893,20 @@ reason this row is a pin and not a footnote.
       at `0644`, run the gate, assert it ends `0600`. **Set the umask explicitly in both**: the mode
       `>>` produces depends on it, so a suite inheriting a `0077` umask passes while the defect is
       live — the same shape as asserting only the winning ordering above.
-- [ ] 7. Green: `hooks/test-marker-guard.sh`.
+      **Plus the TSV boundary itself** (revision 14), which no scenario reaches through a real commit
+      and which is the whole surface ADR 0026 created. Stub the entry point and assert
+      `MSG_CLASSIFIER_BAD_OUTPUT` for each malformed shape separately: two lines; three fields; five
+      fields; a genuinely **empty** field 3 — the case that proves the `-` rule, since without it
+      `read` collapses the gap and the pair lands in the wrong variable; an unknown `MSG_*` in
+      field 2; and an out-of-domain field 1. Then the two component mutants of the mutation floor:
+      an emptied entry point and an emptied classifier, which reach `MSG_CLASSIFIER_FAILED` by
+      different routes. A suite that only ever sees well-formed lines asserts nothing about the check
+      that reads them.
+- [ ] 7. Green: `hooks/test-marker-guard.sh` **and `hooks/lib/decide-commit-gate.py`** — the bash
+      wrapper and the decision call are one behaviour split across two files by ADR 0026, and neither
+      passes task 6 alone. ⚠️ **Task 3 is a third revert partner**: the entry point imports the
+      classifier, so reverting 3 without 7 leaves every commit in an adopting repo on
+      `MSG_CLASSIFIER_FAILED`. See the revert-pair table under task 13.
 - [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
       this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
       `MARKER_ROOT` captured at the top, before any chdir, both absolute; the writer run with
@@ -1675,7 +1919,7 @@ reason this row is a pin and not a footnote.
       5 without 8 leaves 14 suites calling a deleted file. Reverting 8 alone is safe; it only disarms
       the wiring. See the revert-pair table under task 13 — **task 7 is half of the second pair**, and
       reverting it alone stops being harmless the moment task 13 lands.
-- [ ] 9. Mutation check — the **24**-mutant floor (13 doors, 10 allow paths, emptied classifier);
+- [ ] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
       record the result in the checklist annotation. Re-derive the count from the flowchart before
       running it rather than trusting this number: revision 8 changed it, and a floor inherited from a
       superseded revision is the failure this line exists to prevent.
@@ -1703,6 +1947,7 @@ reason this row is a pin and not a footnote.
       | pair | revert order | leaving one half behind costs |
       |---|---|---|
       | 5 ↔ 8 | 8 then 5 | 14 suites call a deleted writer |
+      | 3 ↔ 7 | 7 then 3 | the entry point imports a deleted classifier — every commit in an adopting repo blocks on `MSG_CLASSIFIER_FAILED` |
       | 7 ↔ 13 | **13 then 7** | **every Bash call in the session is blocked** |
 - [ ] 14. **First-arming check — the only proof v1 has that the gate is armed.** With `--status`
       deferred there is no query path, so this runs against the *installed* hook: pipe a real
@@ -1761,6 +2006,7 @@ reason this row is a pin and not a footnote.
   | revision 12 | round-4 fail closed: pin mechanism stated, task 14 gains its positive path | 1,652 |
   | revision 13 | round-5 advisories: `printf` pin, state-dir race, task 6/14 assertions by field | 1,721 |
   | revision 14 (partial) | round-6 items 2–5 only: log-file `0600`, `os.makedirs` twin, encode order, tool pins | 1,833 |
+  | revision 14 (complete) | ADR 0026 applied: the TSV decision contract, the Python exemption check, 6 new scenarios | *see below* |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
@@ -1789,17 +2035,23 @@ reason this row is a pin and not a footnote.
   | prose | 785 |
 
   Re-run at revision 14 (partial), from the same command: **total 1,833, non-prose floor 912, prose
-  921** — the floor moved up another 45 while item 1 of that revision is still unapplied, so the
-  paragraph below understates the case rather than overstating it. ⚠️ Fourth instance of the trap this
-  callout warns about, and it took **two** corrections: 1,832/910/922, then 1,831/912/919, each
-  measured one edit before the edit that recorded it. Verify against the commit, not against this line.
+  921**. ⚠️ Fourth instance of the trap this callout warns about, and it took **two** corrections:
+  1,832/910/922, then 1,831/912/919, each measured one edit before the edit that recorded it.
+
+  **Revision 14 complete — the numbers this row is committed with were read back from the staged
+  blob, not from the working tree:** total **2,085**, non-prose floor **1,070**, prose **1,015**,
+  across **64** scenarios. ⚠️ **Fifth and sixth instances, caught by the procedure rather than by a
+  later round:** written as 2,078/1,068/1,010 from the working tree, then as 2,084/1,070/1,014 — each
+  time the paragraph recording the number was itself the edit that changed it. Measure, write, `git add`, re-run against `git show :<path>`, refuse to
+  commit while the two disagree. Verify against the commit, not against this line.
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **867**, so **deleting
-  every line of prose in this file still leaves it over the ceiling.** The prose budget for an
-  800-line version is **negative 67**. This is no longer "800 is hard to reach"; it is arithmetically
-  unreachable while the spec keeps 58 acceptance scenarios and its contract tables, and cutting those
-  is what the user rejected when choosing the scope cut, and rejected again when restoring the log.
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,070**, so
+  **deleting every line of prose in this file still leaves it 270 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 270**, up from negative 67 at revision 12. This is no
+  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 64 acceptance
+  scenarios and its contract tables, and cutting those is what the user rejected when choosing the
+  scope cut, and rejected again when restoring the log.
 
   **Resolved 2026-08-13: the constraint that gives is the ceiling.** Three constraints — under 800, do
   not split, seek no waiver — were jointly unsatisfiable at this feature's scope, measured twice rather
