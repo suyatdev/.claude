@@ -6650,3 +6650,50 @@ Committed `f0e2405` (test file + feature-file checklist update together, satisfy
 Next is checklist step 8 — write ADR 0026, including the rebase-replay residual hole — then step 9
 (`rules/gates.md` stubs) and step 10 (observability judge, then the already-open PR #52; the verdict
 must stay uncommitted until the PR is open since `judge-guard` compares `head_sha` to HEAD).
+
+## 2026-08-13 — session 65: git-guard-detached-head, checklist steps 8–10 — ADR 0026, gates.md, the judge, PR #52 closed out
+
+Restored on the same branch, `a605192` clean, matching the handoff. Context-handoff-watch fired at
+~92k tokens purely from restore overhead (handoff + 808-line feature file + two reference ADRs), before
+any work began — same pattern session 64 hit, and `CODING_MEMORY.md`'s own record of that precedent is
+what made this session's choice easy: asked, user chose to continue rather than clear.
+
+**Step 8 — ADR 0026** (`docs/decisions/0026-symbolic-ref-not-abbrev-ref-names-the-branch.md`). Before
+writing any claim down, re-verified rather than trusted the spec's prose: re-ran the suite (108/0,
+confirmed `git diff hooks/git-guard.sh` empty against HEAD), and independently re-derived the residual-
+hole claim straight from `classify-git-command.py` (`subcommand ==` appears exactly twice in 198
+lines — `"commit"` and `"push"` — so `merge`/`cherry-pick`/`revert`/`am`/`rebase` provably raise no
+`COMMIT` fact) rather than copying the feature file's version of it. Also re-verified the `git branch
+HEAD` collision claim independently (`fatal: 'HEAD' is not a valid branch name`) instead of citing it
+unchecked. Diagram validated with `diagramming-technical-docs`'s `validate-diagrams.sh` (1 block, 0
+failed) before shipping.
+
+**Step 9 — `rules/gates.md` stubs.** Updated the Default-branch-safety and Force-push-safety stubs
+(the project copy, not the user's global `~/.claude/rules/gates.md`) to state the new fail-closed
+behavior on a detached HEAD / outside a repository, and the sequencer carve-out exception, pointing at
+ADR 0026. Committed both docs changes together (`a478186`).
+
+**Step 10 — observability judge, then PR.** Dispatched via `dispatching-pane-agents` (judges are
+hook-routed to a pane, not in-process). Verdict: **risk=medium, confidence=high**, all ten dimensions
+pass except `checkpoint` (concern) — it flagged the open compliance gate, an uncommitted `phase:
+review` edit sitting on the judged commit, and a stale checklist checkbox (item 1, "cut the branch",
+never ticked across 8 prior sessions despite the branch clearly existing). Fixed the checkbox on
+verified current state (not a reconstructed historical claim): confirmed the branch is 8 commits behind
+a freshly fetched `origin/main`, with zero file overlap against this branch's own changes outside the
+two append-only logs. Committed the verdict artifacts + phase flip + checklist fix together (`6b86db6`)
+— safe to commit immediately rather than waiting, since PR #52 was already open from an earlier session
+and `judge-guard` only gates `gh pr create`, which was never re-invoked.
+
+PR #52's description was fully stale (written before the fix had landed — draft banner, "89 passed, 7
+failed"). Rewrote it end to end against the template (what/why/related/screenshots/testing/risk) to
+reflect the actual landed state, and marked it ready for review — both done only after explicit user
+confirmation, since editing and un-drafting a PR are actions visible to others. Added a `## Verification`
+section to the feature file summarizing tests/judge/gate/PR state, committed and pushed (`ad9fb15`).
+
+**All 10 checklist items are now checked.** The branch's active development is done; what remains is
+human review and merge. The compliance gate stays open by the same 2026-08-10 user decision recorded
+in the feature file's "Gate record" — not revisited or silently waived this session.
+
+Also mishandled `ScheduleWakeup` once — it's a `/loop`-only tool, not a general "wait for a background
+Bash task" mechanism; called it by mistake while waiting on the judge, caught it before it did anything
+useful, and cancelled it. The background task's own completion notification was what actually mattered.
