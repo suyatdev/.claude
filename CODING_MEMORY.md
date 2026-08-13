@@ -6970,3 +6970,50 @@ before `superpowers:writing-plans`, not before the user's own review.
 
 Size after revision 10: **1,576**, non-prose floor **834**, prose budget for an 800-line file
 **negative 34**. Fifth consecutive re-measurement, fifth move upward.
+
+## 2026-08-13 — marker-gate revision 11: the exemption regex was Python syntax in a bash gate
+
+**The open decision was answered against the wrong engine, and the defect underneath it was worse than
+the one being disclosed.**
+
+Revisions 1–10 carried `^[^\x00-\x1f\x7f]{1,200}$` as the `TEST_EXEMPT` validation regex, with a
+disclosed open question: it blocks tab and newline but admits U+200B, U+200D and U+202E. That
+disclosure was verified by running the regex — **in Python**, where `\xNN` is an escape. The gate that
+runs it, `hooks/test-marker-guard.sh` (spec line 168), is **bash**, where it is not.
+
+Measured on bash 3.2.57, not read:
+
+```
+re='^[^\x00-\x1f\x7f]{1,200}$'; [[ "vendored upstream" =~ $re ]]; echo $?
+2      # regcomp failure — distinct from 1/no-match
+```
+
+- `[[ ]]` reads a non-zero exit as false, so **`MSG_BAD_EXEMPT` fired on every exemption**. The escape
+  hatch was inert in every revision that specified it.
+- Dropping `{1,200}` makes it compile and still reject every ordinary reason (lower, UPPER, digits) —
+  the bracket set is not remotely what the spec claimed.
+- The scenario "an explicit exemption is honoured and logged to a file" **could not have passed**.
+- The log-integrity argument ("the regex excludes `\x00-\x1f`, so no reason can forge a field") was
+  resting on a regex that never evaluated anything.
+
+**Fix, user-chosen: `^[[:print:]]{1,200}$` evaluated under a pinned `LC_ALL=C`.** Measured under both
+`LC_ALL=C` and `en_US.UTF-8`: admits `routine cleanup`, rejects tab, newline, U+200B, U+200D and
+U+202E **in both**. Accented letters were the only locale-variant row (admitted under UTF-8, rejected
+under C) — which is what the pin settles, and it makes the `1,200` bound byte-counted. The disclosed
+Unicode gap therefore closed as a side effect, taking **no** dependency on the dormant
+`hooks/scan-invisible-unicode.sh`.
+
+Two regression scenarios shipped in the same edit as the control (58 scenarios now, was 56): U+202E
+rejected, and an ASCII reason accepted under a UTF-8 login locale — the second because the pin is
+invisible at the call site.
+
+**Composition re-derived at revision 11** (structure final → measure → swap digits only; re-measured
+after the swap and every figure matched): total **1,614**, Gherkin 387, table rows 137, code 79, blank
+252, **non-prose floor 855**, prose 759. The floor moved 834 → **855**, so the 800 ceiling is more
+decisively unreachable than when the waiver was recorded — the waiver's arithmetic basis strengthened,
+it did not need revisiting.
+
+**Method note worth keeping: a verification is only as good as the engine it ran in.** The prior
+session did run the regex rather than eyeball it, and still got the wrong answer, because it ran it in
+the language the regex was *written in* rather than the one that would *execute* it. Ask which
+interpreter the artifact will meet in production before trusting the probe.

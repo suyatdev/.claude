@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 10
-revision_status: complete  # round 3 compliance PASS; round-3 observability advisories applied
+revision: 11
+revision_status: complete  # exemption regex was Python syntax in a bash gate; repaired + locale-pinned
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -424,9 +424,23 @@ read-side validation of the classifier's output is specified:
    strings, `exempt` a string. Anything else → `MSG_CLASSIFIER_BAD_OUTPUT` → block. This check never
    inspects the *content* of `exempt`.
 2. **Exemption validity, at node `H`, only once `kind == COMMIT`:** a non-empty `exempt` must match
-   `^[^\x00-\x1f\x7f]{1,200}$`, else **`MSG_BAD_EXEMPT`** — its own door, because a malformed
-   exemption reason is a user error, not a broken component. Over-length is rejected, never silently
-   truncated: a truncated reason is an unauditable exemption.
+   `^[[:print:]]{1,200}$` **evaluated under `LC_ALL=C`**, else **`MSG_BAD_EXEMPT`** — its own door,
+   because a malformed exemption reason is a user error, not a broken component. Over-length is
+   rejected, never silently truncated: a truncated reason is an unauditable exemption.
+
+   > **The regex is a bash ERE and the locale pin is part of it, not decoration** (revision 11).
+   > Revisions 1–10 specified `^[^\x00-\x1f\x7f]{1,200}$`, which is Python syntax: bash ERE has no
+   > `\xNN` escape. Measured on bash 3.2.57, not read — `[[ "vendored upstream" =~ $re ]]` exits **2**
+   > (regcomp failure, distinct from 1/no-match) for *every* input, and `[[ ]]` reads a non-zero exit
+   > as false, so `MSG_BAD_EXEMPT` fired on every exemption and the escape hatch was inert. Dropping
+   > the `{1,200}` makes it compile and still reject every ordinary reason. The scenario at
+   > "an explicit exemption is honoured and logged to a file" could not have passed as specified.
+   > `[[:print:]]` is the POSIX-defined spelling; the `LC_ALL=C` pin makes the door answer identically
+   > on every machine and makes the `1,200` bound count bytes rather than characters. Its cost, stated
+   > plainly: a reason containing accented or other non-ASCII letters is rejected — under a UTF-8
+   > locale the same class admits them, and the point of pinning is that the gate must not depend on
+   > which of those is in force. Rejection is fail-closed and lands on `MSG_BAD_EXEMPT`, which names
+   > the problem, so the remedy is to rewrite the reason in ASCII.
 
 Putting the regex at step 1 would let `TEST_EXEMPT=$'a\nb' ls` — a non-commit — block the session,
 which is why the order is load-bearing rather than incidental.
@@ -1026,10 +1040,27 @@ Scenario: an exemption reason carrying control characters is rejected
    # the classifier reports the value raw and the hook decides; this door is reachable
    # precisely because the classifier does not strip
 
+Scenario: an exemption reason carrying invisible or bidirectional characters is rejected
+  Given the command sets TEST_EXEMPT to "routine cleanup" with U+202E embedded
+   When the hook runs
+   Then it exits 2 with MSG_BAD_EXEMPT
+   # same for U+200B and U+200D; [[:print:]] admits none of them under either locale.
+   # this scenario is the regression test for revision 11 — the previous regex could not
+   # have distinguished them, because it did not compile
+
+Scenario: an ordinary ASCII exemption reason is accepted under a UTF-8 login locale
+  Given hooks/foo.sh is staged with no marker
+    And the invoking shell has LANG=en_US.UTF-8
+   When "TEST_EXEMPT=vendored upstream git commit -m msg" runs
+   Then the hook exits 0
+   # the hook pins LC_ALL=C for the comparison, so the caller's locale cannot change the verdict.
+   # asserted explicitly because the pin is invisible at the call site
+
 Scenario: an over-long exemption reason is rejected, not truncated
   Given the command sets TEST_EXEMPT to a 201-character value
    When the hook runs
    Then it exits 2 with MSG_BAD_EXEMPT
+   # 201 bytes, not characters: LC_ALL=C makes the bound byte-counted
 
 Scenario: an empty exemption is not an exemption
   Given hooks/foo.sh is staged with no marker
@@ -1238,7 +1269,7 @@ literally true instead of approximately true.
 | 4 | `MSG_CLASSIFIER_MISSING` | the classifier file is absent or unreadable |
 | 5 | `MSG_CLASSIFIER_FAILED` | the classifier exits non-zero **other than 3**, or exits 0 printing nothing |
 | 6 | `MSG_CLASSIFIER_BAD_OUTPUT` | output is not one JSON object passing every field check |
-| 7 | `MSG_BAD_EXEMPT` | a non-empty `TEST_EXEMPT` fails `^[^\x00-\x1f\x7f]{1,200}$` |
+| 7 | `MSG_BAD_EXEMPT` | a non-empty `TEST_EXEMPT` fails `^[[:print:]]{1,200}$` under `LC_ALL=C` |
 | 8 | `MSG_UNSUPPORTED_FORM` | `form: UNSUPPORTED`. **The message names which trigger fired** — foreign repo, `-i`/`--pathspec-from-file`, `-p`/`--interactive`, or an off-whitelist option — because the remedies differ even though the refusal does not |
 | 9 | `MSG_GIT_FAILED` | an unexpected non-zero exit from a collection or hashing command |
 | 10 | `MSG_NO_MARKER` | a pair is in the path set with no marker file |
@@ -1328,9 +1359,10 @@ awk -F'\t' '$2=="BLOCK" {print $3}' "$LOG" | sort | uniq -c
 
 **`wc -l` alone is NOT sufficient and naming it here was an error** — it cannot separate `EXEMPT` from
 `BLOCK`, which is the entire question. The field separator is a literal tab, which is why `cut -f2`
-and `awk -F'\t'` are safe: the `TEST_EXEMPT` validation regex excludes `\x00-\x1f`, so no reason
-string can contain a tab or newline and forge an extra field or line. That exclusion is load-bearing
-for the log's parseability, not only for its display.
+and `awk -F'\t'` are safe: `[[:print:]]` admits no control character, so no reason string can contain
+a tab or newline and forge an extra field or line. That exclusion is load-bearing for the log's
+parseability, not only for its display — and until revision 11 it was resting on a regex that never
+compiled, so the property was asserted rather than enforced.
 
 **What this log is, and is not — the storage decision, made explicitly.** It is **machine-local**:
 `/hooks/state/` is gitignored at `.gitignore:17`, so the log is never committed, never shared, and
@@ -1344,22 +1376,27 @@ never survives a fresh clone. That is deliberate:
   who wants to hide a bypass can delete it. It is instrumentation, not evidence, and any later claim
   that this feature provides an audit trail should be read against this paragraph.
 
-> 🔴 **Open, disclosed rather than decided: the exemption regex admits invisible Unicode.**
-> `^[^\x00-\x1f\x7f]{1,200}$` excludes C0 controls and DEL, so **tab and newline cannot reach the log**
-> and no reason string can forge a field or a line — the property the parsing commands above depend on.
-> It does **not** exclude zero-width or bidirectional characters. Verified by running the regex, not by
-> reading it: U+200B (zero-width space), U+200D (zero-width joiner) and **U+202E (right-to-left
-> override)** all match. A reason reading `routine cleanup` in a terminal can therefore carry hidden
-> content, and U+202E can visually reverse the text that follows it.
+> **Closed in revision 11: the invisible-Unicode question, and why it was asked against the wrong
+> engine.** Revisions 1–10 disclosed this as an open user decision — that `^[^\x00-\x1f\x7f]{1,200}$`
+> blocked tab and newline but admitted U+200B, U+200D and U+202E (right-to-left override), so a reason
+> reading `routine cleanup` in a terminal could carry hidden content. That was verified by running the
+> regex **in Python**, where `\x00` is an escape. The gate is `hooks/test-marker-guard.sh`, which is
+> **bash**, where it is not one — so the finding described a regex that was never the one running. See
+> the node-`H` note above for what the specified regex actually did in bash.
 >
-> **Severity is low and the reason is structural, not reassurance:** the log is `0600`, machine-local,
-> gitignored, and read by the one person who wrote the entry — there is no second party to deceive, and
-> a developer minded to hide a bypass can simply delete the file, as the paragraph above already says.
-> It is disclosed because **this repo owns a control for exactly this class and it is not wired up**:
-> `hooks/scan-invisible-unicode.sh` exists, passes its tests, and is **not registered in
-> `settings.json`** (one of the four dormant hooks `rules/gates.md` lists). Whether to tighten the
-> regex, route the reason through that scanner, or accept the gap **is a user decision this spec does
-> not make** — it is recorded here so the choice is explicit rather than inherited by silence.
+> The replacement settles the question rather than deferring it. Measured on bash 3.2.57 under both
+> `LC_ALL=C` and `en_US.UTF-8`, `^[[:print:]]{1,200}$` **rejects U+200B, U+200D and U+202E in both** —
+> zero-width and bidi characters are not printable under either classification — while admitting
+> `routine cleanup`. The pin to `C` is not what closes this gap; it settles the one row that did differ
+> between the two locales, accented letters. **No dependency on `hooks/scan-invisible-unicode.sh` is
+> taken**, which matters because that hook is one of the four `rules/gates.md` lists as existing,
+> passing its tests, and **not registered in `settings.json`** — routing a live door through a dormant
+> control would have made this feature depend on wiring that is still open work.
+>
+> What does **not** change: the log remains `0600`, machine-local, gitignored, and readable only by
+> whoever wrote the entry, and a developer minded to hide a bypass can still delete the file. The
+> paragraph above is the honest account of what this log is worth; tightening the regex does not
+> upgrade it from instrumentation to evidence.
 
 **Both the log and its parent directory carry explicit modes: `<repo>/hooks/state/` is `0700` and
 `test-marker.log` is `0600`** — identical to the marker store, and for the same core-conduct
@@ -1510,6 +1547,7 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | `17d2379` | revision 9 — round-2 count correction | 1,434 |
   | `9251218` | revision 9 — decision log restored to v1 | 1,539 |
   | revision 10 | round-3 advisory fixes: log read commands, as-of caveat, Unicode disclosure | 1,576 |
+  | revision 11 | exemption regex repaired — Python syntax in a bash gate — plus the locale pin | 1,614 |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
@@ -1526,22 +1564,22 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   echo "total=$tot floor=$((blank+gherkin+tbl+code)) prose=$((tot-blank-gherkin-tbl-code))"
   ```
 
-  Composition **as of revision 9**, from that command:
+  Composition **as of revision 11**, from that command:
 
   | component | lines |
   |---|---|
-  | Gherkin, 56 scenarios | 370 |
-  | contract and measurement table rows | 136 |
+  | Gherkin, 58 scenarios | 387 |
+  | contract and measurement table rows | 137 |
   | code blocks (mermaid, sh, python, json) | 79 |
-  | blank | 249 |
-  | **non-prose floor** | **834** |
-  | prose | 742 |
+  | blank | 252 |
+  | **non-prose floor** | **855** |
+  | prose | 759 |
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **834**, so **deleting
+  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **855**, so **deleting
   every line of prose in this file still leaves it over the ceiling.** The prose budget for an
-  800-line version is **negative 34**. This is no longer "800 is hard to reach"; it is arithmetically
-  unreachable while the spec keeps 56 acceptance scenarios and its contract tables, and cutting those
+  800-line version is **negative 55**. This is no longer "800 is hard to reach"; it is arithmetically
+  unreachable while the spec keeps 58 acceptance scenarios and its contract tables, and cutting those
   is what the user rejected when choosing the scope cut, and rejected again when restoring the log.
 
   **Resolved 2026-08-13: the constraint that gives is the ceiling.** Three constraints — under 800, do
