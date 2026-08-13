@@ -6652,5 +6652,61 @@ this size, not the design, is what five rounds failed on. Deliberately not bundl
 
 **Still open:** `falsify-harness-signatures` (0/11) and `verification-marker-gate` (0/15) both remain
 `phase: planning` / `branch: none`, so **every source write in this repo is still denied** by
-`phase-guard.sh`. The compliance judge has **not** been re-run — the failing 2026-08-04 verdict is still
-the latest on record, and re-judging is the next step.
+`phase-guard.sh`.
+
+## 2026-08-13 — marker-gate round 6 judged: both judges hit the same defect, independently
+
+Both judges were collected at spec blob `a6fa6de1`, HEAD `287add5`. **Compliance: FAIL** (round 1 of the
+re-entry cycle, 2 violations). **Observability: risk=medium**, `stage: architecting`, 4 concerns. Round 6
+did genuinely close all five of round 5's ids — the compliance judge re-derived each from scratch rather
+than trusting the card's own "closed" claims, and specifically could not find the fail-open it was asked
+to hunt for in the asymmetric pairing predicate. **None of round 5's ids recur.**
+
+**The convergence is the finding.** Two judges with different rubrics, dispatched in parallel, both
+landed on the *flowchart's node order* — not on any prose either was pointed at:
+
+- `writing-specs/opt-in-fail-closed-conflict` — §Scope (l.124-134, l.197) and the Fail-closed contract
+  (l.1202-1206) both promise **absolutely** that a repo without the writer installed is never blocked.
+  The flowchart's own nodes NP/CM/CF/CO/C (l.59-71) fire **before** the toplevel-resolution and
+  writer-installed nodes F/G (l.73-76). So doors 1-6 block every commit in every repo on the machine —
+  the exact global lockout opt-in exists to prevent. The doc never reconciles the two claims.
+- Observability, arrived at separately: log **field 4 ("the pair") is undefined for 10 of the 14 doors**,
+  and for `FOREIGN`+`TEST_EXEMPT` it is *unknowable by that door's own definition*. Same root cause —
+  doors that fire before a repo or a pair exists. The log's write-target `<repo>/hooks/state/` is
+  equally undefined there.
+
+**Measured this session, and it splits the violation in two** (`settings.json`, hook sources):
+`git-guard`, `judge-guard`, `merge-guard` are all `PreToolUse`/`Bash` **globally registered** and all
+**fail CLOSED (exit 2) on missing python3** — `hooks/git-guard.sh:53-57`. `doc-guard` alone fails **open**
+(`hooks/doc-guard.sh:54`, `[ -n "$py" ] || exit 0`). Therefore:
+
+- **Door 3 `MSG_NO_PYTHON` is not a new hazard** — a broken `python3` already blocks every commit on this
+  machine today, via three existing hooks, before this feature exists. Precedent, verifiable, accepted.
+- **Doors 1, 4, 5, 6 ARE a new hazard.** They depend on `classify-commit-command.py`, a *new file this
+  feature adds*. git-guard's classifier is a different file (`classify-git-command.py`), so no existing
+  precedent covers them. A missing or corrupt new classifier would be a machine-global lockout that does
+  not exist today.
+
+**Fix direction (not yet applied, not yet judged):** read the payload's `cwd` with an inline `python3`
+JSON read — exactly the shape `git-guard.sh:59-65` already uses — then resolve toplevel and check
+writer-installed *before* invoking the classifier. That moves doors 1, 4, 5, 6 behind the opt-in check,
+leaves only door 3 machine-global (where precedent covers it), and simultaneously makes field 4 and the
+log write-target well-defined for every door but that one. Reorders the flowchart, the door table, the
+fail-closed contract, and the logging section.
+
+- `core-conduct/file-size-convention` — 1,419 lines against the **800 hard ceiling** (1.8x). The judge's
+  argument for why **O3 can no longer be deferred** is the sharp part: O3's own justification is that
+  prose consistency at this size is what keeps failing, and violation 1 *is that failure mode, already
+  happened, inside the revision whose stated goal was closing this class of defect* — one guarantee
+  asserted twice, ~1,000 lines apart, drifted apart. Note the shrink is **not** satisfied by an ADR-0017
+  `.md`/`.spec.md` split alone: that pattern needed **explicit user waivers** for both halves on
+  `tracking-feature-state`, and no such waiver exists here. Much of the bulk is round-by-round
+  archaeology ("Round 2 named eleven — and miscounted its own table…") which is *history*, belonging to
+  git and the judge ledger, not to a spec an agent builds from.
+
+**Also still open, from observability (advisory):** the `>=56ms` python3-startup figure attributed to
+that judge is **the third different number it has recorded for the same quantity** across three dates
+(56.3ms 08-02 → 20-30ms 08-04 → ~40ms measured 08-13). Round 6's "closed all seven" framing does not
+surface it as open. Checklist task 10 is the safety net, but an inflated figure makes the latency budget
+impossible to fail. Also: no allow-path signal means the log cannot distinguish "gate healthy and quiet"
+from "gate on but silently never pairing" — both are an empty log forever.

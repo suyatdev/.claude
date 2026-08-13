@@ -585,3 +585,91 @@ and complete); scope boundary; `writer-call-site-cwd` — **closed, verified lin
   contradiction in place and states that implementation is blocked on that decision, frontmatter
   carries `waived: [writing-specs/command-grammar]`, and checklist task 2 (l.1117–1119) repeats the
   block. Recorded, not counted toward this verdict.
+
+## Round 1 (re-entry, judged against spec revision 6) — 2026-08-13T01:49:34Z · **FAIL** (2 violations) · confidence: high
+
+HEAD `287add5bd94cc07c1bf433be55e011ec4e752fda` · spec blob `a6fa6de17181d8fa527b7c8f8d6a4f72e0004bea`
+· 1,419 lines · round counter restarted per the skill's re-entry rule (round 5's `fail` on revision 5
+sat unaddressed for eight days before round 6 revised the document)
+
+### Layman summary
+
+Round 6's own closure claims hold up under re-verification. I re-derived the pairing predicate from
+scratch rather than trusting the prose, and it is genuinely total (every path gets exactly one role
+under the ordered suffix rule) and the subject→test / test→subject asymmetry is sound: the union
+direction is the fail-closed one precisely where fail-closed is needed (a subject shipping with only
+an on-disk test gets caught, not waved through), and the index-only direction is the one direction
+where widening to a union would create a pair no marker could ever satisfy. I did not find the
+fail-open the dispatch prompt asked me to hunt for. The M5 four-case split of the `<base>` ABSENT row
+is correct and matches its own measurement table. `api-contracts`, `latency-budget-count`, and
+`default-deny-store` are all closed as claimed — I checked the totality matrix, checklist task 10, and
+the explicit `0700`/`0600` modes on both `hooks/state/` and `test-marker.log` line by line. The log
+rename (`test-exempt.log` → `test-marker.log`) is consistent everywhere it appears; no stale spelling
+survived. None of the five ids from round 5 recur.
+
+But tracing the flowchart's actual node order — not just the prose claims about it — surfaced a
+contradiction round 6 did not touch, in territory this spec has fought over before. §Scope states, in
+an explicit "would be a lockout" callout, that the gate is **inert until a repo opts in**, and the
+Fail-closed contract repeats this as an absolute: "any repo without the writer installed" is on the
+list of things that "do not, and are accepted" as blocking. Both statements are false as the flowchart
+is drawn: `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED`,
+`MSG_CLASSIFIER_BAD_OUTPUT`, and `MSG_NOTHING_RUNNABLE` all sit at flowchart nodes strictly before the
+toplevel-resolution node `F` and the writer-installed node `G` — meaning a broken interpreter or a
+corrupted classifier in the primary checkout blocks every `git commit` whose raw payload merely
+mentions "commit", in **every** repo on the machine, adopting or not. That is the exact global lockout
+§Scope's callout says the opt-in design exists to prevent, just triggered by infra failure instead of
+a missing writer, and the two absolute claims are never reconciled — no scenario tests the compound
+case (classifier broken **and** repo never installed the writer). The same ordering leaves an
+unanswered question in the logging design the dispatch prompt asked me to scrutinise: the log's field
+4 is "the pairs skipped (`EXEMPT`) or the pair that failed (`BLOCK`)", but ten of the fourteen doors —
+including all six named above — fire before any pair exists to name, and six of those also fire before
+`<repo>` (the log's own path prefix) is known. This is the same species of defect that closed
+`writing-specs/scope-boundary` in round 3 was supposed to have retired: a guarantee about non-adopting
+repos stated confidently in one place and not actually delivered by the control flow. It recurred in a
+different guise the earlier check did not exercise, so I am citing it fresh rather than reusing that
+id — round 5's violation list (the only list this round's persistence check is scoped to) has nothing
+matching it.
+
+Separately, the dispatch prompt asked whether length is now causing violations rather than merely
+being unwieldy. It is: the contradiction above is a textbook instance of the failure mode O3 itself
+names as the reason to eventually shrink this file ("prose consistency at this size... is what keeps
+failing") — the same guarantee asserted ~1,000 lines apart, drifted apart, unnoticed through a revision
+whose stated goal was closing exactly this class of defect. Deferring O3 was a defensible call when it
+was made in round 5-adjacent rounds; carrying it forward now, after the predicted failure mode has
+materialised inside this very revision, is not.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/opt-in-fail-closed-conflict` *(new)* | `~/.claude/skills/writing-specs/SKILL.md` | "Requirements, not one-liners: break the feature into concrete requirements the agent can satisfy and you can check" and "Anything you leave implicit, the agent infers — and inference is where the defects come from" (§What a Spec Must Contain) | §Scope → "Where the gate is active" (l.124–134, l.197); §3 the gate → "Fail-closed contract" → "These do not, and are accepted" (l.1202–1206); flowchart nodes `NP`/`CM`/`CF`/`CO`/`C` (l.59–71) vs. `F`/`G` (l.73–76); §"Decision logging" field 4 (l.1260–1265) | §Scope asserts the gate is "inert until a repo opts in" and the Fail-closed contract repeats, unconditionally, that "any repo without the writer installed" is never blocked. The flowchart places `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED`, `MSG_CLASSIFIER_BAD_OUTPUT`, and `MSG_NOTHING_RUNNABLE` all before node `F` (toplevel resolution) and node `G` (the writer-installed / opt-in check), so a broken `python3` or a missing/corrupt classifier in the primary checkout blocks every commit containing the substring "commit", in every repo on the machine, including repos that never installed the writer — the exact lockout §Scope's own callout says opt-in prevents. The two claims are never reconciled, and the compound case (infra broken, repo not opted in) has no scenario. The same ordering leaves the log's write-target and field-4 content undefined for the ten doors that fire before a pair (and, for six of them, before `<repo>` itself) is known. |
+| 2 | `core-conduct/file-size-convention` *(new)* | `~/.claude/rules/core-conduct.md` | "Many small, focused files (<400 lines, 800 max) over few large ones" (§Code Style) | Whole document, 1,419 lines; "Standing decisions → O3 — the shrink, still owed" (l.1402–1406) | The file is 3.5x the 400-line target and 1.8x the 800-line hard ceiling. O3 defers the shrink on the theory that "prose consistency at this size... is what keeps failing," and round 6 is direct evidence the theory is already right: violation 1 above is exactly that failure — the same opt-in guarantee asserted twice, ~1,000 lines apart, and drifted apart inside a revision whose explicit goal was closing this class of defect. Deferring the shrink after the predicted failure has occurred inside the deferral window is no longer a defensible sequencing call as currently framed; it needs to be re-affirmed as a decision that accounts for this evidence, not carried forward unchanged. |
+
+### Notes (non-blocking)
+
+- **Pairing predicate — cleared, not just re-asserted.** I traced every combination of (subject in path
+  set / test in path set / sibling tracked / sibling on disk only / sibling absent entirely) against
+  the writer's own `--error-unmatch` behaviour and found no case where the asymmetry lets an uncertified
+  subject ship. The "block that commit forever" framing (l.784–787) is accurate for the narrow claim it
+  makes — the *standard* remedy (re-run the suite) cannot satisfy it while the sibling stays untracked —
+  but is not literally forever; tracking the sibling in the same commit resolves it. Not a defect, but
+  the wording invites the stronger reading; worth a half-sentence in a future round, not a violation.
+- **M5's four-case table (l.677–691) is reproducible reasoning**, not just plausible — cases A/B/C/D each
+  isolate exactly one of the two ABSENT disjuncts for `ALL`, and the `PATHSPEC` row correctly drops the
+  disk clause. No arithmetic or logic error found.
+- **The rename to `test-marker.log` is complete.** Grepped every occurrence of the old and new names;
+  no stale `test-exempt.log` spelling remains anywhere in the document, including the checklist and the
+  Gherkin scenarios that assert log lines.
+- **`hooks/lib/shell_segments.py:64`'s `WRAPPERS` tuple was checked against the file directly** (not
+  just the spec's citation of it) and matches: `("rtk", "time", "eval", "command", "builtin", "exec",
+  "nohup")` exists at that path.
+- Confidence is **high**: every citation in this round was traced against the live flowchart text or an
+  independent re-derivation, not against the round-6 callout's own account of itself, per the dispatch
+  instruction to treat that callout as a claim rather than evidence.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived: [writing-specs/command-grammar]`)
+  and re-confirmed present in the artifact at the unresolved-callout under §"The command grammar"
+  (l.531–547) and checklist task 2's cross-reference (l.1339–1341). Not re-argued; not counted toward
+  this verdict.
