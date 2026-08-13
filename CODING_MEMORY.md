@@ -6841,3 +6841,13 @@ next reader does not read the missing subcommand as a stale doc.
 (`writing-specs/opt-in-fail-closed-conflict`, `core-conduct/file-size-convention`) so recurring ones
 keep their id. Expect the size id to be re-cited — the spec now answers it with a measurement and a
 "this is a user decision" rather than a fix, which is the honest position, not a fixable violation.
+
+**USER DECISION 2026-08-13 (same day, reversing an earlier one) — the size ceiling is WAIVED for this
+file.** `core-conduct/file-size-convention` joins `writing-specs/command-grammar` in the card's
+frontmatter. The earlier "no size waiver is to be sought" call was taken while the scope cut was still
+expected to reach 800; the cut landed at 1,380 and the composition measurement showed a 741-line
+non-prose floor, so **the premise was measured false and the decision changed.** Rejected alongside it:
+splitting (considered a third time, still relocates bulk), and cutting Gherkin/contract tables (the
+thing the scope cut was chosen over). The size is now a recorded accepted cost, not an open defect —
+**a judge citing this id is arguing with a settled decision**, and both the header and §Standing
+decisions say so. Round 2 can now be dispatched without burning itself on an unfixable id.
