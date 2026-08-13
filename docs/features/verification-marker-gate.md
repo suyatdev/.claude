@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 9
-revision_status: complete  # round-2 compliance fix: line counts re-measured, derivation stored
+revision: 10
+revision_status: complete  # round 3 compliance PASS; round-3 observability advisories applied
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -130,9 +130,11 @@ the writer-installed check and therefore cannot reach a repo that has not opted 
 > "allowed, inert" — `judge-guard.sh:204` records exactly this failure in exactly this family.
 > Revision 7 answered it with a `--status` subcommand, which remains deferred (follow-up 1). What v1
 > has instead is two partial answers: **task 14**, a one-off arming proof at install time, and the
-> **decision log**, whose contents are asymmetric evidence — *a non-empty log proves the gate is armed
-> and firing; an empty one proves nothing*, since "armed and nothing has gone wrong" and "armed but
-> silently never pairing" look identical. The residual risk is therefore narrower than revision 8 left
+> **decision log**, whose contents are asymmetric evidence — *a non-empty log proves the gate was armed
+> and firing **as of its last entry**; an empty one proves nothing*, since "armed and nothing has gone
+> wrong" and "armed but silently never pairing" look identical. **The as-of qualifier is part of the
+> claim, not a footnote to it:** a log with entries from last month says nothing about today, so
+> neither answer is a live arming check. The residual risk is therefore narrower than revision 8 left
 > it but real: a gate that goes inert *later*, in a repo where nothing has tripped it, is still
 > invisible until someone re-runs task 14 by hand.
 
@@ -1308,10 +1310,27 @@ signal would drown, and both questions above are about the non-allow cases.
 the log with `hooks/test-marker-guard.sh --status` to print decision counts and a pair count — without
 which an empty log cannot distinguish "armed, and nothing has gone wrong" from "armed, but pairing
 silently never fires", since both look like an empty file forever. `--status` remains deferred
-(follow-up 2). Until it lands the log is read with `wc -l` and `cut`, which answers the erosion
-question — the one the judge ranked first — but not the arming question. **A log nothing reads is the
-same defect as no log**, so this is a real half-measure, recorded as one rather than presented as
-complete.
+(follow-up 1). **A log nothing reads is the same defect as no log**, so this is a real half-measure,
+recorded as one rather than presented as complete.
+
+Until `--status` lands, the erosion question is answered by these — stated as runnable commands for the
+same reason every other measured claim in this spec is, rather than as a vague gesture at `wc`:
+
+```sh
+LOG="$(git rev-parse --show-toplevel)/hooks/state/test-marker.log"
+# bypasses vs blocks, all time:
+cut -f2 "$LOG" | sort | uniq -c
+# bypass rate by day — the erosion signal, and the reason field 1 is ISO-8601:
+awk -F'\t' '$2=="EXEMPT" {print substr($1,1,10)}' "$LOG" | sort | uniq -c
+# which doors actually fire:
+awk -F'\t' '$2=="BLOCK" {print $3}' "$LOG" | sort | uniq -c
+```
+
+**`wc -l` alone is NOT sufficient and naming it here was an error** — it cannot separate `EXEMPT` from
+`BLOCK`, which is the entire question. The field separator is a literal tab, which is why `cut -f2`
+and `awk -F'\t'` are safe: the `TEST_EXEMPT` validation regex excludes `\x00-\x1f`, so no reason
+string can contain a tab or newline and forge an extra field or line. That exclusion is load-bearing
+for the log's parseability, not only for its display.
 
 **What this log is, and is not — the storage decision, made explicitly.** It is **machine-local**:
 `/hooks/state/` is gitignored at `.gitignore:17`, so the log is never committed, never shared, and
@@ -1324,6 +1343,23 @@ never survives a fresh clone. That is deliberate:
 - What it does **not** deliver is organisational assurance. Nobody else can read it, and a developer
   who wants to hide a bypass can delete it. It is instrumentation, not evidence, and any later claim
   that this feature provides an audit trail should be read against this paragraph.
+
+> 🔴 **Open, disclosed rather than decided: the exemption regex admits invisible Unicode.**
+> `^[^\x00-\x1f\x7f]{1,200}$` excludes C0 controls and DEL, so **tab and newline cannot reach the log**
+> and no reason string can forge a field or a line — the property the parsing commands above depend on.
+> It does **not** exclude zero-width or bidirectional characters. Verified by running the regex, not by
+> reading it: U+200B (zero-width space), U+200D (zero-width joiner) and **U+202E (right-to-left
+> override)** all match. A reason reading `routine cleanup` in a terminal can therefore carry hidden
+> content, and U+202E can visually reverse the text that follows it.
+>
+> **Severity is low and the reason is structural, not reassurance:** the log is `0600`, machine-local,
+> gitignored, and read by the one person who wrote the entry — there is no second party to deceive, and
+> a developer minded to hide a bypass can simply delete the file, as the paragraph above already says.
+> It is disclosed because **this repo owns a control for exactly this class and it is not wired up**:
+> `hooks/scan-invisible-unicode.sh` exists, passes its tests, and is **not registered in
+> `settings.json`** (one of the four dormant hooks `rules/gates.md` lists). Whether to tighten the
+> regex, route the reason through that scanner, or accept the gap **is a user decision this spec does
+> not make** — it is recorded here so the choice is explicit rather than inherited by silence.
 
 **Both the log and its parent directory carry explicit modes: `<repo>/hooks/state/` is `0700` and
 `test-marker.log` is `0600`** — identical to the marker store, and for the same core-conduct
@@ -1472,7 +1508,8 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | `fa44399` | revision 8 — scope cut | 1,402 |
   | `0294809` | size waiver recorded | 1,413 |
   | `17d2379` | revision 9 — round-2 count correction | 1,434 |
-  | revision 9 (cont.) | decision log restored to v1 | 1,539 |
+  | `9251218` | revision 9 — decision log restored to v1 | 1,539 |
+  | revision 10 | round-3 advisory fixes: log read commands, as-of caveat, Unicode disclosure | 1,576 |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
@@ -1494,16 +1531,16 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | component | lines |
   |---|---|
   | Gherkin, 56 scenarios | 370 |
-  | contract and measurement table rows | 135 |
-  | code blocks (mermaid, sh, python, json) | 72 |
-  | blank | 245 |
-  | **non-prose floor** | **822** |
-  | prose | 717 |
+  | contract and measurement table rows | 136 |
+  | code blocks (mermaid, sh, python, json) | 79 |
+  | blank | 249 |
+  | **non-prose floor** | **834** |
+  | prose | 742 |
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **822**, so **deleting
+  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **834**, so **deleting
   every line of prose in this file still leaves it over the ceiling.** The prose budget for an
-  800-line version is **negative 22**. This is no longer "800 is hard to reach"; it is arithmetically
+  800-line version is **negative 34**. This is no longer "800 is hard to reach"; it is arithmetically
   unreachable while the spec keeps 56 acceptance scenarios and its contract tables, and cutting those
   is what the user rejected when choosing the scope cut, and rejected again when restoring the log.
 

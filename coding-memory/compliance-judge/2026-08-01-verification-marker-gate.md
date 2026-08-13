@@ -755,3 +755,89 @@ which is exactly what the project's own core-conduct rule on verification-before
   measurement backing this waiver is the same one flagged stale above (1,380 claimed vs. 1,413 actual)
   — the waiver itself is not in question (both figures clear 800 by a wide margin), but the next edit
   to this section should re-run the `wc`/`grep` derivation rather than adjust the number by hand.
+
+## Round 3 (re-entry, judged against spec revision 9) — 2026-08-13T04:44:35Z · **PASS** (0 violations) · confidence: high
+
+HEAD `925121815ac31994aa13ecaec128fbcee8782943` · spec blob `28ff93a1eb9e7a214c9a8cdd3432fce31851b38a`
+· 1,539 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 2's one finding — a stale line count presented as a fresh, re-runnable measurement — is fixed,
+and I did not take the fix's own word for it. I re-ran the exact `wc`/`grep`/`awk` derivation now
+embedded in §Standing decisions → O3 against the live file and got **total=1539, floor=822, prose=717,
+blank=245, tbl=135, gherkin=370, code=72** — every one of those matches the composition table in the
+spec exactly. I then went further than the derivation asks and pulled every historical commit the O3
+table cites (`36a0880`, `fa44399`, `0294809`, `17d2379`, current HEAD) with `git show <sha>:<path> |
+wc -l` rather than trusting the table's own arithmetic: `1,448 / 1,402 / 1,413 / 1,434 / 1,539` — all
+five numbers match. The spec's own explanation for *why* round 2 caught what it did (a composition
+table counts itself, so the file grew while the paragraph describing its size was being written) also
+checks out against the commit history: `fa44399` really did ship 1,402 lines while both that commit's
+message and this table's earlier draft recorded 1,380. `core-conduct/verify-before-claim` does not
+recur.
+
+This round's real job was checking that restoring the decision log — cut in revision 8 to hit 800,
+put back once that ceiling was waived — didn't quietly reopen anything round 2 had already closed, or
+introduce something new that isn't actually true. Four things, all independently checked:
+
+1. **The log's field-4 arithmetic.** The spec claims 4 of 13 doors name a pair, 8 write `-`, and 1
+   (`MSG_NO_PYTHON`) writes nothing at all. I cross-checked this against the doors table (§The doors,
+   13 rows) rather than the prose: rows 10–13 (`MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`,
+   `MSG_STALE_TEST`) are the 4 that fire after pair formation; row 3 (`MSG_NO_PYTHON`) is the 1 that
+   fires before any repo is known; the remaining 8 rows write `-`. 4 + 8 + 1 = 13, and it also matches
+   a second statement in the same section ("nine of the thirteen doors fire before a pair exists, and
+   eight of those can still write a line") — 8 + 1 = 9 pre-pair doors + 4 post-pair doors = 13. The
+   correction of revision 7's "two doors write no line" is also sound: the unreadable-payload allow
+   path resolves no toplevel but was never a *door* (allows aren't logged at all), so it never wanted
+   a line in the first place — the fix is a category correction, not a new claim.
+2. **No stale "v1 has no log" text.** Grepped every occurrence of "decision log" and `test-marker.log`
+   in the file: the header callout, §Scope's asymmetry paragraph, §Decision logging, §Follow-ups, and
+   checklist task 6 all agree the log ships in v1, and every remaining "deferred" statement in the
+   document is scoped to `--status` or the `INCLUDE`/`FOREIGN` fold specifically, never to the log
+   itself.
+3. **The half-measure disclosure.** v1 ships the log's writer with no reader — an empty log cannot
+   distinguish "armed and quiet" from "armed but never pairing." The spec states this with a ⚠️ callout
+   in §Decision logging and mirrors the identical asymmetry in §Scope ("a non-empty log proves the gate
+   is armed and firing; an empty one proves nothing"), rather than presenting the log as complete
+   evidence. That is an honest characterization of a real gap, not an overclaim — it says what the log
+   proves and, explicitly, what it does not ("instrumentation, not evidence").
+4. **`TEST_EXEMPT` as new log-write surface.** Node H's validation (`^[^\x00-\x1f\x7f]{1,200}$`,
+   reject-not-truncate) excludes the tab and newline bytes, which is also the log's own field and line
+   separator — so a value that reaches the log has already been proven incapable of forging an extra
+   field or an extra line in a tab-separated file, even though the classifier upstream deliberately does
+   not sanitize it (single-sourced: "the classifier reports, the hook decides"). That is adequate
+   handling of the surface the round asked me to check.
+
+No new violations found in a broader pass either: the marker store and log both carry explicit
+`0700`/`0600` modes (default-deny), pinned tool versions are dated and machine-measured, every Gherkin
+scenario I sampled (including the two "no line is written" edge cases task 6 calls out) is internally
+consistent with the doors/allow-path tables, and no placeholder or TBD text exists anywhere in the file.
+
+### Violations
+
+None.
+
+### Notes (non-blocking)
+
+- **`core-conduct/verify-before-claim` (round 2) closed, and independently re-derived rather than just
+  re-read** — current file and all five historical commits in the O3 table checked directly against
+  git, not against the spec's own arithmetic.
+- **Log arithmetic (4 + 8 + 1 = 13) verified against the doors table**, not just the prose asserting it.
+- **No surviving "log is deferred" text** across header callout, §Scope, §Decision logging,
+  §Follow-ups, and checklist task 6.
+- **`TEST_EXEMPT` log-injection surface checked**: the validation regex at node H structurally excludes
+  the log's own field/line separators, so the classifier's deliberate non-sanitization does not leak
+  into the log.
+- Confidence is **high**: the primary finding this round revisits (line counts) was checked by direct
+  command execution against the live file and five historical git blobs, not by re-reading prose.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" and checklist task 2. Not re-argued.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. The basis has
+  strengthened since round 2: §Standing decisions → O3 now shows the non-prose floor (822 lines: blank
+  + Gherkin + tables + code) is itself over the 800 ceiling, so no amount of prose deletion reaches 800
+  without cutting acceptance scenarios or contract tables, which the user has rejected twice. Not
+  re-argued; not counted toward this verdict.

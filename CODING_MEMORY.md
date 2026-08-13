@@ -6931,3 +6931,42 @@ re-measurements, every one moving the floor up; the waiver is no longer a judgem
 measure → edit → measure loops forever. Get the structure final, measure, then **swap digits only** —
 a within-line edit is line-count-neutral, so it terminates. Two swaps were needed here because a
 one-line precision fix moved the Gherkin count.
+
+## 2026-08-13 — marker-gate round 3: compliance PASSES; three advisory findings applied as revision 10
+
+**`core-conduct/verify-before-claim` CLOSED. Compliance verdict = PASS, violations `[]`.** The judge
+re-derived rather than re-read: it ran the embedded `wc`/`grep`/`awk` command against the live file
+(1,539 / 822 / 717, matched) **and** pulled all five commits the progression table cites straight from
+git (1,448 / 1,402 / 1,413 / 1,434 / 1,539 — every one matched). It also checked the log arithmetic
+door-by-door against the doors table (4 + 8 + 1 = 13) rather than trusting the prose asserting it, and
+confirmed no "log is deferred" text survived the restore across header, §Scope, §Decision logging,
+§Follow-ups and task 6. Both waived ids recorded, not re-cited. **Three consecutive rounds have now
+shown that passing the waived ids in the prompt works** — neither has been re-cited since.
+
+**Observability round 3: risk=medium, confidence=high, three findings — all three verified myself
+before acting, all three real.**
+
+1. **The log's stated read method could not answer the question it claimed.** The spec said the erosion
+   question is answered with `wc -l` and `cut`; `wc -l` cannot separate `EXEMPT` from `BLOCK`, which is
+   the whole question. Every other measured claim in the spec ships a copy-pasteable command and this
+   one did not — the same *store the derivation, not the number* rule, violated one section after
+   being applied. Fixed with three literal one-liners (`cut -f2 | sort | uniq -c`, an `awk` day-bucket
+   for the rate signal, and a door histogram), plus the note that tab-exclusion in the exemption regex
+   is what makes `-F'\t'` parsing safe — **load-bearing for parseability, not only display.**
+2. **The "a non-empty log proves the gate is armed" claim was true only as of the log's last entry**,
+   and the caveat sat two sections from the claim. Merged the as-of qualifier into the claim itself.
+3. **🔴 The exemption regex admits invisible Unicode — verified by running it, not reading it.**
+   `^[^\x00-\x1f\x7f]{1,200}$` blocks tab, newline, ESC and DEL (so **log integrity holds** — no reason
+   string can forge a field or line), but **U+200B, U+200D and U+202E (RTL override) all match.**
+   Confirmed `hooks/scan-invisible-unicode.sh` exists and is **not** in `settings.json` — one of the
+   four dormant hooks. **Disclosed in the spec, deliberately not decided**: severity is low
+   (`0600`, machine-local, gitignored, read by whoever wrote the entry, deletable by them anyway), but
+   this repo owns a control for exactly this class and it is unwired. Tighten / route through the
+   scanner / accept is a **user decision, still open**.
+
+⚠️ **The PASS verdict is now STALE by construction** — it is pinned to blob `28ff93a1` and revision 10
+changed the file. Not a defect; the freshness rule working. A round-4 compliance dispatch is needed
+before `superpowers:writing-plans`, not before the user's own review.
+
+Size after revision 10: **1,576**, non-prose floor **834**, prose budget for an 800-line file
+**negative 34**. Fifth consecutive re-measurement, fifth move upward.
