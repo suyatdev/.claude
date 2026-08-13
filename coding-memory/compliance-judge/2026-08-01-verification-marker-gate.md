@@ -1013,3 +1013,127 @@ None.
   spec's own table, so the 800 ceiling remains arithmetically unreachable without cutting acceptance
   scenarios or contract tables the user has rejected cutting three times now. Not re-argued; not counted
   toward this verdict.
+
+## Round 6 (re-entry, judged against spec revision 13) — 2026-08-13T20:00:15Z · **FAIL** (2 violations) · confidence: high
+
+### Layman summary
+
+Round 5 passed clean, but the spec was then edited (revision 13) to apply three fixes the round-5
+observability judge had flagged: the decision log's writer now uses `printf` instead of `echo` (bash's
+`echo` silently fails to write a real tab byte), the `hooks/state/` directory-creation race between the
+writer and the gate was resolved with a `mkdir -m` + `chmod` pair, and two checklist tasks now check log
+contents field-by-field instead of by `grep`. I re-verified all three fixes by actually running them on
+this machine's bash (3.2.57) rather than trusting the prose, and all three do exactly what the spec now
+claims.
+
+The dispatch also asked for a full sweep for the *next* instance of this spec's recurring defect —
+"a behaviour is required but the command that produces it is never pinned, and gets built by whatever
+interpreter is nearest, which is usually the wrong one" — since that pattern has now bitten three
+revisions running (11: a Python-syntax regex fed to bash; 12: an env-assignment prefix on bash's `[[`
+reserved word; 13: `echo` where only `printf` writes a tab). I found the same species again, in a bigger
+place this time: **the gate itself needs to parse two different JSON payloads from bash — the
+classifier's stdout and the on-disk marker file — and no producing construct is pinned for either.**
+Bash has no JSON parser, no JSON tool (`jq` or otherwise) is in §Pinned versions, and the spec's own
+latency budget accounts for exactly two `python3` processes total for the whole flow, with no third one
+left over for this. That leaves the actual implementer to invent an ad-hoc bash-side JSON reader — the
+same unpinned-construct shape that broke three revisions in a row, except this time it also sits at the
+boundary that reads an attacker-influenced `TEST_EXEMPT` value and a commit's own path list, which is
+exactly the kind of boundary `writing-secure-code` says needs a real schema validator, not a hand-rolled
+one.
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/unpinned-json-parse-classifier-output` | `~/.claude/skills/writing-specs/SKILL.md` | `docs/features/verification-marker-gate.md:405-436` (§3 "the gate" → Wire contract / Validation order, flowchart node `CO` at `:50`) and `:828-838` (§Latency budget table) | The hook must parse and domain-validate the classifier's one-line JSON output — confirming `paths` is a list of strings and `exempt` a string the classifier explicitly "does not sanitise" (`:403`) — but the gate is bash, no JSON tool is pinned in §Pinned versions (no `jq`), and the latency budget accounts for exactly two `python3` starts total for the whole flow (cwd read + classification, `:836-838`), leaving no third call for this validation. The producing construct for a security-relevant parse of adversarial-influenced fields is unpinned — confirmed by grepping the spec's own text for every `python3` mention (12 hits, none covering this step) and by reading `git-guard.sh:59-72`, the precedent this spec cites for its cwd read, which sidesteps the problem entirely by having `python3` hand bash a plain string rather than JSON to re-parse — a pattern this spec does not follow at node `CO`. |
+| `writing-specs/unpinned-json-parse-marker-read` | `~/.claude/skills/writing-specs/SKILL.md` | `docs/features/verification-marker-gate.md:337-353` (§2 marker store → schema and read-side validation) and flowchart node `M` at `:68-69` | The gate must read a JSON marker file, validate its `version`/`blob`/`path` fields against the schema, and independently re-derive the writer's percent-encoded lookup filename (`:320`) — all from bash — but no producing construct is pinned for either the JSON parse or the encode step, and by the same latency-budget accounting as the sibling violation above, no `python3` call is provisioned for it either. Nothing in the document tells the implementer how the 0700/0600-protected marker actually gets read, only what it must contain once read. |
+
+### Targeted sweep — every remaining unpinned-command/non-bash-idiom site checked, on the pinned bash 3.2.57
+
+Ran, not read, on this machine's `/bin/bash` (confirmed `GNU bash, version 3.2.57(1)-release`) unless
+marked otherwise:
+
+1. **`printf '%s\t%s\t%s\t%s\n' … >> "$LOG"`** (the revision-13 fix, `:1363`) — writes a real tab byte
+   (`od -c`: `\t` between fields). **Fine.**
+2. **The `echo "...\t..."` counter-example** (`:1360`) — writes the two literal characters `\` `t`, not a
+   tab, exactly as the spec's WRONG-example claims. **Fine** (correctly labeled wrong in the spec).
+3. **`cut -f2`** against a printf-written log vs. the echo-written one — returns `EXEMPT` correctly
+   against the former, the *entire line* against the latter (no delimiter found). Matches the spec's
+   claim verbatim. **Fine.**
+4. **`awk -F'\t' '{print $2}'`** against both logs — `EXEMPT` against the printf log, an *empty string*
+   against the echo log. Matches the spec's claim verbatim, including that this fails silently rather
+   than erroring. **Fine.**
+5. **`if ( export LC_ALL=C; [[ "$exempt" =~ ^[[:print:]]{1,200}$ ]] ); then …`** (`:463`) — accepts
+   `"routine cleanup"`, rejects a string carrying an embedded U+200B. Matches spec claims. **Fine.**
+6. **The WRONG form, `LC_ALL=C [[ "$exempt" =~ … ]]`** (`:459`) — reproduces `[[: command not found`,
+   exit 127, exactly as the callout states. **Fine** (correctly labeled wrong).
+7. **`mkdir -p -m 0700 "$STATE_DIR"`** against a directory that already exists at `0755` — exits 0,
+   leaves it `0755` (confirmed with `ls -ld`). Matches the spec's measured claim; the mandated follow-up
+   `chmod 0700` is load-bearing, not decorative. **Fine.**
+8. **`os.makedirs(path, mode=0o700, exist_ok=True)` in Python 3.9.6** against the same pre-existing
+   `0755` directory (not asked for by the spec, but relevant since the writer that must also run this
+   fix is Python, not bash) — leaves the directory `0755`, identical race to the shell case. **Checked,
+   not a violation on its own**: the fix (`chmod`/`os.chmod`, unconditional either way) closes the race
+   identically in both idioms, so there is no *wrong-answer* trap here the way there was for the regex,
+   the locale pin, or the tab. Noted only because the spec gives one shell-form snippet as what "both
+   components" run (`:1483-1488`) without mirroring it into a Python form the way the writer call-site
+   section explicitly does (`:275-297`, "the two forms are written as mirrors") — an inconsistency in
+   presentation, not a defect in outcome.
+9. **The marker call-site shell block** (`:277-282`) — ran verbatim in a throwaway repo (`MARKER_SELF`,
+   `MARKER_ROOT`, subshell writer invocation); resolved and executed correctly, exit 0. **Fine.**
+10. **Percent-encoding order** (`:320`, "`/`→`%2F`, `%`→`%25`") — applying the two replacements in the
+    order literally listed (`/` first, then `%`) double-encodes any path containing a literal `%`:
+    measured in Python, `hooks/100%-done.sh` becomes `hooks%252F100%25-done.sh` instead of the correct
+    `hooks%2F100%25-done.sh`. **Noted, not a blocking violation**: none of the 14 files this feature
+    actually covers (§Scope's inventory table) contains a `%`, so the blast radius today is zero, but
+    the order is unstated as normative anywhere, unlike every other order-sensitive construct in this
+    file (`mkdir` before `chmod`, the `LC_ALL` subshell scope), which are spelled out explicitly.
+11. **The O3 composition/derivation script** (`:1666-1671`) — ran verbatim: `total=1721`, matching the
+    file's actual line count and the frontmatter's `revision: 13`. Pure bash/`awk`/`grep`, no
+    cross-interpreter claim to check. **Fine.**
+12. **`git-guard.sh:59-72`'s inline `python3` JSON read**, cited as this spec's precedent for extracting
+    `cwd` (`:361-362`) — read directly: confirmed a real, already-shipped, working pattern, but it
+    **does not** cover the harder need this spec has at nodes `CO`/`M`. `git-guard.sh`'s `python3` call
+    parses the JSON itself and hands bash back one **plain string** (the command text); bash never
+    re-parses JSON. This spec's gate, by contrast, is described as validating a full JSON *object's*
+    shape (node `CO`) and a JSON *file's* schema (node `M`) directly — the two violations above.
+13. **`classify-commit-command.py`'s JSON stdout and the on-disk marker file** — see Violations, above.
+
+**What this sweep could not see:** nothing under this feature exists yet (`phase: planning`, confirmed —
+`hooks/lib/write-test-marker.py`, `hooks/lib/classify-commit-command.py`, and
+`hooks/test-marker-guard.sh` are all absent from the tree today), so every check above is against a
+literal snippet quoted in the spec, or against a directly analogous standalone construct (the `mkdir`/
+`chmod` race, the percent-encoding order), never against the feature's own code. I did not attempt to
+hand-write a bash-native JSON parser and prove every way it could be tricked; I inferred infeasibility
+from the absence of a pinned JSON tool, the two-`python3`-start budget ceiling, and the general
+difficulty of safely regex-parsing adversarial `paths`/`exempt` content — I did not exhaustively catalog
+every injection shape a hypothetical hand-rolled parser could mishandle, since no such parser is
+specified to test against.
+
+### Notes (non-blocking)
+
+- **All three round-5-driven fixes (printf pin, state-dir race, field-based checklist assertions)
+  verified by execution this round**, not by re-reading the prose — see sweep items 1, 2, 3, 4, 7 above.
+- **Percent-encoding replacement order** (`:320`) is silently order-dependent; see sweep item 10.
+  Zero blast radius against the feature's actual 14-file inventory today; flagged for the implementer's
+  awareness, not blocking.
+- **The `mkdir`/`chmod` snippet given for "both components"** (`:1483-1488`) is presented once, in shell
+  form, for a requirement that also binds the Python writer; see sweep item 8. No wrong-answer trap
+  found, only a presentation gap relative to the writer call-site section's explicit twin-form pattern.
+- **Ten previously-closed ids** (`verified-scope-inventory`, `edge-cases`, `api-contracts`,
+  `commit-form-coverage` ×4, `scope-boundary`, `writer-call-site-cwd` ×2, `pair-formation-rule`,
+  `latency-budget-count`, `default-deny-store`, `opt-in-fail-closed-conflict`,
+  `core-conduct/verify-before-claim`, `writing-specs/locale-pin-mechanism`) were not re-litigated: the
+  revision-13 diff (frontmatter, printf pin, state-dir race resolution, task 6/14 field assertions) does
+  not touch the text those ids were closed against.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" (`:544-559`) and checklist task 2's cross-reference. Not
+  re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. File is 1,721 lines
+  against an 800 ceiling; the non-prose floor (Gherkin + tables + code + blanks) alone measures 887
+  lines this round (re-derived live via the O3 script, sweep item 11), still over 800 on its own. Not
+  re-argued; not counted toward this verdict.

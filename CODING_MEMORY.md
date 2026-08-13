@@ -7165,3 +7165,60 @@ for `1,721` — a same-line substitution that cannot change the count. Verified 
 Round 6 (both judges) is owed. Waivers unchanged and not to be re-litigated:
 `writing-specs/command-grammar`, `core-conduct/file-size-convention` (non-prose floor now above 867
 against an 800 ceiling — the file grew again, to 1,721).
+
+## 2026-08-13 — marker-gate round 6: compliance FAILS on the fifth instance, and it is structural
+
+Round 6 (both judges paned, parallel, against revision 13 / commit `3f068d9`):
+
+- **compliance: FAIL, 2 violations** — `unpinned-json-parse-classifier-output`,
+  `unpinned-json-parse-marker-read`. Both new ids; round 5 had passed clean.
+- **observability: risk=medium, confidence=high** — 7 pass / 3 concern.
+
+### The compliance finding is the same defect class, at architecture scale
+
+The gate is bash and was specified to parse two JSON payloads — the classifier's stdout (with an
+`exempt` field the spec says is **unsanitised**) and the on-disk marker files. bash 3.2.57 has no JSON
+parser, no `jq` is pinned, and the latency budget provisions **exactly two `python3` starts**, neither
+covering these. The judge's sharpest point: the spec **cites a precedent it does not follow** —
+`git-guard.sh:59-72` has python3 hand bash a plain string and bash never re-parses JSON.
+
+**User decision → ADR 0026:** no JSON crosses into bash. Classification and marker reading merge into
+one `python3` entry point returning plain tab-separated lines. Rejected: pinning `jq` (new dependency),
+a third `python3` start (budget was deliberate), flat key=value everywhere (close second — still leaves
+two components to sync).
+
+⚠️ **Highest-risk consequence, open for revision 14:** the opt-in ordering rule (classifier runs before
+any repo-state touch) becomes *internal to Python* rather than enforced by bash call sequence. And the
+"process starts go down" claim in ADR 0026 is a **prediction, not a measurement** — the merged entry
+point does not exist. Re-measure the budget against real code.
+
+### The observability finding is my own fix's blind spot
+
+`test-marker.log`'s `0600` is stated 4× and enforced nowhere. Reproduced: the spec's own
+`printf … >> "$LOG"` yields **0644** under umask 022, **0664** under 002. I had fixed the *directory*
+mode race in revision 13 and missed the *file* sibling two paragraphs away. The judge named the
+pattern: "for the second round running the author's sweep fixed exactly the flagged instance and
+missed the adjacent sibling of the same defect class."
+
+Tempering it accurately: the parent dir is `0700`, so another user cannot traverse to the file. Real
+defect (defence-in-depth; last line if the dir mode loosens) but **not** the "world-readable" the
+verdict's prose implies. Recorded as measured, not as narrated.
+
+### Method note — what actually caught things this round
+
+My rev-13 sweep scanned code blocks for *wrong commands* and found nothing new. Both real findings came
+from a different question: **"which stated behaviours have no enforcing command at all?"** — the log
+mode, and the JSON parses. Scanning what is written cannot find what was never written. Next sweep
+enumerates required behaviours and asks which lack a construct, not the reverse.
+
+Also confirmed independently by both judges and by me: all three revision-13 fixes work by execution.
+Non-prose floor re-derived live at **887** (was 867) — the size waiver holds and keeps widening.
+
+### Two non-blocking items queued for revision 14
+
+- Percent-encoding order (`:320`) is silently order-dependent: `/`→`%2F` before `%`→`%25` turns
+  `hooks/100%-done.sh` into `hooks%252F100%25-done.sh`. Encode `%` **first**. Zero blast radius today.
+- The `mkdir`/`chmod` snippet is shell-only though the requirement also binds the Python writer;
+  `os.makedirs(mode=…, exist_ok=True)` has the identical race and identical fix.
+- (mine) §Pinned versions omits `awk`/`cut`/`sort`/`uniq`, which revision 13 made the queries depend
+  on. Verified working under this machine's BSD awk `20200816` — a pinning gap, not a live bug.
