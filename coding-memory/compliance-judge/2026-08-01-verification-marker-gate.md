@@ -841,3 +841,83 @@ None.
   + Gherkin + tables + code) is itself over the 800 ceiling, so no amount of prose deletion reaches 800
   without cutting acceptance scenarios or contract tables, which the user has rejected twice. Not
   re-argued; not counted toward this verdict.
+
+## Round 4 (re-entry, judged against spec revision 11) — 2026-08-13T16:29:34Z · **FAIL** (1 violation) · confidence: high
+
+HEAD `33d9ff978947d2a10d63b62216dd3449164a5999` · spec blob `6c9622a6cbe5ed54dbcef49f9e32b32df85a28de`
+· 1,614 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 3 passed with zero findings. Since then two revisions landed: revision 10 (observability-judge
+advisories — log read commands, an as-of caveat, the invisible-Unicode disclosure) and revision 11, the
+substantive one, which repairs a real bug in the spec itself — the `TEST_EXEMPT` validation regex was
+written in Python escape syntax (`\x00-\x1f`) but the component that runs it, `hooks/test-marker-guard.sh`,
+is bash, where that escape doesn't exist. Measured on bash 3.2.57, the old regex failed to compile on
+every input, so the escape hatch this feature's whole design leans on ("a soft warning gets rationalised
+past, so make the block computational, with a logged exemption for real cases") would have been silently
+dead from day one. Revision 11 replaces it with `^[[:print:]]{1,200}$` pinned to `LC_ALL=C`.
+
+I re-ran every measurable claim revision 11 makes rather than trusting the prose: the new regex compiles
+and matches correctly on the pinned bash version; it rejects U+200B, U+200D, and U+202E under both
+`LC_ALL=C` and `en_US.UTF-8` exactly as claimed; it rejects an accented character under `C` and admits it
+under UTF-8, also exactly as claimed. The composition arithmetic (total 1,614, non-prose floor 855, prose
+759, 58 Gherkin scenarios) reproduces exactly against the live file via the spec's own `wc`/`grep`/`awk`
+derivation. None of that is in question.
+
+What I went on to check was the round's explicit ask: is this the *only* place a construct is specified in
+one language's syntax but destined to run in another? It is not. The fix states the exemption check must
+be "evaluated under `LC_ALL=C`" but never states *how* that pin is scoped to the bash `[[ =~ ]]` builtin
+that node H's own measurement confirms is the actual mechanism. I tested the reading an implementer would
+most naturally reach for — prefixing the assignment directly onto the check, `LC_ALL=C [[ "$s" =~ $re ]]`,
+mirroring how an env var pins an external command — and on the pinned bash 3.2.57 it is not valid syntax:
+bash's reserved-word recognition for `[[` does not survive a leading variable assignment, so the shell
+reports "command not found" (exit 127) instead of running the comparison at all. `( export LC_ALL=C;
+[[ ... ]] )` and `( LC_ALL=C; [[ ... ]] )` both work; the bare prefix does not. This is the same species of
+defect revision 11 exists to close — a requirement stated in prose that maps naturally to syntax the actual
+execution engine rejects — just one level down, in the mechanism for applying the fix rather than in the
+fix's own regex. Because this feature is still 0/15 tasks, phase: planning, nothing has been implemented
+yet to catch this in TDD; the spec is exactly where core-conduct/writing-specs says a defect like this is
+cheapest to fix.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/locale-pin-mechanism` *(new)* | `~/.claude/skills/writing-specs/SKILL.md` | "State explicitly what correct looks like... Anything you leave implicit, the agent infers — and inference is where the defects come from"; "no placeholders, TBDs, or requirements readable two ways" | §3 `hooks/test-marker-guard.sh` — the gate → Validation order, node H, `docs/features/verification-marker-gate.md:419-443`; recurs unresolved at the doors table row 7 (`:1272`) and the two locale scenarios (`:1051-1063`) | The spec requires the `TEST_EXEMPT` regex to be "evaluated under `LC_ALL=C`" against a bash `[[ =~ ]]` check (confirmed as the mechanism by node H's own "Measured on bash 3.2.57 ... `[[ "vendored upstream" =~ $re ]]`" quote) but never states how the pin is scoped to that specific builtin invocation. The natural implementation — `LC_ALL=C [[ "$s" =~ $re ]]` — is invalid bash syntax on the pinned bash 3.2.57 (`command not found`, exit 127: a leading assignment strips `[[`'s reserved-word status), while `( export LC_ALL=C; [[ ... ]] )` works. This is the same syntax-vs-execution-engine mismatch class that made revisions 1–10's regex inert, now one layer down in the fix that closed it, and it is undetected by any Gherkin scenario because the scenarios assert outcomes, not the shell mechanism that must produce them. |
+
+### Notes (non-blocking)
+
+- **Revision 11's measured claims independently reproduced, not re-read.** On the pinned bash 3.2.57:
+  the old regex's regcomp failure (exit 2, not 1) confirmed for the string it never accepted; the new
+  regex compiles and matches ASCII; rejects U+200B, U+200D, U+202E under both `LC_ALL=C` and
+  `en_US.UTF-8`; rejects an accented character under `C` and admits it under UTF-8 — all four claims hold.
+- **Composition figures reproduced exactly**: `total=1614 floor=855 prose=759` and `58` `Scenario:` lines,
+  matching the spec's own table verbatim, via the spec's own derivation command re-run against the live
+  file rather than trusted from the table.
+- **The blob-hash regex is not a second instance of the same bug.** `^([0-9a-f]{40}|[0-9a-f]{64})$` (the
+  marker's read-side validation, §2 the store) uses no `\x`-style escapes and was directly tested to
+  compile and match identically as bash ERE and as Python `re` — syntax-compatible either way, so no
+  finding there regardless of which component ends up evaluating it.
+- **Which component reads/validates the marker file (node M) is left implicit** — the classifier's JSON
+  contract stops at `form`/`paths`/`exempt`; percent-encoding the subject path and parsing the marker
+  JSON for node M is presumably the bash gate's own job, by the same "inline `python3` JSON read" pattern
+  already named for the `cwd` field (citing `git-guard.sh:59-72`), but that pattern is never explicitly
+  extended to marker reads. Not cited as a violation — the precedent is stated elsewhere in the document
+  and a competent implementer has a concrete pattern to follow — but worth a line in the next revision if
+  this file is touched again.
+- Confidence is **high**: the cited violation is a live, reproduced shell result on the pinned bash
+  version named in the spec's own §Pinned versions, not an inference from reading the prose.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" and checklist task 2. Not re-argued; not counted toward this
+  verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. The basis is
+  unchanged in kind and stronger in degree since round 3: §Standing decisions → O3 now measures the
+  non-prose floor at **855** lines (up from 822 at round 3), re-derived this round and matching the
+  spec's own table exactly, so the 800 ceiling remains arithmetically unreachable without cutting
+  acceptance scenarios or contract tables — rejected twice already by the user. Not re-argued; not
+  counted toward this verdict.

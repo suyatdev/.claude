@@ -7017,3 +7017,62 @@ it did not need revisiting.
 session did run the regex rather than eyeball it, and still got the wrong answer, because it ran it in
 the language the regex was *written in* rather than the one that would *execute* it. Ask which
 interpreter the artifact will meet in production before trusting the probe.
+
+## 2026-08-13 — marker-gate round 4: FAIL on one violation, and it was revision 11's own fix
+
+**Compliance round 4 = FAIL, 1 violation. Observability = risk low, confidence high, one advisory
+that mattered more than its label.**
+
+### The violation: `writing-specs/locale-pin-mechanism`
+
+Revision 11 required the exemption regex to be "evaluated under `LC_ALL=C`" but never said how that
+pin is scoped to a bash `[[ ]]` test. The judge tested the spelling an engineer reaches for first and
+found it is not merely wrong but a crash — independently reproduced here:
+
+```
+LC_ALL=C [[ "$s" =~ $re ]]   ->  "[[: command not found", exit 127
+( export LC_ALL=C; [[ ... ]] ) ->  exit 0
+```
+
+`[[` is a bash **reserved word**, not a command; an assignment prefix makes bash search for a command
+by that name. **This is the same defect class as revision 11 itself, one layer down** — a requirement
+written in the idiom of one context and destined to execute in another. Revision 11 fixed the regex's
+engine mismatch and re-introduced the species in the sentence describing the fix. Revision 12 states
+the subshell form explicitly, shows the wrong form with its measured exit code, and gives the reason
+for the subshell: the gate's other comparisons must keep the caller's locale (verified — the pin does
+not leak).
+
+### The advisory that mattered: an arming check that can only observe refusal
+
+Checklist task 14 is v1's **only** proof the gate is armed, and every one of its cases asserted the
+door *shuts* (exit 2) or that an opt-out is honoured (exit 0 because the gate is inert). None fed a
+valid `TEST_EXEMPT` and expected acceptance. So the arming check would have passed cleanly throughout
+revisions 1–10, while the escape hatch was dead — the exact state that shipped. **A check that can
+only observe refusal cannot detect a control that refuses everything.** Revision 12 adds the positive
+path: valid reason → exit 0 → `EXEMPT` line in the log.
+
+Related, recorded rather than fixed: a `MSG_BAD_EXEMPT` log line records that validation refused,
+never why, so a checker rejecting *everything* looks like a dense run of typos. Recording the failing
+sub-rule would not close it — a `regcomp`-level break fails before any sub-rule runs. The task-14
+positive path is what actually separates the two.
+
+### Enumeration, done rather than deferred
+
+Rather than wait for round 5 to find a third instance, the whole class was swept: every regex-shaped
+construct in the spec, attributed to the engine that will run it (guard = bash; classifier and writer
+= Python). `^([0-9a-f]{40}|[0-9a-f]{64})$` is valid and correct in both, ran clean on bash 3.2.57;
+`^-[A-Za-z]+` belongs to the Python classifier; no bash-4 constructs against the 3.2 pin; `[[:print:]]`
+appears only in bash contexts. The first sweep only saw backticked inline spans, so it was re-run
+inside code fences and Gherkin — the acknowledged blind spot — and found nothing further.
+**Result: one instance, already fixed, plus the one the judge found in the fix.**
+
+### Process note
+
+The compliance judge wrote its round-4 markdown by **appending** to the per-spec file
+`coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md` (now nine rounds) rather than
+the round-suffixed filename the prompt specified. Diff verified: **80 added, 0 deleted.** Its own
+summary claimed the specified path, so the claim was wrong while the behaviour was right — and the
+repo convention it followed is the better one. Check the diff, not the report.
+
+Composition re-derived at revision 12: total **1,652**, floor **867** (855 → 867), prose 785, 58
+scenarios. Floor still rising; the 800 waiver holds on stronger arithmetic each round.

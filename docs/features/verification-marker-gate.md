@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 11
-revision_status: complete  # exemption regex was Python syntax in a bash gate; repaired + locale-pinned
+revision: 12
+revision_status: complete  # round-4 fail closed: locale-pin mechanism stated; task 14 gains the positive path
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -441,6 +441,27 @@ read-side validation of the classifier's output is specified:
    > locale the same class admits them, and the point of pinning is that the gate must not depend on
    > which of those is in force. Rejection is fail-closed and lands on `MSG_BAD_EXEMPT`, which names
    > the problem, so the remedy is to rewrite the reason in ASCII.
+
+   **How the pin is scoped — this is part of the requirement, not an implementation detail**
+   (revision 12, `writing-specs/locale-pin-mechanism`). `[[` is a bash **reserved word**, not a
+   command, and a variable-assignment prefix makes bash look for a command by that name. So the
+   spelling an engineer reaches for first is not merely wrong, it is a crash:
+
+   ```sh
+   # WRONG — measured on bash 3.2.57: "[[: command not found", exit 127.
+   # An assignment prefix requires a command; [[ is a reserved word.
+   LC_ALL=C [[ "$exempt" =~ $re ]]
+
+   # CORRECT — a subshell so the pin cannot leak into the rest of the gate,
+   # which does its own locale-sensitive work (sorting, the marker regex).
+   if ( export LC_ALL=C; [[ "$exempt" =~ ^[[:print:]]{1,200}$ ]] ); then …
+   ```
+
+   > Stating only "evaluated under `LC_ALL=C`" is what round 4 cited, and the citation is right: it is
+   > the **same defect class as revision 11 one layer down** — a requirement written in the idiom of
+   > one context and destined to execute in another. Revision 11 fixed the regex's engine mismatch and
+   > then re-introduced the species in the sentence describing the fix. The subshell is specified
+   > rather than a bare assignment because the gate's other comparisons must keep the caller's locale.
 
 Putting the regex at step 1 would let `TEST_EXEMPT=$'a\nb' ls` — a non-commit — block the session,
 which is why the order is load-bearing rather than incidental.
@@ -1375,6 +1396,14 @@ never survives a fresh clone. That is deliberate:
 - What it does **not** deliver is organisational assurance. Nobody else can read it, and a developer
   who wants to hide a bypass can delete it. It is instrumentation, not evidence, and any later claim
   that this feature provides an audit trail should be read against this paragraph.
+- **Nor does it distinguish "the user mistyped a reason" from "the checker is broken."** A
+  `MSG_BAD_EXEMPT` line records that validation refused, never why, so a regex that rejects *every*
+  reason produces a log indistinguishable from a run of typos — only denser. Recording the failing
+  sub-rule would narrow but not close this, because a checker broken at the `regcomp` level fails
+  before any sub-rule is reached. **The control that actually separates the two is the positive-path
+  case in checklist task 14**, which fails loudly the moment the hatch stops opening; the log is not
+  where that question gets answered, and v1 ships no automated reader for it. Noted revision 12 on
+  the round-4 observability advisory.
 
 > **Closed in revision 11: the invisible-Unicode question, and why it was asked against the wrong
 > engine.** Revisions 1–10 disclosed this as an open user decision — that `^[^\x00-\x1f\x7f]{1,200}$`
@@ -1517,6 +1546,14 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
       classifier temporarily renamed**, which is the check that the opt-in ordering actually holds in
       the installed copy. `judge-guard` shipped with this untested and the installed copy had no
       `lib/` at all.
+      **Then the positive path, which every case above omits:** pipe a payload carrying a *valid*
+      `TEST_EXEMPT` reason and expect **exit 0 with an `EXEMPT` line appended to the log**. Added
+      revision 12 on the round-4 observability advisory, and it is not symmetry for its own sake —
+      every other case in this task asserts the door *shuts*, so the whole arming check passes with
+      the escape hatch dead. That is not hypothetical: it is exactly the state revisions 1–10 shipped,
+      where the regex denied every exemption, and this task as written would have reported the gate
+      correctly armed throughout. **A check that can only observe refusal cannot detect a control
+      that refuses everything.**
 - [ ] 15. Obs judge (implementation stage) pinning the final HEAD → PR.
 
 **Standing decisions.**
@@ -1548,6 +1585,7 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   | `9251218` | revision 9 — decision log restored to v1 | 1,539 |
   | revision 10 | round-3 advisory fixes: log read commands, as-of caveat, Unicode disclosure | 1,576 |
   | revision 11 | exemption regex repaired — Python syntax in a bash gate — plus the locale pin | 1,614 |
+  | revision 12 | round-4 fail closed: pin mechanism stated, task 14 gains its positive path | 1,652 |
 
   ⚠️ **Do not trust a line count in this file without re-running the derivation; a composition table
   counts itself.** Round 2 caught two instances of exactly that. The figures here were measured at a
@@ -1564,21 +1602,21 @@ Measured on this machine, not recalled: **bash 3.2.57** (macOS system bash — n
   echo "total=$tot floor=$((blank+gherkin+tbl+code)) prose=$((tot-blank-gherkin-tbl-code))"
   ```
 
-  Composition **as of revision 11**, from that command:
+  Composition **as of revision 12**, from that command:
 
   | component | lines |
   |---|---|
   | Gherkin, 58 scenarios | 387 |
-  | contract and measurement table rows | 137 |
-  | code blocks (mermaid, sh, python, json) | 79 |
-  | blank | 252 |
-  | **non-prose floor** | **855** |
-  | prose | 759 |
+  | contract and measurement table rows | 138 |
+  | code blocks (mermaid, sh, python, json) | 86 |
+  | blank | 256 |
+  | **non-prose floor** | **867** |
+  | prose | 785 |
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **855**, so **deleting
+  it *up*, never toward 800 — and it has now crossed: the non-prose floor is **867**, so **deleting
   every line of prose in this file still leaves it over the ceiling.** The prose budget for an
-  800-line version is **negative 55**. This is no longer "800 is hard to reach"; it is arithmetically
+  800-line version is **negative 67**. This is no longer "800 is hard to reach"; it is arithmetically
   unreachable while the spec keeps 58 acceptance scenarios and its contract tables, and cutting those
   is what the user rejected when choosing the scope cut, and rejected again when restoring the log.
 
