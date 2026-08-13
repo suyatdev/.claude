@@ -808,8 +808,22 @@ assertion. They are still cases and still run.
         `rules/gates.md` in the project root (not the user's global `~/.claude/rules/gates.md`) — this
         is the copy checked into the repo and in scope for this branch per the spec's own note that
         `rules/` sits in neither git-guard's allowlist nor phase-guard's exemptions.
-- [ ] Observability judge, then PR. The verdict must stay uncommitted until the PR is open
+- [x] Observability judge, then PR. The verdict must stay uncommitted until the PR is open
       (`judge-guard` compares `head_sha` to HEAD).
+      - Dispatched via the pane-orchestration procedure (`dispatching-pane-agents`), stage
+        `implementation`. Verdict: **risk=medium, confidence=high**, all ten dimensions pass except
+        `checkpoint` (concern) — flagged the compliance gate's unresolved exit, an uncommitted
+        `phase: review` edit sitting on the judged commit, and one stale checklist checkbox (this
+        item's predecessor, now fixed above). `head_sha` matched HEAD (`a478186`) at judgment time,
+        satisfying `judge-guard`'s freshness check.
+        Verdict: `coding-memory/observability-judge/2026-08-13-fix-git-guard-detached-head.md`.
+      - PR #52 was already open (from an earlier session), so `gh pr create` — and `judge-guard`'s
+        gate on it — was never re-invoked; committed the verdict artifacts immediately rather than
+        waiting further, since the "commit after the PR is open" ordering was already satisfied.
+      - PR #52's description was fully stale (written before the fix landed — draft banner, 7 failing
+        rows). Rewrote it to reflect current state (108/0, ADR 0026, the judge verdict, the open
+        compliance-gate decision, the residual classifier hole) and marked it ready for review, per
+        explicit user confirmation.
 
 ## Gate record
 
@@ -836,4 +850,17 @@ The observability judge still gates the PR, and that gate is not waived.
 
 ## Verification
 
-Not started — implementation begins at checklist step 1.
+- **Tests:** `bash hooks/git-guard.test.sh` — 108 passed, 0 failed. The three carve-out bounds (rows
+  15, 16, 17) were each independently confirmed load-bearing by mutation (remove the protection,
+  confirm the specific row alone goes red, restore, confirm 108/0 again), not only by the suite's
+  green result.
+- **Working tree:** clean at `6b86db6`; `git diff hooks/git-guard.sh` against HEAD is empty — no
+  uncommitted hook edits survive.
+- **Observability judge (implementation stage):** risk=medium, confidence=high, all dimensions pass
+  except `checkpoint` (concern). Verdict: `coding-memory/observability-judge/2026-08-13-fix-git-guard-detached-head.md`.
+- **Compliance gate:** open, by explicit user decision — see "Gate record" above. Not waived silently;
+  three ids remain formally unresolved.
+- **PR:** #52, ready for review, description current as of `6b86db6`.
+- **Open, deliberately, per ADR 0026:** `merge`/`cherry-pick`/`revert`/`am`/`rebase` still bypass the
+  commit allowlist entirely (pre-existing, unrelated to this fix); the sequencer carve-out knowingly
+  widens that gap slightly for a hand-written commit mid-conflict on a detached HEAD.
