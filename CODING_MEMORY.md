@@ -6716,3 +6716,35 @@ that judge is **the third different number it has recorded for the same quantity
 surface it as open. Checklist task 10 is the safety net, but an inflated figure makes the latency budget
 impossible to fail. Also: no allow-path signal means the log cannot distinguish "gate healthy and quiet"
 from "gate on but silently never pairing" — both are an empty log forever.
+
+## 2026-08-13 — marker-gate round 7: the flowchart fix landed; the 800-line target did not
+
+Commit `36a0880` on `docs/post-merge-53`. **Violation 1 closed, violation 2 open and reported as open.**
+
+**`writing-specs/opt-in-fail-closed-conflict` — fixed.** The node order now reads pre-filter → python3
+→ inline JSON read of payload `cwd` → toplevel → writer-installed → classifier. Every door except
+`MSG_NO_PYTHON` sits below the opt-in check. Precedent for that one exception was **verified, not
+inherited**: `git-guard.sh:53-57`, `judge-guard.sh:44-48`, `merge-guard.sh:39-43` all exit 2 on a
+missing python3 and are all globally registered; `doc-guard.sh:54` is the family's lone fail-open. The
+three classifier doors were the ones that actually mattered — `classify-commit-command.py` is a file
+this feature *adds*, so no sibling guard's precedent covered a missing copy of it.
+
+Knock-ons carried through rather than left to drift: allow paths 9→10, mutation floor 24→25, budgets
+3→4 (an adopting repo pays two python3 starts now), log field 4 made total with `-`, and the two doors
+that fire before a repo is known now say explicitly that they write no line.
+
+**`python3 -I` startup re-measured: 23.8 ms median, n=15 (min 23.2, max 26.0).** This is the *fourth*
+figure for one quantity (56.3 → 20-30 → ~40 → 23.8). The spec now carries the derivation command, not
+just the number, so the next reader re-runs it instead of inheriting it. Cause of the drift was that
+nobody ever recorded how it was measured.
+
+**`core-conduct/file-size-convention` — NOT closed, and the agreed method cannot close it.** Measured,
+not estimated: the rewrite deleted **332** lines and added **361** (`git diff --numstat`), leaving
+**1,448**. Composition: 374 lines of Gherkin across 56 scenarios, 124 contract-table rows, 239 blank
+lines, ~711 prose. **Deleting every line of prose still leaves ~740** — so 800 is not reachable while
+the spec keeps its acceptance scenarios and contract tables.
+
+⚠️ **The three standing constraints — under 800, do not split, seek no waiver — are jointly
+unsatisfiable at this feature's scope.** History was never the bulk; the design is. Recorded here
+rather than resolved silently, because picking which constraint gives is a user decision. Do not open
+a round-2 judge dispatch until it is answered: the size id will be re-cited verbatim and burn a round.
