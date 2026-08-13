@@ -774,8 +774,31 @@ assertion. They are still cases and still run.
         rounds (lines 163, 209, 216, 221, 222, 228, 233, 234, 305) isolated correctly — no cross-talk
         between assertions, no unrelated exit-code row moved. `git diff hooks/git-guard.sh` is empty
         after the last restore: no hook edits survived beyond the reverted mutations.
-- [ ] Write ADR 0026, including the rebase-replay residual hole.
-- [ ] Update the two `rules/gates.md` stubs.
+- [x] Write ADR 0026, including the rebase-replay residual hole.
+      - Landed as `docs/decisions/0026-symbolic-ref-not-abbrev-ref-names-the-branch.md`, joining the
+        lineage of ADRs 0013–0015 as the spec required. Covers the `--abbrev-ref` conflation and
+        incident, the `symbolic-ref` decision with the six-state table and the flowchart (validated
+        with `diagramming-technical-docs`'s `validate-diagrams.sh`, 1 block / 0 failed), the four
+        options weighed, the accepted costs, and the residual hole as its own subsection.
+      - Re-verified rather than trusted from the spec before writing anything down: re-ran
+        `bash hooks/git-guard.test.sh` (108 passed, 0 failed) and confirmed `git diff hooks/git-guard.sh`
+        is empty against HEAD — the fix described is actually what's in the working tree, not just
+        what the checklist claims. Independently re-derived the residual-hole claim from
+        `hooks/lib/classify-git-command.py` itself (`subcommand ==` appears exactly twice in 198
+        lines: `"commit"` and `"push"` — no branch inspects `merge`/`cherry-pick`/`revert`/`am`/`rebase`)
+        rather than copying the spec's prose, and independently re-ran the `git branch HEAD` collision
+        check (`fatal: 'HEAD' is not a valid branch name`, exit 128) instead of citing the spec's claim
+        unverified.
+- [x] Update the two `rules/gates.md` stubs.
+      - Default-branch safety stub: added the fail-closed behavior (detached HEAD, detached mid-rebase
+        moving `main`/`master`, outside a repository) and the sequencer-carve-out exception, pointing
+        at ADR 0026.
+      - Force-push safety stub: appended "a detached HEAD, and outside a git repository" to the
+        existing `main`/`master` clause, pointing at ADR 0026.
+      - Located both by the quoted text the spec named, not by line number, as instructed. Edited
+        `rules/gates.md` in the project root (not the user's global `~/.claude/rules/gates.md`) — this
+        is the copy checked into the repo and in scope for this branch per the spec's own note that
+        `rules/` sits in neither git-guard's allowlist nor phase-guard's exemptions.
 - [ ] Observability judge, then PR. The verdict must stay uncommitted until the PR is open
       (`judge-guard` compares `head_sha` to HEAD).
 
