@@ -2114,7 +2114,7 @@ reason this row is a pin and not a footnote.
       ran the writer, directory ended `0700` and the marker `0600`. **Task 6 owns that case** ("run
       either component"), so it is deferred by design rather than missed — but until task 6 lands,
       the repair is real code with nothing asserting it.
-- [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
+- [x] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
       plus the two opt-in-ordering scenarios, plus the four `UNSUPPORTED` triggers each asserted by the
       trigger its message names rather than by the shared constant alone, plus the `test-marker.log`
       line wherever a scenario names one — **including the two that assert no line is written**, since
@@ -2143,6 +2143,20 @@ reason this row is a pin and not a footnote.
       an emptied entry point and an emptied classifier, which reach `MSG_CLASSIFIER_FAILED` by
       different routes. A suite that only ever sees well-formed lines asserts nothing about the check
       that reads them.
+      ✅ 914 lines, **225 assertions**; against the real tree **8 pass / 217 fail** — the gate does
+      not exist, so every case reaching it exits 127. `shellcheck -x` clean (one `SC2086` directive:
+      `$RUN_ENV` must word-split); stderr empty on a full run.
+      ⚠️ **Only 6 of the 225 are proven able to fail *and* able to pass** — the writer-facing mode
+      assertions, validated against two mutants of a throwaway copy of the writer. Deleting
+      `os.chmod(state, …)` flips exactly one, the pre-existing-`0755` case task 5 deferred; loosening
+      both modes flips all six. **The other 219 are proven able to fail and nothing more**: task 4's
+      throwaway-oracle precedent is unreachable here because that oracle *is* the gate. Two of them
+      (*an allowed commit writes no log line*, *the door before a repo is known writes no line*) pass
+      **vacuously** today — they read 0 lines from a log nothing can yet create. Detail:
+      `CODING_MEMORY.md` 2026-08-14.
+      ⚠️ **914 > the 800-line max, accepted** (user decision 2026-08-14); code floor is 625, so
+      fitting means deleting the rationale that makes each fixture honest. **Record the waiver at
+      task 16** — the frontmatter is spec, and this is the implementation phase.
 - [ ] 7. Green: `hooks/test-marker-guard.sh` **and `hooks/lib/decide-commit-gate.py`** — the bash
       wrapper and the decision call are one behaviour split across two files by ADR 0026, and neither
       passes task 6 alone. ⚠️ **Task 3 is a third revert partner**: the entry point imports the

@@ -7432,3 +7432,66 @@ building that oracle means building the gate, which means the classifier. The pa
 the *writer* (the `hooks/state/` mode cases, including the pre-existing-`0755` case task 5 left
 deferred) can be validated now, because the writer exists. Say which half was proven, rather than
 letting "red suite written" imply the stronger claim.
+
+## 2026-08-14 — task 6 red: the gate's suite, and which half of it was actually proven
+
+`hooks/test-marker-guard.test.sh` lands at **914 lines** (code floor **625**), driving **225
+assertions**. Against the real tree: **8 pass, 217 fail** — the gate does not exist, so every case
+that invokes it exits 127. That is the correct red state, not a defect in the suite.
+
+### The honest split — read this before trusting the word "red"
+
+**Proven able to fail *and* able to pass: the six writer-facing mode assertions only.** Two mutants
+of a throwaway copy of the writer (never the repo's), each run against the unmodified suite:
+
+| mutant | effect |
+|---|---|
+| delete `os.chmod(state, STATE_MODE)` | flips **1** case: *pre-existing 0755 store, writer runs* |
+| `STATE_MODE = 0o755`, `MARKER_MODE = 0o644` | flips **all 6** |
+
+The first mutant is the one that matters: it is the case `mkdir -p -m` and `os.makedirs(mode=…)`
+both fail to satisfy, and it is exactly the case task 5 deferred. It flips alone, so it is not
+riding on the other five.
+
+**Not proven satisfiable: the other 219.** Task 4's precedent — validate a red suite against a
+correct throwaway oracle — is unreachable here, because that oracle *is* the gate, which needs the
+classifier, which is task 3. These 219 are proven able to *fail* and nothing more. **"Red suite
+written" must not be read as the stronger claim**, and two assertions inside that set currently pass
+**vacuously**: *an allowed commit writes no log line* and *the door that fires before a repo is
+known writes no line* both read 0 lines from a log that no component has yet been able to create.
+They become real only once the gate runs.
+
+Likewise, *gate first, then writer* and *writer first, then gate* are named for an ordering that
+does not yet exist — today both only exercise the writer. The names are right for task 7's world.
+
+### Decisions taken while writing it
+
+- **File size: 914 > the 800 max, accepted** (user decision, 2026-08-14). Trimming to fit means
+  cutting ~113 lines of rationale, and the rationale is the discipline — each comment names the
+  defect that passes when its case is absent. Splitting the file is a spec change (the spec names
+  one file; task 8 wires one call site), so it would need the GATE. **Record the waiver at task
+  16**, not now: the frontmatter is spec, and this is the implementation phase.
+- **Repo fixtures come from `mktemp -d`, not a counter.** `setup_door` runs inside a command
+  substitution, so a `SEQ` incremented there is lost and the next door silently reuses the path —
+  caught before it could make two door cases share one repo.
+- **`shellcheck -x` clean at 0.11.0**, with one directive: `SC2086` on `$RUN_ENV`, which *must*
+  word-split — a quoted empty string hands `env` an argument it reads as a command name.
+- **stderr is empty** on a full run (measured: 253 stdout lines, 0 stderr).
+
+### What the suite refuses to do, deliberately
+
+- Log assertions read **by field** (`awk -F'\t'`), never by `grep`.
+- Every mode case sets **`umask 022`** explicitly; a suite inheriting `0077` reports 0600 on a file
+  the gate created 0644.
+- Fixtures **disagree on purpose**: `$HOME`'s store is stale, the main checkout's marker is stale
+  against the linked worktree's, `written_at` is varied in both directions.
+- The door cases are driven from the spec's **two Examples tables** as data (`DOORS_TSV`,
+  `DOORS_BASH`). A door added to the spec table becomes a case; there is no second spelling to sync.
+- The `-` placeholder is used for an absent `desc` in `setup_door`'s output, for the same reason the
+  TSV contract uses it: a tab is IFS whitespace, so an empty field vanishes and shifts the rest.
+
+### Still true, still blocking
+
+Task 7 needs task 3 needs the `shell_segments.py` option grammar. **Task 6 was the last forward
+motion on this branch** unless that work is scheduled. Tasks 8–16 remain unassessed — task 8 wires
+the *writer's* call site and may be independent. Re-derive before picking one up.
