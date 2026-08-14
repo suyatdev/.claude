@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 17
-revision_status: complete  # round-9 FAIL closed -- written_at now has an enforcing outline. Round 10 owed OR gate.
+revision: 18
+revision_status: complete  # exhaustive MUST-sweep: 3 unenforced claims in §The marker closed. Round 10 (confirming) is owed.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -362,10 +362,13 @@ A failed marker write **fails the suite**. A silent no-marker would surface late
   would agree with each other and pass every round-trip test** — that scenario is the only assertion
   that catches it, which is why it is written against a literal expected key rather than against the
   writer's own output.
-- Resolved from `git rev-parse --show-toplevel`, **never `$HOME`**. Reading `$HOME`'s copy instead of
+- Resolved from `git rev-parse --show-toplevel`, **never `$HOME`**, and **enforced by two scenarios in
+  §Acceptance** — one against a disagreeing `$HOME` store, one inside a linked worktree, because an
+  agreeing store passes under either implementation. Reading `$HOME`'s copy instead of
   the target repo's was literally the bug `fix/judge-guard-verdict-lookup` existed to fix; a marker
   written inside a worktree must be read back inside that worktree.
-- **`<repo>/hooks/state/` is `0700` and each marker file is `0600`** — core-conduct's default-deny for
+- **`<repo>/hooks/state/` is `0700` and each marker file is `0600`**, **asserted by its own scenario**
+  rather than left to a umask — core-conduct's default-deny for
   a generated store. The real defence is read-side validation, but the store is the sole authority for
   letting a commit through and there is no reason for it to be world-readable. **This feature creates
   `hooks/state/`; it does not exist in this repo today.** Two components can be the first to create
@@ -1064,6 +1067,34 @@ Scenario Outline: written_at never changes a decision, in either direction
     | 1970-01-01T00:00:00Z | match        | exits 0                        |
     | 2099-01-01T00:00:00Z | match        | exits 0                        |
     | the current time     | do not match | exits 2 with MSG_STALE_SUBJECT |
+
+Scenario: the marker is read from the repo's own toplevel, never from $HOME
+  Given a repo at a path other than $HOME, holding a valid marker for hooks/foo.sh
+    And $HOME has a hooks/state/ of its own carrying a STALE marker for that same path
+   When "git commit -m msg" runs inside that repo
+   Then the hook exits 0
+   # §The marker: resolved from `git rev-parse --show-toplevel`, never $HOME. The two stores are
+   # indistinguishable unless the scenario deliberately makes them DISAGREE — with $HOME's copy
+   # absent or agreeing, both implementations pass, which is why this one is stale-on-purpose.
+   # Reading $HOME's copy is not hypothetical: it is the bug fix/judge-guard-verdict-lookup
+   # existed to fix
+
+Scenario: a marker written inside a linked worktree is read back inside that worktree
+  Given hooks/foo.sh is staged in a linked git worktree whose marker matches its content
+    And the main checkout's marker for hooks/foo.sh is stale
+   When "git commit -m msg" runs in the linked worktree
+   Then the hook exits 0
+   # --show-toplevel resolves to the linked worktree, not the main checkout. same defect shape as
+   # the scenario above and a different resolver, so neither substitutes for the other
+
+Scenario: the generated store is not world-readable
+  Given a repo where hooks/state/ does not exist yet
+   When the first decision that writes a marker is made
+   Then hooks/state/ is created with mode 0700
+    And every marker file within it has mode 0600
+   # core-conduct's default-deny for a generated store. Asserted because nothing else here would
+   # notice a 0755 umask default: the gate would behave correctly in every other scenario while
+   # the store that authorises commits sat readable by every process on the machine
 
 Scenario: a repo that has not installed the writer is never gated
   Given a repo with hooks/bar.sh and hooks/bar.test.sh and no marker
@@ -2221,7 +2252,18 @@ reason this row is a pin and not a footnote.
   general lesson: a measurement with no way to disagree with itself is not yet a measurement.
 
   **Revision 17 — same procedure, from the staged blob:** total **2,269**, non-prose floor
-  **1,159**, prose **1,110**, across **67** scenarios, two of them outlines. Round 9 swept
+  **1,159**, prose **1,110**, across **67** scenarios, two of them outlines.
+
+  **Revision 18 — same procedure, from the staged blob:** total **2,311**, non-prose floor
+  **1,188**, prose **1,123**, across **70** scenarios. Not judge-driven: this is the
+  **exhaustive sweep** round 9 argued for, run over the whole file rather than over the last
+  fix. Every `MUST`-shaped sentence and every bolded **never**/**always** claim was checked for
+  an enforcing scenario; most already had one (`exit 3` only for an unreadable payload, an
+  optional value never consuming the next token, `VAR=x` never reaching the environment). **Three
+  did not**, all in §The marker: `never $HOME`, its linked-worktree corollary, and the `0700`/`0600`
+  store. ⚠️ **The `$HOME` one is not hypothetical** — it is the bug `fix/judge-guard-verdict-lookup`
+  existed to fix, and the same defect was being actively worked around, in this session, by hand,
+  every time a judge was dispatched against this worktree. Round 9 swept
   every MUST-shaped sentence for an enforcing scenario and found one left: `written_at` was
   declared unable to influence any decision, and no scenario varied it. ⚠️ **The standing pattern
   broke here** — rounds 6→8 each found their violation inside the previous round's fix, so round 9
@@ -2230,10 +2272,10 @@ reason this row is a pin and not a footnote.
   sweeping the whole surface by rule shape rather than by recency.
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,159**, so
-  **deleting every line of prose in this file still leaves it 359 lines over the ceiling.** The prose
-  budget for an 800-line version is **negative 359**, up from negative 67 at revision 12. This is no
-  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 67 acceptance
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,188**, so
+  **deleting every line of prose in this file still leaves it 388 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 388**, up from negative 67 at revision 12. This is no
+  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 70 acceptance
   scenarios and its contract tables, and cutting those is what the user rejected when choosing the
   scope cut, and rejected again when restoring the log.
 
