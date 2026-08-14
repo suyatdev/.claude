@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 16
-revision_status: complete  # round-8 FAIL closed by one Scenario Outline over all 12 loggable doors; floor/prose figures corrected. Round 9 is owed.
+revision: 17
+revision_status: complete  # round-9 FAIL closed -- written_at now has an enforcing outline. Round 10 owed OR gate.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -391,6 +391,9 @@ A failed marker write **fails the suite**. A silent no-marker would surface late
 
 `written_at` is **informational only and MUST NOT influence any decision.** Freshness is decided by
 content hashes alone — a timestamp rule would re-admit the staleness problem the blob key dissolves.
+**Enforced by the `written_at` outline in §Acceptance**, which varies the timestamp independently of
+the blobs in both directions; the claim stood unenforced through revision 16, which is precisely how
+an implementer could have added a staleness rule and still passed every scenario.
 
 Read-side validation: `version == 1`, both `blob` values match `^([0-9a-f]{40}|[0-9a-f]{64})$` (40
 today, 64 leaves room for a SHA-256 repo), both `path` values equal the expected pair. Anything else →
@@ -1043,6 +1046,24 @@ Scenario: fresh marker allows the commit
     And the suite passed against the current content of both
    When "git commit -m msg" is staged with hooks/foo.sh
    Then the hook exits 0
+
+Scenario Outline: written_at never changes a decision, in either direction
+  Given hooks/foo.sh has a valid marker whose written_at is <written_at>
+    And the recorded blobs <blobs> the staged content
+   When "git commit -m msg" runs
+   Then the hook <outcome>
+   # §The marker states written_at is "informational only and MUST NOT influence any decision",
+   # and through revision 16 nothing enforced it — no scenario varied the timestamp at all, so an
+   # implementer could add a plausible "reject markers older than N days" rule and still pass all
+   # 66. The guarantee is INDEPENDENCE, so it needs both directions: an ancient timestamp must not
+   # block a commit whose blobs match, and a current one must not rescue one whose blobs do not.
+   # Either row alone is satisfied by an implementation that reads the clock.
+
+  Examples:
+    | written_at           | blobs        | outcome                        |
+    | 1970-01-01T00:00:00Z | match        | exits 0                        |
+    | 2099-01-01T00:00:00Z | match        | exits 0                        |
+    | the current time     | do not match | exits 2 with MSG_STALE_SUBJECT |
 
 Scenario: a repo that has not installed the writer is never gated
   Given a repo with hooks/bar.sh and hooks/bar.test.sh and no marker
@@ -2199,11 +2220,20 @@ reason this row is a pin and not a footnote.
   left to be inherited. **The `sum` field is the falsifier the old command lacked**, which is the
   general lesson: a measurement with no way to disagree with itself is not yet a measurement.
 
+  **Revision 17 — same procedure, from the staged blob:** total **2,269**, non-prose floor
+  **1,159**, prose **1,110**, across **67** scenarios, two of them outlines. Round 9 swept
+  every MUST-shaped sentence for an enforcing scenario and found one left: `written_at` was
+  declared unable to influence any decision, and no scenario varied it. ⚠️ **The standing pattern
+  broke here** — rounds 6→8 each found their violation inside the previous round's fix, so round 9
+  was aimed at revision 16's new text; the defect was in §The marker instead, untouched since
+  early revisions. **A fix-adjacent search would have missed it**, which is the argument for
+  sweeping the whole surface by rule shape rather than by recency.
+
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,140**, so
-  **deleting every line of prose in this file still leaves it 340 lines over the ceiling.** The prose
-  budget for an 800-line version is **negative 340**, up from negative 67 at revision 12. This is no
-  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 66 acceptance
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,159**, so
+  **deleting every line of prose in this file still leaves it 359 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 359**, up from negative 67 at revision 12. This is no
+  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 67 acceptance
   scenarios and its contract tables, and cutting those is what the user rejected when choosing the
   scope cut, and rejected again when restoring the log.
 

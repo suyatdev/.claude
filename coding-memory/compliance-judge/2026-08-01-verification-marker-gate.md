@@ -1330,3 +1330,106 @@ the subset that also mentions "log" or "field" in its Then clause. The intersect
   O3 reports the revision-15 measurement, read back from the staged blob: total **2,163** lines
   (matches `wc -l` on this checkout), non-prose floor **1,127** — 327 over the 800 ceiling even with
   every line of prose deleted. Not re-argued; not counted toward this verdict.
+
+## Round 9 (judged against spec revision 16, HEAD `859f303f107dfc57170ce4620d5ff040b2d0e039`) — 2026-08-14T01:39:49Z · **FAIL** (1 violation) · confidence: high
+
+### Layman summary
+
+Two things this round: whether revision 16 actually closed round 8's finding, and whether the
+line-count numbers revision 16 shipped are real. Both check out. I re-ran the corrected `awk`
+line-classifier from §Standing decisions → O3 myself against the exact committed blob rather than
+trusting the spec's own arithmetic, and got exactly what it claims — `total=2239 floor=1140
+prose=1099 sum=2239` (the `sum` field equalling `total` proves every line landed in exactly one
+bucket) and 66 `Scenario`/`Scenario Outline` blocks. I also re-ran the same command against
+revision 15's committed blob and got the corrected retroactive figures the spec now states for it
+(`floor=1089 prose=1074`), confirming the earlier four-grep form really had been double-counting.
+And the round-8 gap is genuinely closed: the single `MSG_NO_MARKER`-only scenario is gone, replaced
+by one Scenario Outline with two Examples tables (8 rows for the doors the Python decision call
+reports, 4 for the doors bash raises itself) that asserts both field 3 and field 4 for all 12
+doors that write a log line, plus a separate scenario for the 13th door (`MSG_NO_PYTHON`) that
+writes none. **I am not re-citing that id.**
+
+Sweeping the rest of the file for the same defect shape the spec itself names — a `MUST`-shaped
+sentence with no scenario that would catch its violation — turned up one new instance the spec has
+not yet closed: the marker schema's `written_at` field is declared "informational only and MUST NOT
+influence any decision," but nothing in the 66 scenarios exercises that claim. There is no scenario
+giving a marker whose blobs match but whose `written_at` is old (or missing, or in the future) and
+asserting the commit still allows — so an implementer who added "reject markers older than N days"
+would pass every scenario in this file while silently reintroducing the exact staleness problem the
+blob-keyed design exists to dissolve.
+
+### Round-8 violation — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/decision-log-field3-per-door` | **Closed** | Read the replacement text directly (`:1393-1429`): `Scenario Outline: every door that writes a line writes the constant that fired in field 3` asserts `Then the hook exits 2 with <door> / And exactly one BLOCK line is appended ... / And field 3 of that line is "<door>" / And field 4 of that line is <field 4>` against two Examples tables. Cross-checked both tables' door lists against the two authoritative partitions elsewhere in the file: the first 8 rows (`MSG_NOTHING_RUNNABLE, MSG_BAD_EXEMPT, MSG_UNSUPPORTED_FORM, MSG_GIT_FAILED, MSG_NO_MARKER, MSG_BAD_MARKER, MSG_STALE_SUBJECT, MSG_STALE_TEST`) exactly match the 8 `BLOCK` rows of the field-1/2/3/4 wire table at `:536-543`; the second 4 (`MSG_CLASSIFIER_MISSING, MSG_BAD_PAYLOAD, MSG_CLASSIFIER_FAILED, MSG_CLASSIFIER_BAD_OUTPUT`) exactly match the "five doors are bash's" list at `:584-585` minus `MSG_NO_PYTHON`, which is separately asserted to write no line at all (`:1447-1453`). 8 + 4 + 1 = 13, matching "The doors" table's total. No per-door scenario was re-added beside the outline (which the spec's own comment at `:1401-1403` warns against as "two spellings of one check"), and each door's *setup* (the Given clause the outline's `<door>` abstracts over) is independently established by a concrete scenario earlier in the file — e.g. `MSG_STALE_SUBJECT` at `:1138-1141`, `MSG_UNSUPPORTED_FORM` at `:1228-1233`, `MSG_CLASSIFIER_FAILED` at `:1242-1248` — so the outline is grounded, not free-floating prose. |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/written-at-no-enforcing-scenario` | `skills/writing-specs/SKILL.md` ("Good, bad, and edge-case scenarios: state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from") | §2 → "`<repo>/hooks/state/test-markers/` — the store", marker schema and the `written_at` sentence (`:381-393`), cross-referenced against "Read-side validation" (`:395-397`) and the full `## Scenarios` block (66 scenarios, `:1040-1558`) | The spec states a design invariant as a MUST NOT — `written_at` is "informational only and MUST NOT influence any decision," with "Freshness is decided by content hashes alone — a timestamp rule would re-admit the staleness problem the blob key dissolves" (`:392-393`) — and the read-side validation rule immediately below correctly omits any check of `written_at` (`:395-397`, validates only `version`, `blob`, `path`). But no scenario in the file ever varies `written_at` independently of the blobs: the positive scenario "fresh marker allows the commit" (`:1041-1045`) uses "the current content of both" without touching the timestamp, and grepping the whole file for `written_at` returns exactly the two hits above — the schema definition and the MUST NOT sentence — never a `Given`/`Then`. This is the identical defect shape the spec's own §Standing decisions history names as its recurring class (`:1903-1908`, "which stated behaviours have no enforcing command at all... asked against every MUST-shaped sentence") and the shape round 8 closed for the decision log: a stated invariant that nothing in the 66 scenarios or the 25-mutant floor (§The doors, `:1643-1648` — no mutant targets a timestamp-based rejection) would catch if violated. An implementer adding a plausible-sounding "stale marker" staleness check by elapsed time — exactly the kind of addition a reviewer unfamiliar with this paragraph might propose — would pass every scenario in this file while reintroducing the staleness problem the blob key was built to dissolve. |
+
+### Verification method
+
+Independently re-ran the corrected O3 measurement against the exact committed blobs rather than
+trusting the spec's own arithmetic:
+
+```
+$ git show bfe7ad457022ae582726bcbbee1a10f83ee3ac37 | awk '<the pinned classifier from §Standing decisions>'
+total=2239 floor=1140 prose=1099 sum=2239
+$ git show bfe7ad4... | grep -cE "^(Scenario:|Scenario Outline:)"
+66
+$ git rev-parse HEAD:docs/features/verification-marker-gate.md
+bfe7ad457022ae582726bcbbee1a10f83ee3ac37   # matches the dispatched spec_blob_sha exactly
+$ git show 263e430:docs/features/verification-marker-gate.md | awk '<same classifier>'   # revision 15
+total=2163 floor=1089 prose=1074 sum=2163   # matches the "corrected" retroactive figures the spec now states for revision 15
+```
+
+`sum == total` in both runs confirms the classifier's own falsifier holds (no line double-counted or
+dropped), and both results match the spec's claims exactly — nothing was taken on trust.
+
+For the round-8 closure, read the replacement Scenario Outline directly and cross-checked its two
+Examples tables against the two authoritative door-partition lists elsewhere in the file (wire table
+at `:536-543`, bash-doors list at `:584-585`) rather than counting scenario mentions, since round 8's
+own finding was that a superficial count ("a scenario exists for this door") had missed that the
+scenario didn't check field 3.
+
+For the new finding, applied the round's stated method exhaustively rather than sampling: grepped
+every `MUST`/`MUST NOT`/`must not`/`must never` sentence in the file (7 hits total, listed at
+`:392, 276, 347, 676-677, 726, 754→"deliberately", 975`) and checked each against the scenario set
+for a discriminating `Given`/`Then`. Six have direct enforcement (e.g. the `--` -inside-a-value rule
+at `:677` is pinned by scenario `:1193-1197`; the "collectors must not walk into" exit-129 hazard at
+`:975` is pinned by "a git failure is never read as 'nothing to check'" at `:1263-1266`, which covers
+any non-zero-exit-with-empty-stdout case generically). `written_at` at `:392` is the one exception —
+confirmed by a second, independent grep for the literal string `written_at` across the whole file,
+which returns only the schema definition and the MUST NOT sentence itself.
+
+### Notes (non-blocking)
+
+- §Decision logging's own cross-reference calls the Scenario Outline's location "§Acceptance"
+  (`:1720, 1728`), but no heading in the file is titled "Acceptance" — the actual location is
+  `## Scenarios` → `### Edges`. Not treated as a violation because the scenario itself is present and
+  auditable at that location; a reader following the literal pointer would not find a matching
+  heading, though, and this is the kind of small drift the file's own "two spellings of one check"
+  warning is aimed at.
+- §Latency's four budgets remain correctly presented as unmeasured targets pending checklist task 10
+  (`:1014-1031`) — no passage in revision 16 revises a budget from ADR 0026's prediction, and the
+  ⚠️ callout explicitly forbids doing so. Confirmed not settled, per this round's dispatch instruction.
+- ADR 0026 (`docs/decisions/0026-the-gate-does-no-json-parsing.md`) exists on disk with
+  `Status: Accepted (2026-08-13)`, matching every citation of it in the spec (the intro callout, §3,
+  and the "`v` schema sentinel is deleted" note).
+- The spec's own checklist (0/15) and frontmatter (`phase: planning`, `revision: 16`) are internally
+  consistent with the dispatch's description of the card's state.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the
+  UNRESOLVED callout under §"The command grammar" and checklist task 2's cross-reference. Not
+  re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing decisions
+  → O3 now reports the corrected revision-16 measurement, independently re-derived above: total
+  **2,239**, non-prose floor **1,140** — 340 over the 800 ceiling even with every line of prose
+  deleted, and the correction (revision 15 was actually 1,089/1,074, not the 1,127/1,036 it shipped
+  with) does not change the waiver's conclusion. Not re-argued; not counted toward this verdict.
