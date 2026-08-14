@@ -3,7 +3,7 @@ phase: planning
 model_tier: high
 branch: none
 revision: 19
-revision_status: complete  # round-10 FAIL closed: PATCH_OR_INTERACTIVE outline + log-mode/dir-repair scenarios. Gate decision owed.
+revision_status: complete  # planning complete at revision 19; task 15 carries the MUST-sweep into implementation. AWAITING GATE.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -2179,7 +2179,18 @@ reason this row is a pin and not a footnote.
       where the regex denied every exemption, and this task as written would have reported the gate
       correctly armed throughout. **A check that can only observe refusal cannot detect a control
       that refuses everything.**
-- [ ] 15. Obs judge (implementation stage) pinning the final HEAD → PR.
+- [ ] 15. **Re-run the MUST-sweep against the code, not the prose.** For every `MUST`-shaped
+      sentence, bolded **never**/**always** claim, and repeated requirement in this spec, confirm a
+      *test* exists that a wrong implementation would fail. **This task exists because inspection
+      demonstrably does not exhaust this class:** rounds 6-10 found 2,1,1,1,2 defects of exactly
+      this shape with no decay, and two independent "exhaustive" sweeps — revision 18's and round
+      10's — **each missed what the other found**. A test either exists or it does not, which is
+      why this is checked here rather than in one more judging round. Two rules learned the hard
+      way: a scenario must make a *wrong* implementation **disagree** (an embedded newline, an
+      agreeing `$HOME` store, and a stale-marker `-p` all pass under the very defect they look
+      like they test), and the two Examples tables must **drive** the test code rather than being
+      hand-copied — both judges raised that independently.
+- [ ] 16. Obs judge (implementation stage) pinning the final HEAD → PR.
 
 **Standing decisions.**
 
@@ -2288,8 +2299,18 @@ reason this row is a pin and not a footnote.
   left to be inherited. **The `sum` field is the falsifier the old command lacked**, which is the
   general lesson: a measurement with no way to disagree with itself is not yet a measurement.
 
-  **Revision 19 — same procedure, from the staged blob:** total **2,359**, non-prose floor
-  **1,224**, prose **1,135**, across **73** scenarios. ⚠️ **Revision 18's sweep called
+  **Proceeding to implementation without a passing compliance verdict — user decision,
+  2026-08-13.** Round 10's `fail` is closed by revision 19 and is now stale (the blob changed),
+  so no round-11 verdict exists and none is claimed. This is **not** a silent waiver: rounds 6-10
+  each surfaced a real defect with no decay in yield (2,1,1,1,2), and revision 18's sweep and
+  round 10's sweep **each missed what the other found** — so the class is being *sampled* by
+  inspection, not exhausted by it. The exit chosen is therefore a stronger detector rather than
+  more of the same one: **checklist task 15** re-runs the sweep against real tests, where a check
+  either exists or does not. Anyone reading this later should treat the spec as *unverified on
+  that axis* until task 15 is ticked.
+
+  **Revision 19 — same procedure, from the staged blob:** total **2,380**, non-prose floor
+  **1,225**, prose **1,155**, across **73** scenarios. ⚠️ **Revision 18's sweep called
   itself exhaustive and was not** — round 10 re-ran the same method against phrasings it had not
   matched and found **two more** instances of the identical class: the `PATCH_OR_INTERACTIVE`
   trigger (named four times as needing its own scenario "so the fold cannot silently drop one",
@@ -2320,9 +2341,9 @@ reason this row is a pin and not a footnote.
   sweeping the whole surface by rule shape rather than by recency.
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,224**, so
-  **deleting every line of prose in this file still leaves it 424 lines over the ceiling.** The prose
-  budget for an 800-line version is **negative 424**, up from negative 67 at revision 12. This is no
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,225**, so
+  **deleting every line of prose in this file still leaves it 425 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 425**, up from negative 67 at revision 12. This is no
   longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 73 acceptance
   scenarios and its contract tables, and cutting those is what the user rejected when choosing the
   scope cut, and rejected again when restoring the log.
