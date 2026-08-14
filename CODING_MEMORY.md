@@ -7222,3 +7222,55 @@ Non-prose floor re-derived live at **887** (was 867) — the size waiver holds a
   `os.makedirs(mode=…, exist_ok=True)` has the identical race and identical fix.
 - (mine) §Pinned versions omits `awk`/`cut`/`sort`/`uniq`, which revision 13 made the queries depend
   on. Verified working under this machine's BSD awk `20200816` — a pinning gap, not a live bug.
+
+## 2026-08-14 — marker-gate implementation opens: task 1, ADR 0027
+
+First session of the implementation phase. Restored from the handoff, verified frontmatter against
+reality (`phase: implementation`, branch `feature/verification-marker-gate`, clean at `02b71d4`),
+and executed **checklist task 1 only**. Committed `9783956`.
+
+**ADR 0027 — `docs/decisions/0027-the-marker-is-a-receipt-not-a-grade.md`.** Records the six things
+task 1 names: the receipt-not-a-grade framing and the ceiling it puts on the whole feature; the
+three rejected designs with their reasons (PostToolUse observer — rests on unmeasured harness
+semantics that could not be confirmed upstream; `bin/run-tests` wrapper — changes the habit; mutual
+certification — a hash says a test *changed*, never that it got *weaker*); the global-but-inert
+scope decision **with a Mermaid flowchart of the node ordering that makes it true**, since the
+"only `MSG_NO_PYTHON` is machine-global" promise is a claim about position in the flow and prose
+states it without showing it; the `UNSUPPORTED` fold and the four triggers whose refusal it kept;
+the two accepted-open shapes; and the `cmux.sh` hole.
+
+**Numbering: 0027, and the task's own instruction would have collided.** Task 1 says "check the next
+free ADR number against `main` first" — `main` tops at 0025, but 0026 landed earlier on this branch.
+Checked both.
+
+### The one thing worth carrying forward: an inherited citation that did not verify
+
+Six file:line citations were being copied out of the spec and the archive into a new durable
+artifact, so all six were re-checked first. **Five hold exactly** (`git-guard.sh:53-57`,
+`judge-guard.sh:44-48`, `merge-guard.sh:39-43`, `doc-guard.sh:54`, `judge-guard.sh:204`).
+
+**One does not.** `CODING_MEMORY.md:503` rejects the wrapper-runner design partly because it
+"invalidates the invocation this repo documents at `hooks/README.md:34,140`". That file documents
+**no suite invocation anywhere in its 284 lines** — `grep 'test\.sh'` over it returns nothing. Lines
+34 and 140 carry a different and more useful claim: *test the code path that will actually run.*
+That principle supports the same rejection by a different route (a wrapper makes the
+marker-producing path differ from the path a developer invokes), so the **conclusion survives and
+the citation was corrected in place** in the ADR rather than inherited. Recorded here because the
+archive line is still wrong where it sits, and append-only means it stays wrong — a later reader
+following that citation lands on unrelated text.
+
+Generalisation, and it is the standing one: a citation copied from an audit trail into a *new* audit
+trail is laundered, not verified. The cost of checking six was minutes; one was wrong.
+
+### Archive gap, flagged not filled
+
+The marker-gate thread in this file stops at **round 6** (`:7169`). Rounds 7–10 and revisions 15–19
+happened and are in git, but were never appended here. Not backfilled — reconstructing them from
+commits would be re-derivation presented as record, which is the failure this file exists to avoid.
+Git is the record for that span; `docs/features/verification-marker-gate.md` carries the outcomes.
+
+### State at close
+
+Task 1 ticked, **1/16**. Next is **task 2**, which is **blocked** on the shared-lexer decision
+landing in `shell_segments.py` (grammar rule 2, user-waived) — so **task 3 may need to lead the
+code**. Spec remains frozen at revision 19; a needed change is a `GATE:` announcement, not an edit.
