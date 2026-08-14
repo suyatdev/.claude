@@ -2056,11 +2056,15 @@ reason this row is a pin and not a footnote.
 
 ## Checklist
 
-- [ ] 1. ADR under `docs/decisions/` — record the marker-as-receipt framing, the three rejected
+- [x] 1. ADR under `docs/decisions/` — record the marker-as-receipt framing, the three rejected
       designs (PostToolUse observer, `bin/run-tests` wrapper, mutual certification), the
       global-but-inert scope decision **and the node ordering that makes it true**, the
       `UNSUPPORTED` fold and what it deliberately kept blocking, the accepted-open shapes, and the
       `cmux.sh` coverage hole. Check the next free ADR number against `main` first.
+      ✅ `docs/decisions/0027-the-marker-is-a-receipt-not-a-grade.md`. Number checked against both:
+      `main` tops at 0025 but 0026 is already on this branch, so checking `main` alone would have
+      collided. One inherited citation corrected rather than propagated — `hooks/README.md:34,140`
+      carries a path-fidelity principle, not the test invocation `CODING_MEMORY.md:503` claims.
 - [ ] 2. Red: `classify-commit-command.test.py` — **the grammar first** (G1-G9, bundles, value-taking
       flags in both groups, `--opt=value`, `--` inside a value), **plus rule 0's wrapper stripping for
       every member of `WRAPPERS` — `rtk git commit …` must classify exactly as `git commit …`, and that
