@@ -2081,8 +2081,23 @@ reason this row is a pin and not a footnote.
 - [ ] 3. Green: `hooks/lib/classify-commit-command.py` — **classification only, no I/O**. It is
       imported, not executed: the entry point in task 7 owns stdin, the git calls, the markers and the
       TSV line. A classifier that reads a payload or prints anything is the pre-ADR-0026 design.
-- [ ] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
+- [x] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
       schema, mode, failure exits. **No inventory assertion yet** — see task 8.
+      ✅ `hooks/lib/write-test-marker.test.py`, 29 assertions across 7 check groups. Validated three
+      ways rather than by inspection: missing module → red; a deliberately-wrong throwaway stub →
+      **9 checks fire**, each on the defect it targets; a correct throwaway oracle → **29/29**. Both
+      stubs deleted. A suite proven only to fail has not been proven to be satisfiable.
+      ⚠️ **Measured gotcha for task 5:** after `--full-name` normalisation the derived subject is
+      **repo-relative**, so a later git call from a different cwd resolves it against that cwd
+      (`panes/panes/adapters/…`) and reports a tracked subject as missing. The call site pins
+      cwd = repo root; run **every** git call there. This defect passed 20 of 29 assertions.
+      ⚠️ Mode is asserted on `hooks/state/` (0700), **not** on `test-markers/` — §2 modes only the
+      former, and a 0700 parent already blocks traversal. Asserting the subdirectory would invent
+      a requirement task 5 would then have to satisfy.
+      ⚠️ **Row 5 of the step-1 table is unspecified for the writer:** the card never says what the
+      writer does when handed a path that forms no pair (`README.md`, or a subject path). No
+      assertion was invented for it — task 5 needs the answer. Raised with the user, not resolved
+      silently.
 - [ ] 5. Green: `hooks/lib/write-test-marker.py`.
 - [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
       plus the two opt-in-ordering scenarios, plus the four `UNSUPPORTED` triggers each asserted by the
