@@ -2100,7 +2100,20 @@ reason this row is a pin and not a footnote.
       which follows from this section's own "a failed marker write fails the suite". Pinned by
       `check_non_test_path`, both rows tracked so the refusal must come from the classification
       itself. Suite is now **35 assertions / 8 groups**.
-- [ ] 5. Green: `hooks/lib/write-test-marker.py`.
+- [x] 5. Green: `hooks/lib/write-test-marker.py`.
+      ✅ 229 lines, **35/35** green (`python3 hooks/lib/write-test-marker.test.py`). Written from the
+      suite; task 4's throwaway oracle was deleted before this task began.
+      ⚠️ **Three mutants SURVIVE the suite.** Probed rather than assumed, and only one is a real
+      blind spot: (a) dropping `--full-name` changes nothing **because every git call is pinned
+      `-C <root>`** — two mechanisms produce the same normalisation, so the spec-mandated flag is
+      defence in depth this suite cannot observe; (b) dropping the marker `chmod` changes nothing
+      because `mkstemp` already creates at `0600` — equivalent today, kept against a future rewrite
+      that reaches for `open()`; (c) dropping `os.chmod(state, 0700)` changes nothing **here**
+      because the fixture never pre-creates `hooks/state/` at `0755` — precisely the case §Decision
+      logging says `makedirs` alone cannot satisfy. Verified by hand instead: pre-created at `0755`,
+      ran the writer, directory ended `0700` and the marker `0600`. **Task 6 owns that case** ("run
+      either component"), so it is deferred by design rather than missed — but until task 6 lands,
+      the repair is real code with nothing asserting it.
 - [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
       plus the two opt-in-ordering scenarios, plus the four `UNSUPPORTED` triggers each asserted by the
       trigger its message names rather than by the shared constant alone, plus the `test-marker.log`

@@ -7334,3 +7334,53 @@ implements rule 2, so it is blocked identically, and inverting would write code 
 Tasks 1 and 4 ticked, **2/16**. Next is **task 5** (green: `hooks/lib/write-test-marker.py`), now
 unblocked, to be written **fresh from the tests** rather than adapted from the throwaway oracle.
 Tasks 2 and 3 remain blocked on the shared lexer. Spec frozen at revision 19.
+
+## 2026-08-14 — task 5 green, and what a green suite still could not see
+
+### The suite passing was the weaker half of the evidence
+
+`hooks/lib/write-test-marker.py` (229 lines) takes the writer's suite to **35/35**. Written from the
+tests; task 4's throwaway oracle was deleted first, so the two never met.
+
+The load-bearing check was **not** the green run. Five mutants were applied to the finished file and
+the suite re-run against each; **three survived**, and each had to be explained before the task
+could close. Explaining them is what separated the one real gap from two false alarms:
+
+| mutant | suite | verdict |
+|---|---|---|
+| non-test path returns silently | 31/35 | caught — row 5 holds |
+| percent-encoding order reversed | 31/35 | caught — the normative order holds |
+| `--full-name` dropped | **35/35** | redundant: every git call is pinned `-C <root>` |
+| marker `chmod` dropped | **35/35** | equivalent: `mkstemp` already creates at `0600` |
+| `os.chmod(state, 0700)` dropped | **35/35** | **real blind spot — see below** |
+
+### Two mechanisms enforcing one property make each other unobservable
+
+`--full-name` is mandated by §1 and it is genuinely dead weight *in this implementation*, because
+resolving the toplevel first and then pinning `-C <root>` on every subsequent call already makes
+every output repo-relative. It stays: it is spec-mandated, and it keeps the function correct if the
+`-C` pin is ever lost. But a mutation score cannot be read as coverage here — the survivor is
+telling the truth about redundancy, not about a missing test.
+
+The same shape, one layer down: the marker's explicit `chmod 0600` is unobservable because
+`tempfile.mkstemp` documents that mode. Kept as defence against a future rewrite reaching for
+`open()`, where the umask would decide instead.
+
+### The one that matters: a repair with nothing asserting it
+
+Dropping `os.chmod(state, 0o700)` costs the suite nothing, because the fixture always lets the
+writer *create* `hooks/state/` — and `os.makedirs(mode=0o700)` is correct for a directory it makes.
+The card's whole argument for the chmod is the case the fixture never builds: a directory that
+**already exists at `0755`**, which `makedirs(exist_ok=True)` silently leaves alone.
+
+Verified by hand rather than left inferred — pre-created `hooks/state/` at `0755`, ran the writer
+from the repo root, directory ended **`0700`**, marker **`0600`**, exit 0. So the code is right.
+**Task 6 owns the assertion** ("pre-create at `0755`, run either component"), so this is deferred by
+design; until it lands, the repair is real code that no test would notice losing.
+
+### State at close
+
+Tasks 1, 4, 5 ticked, **3/16**. Next is **task 6** (red: `hooks/test-marker-guard.test.sh`), which
+must include the pre-existing-`0755` case above for the writer as well as the gate. Tasks 2 and 3
+remain blocked on the shared lexer. Spec frozen at revision 19; ADR 0026 still needs renumbering to
+0028 at task 16.
