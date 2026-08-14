@@ -1137,3 +1137,94 @@ specified to test against.
   against an 800 ceiling; the non-prose floor (Gherkin + tables + code + blanks) alone measures 887
   lines this round (re-derived live via the O3 script, sweep item 11), still over 800 on its own. Not
   re-argued; not counted toward this verdict.
+
+## Round 7 (judged against spec revision 14, ADR 0026 applied) — 2026-08-13T23:23:07Z · **FAIL** (1 violation) · confidence: high
+
+### Layman summary
+
+Revision 14 rewrote the whole wire between bash and the classifier so that no JSON crosses into bash
+anymore — everything (classification, path collection, pairing, marker reading, blob comparison) now
+runs inside one Python process that hands bash back a single tab-separated line. I checked both of
+round 6's findings (bash had no pinned way to parse the classifier's JSON output, and no pinned way to
+read the on-disk JSON marker file) against this rewrite, and **both are genuinely closed**: the
+bash-side `read` of the TSV line is fully pinned with measured WRONG/CORRECT examples covering exactly
+the historical footguns (`echo` vs `printf`, IFS collapsing empty fields, missing `-r`, a pipe running
+`read` in a subshell), and the marker JSON now never reaches bash at all — it's parsed in Python with
+`json.load`, on the interpreter this spec already pins.
+
+But the rewrite introduced a new file: the `TEST_EXEMPT` validity check moved from a bash regex into a
+Python one, and the spec presents a specific "CORRECT" Python regex as measured to reject any newline in
+the exemption string. I ran that exact regex on the pinned Python 3.9.6 and it does **not** reject a
+value that ends in exactly one newline character — `re`'s `$` anchor matches just before a single
+trailing newline even without `re.MULTILINE`, a well-known Python quirk. A caller can set
+`TEST_EXEMPT` to something like `"vendored upstream\n"` and this validation reports it valid, which
+contradicts both the spec's own "Measured: ... tab and newline are refused" claim and the Gherkin
+scenario that requires a newline-carrying exemption to be rejected with `MSG_BAD_EXEMPT`. The fix is a
+one-word change (`.match` → `.fullmatch`), but as written the spec's own pinned construct doesn't do
+what its accompanying prose says it does.
+
+### Round-6 violations — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/unpinned-json-parse-classifier-output` | **Closed** | The classifier's output is no longer a wire at all — it is an in-process Python object returned by a function call (§3, "The classifier's contract is in-process, and it is a function, not a wire"). The only remaining bash-side parse is the four-field TSV line, which is pinned with measured `read -r … <<<` examples (§3 "The wire is one tab-separated line", ~lines 545–567) that explicitly close the exact historical footguns (no `-r`, a piped subshell, IFS collapsing an empty field). |
+| `writing-specs/unpinned-json-parse-marker-read` | **Closed** | "It is validated in Python, by the decision call, and bash never sees this JSON" (§2 marker store, ~line 399). The parsing construct is named (`json.load`, `errors="replace"` on the read) against the pinned Python 3.9.6, and the schema check (`version == 1`, blob regex, path equality) is spelled out immediately above it. Bash's only remaining involvement with this data is reading the TSV verdict, covered by the sibling violation's closure. |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/exempt-regex-trailing-newline` | `skills/writing-specs/SKILL.md` (contract/construct correctness — no requirement readable two ways; also implicates `rules/core-conduct.md` § Session Defaults, "verification precedes both the claim and the write-down") | §3 → "Validating the exemption in Python", the "CORRECT" code block at `EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")` (~lines 616–619), reused as closure evidence at the invisible-Unicode note (~lines 1708–1711), and the Gherkin scenario "an exemption reason carrying control characters is rejected" (~lines 1265–1270) | Measured directly against the pinned Python 3.9.6: `re.compile(rb"^[ -~]{1,200}$").match(b"vendored upstream\n")` returns a match, and so does the same pattern against a 201-byte value ending in `\n` — Python's `$` anchor matches immediately before a single trailing newline even without `re.MULTILINE`, so this "CORRECT", "Measured" construct silently admits exactly the byte class (newline) and violates exactly the length bound (>200 bytes) the surrounding prose claims it refuses; the fix is `EXEMPT_RE.fullmatch(...)` instead of `.match(...)`, and as written an implementer following this spec verbatim ships a `TEST_EXEMPT` value that should block with `MSG_BAD_EXEMPT` but doesn't, for the one specific newline placement (trailing, not embedded) that the spec's own scenario text doesn't pin down precisely enough to force a test that would have caught it. |
+
+### Verification method
+
+Per the dispatch's stated productive method — check which interpreter the artifact actually meets in
+production — I ran the exact "CORRECT" snippet against the pinned Python 3.9.6 on this machine:
+
+```
+$ python3 -c "
+import re
+EXEMPT_RE = re.compile(rb'^[ -~]{1,200}\$')
+for t in [b'vendored upstream', b'vendored upstream\n', b'line1\nline2', b'a'*200+b'\n']:
+    print(repr(t), '->', 'MATCH' if EXEMPT_RE.match(t) else 'no match')
+"
+b'vendored upstream' -> MATCH
+b'vendored upstream\n' -> MATCH        # should be rejected per spec prose; is not
+b'line1\nline2' -> no match            # embedded (non-trailing) newline correctly rejected
+b'aaa...a\n' (201 bytes) -> MATCH      # should be rejected as over-length; is not
+```
+
+An embedded (mid-string) newline is correctly rejected — that is almost certainly the shape an
+implementer's own test would use, which is why this defect could ship undetected even by a careful
+reader. `.fullmatch(...)` in place of `.match(...)` closes it; verified the same run with `fullmatch`
+returns `None` for the trailing-newline case.
+
+### Notes (non-blocking)
+
+- The Python-side construction of the four-field TSV *output* line (in `decide-commit-gate.py`) has no
+  code example the way its bash-side *consumption* does — every other parsing-adjacent construct in this
+  file gets a measured WRONG/CORRECT pair. Not cited as a violation: Python string literals interpret
+  `\t` identically regardless of which idiom (`"\t".join(...)`, an f-string, `%`-format) is used, so
+  there is no analogous wrong-spelling trap to pin against, unlike bash's `echo`/`printf` split.
+- The "hook buffers the payload from stdin once, then extracts `cwd` ... and later hands the same bytes
+  to the decision call" requirement (§3, ~line 418) has no inline bash snippet of its own, but it is
+  explicitly attributed to "the shape `git-guard.sh:59-72` already uses" — read directly, that file does
+  buffer stdin once (`payload=$(cat)`) and re-feed it via `printf '%s' "$payload" | "$py" ...` to two
+  separate `python3` invocations. Treated as adequately pinned by reference to an existing, line-cited,
+  working file, the same way the `WRAPPERS` set is deferred to `hooks/lib/shell_segments.py:64` rather
+  than re-spelled.
+- The marker-blob regex (`^([0-9a-f]{40}|[0-9a-f]{64})$`) was not separately re-tested for the same
+  anchor quirk: its inputs come from the trusted writer's own `git hash-object` output rather than
+  adversarial `TEST_EXEMPT` text, and no "Measured: ... refused" claim is made about it, so the stakes
+  and the false-claim angle both differ from the cited violation. Flagged here only so a later round
+  does not need to re-derive why it was left out.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived: [writing-specs/command-grammar,
+  core-conduct/file-size-convention]`), still present at the UNRESOLVED callout under §"The command
+  grammar" and checklist task 2's cross-reference. Not re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing decisions →
+  O3 now reports the revision-14-complete measurement (total 2,085, non-prose floor 1,070) read back
+  from the staged blob, showing the 800-line ceiling unreachable even with all prose deleted. Not
+  re-argued; not counted toward this verdict.

@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 14
-revision_status: complete  # all five items landed; ADR 0026 applied. Round 7 (both judges) is owed.
+revision: 15
+revision_status: complete  # round-7 FAIL closed (.match -> .fullmatch) + the obs advisory applied. Round 8 (both judges) is owed.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -613,11 +613,29 @@ EXEMPT_RE = re.compile(r"^[[:print:]]{1,200}$")
 # revision 11 decided to reject.
 EXEMPT_RE = re.compile(r"^[^\x00-\x1f\x7f]{1,200}$")
 
-# CORRECT — a bytes pattern over the printable-ASCII range. Measured: 200 bytes
-# pass, 201 fail, tab and newline are refused, backslash and space are admitted.
-EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")
+# WRONG — the right pattern, reached with the wrong method. Python's `$` also
+# matches just before a single trailing newline, with or without re.MULTILINE.
+# Measured on Python 3.9.6: .match(b"vendored upstream\n") returns a match, and
+# .match(b"a"*200 + b"\n") returns a match at 201 bytes. Both the newline
+# refusal and the 200-byte bound fail, for that one placement only — an
+# EMBEDDED newline is still refused, which is exactly what makes this easy to
+# miss by testing the obvious case.
 is_valid = EXEMPT_RE.match(exempt.encode("utf-8")) is not None
+
+# CORRECT — a bytes pattern over the printable-ASCII range, anchored by the
+# method rather than by `$`. Measured on Python 3.9.6: 200 bytes pass, 201 fail,
+# a tab or a newline is refused in EVERY position including the trailing one,
+# backslash and space are admitted.
+EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")
+is_valid = EXEMPT_RE.fullmatch(exempt.encode("utf-8")) is not None
 ```
+
+> ⚠️ **The `$` anchor is not a bound, and revision 14's comment claimed it was.** Through revision 14
+> this block asserted "201 fail, tab and newline are refused" beside a `.match` call that refused
+> neither — the measurement was inherited across four revisions and re-stated without being re-run.
+> **`re.fullmatch` is the fix, and it is the whole fix**; the pattern itself was always right. The
+> scenario that pins this must place the newline **last**, not in the middle, because the middle case
+> passes under both spellings and would certify the defect as fixed.
 
 > **This deletes the `LC_ALL=C` mechanism rather than porting it, and that is the point.** Revisions 11
 > and 12 spent two rounds pinning a locale — first the regex dialect, then the subshell that scopes the
@@ -1263,11 +1281,33 @@ Scenario: a door this version of the gate does not know fails closed
    # a corrupt line are the same failure, so they share a door
 
 Scenario: an exemption reason carrying control characters is rejected
-  Given the command sets TEST_EXEMPT to a value containing a newline
+  Given the command sets TEST_EXEMPT to "vendored\nupstream", the newline EMBEDDED
    When the hook runs
    Then it exits 2 with MSG_BAD_EXEMPT
    # the classifier reports the value raw and the hook decides; this door is reachable
    # precisely because the classifier does not strip
+   # NOT the regression test for revision 15: an embedded newline is refused by both
+   # re.match and re.fullmatch, so this scenario passes with the defect still present.
+   # the two scenarios below are the ones that discriminate
+
+Scenario: an exemption reason ending in a newline is rejected
+  Given the command sets TEST_EXEMPT to "vendored upstream\n", the newline LAST
+   When the hook runs
+   Then it exits 2 with MSG_BAD_EXEMPT
+   # regression test for revision 15. Python's `$` matches just before a single trailing
+   # newline, so re.match ADMITS this value — measured on 3.9.6 — while re.fullmatch
+   # refuses it. placement is the whole point: move the newline into the middle and the
+   # scenario certifies the defect as fixed
+
+Scenario: the byte bound is not escapable by a trailing newline
+  Given the command sets TEST_EXEMPT to 200 printable bytes followed by a newline
+   When the hook runs
+   Then it exits 2 with MSG_BAD_EXEMPT
+   # 201 bytes total. under re.match the {1,200} quantifier consumes the 200 printable
+   # bytes and `$` matches before the trailing newline, so the value passes at 201 bytes
+   # and the bound is defeated. this is the same defect as above reached through the
+   # length door rather than the character door, and it needs its own scenario because
+   # the 201-character scenario below is refused under both spellings
 
 Scenario: an exemption reason carrying invisible or bidirectional characters is rejected
   Given the command sets TEST_EXEMPT to "routine cleanup" with U+202E embedded
@@ -1612,6 +1652,37 @@ echo "$ts\t$verdict\t$reason\t$pair" >> "$LOG"
 # CORRECT — printf's format string is the only portable source of a real tab.
 printf '%s\t%s\t%s\t%s\n' "$ts" "$verdict" "$reason" "$pair" >> "$LOG"
 ```
+
+**Where those four variables come from — the log's fields are not the TSV's fields, and only one of
+them is a straight copy.** The mapping is stated here, once, because the table above defines the log
+line and §3's table defines the wire line, and an implementer holding both still has to be told that
+field 3 means different things on either side of the boundary:
+
+```sh
+# WRONG — the log's reason is not TSV field 3. Measured against the eight doors
+# field 2 can carry: six of them put `-` in field 3, MSG_NO_MARKER puts the
+# REMEDY COMMAND there and MSG_UNSUPPORTED_FORM puts the TRIGGER NAME there.
+# So this logs the door name for zero of the eight — and never errors.
+reason=$f3
+
+# CORRECT — the reason switches on the outcome, because a bypass is identified
+# by its human reason and a block is identified by the rule that fired.
+case "$f1" in
+  EXEMPT) reason=$f3 ;;   # the validated TEST_EXEMPT reason
+  BLOCK)  reason=$f2 ;;   # the MSG_* constant
+esac
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # not on the wire; the TSV line carries no timestamp
+verdict=$f1                          # ALLOW is never logged — see "non-trivial decision" above
+pair=$f4                             # the only straight copy
+```
+
+⚠️ **A test that asserts a line was written does not catch any of this.** The failure is a
+well-formed line carrying the wrong text, so the scenarios that pin this section **MUST assert the
+value of field 3 for every one of the eight doors**, not for one representative door and not merely
+that the log grew by a line. The six doors that carry `-` in the wire's field 3 are the ones that
+make a uniform `$f3` look like it works: their log lines are still well-formed, still tab-separated,
+and still parse — they just say `-` where the door name belongs, so the erosion counts stay
+plausible while the bypass-versus-block split silently degrades.
 
 The cost of getting this wrong is not a cosmetic one, and it lands on the two readers this section
 specifies: against an `echo`-written log, **`cut -f2` returns the entire line** (it finds no
@@ -2045,11 +2116,18 @@ reason this row is a pin and not a footnote.
   time the paragraph recording the number was itself the edit that changed it. Measure, write, `git add`, re-run against `git show :<path>`, refuse to
   commit while the two disagree. Verify against the commit, not against this line.
 
+  **Revision 15 — read back from the staged blob, by the same procedure:** total **2,163**, non-prose
+  floor **1,127**, prose **1,036**, across **66** scenarios. Round 7 closed one compliance FAIL
+  (`re.match` → `re.fullmatch`) and applied one observability advisory, adding two discriminating
+  Gherkin scenarios and two WRONG/CORRECT pairs. ⚠️ The trap was **sidestepped rather than survived
+  this time**: the numbers went in as fixed-width placeholders first, so substituting the digits could
+  not move the line count — only adding lines can. That is the cheaper form of the same discipline.
+
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,070**, so
-  **deleting every line of prose in this file still leaves it 270 lines over the ceiling.** The prose
-  budget for an 800-line version is **negative 270**, up from negative 67 at revision 12. This is no
-  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 64 acceptance
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,127**, so
+  **deleting every line of prose in this file still leaves it 327 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 327**, up from negative 67 at revision 12. This is no
+  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 66 acceptance
   scenarios and its contract tables, and cutting those is what the user rejected when choosing the
   scope cut, and rejected again when restoring the log.
 
