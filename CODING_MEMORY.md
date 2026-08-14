@@ -7274,3 +7274,63 @@ Git is the record for that span; `docs/features/verification-marker-gate.md` car
 Task 1 ticked, **1/16**. Next is **task 2**, which is **blocked** on the shared-lexer decision
 landing in `shell_segments.py` (grammar rule 2, user-waived) — so **task 3 may need to lead the
 code**. Spec remains frozen at revision 19; a needed change is a `GATE:` announcement, not an edit.
+
+## 2026-08-14 — marker-gate task 4: the writer's red suite, and a duplicated ADR number
+
+### Task 4 landed — 35 assertions, proven able to fail *and* to pass
+
+`hooks/lib/write-test-marker.test.py` (`36f3004`, row 5 added in `2235b8d`): sibling derivation
+driven from the step-1 table, percent-encoding against **literal** expected keys, absolute-path
+normalisation, the no-subject skip, schema, mode, atomic write, failure exits, non-test paths.
+
+The method is the part worth keeping. The card is explicit that inspection does not exhaust this
+class of defect, so the suite was validated three ways instead: with no module it goes red; against
+a **deliberately-wrong stub** the checks fire on exactly the defects they target; against a
+**correct throwaway oracle** it reaches 35/35. Both stubs were deleted. A suite proven only to fail
+has not been proven satisfiable, and one proven only to pass is worthless — the pair is the point.
+
+### The probe found a defect that passed 20 of 29 assertions
+
+The first version of the normalisation check was wrong, and finding out why exposed the trap task 5
+must avoid: after `git ls-files --full-name` yields a **repo-relative** subject, handing that value
+to a later git call from a different cwd makes git resolve it against *that* cwd
+(`panes/panes/adapters/…`), so a tracked subject reports as missing. The call site pins
+`cwd = MARKER_ROOT` precisely for this. A wrong test found a real defect — the inverse of the usual
+failure, and only because the wrong-stub probe forced both to be explained.
+
+Also pulled back an over-assertion: the mode was being checked on `hooks/state/test-markers/`, but
+§2 modes only `hooks/state/`. Asserting a mode the spec never states would have forced task 5 to
+satisfy an invented requirement.
+
+### ADR 0026 is duplicated, and the numbering rule was wrong
+
+`origin/main` carries `0026-symbolic-ref-not-abbrev-ref-names-the-branch.md` (merged via PR #52);
+this branch carries `0026-the-gate-does-no-json-parsing.md`. **The filenames differ, so git merges
+both cleanly and no conflict will ever surface it.**
+
+Root cause: task 1 checked the next free number against **local `main`**, which is 10+ commits
+behind `origin/main`. The rule is now explicit — **check ADR numbers against `origin/main`, never
+the local ref.** 0027 turned out free anyway, so task 1's ADR stands, but by luck rather than by the
+check. Renumbering this branch's 0026 → 0028 is deferred to **task 16**, when spec edits reopen; it
+touches the card (18 lines), this file, two `coding-memory/` judge records and both ADRs.
+
+### Row 5 was unspecified, and was raised rather than invented
+
+The step-1 table never said what the writer does with a path forming no pair. No assertion was
+written for it until the user decided (2026-08-14): **fail loudly, non-zero + stderr**. It follows
+from the card's own rule that a failed marker write fails the suite; the legitimate orphan case is
+the separate no-subject skip, which exits 0 on purpose.
+
+### Task 2's blocker re-verified, not inherited
+
+`hooks/lib/shell_segments.py` is **byte-identical to `origin/main`** (155 lines) — segmentation and
+wrapper stripping only, no option grammar, nothing that knows `--untracked-files`/`--gpg-sign` must
+not consume the next token. Its citation `shell_segments.py:64` for `WRAPPERS` was re-opened and is
+correct. Superseding the previous section's close: **2↔3 are NOT inverted** (user decision) — task 3
+implements rule 2, so it is blocked identically, and inverting would write code before its test.
+
+### State at close
+
+Tasks 1 and 4 ticked, **2/16**. Next is **task 5** (green: `hooks/lib/write-test-marker.py`), now
+unblocked, to be written **fresh from the tests** rather than adapted from the throwaway oracle.
+Tasks 2 and 3 remain blocked on the shared lexer. Spec frozen at revision 19.
