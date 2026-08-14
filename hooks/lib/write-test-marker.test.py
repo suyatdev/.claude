@@ -147,6 +147,16 @@ ENCODING = [
 ]
 
 
+# --- paths that form no pair ---------------------------------------------------------------
+# Row 5 of the step-1 table, plus a SUBJECT path -- which the table classifies as row 3 and which
+# a writer applying the table blindly would "derive" a sibling for, writing a marker whose subject
+# is itself a test file. The writer's input is always a suite's $0, so neither can arrive honestly.
+NON_TEST = [
+    ("README.md", "row 5 proper -- no .sh/.py extension at all"),
+    ("hooks/foo.sh", "a SUBJECT path: row 3 by the table, but never valid writer input"),
+]
+
+
 def check_derivation(mod, record):
     for test_rel, subject_rel, why in DERIVATION:
         files = {test_rel: "test body\n", subject_rel: "subject body\n"}
@@ -286,6 +296,30 @@ def check_atomic_write(mod, record):
                    "want {!r}, got {!r}".format(want_blob, doc.get("subject", {}).get("blob")))
 
 
+def check_non_test_path(mod, record):
+    """A path that forms no pair fails loudly (user decision 2026-08-14).
+
+    The writer is only ever handed a suite's own $0, so a non-test path can arrive only through
+    a call-site wiring error -- and the card already rules that "a failed marker write fails the
+    suite. A silent no-marker would surface later as a confusing block." The legitimate orphan
+    case is NOT this one: it is the separate no-subject skip, which exits 0 on purpose.
+
+    Both rows are TRACKED, so the writer cannot pass them by failing at the ls-files step for an
+    unrelated reason -- the refusal has to come from the classification itself.
+    """
+    for rel, why in NON_TEST:
+        files = {rel: "body\n"}
+        with _repo(files) as root:
+            proc = _run_cli(root, _self(root, rel))
+            record(proc.returncode != 0, "non-test path {} exits non-zero".format(rel),
+                   "want non-zero, got {} ({})".format(proc.returncode, why))
+            record(proc.stderr.strip() != "", "non-test path {} explains itself".format(rel),
+                   "want a message on stderr, got empty ({})".format(why))
+            listing = os.listdir(_store(root)) if os.path.isdir(_store(root)) else []
+            record(listing == [], "non-test path {} writes no marker".format(rel),
+                   "want an empty store, got {!r}".format(listing))
+
+
 def check_failure_exits(mod, record):
     """An untracked TEST path cannot be normalised, so the writer fails loudly. A silent
     no-marker would surface later as a confusing block."""
@@ -319,6 +353,7 @@ CHECKS = [
     check_encoding,
     check_normalisation,
     check_no_subject_skip,
+    check_non_test_path,
     check_schema_and_mode,
     check_atomic_write,
     check_failure_exits,

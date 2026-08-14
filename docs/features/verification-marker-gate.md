@@ -2094,10 +2094,12 @@ reason this row is a pin and not a footnote.
       ⚠️ Mode is asserted on `hooks/state/` (0700), **not** on `test-markers/` — §2 modes only the
       former, and a 0700 parent already blocks traversal. Asserting the subdirectory would invent
       a requirement task 5 would then have to satisfy.
-      ⚠️ **Row 5 of the step-1 table is unspecified for the writer:** the card never says what the
-      writer does when handed a path that forms no pair (`README.md`, or a subject path). No
-      assertion was invented for it — task 5 needs the answer. Raised with the user, not resolved
-      silently.
+      ⚠️ **Row 5 of the step-1 table was unspecified for the writer** — the card never said what
+      the writer does when handed a path that forms no pair (`README.md`, or a subject path).
+      Raised rather than invented; **user decision 2026-08-14: fail loudly, non-zero + stderr**,
+      which follows from this section's own "a failed marker write fails the suite". Pinned by
+      `check_non_test_path`, both rows tracked so the refusal must come from the classification
+      itself. Suite is now **35 assertions / 8 groups**.
 - [ ] 5. Green: `hooks/lib/write-test-marker.py`.
 - [ ] 6. Red: `hooks/test-marker-guard.test.sh` — every scenario above, asserting message **and** code,
       plus the two opt-in-ordering scenarios, plus the four `UNSUPPORTED` triggers each asserted by the
