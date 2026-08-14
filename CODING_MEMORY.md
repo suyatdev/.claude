@@ -7384,3 +7384,51 @@ Tasks 1, 4, 5 ticked, **3/16**. Next is **task 6** (red: `hooks/test-marker-guar
 must include the pre-existing-`0755` case above for the writer as well as the gate. Tasks 2 and 3
 remain blocked on the shared lexer. Spec frozen at revision 19; ADR 0026 still needs renumbering to
 0028 at task 16.
+
+## 2026-08-14 — task 6 is clear to write; task 7 is not, and nobody had checked
+
+### The assessment the handoff kept deferring
+
+Every prior session recorded tasks 6–16 as "reasoning only, never checked". Two of them are now
+checked. The answers point in opposite directions, which is why assuming either would have been
+wrong.
+
+**Task 6 is unblocked.** The block on tasks 2 and 3 is the waived, unresolved grammar rule 2, and
+rule 2 is unresolved *only* where it collides with the optional-value flags `-u/--untracked-files`
+and `-S/--gpg-sign` — the group the spec says must never consume the next token. So the question is
+not "does task 6 depend on the grammar" (it does, everywhere) but "does any scenario task 6 must
+encode turn on the one case nobody has decided". Derivation rather than reading:
+
+```
+grep -n "untracked-files\|gpg-sign\|-u \|-S " docs/features/verification-marker-gate.md
+```
+
+Three hits, all inside §The command grammar and its UNRESOLVED callout. **No scenario uses either
+flag.** The commands the scenarios actually drive are `-m`, `-am`, `-F`, `-p`, `--amend`, `-i`, and
+bare/`--`-separated pathspecs — all of them settled rows G1–G9. Writing task 6 therefore encodes no
+waived decision.
+
+**Task 7 is blocked, and it is the one that stalls the branch.** Its own text names the mechanism:
+the entry point *imports* the classifier, which is why the spec carries a scenario asserting a
+deleted classifier surfaces as `MSG_CLASSIFIER_FAILED` at a different door than a deleted entry
+point. Task 7 cannot go green while task 3 is blocked — no import, no decision call, no gate.
+
+### What that means for sequencing
+
+Task 6 lands a suite that stays red until an out-of-scope decision lands in `shell_segments.py`.
+That is the correct state for a red task and not a reason to defer it — but it does mean the branch
+has **one task of forward motion left** before it parks, unless the shared-lexer work is scheduled.
+
+⚠️ **Tasks 8–16 remain unassessed. Do not infer they are blocked by 7** — task 8 wires the
+*writer's* call site into the 14 paired suites and may well be independent of the gate. That is a
+guess, and this file has been burned by exactly that kind of guess before. Check it before picking
+it up.
+
+### Method note
+
+Task 4's precedent — validate a red suite against a correct throwaway oracle, so it is proven
+satisfiable and not merely proven to fail — **cannot be met for task 6's scenario half**, because
+building that oracle means building the gate, which means the classifier. The parts that exercise
+the *writer* (the `hooks/state/` mode cases, including the pre-existing-`0755` case task 5 left
+deferred) can be validated now, because the writer exists. Say which half was proven, rather than
+letting "red suite written" imply the stronger claim.
