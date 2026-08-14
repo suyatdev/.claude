@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 15
-revision_status: complete  # round-7 FAIL closed (.match -> .fullmatch) + the obs advisory applied. Round 8 (both judges) is owed.
+revision: 16
+revision_status: complete  # round-8 FAIL closed by one Scenario Outline over all 12 loggable doors; floor/prose figures corrected. Round 9 is owed.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -1390,11 +1390,43 @@ Scenario: an exemption rescues a commit aimed at another repo
    # the exemption check precedes the form decision; the reverse order would make this
    # unreachable while MSG_UNSUPPORTED_FORM's own message recommends it
 
-Scenario: a block is logged with the message constant that fired
-  Given hooks/foo.sh is staged with no marker
+Scenario Outline: every door that writes a line writes the constant that fired in field 3
+  Given the gate is armed and <door> is the door that fires
    When "git commit -m msg" runs
-   Then the hook exits 2 with MSG_NO_MARKER
-    And one BLOCK line naming MSG_NO_MARKER and the pair is appended to the log
+   Then the hook exits 2 with <door>
+    And exactly one BLOCK line is appended to <repo>/hooks/state/test-marker.log
+    And field 3 of that line is "<door>"
+    And field 4 of that line is <field 4>
+   # ONE outline rather than twelve scenarios, and it replaces the single-door scenario that
+   # stood here through revision 15 — that one asserted the log for MSG_NO_MARKER alone, which
+   # is how seven doors came to state a MUST that nothing enforced. Do not re-add a per-door
+   # copy beside this table: two spellings of one check is this spec's own named defect class.
+
+  Examples: the eight the decision call reports, read from field 2 of the TSV
+    | door                 | field 4  |
+    | MSG_NOTHING_RUNNABLE | -        |
+    | MSG_BAD_EXEMPT       | -        |
+    | MSG_UNSUPPORTED_FORM | -        |
+    | MSG_GIT_FAILED       | -        |
+    | MSG_NO_MARKER        | the pair |
+    | MSG_BAD_MARKER       | the pair |
+    | MSG_STALE_SUBJECT    | the pair |
+    | MSG_STALE_TEST       | the pair |
+   # MSG_UNSUPPORTED_FORM is the row that discriminates the mapping: the TSV puts the TRIGGER
+   # in field 3 and the constant in field 2, so a uniform reason=$f3 logs a trigger name here
+   # and MSG_NO_MARKER's row logs a remedy command. Both still parse. Neither errors.
+
+  Examples: the four bash raises itself, which never appear in a TSV line at all
+    | door                      | field 4 |
+    | MSG_CLASSIFIER_MISSING    | -       |
+    | MSG_BAD_PAYLOAD           | -       |
+    | MSG_CLASSIFIER_FAILED     | -       |
+    | MSG_CLASSIFIER_BAD_OUTPUT | -       |
+   # these four are statements ABOUT the decision call (§The doors, rows 4, 1, 5, 6), so no TSV
+   # line exists to map from and the case-based mapping never runs for them. They are the half
+   # of the log the field-2/field-3 rule cannot reach, which is why they need their own table.
+   # The thirteenth door, MSG_NO_PYTHON, is absent by design — it writes no line, and the
+   # scenario asserting that absence stands separately below.
 
 Scenario: a block with no pair still writes a well-formed line
   Given the repo has opted in and hooks/foo.sh is staged
@@ -1674,12 +1706,27 @@ esac
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # not on the wire; the TSV line carries no timestamp
 verdict=$f1                          # ALLOW is never logged — see "non-trivial decision" above
 pair=$f4                             # the only straight copy
+
+# The four doors bash raises ITSELF never reach this mapping. MSG_CLASSIFIER_MISSING,
+# MSG_BAD_PAYLOAD, MSG_CLASSIFIER_FAILED and MSG_CLASSIFIER_BAD_OUTPUT are statements
+# ABOUT the decision call (§The doors, rows 4, 1, 5, 6), so no TSV line exists to read
+# and $f1..$f4 are unset. Bash already holds the constant, and writes it directly:
+printf '%s\t%s\t%s\t%s\n' "$ts" BLOCK "$msg" - >> "$LOG"
 ```
+
+**Twelve doors write a line, not eight** — the mapping above covers only the eight the decision
+call reports, and stating it without its counterpart is what round 8 caught. The four above are
+the other half, and `MSG_NO_PYTHON` is the thirteenth, which writes nothing because it fires
+before a `<repo>` is known. All twelve are asserted by one Scenario Outline in §Acceptance, whose
+two Examples tables are that same partition; **field 4 is `-` for every one of the four**, since
+each fires long before a pair could be formed.
 
 ⚠️ **A test that asserts a line was written does not catch any of this.** The failure is a
 well-formed line carrying the wrong text, so the scenarios that pin this section **MUST assert the
-value of field 3 for every one of the eight doors**, not for one representative door and not merely
-that the log grew by a line. The six doors that carry `-` in the wire's field 3 are the ones that
+value of field 3 for every one of the twelve doors that writes a line**, not for one representative
+door and not merely that the log grew by a line — that MUST is discharged by the Scenario Outline
+in §Acceptance and nowhere else, and revision 15 stated it here while leaving eleven of the twelve
+unasserted. The six doors that carry `-` in the wire's field 3 are the ones that
 make a uniform `$f3` look like it works: their log lines are still well-formed, still tab-separated,
 and still parse — they just say `-` where the door name belongs, so the erosion counts stay
 plausible while the bypass-versus-block split silently degrades.
@@ -2088,10 +2135,20 @@ reason this row is a pin and not a footnote.
 
   ```sh
   f=docs/features/verification-marker-gate.md
-  tot=$(wc -l < "$f"); blank=$(grep -c '^$' "$f"); tbl=$(grep -c '^ *|' "$f")
-  gherkin=$(awk '/^ *```gherkin/{g=1;next} /^ *```$/{g=0} g' "$f" | wc -l)
-  code=$(awk '/^ *```(sh|python|json|mermaid)/{c=1;next} /^ *```$/{c=0} c' "$f" | wc -l)
-  echo "total=$tot floor=$((blank+gherkin+tbl+code)) prose=$((tot-blank-gherkin-tbl-code))"
+  # Each line lands in EXACTLY ONE bucket, and `sum` proves it: sum != total means the
+  # classification is broken. The four-grep form used through revision 15 had no such check
+  # and silently double-counted — see the correction note below.
+  awk '
+    /^ *```gherkin/                  {fence="g"; g++; next}
+    /^ *```(sh|python|json|mermaid)/ {fence="c"; c++; next}
+    /^ *```$/  {if(fence=="g") g++; else if(fence=="c") c++; else p++; fence=""; next}
+    /^$/       {b++; next}
+    fence=="g" {g++; next}
+    fence=="c" {c++; next}
+    /^ *\|/    {t++; next}
+               {p++}
+    END{printf "total=%d floor=%d prose=%d sum=%d\n", NR, b+g+c+t, p, b+g+c+t+p}
+  ' "$f"
   ```
 
   Composition **as of revision 12**, from that command:
@@ -2123,10 +2180,29 @@ reason this row is a pin and not a footnote.
   this time**: the numbers went in as fixed-width placeholders first, so substituting the digits could
   not move the line count — only adding lines can. That is the cheaper form of the same discipline.
 
+  **Revision 16 — same procedure, read back from the staged blob:** total **2,239**, non-prose floor
+  **1,140**, prose **1,099**, across **66** scenarios, one of which is an outline covering
+  **12** doors. Round 8 found that revision 15 had stated a per-door MUST and enforced it for one
+  door of twelve; the fix replaces that single scenario with one Scenario Outline and adds the
+  bash-side half of the mapping. ⚠️ **Note the direction:** twelve asserted cases cost roughly the
+  lines of two prose paragraphs, because an outline amortises across its Examples rows — the size
+  pressure this section measures argues *for* tabular scenarios, not against coverage.
+
+  ⚠️ **Every floor and prose figure recorded before revision 16 came from a command that
+  double-counted, and is corrected here.** The four-grep form counted a table row inside a
+  `gherkin` fence as both Gherkin *and* table, and a blank line inside any fence twice over — it
+  had no cross-check, so nothing could catch it. Re-run against the same blob with the
+  deduplicated command above: **revision 15 measured floor 1,089 / prose 1,074, not the floor
+  1,127 / prose 1,036 it was committed with.** The waiver's *conclusion* never depended on the
+  difference — the floor still clears 800 by 340 — but it was overstated by 38 lines, and
+  since the waiver rests on exactly this measurement the overstatement is corrected rather than
+  left to be inherited. **The `sum` field is the falsifier the old command lacked**, which is the
+  general lesson: a measurement with no way to disagree with itself is not yet a measurement.
+
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,127**, so
-  **deleting every line of prose in this file still leaves it 327 lines over the ceiling.** The prose
-  budget for an 800-line version is **negative 327**, up from negative 67 at revision 12. This is no
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,140**, so
+  **deleting every line of prose in this file still leaves it 340 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 340**, up from negative 67 at revision 12. This is no
   longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 66 acceptance
   scenarios and its contract tables, and cutting those is what the user rejected when choosing the
   scope cut, and rejected again when restoring the log.

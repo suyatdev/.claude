@@ -1228,3 +1228,105 @@ returns `None` for the trailing-newline case.
   O3 now reports the revision-14-complete measurement (total 2,085, non-prose floor 1,070) read back
   from the staged blob, showing the 800-line ceiling unreachable even with all prose deleted. Not
   re-argued; not counted toward this verdict.
+
+## Round 8 (judged against spec revision 15, HEAD `263e430ec8767f73503f0be63d41092f83d6d2f1`) — 2026-08-14T00:55:40Z · **FAIL** (1 violation) · confidence: high
+
+### Layman summary
+
+Revision 15 was meant to close round 7's finding (a Python regex meant to reject any newline in a
+`TEST_EXEMPT` reason actually let a *trailing* newline through) and to answer round 7's observability
+advisory about how the decision log's "reason" field is filled in. I re-ran the fix myself rather than
+trusting the spec's own re-measurement, and it holds: switching `.match(...)` to `.fullmatch(...)`
+does reject the trailing-newline case and the 201-byte-with-trailing-newline case on the pinned Python
+3.9.6, and the two new Gherkin scenarios (newline last; 200 printable bytes + a newline) are exactly
+the cases needed to pin that fix rather than one that happens to pass either way. **That finding is
+genuinely closed — I am not re-citing it.**
+
+The new decision-logging section, though, states its own test-coverage requirement and then doesn't
+meet it inside the same revision. It says, in its own words, that the scenarios pinning this section
+"MUST assert the value of field 3 for every one of the eight doors, not for one representative door."
+Counting the actual Gherkin scenarios in the file, only one of those eight doors (`MSG_NO_MARKER`) has
+a scenario that checks what the log's field 3 actually contains; the other seven have scenarios that
+check the exit code and the door name printed to the user, but none that reads the log file and checks
+what got written to it. That gap matters here specifically because the section's own worked example
+(a uniform `reason=$f3` instead of the correct `case`-based mapping) is a bug that produces a
+well-formed, still-parseable log line with the wrong text in it — exactly the kind of defect that an
+exit-code assertion cannot catch and only a field-level log read can. As written, the checklist task
+that turns scenarios into tests (task 6) is scoped to add a log assertion "wherever a scenario names
+one," so it would inherit this same gap rather than close it.
+
+### Round-7 violation — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/exempt-regex-trailing-newline` | **Closed** | Independently re-ran the pinned construct on Python 3.9.6 (not taken on trust). `EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")`: `.match(b"vendored upstream\n")` → `True` (still admits it, confirming the old defect existed), `.fullmatch(b"vendored upstream\n")` → `False` (now correctly refused). Same pattern against `b"a"*200 + b"\n"` (201 bytes): `.match` → `True`, `.fullmatch` → `False`. The spec's CORRECT block (`:625-630`) now calls `.fullmatch`, the superseded `.match` form is shown explicitly as WRONG with accurate measured behaviour (`:616-623`), and the two new scenarios "an exemption reason ending in a newline is rejected" (`:1293-1300`) and "the byte bound is not escapable by a trailing newline" (`:1302-1310`) place the newline last rather than embedded, which is the one placement that discriminates `.match` from `.fullmatch`. The pre-existing "carrying control characters" scenario (`:1283-1291`) is now explicitly annotated as *not* the regression test, which is correct — it passes under both spellings. |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/decision-log-field3-per-door` | `skills/writing-specs/SKILL.md` ("Good, bad, and edge-case scenarios: state explicitly what correct looks like ... anything you leave implicit, the agent infers — and inference is where the defects come from") | §3 → "Decision logging — exemptions and blocks" (`:1656-1685`), cross-referenced against `## Scenarios` → "Edges" (`:1372-1419`) and checklist task 6 (`:1947-1953`) | The section states its own MUST — "the scenarios that pin this section MUST assert the value of field 3 for every one of the eight doors" (`:1680-1681`) — immediately after showing a WRONG mapping (`reason=$f3`) whose defect is door-specific: it produces a well-formed log line with the wrong text for every one of the eight `BLOCK` doors (`-` for six, the remedy command for `MSG_NO_MARKER`, the trigger name for `MSG_UNSUPPORTED_FORM`), never errors, and cannot be caught by an exit-code or stderr-message assertion. Counting the actual scenarios: only `MSG_NO_MARKER`'s ("a block is logged with the message constant that fired", `:1393-1397`) asserts what field 3 contains. `MSG_UNSUPPORTED_FORM`'s companion scenario ("a block with no pair still writes a well-formed line", `:1399-1403`) checks only field 4. The remaining five doors that write a log line (`MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`, `MSG_STALE_TEST`, `MSG_NOTHING_RUNNABLE`, `MSG_GIT_FAILED`) have scenarios elsewhere in the file asserting exit code and door name (e.g. `:1141`, `:1147`, `:1266`, `:1459`) but none of them names the log at all. Checklist task 6 turns scenarios into tests by adding "the `test-marker.log` line wherever a scenario names one" (`:1949-1950`) — a scope explicitly tied to what the scenarios already name — so an implementer following the spec as written would ship exactly the `reason=$f3` defect class for seven of the eight doors without any scenario catching it, which is the same "stated behaviour with no enforcing command" defect shape this card has repeatedly shipped and repeatedly had to close in earlier rounds. |
+
+### Verification method
+
+Independently reproduced the `.fullmatch` fix on the pinned Python 3.9.6 before trusting the spec's own
+"Measured" claims (per the dispatch's instruction not to take the reproduction on trust):
+
+```
+$ python3 -c "
+import re
+EXEMPT_RE = re.compile(rb'^[ -~]{1,200}\$')
+tests = {
+  'trailing_newline_17': b'vendored upstream\n',
+  '200_then_newline_201': b'a'*200 + b'\n',
+  'embedded_newline': b'ab\ncd',
+  '200_ok': b'a'*200,
+  '201_fail': b'a'*201,
+}
+for name, val in tests.items():
+    print(name, 'match=', EXEMPT_RE.match(val) is not None, 'fullmatch=', EXEMPT_RE.fullmatch(val) is not None)
+"
+trailing_newline_17  match= True  fullmatch= False
+200_then_newline_201 match= True  fullmatch= False
+embedded_newline     match= False fullmatch= False
+200_ok                match= True  fullmatch= True
+201_fail              match= False fullmatch= False
+```
+
+For the new violation, verified by exhaustive count rather than sampling: grepped every `Scenario:` /
+`Scenario Outline:` block in the file (66 total, matching the spec's own claimed count), identified the
+subset naming `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`, `MSG_STALE_TEST`,
+`MSG_NOTHING_RUNNABLE`, `MSG_BAD_EXEMPT`, `MSG_GIT_FAILED`, and `MSG_UNSUPPORTED_FORM`, and separately
+the subset that also mentions "log" or "field" in its Then clause. The intersection is one scenario
+(`MSG_NO_MARKER`), against the section's own stated requirement of eight.
+
+### Notes (non-blocking)
+
+- The pinned timestamp command for the log (`ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)`, `:1674`) was run on
+  this machine's bash 3.2.57 / macOS `date` and produces the claimed ISO-8601 form; only one call site
+  exists in the file, so there is no second spelling to drift from it.
+- The `reason=$f3` / `case`-based `reason` mapping is internally consistent with the wire table in §3
+  (`:536-543`): for `BLOCK`, wire field 2 is always the door's own `MSG_*` constant and field 3 is
+  door-specific detail (`-`, a trigger name, or a remedy command), so `reason=$f2` for `BLOCK` is
+  correct and `reason=$f3` for `BLOCK` is wrong for all eight doors, not just some — the section's
+  "zero of the eight" claim checks out arithmetically (6 doors carry `-`, 1 carries a remedy command, 1
+  carries a trigger name; none carries a door name).
+- Field-4 and field-2 total counts in §Decision logging (`:1702-1707`, "eight write `-`... exactly
+  four... run after pair formation") were cross-checked against the 13-door table (`:1569-1587`) and
+  are arithmetically consistent once `MSG_NO_PYTHON`'s "writes no line at all" exception is accounted
+  for (13 doors − 1 that logs nothing − 4 that carry a pair = 8 that carry `-`).
+- §Latency's four budgets are correctly presented as targets pending checklist task 10's measurement,
+  not as achieved results — the ⚠️ callout at `:1026-1031` explicitly forbids revising a row from ADR
+  0026's prediction, and no other passage in this revision states a budget as met. Not treated as
+  settled, per the dispatch's instruction.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" and checklist task 2's cross-reference. Not re-argued; not
+  counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing decisions →
+  O3 reports the revision-15 measurement, read back from the staged blob: total **2,163** lines
+  (matches `wc -l` on this checkout), non-prose floor **1,127** — 327 over the 800 ceiling even with
+  every line of prose deleted. Not re-argued; not counted toward this verdict.
