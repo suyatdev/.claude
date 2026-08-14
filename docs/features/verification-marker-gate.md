@@ -2,8 +2,8 @@
 phase: planning
 model_tier: high
 branch: none
-revision: 18
-revision_status: complete  # exhaustive MUST-sweep: 3 unenforced claims in §The marker closed. Round 10 (confirming) is owed.
+revision: 19
+revision_status: complete  # round-10 FAIL closed: PATCH_OR_INTERACTIVE outline + log-mode/dir-repair scenarios. Gate decision owed.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -769,6 +769,8 @@ the remedy is still actionable.
 - **`-p`/`--patch` and `--interactive`.** Both select their content *interactively, after* the
   `PreToolUse` hook has already returned, so there is no moment at which the hook could inspect what
   the commit will contain. Refused on that ground, not a lexing one; no grammar work changes it.
+  **Enforced by its own outline in §Acceptance** — this was the one trigger of the four with no
+  scenario at all through revision 18, which is exactly the silent drop the fold is warned against.
 - **Any option outside the whitelist** — see immediately below.
 
 ##### Recognition is a closed whitelist, and the default for a recognised commit is refuse
@@ -1096,6 +1098,22 @@ Scenario: the generated store is not world-readable
    # notice a 0755 umask default: the gate would behave correctly in every other scenario while
    # the store that authorises commits sat readable by every process on the machine
 
+Scenario: the decision log is created 0600, not left at the append default
+  Given <repo>/hooks/state/test-marker.log does not exist yet
+   When the first BLOCK line is written
+   Then that file has mode 0600
+   # `>>` alone creates it 0644 under a default umask, which is why §Decision logging specifies a
+   # touch-then-chmod before the first append. Asserted because every other log scenario in this
+   # file passes just as happily against a 0644 log
+
+Scenario: a store directory that already exists with the wrong mode is repaired
+  Given <repo>/hooks/state/ already exists with mode 0755
+   When any decision that writes a line is made
+   Then the directory has mode 0700
+   # measured: `mkdir -p -m` and os.makedirs BOTH leave a PRE-EXISTING directory's mode
+   # untouched, so no creation-time flag can satisfy this and an explicit chmod is required.
+   # The creation-path scenario above cannot reach this case, which is why it is separate
+
 Scenario: a repo that has not installed the writer is never gated
   Given a repo with hooks/bar.sh and hooks/bar.test.sh and no marker
     And that repo has no hooks/lib/write-test-marker.py
@@ -1269,6 +1287,25 @@ Scenario: git commit -i does not sweep an untested staged file past the gate
    Then the hook exits 2 with MSG_UNSUPPORTED_FORM naming the -i trigger
    # measured (M3): -i commits the staged hooks/foo.sh too, while a pathspec collector
    # returns docs/notes.md alone — a fail-open that lexes cleanly
+
+Scenario Outline: interactive content selection blocks even when the marker is fresh
+  Given hooks/foo.sh has a valid marker matching its current content
+   When "<command>" runs
+   Then the hook exits 2 with MSG_UNSUPPORTED_FORM
+    And field 3 of the log line is PATCH_OR_INTERACTIVE
+   # the FOURTH UNSUPPORTED trigger, and through revision 18 the only one of the four with no
+   # scenario at all — foreign-repo, -i/--include and off-whitelist each had one, so the fold
+   # this spec says four separate times must not "silently drop one" had already dropped one.
+   # Written against a FRESH marker deliberately: these block because the content is chosen
+   # interactively AFTER the PreToolUse hook returns, not because anything is stale. A
+   # stale-marker setup would block under an implementation that never implemented this
+   # trigger at all, and would certify its absence as correct.
+
+  Examples:
+    | command                   |
+    | git commit -p -m msg      |
+    | git commit --patch -m msg |
+    | git commit --interactive  |
 
 Scenario: an amend re-commits a file from the amended commit at an untested version
   Given hooks/foo.sh was committed, then edited and staged
@@ -2251,6 +2288,17 @@ reason this row is a pin and not a footnote.
   left to be inherited. **The `sum` field is the falsifier the old command lacked**, which is the
   general lesson: a measurement with no way to disagree with itself is not yet a measurement.
 
+  **Revision 19 — same procedure, from the staged blob:** total **2,359**, non-prose floor
+  **1,224**, prose **1,135**, across **73** scenarios. ⚠️ **Revision 18's sweep called
+  itself exhaustive and was not** — round 10 re-ran the same method against phrasings it had not
+  matched and found **two more** instances of the identical class: the `PATCH_OR_INTERACTIVE`
+  trigger (named four times as needing its own scenario "so the fold cannot silently drop one",
+  and the only one of the four that had none) and the decision log's own `0600` plus the
+  directory mode-repair race, both of which had fix *code* and no scenario. **Two independent
+  exhaustive sweeps each missed what the other found**, which is the honest characterisation of
+  this defect class: it is not reliably exhaustible by inspection, and the detector that actually
+  settles it is a written test that either exists or does not.
+
   **Revision 17 — same procedure, from the staged blob:** total **2,269**, non-prose floor
   **1,159**, prose **1,110**, across **67** scenarios, two of them outlines.
 
@@ -2272,10 +2320,10 @@ reason this row is a pin and not a footnote.
   sweeping the whole surface by rule shape rather than by recency.
 
   **The floor is the finding, and restoring the log made it decisive.** Every re-measurement has moved
-  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,188**, so
-  **deleting every line of prose in this file still leaves it 388 lines over the ceiling.** The prose
-  budget for an 800-line version is **negative 388**, up from negative 67 at revision 12. This is no
-  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 70 acceptance
+  it *up*, never toward 800 — and it has now crossed decisively: the non-prose floor is **1,224**, so
+  **deleting every line of prose in this file still leaves it 424 lines over the ceiling.** The prose
+  budget for an 800-line version is **negative 424**, up from negative 67 at revision 12. This is no
+  longer "800 is hard to reach"; it is arithmetically unreachable while the spec keeps 73 acceptance
   scenarios and its contract tables, and cutting those is what the user rejected when choosing the
   scope cut, and rejected again when restoring the log.
 

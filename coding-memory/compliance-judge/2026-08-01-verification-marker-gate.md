@@ -1433,3 +1433,119 @@ which returns only the schema definition and the MUST NOT sentence itself.
   **2,239**, non-prose floor **1,140** — 340 over the 800 ceiling even with every line of prose
   deleted, and the correction (revision 15 was actually 1,089/1,074, not the 1,127/1,036 it shipped
   with) does not change the waiver's conclusion. Not re-argued; not counted toward this verdict.
+
+## Round 10 (judged against spec revision 18, HEAD `c6bf55665b5eb0b23efceb065e58bd7003f3edd8`) — 2026-08-14T02:48:44Z · **FAIL** (2 violations) · confidence: high
+
+### Layman summary
+
+This round's spec revision claims to have done something the last several rounds only did
+piecemeal: swept the *entire* file for every "MUST"-shaped sentence and every bolded
+never/always claim, checking each one for a matching test scenario, instead of only re-checking
+the section that was just edited. It found and fixed three real gaps (the marker store's location
+— never `$HOME`, read back correctly inside a worktree — and the store's `0700`/`0600` file
+permissions). I re-verified all three fixes are genuinely closed, then re-ran that same sweep
+myself, independently, looking specifically for the same defect shape under phrasings the sweep
+might have missed (unbolded "never"/"cannot"/"only", table cells, blockquotes). I found two more
+instances the sweep didn't catch, both of the identical shape as the last five rounds' findings:
+a real, specific, testable requirement stated in prose — with code fixes attached, in one case —
+that no scenario in the file would catch if an implementation got it wrong.
+
+First: the gate names exactly **four** distinct trigger reasons for its `MSG_UNSUPPORTED_FORM`
+door, and says four separate times (the doors table, the testing requirements, and two checklist
+tasks) that each one needs its own scenario "so the fold cannot silently drop one." Three do.
+The fourth — committing with `-p`/`--patch` or `--interactive` — has none anywhere in the file.
+
+Second: the spec specifies, with actual shell and Python code, that the decision log file
+(`test-marker.log`) must end up at file-permission `0600`, and that a directory left at the wrong
+permission by a losing race must get repaired rather than left alone — but neither of those two
+requirements has a matching scenario. Only the *directory's* from-scratch creation case (not the
+log file, and not the repair-after-a-bad-start case) is covered.
+
+Both are new findings, not a recurrence of round 9's `written_at` finding — that one is
+genuinely fixed and I am not re-citing its id.
+
+### Round-9 violation and revision-18's own three fixes — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/written-at-no-enforcing-scenario` | **Closed** | `Scenario Outline: written_at never changes a decision, in either direction` (`:1053-1069`) varies `written_at` across `1970-01-01`, `2099-01-01`, and "the current time," crossed against matching/non-matching blobs, and asserts the outcome in **both** directions (an ancient/future timestamp does not rescue a stale pair; matching blobs still allow regardless of timestamp). This is the shape the round-9 finding demanded — one direction alone would pass an implementation that reads the clock. |
+| (unlabeled — the `$HOME` half of the same §The marker sweep) | **Closed, and adversarial** | `Scenario: the marker is read from the repo's own toplevel, never from $HOME` (`:1071-1080`) deliberately makes the two stores **disagree** (a stale `$HOME` copy alongside a valid repo-local one) rather than merely being absent — the only shape that discriminates a `$HOME`-reading implementation from a correct one, per the file's own note that an agreeing or empty `$HOME` store passes under either. |
+| (unlabeled — the worktree half) | **Closed, and adversarial** | `Scenario: a marker written inside a linked worktree is read back inside that worktree` (`:1082-1088`) uses the same disagreeing-stores construction against the main checkout instead of `$HOME`, a distinct resolver path per the spec's own note that "neither substitutes for the other." |
+| (unlabeled — the store-permissions half) | **Closed** | `Scenario: the generated store is not world-readable` (`:1090-1098`) asserts `hooks/state/` at `0700` and marker files at `0600` on first write. (This scenario's own scope is narrower than the claims made elsewhere about the same directory — see the new findings below.) |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/unsupported-form-trigger-no-enforcing-scenario` | `skills/writing-specs/SKILL.md` ("Good, bad, and edge-case scenarios: state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from.") | §"The command grammar" → rule 4 resolution table, row 2 (`:713`) and "What `UNSUPPORTED` absorbs" (`:769-771`); §3 → the wire's field-2 domain (`:546`) and "The doors" row 8 (`:1666`); Testing requirements (`:2007-2008`) and checklist tasks 2 (`:2034`) and 6 (`:2047-2048`); vs. the full `## Scenarios` block | The spec names exactly four `MSG_UNSUPPORTED_FORM` triggers — `FOREIGN_REPO`, `INCLUDE_OR_FROM_FILE`, `PATCH_OR_INTERACTIVE`, `OFF_WHITELIST` — and states four separate times that each must be asserted individually "by the trigger its message names ... so the fold cannot silently drop one" (checklist task 6's exact words). Three have a dedicated scenario: foreign-repo (`:1280-1285`), `-i` (`:1265-1271`), and off-whitelist via `--am` (`:1258-1263`). `PATCH_OR_INTERACTIVE` (`-p`/`--patch`, `--interactive`) has none — grepping the whole `## Scenarios` block (case-insensitive) for "patch" or "interactive" returns nothing. It is the only one of the gate's thirteen doors, and the only one of its own four named `UNSUPPORTED` sub-triggers, with zero enforcing scenario, so an implementation that silently drops this trigger from the fold — precisely the failure checklist task 2 names — would pass every scenario in the file. |
+| `writing-specs/store-mode-repair-no-enforcing-scenario` | `skills/writing-specs/SKILL.md` (same rule as above) | §2 → marker store bullet (`:370-382`); §3 → Decision logging mode paragraphs (`:1895-1945`); checklist task 6 (`:2053-2065`); vs. the single mode-related scenario, `:1090-1098` | Two MUST-shaped, code-backed requirements have no enforcing scenario. **(a)** `test-marker.log`'s own `0600` mode is asserted four times in prose and fixed with an explicit `touch`+`chmod` pair (revision 14, because a bare `>>` alone creates the file at `0644` under umask `022`, measured) — but no scenario in `## Scenarios` ever creates or inspects `test-marker.log`'s file mode; the one mode-related scenario asserts only `hooks/state/`'s `0700` and marker files' `0600`, never the log. **(b)** the state-dir repair race — "the mode must be set by whichever component wins, because the loser cannot repair it," measured that `mkdir -p -m 0700` and `os.makedirs(..., mode=0o700)` both leave a pre-existing `0755` directory unrepaired — has no scenario either; the one existing store scenario's `Given` is "`hooks/state/` does not exist yet," which never exercises the pre-existing-wrong-mode repair case checklist task 6 calls out by name as "the one `mkdir -p -m` alone does not satisfy." Checklist task 6 hands both gaps to the implementer as bare prose test-case instructions with no spec-level `Given`/`When`/`Then` to build them from — breaking the pairing this same section's revision-18 fixes just established for the marker store three paragraphs above it. |
+
+### Verification method
+
+Re-ran the O3 line-classifier independently against the exact committed blob (not taken on trust):
+
+```
+$ git hash-object docs/features/verification-marker-gate.md
+f596c35f62cdd1a9eb2092f44a90b8479eb6c825   # matches the dispatched spec_blob_sha exactly
+$ git cat-file -p f596c35f62cdd1a9eb2092f44a90b8479eb6c825 | diff - docs/features/verification-marker-gate.md
+(no output — HEAD, blob sha, and working tree are all identical)
+$ awk '<the pinned §Standing decisions classifier>' docs/features/verification-marker-gate.md
+total=2311 floor=1188 prose=1123 sum=2311
+$ grep -c '^Scenario:' docs/features/verification-marker-gate.md   # 67
+$ grep -c '^Scenario Outline:' docs/features/verification-marker-gate.md   # 3
+```
+
+All four figures (2,311 / 1,188 / 1,123 / 70 scenarios) match revision 18's own claims exactly,
+and `sum == total` confirms the classifier's own falsifier holds.
+
+For the sweep itself, applied the round's stated method — search for claim shapes the exhaustive
+sweep might not have matched (unbolded "never"/"cannot"/"only"/"is refused"/"is rejected"/"fails
+closed", and requirements inside tables or blockquotes rather than prose sentences) — against the
+whole file, then checked each hit against the `## Scenarios` block for a discriminating
+`Given`/`Then`. Grepped `MUST`, `MUST NOT`, `**never**`, `**always**`, `is total`, `fails
+closed`/`fail-closed`, `cannot`, `is refused`, `is rejected` as whole-file passes; cross-checked
+every hit that named a still-open behavioural commitment (as opposed to a measured fact or an
+explanatory aside) against a scenario. Two hits had none: `PATCH_OR_INTERACTIVE` (found via the
+doors-table sweep) and the log-file/state-dir-repair mode pair (found via the `fails
+closed`/`cannot repair` sweep of §Decision logging). One additional candidate — "Optional value,
+attached only — these must **never** consume the next token" for `-u`/`--untracked-files` and
+`-S`/`--gpg-sign` (`:726-728`) — also has no scenario, but sits inside the user-waived,
+unresolved tokenisation callout immediately below it (`:729-744`), which explicitly names "how the
+command string becomes tokens" as deferred to `hooks/lib/shell_segments.py`; not cited as a new
+violation, since it is the same open question the existing `writing-specs/command-grammar` waiver
+already covers. Rule 0's wrapper-stripping (`rtk git commit …`, `:690-699`) is likewise unscenario'd
+but explicitly sourced from the same deferred module ("segmentation ... comes from the same
+module, for the same reason") and treated the same way.
+
+### Notes (non-blocking)
+
+- §Decision logging's and §Marker store's repeated cross-references to "§Acceptance" (`:366, 397,
+  1772, 1780`) still point at a heading that does not exist in the file (the actual location is
+  `## Scenarios`); flagged as a non-blocking drift by round 9 and still present, unchanged, in
+  revision 18. Not treated as a violation for the same reason as before: the referenced scenarios
+  are present and auditable at their real location, only mislabeled.
+- §Latency's four budgets remain correctly presented as unmeasured targets pending checklist task
+  10 (`:1020-1037`); no passage revises a budget from ADR 0026's prediction, consistent with this
+  round's dispatch instruction not to treat them as settled.
+- v1's log-writer-with-no-reader gap and the `MSG_NO_PYTHON` no-trace gap are both stated as
+  accepted, open follow-ups in the spec's own text (§Decision logging, §Scope) and were not
+  re-litigated as violations, per this round's dispatch instruction.
+- `docs/decisions/0026-the-gate-does-no-json-parsing.md` exists on disk, `Status: Accepted
+  (2026-08-13)`, matching every citation of it in the spec.
+- The frontmatter's `revision_status: complete # exhaustive MUST-sweep: 3 unenforced claims in
+  §The marker closed. Round 10 (confirming) is owed.` accurately describes what revision 18 did —
+  it does not claim the sweep found everything, and this round's two new findings are consistent
+  with "confirming," not contradicting, that self-description.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the
+  UNRESOLVED callout under §"The command grammar" (`:729-744`) and checklist task 2's
+  cross-reference (`:2038-2039`). Not re-argued; not counted toward this verdict. (Also covers the
+  `-u`/`-S` "never consume" and rule-0 wrapper-stripping gaps noted above — see Verification
+  method.)
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing
+  decisions → O3 reports the revision-18 measurement, independently re-derived above: total
+  **2,311**, non-prose floor **1,188** — 388 over the 800 ceiling even with every line of prose
+  deleted. Not re-argued; not counted toward this verdict.
