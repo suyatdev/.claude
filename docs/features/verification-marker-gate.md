@@ -1,9 +1,9 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feature/verification-marker-gate
 revision: 19
-revision_status: complete  # planning complete at revision 19; task 15 carries the MUST-sweep into implementation. AWAITING GATE.
+revision_status: complete  # planning closed at revision 19; gate confirmed 2026-08-14. Spec is frozen — a needed change is a GATE announcement, not an edit.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
