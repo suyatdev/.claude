@@ -7642,3 +7642,27 @@ spec's `if failures == 0` maps to `if rc == 0` with no new variable.
    §Scope "out" line of its own.
 4. Task 9's **25**-mutant floor and task 14's arming check both counted doors against the old
    inventory; neither was re-derived here.
+
+### Task 12 assessed — blocked on 7, and the branch is now fully blocked
+
+Task 12 was never assessed. The table above jumps from 8 to "9–11, 13–15"; 12 is absent from it, and
+the "one live thread" conclusion was drawn without it. Assessed now, and it is **blocked on task 7** —
+for a different reason than 9–11/13–16, which need the gate to *run*:
+
+Verified: `hooks/test-marker-guard.sh` does not exist; `test-marker` appears **0 times** in
+`settings.json`, `rules/gates.md`, and `hooks/README.md`. Task 12's entire deliverable is behavioural
+claims about that script — global-but-inert scope, `MSG_NO_PYTHON` as the one exception, and that v1
+ships no way to query whether the gate is armed. Every one is a **write-down that cannot be verified
+first**, into `rules/gates.md`, the file every session loads every turn.
+
+The dormant-hook precedent does not stretch to cover it. README documents `scan-secrets.sh`,
+`scan-invisible-unicode.sh`, `checkpoint-before-modify.sh` and `require-project-standards.sh` — all
+four **exist as files** and are merely unregistered. Documenting a script that does not exist at all
+has no precedent here, and `rules/gates.md` already names that exact failure: "advertised protection
+that is not currently protecting anything."
+
+**Result: 4/16 and no task can move.** Everything routes through one of two unblockers, neither
+available at this tier — the high-tier spec revision (task 8), or the `shell_segments.py`
+option-grammar work (tasks 2/3/7 →  everything else), scoped off this branch by user decision.
+The ADR 0026 → 0028 renumber is **not** available as filler: it edits the card, which the freeze
+forbids. Recording this so the next session does not re-derive a task-shaped substitute.
