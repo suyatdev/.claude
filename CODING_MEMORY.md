@@ -7495,3 +7495,61 @@ does not yet exist — today both only exercise the writer. The names are right 
 Task 7 needs task 3 needs the `shell_segments.py` option grammar. **Task 6 was the last forward
 motion on this branch** unless that work is scheduled. Tasks 8–16 remain unassessed — task 8 wires
 the *writer's* call site and may be independent. Re-derive before picking one up.
+
+## 2026-08-15 — tasks 8–16 assessed at last: one root blocker, one live thread
+
+### The previous line was right to hedge — task 8 *is* independent, and nearly ready
+
+Restored to find the handoff one commit stale: it read `NEXT: task 6`, but `c3dedc8` had already
+landed task 6's red suite. Actual state **4/16** (tasks 1, 4, 5, 6), clean, level with origin, no PR.
+Re-ran the writer before trusting it: **35/35**.
+
+Then assessed 8–16, which no prior session had done:
+
+| task | needs | verdict |
+|---|---|---|
+| 2, 3 | grammar rule 2 (waived, unresolved) | blocked on the shared lexer |
+| 7 | *imports* the classifier | blocked on 3 |
+| **8** | row 12's suite = task 2's artifact | **13 of 14 present** |
+| 9–11, 13–15 | the gate itself | blocked on 7 |
+| 16 | everything | blocked |
+
+**One root cause, not twelve.** `hooks/lib/shell_segments.py` re-verified byte-identical to
+`origin/main`, still 155 lines, no option grammar.
+
+### Why task 8 survives the block — three measured facts
+
+1. **The call site touches only the writer.** Spec lines 311–330 invoke
+   `hooks/lib/write-test-marker.py` and nothing else. No classifier, no gate, no TSV boundary.
+2. **13 of the 14 suites exist**, checked file-by-file, not inferred: rows 1–11 all present, row 13
+   present, **row 14 present** (task 6 created `hooks/test-marker-guard.test.sh`). Only row 12,
+   `hooks/lib/classify-commit-command.test.py`, is missing — it is task 2's artifact.
+3. **The spec's own enforcement is already built for this.** Assertion 1 (lines 290–292) enumerates
+   `git ls-files`, keeps only suites whose subject is **tracked**, and "self-extends to pairs 12–14
+   instead of contradicting them"; the section below it explicitly tolerates a transient orphan
+   during TDD. So wiring the 13 satisfies assertion 1 *today*, and the assertion turns red on its own
+   if task 3 ever lands its suite unwired. The deferral needs no new mechanism.
+
+**Row 14 is safe to wire despite having no subject.** The writer derives
+`hooks/test-marker-guard.sh`, finds it untracked, takes the no-subject skip and exits 0. Wiring it
+now is correct and inert.
+
+### User decision (2026-08-15) — task 8 partial
+
+Wire the 13 that exist; **leave row 12 to task 3's commit**. The checklist box stays **UNTICKED**
+with a completion note naming row 12 as the remainder — partial work recorded as partial. Ticking it
+against "all 14" would be a false claim in an audit trail. This is *not* a spec change and needs no
+GATE: the task's scope is unchanged, one input simply does not exist yet.
+
+**Two costs flagged and accepted before the decision**, both real:
+- 13 suites gain a call that spawns the writer on pass, and **a writer error fails the suite** — in
+  suites other live sessions may be running, while the gate itself is nowhere near shipping.
+- Touching 13 shared test files raises the merge-conflict surface against `feature/memsearch-freshness`
+  and `fix/git-guard-detached-head`.
+
+### Sequencing after this
+
+Task 8 partial is the **last** forward motion on this branch. Everything remaining routes through the
+`shell_segments.py` option-grammar work, which is scoped **off** this branch by user decision — so it
+wants its own feature before tasks 2/3/7 can move. ADR 0026's duplicate renumber (→ **0028**) is still
+parked at task 16.
