@@ -7732,3 +7732,12 @@ for `install-schedule.sh` and finds nothing. That is a distinct failure mode fro
 every extensionless executable (`memsearch/bin/memsearch` is the other, with no sibling test at all).
 Fixing it would mean pairing on shebang or content instead of suffix — a redesign of the pairing rule,
 so it is recorded as a follow-up, not folded in.
+
+### Compliance gate — deliberately skipped for revision 20 (user decision, 2026-08-15)
+
+The spec-compliance gate calls for a judge run after *any* later spec edit. **Not run for revision
+20**, on the user's standing "proceed without a passing compliance verdict" decision, reaffirmed
+explicitly when the cost was put to them. Recorded here because a skipped gate that leaves no trace
+is indistinguishable from a forgotten one — that asymmetry is the whole reason this line exists.
+Round 10's `fail` remains stale and closed by rev 19; no verdict exists for rev 20 and none is
+pending. The observability judge at task 16 is unaffected and still required before any PR.
