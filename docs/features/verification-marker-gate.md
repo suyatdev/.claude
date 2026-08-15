@@ -1,9 +1,9 @@
 ---
-phase: implementation
-model_tier: low
+phase: planning
+model_tier: high
 branch: feature/verification-marker-gate
-revision: 19
-revision_status: complete  # planning closed at revision 19; gate confirmed 2026-08-14. Spec is frozen — a needed change is a GATE announcement, not an edit.
+revision: 20
+revision_status: in-progress  # reopened at revision 20 (2026-08-15, user decision) — §Scope's dated table was six pairs stale and task 8 could not proceed. Implementation resumes only on a fresh `gate confirmed`.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -175,50 +175,96 @@ the writer-installed check and therefore cannot reach a repo that has not opted 
 ### Which files the gate covers
 
 Any repo path with a sibling test under the `X.sh`↔`X.test.sh` / `X.py`↔`X.test.py` convention.
-**Measured 2026-08-02 from `git ls-files`, not recalled — 13 tracked suite files, 11 conforming pairs
-(10 shell + 1 Python), 2 orphan suites.**
 
-| # | subject | suite |
-|---|---|---|
-| 1 | `hooks/context-handoff-watch.sh` | `hooks/context-handoff-watch.test.sh` |
-| 2 | `hooks/judge-guard.sh` | `hooks/judge-guard.test.sh` |
-| 3 | `hooks/memsearch-nudge.sh` | `hooks/memsearch-nudge.test.sh` |
-| 4 | `hooks/pane-dispatch-guard.sh` | `hooks/pane-dispatch-guard.test.sh` |
-| 5 | `hooks/phase-guard.sh` | `hooks/phase-guard.test.sh` |
-| 6 | `hooks/lib/classify-pr-command.py` | `hooks/lib/classify-pr-command.test.py` |
-| 7 | `panes/adapters/cmux-layout.sh` | `panes/adapters/cmux-layout.test.sh` |
-| 8 | `panes/dispatch-pane-agent.sh` | `panes/dispatch-pane-agent.test.sh` |
-| 9 | `panes/run-pane-agent.sh` | `panes/run-pane-agent.test.sh` |
-| 10 | `panes/terminal-detect.sh` | `panes/terminal-detect.test.sh` |
-| 11 | `statusline-command.sh` | `statusline-command.test.sh` |
+#### The covered set is a derivation, not a list (revision 20)
 
-**This table is a dated measurement of the pre-feature repo, and it is not the completion criterion**,
-because **this feature adds three conforming pairs of its own:**
+> **The covered set is whatever this command returns, at the moment it is run:**
+>
+> ```sh
+> git ls-files '*.test.sh' '*.test.py'   # → strip .test.sh/.test.py, add .sh/.py
+>                                        # → keep the ones whose subject is TRACKED
+> ```
+>
+> **No task, test, or judge may substitute a number or a hand-written list for it.** Anything that
+> counts pairs re-runs this; anything that names pairs cites it as of a stated date.
 
-| # | subject | suite | lands at |
-|---|---|---|---|
-| 12 | `hooks/lib/classify-commit-command.py` | `hooks/lib/classify-commit-command.test.py` | task 3 |
-| 13 | `hooks/lib/write-test-marker.py` | `hooks/lib/write-test-marker.test.py` | task 5 |
-| 14 | `hooks/test-marker-guard.sh` | `hooks/test-marker-guard.test.sh` | task 7 |
+⚠️ **Revision 20 replaced an enumeration with this derivation because the enumeration silently went
+stale and blocked task 8.** Revision 19 and earlier carried a table of 11 pairs stamped *"Measured
+2026-08-02 from `git ls-files`, not recalled."* The stamp was honest and the measurement was correct
+**on the day it was taken**. Six more conforming pairs then landed between **2026-08-03 and
+2026-08-06** — `doc-guard`, `git-guard`, `classify-git-command`, `shell_segments`,
+`feature-sync-guard`, `slim-session-start` — and the command was not re-run until 2026-08-15, **13
+days after the measurement and 9 after the last newcomer landed**. Task 8
+inherited "all 14" from that table and would have wired 13 of 18, which **fails assertion 1 on
+landing** and leaves six subjects uncommittable once the gate arms, `hooks/git-guard.sh` among them.
 
-All three are `hooks/` files with sibling tests, so **the gate demands markers for them too**. A
-suite of this feature's own that does not write a marker makes its subject uncommittable the moment
-the gate arms. The wiring criterion is therefore **every pair, 14 of them at task 8** — never a
-literal carried over from the table above. Freezing the number 11 in a test would make that assertion
-false from task 4 onward by this feature's own construction. The suite files live under four different
-directory depths, which is why the call site cannot use a `$0`-relative path (see §1).
+**The lesson is general and it is why the derivation is now normative: a dated measurement written
+into a spec is a liability with a fuse. Re-derive, never re-read.** The spec had already warned
+against "a literal carried over from the table above" and still shipped one, because the warning sat
+next to the very literal it forbade.
+
+#### Snapshot, 2026-08-15 — illustrative only, never a criterion
+
+Re-derived at revision 20: **22 tracked suite files → 18 tracked pairs, 4 orphan suites.** Of the 18,
+**17 are pre-existing** and **1 is this feature's own** (`write-test-marker`, landed at task 5).
+
+The remaining two of this feature's three pairs are still to come, so the derivation grows on its own:
+
+| # | subject | suite | lands at | pairs after |
+|---|---|---|---|---|
+| — | *(18 pairs as of 2026-08-15)* | — | — | 18 |
+| 12 | `hooks/lib/classify-commit-command.py` | `hooks/lib/classify-commit-command.test.py` | task 3 | 19 |
+| 14 | `hooks/test-marker-guard.sh` | `hooks/test-marker-guard.test.sh` | task 7 | 20 |
+
+`test-marker-guard.test.sh` exists **today** and is currently counted as an orphan; task 7 lands its
+subject and promotes it to a pair. **20 is the expected end state, and it is expected, not
+prescribed** — if the repo grows again, the derivation is right and this number is wrong.
+
+All of this feature's own pairs are `hooks/` files with sibling tests, so **the gate demands markers
+for them too**. A suite of this feature's own that does not write a marker makes its subject
+uncommittable the moment the gate arms — which is precisely the failure the stale table was about to
+cause for six *other* files. The wiring criterion is therefore **every pair the derivation returns at
+the time task 8 runs**. Freezing any count in a test would make that assertion false from task 4
+onward by this feature's own construction. The suite files are spread across **6 directories at 3
+different depths** — re-measured at revision 20: `.`, `hooks/`, `hooks/handoff/`, `hooks/lib/`,
+`panes/`, `panes/adapters/` — which is why the call site cannot use a `$0`-relative path (see §1).
+(Revision 19 said "four different directory depths"; that was wrong when written — the 11-pair set
+was 5 directories at 3 depths — and is corrected here rather than carried forward.)
+
+**`hooks/lib/shell_segments.py` is IN scope** (user decision, 2026-08-15). Its suite gets the call
+line like any other pair. This does **not** re-open the standing "do not expand scope into
+`shell_segments.py`" boundary, which is about implementing the option grammar tasks 2/3 need — adding
+a line to `shell_segments.test.py` modifies neither that grammar nor the subject file. Excluding it
+was considered and rejected as the more expensive option: the design has no exclusion mechanism for a
+suite whose subject *is* tracked, so leaving it unwired would make `shell_segments.py` permanently
+uncommittable without a `TEST_EXEMPT` on every commit.
 
 **Out, and stated so nobody later assumes coverage:**
 
-- **Two orphan suites — tests with no sibling subject.** `panes/adapters.test.sh` exercises the whole
-  `panes/adapters/` directory, and `panes/adapters/cmux-exec.test.sh` exercises
-  `panes/adapters/cmux.sh`. Neither `panes/adapters.sh` nor `panes/adapters/cmux-exec.sh` exists.
+- **Three orphan suites — tests whose derived subject is not tracked.** Re-derived 2026-08-15;
+  revision 19 said "two" and named only the first two.
+  `panes/adapters.test.sh` exercises the whole `panes/adapters/` directory,
+  `panes/adapters/cmux-exec.test.sh` exercises `panes/adapters/cmux.sh`, and
+  `memsearch/bin/install-schedule.test.sh` exercises `memsearch/bin/install-schedule`. None of
+  `panes/adapters.sh`, `panes/adapters/cmux-exec.sh` or `memsearch/bin/install-schedule.sh` exists.
   Behaviour is defined below (§"Test with no subject"), not left to inference: they write no marker
   and are never gated.
-- 🔴 **`panes/adapters/cmux.sh` is gated by nothing.** It is the largest adapter in the repo and it
-  *does* have a test — but that test is named `cmux-exec.test.sh`, so the strict 1:1 rule cannot see
-  the relationship. `panes/` is therefore **partially** covered, and this file is the hole. Renaming
-  the suite would close it and is deliberately **not** in this feature; it is a follow-up task.
+  *(A fourth, `hooks/test-marker-guard.test.sh`, is this feature's own and transient — task 7 lands
+  its subject and promotes it to a pair. See "why not a count" below.)*
+- 🔴 **Two real subjects are gated by nothing, for two different reasons.** Both are coverage holes
+  this feature leaves open, and both are follow-ups rather than v1 work:
+  - `panes/adapters/cmux.sh` — the largest adapter in the repo. It *does* have a test, but that test
+    is named `cmux-exec.test.sh`, so the strict 1:1 rule cannot see the relationship. `panes/` is
+    therefore **partially** covered. Renaming the suite would close it.
+  - `memsearch/bin/install-schedule` — found at revision 20. It *does* have a correctly-named sibling
+    test, and the subject really exists; the mismatch is that **the subject carries no `.sh`
+    extension**, so the derivation looks for `install-schedule.sh` and finds nothing. This is a
+    distinct failure mode from `cmux.sh` — the test name is right and the *subject* name is
+    unmatchable — and it will recur for every extensionless executable in the repo
+    (`memsearch/bin/memsearch` is the other one today, and it has no sibling test at all).
+    Extending the convention to extensionless subjects is deliberately **not** in this feature: it
+    would mean pairing on content or on a shebang rather than on a suffix, which is a redesign of the
+    pairing rule, not an addition to it.
 - `memsearch/tests/test_*.py` uses a non-sibling layout, so the gate never fires there. Its own
   follow-up task — not forgotten, just not v1.
 - Files with no sibling test. The gate never demands a test that does not exist.
@@ -289,20 +335,24 @@ two parts:
 1. **Every tracked pair's suite contains the marker-write call.** Enumerate
    `git ls-files '*.test.sh' '*.test.py'`, derive each subject, keep the ones whose subject is tracked,
    and assert each of those suite files contains the call line. This has a real trigger — adding a
-   paired suite without wiring it turns the suite red — and it self-extends to pairs 12–14 instead of
-   contradicting them.
-2. **The two named orphans are still orphans.** Assert `panes/adapters.test.sh` and
-   `panes/adapters/cmux-exec.test.sh` each derive a subject that is **not** tracked. This freezes the
-   `cmux.sh` coverage-hole claim in §Scope; the follow-up rename will turn it red, which is correct —
-   the rename must update §Scope in the same commit.
+   paired suite without wiring it turns the suite red — and it self-extends to new pairs instead of
+   contradicting them. **This assertion is the enforcement arm of the derivation in §Scope** — it
+   consults `git ls-files` and nothing else, so a stale table cannot satisfy it. Revision 20 exists
+   because task 8 was about to wire a hand-copied 14 against an assertion that measures 18.
+2. **The three named orphans are still orphans.** Assert `panes/adapters.test.sh`,
+   `panes/adapters/cmux-exec.test.sh` and `memsearch/bin/install-schedule.test.sh` each derive a
+   subject that is **not** tracked. This freezes both coverage-hole claims in §Scope; the follow-up
+   rename (`cmux.sh`) or an extensionless-pairing redesign (`install-schedule`) will turn it red,
+   which is correct — either change must update §Scope in the same commit.
 
-Deliberately *not* asserted: that the orphan set is exactly those two. During TDD each red step commits
-a suite whose subject does not exist yet, a transient third orphan; an equality assertion would make
-the red steps unlandable.
+Deliberately *not* asserted: that the orphan set is exactly those three. During TDD each red step
+commits a suite whose subject does not exist yet — `hooks/test-marker-guard.test.sh` is exactly that
+today, a transient fourth orphan until task 7 — and an equality assertion would make the red steps
+unlandable.
 
-**Assertion 1 lands in task 8's commit, not task 4.** Written at task 4 it would be red for four tasks,
-since the 11 pre-existing suites are not wired until task 8. Task 8 wires all 14 and adds the assertion
-that keeps them wired, together, in one commit.
+**Assertion 1 lands in task 8's commit, not task 4.** Written at task 4 it would be red for four
+tasks, since the pre-existing suites are not wired until task 8. Task 8 wires **every pair the
+derivation returns** and adds the assertion that keeps them wired, together, in one commit.
 
 **Call site — one line per suite, after the tally.** Shell form:
 
@@ -331,9 +381,11 @@ if failures == 0:
 ```
 
 **Capture at the top, use at the bottom, and give the writer the right cwd — all three.** Resolved from
-the **repo root**, never `$(dirname "$0")/lib`, which resolves only for the 5 suites under `hooks/`.
+the **repo root**, never `$(dirname "$0")/lib`, which resolves only for the **8** suites sitting
+directly in `hooks/` (re-measured 2026-08-15; 13 of the 18 pairs are somewhere under `hooks/`, but
+only 8 are at its top level).
 Both `$0` and `rev-parse` depend on the suite's cwd, and **measured: `hooks/judge-guard.test.sh:13`
-runs `cd "$TMP" || exit 1` at top level** — 1 of the 11 existing suites already invalidates a
+runs `cd "$TMP" || exit 1` at top level** — 1 of the 18 pairs already invalidates a
 bottom-of-file `rev-parse`. The writer is a *separate process*, and both of its resolution steps
 (`git ls-files --full-name --error-unmatch` and `rev-parse --show-toplevel`) run in **its** cwd, not in
 the values it was handed: launched from a suite sitting in `$TMP`, `ls-files` exits 1 and `rev-parse`
@@ -963,7 +1015,7 @@ never gated") with the `-am` scenario below, which forms a pair with an **untrac
   mirroring the writer's `--error-unmatch` check exactly. Widening this half to the union would be a
   live defect: the writer refuses to write a marker for an untracked subject, so the gate would demand
   a marker nothing can produce and block that commit forever, with `MSG_NO_MARKER`'s remedy re-running
-  a suite that correctly writes nothing. The two orphan suites are never gated for this reason, and
+  a suite that correctly writes nothing. The three orphan suites are never gated for this reason, and
   they must stay ungated even if someone drops an untracked `panes/adapters.sh` into the tree.
 
 *Step 3 — the pair set is a set.* When both members are in the path set the pair is formed once, not
@@ -1643,7 +1695,7 @@ Scenario: a suite that cds still writes a findable marker
   Given a suite that runs "cd $TMP" at top level before its tally
    When it passes and writes its marker
    Then the key is derived from the values captured before the cd
-   # measured: hooks/judge-guard.test.sh:13 does exactly this — 1 of the 11 existing suites
+   # measured: hooks/judge-guard.test.sh:13 does exactly this — 1 of the 18 pairs
 ```
 
 ## Fail-closed contract
@@ -2162,17 +2214,36 @@ reason this row is a pin and not a footnote.
       passes task 6 alone. ⚠️ **Task 3 is a third revert partner**: the entry point imports the
       classifier, so reverting 3 without 7 leaves every commit in an adopting repo on
       `MSG_CLASSIFIER_FAILED`. See the revert-pair table under task 13.
-- [ ] 8. Wire the one-line call into **all 14 paired suites** — the 11 in §Scope's first table plus
-      this feature's own 3 — using the call site exactly as §1 specifies it: **`MARKER_SELF` and
+- [ ] 8. Wire the one-line call into **every pair the §Scope derivation returns when this task runs**
+      — **re-run `git ls-files` first; do not carry a number in from anywhere, including this line.**
+      As of 2026-08-15 that is **18** (17 pre-existing + `write-test-marker`), but the count is an
+      output, not an input. ⚠️ **Revision 20 rewrote this task because revision 19 said "all 14",
+      inherited from a table measured 2026-08-02 that six pairs had outgrown by 2026-08-06.** Wiring
+      14 would have failed assertion 1 on landing and left six subjects uncommittable once the gate
+      armed — `hooks/git-guard.sh` among them. `hooks/lib/shell_segments.test.py` **is in scope**
+      (user decision 2026-08-15; see §Scope). Rows 12 and 14 are not skipped for being absent — they
+      simply are not pairs yet, and the derivation will pick them up at tasks 3 and 7; if a suite
+      exists whose subject does not, wire it anyway (the writer takes the no-subject skip and exits
+      0), which is already true of `hooks/test-marker-guard.test.sh` today.
+      Use the call site exactly as §1 specifies it: **`MARKER_SELF` and
       `MARKER_ROOT` captured at the top, before any chdir, both absolute; the writer run with
-      `MARKER_ROOT` as its cwd** (`cd` in a subshell for shell suites, `cwd=` for the three Python
-      ones). `judge-guard.test.sh` cds at line 13 and pairs 12–13 build throwaway repos, so a
-      bottom-of-file resolution is wrong in both languages. Add the two inventory assertions to
-      `write-test-marker.test.py` in this same
+      `MARKER_ROOT` as its cwd** (`cd` in a subshell for shell suites, `cwd=` for the Python ones).
+      **Measured 2026-08-15: the 18 split 14 shell / 4 Python** — the Python four are
+      `classify-git-command`, `classify-pr-command`, `shell_segments`, `write-test-marker`, all under
+      `hooks/lib/`; re-derive rather than trust that split too. `judge-guard.test.sh` cds at line 13
+      and `write-test-marker.test.py` builds throwaway repos and chdirs into them, so a
+      bottom-of-file resolution is wrong in both languages.
+      **Measured 2026-08-15, and it makes the wiring uniform:** every one of the 18 uses `set -u` with
+      **no `set -e`**; all 14 shell suites end on a tally `printf` followed by `[ "$fail" -eq 0 ]` as
+      the final command, and all 4 Python suites end `sys.exit(main())` with `main()` returning
+      `1 if failed else 0` — so §1's `if failures == 0` is `if rc == 0`, needing no new variable.
+      Placing the shell call **between** the tally and that final `[ "$fail" -eq 0 ]` is exit-neutral
+      by construction; placing it after works only by the accident that `&&` yields 1.
+      Add the two inventory assertions to `write-test-marker.test.py` in this same
       commit. **Own commit**, measured behaviour-neutral against the unmodified hook — never bundled
       with a green step. ⚠️ **Tasks 5 and 8 revert as a pair.** The **writer** is task 5, so reverting
-      5 without 8 leaves 14 suites calling a deleted file. Reverting 8 alone is safe; it only disarms
-      the wiring. See the revert-pair table under task 13 — **task 7 is half of the second pair**, and
+      5 without 8 leaves **every wired suite** calling a deleted file. Reverting 8 alone is safe; it
+      only disarms the wiring. See the revert-pair table under task 13 — **task 7 is half of the second pair**, and
       reverting it alone stops being harmless the moment task 13 lands.
 - [ ] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
       record the result in the checklist annotation. Re-derive the count from the flowchart before
@@ -2196,12 +2267,12 @@ reason this row is a pin and not a footnote.
       names `hooks/test-marker-guard.sh` to the harness; reverting **7 without 13** leaves a
       registered-yet-missing hook, and a `PreToolUse` entry whose script cannot be executed fails
       **every Bash tool call in the session**, not just commits — the blast radius is the whole
-      session, against 5↔8's fourteen suites. Revert **13 first, then 7**, never the reverse, and
+      session, against 5↔8's wired suites. Revert **13 first, then 7**, never the reverse, and
       never 7 alone. Reverting 13 alone is safe: it disarms the gate and leaves an inert script.
 
       | pair | revert order | leaving one half behind costs |
       |---|---|---|
-      | 5 ↔ 8 | 8 then 5 | 14 suites call a deleted writer |
+      | 5 ↔ 8 | 8 then 5 | every wired suite calls a deleted writer (18 as of 2026-08-15) |
       | 3 ↔ 7 | 7 then 3 | the entry point imports a deleted classifier — every commit in an adopting repo blocks on `MSG_CLASSIFIER_FAILED` |
       | 7 ↔ 13 | **13 then 7** | **every Bash call in the session is blocked** |
 - [ ] 14. **First-arming check — the only proof v1 has that the gate is armed.** With `--status`

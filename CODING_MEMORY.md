@@ -7666,3 +7666,69 @@ available at this tier — the high-tier spec revision (task 8), or the `shell_s
 option-grammar work (tasks 2/3/7 →  everything else), scoped off this branch by user decision.
 The ADR 0026 → 0028 renumber is **not** available as filler: it edits the card, which the freeze
 forbids. Recording this so the next session does not re-derive a task-shaped substitute.
+
+## 2026-08-15 — revision 20: the enumeration becomes a derivation
+
+Card reopened to `phase: planning`, `model_tier: high`, `revision: 20`, `revision_status: in-progress`
+(user decision). Implementation resumes only on a fresh `gate confirmed`. Note `hooks/phase-guard.sh`
+re-arms the moment the card leaves `implementation` — no card records this branch as implementing any
+more, so source writes are denied until the gate reopens. That is the intent, not a side effect.
+
+**The fix is structural, not arithmetic.** §Scope no longer lists the covered set; it *derives* it:
+
+```sh
+git ls-files '*.test.sh' '*.test.py'   # strip .test.*, add .sh/.py, keep tracked subjects
+```
+
+with a normative line — no task, test or judge may substitute a number or a hand-written list. The
+snapshot is kept but demoted to illustration and stamped. Replacing the list rather than re-measuring
+it is the whole point: revision 19 already *warned* against "a literal carried over from the table
+above" and shipped one anyway, because the warning sat next to the literal it forbade.
+
+**User decision: `hooks/lib/shell_segments.py` is IN scope.** Wiring its suite touches neither the
+option grammar nor the subject file, so the standing "do not expand scope into `shell_segments.py`"
+boundary holds. Excluding it was rejected as the *more* expensive option — the design has no exclusion
+mechanism for a suite whose subject is tracked, so an unwired `shell_segments.py` would be permanently
+uncommittable without a `TEST_EXEMPT` on every commit.
+
+### Measured at revision 20 — every number re-derived, none carried
+
+| quantity | value | note |
+|---|---|---|
+| tracked suite files | **22** | 18 + 4 balances |
+| tracked pairs | **18** | 17 pre-existing + `write-test-marker` |
+| orphan suites | **4** | 3 permanent + 1 transient (`test-marker-guard.test.sh`, task 7) |
+| shell / Python split | **14 / 4** | Python four all under `hooks/lib/` |
+| directories / depths | **6 / 3** | `.`, `hooks/`, `hooks/handoff/`, `hooks/lib/`, `panes/`, `panes/adapters/` |
+| suites directly in `hooks/` | **8** | 13 are somewhere under `hooks/`; only 8 at top level |
+| expected end state | **20** | +row 12 at task 3, +row 14 at task 7 — expected, not prescribed |
+
+**Two inherited numbers were wrong on their own terms, independent of the staleness:**
+- "four different directory depths" — wrong when written; the 11-pair set was **5 directories at 3
+  depths**. Corrected in place rather than carried forward.
+- "the 5 suites under `hooks/`" — **8** sit directly in `hooks/`.
+
+Five residual stale counts were swept out beyond the table itself (§1's call-site prose, the
+fail-closed Gherkin comment, the "two orphan suites" line in the flowchart narrative, and both halves
+of the 5↔8 revert-pair note). Found by grepping the literals, not by re-reading — the same class the
+revision exists to kill.
+
+### 🔴 Correction — a claim from earlier today was wrong
+
+The gate announcement listed as decision (4): *"task 9's 25-mutant floor and task 14's arming check
+both counted doors against the old inventory; neither was re-derived."* **That is false.** The floor
+is `13 doors + 10 allow paths + 2 component mutants` (spec §Mutation floor) — all properties of the
+gate's decision logic and its two Python files, none of the pair inventory. Task 14 pipes payloads at
+the installed hook and likewise never counts pairs. **Tasks 9 and 14 needed no change and got none.**
+The claim was asserted from the shape of the finding rather than checked against the derivation, which
+is exactly the error the revision is about.
+
+### The third orphan is a different species than first recorded
+
+`memsearch/bin/install-schedule.test.sh` is not a test with no subject. **The subject exists** —
+`memsearch/bin/install-schedule` — but carries **no `.sh` extension**, so the suffix derivation looks
+for `install-schedule.sh` and finds nothing. That is a distinct failure mode from `cmux.sh`, where the
+*test* is misnamed; here the test name is right and the **subject** name is unmatchable. It recurs for
+every extensionless executable (`memsearch/bin/memsearch` is the other, with no sibling test at all).
+Fixing it would mean pairing on shebang or content instead of suffix — a redesign of the pairing rule,
+so it is recorded as a follow-up, not folded in.
