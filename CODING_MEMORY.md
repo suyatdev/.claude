@@ -7741,3 +7741,21 @@ explicitly when the cost was put to them. Recorded here because a skipped gate t
 is indistinguishable from a forgotten one — that asymmetry is the whole reason this line exists.
 Round 10's `fail` remains stale and closed by rev 19; no verdict exists for rev 20 and none is
 pending. The observability judge at task 16 is unaffected and still required before any PR.
+
+## 2026-08-15 — session restored after accidental close; state verified consistent
+
+Prior session ended without a clean handoff. Restored from the handoff trio's
+`.claude/session-state.md` and checked it against reality rather than trusting it on read, per the
+handoff/restore discipline: branch is `feature/verification-marker-gate` (matches), working tree
+clean and pushed, no PR (matches). Card frontmatter — `phase: planning`, `revision: 20`,
+`revision_status: in-progress` — matches the handoff. One drift found: the handoff's recorded HEAD
+(`8db8132`) was one commit behind actual HEAD (`747d8ef`, the compliance-skip memory commit above);
+corrected in the scratch state file. No branch/phase mismatch, so nothing escalated.
+
+No new engineering decisions this turn. `.claude/session-state.md` was trimmed to drop measured-number
+detail already durable here (`CODING_MEMORY.md:7694-7699`, `:7623-7628`) per the handoff-discipline
+rule against restating spec content in a scratch file; `.claude/current-task.md` was corrected from a
+stale 2/16-tasks, revision-19 snapshot to the current 4/16, revision-20 state. This entry exists
+because `context-handoff-watch.sh` fired its ≥75k-token freshness checkpoint at session start (system
+prompt + skill catalog overhead, not new conversation growth) — logged so the checkpoint isn't a
+silent no-op. Still waiting on the user to review revision 20 and say the literal `gate confirmed`.
