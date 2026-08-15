@@ -7553,3 +7553,92 @@ Task 8 partial is the **last** forward motion on this branch. Everything remaini
 `shell_segments.py` option-grammar work, which is scoped **off** this branch by user decision — so it
 wants its own feature before tasks 2/3/7 can move. ADR 0026's duplicate renumber (→ **0028**) is still
 parked at task 16.
+
+## 2026-08-15 — task 8 STOPPED at a GATE: §Scope's table is stale by six pairs
+
+**The premise under yesterday's "wire the 13" decision was never measured, and it is false.** That
+decision checked that each of the table's 14 rows *exists*. It never asked the inverse question —
+whether any tracked pair exists **outside** the table. Measured from source just now:
+
+```
+git ls-files '*.test.sh' '*.test.py'   # 22 suite files
+  -> 18 tracked pairs, 4 orphan suites
+```
+
+Not 11 pairs + 3 of this feature's own = 14. **Eighteen.** Six tracked pairs are absent from
+§Scope's first table entirely:
+
+| suite | subject | suite first appeared |
+|---|---|---|
+| `hooks/doc-guard.test.sh` | `hooks/doc-guard.sh` | 2026-08-03 `ac5afa2` |
+| `hooks/git-guard.test.sh` | `hooks/git-guard.sh` | 2026-08-03 `ac5afa2` |
+| `hooks/lib/classify-git-command.test.py` | `hooks/lib/classify-git-command.py` | 2026-08-03 `ac5afa2` |
+| `hooks/lib/shell_segments.test.py` | `hooks/lib/shell_segments.py` | 2026-08-04 `64ba2fa` |
+| `hooks/feature-sync-guard.test.sh` | `hooks/feature-sync-guard.sh` | 2026-08-06 `7f9bb6f` |
+| `hooks/handoff/slim-session-start.test.sh` | `hooks/handoff/slim-session-start.sh` | 2026-08-06 `ca2c969` |
+
+**Every one landed AFTER 2026-08-02**, the date §Scope stamps on its own measurement — "Measured
+2026-08-02 from `git ls-files`, not recalled — 13 tracked suite files, 11 conforming pairs (10 shell
++ 1 Python), 2 orphan suites." The table did not drift; the repo grew past it, in exactly the four
+days after it was taken. The dated stamp is what made this findable, and nothing before now went
+looking.
+
+There is also a **third real orphan** the spec does not name: `memsearch/bin/install-schedule.test.sh`
+(no `install-schedule.sh`). So the orphan count is 3 real + 1 transient (`test-marker-guard.test.sh`,
+whose subject lands at task 7), not 2.
+
+### Why this is a GATE and not a judgement call
+
+The spec's *criterion* is right and its *enumeration* is wrong, and the two now contradict each other:
+
+- **The criterion** (§Scope): "The wiring criterion is therefore **every pair**, 14 of them at task 8
+  — never a literal carried over from the table above." It even names this failure mode.
+- **Assertion 1** (spec 290–292), which task 8 must land in the same commit, enumerates
+  `git ls-files`, keeps suites whose subject is tracked, and asserts each contains the call line. As
+  specified it demands **all 18**. Wiring 13 makes assertion 1 **red on landing** — and red for a
+  correct reason.
+- **Task 8's text** says "all 14 paired suites — the 11 in §Scope's first table plus this feature's
+  own 3." That set is now factually wrong.
+
+So yesterday's point 3 — "wiring the 13 satisfies assertion 1 *today*" — is **withdrawn**. It was
+derived from the table rather than from `git ls-files`, which is the one source assertion 1 actually
+consults.
+
+**The cost of shipping the 13-suite reading is not cosmetic.** The gate demands a marker for any
+tracked subject with a sibling suite. Wire 13 of 18 and the moment the gate arms, six subjects become
+uncommittable with no way to earn a receipt: `doc-guard.sh`, `git-guard.sh`, `feature-sync-guard.sh`,
+`slim-session-start.sh`, `classify-git-command.py`, `shell_segments.py` — four of them live hook
+scripts, and `git-guard.sh` is the one that guards `main`.
+
+### State at the stop
+
+**Nothing was committed.** No suite was modified. HEAD is still `63881ea`, tree clean apart from this
+file and `.claude/session-state.md`.
+
+The before-baseline was taken and is worth keeping — it is the neutrality control task 8 needs
+whenever it resumes, and it reproduces the handoff's numbers exactly:
+
+| suite | rc | result |
+|---|---|---|
+| 11 shell suites (rows 1–11) | 0 | all green |
+| `hooks/lib/classify-pr-command.test.py` | 0 | 51 passed, 0 failed |
+| `hooks/lib/write-test-marker.test.py` | 0 | 35 passed, 0 failed |
+| `hooks/test-marker-guard.test.sh` | 1 | **8 passed, 217 failed** (task 6's red suite, expected) |
+
+Also measured while reading the suites, and unchanged by the gate finding: all 11 shell suites share
+one shape — `set -u`, **no `set -e`**, a tally `printf`, then `[ "$fail" -eq 0 ]` as the final
+command. Only `hooks/judge-guard.test.sh:13` cds at top level, confirming the spec's measured claim.
+Both Python suites end `sys.exit(main())` where `main()` returns `1 if failed else 0`, so the
+spec's `if failures == 0` maps to `if rc == 0` with no new variable.
+
+### What the revision has to decide (not for the low tier to guess)
+
+1. Re-measure §Scope's first table, or replace it with the `git ls-files` derivation and drop the
+   frozen count — the table is a dated measurement that has now gone stale once.
+2. Whether all six newcomers are **in** scope. `shell_segments.py` is the awkward one: tasks 2/3 are
+   already blocked on its missing option grammar, and wiring its suite pulls a file this branch was
+   explicitly told not to expand into.
+3. Whether the third orphan (`install-schedule.test.sh`) joins assertion 2's named set or gets an
+   §Scope "out" line of its own.
+4. Task 9's **25**-mutant floor and task 14's arming check both counted doors against the old
+   inventory; neither was re-derived here.
