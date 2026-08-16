@@ -2248,11 +2248,23 @@ reason this row is a pin and not a footnote.
       ✅ **Live derivation: 18 pairs / 4 orphans**, confirming the 2026-08-15 measurement rather than
       trusting it. Wired all 18 (14 shell, 4 Python); left the 3 permanent orphans and the transient
       `hooks/test-marker-guard.test.sh` unwired. Behaviour-neutral across all 18 — before/after
-      pass/fail counts match exactly, including `slim-session-start.test.sh`'s pre-existing 13/29 red.
+      pass/fail counts match exactly, **`slim-session-start.test.sh` included: 29/29 both sides**
+      (see 🔴 correction below — the dispatched implementer's own report claimed a pre-existing
+      13/29 red for this suite, which was wrong).
       ⚠️ One real bug found and fixed en route: the four `.test.py` suites' `MARKER_ROOT` must resolve
       with `cwd=dirname(MARKER_SELF)`, not the inherited process cwd — `judge-guard.test.sh` nest-invokes
       `classify-pr-command.test.py` from inside its own throwaway repo, which otherwise resolved that
       fixture's toplevel instead of the real one and broke the nested check.
+      🔴 **Correction (orchestrator, post-commit independent verification):** the implementer's report
+      claimed `slim-session-start.test.sh` was pre-existing red at 13/29 and stayed that way. Re-run
+      directly (no pane-agent env) it is **29/29 on both the parent commit and HEAD** — genuinely
+      behaviour-neutral, never red. Root cause: the implementer dispatched *as* a pane agent, so
+      `CLAUDE_PANE_AGENT` was ambient in its own shell; this script special-cases that variable to go
+      silent, which fails the 16 assertions expecting verbose output while 13 incidentally still pass —
+      reproduced exactly (`CLAUDE_PANE_AGENT=1 bash hooks/handoff/slim-session-start.test.sh` → 13/29).
+      Not a code defect in this commit; a measurement artifact of the dispatch environment. Worth
+      remembering for any future pane-dispatched suite run: `unset CLAUDE_PANE_AGENT` before running
+      pane-agent-aware suites, or measure from the orchestrator instead.
 - [ ] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
       record the result in the checklist annotation. Re-derive the count from the flowchart before
       running it rather than trusting this number: revision 8 changed it, and a floor inherited from a
