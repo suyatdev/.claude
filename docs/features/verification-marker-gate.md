@@ -1,9 +1,9 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: feature/verification-marker-gate
 revision: 20
-revision_status: in-progress  # reopened at revision 20 (2026-08-15, user decision) — §Scope's dated table was six pairs stale and task 8 could not proceed. Implementation resumes only on a fresh `gate confirmed`.
+revision_status: complete  # planning closed at revision 20; gate confirmed 2026-08-15. Spec is frozen — a needed change is a GATE announcement, not an edit.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
@@ -2214,7 +2214,7 @@ reason this row is a pin and not a footnote.
       passes task 6 alone. ⚠️ **Task 3 is a third revert partner**: the entry point imports the
       classifier, so reverting 3 without 7 leaves every commit in an adopting repo on
       `MSG_CLASSIFIER_FAILED`. See the revert-pair table under task 13.
-- [ ] 8. Wire the one-line call into **every pair the §Scope derivation returns when this task runs**
+- [x] 8. Wire the one-line call into **every pair the §Scope derivation returns when this task runs**
       — **re-run `git ls-files` first; do not carry a number in from anywhere, including this line.**
       As of 2026-08-15 that is **18** (17 pre-existing + `write-test-marker`), but the count is an
       output, not an input. ⚠️ **Revision 20 rewrote this task because revision 19 said "all 14",
@@ -2245,6 +2245,14 @@ reason this row is a pin and not a footnote.
       5 without 8 leaves **every wired suite** calling a deleted file. Reverting 8 alone is safe; it
       only disarms the wiring. See the revert-pair table under task 13 — **task 7 is half of the second pair**, and
       reverting it alone stops being harmless the moment task 13 lands.
+      ✅ **Live derivation: 18 pairs / 4 orphans**, confirming the 2026-08-15 measurement rather than
+      trusting it. Wired all 18 (14 shell, 4 Python); left the 3 permanent orphans and the transient
+      `hooks/test-marker-guard.test.sh` unwired. Behaviour-neutral across all 18 — before/after
+      pass/fail counts match exactly, including `slim-session-start.test.sh`'s pre-existing 13/29 red.
+      ⚠️ One real bug found and fixed en route: the four `.test.py` suites' `MARKER_ROOT` must resolve
+      with `cwd=dirname(MARKER_SELF)`, not the inherited process cwd — `judge-guard.test.sh` nest-invokes
+      `classify-pr-command.test.py` from inside its own throwaway repo, which otherwise resolved that
+      fixture's toplevel instead of the real one and broke the nested check.
 - [ ] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
       record the result in the checklist annotation. Re-derive the count from the flowchart before
       running it rather than trusting this number: revision 8 changed it, and a floor inherited from a

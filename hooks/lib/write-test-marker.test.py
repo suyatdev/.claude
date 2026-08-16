@@ -16,10 +16,12 @@ detail. Measured while writing this suite: normalise the test path to repo-relat
 hand that value to a second git call from a DIFFERENT cwd and git resolves it against the cwd
 (`panes/panes/adapters/...`), so the subject check reports "not tracked" for a file that is.
 
-SCOPE: the two repo-level inventory assertions belong to task 8, not here. Until the 11
-pre-existing suites are wired, a wiring assertion is legitimately red -- see the feature card,
-"What the inventory test asserts, and why not a count". The suite-level case where $0 itself is
-relative is also task 8's: the call site resolves that before the writer ever sees it.
+SCOPE: the two repo-level inventory assertions (check_all_pairs_wired,
+check_named_orphans_still_orphans) are added here at task 8 -- see the feature card, "What the
+inventory test asserts, and why not a count". Both re-derive the pair/orphan set from
+`git ls-files` against the real repo rather than trusting any hardcoded list, so a stale count
+cannot satisfy them. The suite-level case where $0 itself is relative is the call site's job: it
+resolves that before the writer ever sees it.
 """
 
 import contextlib
@@ -32,6 +34,12 @@ import subprocess
 import sys
 import tempfile
 
+MARKER_SELF = os.path.abspath(__file__)
+# cwd=dirname(MARKER_SELF), never the inherited process cwd -- mirrors classify-pr-command.test.py,
+# the sibling this repo's suites nest-invoke from inside a throwaway repo.
+MARKER_ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=os.path.dirname(MARKER_SELF),
+                             capture_output=True, text=True, check=True).stdout.strip()
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _WRITER = os.path.join(_HERE, "write-test-marker.py")
 
@@ -39,6 +47,19 @@ _WRITER = os.path.join(_HERE, "write-test-marker.py")
 # the writer just produced agrees with whatever wrote it, including a wrong one.
 MARKER_MODE = 0o600
 STORE_MODE = 0o700
+
+# The literal substring both call-site forms share (§1's shell and Python blocks). Presence of
+# this string is what "wired" means for assertion 1 -- not a parse of either form.
+CALL_MARKER = "hooks/lib/write-test-marker.py"
+
+# The three permanent orphans (§1, "What the inventory test asserts"). Deliberately not the
+# full orphan set: hooks/test-marker-guard.test.sh is a transient fourth orphan until task 7,
+# and an equality assertion here would break the moment that subject lands.
+NAMED_ORPHANS = [
+    "panes/adapters.test.sh",
+    "panes/adapters/cmux-exec.test.sh",
+    "memsearch/bin/install-schedule.test.sh",
+]
 
 # ISO-8601 with a literal Z, matching the schema block in the card. Informational only: nothing
 # in this suite lets written_at influence an outcome, because nothing in the writer may.
@@ -348,6 +369,61 @@ def check_failure_exits(mod, record):
         shutil.rmtree(outside, ignore_errors=True)
 
 
+def _real_repo_root():
+    """The toplevel of the repo THIS suite lives in -- not a throwaway fixture. Resolved from
+    _HERE rather than the process cwd, since this file may be invoked from anywhere."""
+    return subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], cwd=_HERE,
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def _derive_subject(suite_rel):
+    if suite_rel.endswith(".test.sh"):
+        return suite_rel[: -len(".test.sh")] + ".sh"
+    return suite_rel[: -len(".test.py")] + ".py"
+
+
+def _is_tracked(root, rel):
+    proc = subprocess.run(
+        ["git", "-C", root, "ls-files", "--error-unmatch", "--", rel],
+        capture_output=True, text=True,
+    )
+    return proc.returncode == 0
+
+
+def check_all_pairs_wired(mod, record):
+    """Assertion 1 (§1, 'What the inventory test asserts'): every tracked pair's suite file
+    contains the marker-write call. Re-enumerates `git ls-files` against the real repo -- the
+    same derivation task 8's own wiring used -- so a stale hardcoded list can never satisfy
+    this; adding a paired suite without wiring it turns this red."""
+    root = _real_repo_root()
+    suites = subprocess.run(
+        ["git", "-C", root, "ls-files", "--", "*.test.sh", "*.test.py"],
+        capture_output=True, text=True, check=True,
+    ).stdout.splitlines()
+    for suite_rel in suites:
+        subject_rel = _derive_subject(suite_rel)
+        if not _is_tracked(root, subject_rel):
+            continue
+        with open(os.path.join(root, suite_rel)) as handle:
+            body = handle.read()
+        record(CALL_MARKER in body, "wired: {}".format(suite_rel),
+               "want {!r} to contain the marker-write call ({!r})".format(
+                   suite_rel, CALL_MARKER))
+
+
+def check_named_orphans_still_orphans(mod, record):
+    """Assertion 2 (§1): the three permanent orphans each still derive an untracked subject.
+    Freezes the coverage-hole claims in §Scope -- a rename or extensionless-pairing redesign
+    that turns one of these red is correct, and must update §Scope in the same commit."""
+    root = _real_repo_root()
+    for suite_rel in NAMED_ORPHANS:
+        subject_rel = _derive_subject(suite_rel)
+        record(not _is_tracked(root, subject_rel), "orphan: {}".format(suite_rel),
+               "want subject {!r} untracked, but git ls-files tracks it".format(subject_rel))
+
+
 CHECKS = [
     check_derivation,
     check_encoding,
@@ -357,6 +433,8 @@ CHECKS = [
     check_schema_and_mode,
     check_atomic_write,
     check_failure_exits,
+    check_all_pairs_wired,
+    check_named_orphans_still_orphans,
 ]
 
 
@@ -386,4 +464,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _rc = main()
+    if _rc == 0:
+        subprocess.run([sys.executable, "-I", "hooks/lib/write-test-marker.py", MARKER_SELF],
+                       cwd=MARKER_ROOT, check=True)
+    sys.exit(_rc)

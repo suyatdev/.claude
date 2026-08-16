@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # terminal-detect.test.sh — run: bash panes/terminal-detect.test.sh
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 DETECT="$(cd "$(dirname "$0")" && pwd)/terminal-detect.sh"
 pass=0; fail=0
 run_case() { # $1 desc, $2 want, then env pairs as VAR=VAL...
@@ -20,4 +22,6 @@ run_case "cmux beats tmux"          cmux     CMUX_PANEL_ID=abc TMUX=/tmp/sock,1,
 run_case "cmux beats TERM_PROGRAM"  cmux     CMUX_PANEL_ID=abc TERM_PROGRAM=ghostty
 run_case "tmux beats TERM_PROGRAM"  tmux     TMUX=/tmp/sock,1,0 TERM_PROGRAM=iTerm.app
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]

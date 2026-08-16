@@ -12,6 +12,8 @@
 #
 # The commands below are DATA fed to the hook on stdin. Nothing here executes them.
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/git-guard.sh"
 TMP="$(mktemp -d)"
@@ -358,4 +360,6 @@ orphan_case "no classifier, unrelated command -> FAIL CLOSED" 2 'ls -la'
 
 # ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]

@@ -15,6 +15,8 @@
 #
 # The commands below are DATA fed to the hook on stdin. Nothing here executes them.
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/doc-guard.sh"
 TMP="$(mktemp -d)"
@@ -149,4 +151,6 @@ run_case "control: same state, real hook -> block"          2 'git commit -m msg
 
 # ---------------------------------------------------------------------------
 printf '\ndoc-guard: %s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]
