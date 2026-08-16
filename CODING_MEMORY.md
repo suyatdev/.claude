@@ -7797,3 +7797,34 @@ matched the implementer's report exactly; marker files exist under `hooks/state/
 all 18 pairs (dir `0700`, files `0600`). Branch is 3 commits ahead of `origin` (not pushed yet:
 `6ad7e43`, `d0d935f`, `43d070f`). Next: task 9 and everything after remains blocked on tasks 2/3/7
 per the standing assessment; nothing new is unblocked by task 8 landing.
+
+## 2026-08-16 — pivot: verification-marker-gate paused, a new feature queued to unblock it
+
+`verification-marker-gate` stays fully blocked (5/16; tasks 2/3/7/9–16 all downstream of one
+shared-lexer decision) and nothing changes that from inside this branch. User directed starting
+the blocking feature next, in a fresh session, rather than continuing to sit on the block.
+
+**What the new feature has to resolve** — waiver `writing-specs/command-grammar`, card
+`docs/features/verification-marker-gate.md:781-796`: rule 2 ("a long option that takes a value
+consumes the next token") contradicts the same section's own list of attach-only long options
+(`--untracked-files`, `--gpg-sign`, which must never consume the next token). Not just imprecise
+wording — measured on git 2.50.1, `git commit -m msg --untracked-files foo.sh` ships the
+**worktree** blob of `foo.sh` because `foo.sh` is a real pathspec operand; a classifier applying
+rule 2 literally reads `foo.sh` as `--untracked-files`'s value instead, calls the command `PLAIN`,
+and hashes the wrong (stale) content — reopening the exact fail-open (`G2` in the grammar table)
+the whole feature exists to close.
+
+**Confirmed before the pivot:** `hooks/lib/shell_segments.py` — the shared tokenizer `git-guard`,
+`doc-guard`, and `classify-pr-command.py` already depend on, and where this decision is spec-
+mandated to live rather than be reimplemented locally — is byte-identical to `origin/main`. It
+currently does segment-level splitting only (chained commands, redirects, wrapper stripping); zero
+flag-level parsing exists anywhere in the repo today. This is new capability, not a patch.
+
+**Scope for the new feature:** (1) the complete value-consuming vs. attach-only long-option list for
+`git commit`; (2) how `git <global-opts> commit <opts>` tells global git options (`-C`, `--git-dir`,
+`--work-tree`) from the subcommand's own options — both currently unanswered, both required by
+verification-marker-gate's task 2 (`UNSUPPORTED` trigger fires on `-C`/`--git-dir`/`--work-tree`
+wherever they sit). No feature file exists yet — create one from the template at planning start;
+suggested name `shell-segments-option-grammar`, own branch off `main` (not off
+`feature/verification-marker-gate`). **Entering-planning model-switch checkpoint is still owed** —
+not asked this session; the fresh session must ask it before brainstorming begins.
