@@ -7759,3 +7759,41 @@ stale 2/16-tasks, revision-19 snapshot to the current 4/16, revision-20 state. T
 because `context-handoff-watch.sh` fired its ≥75k-token freshness checkpoint at session start (system
 prompt + skill catalog overhead, not new conversation growth) — logged so the checkpoint isn't a
 silent no-op. Still waiting on the user to review revision 20 and say the literal `gate confirmed`.
+
+## 2026-08-15 — gate confirmed at revision 20; task 8 lands (`d0d935f`, corrected `43d070f`)
+
+User said the literal `gate confirmed`. Frontmatter flipped to `phase: implementation,
+model_tier: low` (user chose low tier when asked the unskippable planning→implementation
+model-switch checkpoint — its own ask, not inferred from "gate confirmed" itself). User also
+explicitly overrode the skill's mandatory-`/clear`-point with "continue here," and asked to be
+prompted at 165k tokens instead of the default checkpoint cadence — both honored as explicit
+in-session instruction, noted here so the departure from the default isn't silently invisible.
+
+Task 8 (wire the marker-write call into every live `§Scope`-derived pair) was dispatched to a
+paned `general-purpose` implementer — first worker dispatch this session, so the pane-split policy
+was asked and set to `panes max=2`. It landed as `d0d935f`: live-derived 18 pairs / 4 orphans
+(matching the 2026-08-15 snapshot, re-confirmed rather than trusted), wired all 18, added the two
+inventory assertions to `write-test-marker.test.py` (35 → 56 assertions), and found one real bug
+not called out in the spec: the four Python suites' `MARKER_ROOT`, resolved via `git rev-parse
+--show-toplevel` in the ambient cwd, returns the wrong toplevel when `judge-guard.test.sh` (which
+`cd`s into a throwaway repo) nest-invokes `classify-pr-command.test.py` as an internal check — the
+child inherits the fixture's cwd. Fixed by anchoring all four to `cwd=dirname(MARKER_SELF)`.
+
+**Independent verification (per `verifying-subagent-commits`) caught one report inaccuracy.** The
+implementer's self-report claimed `slim-session-start.test.sh` was pre-existing red at 13/29,
+unchanged by the wiring. Re-run directly it is **29/29** — on the parent commit and on HEAD alike.
+Root cause: the implementer ran *as* a pane agent, so `CLAUDE_PANE_AGENT` was ambient in its own
+shell; the suite's subject script goes silent under that variable, failing 16 of 29 assertions
+that expect verbose output while 13 incidentally still pass — reproduced exactly with
+`CLAUDE_PANE_AGENT=1 bash hooks/handoff/slim-session-start.test.sh`. The wiring itself was never
+wrong; only the report was. Corrected in the checklist note by `43d070f` rather than left standing
+as settled fact. **General lesson for future pane-dispatched verification:** a pane-agent-run test
+suite can spuriously fail (or pass) any assertion that depends on `CLAUDE_PANE_AGENT` being unset,
+for scripts that intentionally special-case it — `unset` it before the suite runs inside a pane,
+or re-verify from the orchestrator's own (non-pane) shell as was done here.
+
+All other 17 suites' before/after counts, independently re-run from the orchestrator's shell,
+matched the implementer's report exactly; marker files exist under `hooks/state/test-markers/` for
+all 18 pairs (dir `0700`, files `0600`). Branch is 3 commits ahead of `origin` (not pushed yet:
+`6ad7e43`, `d0d935f`, `43d070f`). Next: task 9 and everything after remains blocked on tasks 2/3/7
+per the standing assessment; nothing new is unblocked by task 8 landing.
