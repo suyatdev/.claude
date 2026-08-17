@@ -704,7 +704,7 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
 > Patching the wording a fourth time would relocate the problem again. **User decision: build the
 > missing groundwork first.**
 
-- [ ] 0a. Give both hook harnesses a **stdout** assertion, and doc-guard a stderr one.
+- [x] 0a. Give both hook harnesses a **stdout** assertion, and doc-guard a stderr one.
       `git-guard.test.sh` already asserts stderr (`assert_stderr`, `:252`) — model the new
       `assert_stdout_json` on it, and do **not** rewrite `assert_stderr`, whose `1>/dev/null` is
       deliberate. `doc-guard.test.sh` has neither and needs both. **Put the shared bodies in one place**
@@ -793,3 +793,11 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
 ## Verification
 
 <Appended during review: pass/fail per area and open issues only.>
+
+- **Task 0a — PASS (2026-08-17).** `hooks/lib/guard_test_helpers.sh` created with `assert_stderr`
+  (moved verbatim from `git-guard.test.sh`, body unchanged) and the new `assert_stdout`. Both
+  `git-guard.test.sh` and `doc-guard.test.sh` source it. All existing cases pass unchanged:
+  git-guard 108/108, doc-guard 16/16. **Confirmed the new helper can fail, not just pass:** a
+  synthetic fake hook writing distinct markers to stdout and stderr showed `assert_stdout` correctly
+  rejects a stderr-only string and `assert_stderr` correctly rejects a stdout-only string — each
+  stream stays isolated from the other, so neither check is blind by construction.

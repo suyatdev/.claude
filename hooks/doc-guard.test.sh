@@ -17,6 +17,8 @@
 set -u
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/doc-guard.sh"
+# shellcheck disable=SC1091  # this test's own dynamically-resolved path, not user input
+source "$(cd "$(dirname "$0")" && pwd)/lib/guard_test_helpers.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

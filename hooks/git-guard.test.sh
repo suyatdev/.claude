@@ -14,6 +14,8 @@
 set -u
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/git-guard.sh"
+# shellcheck disable=SC1091  # this test's own dynamically-resolved path, not user input
+source "$(cd "$(dirname "$0")" && pwd)/lib/guard_test_helpers.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -244,19 +246,10 @@ run_case_in() { # $1 dir, $2 desc, $3 want-exit, $4 command string
   _run_case_common "$1" "$2" "$3" "$4"
 }
 
-# Re-runs the hook against the same fixture/command a run_case/run_case_in call
-# just used, and checks stderr instead of the exit code -- neither of those checks
-# it. Written AFTER git-guard.sh already renders this text (docs/features/
-# git-guard-detached-head.md, "The message contract"), so each call below is only
-# trustworthy once proven able to fail -- see the checklist's mutation round.
-assert_stderr() { # $1 dir, $2 desc, $3 command string, $4 expected substring
-  local dir="$1" desc="$2" cmd="$3" want="$4" got
-  got="$(cd "$dir" && payload "$cmd" | bash "$HOOK" 2>&1 1>/dev/null)"
-  case "$got" in
-    *"$want"*) printf 'ok   — %s\n' "$desc"; pass=$((pass+1)) ;;
-    *) printf 'FAIL — %s\n  want (substring): %s\n  got:\n%s\n' "$desc" "$want" "$got"; fail=$((fail+1)) ;;
-  esac
-}
+# assert_stderr (checks stderr against the fixture/command a run_case/run_case_in
+# call just used) and assert_stdout now live in lib/guard_test_helpers.sh, shared
+# with doc-guard.test.sh and merge-guard.test.sh. Each call site is only
+# trustworthy once proven able to fail -- see this suite's mutation-round history.
 
 # ---------------------------------------------------------------------------
 # Guard 1 — default-branch commit
