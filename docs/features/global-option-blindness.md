@@ -2,7 +2,7 @@
 phase: planning
 model_tier: high
 branch: feature/global-option-blindness
-revision: 4
+revision: 4.1
 adr: 0029  # 0027 is taken by the paused marker-gate branch; 0028 is reserved for its renumber
 ---
 
@@ -16,18 +16,40 @@ adr: 0029  # 0027 is taken by the paused marker-gate branch; 0028 is reserved fo
 > **Revision 4 — the root cause, not another patch.** Round 3 failed with three more violations, all
 > introduced by revision 3, and its sweep named the pattern: three revisions running had each stated a
 > requirement with **no buildable path to it**, relocating the promise each time instead of building
-> the capability. The reason is structural — **no harness in this repo can assert what a guard *says*,
-> only whether it blocked** (`git-guard.test.sh:347`, `doc-guard.test.sh:70` both discard stdout and
-> stderr), and `merge-guard.test.sh` has never existed at all. Per user decision, revision 4 adds
-> **groundwork tasks 0a–0c ahead of every behaviour task** so the message-level promises have somewhere
-> real to live. It also fixes round 3's three findings: `--attr-source` moved out of the
-> subcommand-is-seen table into its own consuming-option scenarios (measured: `git --attr-source
-> commit -m x -a` errors `unknown option: -m` and commits nothing), task 7 re-pointed at the
-> hook-level harnesses instead of the fact-only unit suite, and task 8's suite list corrected.
+> the capability. The reason is structural — **the harnesses cannot capture the channel this feature's
+> new decision travels on.** Per user decision, revision 4 adds **groundwork tasks 0a–0c ahead of every
+> behaviour task** so the message-level promises have somewhere real to live. It also fixes round 3's
+> three findings: `--attr-source` moved out of the subcommand-is-seen table into its own consuming-option
+> scenarios (measured: `git --attr-source commit -m x -a` errors `unknown option: -m` and commits
+> nothing), task 7 re-pointed at the hook-level harnesses instead of the fact-only unit suite, and task
+> 8's suite list corrected.
+>
+> **Revision 4.1 — the pre-dispatch sweep, run before any judge saw revision 4.** Every defect it
+> found is fixed below and marked in place; the two classes were **wrong measurements** (table
+> immediately below) and **requirements with no scenario that could fail on them** (`--bare`'s
+> contradictory bucket, the four pathspec options, `--list-cmds`, `--paginate`, the at-most-once rule,
+> the denying-fact-across-segments rule, the `PUSH*` half of fact suppression, both of `doc-guard`'s
+> promises, and the 400-line limit) — plus one task, 7, whose acceptance measure could not tell the fix
+> from the bug. The largest correction is to revision 4's own premise, and it is recorded here rather
+> than quietly overwritten:
+>
+> | revision 4 claimed | measured 2026-08-17 |
+> |---|---|
+> | "no harness in this repo can assert what a guard *says*" | **false for `git-guard.sh`** — `assert_stderr()` (`git-guard.test.sh:252-259`) already asserts stderr text. What no harness captures is **stdout**, which is exactly where the new `ask` JSON goes: `:254` runs `bash "$HOOK" 2>&1 1>/dev/null`, keeping stderr and discarding stdout |
+> | `git-guard.test.sh:347` discards both channels | `:347` is fixture code; the exit-code-only runner is `_run_case_common` at **`:226`** |
+> | `doc-guard.test.sh:70` | the runner line is **`:68`** (`run_case` spans `:66-76`); doc-guard has **no** message-asserting helper at all |
+> | "12 other hooks have one" | **18** hook scripts in `hooks/`, **8** `*.test.sh` suites; `merge-guard` is not among them |
+> | task 1: `classify-git-command.test.py` is 236 lines | **224** lines |
+>
+> The groundwork is therefore *narrower and better-founded* than revision 4 stated, not unnecessary:
+> git-guard needs a stdout assertion only, doc-guard needs both channels, and merge-guard needs a suite
+> from nothing.
 >
 > **Standing rule for any future revision of this card:** before dispatching a judge, sweep every MUST
 > and every contract row for (a) a task that builds it and (b) a scenario that can fail on it. Three
-> rounds were lost to skipping that sweep.
+> rounds were lost to skipping that sweep; the fourth sweep, run before dispatch for the first time,
+> caught every defect listed in the revision-4.1 block above — including one in the sweep rule's own
+> justification.
 >
 > **Revision 3** closed the one violation revision 2 introduced —
 > `writing-specs/prints-and-exits-no-enforcing-scenario`, found independently by **both** judges.
@@ -78,14 +100,23 @@ reader and the merge guard never received it.**
 Each row ran the real hook with a `{"hook_event_name":"PreToolUse","tool_name":"Bash",...}` payload
 and captured its exit code. rc=2 is a block, rc=0 is an allow.
 
-| # | guard | protects against | plain form | with a global option |
-|---|---|---|---|---|
-| a | `git-guard.sh` | committing to `main` | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `-C .`, `--work-tree=.`, `--git-dir=.git`, `-c k=v` |
-| b | `git-guard.sh` | bare `--force` push | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `git -C . push --force` |
-| c | `doc-guard.sh` | undocumented source commit | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `git -C . commit -m x` |
-| d | `merge-guard.sh` | `gh pr merge` | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `gh -R o/r pr merge 5` |
-| e | `merge-guard.sh` | `gh pr merge` | — | 🔴 rc=0 **ALLOWED** — `echo hi && gh pr merge 5` (pre-existing chained gap, `rules/gates.md`) |
-| f | `classify-pr-command.py` | `gh pr create` | `PR` | `PR` — unaffected; **this is the control** |
+| # | guard | protects against | plain form | with a global option | after the fix (expected) |
+|---|---|---|---|---|---|
+| a | `git-guard.sh` | committing to `main` | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `-C .`, `--work-tree=.`, `--git-dir=.git`, `-c k=v` | **rc=0 + `ask` JSON on stdout** |
+| b | `git-guard.sh` | bare `--force` push | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `git -C . push --force` | **rc=0 + `ask` JSON on stdout** |
+| c | `doc-guard.sh` | undocumented source commit | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `git -C . commit -m x` | **rc=0, unchanged — silent by design** |
+| d | `merge-guard.sh` | `gh pr merge` | rc=2 BLOCKED | 🔴 rc=0 **ALLOWED** — `gh -R o/r pr merge 5` | rc=2 BLOCKED |
+| e | `merge-guard.sh` | `gh pr merge` | — | 🔴 rc=0 **ALLOWED** — `echo hi && gh pr merge 5` (pre-existing chained gap, `rules/gates.md`) | rc=2 BLOCKED |
+| f | `classify-pr-command.py` | `gh pr create` | `PR` | `PR` — unaffected; **this is the control** | `PR` — unchanged |
+
+> 🔴 **The exit code cannot score this fix, and the last column is why.** Three of the six rows end at
+> `rc=0` *after* the fix — (a) and (b) because an `ask` is delivered as exit 0 with JSON on stdout, and
+> (c) because `doc-guard` deliberately stays silent so one command does not raise two prompts. A re-run
+> that captures only `$?`, which is what every harness does today, shows those rows identical to the
+> bug. **The acceptance measure is therefore the pair `(exit code, stdout decision)`, never the exit
+> code alone** — and that pair is exactly what task 0a exists to make capturable. Revision 4 asked task
+> 7 to "paste the new exit codes beside the old" against a table that had no expected-after column at
+> all; the sweep added the column and re-pointed the task.
 
 Row (a) was probed in a throwaway `git init -b main` repo so `current_branch()`'s
 `git rev-parse --abbrev-ref HEAD` reports `main`, **not** by borrowing the sibling worktree that
@@ -140,6 +171,15 @@ measured fact, not a reason to skip the distinction.
 never running the subcommand), `-p --paginate -P --no-pager --no-replace-objects --no-lazy-fetch
 --no-optional-locks --no-advice`, `--bare`.
 
+> ⚠️ **"Takes no value" and "is harmless" are different questions, and `--bare` answers them
+> differently.** It consumes no token, so it belongs in this list; it also redirects the repository, so
+> it is **bucket 2**, not bucket 1. Measured — in a fresh non-bare `git init -b main` repo,
+> `git --bare rev-parse --is-inside-work-tree` returns `fatal: not a git repository:
+> '/private/tmp/gob-probe'`: the option makes git read the *current directory itself* as the git dir,
+> so the repo the guard inspected is not the repo the command acts on. Revision 4 let the bucket-1
+> sentence below say "the no-value list above", which silently swept `--bare` into bucket 1 and
+> contradicted the bucket-2 list two paragraphs later. Caught by the revision-4.1 sweep.
+
 **The synopsis is not the whole list — six more come from `man git`.** Found by diffing the manual
 page's option list against the synopsis above; the count is measured, not estimated:
 
@@ -175,11 +215,19 @@ flowchart TD
     F -- no --> H["unrecognised option<br/>emit SCOPE_UNKNOWN &lt;tab&gt; option<br/>→ guard asks the user"]
 ```
 
-**Bucket 1 — skip, then read the subcommand normally.** The no-value list above plus `--exec-path`.
-None of them changes which repository is acted on.
+**Bucket 1 — skip, then read the subcommand normally.** The no-value list above **minus `--bare`**,
+plus `--exec-path`, `--attr-source` (consuming) and `--list-cmds` (attached). None of them changes
+which repository is acted on. The exhaustive membership is the union of the two Examples tables in the
+Scenarios section — bucket 1 is the only bucket whose mistakes are silent, so it is enumerated by test,
+never by prose.
 
 **Bucket 2 — refuse and ask: `-C`, `--git-dir`, `--work-tree`, `--namespace`, `--bare`, `-c`,
-`--config-env`.** These can point git at a different repository. The guards decide from the
+`--config-env`, `--literal-pathspecs`, `--glob-pathspecs`, `--noglob-pathspecs`, `--icase-pathspecs`.**
+The first seven can point git at a different repository; the four pathspec options change what a
+pathspec *means*, which is the string `git-guard` reads to decide its documentation-only exemption
+(the option table above already assigned them here — revision 4 then left them out of this sentence
+and out of every Examples table, so nothing could fail if an implementer read the sentence instead of
+the table). The guards decide from the
 *current* folder's branch and the *current* index, so continuing would inspect the wrong repo — a
 check that reports confidently on the wrong subject is worse than today's visible hole.
 
@@ -275,14 +323,15 @@ Feature: a global option must not hide the subcommand
     And no SCOPE_UNKNOWN fact is emitted
 
     Examples:
-      | option              |
-      | --no-pager          |
-      | -p                  |
-      | --no-optional-locks |
-      | --no-advice         |
+      | option               |
+      | --no-pager           |
+      | -p                   |
+      | --paginate           |
+      | --no-optional-locks  |
+      | --no-advice          |
       | --no-replace-objects |
-      | --no-lazy-fetch     |
-      | -P                  |
+      | --no-lazy-fetch      |
+      | -P                   |
 
   # Every option in the table above is bucket 1, takes NO value, and does NOT suppress the
   # subcommand. Three neighbouring sets must stay out of it, and each has its own scenario:
@@ -322,13 +371,17 @@ Feature: a global option must not hide the subcommand
     And no SCOPE_UNKNOWN fact is emitted
 
     Examples:
-      | option      |
-      | --exec-path |
-      | --version   |
-      | --help      |
-      | --html-path |
-      | --man-path  |
-      | --info-path |
+      | option           |
+      | --exec-path      |
+      | --version        |
+      | -v               |
+      | --help           |
+      | -h               |
+      | --html-path      |
+      | --man-path       |
+      | --info-path      |
+      | --list-cmds      |
+      | --list-cmds=main |
 
   Scenario: the print-and-exit set changes the message only, never the decision
     Given a repository whose current branch is "main"
@@ -344,14 +397,25 @@ Feature: a global option must not hide the subcommand
     And the reason text names <option>
 
     Examples:
-      | option        |
-      | -C            |
-      | --git-dir     |
-      | --work-tree   |
-      | --namespace   |
-      | --bare        |
-      | -c            |
-      | --config-env  |
+      | option             |
+      | -C                 |
+      | --git-dir          |
+      | --work-tree        |
+      | --namespace        |
+      | --bare             |
+      | -c                 |
+      | --config-env       |
+      | --literal-pathspecs |
+      | --glob-pathspecs   |
+      | --noglob-pathspecs |
+      | --icase-pathspecs  |
+
+  # The four pathspec options are bucket 2 and only this table can prove it. The option
+  # table assigned them there in revision 3; revision 4 left them out of the bucket-2 prose
+  # list AND out of every Examples table, so an implementer who put them in bucket 1 would
+  # have passed the whole suite. Note `-C` and `--git-dir` need a value, so the rows above
+  # that consume one are exercised again by the dedicated value-consuming scenario below;
+  # here the bare spelling is enough because SCOPE_UNKNOWN fires before any value is read.
 
   Scenario: an abbreviated option nobody enumerated is still refused
     When the hook inspects "git --work-tre=/tmp commit -m x -- app.js"
@@ -373,6 +437,36 @@ Feature: a global option must not hide the subcommand
     When the hook inspects "git -C . push --force"
     Then git-guard writes permissionDecision "ask" to stdout and exits 0
     And the reason names "-C"
+    And no PUSH or PUSH_FORCE fact is emitted
+
+  # The contract says SCOPE_UNKNOWN suppresses "COMMIT*/PUSH*" facts, but revision 4 only
+  # ever asserted the COMMIT half. The PUSH assertion above is the other half. Both added
+  # by the revision-4.1 sweep.
+
+  # The contract also says the fact is emitted AT MOST ONCE PER LINE, from the FIRST
+  # triggering option — stated in the contract and in the accepted limits, asserted nowhere.
+  # No scenario used a command with two triggering options, so an implementation emitting
+  # one fact per option would have passed the entire suite.
+  Scenario: two repo-redirecting options produce exactly one fact, naming the first
+    When the hook inspects "git -c a=b -C /x commit -m x -- app.js"
+    Then exactly one SCOPE_UNKNOWN fact is emitted for the line
+    And it names "-c", not "-C"
+
+  # SCOPE_UNKNOWN is a DENYING fact (classify-git-command.py:31-40): true of any one segment
+  # is enough for the whole line. Every other scenario on this card is single-segment, so
+  # nothing could fail if an implementer required the trigger to be in the first segment.
+  Scenario: a redirecting option in a later segment still denies the whole line
+    Given a repository whose current branch is "main"
+    When the hook inspects "echo hi && git -C /x commit -m x -- app.js"
+    Then SCOPE_UNKNOWN is emitted for "-C"
+    And git-guard writes permissionDecision "ask" to stdout and exits 0
+
+  Scenario: a granting fact in one segment cannot cancel another segment's SCOPE_UNKNOWN
+    Given a repository whose current branch is "main"
+    When the hook inspects "git commit -m a -- docs/a.md && git -C /x commit -m b -- app.js"
+    Then SCOPE_UNKNOWN is emitted for "-C"
+    And git-guard writes permissionDecision "ask" to stdout and exits 0
+    And the documentation-only exemption earned by the first segment does not allow the line
 
   Scenario Outline: SCOPE_UNKNOWN asks on ANY branch, not only on main
     Given a repository whose current branch is "<branch>"
@@ -404,6 +498,22 @@ Feature: a global option must not hide the subcommand
     When the hook inspects "git commit -m x -- app.js"
     Then git-guard exits 2
     And it does not write a permissionDecision to stdout
+
+  # doc-guard has two promises on this card and revision 4 gave neither a scenario: it must
+  # newly SEE bucket-1 commands, and it must stay silent on SCOPE_UNKNOWN rather than adding
+  # a second prompt to git-guard's. Both are behaviour changes in a hook whose failure mode
+  # is over-blocking real commits. Added by the revision-4.1 sweep.
+  Scenario: doc-guard newly sees a commit hidden behind a harmless global option
+    Given a substantial source change is staged with no documentation
+    When the hook inspects "git --no-pager commit -m x"
+    Then doc-guard refuses with exit 2 for the missing documentation
+
+  Scenario: doc-guard stays silent on a cannot-tell command
+    Given a substantial source change is staged with no documentation
+    When the hook inspects "git -C . commit -m x"
+    Then doc-guard exits 0
+    And it does not write a permissionDecision to stdout
+    And git-guard is the only guard that prompts for this command
 ```
 
 Fixtures must be built so a **wrong** implementation disagrees: write the harmless, redirecting and
@@ -461,15 +571,24 @@ the acceptance gate; the same table re-run later is the regression signal.
 - **Bucket 1 can produce a false denial on a command that would never have run.** Several of the
   no-value options *print and exit* rather than running the subcommand: `git --version commit -m x`
   does nothing at all, but after skipping `--version` the reader sees `commit` and `git-guard` will
-  refuse it on `main`. Same for `-h`, `--help`, `--html-path`, `--man-path`, `--info-path`, and the
-  bare `--exec-path`. Accepted: the fail direction is toward blocking, these shapes are vanishingly
+  refuse it on `main`. Accepted: the fail direction is toward blocking, these shapes are vanishingly
   rare, and modelling "which options suppress the subcommand" is a fourth list that would rot.
 
   **But the refusal must not lie about why.** Today's message would say the commit was blocked for
-  targeting `main`, which is not what happened — the command commits nothing. These six options are
+  targeting `main`, which is not what happened — the command commits nothing. The affected options are
   therefore named in a `PRINTS_AND_EXITS` set used **only** to select the message, never to change
   the decision: the refusal still fires, and its text says the command carries a git option that
   prints and exits, so nothing would have been committed. Decision unchanged, diagnosis honest.
+
+  The set is exactly `-v --version -h --help --html-path --man-path --info-path`, bare `--exec-path`,
+  and **`--list-cmds` in both spellings** — the last added by the revision-4.1 sweep, which found it
+  described as "prints a command list and exits" in the option table yet absent from this set and from
+  every Examples table, so no test could have failed on it. Measured (git 2.50.1): `git --list-cmds=main
+  rev-parse --is-inside-work-tree` prints the command list and never runs `rev-parse`; the bare
+  `git --list-cmds rev-parse …` errors `unknown option: --list-cmds` and also never runs it. The two
+  forms fail differently but neither reaches the subcommand, which is the only property this set
+  encodes — so the set's invariant is stated as **"git never reaches the subcommand"**, not literally
+  "prints".
   (Raised by the observability judge; a refusal nobody can explain is a refusal people learn to
   route around.)
 - **`--exec-path=<path>` stays in bucket 1 though it can substitute git's helper binaries.** That is
@@ -520,44 +639,65 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
 ### Groundwork — must land before any behaviour task
 
 > **Why these exist, and why they are first.** Three consecutive revisions of this card shipped a
-> requirement with no way to check it, because **no harness in this repo can assert what a guard
-> *says* — only whether it blocked.** Measured: `hooks/git-guard.test.sh:347` and
-> `hooks/doc-guard.test.sh:70` both run the hook as
-> `payload "$cmd" | bash "$HOOK" >/dev/null 2>&1` and keep only `got=$?`. Message text and the `ask`
-> JSON on stdout are discarded, so every message-level promise in this spec was unbuildable by
-> construction. And `hooks/merge-guard.test.sh` **does not exist** — 12 other hooks have one; the
-> single guard this spec names as its only *silent* failure mode has none.
+> requirement with no way to check it: **the `ask` decision this feature introduces travels on stdout,
+> and no harness in this repo captures stdout.** Measured 2026-08-17 — per-harness, because they are
+> not in the same state and revision 4 wrongly said they were:
+>
+> | harness | exit code | stderr | stdout |
+> |---|---|---|---|
+> | `hooks/git-guard.test.sh` | `_run_case_common` `:226` | ✅ `assert_stderr` `:252-259` | ❌ `:254` runs `2>&1 1>/dev/null` — stdout thrown away |
+> | `hooks/doc-guard.test.sh` | `run_case` `:66-76`, `:68` | ❌ none | ❌ `:68` runs `>/dev/null 2>&1` |
+> | `hooks/merge-guard.test.sh` | **file does not exist** | — | — |
+>
+> So the groundwork is three different jobs, not one: git-guard needs a **stdout** helper beside the
+> stderr one it already has, doc-guard needs **both** channels, and merge-guard needs a suite from
+> nothing — `hooks/` holds **18** hook scripts and **8** `*.test.sh` suites, and the one guard this
+> spec names as its only *silent* failure mode is not among them. (Revision 4 claimed no harness could
+> assert any message and cited `git-guard.test.sh:347`, `doc-guard.test.sh:70`, and "12 other hooks";
+> all four figures were wrong. Corrected by the revision-4.1 sweep. The conclusion — build the
+> groundwork first — survives; the reasoning behind it did not.)
 >
 > Patching the wording a fourth time would relocate the problem again. **User decision: build the
 > missing groundwork first.**
 
-- [ ] 0a. Extend `hooks/git-guard.test.sh` and `hooks/doc-guard.test.sh` to capture **stdout and
-      stderr** alongside the exit code, and add assertion helpers for "stdout is this JSON" and
-      "stderr contains this text". Every existing case must keep passing unchanged — prove that
-      before adding a single new case.
-- [ ] 0b. Create `hooks/merge-guard.test.sh`, which has never existed. Pin **today's** behaviour
-      first: `gh pr merge 5` → exit 2, `MERGE_EXEMPT=<reason> gh pr merge 5` → allowed with the
-      reason on stderr, an ordinary `git merge` → untouched. This is the baseline the rewrite in
-      task 6 must not break, and without it that rewrite has no safety net at all.
+- [ ] 0a. Give both hook harnesses a **stdout** assertion, and doc-guard a stderr one.
+      `git-guard.test.sh` already asserts stderr (`assert_stderr`, `:252`) — model the new
+      `assert_stdout_json` on it, and do **not** rewrite `assert_stderr`, whose `1>/dev/null` is
+      deliberate. `doc-guard.test.sh` has neither and needs both. **Put the shared bodies in one place**
+      (a `hooks/lib/guard_test_helpers.sh` sourced by all three suites) rather than pasting them into
+      three files — task 0b needs the identical helpers, and three copies is the DRY violation this
+      repo keeps paying for. Every existing case must keep passing unchanged — prove that before
+      adding a single new case.
+- [ ] 0b. Create `hooks/merge-guard.test.sh`, which has never existed, using 0a's shared helpers. Pin
+      **today's** behaviour first: `gh pr merge 5` → exit 2, `MERGE_EXEMPT=<reason> gh pr merge 5` →
+      allowed with the reason on stderr, an ordinary `git merge` → untouched. This is the baseline the
+      rewrite in task 6 must not break, and without it that rewrite has no safety net at all.
 - [ ] 0c. Confirm where these suites actually run (a runner script, a git hook, or by hand) and
       record the answer here. If nothing runs them automatically, say so plainly rather than
       implying coverage that no one executes.
 
 ### Behaviour
 
-- [ ] 1. Red: extend `hooks/lib/classify-git-command.test.py` (exists, 236 lines) with the
-      Examples-driven cases above; confirm it fails for the stated reason and record the split.
+- [ ] 1. Red: extend `hooks/lib/classify-git-command.test.py` (exists; **224** lines at `a5de681` —
+      re-run `wc -l`, do not trust this number, revision 4's said 236) with the Examples-driven cases
+      above; confirm it fails for the stated reason and record the split.
       **Scope note:** this suite tests the fact output only — it never runs a hook and never checks an
       exit code (its own docstring). Hook-level cases belong in the 0a/0b harnesses, not here.
 - [ ] 2. Green: `resolve_subcommand()` + the three tables in `classify-git-command.py`; emit
-      `SCOPE_UNKNOWN<tab><option>`.
+      `SCOPE_UNKNOWN<tab><option>` **at most once per line, naming the first triggering option**, and
+      suppress every `COMMIT*`/`PUSH*` fact for a segment that triggers it — both halves have
+      scenarios above, and both were previously contract-only. Check `wc -l` on the file afterwards:
+      198 lines at `a5de681`, house limit 400.
 - [ ] 3. Red then green: `git-guard.sh` emits the `ask` JSON on `SCOPE_UNKNOWN`, on **every branch**
       (the check must NOT be nested inside the `on_main` block at `:152`), and keeps every existing
       `exit 2` path byte-identical in behaviour. Also settle the open question above: **is stderr from
       an exit-0 hook surfaced at all?** Record the answer in this card either way.
-- [ ] 3b. **The `PRINTS_AND_EXITS` message rule gets built, not just written.** Add the six-option set
-      to `git-guard.sh`, wire it to the refusal *message* only, and land the two scenarios above with
-      it. **The decision-invariance scenario is the load-bearing one:** emptying the set must change
+- [ ] 3b. **The `PRINTS_AND_EXITS` message rule gets built, not just written.** Add the set to
+      `git-guard.sh` — exactly `-v --version -h --help --html-path --man-path --info-path`, bare
+      `--exec-path`, and `--list-cmds` in both spellings — wire it to the refusal *message* only, and
+      land the two scenarios above with it. The set's invariant is "git never reaches the subcommand",
+      which is why bare `--list-cmds` belongs in it even though it errors rather than printing.
+      **The decision-invariance scenario is the load-bearing one:** emptying the set must change
       no decision, only text — that is what stops a later edit from wiring it into the decision.
       Revisions 1 and 2 each shipped a prose MUST with no task behind it; both judges caught this one
       independently. Do not repeat it a third time.
@@ -567,7 +707,10 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
 - [ ] 6. `merge-guard.sh` calls the shared reader. **Prove the OLD behaviour first** — `gh pr merge 5`
       still exit 2, `MERGE_EXEMPT=<reason>` still honoured — then that rows (d) and (e) stop being
       allowed. This is the one guard whose failure mode is silent under-blocking.
-- [ ] 7. Re-run the full defect table from this spec and paste the new exit codes beside the old.
+- [ ] 7. Re-run the full defect table from this spec and paste the result beside the old — **as the
+      pair `(exit code, stdout decision)`, not the exit code alone.** Rows (a), (b) and (c) all end at
+      `rc=0` after the fix, so an exit-code-only re-run cannot distinguish the fix from the bug; the
+      table's "after the fix (expected)" column is the thing being matched. This is why 0a comes first.
       **Then make it stop being a manual ritual:** encode the rows as cases in the **hook-level**
       harnesses from 0a/0b — rows (a)(b) in `git-guard.test.sh`, row (c) in `doc-guard.test.sh`, rows
       (d)(e) in the new `merge-guard.test.sh`, and row (f) as a control in
