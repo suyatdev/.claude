@@ -528,3 +528,137 @@ failure shape (an unverified `file:line` reference asserted as fact).
 
 _None recorded (round 5) — no waived ids were provided, and the finding above is not being waived on
 this judge's own initiative._
+
+## Round 6 — 2026-08-17
+
+**Verdict: PASS** (confidence: high) — first PASS after 5 consecutive FAILs.
+
+### Layman summary
+
+Round 5's finding was a small but real citation error: the spec pointed at a second document
+(`memsearch-freshness.md:1282`) to back up "the house already solves this by hand-mutating and
+restoring," and that line didn't say what the spec claimed. This round's fix doesn't repoint the
+citation — it drops it, and explains why dropping is the right call rather than patching: that
+line only ever half-supported the claim (it showed a mutation, never a restore), and worse, it was
+a citation into a *different branch's* live document, which reads differently depending on which
+checkout of this repo the reader has open — no amount of re-deriving fixes that kind of instability.
+The single citation that remains, `git-guard-detached-head.md:743-785` (`:755` for the explicit
+restore step), already carries the whole claim on its own and is a document already merged to
+`main`, so it can't drift out from under a reader the way the dropped one could.
+
+I independently re-derived every citation and factual claim in the document this round, not just
+the one that changed, working entirely from this worktree
+(`/Users/marksuyat/.claude/.claude/worktrees/global-option-blindness`) as instructed — the round-5
+mistake was reading `$HOME/.claude`'s copy of a same-named path on another branch, and I confirmed
+the two checkouts really do diverge (this worktree's `docs/decisions/` tops out at 0026 same as
+`origin/main`; `$HOME/.claude` itself is on `feature/memsearch-freshness` and tops out at 0021 —
+a different history entirely, never used as ground truth here). Everything held:
+
+- **The dropped citation is genuinely gone.** `grep -n memsearch-freshness` on the live spec returns
+  only the one historical sentence explaining *why* it was dropped — no remaining citation into that
+  file anywhere.
+- **The replacement citation is exact.** `docs/features/git-guard-detached-head.md` is 866 lines in
+  this worktree, byte-identical to `origin/main`'s copy of the same file (`diff` on lines 740-790
+  empty). Line 755 reads verbatim "Restored the file after each mutation and confirmed `diff`
+  against the pre-mutation copy" — exactly the quoted text — and it sits inside the larger
+  743-785 mutation-and-restore narrative the spec points at.
+- **Every other `file:line` citation in the document re-derived from scratch, all exact:**
+  `classify-git-command.py:150` (`subcommand, rest = argv[1], argv[2:]`), `:152`
+  (`if subcommand == "commit":`), `:169` (`elif subcommand == "push":`), `:31-40` (the GRANTING/
+  DENYING rule), `:104` (`-S`/`--gpg-sign`); `git-guard.sh:280` (`has_fact PUSH_FORCE`), `:292`
+  (`if has_fact COMMIT && on_main; then`); `git-guard.test.sh:224` for the `_run_case_common`
+  function and `:226` for its exit-code-only line (`>/dev/null 2>&1`, discarding both channels
+  before `got=$?` on the next line — the spec's `:226` citation targets that specific line, and it's
+  exact), `:252-259` (`assert_stderr`, opening to closing brace), `:254`
+  (`2>&1 1>/dev/null`); `doc-guard.test.sh:66` (`run_case`) and `:68`
+  (`>/dev/null 2>&1`); `doc-guard.sh:91-100` (the `case "$event" in ... *) exit 0 ;;` dispatch) and
+  `:127` ("a missing note is not worth blocking work over," verbatim); `merge-guard.sh:82`
+  (`toks[i:i+3] == ["gh","pr","merge"]`) and `:93` (the `MERGE_EXEMPT` `printf … >&2`);
+  `classify-pr-command.py:38-45` (the "global flags are legal before the subcommand" comment and
+  adjacent-pair scan); `judge-guard.sh:230` and `feature-sync-guard.sh:136` (both `printf … >&2`
+  exemption lines); and the cross-branch `docs/features/verification-marker-gate.md:781-796`,
+  opened in the worktree that actually holds `feature/verification-marker-gate`
+  (`worktrees/tracking-feature-state`, not the old `verification-marker-gate` path — `git worktree
+  list` shows it moved) — the "UNRESOLVED — user-waived" block starts at 781 and "blocked on that
+  decision landing" ends the block at 796, exactly as cited, and that file's frontmatter really does
+  carry `revision_status: complete`.
+- **All git 2.50.1 behavior claims reproduced live, in a fresh throwaway `git init -b main` repo:**
+  `--bare` makes git read the cwd itself as the repo (`fatal: not a git repository: '<cwd>'`);
+  `--list-cmds=main` prints the full command list and exits 0 without ever reaching `rev-parse`,
+  bare `--list-cmds` errors `unknown option: --list-cmds` (exit 129); `--attr-source HEAD rev-parse
+  --is-inside-work-tree` consumes `HEAD` and returns `true`, while `--attr-source commit -m x -a`
+  errors `unknown option: -m` and leaves the repo's commit log unchanged (confirmed via `git log
+  --oneline` before/after); `--exec-path commit -m x -a` bare prints the exec path and commits
+  nothing (log unchanged), `--exec-path=/tmp commit -m x -a` commits normally (new commit appears).
+- **All five pinned tool versions match**, confirmed live: `git 2.50.1 (Apple Git-155)`, `Python
+  3.9.6`, `bash 3.2.57(1)-release (arm64-apple-darwin25)`, `shellcheck 0.11.0`. The sixth,
+  **Claude Code 2.1.233**, is no longer the *active* installed version — the environment auto-updated
+  to `2.1.234` earlier today (`/Users/marksuyat/.local/bin/claude` now symlinks to the `2.1.234`
+  build, timestamped after this spec's last edit). This is not a spec defect: the exact `2.1.233`
+  binary is still archived at `/Users/marksuyat/.local/share/claude/versions/2.1.233`, and both
+  strings the spec quotes as "verbatim from the same binary" — `Valid types are: allow, deny, ask,
+  defer` and the full `bypassPermissions` sentence — are confirmed present, verbatim, in that exact
+  archived binary. The spec's claim is about what `2.1.233` says, and it still says it; it is simply
+  no longer the version a reader gets by running `claude --version` today. Noted below as a
+  non-blocking observation, since the next revision that touches this section will need to re-pin or
+  re-verify against whatever is current then.
+- **File-size and count claims all exact:** `hooks/lib/classify-git-command.py` is 198 lines,
+  `hooks/lib/classify-git-command.test.py` is 224 lines, `hooks/` holds 18 non-test hook scripts and
+  8 `*.test.sh` suites, and `hooks/merge-guard.test.sh` still does not exist (confirming task 0b's
+  premise is still live, not already done).
+- **ADR 0029 is still free.** `origin/main`'s `docs/decisions/` tops out at 0026, this worktree's
+  local copy matches; the worktree holding `feature/verification-marker-gate` (now at
+  `worktrees/tracking-feature-state`) confirms ADR 0027 is taken there and no local 0028 exists
+  anywhere. (That worktree's *own* `0026-the-gate-does-no-json-parsing.md` collides with
+  `origin/main`'s already-merged `0026-symbolic-ref-not-abbrev-ref-names-the-branch.md` — a
+  pre-existing numbering conflict on that other branch, unrelated to and not caused by this spec,
+  and not this card's problem to fix.)
+
+Nothing failed re-derivation. No new defect of any kind — citation, factual claim, buildability gap,
+or scope creep — was found anywhere in the document this round.
+
+### Round-5 violation — verification of the fix
+
+`core-conduct/stale-line-citation` — **CLOSED**, by removal rather than repair, and the removal
+itself checks out:
+
+- `grep -n memsearch-freshness docs/features/global-option-blindness.md` returns exactly one line —
+  the historical sentence recording *why* the citation was dropped — and no live citation into that
+  file remains anywhere in the document.
+- The surviving citation, `git-guard-detached-head.md:743-785`/`:755`, was independently re-derived
+  against this worktree's copy (confirmed byte-identical to `origin/main`'s merged copy over the
+  cited range) and matches exactly, including the newly-added exact quote at `:755`.
+- The new house rule the spec records — "cite precedent from THIS worktree, and prefer a document
+  already merged to main" — is not just stated but satisfied by its own remaining citation: the doc
+  it points to actually is on `main`.
+
+Not reused as a violation id this round; nothing recurred.
+
+### Violations
+
+_None._
+
+### Notes (non-blocking, round 6)
+
+- **Claude Code version drift since round 5.** The environment's active `claude` binary is now
+  `2.1.234`, not the pinned `2.1.233`. The spec's binary-derived claims still verify exactly against
+  the archived `2.1.233` build, so this is not a defect in the spec as written — but if a future
+  revision re-touches the "Contract — how a refusal reaches the user" section, re-pin against
+  whatever is current then rather than assuming `2.1.233` is still installed.
+- **A numbering collision exists on a different, unrelated branch** (`feature/verification-marker-gate`,
+  now checked out at `worktrees/tracking-feature-state`): its local `0026-the-gate-does-no-json-
+  parsing.md` collides with `origin/main`'s already-merged `0026-symbolic-ref-not-abbrev-ref-names-
+  the-branch.md`. This spec's own ADR 0029 claim is unaffected and correctly checked against both
+  `origin/main` and that branch's real occupant of 0027 — flagged here only so it isn't rediscovered
+  as a surprise when that other branch resumes.
+- **Task list, scenarios, and contract sections are otherwise unchanged from round 5** (confirmed via
+  `git show --stat 21f9b37` and a full diff: only the one 12-line comment block changed), so every
+  structural finding closed in rounds 1-5 — the merge-guard ask ambiguity, the untracked-files
+  measurement, the print-and-exit enforcement gap, the `--attr-source` table placement, the defect-
+  table test-suite routing, the message-assertion harness gap, and the first stale `git-guard.sh`
+  citation — remains closed, independently reconfirmed rather than assumed stable.
+
+### Waivers
+
+_None recorded (round 6) — no waived ids were provided, and there is nothing to waive: zero
+violations found._

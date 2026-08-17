@@ -1,17 +1,29 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: feature/global-option-blindness
 revision: 4.1
+compliance_verdict: pass  # round 6, 2026-08-17; subject blob 81fcd3e (spec content at 21f9b37)
 adr: 0029  # 0027 is taken by the paused marker-gate branch; 0028 is reserved for its renumber
 ---
 
-> **Gate status (2026-08-17): user said `gate confirmed`; the branch exists; the phase is deliberately
-> still `planning`.** The same turn the user opened the gate, they asked for the compliance judge to be
-> re-run on revision 4 first — and `implementation` forbids the spec edits a failing verdict would
-> require. So the sequence is: sweep → judge → **on pass**, flip to `phase: implementation` /
-> `model_tier: low` and start task 0a. Do **not** read `phase: planning` here as "the gate never
-> opened"; it opened, and this is the one step held back behind it.
+> **Gate status (2026-08-17): OPEN. Compliance round 6 = PASS, and the phase is now
+> `implementation`.** The user said `gate confirmed` and, in the same turn, asked for the spec to be
+> re-judged first; that held the flip behind a verdict, because `implementation` forbids the spec
+> edits a failing verdict would require. Rounds 1–5 failed, round 6 passed with no violations, and the
+> flip happened immediately after. **From here, spec and checklist edits are out of phase** — record
+> results by ticking tasks and appending to `## Verification`, escalate a wrong spec rather than
+> quietly editing it.
+>
+> The only edit made after the passing verdict is this frontmatter block: `phase`, `model_tier`, and
+> the `compliance_verdict` line. The verdict's subject is spec blob `81fcd3e`, the content at commit
+> `21f9b37` — recorded so a later reader can tell metadata drift from content drift.
+>
+> ⚠️ **One known, deliberate staleness:** the pinned Claude Code version is **2.1.233**, and the
+> installed binary auto-updated to **2.1.234** during round 6. The round-6 judge re-verified both
+> quoted binary strings against the archived 2.1.233 and they hold, so every measurement here is still
+> true of the version it names. Re-derive against the live binary at task 3/task 9 rather than editing
+> this line now — an edit would invalidate the passing verdict.
 
 > **Revision 4 — the root cause, not another patch.** Round 3 failed with three more violations, all
 > introduced by revision 3, and its sweep named the pattern: three revisions running had each stated a
