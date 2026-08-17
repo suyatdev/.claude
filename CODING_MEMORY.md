@@ -6954,3 +6954,38 @@ observability judges, then — only on a pass — the phase flip and task 0a.
 **Noted, not fixed (own task):** `.gitignore:72` ignores all of `/.claude/`, not just the
 machine-local handoff files. `managing-session-memory` calls for the narrower form so committed
 project settings can live there. Out of scope for this feature.
+
+## 2026-08-17 — global-option-blindness: task 0a lands, groundwork begins
+
+Restored into `implementation` phase (gate opened and compliance passed at round 6 in the prior
+session on this date; see the section above). This session's only work was task 0a, the first of
+three groundwork tasks the spec requires before any behaviour task, because no harness in this
+repo could previously assert what a guard writes to **stdout** — and the new `SCOPE_UNKNOWN` "ask"
+decision this feature adds is delivered as JSON on exactly that channel.
+
+**What landed (commit `975478c`):** `hooks/lib/guard_test_helpers.sh`, a new shared file holding
+`assert_stderr` (moved out of `git-guard.test.sh` verbatim, byte-identical body — not rewritten,
+per the spec's explicit instruction) and the new `assert_stdout` beside it. Both
+`hooks/git-guard.test.sh` and `hooks/doc-guard.test.sh` now source it instead of duplicating the
+body — task 0b's `merge-guard.test.sh` (still to be created) will source the same file rather than
+becoming a third copy.
+
+**Proof, not assertion, that the new helper works:** all 108 git-guard cases and 16 doc-guard
+cases pass unchanged (no regression from the move). Then, because a check that has never been
+shown able to fail is not trustworthy by construction (`feedback_confirm_the_check_can_fail`), a
+synthetic fake hook writing distinct markers to stdout and stderr was probed directly:
+`assert_stdout` correctly failed when asked to find the stderr-only marker, and `assert_stderr`
+correctly failed when asked to find the stdout-only marker — each stream is actually isolated from
+the other, not merged and coincidentally matching. Recorded in the feature file's own
+`## Verification` section, not here, per the one-canonical-file rule; this entry exists only
+because CODING_MEMORY is the cross-session archive, not a duplicate of that section's content.
+
+**Also fixed in the same commit:** shellcheck 0.11.0 flagged the new lib file (SC2148, no shebang
+on a sourced-only file — fixed with a `# shellcheck shell=bash` directive) and both dynamic
+`source` lines (SC1091 — silenced with the same `# shellcheck disable=SC1091` pattern already used
+at `hooks/handoff/slim-session-start.test.sh:188`, rather than inventing a new convention).
+
+**Next session: task 0b.** Create `hooks/merge-guard.test.sh` (has never existed) using this
+session's shared helpers. Pin **today's** behaviour first — `gh pr merge 5` → exit 2,
+`MERGE_EXEMPT=<reason> gh pr merge 5` → allowed with the reason on stderr, an ordinary `git merge`
+→ untouched — because that is the safety net task 6's rewrite needs and has none without it.
