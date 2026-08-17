@@ -6914,3 +6914,43 @@ verified zero deletions) kept separate from the fact that it isn't a judge verdi
 was finished, verified, committed and pushed before this entry was written, so nothing here is a
 save-in-progress. Nothing else was left open by the merge itself; PR #52 is mergeable now and waiting
 on human review, same status as before this session except the conflict is gone.
+
+## 2026-08-17 — global-option-blindness: the gate opens, and the spec gets its own branch
+
+(Date-headed rather than numbered: the preceding entries run 79, 79-post-merge, 80, then a
+2026-08-13 "session 66" — the counter is not reliable enough to extend.)
+
+**The gate opened.** The user said the literal phrase `gate confirmed` for
+`docs/features/global-option-blindness.md` (revision 4). Both owed checkpoints were put to them
+first, in one ask: the planning→implementation model-switch checkpoint, and whether to re-run the
+compliance judge on revision 4. Answers: **switch to the smaller model**, and **yes, re-check the
+spec first**.
+
+**Consequence — the phase is deliberately still `planning`.** Those two answers are in tension with
+the standard gate sequence: `implementation` forbids spec edits, and a failing verdict would demand
+exactly that. So the branch was created and the frontmatter records it, but the phase flip is held
+until the verdict lands. A note in the feature file's own frontmatter block says so, because
+`phase: planning` on a branch that exists otherwise reads as an unopened gate.
+
+**The spec was rescued from the wrong worktree.** Revision 4 had lived its whole life as an
+*untracked* file inside the paused `feature/verification-marker-gate` worktree — one `git clean`
+from gone, and uncommittable there without landing this feature on the paused feature's branch.
+Fixed by branching `feature/global-option-blindness` off **`origin/main`** (6a2b7c5, not local
+`main`, which can lag) into a new worktree, transplanting the spec plus the three compliance
+verdicts and two architecting verdicts, and committing them there as `4c9a431`. Pushed.
+
+- The paused worktree's ledgers carried **its own** unmerged rows too (115 vs origin/main's 111).
+  Only the 5 rows belonging to this feature were moved. The append was proven to be a pure append
+  before transplanting — first N lines diffed byte-identical against HEAD — and every resulting
+  ledger line re-parsed as JSON afterwards.
+- **The transplanted verdict rows still say `branch: feature/verification-marker-gate`.** That is
+  where the judges genuinely ran. An audit row does not get rewritten to look tidier; only the
+  verdict *filenames* name the feature. Future rounds on this branch will key correctly by themselves.
+
+**Still owed, in order, by the next session:** the MUST/contract sweep of the spec (the standing
+rule written into this card after three rounds were lost to skipping it), then the compliance +
+observability judges, then — only on a pass — the phase flip and task 0a.
+
+**Noted, not fixed (own task):** `.gitignore:72` ignores all of `/.claude/`, not just the
+machine-local handoff files. `managing-session-memory` calls for the narrower form so committed
+project settings can live there. Out of scope for this feature.
