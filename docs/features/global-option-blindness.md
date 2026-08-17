@@ -383,11 +383,19 @@ Feature: a global option must not hide the subcommand
       | --list-cmds      |
       | --list-cmds=main |
 
+  # This one is a MUTATION ROUND, not a runtime switch — the distinction is the whole point.
+  # Round 3 cited the earlier wording (writing-specs/message-assertions-no-test-harness) because
+  # "when PRINTS_AND_EXITS is emptied" implied an override the guard does not have and must not
+  # grow: an env var that empties the set would be a production seam whose only purpose is to
+  # make a test pass. The house already solves this by hand-mutating the source and restoring it
+  # (docs/features/git-guard-detached-head.md:743-785, memsearch-freshness.md:1282). Revision 4
+  # left this half of that violation unfixed; the 4.1 sweep caught it before a second citation.
   Scenario: the print-and-exit set changes the message only, never the decision
     Given a repository whose current branch is "main"
-    When PRINTS_AND_EXITS is emptied and the suite is re-run
-    Then every refusal decision in the two Outlines above is unchanged
-    And only the message text differs
+    When PRINTS_AND_EXITS is emptied in the source and the suite is re-run
+    Then every message assertion in the print-and-exit Outline fails
+    And not one decision assertion in either Outline changes
+    And the source is restored and diffed clean against its pre-mutation copy
 
   Scenario Outline: a repo-redirecting global option is refused and put to the user
     Given a repository whose current branch is "main"
@@ -697,8 +705,14 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       `--exec-path`, and `--list-cmds` in both spellings — wire it to the refusal *message* only, and
       land the two scenarios above with it. The set's invariant is "git never reaches the subcommand",
       which is why bare `--list-cmds` belongs in it even though it errors rather than printing.
-      **The decision-invariance scenario is the load-bearing one:** emptying the set must change
-      no decision, only text — that is what stops a later edit from wiring it into the decision.
+      **The decision-invariance scenario is the load-bearing one, and it is a hand-run mutation
+      round — do NOT add an env var or any other runtime seam to empty the set.** Empty it in the
+      source, re-run, record that every message assertion failed and no decision assertion moved,
+      then restore and `diff` against the pre-mutation copy. That is what stops a later edit from
+      wiring the set into the decision, and it is the house pattern
+      (`docs/features/git-guard-detached-head.md:743-785`). Round 3 cited the previous wording for
+      implying an override the guard does not have; revision 4 fixed the other half of that finding
+      and left this half, which is why it is spelled out here.
       Revisions 1 and 2 each shipped a prose MUST with no task behind it; both judges caught this one
       independently. Do not repeat it a third time.
 - [ ] 4. `doc-guard.sh`: bucket-1 commands become visible; `SCOPE_UNKNOWN` stays exit 0.
