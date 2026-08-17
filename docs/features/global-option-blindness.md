@@ -120,8 +120,17 @@ and captured its exit code. rc=2 is a block, rc=0 is an allow.
 
 Row (a) was probed in a throwaway `git init -b main` repo so `current_branch()`'s
 `git rev-parse --abbrev-ref HEAD` reports `main`, **not** by borrowing the sibling worktree that
-holds `main`. Guard logic confirmed at `git-guard.sh:142` (`has_fact PUSH_FORCE`) and `:152`
-(`has_fact COMMIT && on_main`); with no facts both conditions are false.
+holds `main`. Guard logic confirmed at `git-guard.sh:280` (`has_fact PUSH_FORCE`) and `:292`
+(`if has_fact COMMIT && on_main; then`); with no facts both conditions are false.
+
+> ⚠️ **These two line numbers have gone stale once already — re-run `grep -n` before trusting them.**
+> Revision 2 verified them as `:142` and `:152`, correctly, on the `feature/verification-marker-gate`
+> worktree. This branch was cut (`4c9a431`) *after* PR #52 merged the detached-HEAD fix into `main`,
+> which inserted `checkout_desc()` and roughly 140 lines above them, so the spec arrived here carrying
+> citations that now land inside an unrelated comment block. Nobody re-derived them during the move —
+> a copied citation is laundered, not verified. Round 4 (`core-conduct/stale-line-citation`) caught it.
+> The `classify-git-command.py` citations in this spec were re-derived at the same time and all held
+> exactly (`:150`, `:152`, `:169`).
 
 > ⚠️ **Probe-method requirement.** The payload must carry `"hook_event_name":"PreToolUse"`.
 > Without it `doc-guard.sh:91-100` dispatches to `*) exit 0` and every result reads as a false
@@ -217,9 +226,12 @@ flowchart TD
 
 **Bucket 1 — skip, then read the subcommand normally.** The no-value list above **minus `--bare`**,
 plus `--exec-path`, `--attr-source` (consuming) and `--list-cmds` (attached). None of them changes
-which repository is acted on. The exhaustive membership is the union of the two Examples tables in the
-Scenarios section — bucket 1 is the only bucket whose mistakes are silent, so it is enumerated by test,
-never by prose.
+which repository is acted on. Bucket 1 is the only bucket whose mistakes are silent, so **every member
+is enumerated by a test, never by this prose** — the two Examples tables in the Scenarios section carry
+all of them (`--list-cmds` in both spellings sits in the print-and-exit table) except `--attr-source`,
+which consumes a value and so cannot use either table's shared template; it has two standalone
+scenarios instead. If an option is named here but appears in no scenario at all, that is the defect,
+not a shorthand.
 
 **Bucket 2 — refuse and ask: `-C`, `--git-dir`, `--work-tree`, `--namespace`, `--bare`, `-c`,
 `--config-env`, `--literal-pathspecs`, `--glob-pathspecs`, `--noglob-pathspecs`, `--icase-pathspecs`.**
@@ -697,7 +709,9 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       scenarios above, and both were previously contract-only. Check `wc -l` on the file afterwards:
       198 lines at `a5de681`, house limit 400.
 - [ ] 3. Red then green: `git-guard.sh` emits the `ask` JSON on `SCOPE_UNKNOWN`, on **every branch**
-      (the check must NOT be nested inside the `on_main` block at `:152`), and keeps every existing
+      (the check must NOT be nested inside the `if has_fact COMMIT && on_main; then` block —
+      `git-guard.sh:292` at `b9c5c9c`, but **`grep -n` it rather than trusting the number**, this
+      file has already moved ~140 lines once mid-spec), and keeps every existing
       `exit 2` path byte-identical in behaviour. Also settle the open question above: **is stderr from
       an exit-0 hook surfaced at all?** Record the answer in this card either way.
 - [ ] 3b. **The `PRINTS_AND_EXITS` message rule gets built, not just written.** Add the set to

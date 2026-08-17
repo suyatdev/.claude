@@ -285,3 +285,119 @@ stay accurate about what actually recurred versus what is new.
 ### Waivers
 
 _None recorded (round 3) — nothing offered as a waiver by the dispatching context, and none of the three findings above are being waived on this judge's own initiative._
+
+## Round 4 — 2026-08-17
+
+**Verdict: FAIL** (confidence: high) — 4th consecutive FAIL; round 3 already tripped the
+escalation-to-user tripwire, so this is a status update on an already-escalated card, not a new
+escalation.
+
+### Layman summary
+
+Revision 4/4.1 genuinely fixes all three problems round 3 found. I re-derived every one of them
+against this branch's live files rather than trusting the spec's own "corrected" notes: `--attr-source`
+is out of the shared harmless-option table and now has its own two scenarios, and I ran the actual
+command (`git --attr-source commit -m x -a`) and confirmed it errors `unknown option: -m` and commits
+nothing, exactly as the spec now says. Task 7 now routes each row of the defect table to the hook
+whose exit code it actually is, and task 0b adds the `merge-guard.test.sh` suite that never existed —
+confirmed still absent from `hooks/` today, so the gap this task closes is real. And the message
+scenarios' harness gap is closed two ways: a stdout-capturing helper is now explicitly scoped as new
+groundwork (task 0a), while the exit-2 message path can already use `assert_stderr`, which I confirmed
+really exists at `git-guard.test.sh:252-259` and really discards stdout via the `2>&1 1>/dev/null` swap
+at line 254 — both exactly where the spec's own revision-4.1 table says. The runtime-override risk in
+the "empty `PRINTS_AND_EXITS`" scenario — round 3's other half — is now explicitly a hand-mutate-and-
+restore round with no new env var, matching the house's own precedent at
+`git-guard-detached-head.md:743-785`, which I opened and confirmed really does describe that pattern.
+
+I also independently re-ran the git-behavior claims the round 4 brief flagged by name: `--bare` really
+does make git read the cwd as the repo (`fatal: not a git repository`, confirmed live); `--list-cmds`
+really does print a command list in the `=` form and error `unknown option: --list-cmds` bare, neither
+ever reaching `rev-parse`; `--attr-source`'s space form really does consume the next token (confirmed
+with a valid tree-ish, `HEAD`); `--exec-path` bare really doesn't commit while `--exec-path=<path>`
+does. Every pinned tool version and both binary-extracted strings (`Valid types are: allow, deny, ask,
+defer`; the `bypassPermissions` sentence) matched the installed tools exactly. The counts "18 hook
+scripts / 8 `*.test.sh` suites," "224 lines," and "198 lines" all reproduced exactly.
+
+But one thing doesn't hold up, and it's a genuine, checkable defect rather than a judgment call: two
+`git-guard.sh` line citations are stale for the branch actually being judged.
+
+### Round-3 violations — verification of the fix
+
+All three **CLOSED**, re-derived rather than re-read:
+
+- **`writing-specs/attr-source-consumes-subcommand` — CLOSED.** `--attr-source` no longer appears in
+  the shared harmless-skip Examples table (confirmed by reading the table: 8 rows, none is
+  `--attr-source`). It now has two dedicated scenarios ("a value-consuming harmless option takes the
+  next token, not the subcommand" and "a consuming option with the subcommand as its value commits
+  nothing"). I ran both underlying commands live: `git --attr-source commit -m x -a` → `unknown option:
+  -m`, exit 129, no commit created (matches the second scenario exactly); `git --attr-source HEAD
+  commit -m x -a` (a valid tree-ish, since `.gitattributes` in the spec's own example only fails later
+  at attribute-resolution time, not at option-parsing time — I checked this distinction directly) →
+  commits normally, confirming the option really does consume a value and the subcommand really does
+  resolve to `commit` (matches the first scenario's intent).
+- **`writing-specs/defect-table-wrong-test-suite` — CLOSED.** Task 7 now reads "encode the rows as
+  cases in the **hook-level** harnesses from 0a/0b — rows (a)(b) in `git-guard.test.sh`, row (c) in
+  `doc-guard.test.sh`, rows (d)(e) in the new `merge-guard.test.sh`, and row (f) as a control in
+  `classify-pr-command.test.py`. **Not** in the task-1 suite." Task 0b creates `merge-guard.test.sh`,
+  and I confirmed it genuinely does not exist yet anywhere in `hooks/` (`find hooks -maxdepth 1 -name
+  "*.test.sh"` returns 8 files, none named `merge-guard.test.sh`), so the gap this task exists to close
+  is real and the fix gives it a concrete, buildable home.
+- **`writing-specs/message-assertions-no-test-harness` — CLOSED**, in two parts. First (harness
+  existence): task 0a adds a **stdout** assertion helper modeled on the existing `assert_stderr`, and
+  gives `doc-guard.test.sh` both channels it currently lacks — I confirmed `doc-guard.test.sh`'s
+  `run_case` (`:66-76`, discarding both channels at `:68`) has no sibling message-asserting helper
+  anywhere in the file (`grep` for `assert_std`/`assert_stderr` returns nothing). Second (the runtime-
+  override risk): the "empty `PRINTS_AND_EXITS`" scenario is now explicitly framed as "a MUTATION
+  ROUND, not a runtime switch," with task 3b saying plainly "do NOT add an env var or any other runtime
+  seam to empty the set" and pointing at the house's existing hand-mutate/restore pattern. I opened
+  `git-guard-detached-head.md:743-785` and `memsearch-freshness.md:1282` and confirmed both really do
+  describe exactly that pattern (mutate the source by hand, confirm the expected assertions go red and
+  nothing else does, restore, diff clean) — legitimate precedent, not an invented one.
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `core-conduct/stale-line-citation` | `rules/core-conduct.md` | "Verification precedes both the claim and the write-down — never state that something works... until you have actually run it and re-read the output." | "Measured defect" background ("Guard logic confirmed at `git-guard.sh:142` (`has_fact PUSH_FORCE`) and `:152` (`has_fact COMMIT && on_main`)") and Task 3 ("the check must NOT be nested inside the `on_main` block at `:152`") | This branch (`feature/global-option-blindness`) was created (`4c9a431`) **after** PR #52 (`fix/git-guard-detached-head`) merged into `main`, which added ~140 lines to `hooks/git-guard.sh` (the new `checkout_desc()` helper and its surrounding comments). On this branch's actual HEAD, `git-guard.sh:142`/`:152` fall inside `checkout_desc()` — confirmed by reading them directly, they contain none of the cited code. The real locations, confirmed by `grep -n`, are `has_fact PUSH_FORCE` at `:280` and `if has_fact COMMIT && on_main; then` at `:292`. This citation was correct when it was independently re-derived in round 2 (`git-guard.sh:142`, `:152` — both verified then) but that verification ran on a *different* branch/worktree (`feature/verification-marker-gate`, per this round's own branch note); when the spec was "rescued" onto this branch it carried the citation forward unchanged rather than re-deriving it against the file this branch actually ships. This is not cosmetic: Task 3 uses `:152` to tell the implementer *where the block is that the new check must not be nested inside* — on this branch that line is `checkout_desc`'s case statement, not `on_main`'s block, so an implementer following the citation literally would look in the wrong place. Fix: update both citations to `:280` and `:292` (or re-run `grep -n` at implementation time and stop hardcoding either, given how much this file has moved once already). |
+
+### Notes (non-blocking, round 4)
+
+- **"The exhaustive membership is the union of the two Examples tables" (bucket 1, "The rule" section)
+  is not quite true as written**, and it's new text from the 4.1 sweep itself. The same paragraph
+  assigns `--attr-source` to bucket 1 by prose two sentences earlier, but `--attr-source`'s behavior is
+  tested by two standalone `Scenario:` blocks, not by either of the two `Scenario Outline` + `Examples:`
+  tables the sentence points at — so the claim "enumerated by test, never by prose" technically doesn't
+  hold for that one member, ironically the same defect shape the sweep just fixed for bucket 2 (options
+  assigned by prose but missing from the Examples table). Not blocking: the behavior itself *is*
+  scenario-backed (just not via an "Examples table" specifically), so no implementer loses a buildable
+  path — but worth tightening the sentence (e.g. "the two Examples tables plus the two `--attr-source`
+  scenarios") the next time this section is touched.
+- **Task 1's "the Examples-driven cases above" could be read narrowly.** Read literally it might seem
+  to scope `classify-git-command.test.py`'s new cases to only the `Scenario Outline`/`Examples:` blocks,
+  which would silently drop ~8 standalone `Scenario:` blocks that are equally fact-level and equally
+  new (the two `--attr-source` scenarios, the abbreviated-option scenario, the two multi-segment
+  scenarios, etc.). I don't think this is the intended reading — Task 2 explicitly says "both halves
+  have scenarios above, and both were previously contract-only," referring to the whole Scenarios
+  section, not just Outline tables — and the closing "Fixtures must be built..." paragraph uses
+  "Examples tables" the same loose way even for bucket 3, which has no literal Examples table at all.
+  Consistent informal usage throughout, not a real gap, but the phrase is doing double duty and a
+  future revision could tighten it.
+- **Everything else re-derived this round, independently, matches:** all 5 pinned tool versions (git
+  2.50.1 (Apple Git-155), Python 3.9.6, bash 3.2.57, shellcheck 0.11.0, awk 20200816) match the
+  installed tools exactly, including a fresh check of the user's shell alias carrying
+  `--allow-dangerously-skip-permissions` (Task 9's own claim); both binary-extracted strings (`Valid
+  types are: allow, deny, ask, defer` at one `strings` offset, the full `bypassPermissions` sentence at
+  another) are verbatim present in the installed Claude Code 2.1.233 binary; `--bare`, both spellings of
+  `--list-cmds`, `--attr-source`'s value-consuming behavior, and `--exec-path`'s bare-vs-`=` split all
+  reproduced exactly as the spec states; the "18 hook scripts / 8 `*.test.sh` suites" count, and the
+  224-line / 198-line file counts, are exact as of this HEAD (`a5de681` and current HEAD agree, since
+  neither sweep commit touched the hooks); ADR 0029 is genuinely free against both `origin/main` (tops
+  out at 0026) and the local `0027`-holding marker-gate worktree; every other `file:line` citation I
+  checked (`doc-guard.sh:91-100`, `:127`; `merge-guard.sh:82`, `:93`; `classify-pr-command.py:38-45`;
+  `classify-git-command.py:79-110`, `:90-105`, `:31-40`, `:104`; `judge-guard.sh:230`;
+  `feature-sync-guard.sh:136`) points at the text quoted, exactly.
+
+### Waivers
+
+_None recorded (round 4) — no waived ids were provided, and none of the finding above is being waived
+on this judge's own initiative._
