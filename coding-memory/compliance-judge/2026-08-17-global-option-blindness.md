@@ -401,3 +401,130 @@ All three **CLOSED**, re-derived rather than re-read:
 
 _None recorded (round 4) — no waived ids were provided, and none of the finding above is being waived
 on this judge's own initiative._
+
+## Round 5 — 2026-08-17
+
+**Verdict: FAIL** (confidence: high) — 5th consecutive FAIL. Already escalated to the user after
+round 3; this is a status update on that escalation, not a new trip.
+
+### Layman summary
+
+Round 4's single problem — two `git-guard.sh` line numbers that pointed at the wrong code because
+this branch pulled in ~140 unrelated lines from another PR — is genuinely fixed. I re-derived both
+from scratch rather than trusting the spec's own "corrected" note: `has_fact PUSH_FORCE` really is
+at line 280 and `if has_fact COMMIT && on_main; then` really is at line 292 on this branch's current
+HEAD, Task 3 now names the block by its literal source text as a second, line-number-independent
+anchor, and the neighbouring `classify-git-command.py` citations (`:150`, `:152`, `:169`) still hold
+exactly. The round-4 non-blocking note is also applied correctly: the bucket-1 paragraph no longer
+claims every harmless option lives in "the union of the two Examples tables" — it now explicitly
+carves out `--attr-source`, which is scenario-backed but not table-backed.
+
+I then did what this round's brief asked and re-checked the file's *other* citations rather than
+assuming the one named fix was the only thing that needed eyes, since it's a small delta but the
+brief says to judge the whole spec. Almost everything held: I independently reproduced every listed
+git 2.50.1 behavior (`--bare` making git read the cwd itself as the repo, both spellings of
+`--list-cmds`, `--attr-source`'s space-form value-consumption, `--exec-path`'s bare-vs-`=` split),
+confirmed both binary-extracted strings from the Claude Code 2.1.233 executable itself (`Valid types
+are: allow, deny, ask, defer`; the `bypassPermissions` sentence), confirmed the user's shell alias
+really does carry `--allow-dangerously-skip-permissions` (Task 9's premise), confirmed all five other
+pinned tool versions, confirmed the "18 hook scripts / 8 `*.test.sh` suites" count and both file line
+counts (224, 198) are exact as of this HEAD, confirmed ADR 0029 is free against `origin/main` and
+against the sibling `feature/verification-marker-gate` worktree that actually holds ADR 0027, and
+walked every remaining `file:line` citation in the document (`doc-guard.sh:91-100`/`:127`,
+`git-guard.test.sh:226`/`:252-259`, `doc-guard.test.sh:66-76`/`:68`, `merge-guard.sh:82`/`:93`,
+`classify-pr-command.py:38-45`, `classify-git-command.py:31-40`/`:79-110`/`:90-105`/`:104`,
+`judge-guard.sh:230`, `feature-sync-guard.sh:136`, and the cross-branch citation
+`verification-marker-gate.md:781-796`) — all point exactly at the text the spec quotes or describes.
+
+One did not hold, and it's the same species of defect as round 4's, just relocated. The Scenarios
+section still says: *"The house already solves this by hand-mutating the source and restoring it
+(`docs/features/git-guard-detached-head.md:743-785`, `memsearch-freshness.md:1282`)."* The first
+citation is accurate — I opened it and it really does narrate mutate-the-hook / confirm-red /
+`git checkout --` restore / diff-clean. The second is not: `memsearch-freshness.md`'s line 1282, as
+it stands right now, reads *"wedged-run all render their intended state. The live file has no run
+stamps yet, so the"* — the middle of a **live-smoke-test** bullet, not a mutate-and-restore bullet.
+The nearest bullet that actually is about mutation testing sits just above it (lines 1276–1280,
+"Mutation check: 8 mutations, 7 caught") but doesn't itself narrate a restore step either; the
+passage that actually matches the claim — revert, observe both tests fail, restore, 74 pass — is much
+further down, at lines 1347–1348 and 1380. I also checked whether this could be explained the way
+round 4's citation drift was (the cited file moved after the citation was written): it isn't — that
+file's last commit is 2026-08-08, nine days before this citation was written on 2026-08-17, so the
+citation was wrong the moment it was added, not made wrong by later drift elsewhere. This is a small,
+non-load-bearing citation (the paired `git-guard-detached-head.md` citation already carries the
+claim on its own, and Task 3b's actual requirement — hand-mutate, no env var — is unambiguous with or
+without it), but it is the identical rule this card has now failed a round over once already: a
+citation written down and not verified before being asserted as fact.
+
+### Round-4 violation — verification of the fix
+
+`core-conduct/stale-line-citation` — **CLOSED** for the citation it named, re-derived rather than
+re-read:
+
+- `grep -n "has_fact PUSH_FORCE"` → `280:if has_fact PUSH_FORCE; then`, matching the spec's updated
+  `:280` exactly.
+- `grep -n "has_fact COMMIT && on_main"` → `292:if has_fact COMMIT && on_main; then`, matching the
+  spec's updated `:292` exactly, and Task 3 now also names this block by its literal source text
+  (`if has_fact COMMIT && on_main; then`) so an implementer isn't solely dependent on the number.
+- The neighbouring `classify-git-command.py` citations (`:150` `subcommand, rest = argv[1], argv[2:]`,
+  `:152` `if subcommand == "commit":`, `:169` `elif subcommand == "push":`) all still hold on this
+  HEAD, confirming these weren't touched by the same drift.
+- The bucket-1 paragraph's over-claim (round 4's non-blocking note) is fixed: it now reads "the two
+  Examples tables in the Scenarios section carry all of them ... except `--attr-source`, which
+  consumes a value and so cannot use either table's shared template; it has two standalone scenarios
+  instead," closing the exact gap the note identified.
+
+Not reused as a violation id this round for that specific citation — it's genuinely fixed. Reused
+below for a *different* citation in the same document, since it's the identical rule and the identical
+failure shape (an unverified `file:line` reference asserted as fact).
+
+### Violations
+
+| id | rule source | rule | where | why |
+|---|---|---|---|---|
+| `core-conduct/stale-line-citation` | `rules/core-conduct.md` | "Verification precedes both the claim and the write-down — never state that something works... until you have actually run it and re-read the output." | Scenarios section, comment above `Scenario: the print-and-exit set changes the message only, never the decision` — "The house already solves this by hand-mutating the source and restoring it (`docs/features/git-guard-detached-head.md:743-785`, `memsearch-freshness.md:1282`)." | `memsearch-freshness.md:1282`, read on the live file today, is `wedged-run all render their intended state. The live file has no run stamps yet, so the` — the middle of a **"Live smoke against the real 7,631-chunk index"** bullet (lines 1281–1283), not a mutate-and-restore bullet. The file's nearby "Mutation check: 8 mutations, 7 caught" bullet (lines 1276–1280) doesn't narrate a restore step either; the passage that actually matches the claimed pattern (revert `chunk.py`'s episodic branch and `_doc_source_type` → both fail; restore → 74 pass; "Original restored byte-identical after both") sits at lines 1347–1348 and 1380. Ruled out drift as the explanation: the cited file's last commit (`e255b2d`, 2026-08-08) predates this citation's addition (`b9c5c9c`, 2026-08-17) by nine days, so the citation did not become stale after the fact — it was never checked against the line it names. The paired `git-guard-detached-head.md:743-785` citation is independently accurate and already carries the underlying claim, so no requirement is left unbuildable, but a second citation next to a verified one that itself turns out unverified is exactly the failure this same spec's own revision-4 note (two paragraphs earlier in this document) calls "a copied citation is laundered, not verified." Fix: repoint to `memsearch-freshness.md:1347-1348` (or `:1380`), or drop the second citation and let the `git-guard-detached-head.md` precedent stand alone. |
+
+### Notes (non-blocking, round 5)
+
+- **Everything else re-derived this round, independently, holds.** Git 2.50.1 behavior for `--bare`
+  (`fatal: not a git repository: '<cwd>'`), both spellings of `--list-cmds` (`=main` prints the command
+  list and exits 0 without reaching `rev-parse`; bare errors `unknown option: --list-cmds`, exit 129),
+  `--attr-source`'s space-form value consumption (`--attr-source HEAD rev-parse …` → `true`;
+  `--attr-source commit -m x -a` → `unknown option: -m`, exit 129, no commit), and `--exec-path`'s
+  bare-vs-`=` split (bare prints the exec path and commits nothing; `=/tmp` commits normally) all
+  reproduced exactly as the spec states. Both binary-extracted strings (`. Valid types are: allow,
+  deny, ask, defer`; the full `bypassPermissions` sentence) are verbatim present in the installed
+  Claude Code 2.1.233 executable (`/Users/marksuyat/.local/bin/claude`). All five other pinned
+  versions match (`git 2.50.1 (Apple Git-155)`, `Python 3.9.6`, `bash 3.2.57 (arm64-apple-darwin25)`,
+  `shellcheck 0.11.0`, `awk 20200816 (BSD)`), including a fresh check that the user's shell alias
+  really does carry `--allow-dangerously-skip-permissions` (Task 9's premise). The "18 hook scripts /
+  8 `*.test.sh` suites" count (`ls hooks/*.sh` minus `*.test.sh` = 18; `ls hooks/*.test.sh` = 8) and
+  both file line counts (`classify-git-command.test.py` = 224, `classify-git-command.py` = 198) are
+  exact on this HEAD. ADR 0029 is genuinely free: `origin/main`'s `docs/decisions/` tops out at 0026,
+  and the sibling `feature/verification-marker-gate` worktree confirms 0027 is taken
+  (`0027-the-marker-is-a-receipt-not-a-grade.md`) with no local 0028 anywhere.
+- **Every remaining `file:line` citation checked, all hold:** `doc-guard.sh:91-100` (the
+  `case "$event" in ... *) exit 0 ;; esac` dispatch, confirmed spanning exactly those lines) and
+  `:127` (`# fails OPEN throughout, because a missing note is not worth blocking work over.`,
+  verbatim); `git-guard.test.sh:226` (`_run_case_common`) and `:252-259` (`assert_stderr`, whose body
+  really does run `2>&1 1>/dev/null` at what is now line 254); `doc-guard.test.sh:66-76`/`:68`
+  (`run_case`, whose body discards both channels at `>/dev/null 2>&1`); `merge-guard.sh:82`
+  (`toks[i:i+3] == ["gh", "pr", "merge"]`) and `:93` (the `MERGE_EXEMPT` stderr `printf`);
+  `classify-pr-command.py:38-45` (the "global flags are legal before the subcommand" comment plus the
+  adjacent-pair scan loop); `classify-git-command.py:31-40` (the GRANTING vs DENYING rule), `:79-110`
+  (the value/safe-flag tables), `:90-105` (the UNRECOGNISED-means-block comment plus
+  `COMMIT_SAFE_FLAGS`), `:104` (`-S`, `--gpg-sign`'s short form); `judge-guard.sh:230` and
+  `feature-sync-guard.sh:136` (both `printf … >&2` exemption lines); and the cross-branch citation
+  `docs/features/verification-marker-gate.md:781-796`, opened in the sibling
+  `feature/verification-marker-gate` worktree — the `UNRESOLVED — user-waived` block starts at line
+  781 and the "blocked on that decision landing" sentence ends the block at line 796, exactly as
+  cited.
+- **The revision-4.1 table's self-corrections also still hold**, checked as history rather than live
+  fact since the spec frames them that way: `git-guard.test.sh:347` really is fixture code unrelated
+  to the exit-code runner (correctly superseded by `:226`), and `doc-guard.sh:27` (the round-3
+  correction) was never the right line for the quoted phrase, which lives at `:127` as the spec now
+  states throughout.
+
+### Waivers
+
+_None recorded (round 5) — no waived ids were provided, and the finding above is not being waived on
+this judge's own initiative._

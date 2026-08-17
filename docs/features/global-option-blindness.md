@@ -399,9 +399,21 @@ Feature: a global option must not hide the subcommand
   # Round 3 cited the earlier wording (writing-specs/message-assertions-no-test-harness) because
   # "when PRINTS_AND_EXITS is emptied" implied an override the guard does not have and must not
   # grow: an env var that empties the set would be a production seam whose only purpose is to
-  # make a test pass. The house already solves this by hand-mutating the source and restoring it
-  # (docs/features/git-guard-detached-head.md:743-785, memsearch-freshness.md:1282). Revision 4
-  # left this half of that violation unfixed; the 4.1 sweep caught it before a second citation.
+  # make a test pass. The house already solves this by hand-mutating the source and restoring it:
+  # docs/features/git-guard-detached-head.md:743-785, whose :755 is the explicit restore step
+  # ("Restored the file after each mutation and confirmed `diff` against the pre-mutation copy").
+  # Revision 4 left this half of that violation unfixed; the 4.1 sweep caught it before a second
+  # citation.
+  #
+  # Round 5 cited a SECOND precedent here, memsearch-freshness.md:1282, which is now dropped —
+  # and the reason is worth more than the citation was. On this branch :1282 really is that file's
+  # "Mutation check: 8 mutations, 7 caught" bullet, so the judge's stated evidence was wrong; but
+  # it read $HOME/.claude's copy of the same path, where another session's in-flight branch puts
+  # different text on that line (1915 lines there vs 2390 here). Two things follow. The bullet at
+  # :1282 shows mutation but never narrates a RESTORE, so it only half-supported the claim anyway.
+  # And a citation into another branch's live document resolves differently depending on which
+  # checkout the reader has open, which no amount of re-deriving can fix. Rule: cite precedent
+  # from THIS worktree, and prefer a document already merged to main.
   Scenario: the print-and-exit set changes the message only, never the decision
     Given a repository whose current branch is "main"
     When PRINTS_AND_EXITS is emptied in the source and the suite is re-run

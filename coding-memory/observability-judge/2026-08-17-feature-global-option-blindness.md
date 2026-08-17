@@ -2,155 +2,127 @@
 
 - repo: `global-option-blindness`
 - branch: `feature/global-option-blindness`
-- head_sha: `b9c5c9c331ad66a68ad2a3d97270e745589c4565`
-- stage: `architecting` (advisory — no code has been written; checklist 0/11, `phase: planning`)
-- ts: `2026-08-17T18:22:42Z`
-- doc judged: `docs/features/global-option-blindness.md`, **revision 4.1**
-- prior rounds: this design was judged twice before, on a different worktree/branch, while the spec
-  lived on `feature/verification-marker-gate` before being rescued onto its own branch (`4c9a431`).
-  Round 1 raised four advisories; round 2 (verdict at `2026-08-17-global-option-blindness.md` in
-  this same directory) found three of the four substantively fixed and one (`PRINTS_AND_EXITS` had
-  no contract/task/test) still open, plus a minor citation drift. This round re-reads the full spec
-  and independently re-derives the load-bearing claims rather than trusting the revision-4.1
-  changelog note.
+- head_sha: `4646a10041614377424305a768445e4a9fd3b5a5`
+- stage: `architecting` (advisory — no source has been written; checklist 0/11, `phase: planning`)
+- ts: `2026-08-17T19:53:25Z`
+- doc judged: `docs/features/global-option-blindness.md`, revision 4.1 (unchanged text label; citations fixed)
+- **This supersedes my prior verdict at this same path**, taken at `b9c5c9c` minutes earlier
+  (`risk=medium confidence=high`, zero errors found). This round is a refresh, triggered because
+  the compliance judge failed revision 4.1 on round 4 (`core-conduct/stale-line-citation`) after my
+  prior read, and commit `4646a10` fixed it. I did not re-litigate anything my prior round already
+  passed; I re-verified only the delta and re-checked whether it changes the three open concerns.
 
 ## What was changed
 
-Same underlying design throughout: four PreToolUse guard hooks decide what a Bash command does by
-reading its first two words, but both `git` and `gh` accept options before the subcommand, so
-`git -C . push --force` and `gh -R o/r pr merge 5` are invisible to every guard — measured
-end-to-end. Two revisions happened since the last judge round. Revision 3 closed round 2's one open
-finding (`PRINTS_AND_EXITS` now has a task, message-only wiring, and Gherkin coverage including a
-hand-run mutation scenario) and fixed the `doc-guard.sh:27`→`:127` citation. Revision 4 added
-groundwork tasks (0a–0c) after a self-diagnosed pattern: three straight revisions had stated a
-requirement — "the `ask` decision travels on stdout" — with no harness in this repo able to check
-it. Revision 4.1 is a pre-dispatch sweep that caught its **own** premise wrong (every one of
-revision 4's four measured claims about the harnesses turned out incorrect on re-count) plus several
-requirements-with-no-failing-scenario, and replaced the acceptance measure with the pair `(exit
-code, stdout decision)` after finding three of six defect-table rows still read `rc=0` after the fix.
+A ~26-line, three-hunk documentation fix, nothing else touched:
+
+1. Two `git-guard.sh` citations that had gone stale — the design was written on a sibling worktree
+   where they pointed at `:142`/`:152`; this branch was cut *after* a merge inserted ~140 lines
+   above them, so the numbers silently landed inside an unrelated comment block. Corrected to
+   `:280`/`:292`, with a new warning telling the reader to `grep -n` rather than trust the number,
+   and an honest note recording exactly how and why the old numbers rotted.
+2. Task 3 now names its target block by literal source text (`` the `if has_fact COMMIT && on_main;
+   then` block ``) in addition to the line number — a citation that survives the next line-count
+   drift, not just a corrected number.
+3. The bucket-1 paragraph no longer claims its membership is "the union of the two Examples
+   tables"; it now says the two tables cover everything except `--attr-source`, which has its own
+   standalone scenarios instead.
 
 ## Does it do what you wanted?
 
-Yes, and the self-correction pattern is the strongest part of this trajectory. I independently
-re-derived essentially every load-bearing citation and measurement in the current spec against the
-real files rather than trusting the document's own claims:
+Yes. I independently re-derived every changed citation against the real files rather than trusting
+the commit message:
 
-- **`classify-git-command.py:150/152/169`** (`subcommand, rest = argv[1], argv[2:]`; the `commit`/
-  `push` gates) — match exactly.
-- **`merge-guard.sh:82`** (`toks[i:i+3] == ["gh","pr","merge"]`) — matches.
-- **`classify-pr-command.py:39`** ("global flags are legal before the subcommand") — matches (cited
-  as `:38-45`, the comment block spans that range).
-- **`classify-git-command.py:31`** (GRANTING vs DENYING facts) and **`:91-104`** (`UNRECOGNISED`
-  reasoning / `COMMIT_SAFE_FLAGS`) — both match (cited as `:31-40` and `:90-105`).
-- **`git-guard.test.sh:224`** (`_run_case_common`), **`:252`** (`assert_stderr`), **`:254`**
-  (`2>&1 1>/dev/null`, discarding stdout) — all match exactly, correcting revision 4's wrong `:226`/
-  `:347`.
-- **`doc-guard.test.sh:66-76`** (`run_case`), **`:68`** (`>/dev/null 2>&1`, discarding both channels)
-  — matches, correcting revision 4's `:70`.
-- **`hooks/merge-guard.test.sh` does not exist** — confirmed (`ls` errors `No such file or
-  directory`).
-- **`classify-git-command.test.py` is 224 lines** — confirmed via `wc -l`, correcting revision 4's
-  236.
-- **18 hook scripts, 8 `*.test.sh` suites** — confirmed (26 `*.sh` matches total, 8 of them
-  `*.test.sh`).
-- **`classify-git-command.py` is 198 lines** — confirmed, under the house 400-line limit task 2 must
-  respect.
-- **ADR numbering** — highest ADR on `origin/main` is `0026`; `0027` is real and already taken by
-  the paused marker-gate branch (`9783956 docs(decisions): ADR 0027 — the marker is a receipt, not a
-  grade`), confirming `0029` is the correct next number for this card.
+- `hooks/git-guard.sh:280` is `if has_fact PUSH_FORCE; then` and `:292` is `if has_fact COMMIT &&
+  on_main; then` — both match exactly (`wc -l` confirms the file is 339 lines now, consistent with
+  the ~140-line insertion the spec describes).
+- `hooks/lib/classify-git-command.py:150/152/169` (`subcommand, rest = argv[1], argv[2:]`; the
+  `commit`/`push` gates) still match exactly, as the spec claims.
+- The bucket-1 recount holds arithmetically: the no-value list is 16 options minus `--bare` (15),
+  plus `--exec-path`, `--attr-source`, `--list-cmds` = 18 members. The harmless Examples table
+  carries exactly its 8; the print-and-exit Examples table carries its 7 plus `--exec-path` plus
+  `--list-cmds` (both spellings) = 9 distinct options; `--attr-source` is the 18th, standalone. The
+  corrected sentence is true; the sentence it replaced was not.
 
-I found no citation or measurement error in this revision. That is a meaningfully different state
-than round 2, which found one (`doc-guard.sh:27`, now fixed) and an unbuilt requirement
-(`PRINTS_AND_EXITS`, now built — task 3b wires the set into `git-guard.sh`'s message only, and lands
-both the print-and-exit Examples Outline and a hand-run mutation scenario proving the message and the
-decision never move together). The task-7 "regression signal" gap round 2 flagged — a human-run
-table comparison with no automated counterpart — is now explicitly closed: task 7 requires the
-defect-table rows to be encoded as permanent cases in the task-0a/0b hook-level harnesses, not left
-as a ritual.
+This is a surgical fix — exactly the one blocking violation plus the one non-blocking note the
+compliance judge raised, nothing more. No drive-by edits, no scope creep into unrelated sections.
 
 ## What could go wrong / what I'm unsure about
 
-- **The stderr-surfacing question is real and still open by design.** The spec states, in its own
-  words, that it does not know whether stderr from an exit-0 hook (the new `ask` path) is surfaced
-  anywhere at all, as opposed to stderr from `exit 2`, which is proven. It assigns the answer to task
-  3 rather than guessing. At this design stage that is the right call — asserting an answer without
-  running the check would be exactly the kind of fabricated certainty this house's own conventions
-  forbid — but it means the "traceability" story (prompt text *plus* a stderr line) could collapse to
-  "prompt text only" once task 3 actually runs, and nothing in the design revisits bucket 2's
-  cost/benefit if that happens. Worth a one-line contingency note, not a blocker.
-- **Task 9 is an irreducible manual gate.** It is now blocking, specific (two named sub-checks), tied
-  to the actual permission mode this repo's sessions launch under, and requires pasting the
-  observation rather than asserting a pass — genuinely strong scoping. But it remains a single
-  point-in-time human check with no mechanism to notice if Claude Code's prompt behaviour later
-  changes (version bump, alias edit, mode change). That risk is inherent to the claim being tested,
-  not a design flaw, but it means `execution` can't be a clean pass at this stage.
-- **Task 0c is itself an open question at judgment time.** "Confirm where these suites actually run…
-  If nothing runs them automatically, say so plainly" is honest, but it means the regression-signal
-  story task 7 just strengthened (rows becoming permanent test cases) still rests on an unconfirmed
-  assumption — that anything executes those test files without a human remembering to. This is
-  scoped correctly as groundwork, not deferred indefinitely, so I'm not flagging it as a design gap,
-  just an open item worth watching when task 0c lands.
-- **`audit_trail` is a reasoned trade-off, not a closed gap.** The "no log file" decision is backed by
-  real citations (`merge-guard.sh:93`, `judge-guard.sh:230`, `feature-sync-guard.sh:136` — I did not
-  re-verify these three this round since round 2 already confirmed them and nothing in this revision
-  touched that section) and a sound volume argument (these hooks run on every Bash call). It will be
-  captured in ADR 0029. But six months from now, "how often did `SCOPE_UNKNOWN` fire, and on what"
-  still has no queryable answer — only a one-time prompt string and a stderr line whose own
-  surfacing is unverified. That is an accepted limit, stated as one, which is the correct way to ship
-  it — but it is still a limit.
-- **Asymmetric risk is correctly weighted, and that is worth naming as a positive, not a concern.**
-  Only `merge-guard.sh` fails silently (under-blocking, a merge that should be refused just works);
-  `git-guard.sh` and `doc-guard.sh` fail loud. The design routes the most scrutiny at the one hook
-  that fails quietly — a from-scratch test suite (0b) pinning today's behaviour before the rewrite,
-  and task 6 explicitly proving the *old* behaviour survives before accepting the new cases. This is
-  exactly the right place to spend extra proof, and it's a repeat of the same pattern round 2 already
-  credited, still intact.
+Two questions were asked of this refresh specifically:
+
+**Does the fix change my risk assessment or the three open concerns?** No. The delta does not touch
+task 9 (the manual `ask`-really-prompts check), task 0c (whether the test suites run automatically
+at all), the unverified stderr-surfacing question, or the "no log file" audit_trail trade-off. All
+three concerns from the prior round (`execution`, `success_masking`, `audit_trail`) stand exactly as
+recorded. Risk stays `medium`.
+
+**Is "re-derive, don't trust the number" sufficient for a spec whose citations have now rotted once
+mid-flight, or does something need to fail loudly on a stale citation?** I judge it sufficient at
+this stage, for three reasons, not zero reasons:
+
+- Something already *did* fail loudly here — the compliance judge is the fail-loud mechanism, and
+  it caught this exact defect (round 4) before merge. This episode is evidence the safety net works,
+  not evidence one is missing.
+- Task 3's fix is stronger than a corrected number: pairing the citation with the literal source
+  text (`` the `if has_fact COMMIT && on_main; then` block ``) means a *future* line-count drift
+  degrades the reference to "still findable by search," not to "silently wrong," the way a bare
+  number does. That is the right fix for the failure mode that actually occurred.
+- Building an automated citation-checker for markdown specs (verifying every `file:line` reference
+  against the real file at commit time) would be new tooling with no precedent anywhere else in this
+  repo's hook set, and would itself be scope creep for a feature about bash guard blindness — a
+  second problem grafted onto this one.
+
+The residual risk is real but small: the mitigation is still a *process* instruction ("re-run
+`grep -n`"), not a hard gate — the same category of residual risk task 9 already carries as a
+named, accepted limit. If this branch rebases again before task 3 executes, a third drift is
+possible, though now it would land as "the named block moved," which a text search still finds,
+rather than "the block silently became something else." I would not block on this; I would name it
+as a pattern worth a one-line ADR note (a citation that carries its own anchor text is more durable
+than one that carries only a number) if this pattern recurs on a future card.
 
 ## What I'd double-check before merging (i.e., before task 11 / PR)
 
+Unchanged from the prior round, since nothing in this delta touched them:
+
 - When task 3 runs, record the stderr-surfacing answer plainly, and if it comes back "swallowed,"
-  revisit whether bucket 2's `ask` framing needs a caveat about what the user actually has to rely on
-  (the prompt text alone).
+  revisit whether bucket 2's `ask` framing needs a caveat about what the user actually has to rely on.
 - When task 0c runs, if the answer is "nothing runs these automatically," treat that as a follow-up
-  worth its own line in the ADR — the task-7 automation work is only a regression signal if something
-  executes it.
-- Task 9's fallback path (drop to `deny` and revisit bucket 2) is written but never rehearsed — worth
-  a one-line gut-check on what `deny`'s message would actually say for `SCOPE_UNKNOWN`, since today's
-  `deny` messages are hand-written per guard and this path doesn't have one yet.
-- Nothing else — the citation and measurement layer is unusually solid this round; I would not spend
-  further judge time re-deriving what's already been re-derived twice.
+  worth its own line in ADR 0029.
+- Task 9's fallback path (drop to `deny`, revisit bucket 2) is written but never rehearsed.
+- New this round: when task 3 actually greps `git-guard.sh`, confirm the block still reads `if
+  has_fact COMMIT && on_main; then` verbatim — if a further merge changed that literal text (not
+  just its line number) between now and implementation, the anchor itself needs re-deriving, not
+  just the number beside it.
 
 ## Dimension table
 
 | dimension | verdict | why |
 |---|---|---|
-| intent | pass | Same measured defect throughout; every prior-round finding (round 1's four advisories, round 2's `PRINTS_AND_EXITS` gap and citation drift) was engaged with directly and closed, not reworded or deferred. |
-| execution | concern | Task 9 (does `ask` really prompt) is well-scoped but inherently unautomatable; task 0c (do the suites run automatically at all) is an open question at judgment time, not yet answered. Neither is a design flaw, but neither can be called "works" before it runs. |
-| trajectory | pass | Four straight revisions plus a self-run pre-dispatch sweep, each one naming its own prior wrong measurement rather than silently overwriting it (the revision-4.1 table is a model example); every citation and count I independently re-checked this round matched exactly. |
-| regression | pass | Task 8 dependent suites (including the new `merge-guard` suite), task 5 proves `pr create` unchanged before switching callers, task 3 keeps existing `exit 2` paths byte-identical, task 6 proves *old* `merge-guard` behaviour before accepting new cases. |
-| context_budget | pass | Lives in `docs/features/*`, loaded on demand, not an always-on rule/skill/prompt; the one code file that grows (`classify-git-command.py`, 198 lines today) is explicitly bounded under the house 400-line limit in task 2. |
-| traceability | pass | Every file:line citation checked this round (11 distinct locations across 5 files, 2 test-count claims) matched the real repo exactly; the one drift round 2 found (`doc-guard.sh:27`→`:127`) is fixed. |
-| success_masking | concern | Task 9's manual step and task 0c's unresolved "do these suites run automatically" both mean a green plan could still hide a real gap; mitigated by task 9's blocking/paste-observed framing and by the revision-4.1 fix that stopped an exit-code-only re-run from reporting three still-broken rows as fixed. |
-| intent_drift | pass | Entirely responsive to prior findings; out-of-scope section stays honest about what belongs on the paused marker-gate branch instead. |
-| checkpoint | pass | Explicit per-hook, independent rollback story: each of the three changed hooks reverts on its own without touching the others; task 7's re-run is the acceptance gate and the later regression signal. |
-| audit_trail | concern | Real, reasoned trade-off (no log file, citations accurate, will be captured in ADR 0029) rather than a silent omission — but the underlying gap (no queryable record of how often `SCOPE_UNKNOWN` fires) is unchanged from round 2, and still hinges on the still-unverified stderr-surfacing question. |
+| intent | pass | Same design throughout; the fix addresses exactly the compliance judge's finding plus its one non-blocking note, nothing else. |
+| execution | concern | Unchanged from the prior round — task 9 (manual prompt check) and task 0c (do the suites run automatically) are both still open at judgment time; this delta doesn't touch either. |
+| trajectory | pass | A fourth self-correction cycle handled the same way as the prior three: the root cause is named plainly in the commit message and in the spec itself, and the fix upgrades the citation (adds a literal-text anchor) rather than just patching the number. |
+| regression | pass | Unchanged; the delta doesn't touch any task, scenario, or contract section. |
+| context_budget | pass | Unchanged; lives in `docs/features/*`, loaded on demand. |
+| traceability | pass | I independently re-verified both corrected `git-guard.sh` citations (`:280`, `:292`) and the three `classify-git-command.py` citations against the real files — all match exactly. The bucket-1 recount was independently re-derived arithmetically and holds. |
+| success_masking | concern | Unchanged — task 9's manual step and task 0c's open question remain the two ways a green plan could still hide a real gap. |
+| intent_drift | pass | The fix is scoped to exactly the violation and the one advisory note; no drive-by edits elsewhere in the document. |
+| checkpoint | pass | Unchanged; per-hook independent rollback story untouched by this delta. |
+| audit_trail | concern | Unchanged — the "no log file" trade-off is still a stated limit, not a closed gap. The citation-drift episode itself is a small positive counter-example (the commit message states exactly what was wrong, on which branch, and why, before recording the fix), but it doesn't resolve the underlying `SCOPE_UNKNOWN`-frequency gap. |
 
 ## Concerns
 
-- Whether stderr from an exit-0 (`ask`) hook is surfaced anywhere is stated as unverified and
-  deferred to task 3 — the right call for a design doc, but it means the traceability story could
-  collapse to "prompt text only" once measured, and nothing revisits bucket 2 if it does.
-- Task 9 (does `ask` actually raise a prompt under this repo's real permission mode) is a blocking,
-  well-scoped, but irreducibly manual, one-time check with no mechanism to notice if permission
-  behaviour later changes.
-- Task 0c (do the test suites run automatically at all) is an open question at judgment time; task
-  7's new automated-regression-signal story is only as strong as that answer turns out to be.
-- `audit_trail` remains a stated, ADR-bound trade-off rather than a closed gap — no queryable record
-  of how often the new cannot-tell case fires exists or is planned.
-- Positive, not a concern: the asymmetric-risk routing (extra proof at `merge-guard.sh`, the one
-  silently-failing hook, via tasks 0b and 6) and the revision-4.1 correction of the acceptance measure
-  (exit code alone would have called three still-broken rows fixed) are both exactly the right
-  instincts and worth preserving as the house pattern for future guard-hook features.
+- Unchanged from the prior round: stderr-surfacing on an exit-0 hook is unverified and deferred to
+  task 3; task 9 is a blocking but irreducibly manual, one-time permission-prompt check; task 0c (do
+  the suites run automatically) is an open question at judgment time; `audit_trail`'s "no log file"
+  decision remains a stated, ADR-bound trade-off rather than a closed gap.
+- New, non-blocking: the citation-drift mitigation (re-derive, plus a literal-text anchor) is a
+  process safeguard, not a hard gate. It is proportionate for this feature's scope, but if the same
+  file moves again before task 3 executes, only the number would auto-invalidate itself via the
+  `grep -n` instruction — the anchor text still needs a human to notice if it, too, changed.
+- Positive, not a concern, worth repeating: this round is direct evidence the compliance-judge gate
+  functions as the "fail loudly on a stale citation" mechanism the refresh prompt asked about — it
+  caught the defect before merge, and the fix was root-caused rather than patched blind.
 
 ## Risk / confidence
 
