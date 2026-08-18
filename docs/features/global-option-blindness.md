@@ -712,7 +712,7 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       three files — task 0b needs the identical helpers, and three copies is the DRY violation this
       repo keeps paying for. Every existing case must keep passing unchanged — prove that before
       adding a single new case.
-- [ ] 0b. Create `hooks/merge-guard.test.sh`, which has never existed, using 0a's shared helpers. Pin
+- [x] 0b. Create `hooks/merge-guard.test.sh`, which has never existed, using 0a's shared helpers. Pin
       **today's** behaviour first: `gh pr merge 5` → exit 2, `MERGE_EXEMPT=<reason> gh pr merge 5` →
       allowed with the reason on stderr, an ordinary `git merge` → untouched. This is the baseline the
       rewrite in task 6 must not break, and without it that rewrite has no safety net at all.
@@ -801,3 +801,13 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   synthetic fake hook writing distinct markers to stdout and stderr showed `assert_stdout` correctly
   rejects a stderr-only string and `assert_stderr` correctly rejects a stdout-only string — each
   stream stays isolated from the other, so neither check is blind by construction.
+- **Task 0b — PASS (2026-08-17).** `hooks/merge-guard.test.sh` created (did not exist before),
+  sourcing 0a's `hooks/lib/guard_test_helpers.sh`. Pins the three named behaviours against the
+  current `merge-guard.sh`: `gh pr merge 5` → exit 2 with the GitHub-UI remedy on stderr;
+  `MERGE_EXEMPT="release cut" gh pr merge 5` → exit 0 with `MERGE_EXEMPT=release cut` echoed on
+  stderr; a plain `git merge origin/main` → exit 0, untouched. All 5 assertions (3 exit-code, 2
+  stderr-substring) pass. **Confirmed falsifiable, not vacuous:** a probe re-running the same two
+  stderr assertions against a wrong substring, and the same exit-code check against a wrong wanted
+  code, produced 2/2 FAILs. `shellcheck 0.11.0` on the new file returns only the same SC2016
+  info-level backtick notice that `merge-guard.sh` itself already carries on the identical literal
+  string — no error/warning-level findings.
