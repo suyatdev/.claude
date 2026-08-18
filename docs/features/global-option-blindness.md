@@ -716,9 +716,14 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       **today's** behaviour first: `gh pr merge 5` → exit 2, `MERGE_EXEMPT=<reason> gh pr merge 5` →
       allowed with the reason on stderr, an ordinary `git merge` → untouched. This is the baseline the
       rewrite in task 6 must not break, and without it that rewrite has no safety net at all.
-- [ ] 0c. Confirm where these suites actually run (a runner script, a git hook, or by hand) and
+- [x] 0c. Confirm where these suites actually run (a runner script, a git hook, or by hand) and
       record the answer here. If nothing runs them automatically, say so plainly rather than
-      implying coverage that no one executes.
+      implying coverage that no one executes. **Answer: nothing runs them automatically.** No
+      `.github/workflows/`, no `package.json`/Makefile test script, no `core.hooksPath` override,
+      and the real git hooks directory (`git rev-parse --git-common-dir`, since this is a worktree)
+      holds only unused `.sample` files — no installed `pre-commit`/`pre-push`. Not wired into
+      `settings.json` either (that file drives Claude Code's own PreToolUse hooks, a different
+      mechanism from these git-level suites). Full measurement in `## Verification`.
 
 ### Behaviour
 
@@ -811,3 +816,19 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   code, produced 2/2 FAILs. `shellcheck 0.11.0` on the new file returns only the same SC2016
   info-level backtick notice that `merge-guard.sh` itself already carries on the identical literal
   string — no error/warning-level findings.
+- **Task 0c — PASS (2026-08-17).** Measured, not assumed, across every place a test suite could be
+  wired in: `ls .github/workflows` → no such directory; no `package.json` in the repo at all;
+  no `Makefile`; `git config --get core.hooksPath` → unset (exit 1); no `.husky/`. The real git
+  hooks directory is **not** `.git/hooks` here — this checkout is a worktree, so that path is a
+  file, not a directory — the actual shared hooks live at
+  `` `git rev-parse --git-common-dir`/hooks `` (`/Users/marksuyat/.claude/.git/hooks`), and listing
+  it with `.sample` files filtered out returns **zero** installed hooks. A repo-wide grep for any
+  script that loops over or invokes `*.test.sh` turned up nothing but the suites' own header
+  comments (`Run: bash hooks/<name>.test.sh`) and one unrelated prose comment in the dormant
+  `checkpoint-before-modify.sh`. `.claude/settings.json` doesn't reference any `*.test.sh` file
+  either — it drives Claude Code's own PreToolUse hooks (`git-guard.sh` etc.), a separate mechanism
+  from these git-level test suites. **Conclusion: `git-guard.test.sh`, `doc-guard.test.sh`, and
+  `merge-guard.test.sh` all run only by hand** (`bash hooks/<name>.test.sh`) — there is no
+  automatic execution path today, so their green results are a snapshot from whoever last ran them,
+  not a standing guarantee. Wiring one up is out of scope for this feature (not a task any
+  behaviour row depends on); flagged here rather than left implicit.
