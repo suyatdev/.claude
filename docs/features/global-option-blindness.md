@@ -803,9 +803,10 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       cannot host 5 of the 6 rows. A table only a human re-runs is not a regression signal.
       **All nine measurements (row (a)'s four forms plus b/c/d/e/f) match the "after the fix
       (expected)" column exactly.** Detail and the re-measured table in `## Verification`.
-- [ ] 8. Dependent suites green: `git-guard`, `doc-guard`, **`merge-guard` (new, from 0b)**,
+- [x] 8. Dependent suites green: `git-guard`, `doc-guard`, **`merge-guard` (new, from 0b)**,
       `phase-guard`, `shell_segments`, `classify-git-command`, `classify-pr-command`, `judge-guard`,
-      plus the replay harness.
+      plus the replay harness. **All eight green; the replay harness reports zero regressions
+      against `main` (378/378 pairs identical, 0 relaxed).** Detail in `## Verification`.
 - [ ] 9. ❗🔴 **BLOCKING manual acceptance test — user-run, cannot be automated, and the feature is
       NOT done without it.** Confirm an `ask` decision really raises an interactive prompt **under the
       permission mode this repo's sessions actually launch with** — note that the user's shell alias
@@ -1144,6 +1145,22 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   **Verified:** `git-guard.test.sh` → **151 passed, 0 failed** (143 + 8: 4 `run_case` + 4
   `assert_stdout`). `shellcheck 0.11.0` clean. The throwaway probe repo and scratch payload files
   were deleted after use — nothing left behind.
+- **Task 8 — all green (2026-08-17).** Ran all eight named suites fresh, in one pass:
+  `git-guard.test.sh` 151/151, `doc-guard.test.sh` 19/19, `merge-guard.test.sh` 10/10,
+  `phase-guard.test.sh` 141/141, `shell_segments.test.py` 35/35, `classify-git-command.test.py`
+  114/114, `classify-pr-command.test.py` 59/59, `judge-guard.test.sh` 101/101 — **630 cases total,
+  zero failures.** `phase-guard.test.sh` and `judge-guard.test.sh` were never touched by this
+  feature; running them anyway confirms nothing else on the branch quietly broke them.
+
+  **The replay harness** (`hooks/git-guard.replay.sh <worktree>`) compares this worktree's
+  `git-guard.sh` against a baseline over the same fixture matrix and reports every case where the
+  base BLOCKS and the branch ALLOWS — "never weaker than main" as an automated property, not a
+  claim. Run against local `main` (`da369be`): **63 commands × 6 fixture states = 378 pairs, 378
+  identical, 0 stricter, 0 relaxed.** Zero regressions. This does **not** prove the `ask` mechanism
+  works — the tool only compares exit codes, and both the pre-fix bug (silent allow) and the
+  post-fix `ask` decision exit 0, exactly the blind spot task 7 already named — it proves the
+  narrower, still-valuable thing: nothing this feature touched became WEAKER than `main` at the
+  exit-code level than it already was before this branch existed.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading
