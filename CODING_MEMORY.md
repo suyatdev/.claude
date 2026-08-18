@@ -7064,3 +7064,46 @@ so writing the ADR first would risk documenting a decision task 9 might overturn
 **Next session (or later this one): task 9, with the user.** Two sub-checks: 9a, the prompt
 appears and its text names the triggering option; 9b, declining it actually stops the command.
 Ticking this requires pasting what was observed, not asserting it passed.
+
+## 2026-08-18 — global-option-blindness: task 9 passes, ADR written, judged, PR #54 open — feature done
+
+Same session, continued. Task 9 blocked the previous entry; it's resolved now, and everything after
+it (tasks 10 and 11) landed in the same sitting. Full task-by-task detail: the feature file's own
+`## Verification`, 15 dated bullets total. PR detail: `coding-memory/pr-tracking.md`, the PR #54 entry.
+
+**Task 9, the hard part.** A first test attempt (a different live session) found no prompt and
+looked like a real negative result. It wasn't: **every hook in `settings.json` resolves via an
+absolute `$HOME/.claude/hooks/...` path**, so any session on this machine — regardless of which
+worktree or branch its own files sit on — runs hooks from the ONE shared `~/.claude` checkout,
+which doesn't have this unmerged feature yet. That session ran the old code; the "no prompt" result
+was a false negative from testing the wrong script, not evidence against the fix. Neither a
+same-branch worktree nor a project `settings.local.json` override would have fixed this (confirmed
+against the running 2.1.234 build's own hook-resolution logic, via a dispatched research agent:
+project settings only ADD a hook entry, never replace one). `CLAUDE_CONFIG_DIR` is a true
+substitution — built an isolated copy of `~/.claude` with only this feature's 5 touched files
+swapped in and its own `settings.json` repointed at itself, self-verified the swap before handing
+it to the user, and the real `~/.claude` (and the unrelated live session using it) were never
+touched. The user ran the real interactive test and pasted the verbatim prompt text and outcome —
+both sub-checks passed for real, not asserted.
+
+**ADR 0029** records the structural decision: three buckets (skip / ask-known-risky /
+ask-unrecognised), and why "cannot tell" resolves to an interactive `ask` rather than a silent
+allow (the bug) or a hard deny (rejected — bucket 2 deliberately includes options that are usually
+harmless, and that's only affordable because refusing means asking, not walling off).
+
+**Observability judge ran twice, not once — a self-caught sequencing mistake, not a retry for
+luck.** First run at `f0ba837`: risk=low, confidence=high, and it caught something this session's
+own task 8 had missed (the replay-harness regression check used a stale local `main`; the judge
+independently re-ran it against `origin/main` too, same clean result). Then a README Roadmap
+addition landed *after* that verdict, moving HEAD and invalidating it — `judge-guard.sh` needs an
+exact match. Re-ran rather than reaching for `JUDGE_EXEMPT`, which is for a genuinely exempt PR,
+not a self-inflicted sequencing slip. Second run at `5c479a9`: same verdict, unchanged.
+
+**PR #54 opened against `main`.** The verdict files were committed *after* `gh pr create`
+succeeded, not before, per the standing rule (`feedback_committing_a_verdict_invalidates_it`) — a
+committed verdict moves HEAD and invalidates itself.
+
+**Everything from task 0a through 11 is now closed.** The feature file's frontmatter reads
+`phase: review`. What's left is entirely outside this session's control: GitHub-UI review and
+merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
+the judge flagged this rollout step explicitly, since the fix does nothing until that happens.
