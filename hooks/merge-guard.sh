@@ -11,26 +11,29 @@
 # `MERGE_EXEMPT=<reason> gh pr merge ...` allows the merge and logs the reason —
 # the same convention as judge-guard.sh's JUDGE_EXEMPT.
 #
-# Must also catch the `rtk gh ...` form: the RTK PreToolUse hook (registered
-# ahead of this one in settings.json) may rewrite the command before this guard
-# runs, so a leading `rtk ` wrapper is stripped before classifying.
-#
-# Command classification uses python shlex (same approach as judge-guard.sh):
-# shlex handles the shell quoting a flat bash regex cannot, so the phrase inside
-# an echo, a commit message, or a quoted string is ignored — only a real
-# `gh pr merge` command is caught. Accepted limitation: a chained
-# `foo && gh pr merge` is not caught, the same tradeoff git-guard.sh makes.
+# Classification now calls the SAME shared adjacent-pair-in-a-segment reader
+# hooks/judge-guard.sh uses for `gh pr create` (lib/classify-pr-command.py,
+# generalised for this — docs/features/global-option-blindness.md, task 5) —
+# rather than an inline shlex-only classifier duplicating that logic. The old
+# inline version required "gh", "pr", "merge" to be adjacent AT A FIXED OFFSET,
+# with only ONE leading `rtk` wrapper stripped, so three shapes bypassed it
+# silently: a global flag before the subcommand (`gh -R o/r pr merge 5`), any
+# chained command (`echo hi && gh pr merge 5`), and a STACK of wrappers
+# (`time rtk gh pr merge 5` — only the single literal `rtk` was ever
+# stripped). All three are closed for free by switching to the shared reader,
+# which lexes the whole command into shell segments (`rules/gates.md`'s own
+# chained-command gap) and finds the pair at any position within one.
 #
 # Fails CLOSED when python is unavailable (cannot inspect the command), matching
-# git-guard.sh / judge-guard.sh; fails OPEN on exotic unparseable quoting.
+# git-guard.sh / judge-guard.sh; fails OPEN on exotic unparseable quoting (the
+# shared reader's own accepted-open shapes — see classify-pr-command.py).
 #
-# Regexes live in variables, never inline in `[[ ]]` — a bare `(` or `;` in an
-# inline regex kills bash's parser and a dead script exits non-zero, which
-# PreToolUse reads as a block. Same trap and fix as git-guard.sh.
-#
-# Exit 0 = allow (silent). Exit 2 = blocked, reason on stderr.
+# Exit 0 = allow (silent, or exempted with a reason on stderr). Exit 2 =
+# blocked, reason on stderr.
 
 set -u
+
+CLASSIFIER="$(cd "$(dirname "$0")" && pwd)/lib/classify-pr-command.py"
 
 payload=""
 if [ ! -t 0 ]; then payload=$(cat); fi
@@ -56,36 +59,22 @@ if isinstance(ti, dict):
 ' 2>/dev/null)
 [ -n "$command_line" ] || exit 0
 
-# Classify with python shlex: strip an optional leading `rtk` wrapper and any
-# leading NAME=VALUE env-assignments, capture MERGE_EXEMPT's value (quoted or
-# not), then test whether the actual command is `gh pr merge`.
 classify=$(printf '%s' "$command_line" | "$py" -c '
-import re, shlex, sys
-try:
-    toks = shlex.split(sys.stdin.read())
-except ValueError:
-    # Deliberate fail-OPEN, not a bug: a command that is valid bash but not
-    # shlex-parseable (some exotic shell quoting) is treated as "not a gh pr
-    # merge". Failing closed here would block unrelated commands that merely
-    # contain such quoting, wrong for a momentum guardrail.
-    print("NO"); print(""); sys.exit(0)
-if toks and toks[0] == "rtk":
-    toks = toks[1:]
-assign = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-exempt = ""
-i = 0
-while i < len(toks) and assign.match(toks[i]):
-    name, _, val = toks[i].partition("=")
-    if name == "MERGE_EXEMPT":
-        exempt = val.replace("\n", " ")
-    i += 1
-print("MERGE" if toks[i:i+3] == ["gh", "pr", "merge"] else "NO")
-print(exempt)
-' 2>/dev/null)
+import importlib.util, sys
+
+spec = importlib.util.spec_from_file_location("classify_pr_command", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+kind, exempt = mod.classify(sys.stdin.read(), subcommand=("pr", "merge"), exempt_var="MERGE_EXEMPT")
+sys.stdout.write(kind + "\n" + exempt + "\n")
+' "$CLASSIFIER" 2>/dev/null)
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 
-[ "$kind" = "MERGE" ] || exit 0
+# classify() returns "PR" for a matched pair regardless of which pair was
+# asked for -- see its own docstring ("both are `gh pr <verb>` operations").
+[ "$kind" = "PR" ] || exit 0
 
 # Escape hatch: a non-empty MERGE_EXEMPT reason as a leading env-assignment
 # allows the merge and logs the exemption.

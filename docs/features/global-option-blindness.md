@@ -786,9 +786,12 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       unchanged before switching any caller. **All 51 existing cases re-run unmodified and passed
       before a single new case was added** — the proof this line asks for. Detail in
       `## Verification`.
-- [ ] 6. `merge-guard.sh` calls the shared reader. **Prove the OLD behaviour first** — `gh pr merge 5`
+- [x] 6. `merge-guard.sh` calls the shared reader. **Prove the OLD behaviour first** — `gh pr merge 5`
       still exit 2, `MERGE_EXEMPT=<reason>` still honoured — then that rows (d) and (e) stop being
-      allowed. This is the one guard whose failure mode is silent under-blocking.
+      allowed. This is the one guard whose failure mode is silent under-blocking. **Old baseline
+      (task 0b's suite) re-confirmed passing before touching the file; rows (d) and (e) both closed,
+      plus a third gap (stacked wrappers) inherited for free from the shared reader.** Detail in
+      `## Verification`.
 - [ ] 7. Re-run the full defect table from this spec and paste the result beside the old — **as the
       pair `(exit code, stdout decision)`, not the exit code alone.** Rows (a), (b) and (c) all end at
       `rc=0` after the fix, so an exit-code-only re-run cannot distinguish the fix from the bug; the
@@ -1069,6 +1072,33 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   **Verified:** `classify-pr-command.test.py` → **59 passed, 0 failed** (51 + 8). Line counts:
   `classify-pr-command.py` 68 lines, `classify-pr-command.test.py` 157 — both far under the house
   limit. `merge-guard.sh` does not call this yet — that is task 6, the second caller, next.
+- **Task 6 — RED then GREEN, old behaviour proven first (2026-08-17).** Before touching
+  `merge-guard.sh`, re-ran task 0b's suite as the required "prove the OLD behaviour first" step —
+  5/5 still passing, confirming the baseline this rewrite must not break was genuinely intact going
+  in. Added 5 new cases pinning rows (d) and (e) from the spec's own measured-defect table, both
+  currently silently ALLOWED by the old inline shlex classifier: `gh -R o/r pr merge 5` (a global
+  flag before the subcommand — the old code required `gh`/`pr`/`merge` adjacent at a FIXED offset)
+  and `echo hi && gh pr merge 5` (chained — the old code ran one `shlex.split()` over the whole
+  string with no segment awareness at all, `&&` just became a literal token). Also added a bonus
+  case not named in the defect table but the same species of bug: the old code stripped only ONE
+  literal leading `rtk`, not a stack — `time rtk gh pr merge 5` bypassed it identically. **Red,
+  confirmed for the right reason:** all 3 currently exit 0 (silently allowed) against today's hook.
+
+  **Green:** replaced the inline shlex classifier with a call to task 5's generalised
+  `classify-pr-command.classify()`, `subcommand=("pr","merge")`, `exempt_var="MERGE_EXEMPT"` — same
+  dynamic-import pattern as `git-guard.sh`'s `prints_and_exits_option()`. All three gaps close for
+  free: the shared reader already lexes into shell segments (fixing the chained-command case) and
+  scans for the pair at ANY position within a segment rather than a fixed offset (fixing the global-
+  flag case), and wrapper-stripping already loops (`classify-pr-command.test.py`'s own "wrappers
+  stack" case), fixing the stacked-`rtk` case with no new code at all — a genuinely free win from
+  reuse, not something built for this task specifically.
+
+  **Verified:** `merge-guard.test.sh` → **10 passed, 0 failed** (5 original + 5 new). `judge-guard.
+  test.sh` spot-checked unaffected — 101/101 — confirming the shared classifier's OTHER caller,
+  which this task never touched, still works after `classify-pr-command.py` changed underneath it.
+  `shellcheck 0.11.0`: one pre-existing SC2016 info-level note (the literal backtick in the refusal
+  message, present before this task, unrelated to the rewrite) — no new findings. Line counts:
+  `merge-guard.sh` 90, `merge-guard.test.sh` 87, both far under the house limit.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading

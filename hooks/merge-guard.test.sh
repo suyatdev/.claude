@@ -56,5 +56,32 @@ assert_stderr "$TMP" "  ...exemption reason echoed on stderr" 'MERGE_EXEMPT="rel
 run_case "ordinary git merge -> allow, untouched"             0 'git merge origin/main'
 
 # ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 6).
+# Rows (d) and (e) of the spec's own measured-defect table -- both silently
+# ALLOWED (rc=0) by today's inline shlex classifier, which requires "gh",
+# "pr", "merge" to be adjacent AT A FIXED OFFSET with only ONE leading rtk
+# stripped. Real gh usage puts a global flag before the subcommand, and this
+# repo chains commands constantly -- exactly the two shapes that slipped
+# through, and merge-guard is the one guard whose failure mode here is
+# SILENT under-blocking, not a loud, self-reporting over-refusal.
+# ---------------------------------------------------------------------------
+run_case "row (d): global flag before the subcommand -> block"  2 'gh -R o/r pr merge 5'
+run_case "row (e): chained command -> block"                    2 'echo hi && gh pr merge 5'
+
+# Bonus, inherited for free from the shared reader rather than named in the
+# defect table: the OLD classifier stripped only ONE literal leading "rtk",
+# not a STACK of wrappers -- "time rtk gh pr merge 5" bypassed it the same
+# way row (d)/(e) did. classify-pr-command.py's own suite already proves
+# wrapper-stacking is stripped correctly; this is the hook-level echo of it.
+run_case "stacked wrappers ('time rtk') -> block"                2 'time rtk gh pr merge 5'
+
+# The control this rewrite must not touch: MERGE_EXEMPT still exempts a
+# merge reached through either of the newly-closed shapes.
+run_case "row (d) shape, but exempted -> allow"                  0 'MERGE_EXEMPT=release gh -R o/r pr merge 5'
+assert_stderr "$TMP" "  ...row (d) shape exemption reason echoed on stderr" \
+  'MERGE_EXEMPT=release gh -R o/r pr merge 5' \
+  'merge-guard: exempted (MERGE_EXEMPT=release); allowing the PR merge.'
+
+# ---------------------------------------------------------------------------
 printf '\nmerge-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
