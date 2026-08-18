@@ -760,5 +760,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 3b).
+# PRINTS_AND_EXITS -- message ONLY. The decision (refuse, exit 2) is
+# unchanged from Guard 1's ordinary main-branch refusal; only the reason
+# text must stop implying a commit-to-main that git itself never reaches.
+# ---------------------------------------------------------------------------
+stage
+on_branch main
+for opt in --exec-path --version -v --help -h --html-path --man-path --info-path --list-cmds '--list-cmds=main'; do
+  run_case "prints-and-exits ($opt) -> still exit 2" 2 "git $opt commit -m x -- app.js"
+  assert_stderr "$REPO" "  ...($opt) message says prints and exits" \
+    "git $opt commit -m x -- app.js" 'prints and exits'
+done
+
+# The negative half: the message must NOT claim a commit-to-main happened.
+# One representative case is enough -- there is exactly one message template
+# behind all ten spellings above, not one template per option.
+got_stderr="$(cd "$REPO" && payload 'git --version commit -m x -- app.js' | bash "$HOOK" 2>&1 1>/dev/null)"
+case "$got_stderr" in
+  *"restricted to documentation"*|*"blocked for targeting main"*)
+    printf 'FAIL —   ...message does NOT claim a commit-to-main happened\n  got:\n%s\n' "$got_stderr"
+    fail=$((fail+1)) ;;
+  *)
+    printf 'ok   —   ...message does NOT claim a commit-to-main happened\n'; pass=$((pass+1)) ;;
+esac
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -760,7 +760,7 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       workaround: `git-guard.sh` writes the identical reason text to **both** stderr (house
       convention) and `permissionDecisionReason` (contract-guaranteed), so the record survives
       whichever answer task 9 finds. Full detail in `## Verification`.
-- [ ] 3b. **The `PRINTS_AND_EXITS` message rule gets built, not just written.** Add the set to
+- [x] 3b. **The `PRINTS_AND_EXITS` message rule gets built, not just written.** Add the set to
       `git-guard.sh` — exactly `-v --version -h --help --html-path --man-path --info-path`, bare
       `--exec-path`, and `--list-cmds` in both spellings — wire it to the refusal *message* only, and
       land the two scenarios above with it. The set's invariant is "git never reaches the subcommand",
@@ -772,7 +772,10 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       wiring the set into the decision, and it is the house pattern
       (`docs/features/git-guard-detached-head.md:743-785`). Round 3 cited the previous wording for
       implying an override the guard does not have; revision 4 fixed the other half of that finding
-      and left this half, which is why it is spelled out here.
+      and left this half, which is why it is spelled out here. **Mutation round run and clean —
+      132 passed/11 failed under the emptied set, byte-identical to the pre-implementation red
+      baseline; `diff` against the pre-mutation copy was empty after restore.** Detail in
+      `## Verification`.
       Revisions 1 and 2 each shipped a prose MUST with no task behind it; both judges caught this one
       independently. Do not repeat it a third time.
 - [ ] 4. `doc-guard.sh`: bucket-1 commands become visible; `SCOPE_UNKNOWN` stays exit 0.
@@ -980,6 +983,40 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   non-automatable step. Recorded plainly rather than implied: **the reason text lives in both
   places** (stderr and `permissionDecisionReason`) precisely because which one actually reaches a
   human is not yet known, and task 9 is where that gets settled for real.
+- **Task 3b — RED then GREEN, mutation-round verified (2026-08-17).** Added 11 cases to
+  `git-guard.test.sh`: the 10 print-and-exit spellings, each pinning exit 2 unchanged plus a
+  message containing "prints and exits", and one negative check that the message does NOT claim a
+  commit-to-main (checked directly, not via `assert_stderr`, which has no "must be absent" mode —
+  one representative case is enough, since there is exactly one message template behind all ten
+  spellings, not one per option). **Red, correctly:** all 11 failed with the OLD "restricted to
+  documentation" message; every decision (exit-code) assertion already passed, since Guard 1
+  already refused for the right reason — only the explanation was ever wrong.
+
+  **Green:** added a `prints_and_exits_option()` helper to `git-guard.sh` that dynamically loads
+  `classify-git-command.py` (same `importlib.util` pattern the classifier's own test file already
+  uses) and calls its already-tested `segments()`/`resolve_subcommand()` directly — **no second
+  copy of the global-option walk.** For any segment resolving to a real `commit`, it re-derives the
+  skipped prefix from arithmetic on the tuple already returned (`prefix_len = len(argv) - 2 -
+  len(rest)`) rather than re-walking `argv` a second time, and checks that prefix against a NEW,
+  git-guard.sh-local `PRINTS_AND_EXITS` set — kept out of `classify-git-command.py` on purpose (see
+  "Where the code lives": this is message-only, never a fact). Guard 1 calls it once, up front, and
+  short-circuits to the honest message before either of the two existing exit-2 paths if it hits.
+
+  **The mutation round (not a runtime seam — a literal hand-edit):** snapshotted `git-guard.sh` to
+  scratch, replaced `PRINTS_AND_EXITS` with an empty set in place, re-ran the suite —
+  **132 passed, 11 failed, exactly matching the pre-implementation red baseline number-for-number**
+  (same 11 failures, same 132 passing decisions) — proving the message and the decision are truly
+  decoupled: emptying the set breaks every message assertion and moves not one exit code. Restored
+  from the snapshot and `diff`'d: **zero bytes differ.** `git diff --stat` afterward shows exactly
+  the 58 insertions of the real implementation, confirming no mutation residue survived.
+
+  **Verified:** `git-guard.test.sh` → **143 passed, 0 failed** (132 + 11, all green).
+  `shellcheck 0.11.0` clean on both changed files. `git-guard.sh` is now **435 lines** — over the
+  400-line soft preference, under the 800 hard max. Not flagged as a violation: the spec's own
+  "Where the code lives" section put a hard 400-line gate on `classify-git-command.py` specifically
+  (already met, 285 lines) and named no such gate for `git-guard.sh`; splitting a single PreToolUse
+  hook into multiple sourced files would add a fragile sourcing dependency for marginal benefit,
+  where the guards are already logically related and share helpers (`has_fact`, `current_branch`).
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading

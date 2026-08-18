@@ -288,9 +288,67 @@ if has_fact PUSH_LEASE && on_main; then
   exit 2
 fi
 
+# PRINTS_AND_EXITS -- message selection ONLY, never a decision input. Some
+# bucket-1 global options make git print something and exit WITHOUT ever
+# reaching the subcommand (measured, git 2.50.1: -v/--version, -h/--help,
+# --html-path, --man-path, --info-path always print and exit; bare
+# --exec-path prints the exec path and stops; bare --list-cmds errors
+# "unknown option" and also never reaches a subcommand -- --list-cmds=<group>
+# prints the list and stops. Neither --list-cmds spelling reaches the
+# subcommand, which is the set's actual invariant, not literally "prints").
+# classify() still correctly resolves these to a COMMIT fact -- bucket 1
+# means "skip it, read the subcommand normally" -- so Guard 1 below is still
+# right to refuse, but saying it "blocked a commit to main" would be a LIE:
+# no commit was ever going to happen. Deliberately kept OUT of
+# classify-git-command.py (see the feature's "Where the code lives") and
+# resolved here via resolve_subcommand() -- already tested, never
+# reimplemented -- purely to ask which bucket-1 options a COMMIT segment
+# skipped over; classify()'s own fact stream carries no such record.
+prints_and_exits_option() {
+  printf '%s' "$command_line" | "$py" -c '
+import importlib.util, sys
+
+spec = importlib.util.spec_from_file_location("classify_git_command", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+PRINTS_AND_EXITS = {
+    "-v", "--version", "-h", "--help",
+    "--html-path", "--man-path", "--info-path",
+    "--exec-path", "--list-cmds",
+}
+
+for _assigns, argv in mod.segments(sys.stdin.read()):
+    if len(argv) < 2 or argv[0] != "git":
+        continue
+    subcommand, rest, blocking = mod.resolve_subcommand(argv)
+    if subcommand != "commit":
+        continue
+    # Every token between argv[1] and the resolved subcommand was a bucket-1
+    # skip (blocking is None whenever subcommand is not None) -- re-derive
+    # that same prefix from the tuple resolve_subcommand already returned,
+    # rather than re-walking argv a second time with a second copy of the
+    # walk logic.
+    prefix_len = len(argv) - 2 - len(rest)
+    prefix = argv[1:1 + prefix_len]
+    hit = next((tok.split("=", 1)[0] for tok in prefix
+                if tok.split("=", 1)[0] in PRINTS_AND_EXITS), None)
+    if hit:
+        sys.stdout.write(hit)
+        break
+' "$CLASSIFIER" 2>/dev/null
+}
+
 # --- Guard 1: default-branch commit ---
 if has_fact COMMIT && on_main; then
   checkout_branch="$(current_branch)"
+
+  prints_and_exits="$(prints_and_exits_option)"
+  if [ -n "$prints_and_exits" ]; then
+    printf 'git-guard: this command carries %s, which prints and exits -- git never reaches the subcommand, so nothing would have been committed here.\n' "$prints_and_exits" >&2
+    exit 2
+  fi
+
   files=$(git diff --cached --name-only 2>/dev/null || echo "")
   label="Staged files"
 
