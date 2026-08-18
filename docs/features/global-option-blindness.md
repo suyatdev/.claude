@@ -807,13 +807,16 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       `phase-guard`, `shell_segments`, `classify-git-command`, `classify-pr-command`, `judge-guard`,
       plus the replay harness. **All eight green; the replay harness reports zero regressions
       against `main` (378/378 pairs identical, 0 relaxed).** Detail in `## Verification`.
-- [ ] 9. ❗🔴 **BLOCKING manual acceptance test — user-run, cannot be automated, and the feature is
+- [x] 9. ❗🔴 **BLOCKING manual acceptance test — user-run, cannot be automated, and the feature is
       NOT done without it.** Confirm an `ask` decision really raises an interactive prompt **under the
       permission mode this repo's sessions actually launch with** — note that the user's shell alias
       carries `--allow-dangerously-skip-permissions`, so testing under a default-permissions session
       would prove the wrong thing. Two sub-checks, both required:
       - 9a. the prompt appears, and its text names the triggering option;
       - 9b. declining the prompt actually stops the command.
+
+      **PASS — user-run 2026-08-18, both sub-checks observed and pasted, not asserted.** Real
+      transcript in `## Verification`.
 
       Hooks *running* under bypassed permissions is proven (binary quote above); `ask` *prompting* is
       not, and **no automated test can ever close this** — it is the one claim in this feature that
@@ -1161,6 +1164,52 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   post-fix `ask` decision exit 0, exactly the blind spot task 7 already named — it proves the
   narrower, still-valuable thing: nothing this feature touched became WEAKER than `main` at the
   exit-code level than it already was before this branch existed.
+- **Task 9 — PASS, user-run 2026-08-18.** A first attempt, from a different live session, found
+  no prompt at all — but that session was running hooks from `$HOME/.claude/hooks/git-guard.sh`,
+  an **absolute path baked into every hook entry in `settings.json`** (confirmed: `grep -c
+  '\$HOME/\.claude' settings.json` → 17, every single hook, not just this one). `$HOME` resolves
+  to the real home directory regardless of which worktree or branch a session's own files are on,
+  so that session ran the OLD, pre-fix script — the negative result was a false negative from
+  testing the wrong code, not evidence against the feature. **A same-branch worktree would not
+  have fixed this either** — its `settings.json` carries the identical `$HOME/.claude/...` paths,
+  so it would still resolve to the one shared file in the real checkout.
+
+  **Isolation method, verified against the running 2.1.234 build rather than assumed:** researched
+  whether a project-level `settings.local.json` or the `--settings` CLI flag could override a
+  hook's command path. Neither does — both **add** hook entries alongside the existing ones rather
+  than replacing them (confirmed against the binary's own hook-resolution logic and the
+  `--settings` flag's own help text, "load **additional** settings from"), so either approach would
+  run the OLD script *alongside* the fix rather than in its place. **`CLAUDE_CONFIG_DIR` is a true
+  substitution**, not a layer — every place the binary resolves `~/.claude` (settings, hooks,
+  credentials) reads `process.env.CLAUDE_CONFIG_DIR ?? homedir()/.claude`. Built an isolated test
+  environment: `cp -R ~/.claude` to a scratch directory, overwrote just the five files this feature
+  touched (`git-guard.sh`, `doc-guard.sh`, `merge-guard.sh`, `classify-git-command.py`,
+  `classify-pr-command.py`) with this branch's versions, rewrote all 17 `$HOME/.claude` references
+  in the copy's own `settings.json` to the scratch path (confirmed valid JSON afterward), and
+  self-checked the swapped-in `git-guard.sh` fired correctly before handing it to the user — the
+  real `~/.claude` and the other live session using it were never touched. The user launched their
+  normal `claude` (its `--allow-dangerously-skip-permissions` alias intact, matching the
+  permission mode this task requires) with `CLAUDE_CONFIG_DIR=<scratch>` and ran `git -C . commit
+  -m x`.
+
+  **9a — PASS, pasted verbatim, not summarized:**
+  > Hook PreToolUse:Bash requires confirmation for this command:
+  > This command carries -C ahead of the subcommand, which git-guard cannot account for -- it may
+  > point git at a different repository or change how a pathspec is read. Confirm this is
+  > intended. [settings]
+  > settings.json to update hooks
+  >
+  > Do you want to proceed?
+  > ❯ 1. Yes
+  >   2. No
+
+  The prompt appeared, under the exact permission mode this repo's sessions actually launch with,
+  and its text is exactly `permissionDecisionReason` — naming `-C` directly.
+
+  **9b — PASS.** User selected "No" (option 2). Reported: "it stopped" — the command did not run.
+
+  Scratch `CLAUDE_CONFIG_DIR` test directory deleted after the test; nothing left behind in
+  `~/.claude` or anywhere else persistent.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading
