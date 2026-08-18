@@ -1,10 +1,11 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: feature/global-option-blindness
 revision: 4.1
 compliance_verdict: pass  # round 6, 2026-08-17; subject blob 81fcd3e (spec content at 21f9b37)
 adr: 0029  # 0027 is taken by the paused marker-gate branch; 0028 is reserved for its renumber
+pr: 54  # https://github.com/suyatdev/.claude/pull/54, opened 2026-08-18
 ---
 
 > **Gate status (2026-08-17): OPEN. Compliance round 6 = PASS, and the phase is now
@@ -829,7 +830,9 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       marker-gate branch and 0028 is reserved for its renumber. **Re-confirmed against
       `origin/main` directly (`git ls-tree`), still tops out at 0026.**
       `docs/decisions/0029-three-buckets-and-cannot-tell-asks.md` written.
-- [ ] 11. Observability judge, then PR.
+- [x] 11. Observability judge, then PR. **Judge: risk=low, confidence=high (re-scored once, after a
+      trailing README commit moved HEAD — verdict must match HEAD exactly, not approximately).
+      PR #54 opened against `main`.** Detail in `## Verification`.
 
 ## Verification
 
@@ -1212,6 +1215,36 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
 
   Scratch `CLAUDE_CONFIG_DIR` test directory deleted after the test; nothing left behind in
   `~/.claude` or anywhere else persistent.
+- **Task 11 — done (2026-08-18).** Ran the observability judge at `stage: implementation`, per
+  `running-the-observability-judge`, dispatched to a pane (hook-enforced — judges never run
+  in-process). Gave it all nine test commands and a ten-point decisions summary covering every
+  choice the session made and why, since it cannot see the session itself.
+
+  **First run (`head_sha f0ba837`): risk=low, confidence=high.** It re-ran all nine test commands
+  itself rather than trusting the summary, read the core diff line by line, and caught something
+  this session's own task 8 missed: the replay-harness comparison had used a **stale local `main`**
+  — it independently re-ran the replay against the real, fetched `origin/main` too, and both came
+  back clean (0 relaxed either way), so the earlier finding stood, just now on firmer evidence.
+
+  **Sequencing mistake, caught and fixed in the same pass:** added the README Roadmap entry (below)
+  *after* the judge had already run, which moved `HEAD` and invalidated that verdict —
+  `judge-guard.sh` requires an exact match, not an approximate one. Re-dispatched the judge against
+  the new `HEAD` (`5c479a9`) rather than reaching for `JUDGE_EXEMPT`, which the skill itself says is
+  for a genuinely exempt PR, not a self-inflicted sequencing slip. **Second run: risk=low,
+  confidence=high, unchanged** — it correctly identified the one intervening commit as a
+  no-behaviour-change doc addition and didn't need to re-verify the substance.
+
+  Both verdicts landed in **this worktree's** `coding-memory/observability-judge/` (confirmed no
+  stray duplicate in `$HOME/.claude`'s — the exact gotcha `judge_verdicts_go_to_the_judged_repo`
+  warns about), and were committed **after** `gh pr create` succeeded, not before — committing a
+  verdict moves `HEAD` and would invalidate the very thing `judge-guard.sh` checks.
+
+  **README Roadmap updated** (`writing-project-readmes`'s trigger: a PR delivering a
+  user-visible feature) with a one-line entry pointing at ADR 0029, matching house convention.
+
+  **PR #54 opened** against `main`, full template (plain-language summary, why, testing
+  instructions including 9a/9b's verbatim transcript, change summary and risk assessment) — URL
+  recorded in `coding-memory/pr-tracking.md` and `CODING_MEMORY.md` per `preparing-pull-requests`.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading
