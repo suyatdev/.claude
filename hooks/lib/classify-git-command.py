@@ -153,11 +153,11 @@ def resolve_subcommand(argv):
     """argv[0] == "git". Walk past bucket-1 global options and return the real
     subcommand.
 
-    Returns (subcommand, rest) once a genuine subcommand is found, (None, [])
-    if the line runs out of tokens first, or ("SCOPE_UNKNOWN", <option>) the
-    moment a bucket-2 or bucket-3 option is seen -- once that happens nothing
-    past it is inspected, because git-guard cannot tell which repository or
-    branch the rest of the segment targets.
+    Returns (subcommand, rest, None) once a genuine subcommand is found,
+    (None, [], None) if the line runs out of tokens first, or
+    (None, [], <option>) the moment a bucket-2 or bucket-3 option is seen --
+    once that happens nothing past it is inspected, because git-guard cannot
+    tell which repository or branch the rest of the segment targets.
     """
     i = 1
     while i < len(argv) and argv[i].startswith("-"):
@@ -169,11 +169,11 @@ def resolve_subcommand(argv):
             i += 2
             continue
         if name in GLOBAL_REDIRECT:
-            return "SCOPE_UNKNOWN", name      # bucket 2: known to redirect the repo
-        return "SCOPE_UNKNOWN", name          # bucket 3: unrecognised -- cannot tell, so cannot allow
+            return None, [], name      # bucket 2: known to redirect the repo
+        return None, [], name          # bucket 3: unrecognised -- cannot tell, so cannot allow
     if i >= len(argv):
-        return None, []
-    return argv[i], argv[i + 1:]
+        return None, [], None
+    return argv[i], argv[i + 1:], None
 
 
 def commit_scan(rest):
@@ -224,11 +224,11 @@ def classify(src):
     for _assigns, argv in segments(src):
         if len(argv) < 2 or argv[0] != "git":
             continue
-        subcommand, rest = resolve_subcommand(argv)
+        subcommand, rest, blocking_option = resolve_subcommand(argv)
 
-        if subcommand == "SCOPE_UNKNOWN":
+        if blocking_option is not None:
             if scope_unknown is None:
-                scope_unknown = rest
+                scope_unknown = blocking_option
             continue  # denying: no COMMIT*/PUSH* fact for THIS segment
         if subcommand is None:
             continue  # ran out of tokens before a subcommand appeared

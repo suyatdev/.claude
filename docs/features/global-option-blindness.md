@@ -919,3 +919,11 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   `git-guard.test.sh` 108/108, `doc-guard.test.sh` 16/16, both unchanged — neither hook acts on the
   new `SCOPE_UNKNOWN` fact yet (that is tasks 3 and 4), so this only confirms the classifier's CLI
   contract (stdin in, sorted fact lines out) held.
+  **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
+  section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
+  `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading
+  the subcommand slot with a `"SCOPE_UNKNOWN"` sentinel string — it passed every test (nothing
+  outside this file touches `resolve_subcommand()` directly; `git-guard.sh`/`doc-guard.sh` only see
+  `classify()`'s external stdout contract, which was unaffected), but it didn't match what the spec
+  actually names. Fixed to the literal 3-tuple and re-verified: 114/114, 108/108, 16/16, all
+  unchanged, 285 lines (no size change — this was a shape fix, not new logic).
