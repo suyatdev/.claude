@@ -778,7 +778,10 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       `## Verification`.
       Revisions 1 and 2 each shipped a prose MUST with no task behind it; both judges caught this one
       independently. Do not repeat it a third time.
-- [ ] 4. `doc-guard.sh`: bucket-1 commands become visible; `SCOPE_UNKNOWN` stays exit 0.
+- [x] 4. `doc-guard.sh`: bucket-1 commands become visible; `SCOPE_UNKNOWN` stays exit 0. **Both
+      already true with zero code changes to this file** — it only ever calls
+      `has_fact COMMIT`, which task 2's classifier fix now answers correctly on both sides.
+      Verified with two new regression cases, not assumed. Detail in `## Verification`.
 - [ ] 5. Generalise `classify-pr-command.py` to a parameterised pair; prove `pr create` behaviour is
       unchanged before switching any caller.
 - [ ] 6. `merge-guard.sh` calls the shared reader. **Prove the OLD behaviour first** — `gh pr merge 5`
@@ -1017,6 +1020,27 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   (already met, 285 lines) and named no such gate for `git-guard.sh`; splitting a single PreToolUse
   hook into multiple sourced files would add a fragile sourcing dependency for marginal benefit,
   where the guards are already logically related and share helpers (`has_fact`, `current_branch`).
+- **Task 4 — verified, not implemented (2026-08-17).** Traced `doc-guard.sh` before writing a
+  single line: it calls the SAME `CLASSIFIER`, and its entire dependency on this feature is one
+  line, `has_fact COMMIT || exit 0`. For `git --no-pager commit -m x`, the classifier (task 2)
+  already resolves `commit` normally and emits `COMMIT` — `has_fact COMMIT` is now true where it
+  used to be false, so the existing threshold logic below it runs unchanged and blocks exactly as
+  it would for a plain `git commit -m x`. For `git -C . commit -m x`, the classifier emits only
+  `SCOPE_UNKNOWN\t-C` (no `COMMIT` fact, by the denying-fact suppression rule) — `has_fact COMMIT`
+  is false, so `doc-guard.sh` exits at its very first check, before the threshold logic or any
+  stdout write is even reached. Neither behaviour needed a code change; both were already correct
+  as a transitive consequence of task 2, not something this file had to be taught.
+
+  **Verification, not assumption:** added two cases to `doc-guard.test.sh` — `git --no-pager
+  commit -m x` over a 3-file substantial change blocks (exit 2), and `git -C . commit -m x` over
+  the same staged change stays silent (exit 0, empty stdout — checked directly, confirming
+  git-guard is the only guard that ever prompts for this command, matching the contract's own
+  table). Both passed on the FIRST run, with no implementation step in between — genuinely nothing
+  to fix here, not a red phase skipped. This is still real, not padding: it's a regression guard a
+  future edit to either file could silently break, and nothing before this suite would have caught
+  it. `doc-guard.test.sh` → **19 passed, 0 failed** (16 original + 3 new: 2 `run_case` checks plus
+  the inline empty-stdout check). `shellcheck 0.11.0` clean. Line counts: `doc-guard.sh` 191
+  (unchanged — no edit was made), `doc-guard.test.sh` 175, both well under the house limit.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading
