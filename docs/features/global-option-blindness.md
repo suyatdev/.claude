@@ -792,7 +792,7 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       (task 0b's suite) re-confirmed passing before touching the file; rows (d) and (e) both closed,
       plus a third gap (stacked wrappers) inherited for free from the shared reader.** Detail in
       `## Verification`.
-- [ ] 7. Re-run the full defect table from this spec and paste the result beside the old — **as the
+- [x] 7. Re-run the full defect table from this spec and paste the result beside the old — **as the
       pair `(exit code, stdout decision)`, not the exit code alone.** Rows (a), (b) and (c) all end at
       `rc=0` after the fix, so an exit-code-only re-run cannot distinguish the fix from the bug; the
       table's "after the fix (expected)" column is the thing being matched. This is why 0a comes first.
@@ -801,6 +801,8 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       (d)(e) in the new `merge-guard.test.sh`, and row (f) as a control in
       `classify-pr-command.test.py`. **Not** in the task-1 suite: that file tests fact output only and
       cannot host 5 of the 6 rows. A table only a human re-runs is not a regression signal.
+      **All nine measurements (row (a)'s four forms plus b/c/d/e/f) match the "after the fix
+      (expected)" column exactly.** Detail and the re-measured table in `## Verification`.
 - [ ] 8. Dependent suites green: `git-guard`, `doc-guard`, **`merge-guard` (new, from 0b)**,
       `phase-guard`, `shell_segments`, `classify-git-command`, `classify-pr-command`, `judge-guard`,
       plus the replay harness.
@@ -1099,6 +1101,49 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   `shellcheck 0.11.0`: one pre-existing SC2016 info-level note (the literal backtick in the refusal
   message, present before this task, unrelated to the rewrite) — no new findings. Line counts:
   `merge-guard.sh` 90, `merge-guard.test.sh` 87, both far under the house limit.
+- **Task 7 — re-measured and encoded (2026-08-17).** Probed all nine commands end-to-end through
+  the real hooks (a throwaway `git init -b main` repo for the git-guard rows, matching the
+  original probe's own methodology; the merge-guard and classifier rows don't touch repo state at
+  all), payload shape `{"hook_event_name":"PreToolUse","tool_input":{"command":...}}`, capturing
+  the pair `(exit code, stdout decision)` per the task's own instruction, never the exit code
+  alone:
+
+  | row | command | exit | stdout | matches "after the fix"? |
+  |---|---|---|---|---|
+  | a (`-C .`) | `git -C . commit -m x` | 0 | `ask` JSON, reason names `-C` | ✅ |
+  | a (`--work-tree=.`) | `git --work-tree=. commit -m x` | 0 | `ask` JSON, reason names `--work-tree` | ✅ |
+  | a (`--git-dir=.git`) | `git --git-dir=.git commit -m x` | 0 | `ask` JSON, reason names `--git-dir` | ✅ |
+  | a (`-c k=v`) | `git -c k=v commit -m x` | 0 | `ask` JSON, reason names `-c` | ✅ |
+  | b | `git -C . push --force` | 0 | `ask` JSON, reason names `-C` | ✅ |
+  | c | `git -C . commit -m x` (doc-guard) | 0 | empty | ✅ |
+  | d | `gh -R o/r pr merge 5` | 2 | — | ✅ |
+  | e | `echo hi && gh pr merge 5` | 2 | — | ✅ |
+  | f | `gh pr create` (raw stdin, the classifier's own CLI contract — not JSON) | — | `PR` | ✅ |
+
+  **All nine match.** One methodology slip caught and corrected in the same pass, not silently
+  redone: row (f) was first probed by piping the JSON payload straight into
+  `classify-pr-command.py`, which reads RAW COMMAND TEXT on stdin (it's a library used BY
+  `judge-guard.sh`, which does the JSON extraction itself, not a hook with the JSON-in contract the
+  other five rows share) — that produced a meaningless "NO" against JSON syntax, not a real
+  measurement. Re-probed with `printf 'gh pr create' | python3 classify-pr-command.py` — `PR`,
+  correct — and the wrong result discarded rather than reported.
+
+  **Made it stop being a manual ritual, per the task's own instruction — but redundant work was
+  skipped, not duplicated:** checked each row against the cases tasks 3/4/6 already wrote before
+  adding anything new. Rows (b), (c), (d), (e) turned out to already be encoded byte-for-byte —
+  literally the same command strings, because those tasks were written directly against this same
+  table (row (b) is task 3's `git -C . push --force` force-push case; row (c) is task 4's own
+  `git -C . commit -m x`; rows (d)/(e) are task 6's own, even already labeled "row (d)"/"row (e)"
+  in the test file). Row (f) is the original suite's own case 1, `("gh pr create", "PR", "",
+  "bare invocation")`. Only row (a) needed new cases: task 3 had proven the mechanism with `-C .`
+  plus a pathspec, but never the bare form, and never `--work-tree=.`, `--git-dir=.git`, or
+  `-c k=v` at all. Added all four verbatim to `git-guard.test.sh` (one is a near-duplicate of an
+  existing case on purpose — exact traceability to the table's own text matters more here than
+  avoiding overlap).
+
+  **Verified:** `git-guard.test.sh` → **151 passed, 0 failed** (143 + 8: 4 `run_case` + 4
+  `assert_stdout`). `shellcheck 0.11.0` clean. The throwaway probe repo and scratch payload files
+  were deleted after use — nothing left behind.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading

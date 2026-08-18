@@ -786,5 +786,27 @@ case "$got_stderr" in
 esac
 
 # ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 7).
+# Defect-table row (a), encoded VERBATIM -- the exact four commands the
+# original bug report measured, not just "a similar shape" to what the
+# SCOPE_UNKNOWN block above already covers. Re-running this suite from now
+# on IS re-running that row of the table. (-C . is functionally covered
+# above too, with a pathspec appended; included here anyway, bare, for exact
+# traceability to the table's own text. --work-tree=., --git-dir=.git, and
+# -c k=v are not tested anywhere else in this file.)
+# ---------------------------------------------------------------------------
+on_branch main
+run_case "defect table row (a): -C . -> ask"              0 'git -C . commit -m x'
+assert_stdout "$REPO" "  ...row (a) -C .: ask JSON present" 'git -C . commit -m x' '"permissionDecision":"ask"'
+run_case "defect table row (a): --work-tree=. -> ask"     0 'git --work-tree=. commit -m x'
+assert_stdout "$REPO" "  ...row (a) --work-tree=.: ask JSON present" \
+  'git --work-tree=. commit -m x' '"permissionDecision":"ask"'
+run_case "defect table row (a): --git-dir=.git -> ask"    0 'git --git-dir=.git commit -m x'
+assert_stdout "$REPO" "  ...row (a) --git-dir=.git: ask JSON present" \
+  'git --git-dir=.git commit -m x' '"permissionDecision":"ask"'
+run_case "defect table row (a): -c k=v -> ask"             0 'git -c k=v commit -m x'
+assert_stdout "$REPO" "  ...row (a) -c k=v: ask JSON present" 'git -c k=v commit -m x' '"permissionDecision":"ask"'
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
