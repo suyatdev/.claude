@@ -727,9 +727,15 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
 
 ### Behaviour
 
-- [ ] 1. Red: extend `hooks/lib/classify-git-command.test.py` (exists; **224** lines at `a5de681` —
+- [x] 1. Red: extend `hooks/lib/classify-git-command.test.py` (exists; **224** lines at `a5de681` —
       re-run `wc -l`, do not trust this number, revision 4's said 236) with the Examples-driven cases
-      above; confirm it fails for the stated reason and record the split.
+      above; confirm it fails for the stated reason and record the split. **Re-measured: 224 lines
+      confirmed correct before this edit, 337 after — 36 new cases added.** Split: **78 passed, 36
+      failed** — every failure is one of the 36 new cases, every pre-existing case still passes
+      unchanged, and every failure reads `got []` where a fact was wanted (today's classifier reads
+      `argv[1]` as the subcommand unconditionally, so any leading global option makes the whole
+      segment yield nothing — exactly the bug this feature fixes). Full case list and reasoning in
+      `## Verification`.
       **Scope note:** this suite tests the fact output only — it never runs a hook and never checks an
       exit code (its own docstring). Hook-level cases belong in the 0a/0b harnesses, not here.
 - [ ] 2. Green: `resolve_subcommand()` + the three tables in `classify-git-command.py`; emit
@@ -832,3 +838,49 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   automatic execution path today, so their green results are a snapshot from whoever last ran them,
   not a standing guarantee. Wiring one up is out of scope for this feature (not a task any
   behaviour row depends on); flagged here rather than left implicit.
+- **Task 1 — RED, as intended (2026-08-17).** Extended `hooks/lib/classify-git-command.test.py`
+  with 36 new cases, one per fact-level assertion the Scenarios section actually makes (never a
+  hook-level exit-code or ask-decision claim — those are out of this suite's scope by its own
+  docstring, and land in tasks 3/3b/4 instead):
+  - **8 cases** — bucket-1 table 1 (harmless, no value): each option skipped, subcommand still
+    resolves to `commit`, full `COMMIT`/`COMMIT_PATH`/`COMMIT_PATHSPEC` triple.
+  - **10 cases** — bucket-1 table 2 (print-and-exit): same fact-level outcome as table 1, because
+    `classify()` does not model "prints and exits" — only `git-guard.sh`'s refusal *message*
+    differs for these (task 3b), never the fact.
+  - **2 cases** — `--attr-source`'s own standalone scenarios (bucket 1, but value-consuming, so it
+    fits neither table): consumes an explicit value and still resolves `commit` normally; consumes
+    `commit` itself as its value, leaving `-m` in subcommand position, unrecognised → `SCOPE_UNKNOWN\t-m`
+    and no `COMMIT` fact — a direct, mechanical read of the bucket-3 rule ("any unrecognised token
+    starting with `-` before the subcommand"), not a guess.
+  - **11 cases** — bucket-2 table (repo-redirecting): each option → exactly `SCOPE_UNKNOWN\t<option>`,
+    no `COMMIT` fact for the segment.
+  - **1 case** — bucket 3, an abbreviation nobody enumerated (`--work-tre=/tmp`), named without its
+    value (`split("=", 1)[0]`, the same convention the module already uses for `--opt=value` forms).
+  - **1 case** — a value-consuming bucket-2 option's literal value (`/tmp/x`) proven never mistaken
+    for a subcommand or a pathspec.
+  - **1 case** — `SCOPE_UNKNOWN` suppresses `PUSH`/`PUSH_FORCE` too, not just `COMMIT*` — the
+    contract says "no `COMMIT*`/`PUSH*` fact", but no existing scenario used `push`, so nothing
+    could have failed if an implementer wired the suppression to commit only.
+  - **2 cases** — the "at most once, from the first option" rule, and "a later segment still
+    denies the whole line" — both single-git-segment, so the full expected fact set is unambiguous.
+
+  **One scenario deliberately left OUT of this suite, and why:** "a granting fact in one segment
+  cannot cancel another segment's `SCOPE_UNKNOWN`" is fundamentally a hook-level DECISION claim
+  (the line's `ask` verdict is not downgraded by a granting fact elsewhere on the same line) — and
+  unlike every case above, its full expected `classify()` fact set is genuinely **not** determined
+  by the spec text: whether a `SCOPE_UNKNOWN` segment poisons `commit_scopes` for an *unrelated*,
+  cleanly-scoped commit segment elsewhere on the line is an implementation choice the contract
+  never states either way. Writing a guessed expected value here would smuggle my own assumption
+  into the RED baseline that task 2 is supposed to satisfy. It belongs in `git-guard.test.sh`
+  (task 3), where the actual claim being tested (the decision, not the fact) is unambiguous.
+
+  **Verified, not assumed, that this is a genuine RED:** `wc -l` re-run — 224 lines before this
+  edit (confirms the frontmatter's citation, contradicts revision 4's stale 236), 337 after.
+  `python3 hooks/lib/classify-git-command.test.py` → **78 passed, 36 failed**. All 36 failures are
+  the new cases; all 78 pre-existing cases are byte-identical to before and still pass, so this is
+  new failing coverage, not a regression. Every failure reads `want [...], got []` — today's
+  `classify()` does `subcommand, rest = argv[1], argv[2:]` unconditionally
+  (`hooks/lib/classify-git-command.py:150`), so any leading global option is read as if it were the
+  subcommand itself, `subcommand not in ("commit", "push")`, and the segment silently yields no
+  facts at all. That is the exact defect this feature exists to fix, so every red is red for the
+  right reason.
