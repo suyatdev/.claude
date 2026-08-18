@@ -782,8 +782,10 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       already true with zero code changes to this file** — it only ever calls
       `has_fact COMMIT`, which task 2's classifier fix now answers correctly on both sides.
       Verified with two new regression cases, not assumed. Detail in `## Verification`.
-- [ ] 5. Generalise `classify-pr-command.py` to a parameterised pair; prove `pr create` behaviour is
-      unchanged before switching any caller.
+- [x] 5. Generalise `classify-pr-command.py` to a parameterised pair; prove `pr create` behaviour is
+      unchanged before switching any caller. **All 51 existing cases re-run unmodified and passed
+      before a single new case was added** — the proof this line asks for. Detail in
+      `## Verification`.
 - [ ] 6. `merge-guard.sh` calls the shared reader. **Prove the OLD behaviour first** — `gh pr merge 5`
       still exit 2, `MERGE_EXEMPT=<reason>` still honoured — then that rows (d) and (e) stop being
       allowed. This is the one guard whose failure mode is silent under-blocking.
@@ -1041,6 +1043,32 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   it. `doc-guard.test.sh` → **19 passed, 0 failed** (16 original + 3 new: 2 `run_case` checks plus
   the inline empty-stdout check). `shellcheck 0.11.0` clean. Line counts: `doc-guard.sh` 191
   (unchanged — no edit was made), `doc-guard.test.sh` 175, both well under the house limit.
+- **Task 5 — done (2026-08-17).** `classify-pr-command.py`'s `classify(src)` gained two
+  keyword-defaulted parameters, `subcommand=("pr", "create")` and `exempt_var="JUDGE_EXEMPT"` —
+  today's hardcoded pair and exemption variable, now the defaults rather than the only option.
+  `main()` (the subprocess entry point `judge-guard.sh` actually calls) is untouched, still calling
+  `classify(stdin_text)` with zero extra args, so it hits exactly the same defaults as before —
+  the generalisation is invisible to that caller by construction, not merely by test result.
+
+  **Proof required by this task, run before anything else:** all **51** pre-existing cases in
+  `classify-pr-command.test.py` re-run completely unmodified (still calling bare `classify(cmd)`)
+  and **all 51 passed**, confirming `pr create` behaviour is unchanged before touching any caller.
+  Only then were **8 new cases** added, exercising the parameters themselves rather than
+  re-proving the lexer (chaining, quoting, wrapper-stripping are untouched and already fully
+  proven against `pr create` above — adjacency-matching runs after lexing and does not care which
+  pair it compares, so re-running every one of those shapes against `pr merge` would be redundant):
+  the new pair matches `gh pr merge`, the SAME command does NOT match the old default pair (proves
+  the parameter is live, not decorative), the converse also holds, chaining and a leading global
+  flag still work, `MERGE_EXEMPT` is read correctly from its own segment, and — the one that
+  actually matters — a `JUDGE_EXEMPT=x` prefix does **not** leak into a `MERGE_EXEMPT` lookup,
+  proving the two guards' exemptions stay isolated under the new shared code path exactly as they
+  were under two separate ones. **Confirmed non-vacuous:** probed the isolation case directly —
+  `classify("JUDGE_EXEMPT=x gh pr merge 5", subcommand=("pr","merge"), exempt_var="MERGE_EXEMPT")`
+  returns `("PR", "")`, not `("PR", "x")` — the assertion would have caught a leak if one existed.
+
+  **Verified:** `classify-pr-command.test.py` → **59 passed, 0 failed** (51 + 8). Line counts:
+  `classify-pr-command.py` 68 lines, `classify-pr-command.test.py` 157 — both far under the house
+  limit. `merge-guard.sh` does not call this yet — that is task 6, the second caller, next.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading

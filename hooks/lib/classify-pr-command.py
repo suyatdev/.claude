@@ -27,26 +27,35 @@ from shell_segments import WRAPPERS, segments  # noqa: E402  (path must be set f
 __all__ = ["classify", "WRAPPERS"]
 
 
-def classify(src):
+def classify(src, subcommand=("pr", "create"), exempt_var="JUDGE_EXEMPT"):
     """Return (kind, exempt_reason) for a raw Bash command string.
 
-    kind is "PR" when some shell segment really runs `gh pr create`, else "NO".
-    exempt_reason is the JUDGE_EXEMPT value from the *matching* segment, mirroring bash,
-    where such a prefix binds only to its own command.
+    kind is "PR" when some shell segment really runs `gh <subcommand[0]> <subcommand[1]>`
+    (default: `gh pr create`), else "NO". exempt_reason is the exempt_var value (default
+    JUDGE_EXEMPT) from the *matching* segment, mirroring bash, where such a prefix binds
+    only to its own command.
+
+    Generalised (docs/features/global-option-blindness.md, task 5) from a `pr create`-only
+    reader so merge-guard.sh (task 6) can call the SAME adjacent-pair scan with
+    subcommand=("pr", "merge"), exempt_var="MERGE_EXEMPT" instead of carrying its own inline
+    copy. Both parameters default to today's values, so every existing caller -- this
+    module's own main(), and judge-guard.sh via the subprocess it stays unchanged either way.
     """
+    word1, word2 = subcommand
     for assigns, argv in segments(src):
-        # `gh` must hold the command position, but `pr create` need not be tokens 1-2: global
-        # flags are legal before the subcommand (`gh -R owner/repo pr create`). Requiring the two
-        # words ADJACENT keeps the false-positive surface narrow -- quoted text is a single token,
-        # so a commit message mentioning the phrase still cannot produce an adjacent bare pair.
+        # `gh` must hold the command position, but the pair need not be tokens 1-2: global
+        # flags are legal before the subcommand (`gh -R owner/repo pr create`). Requiring the
+        # two words ADJACENT keeps the false-positive surface narrow -- quoted text is a single
+        # token, so a commit message mentioning the phrase still cannot produce an adjacent pair.
         if not argv or argv[0] != "gh":
             continue
         for j in range(1, len(argv) - 1):
-            if argv[j] == "pr" and argv[j + 1] == "create":
+            if argv[j] == word1 and argv[j + 1] == word2:
                 # The exemption name is matched exactly, never by suffix: a suffix match would
-                # hand every *_EXEMPT variable in the repo the power to wave a PR past the gate,
-                # and MERGE_EXEMPT is a real one belonging to merge-guard.sh.
-                return ("PR", assigns.get("JUDGE_EXEMPT", "").replace("\n", " "))
+                # hand every *_EXEMPT variable in the repo the power to wave this check past its
+                # gate -- JUDGE_EXEMPT and MERGE_EXEMPT are two REAL, distinct ones, and a caller
+                # asking for one must never see the other's value.
+                return ("PR", assigns.get(exempt_var, "").replace("\n", " "))
     return ("NO", "")
 
 
