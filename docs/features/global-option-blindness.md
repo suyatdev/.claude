@@ -824,9 +824,11 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       message always names the exact command to proceed (existing `MERGE_EXEMPT=<reason>` pattern),
       **and revisit bucket 2** — its conservatism is only affordable while refusing means prompting.
       Ticking this task requires pasting what was observed, not asserting that it passed.
-- [ ] 10. **ADR 0029** — the three-bucket rule and why cannot-tell asks instead of allowing.
+- [x] 10. **ADR 0029** — the three-bucket rule and why cannot-tell asks instead of allowing.
       Number checked against `origin/main` (highest there is 0026); 0027 belongs to the paused
-      marker-gate branch and 0028 is reserved for its renumber.
+      marker-gate branch and 0028 is reserved for its renumber. **Re-confirmed against
+      `origin/main` directly (`git ls-tree`), still tops out at 0026.**
+      `docs/decisions/0029-three-buckets-and-cannot-tell-asks.md` written.
 - [ ] 11. Observability judge, then PR.
 
 ## Verification
