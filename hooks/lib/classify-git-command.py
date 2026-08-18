@@ -23,6 +23,12 @@ unrecognised command simply yields no facts.
     PUSH_FORCE  some segment runs `git push` with a bare --force / -f AND NO
                 --force-with-lease of its own
     PUSH_LEASE  some segment runs `git push` with --force-with-lease
+    SCOPE_UNKNOWN<tab><option>
+                a global option ahead of the subcommand that this file cannot
+                account for -- it may redirect which repository is inspected, or
+                change what a pathspec means, or simply be unrecognised. Denying:
+                suppresses every COMMIT*/PUSH* fact for THAT segment, emitted at
+                most once per LINE, naming the first triggering option.
 
 Both guards previously matched a regex anchored to the start of the command string, so
 `git add -- x && git commit -m y` -- the shape this repo uses constantly -- never matched
@@ -104,6 +110,72 @@ COMMIT_SAFE_FLAGS = (
     "-S", "--gpg-sign", "--no-gpg-sign",
 )
 
+# Global options resolve_subcommand() walks past before reading the real
+# subcommand (docs/features/global-option-blindness.md, "The rule -- three
+# buckets"). Every member is enumerated here, never inferred -- the same
+# reasoning as COMMIT_SAFE_FLAGS below: an option this file does not name is
+# unrecognised, and unrecognised must not mean "skip".
+
+# Bucket 1a -- takes no value, or an attached `=value` that is never a
+# SEPARATE token, and never redirects the repo or changes what a pathspec
+# means. Recognised by the name before any "=". The spec's two Examples
+# tables (harmless-skip and print-and-exit) name exactly these; the tables
+# differ only in git-guard.sh's refusal MESSAGE for a print-and-exit option
+# (task 3b), never in this classifier's fact.
+GLOBAL_SKIP_NO_VALUE = (
+    "--no-pager", "-p", "--paginate", "-P",
+    "--no-optional-locks", "--no-advice", "--no-replace-objects", "--no-lazy-fetch",
+    "--exec-path", "--version", "-v", "--help", "-h",
+    "--html-path", "--man-path", "--info-path", "--list-cmds",
+)
+
+# Bucket 1b -- also skipped, but CONSUMES the next token as its value.
+# --attr-source is the only member; it cannot share the table above, or the
+# subcommand itself gets swallowed as the option's value (measured against
+# git 2.50.1: `git --attr-source commit -m x -a` errors `unknown option: -m`
+# and commits nothing -- "commit" was consumed as attr-source's value).
+GLOBAL_SKIP_CONSUMING = ("--attr-source",)
+
+# Bucket 2 -- refuse and ask: can redirect which repository is inspected, or
+# changes what a pathspec MEANS, which git-guard's documentation-only
+# exemption is decided from. Checked explicitly, the same shape as
+# COMMIT_SAFE_FLAGS below: anything not in bucket 1 or named here is bucket
+# 3, unrecognised, and gets the identical SCOPE_UNKNOWN treatment -- the
+# asymmetry that lets a future git option land in "ask", never in "allow".
+GLOBAL_REDIRECT = (
+    "-C", "--git-dir", "--work-tree", "--namespace", "--bare",
+    "-c", "--config-env",
+    "--literal-pathspecs", "--glob-pathspecs", "--noglob-pathspecs", "--icase-pathspecs",
+)
+
+
+def resolve_subcommand(argv):
+    """argv[0] == "git". Walk past bucket-1 global options and return the real
+    subcommand.
+
+    Returns (subcommand, rest) once a genuine subcommand is found, (None, [])
+    if the line runs out of tokens first, or ("SCOPE_UNKNOWN", <option>) the
+    moment a bucket-2 or bucket-3 option is seen -- once that happens nothing
+    past it is inspected, because git-guard cannot tell which repository or
+    branch the rest of the segment targets.
+    """
+    i = 1
+    while i < len(argv) and argv[i].startswith("-"):
+        name = argv[i].split("=", 1)[0]
+        if name in GLOBAL_SKIP_NO_VALUE:
+            i += 1
+            continue
+        if name in GLOBAL_SKIP_CONSUMING:
+            i += 2
+            continue
+        if name in GLOBAL_REDIRECT:
+            return "SCOPE_UNKNOWN", name      # bucket 2: known to redirect the repo
+        return "SCOPE_UNKNOWN", name          # bucket 3: unrecognised -- cannot tell, so cannot allow
+    if i >= len(argv):
+        return None, []
+    return argv[i], argv[i + 1:]
+
+
 def commit_scan(rest):
     """(paths named after `--`, whether the file set is UNKNOWABLE).
 
@@ -144,10 +216,22 @@ def classify(src):
     # docstring. Collected first and emitted after the loop because a segment
     # cannot know whether a LATER one will name nothing.
     commit_scopes = []
+    # The option that first triggered SCOPE_UNKNOWN, across the whole line --
+    # "at most once per line, from the first triggering option" (contract).
+    # segments() and resolve_subcommand() both scan left to right, so the
+    # first one found in iteration order IS the first one on the line.
+    scope_unknown = None
     for _assigns, argv in segments(src):
         if len(argv) < 2 or argv[0] != "git":
             continue
-        subcommand, rest = argv[1], argv[2:]
+        subcommand, rest = resolve_subcommand(argv)
+
+        if subcommand == "SCOPE_UNKNOWN":
+            if scope_unknown is None:
+                scope_unknown = rest
+            continue  # denying: no COMMIT*/PUSH* fact for THIS segment
+        if subcommand is None:
+            continue  # ran out of tokens before a subcommand appeared
 
         if subcommand == "commit":
             facts.add("COMMIT")
@@ -185,6 +269,9 @@ def classify(src):
         for scope in commit_scopes:
             for path in scope:
                 facts.add("COMMIT_PATH\t" + path)
+
+    if scope_unknown is not None:
+        facts.add("SCOPE_UNKNOWN\t" + scope_unknown)
 
     return sorted(facts)
 

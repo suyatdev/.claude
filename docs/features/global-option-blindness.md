@@ -738,11 +738,12 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       `## Verification`.
       **Scope note:** this suite tests the fact output only — it never runs a hook and never checks an
       exit code (its own docstring). Hook-level cases belong in the 0a/0b harnesses, not here.
-- [ ] 2. Green: `resolve_subcommand()` + the three tables in `classify-git-command.py`; emit
+- [x] 2. Green: `resolve_subcommand()` + the three tables in `classify-git-command.py`; emit
       `SCOPE_UNKNOWN<tab><option>` **at most once per line, naming the first triggering option**, and
       suppress every `COMMIT*`/`PUSH*` fact for a segment that triggers it — both halves have
       scenarios above, and both were previously contract-only. Check `wc -l` on the file afterwards:
-      198 lines at `a5de681`, house limit 400.
+      198 lines at `a5de681`, house limit 400. **Re-measured: 198 confirmed correct, 285 after —
+      well under the limit.** All 114 cases (78 old + 36 new) pass. Detail in `## Verification`.
 - [ ] 3. Red then green: `git-guard.sh` emits the `ask` JSON on `SCOPE_UNKNOWN`, on **every branch**
       (the check must NOT be nested inside the `if has_fact COMMIT && on_main; then` block —
       `git-guard.sh:292` at `b9c5c9c`, but **`grep -n` it rather than trusting the number**, this
@@ -884,3 +885,37 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   subcommand itself, `subcommand not in ("commit", "push")`, and the segment silently yields no
   facts at all. That is the exact defect this feature exists to fix, so every red is red for the
   right reason.
+- **Task 2 — GREEN (2026-08-17).** Added `resolve_subcommand()` and three tables to
+  `hooks/lib/classify-git-command.py`, following the same "enumerate it explicitly, never infer
+  it" pattern the file already uses for `COMMIT_VALUE_FLAGS`/`COMMIT_SAFE_FLAGS`:
+  - `GLOBAL_SKIP_NO_VALUE` (17 entries) — bucket 1, both Examples tables' no-value / attach-only
+    members combined (they differ only in `git-guard.sh`'s message for print-and-exit, task 3b,
+    never in this file's fact).
+  - `GLOBAL_SKIP_CONSUMING` (`--attr-source` only) — bucket 1, consumes the next token.
+  - `GLOBAL_REDIRECT` (11 entries) — bucket 2, checked explicitly before the bucket-3 fall-through,
+    mirroring `commit_scan`'s own `COMMIT_VALUE_FLAGS → COMMIT_SAFE_FLAGS → "cannot tell"` shape.
+    Bucket 2 and bucket 3 return the identical `SCOPE_UNKNOWN` fact — nothing past a denying
+    option is inspected, so there is no behavioural difference between "known to redirect" and
+    "simply unrecognised" at this layer — but the table stays a real, exercised branch (11 of the
+    36 new cases go through it), not dead documentation.
+
+  `resolve_subcommand()` walks bucket 1, returns `("SCOPE_UNKNOWN", <option>)` the moment anything
+  else starting with `-` is seen, and returns `(None, [])` if the line runs out of tokens first —
+  degrades safely (no fact, matching that nothing committed or pushed) rather than raising.
+  `classify()` now calls it instead of reading `argv[1]` directly, tracks the first
+  `SCOPE_UNKNOWN` option across the whole line (`segments()` and the resolver both scan strictly
+  left to right, so "first seen in iteration order" already IS "first on the line" — no extra
+  bookkeeping needed), and `continue`s past a denied segment before any `COMMIT`/`PUSH` fact could
+  be added for it.
+
+  **Verified, not assumed:** `wc -l` re-run — 198 lines immediately before this edit (confirms the
+  task's own citation), 285 after, well inside the 400-line house limit. `classify-git-command.test.py`
+  → **114 passed, 0 failed** (all 78 old cases plus all 36 new ones from task 1, byte-identical
+  expectations, no test file changes made in this step — the whole point of red-then-green).
+  Backward compatibility argued, not just tested: `resolve_subcommand()` returns `(argv[1], argv[2:])`
+  on the very first iteration whenever `argv[1]` doesn't start with `-`, which is every existing
+  case — so old inputs take an identical code path to before, not just a coincidentally-matching
+  one. Also re-ran the two dependent hook suites, since they call this classifier as a subprocess:
+  `git-guard.test.sh` 108/108, `doc-guard.test.sh` 16/16, both unchanged — neither hook acts on the
+  new `SCOPE_UNKNOWN` fact yet (that is tasks 3 and 4), so this only confirms the classifier's CLI
+  contract (stdin in, sorted fact lines out) held.
