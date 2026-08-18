@@ -6989,3 +6989,35 @@ at `hooks/handoff/slim-session-start.test.sh:188`, rather than inventing a new c
 session's shared helpers. Pin **today's** behaviour first — `gh pr merge 5` → exit 2,
 `MERGE_EXEMPT=<reason> gh pr merge 5` → allowed with the reason on stderr, an ordinary `git merge`
 → untouched — because that is the safety net task 6's rewrite needs and has none without it.
+
+## 2026-08-17 — global-option-blindness: task 0b lands, merge-guard gets its first suite
+
+Restored into `implementation` phase (task 0a landed the prior session on this date; see the
+section above). This session's only work was task 0b, the second of three groundwork tasks —
+`merge-guard.sh` was the one hook script in the repo (of 18) with no `*.test.sh` at all, and the
+spec names it as this feature's sole *silent* failure mode: a rewrite that quietly stopped
+blocking `gh pr merge` would fail open with nothing to say so.
+
+**What landed (commit `e5d0bf2`):** `hooks/merge-guard.test.sh`, sourcing task 0a's
+`hooks/lib/guard_test_helpers.sh` rather than pasting a third copy of `assert_stderr`. Pins exactly
+the three behaviours the spec named, against a bare scratch directory rather than a git repo —
+`merge-guard.sh` only classifies the command string, it never reads or writes the checkout:
+
+- `gh pr merge 5` → exit 2, with the GitHub-UI remedy message on stderr.
+- `MERGE_EXEMPT="release cut" gh pr merge 5` → exit 0, with `MERGE_EXEMPT=release cut` echoed on
+  stderr (confirms the shlex-based value extraction in `merge-guard.sh` unquotes-and-preserves the
+  interior space correctly).
+- A plain `git merge origin/main` → exit 0, untouched.
+
+**Proof, not assertion, that the pins are real:** all 5 assertions (3 exit-code, 2 stderr-substring)
+pass against today's hook. Then, per `feedback_confirm_the_check_can_fail`, a mutation probe
+re-ran the two stderr assertions against a wrong substring and the exit-code check against a wrong
+wanted code — 2/2 FAILed, so the green run above is not vacuous. `shellcheck 0.11.0` on the new
+file returns only the same SC2016 info-level "backticks don't expand in single quotes" notice that
+`merge-guard.sh`'s own source already carries on the identical literal string — accepted, not a
+real finding. Recorded in the feature file's own `## Verification` section, not here.
+
+**Next session: task 0c.** Confirm where `git-guard.test.sh`, `doc-guard.test.sh`, and the new
+`merge-guard.test.sh` actually run — a runner script, a git hook, or only by hand — and record the
+answer in the feature file plainly. If nothing runs them automatically, say that outright rather
+than letting the existence of the suites imply coverage no one executes.
