@@ -336,4 +336,42 @@ if has_fact COMMIT && on_main; then
   fi
 fi
 
+# --- Guard 3: cannot tell which repository or branch this line targets ---
+# SCOPE_UNKNOWN (lib/classify-git-command.py) is a global option ahead of the
+# subcommand this file cannot account for -- it may redirect the repository,
+# change what a pathspec means, or simply be unrecognised. Runs on EVERY
+# branch: the guard cannot tell WHICH branch a redirecting option targets, so
+# on_main() is not even a meaningful question here. Checked LAST, after both
+# guards above: those are proven protections and win outright if they also
+# fire on this line (an existing hard block is never downgraded to a
+# prompt) -- this is strictly additive over what used to be a silent,
+# unexamined allow, which is the whole defect this feature fixes.
+#
+# Unverified whether stderr from an exit-0 hook is surfaced anywhere -- the
+# embedded hooks reference (this binary, 2.1.234) documents `systemMessage`
+# and `suppressOutput` for stdout, and says nothing about stderr for any exit
+# code. A live check would need an actual ask decision to fire, which is
+# task 9's blocking manual acceptance test, not something to trigger here.
+# Conservative assumption either way: permissionDecisionReason is the
+# guaranteed-visible record, so the SAME text also goes to stderr for free --
+# the house convention (merge-guard.sh, judge-guard.sh, feature-sync-guard.sh
+# all `printf ... >&2`), and correct whether or not it turns out redundant.
+scope_tab=$(printf '\t')
+scope_option=$(printf '%s\n' "$facts" | grep "^SCOPE_UNKNOWN${scope_tab}" | head -1 | cut -f2-)
+if [ -n "$scope_option" ]; then
+  reason="This command carries $scope_option ahead of the subcommand, which git-guard cannot account for -- it may point git at a different repository or change how a pathspec is read. Confirm this is intended."
+  printf 'git-guard: %s\n' "$reason" >&2
+  "$py" -c '
+import json, sys
+sys.stdout.write(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "ask",
+        "permissionDecisionReason": sys.argv[1],
+    }
+}, separators=(",", ":")) + "\n")
+' "$reason"
+  exit 0
+fi
+
 exit 0

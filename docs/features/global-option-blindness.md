@@ -744,12 +744,22 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       scenarios above, and both were previously contract-only. Check `wc -l` on the file afterwards:
       198 lines at `a5de681`, house limit 400. **Re-measured: 198 confirmed correct, 285 after —
       well under the limit.** All 114 cases (78 old + 36 new) pass. Detail in `## Verification`.
-- [ ] 3. Red then green: `git-guard.sh` emits the `ask` JSON on `SCOPE_UNKNOWN`, on **every branch**
+- [x] 3. Red then green: `git-guard.sh` emits the `ask` JSON on `SCOPE_UNKNOWN`, on **every branch**
       (the check must NOT be nested inside the `if has_fact COMMIT && on_main; then` block —
       `git-guard.sh:292` at `b9c5c9c`, but **`grep -n` it rather than trusting the number**, this
       file has already moved ~140 lines once mid-spec), and keeps every existing
       `exit 2` path byte-identical in behaviour. Also settle the open question above: **is stderr from
       an exit-0 hook surfaced at all?** Record the answer in this card either way.
+      **Re-measured: `git-guard.sh:292` confirmed correct, unchanged.** New Guard 3 added after both
+      existing guards, before the final `exit 0` — their code is untouched, so byte-identical is true
+      by construction, not just by test result. **Stderr question: left genuinely unresolved, recorded
+      honestly rather than guessed** — no live "ask" has fired yet (that's task 9, and triggering one
+      here to find out would be jumping ahead into a manual, human-supervised acceptance test); the
+      binary's own embedded hooks reference documents `systemMessage` and `suppressOutput` for stdout
+      and says nothing about stderr for any exit code, on either channel. Consequence, not a
+      workaround: `git-guard.sh` writes the identical reason text to **both** stderr (house
+      convention) and `permissionDecisionReason` (contract-guaranteed), so the record survives
+      whichever answer task 9 finds. Full detail in `## Verification`.
 - [ ] 3b. **The `PRINTS_AND_EXITS` message rule gets built, not just written.** Add the set to
       `git-guard.sh` — exactly `-v --version -h --help --html-path --man-path --info-path`, bare
       `--exec-path`, and `--list-cmds` in both spellings — wire it to the refusal *message* only, and
@@ -919,6 +929,57 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   `git-guard.test.sh` 108/108, `doc-guard.test.sh` 16/16, both unchanged — neither hook acts on the
   new `SCOPE_UNKNOWN` fact yet (that is tasks 3 and 4), so this only confirms the classifier's CLI
   contract (stdin in, sorted fact lines out) held.
+- **Task 3 — RED then GREEN (2026-08-17).** Added 14 new cases to `git-guard.test.sh`, covering
+  every hook-level ("git-guard writes/asks/exits") assertion the Scenarios section makes for
+  `SCOPE_UNKNOWN` — including the one deliberately left out of task 1's fact-only suite ("a
+  granting fact in one segment cannot cancel another segment's `SCOPE_UNKNOWN`"), which belongs
+  here precisely because its claim is about the DECISION, not the fact.
+
+  **Red, and confirmed red for the right reason, not the obvious one:** exit code alone cannot
+  tell a silent allow from an ask — both exit 0, exactly task 7's own warning about rows (a)-(c).
+  9 of the 14 new cases therefore passed immediately even against the un-fixed hook (their exit
+  code was already coincidentally right); the other **5 failed**, every one on an
+  `assert_stdout` check for the ask JSON or its reason text — `got` was empty every time, because
+  nothing before this task ever wrote to stdout. That is the real, meaningful red: the classifier
+  already knew (task 2), the hook did not yet act on it.
+
+  **Green:** added Guard 3 to `git-guard.sh`, immediately before the final `exit 0`, after both
+  existing guards — their code is byte-for-byte untouched, so "every existing exit 2 path stays
+  identical" holds by construction, not merely by the unchanged 108 passing cases. Guard 3 greps
+  `$facts` for a `SCOPE_UNKNOWN<tab>` line (the same pattern `commit_pathspec_files()` already uses
+  for `COMMIT_PATH<tab>`, since `has_fact` only does exact-line matches), and on a hit writes the
+  same plain-English reason to both stderr and a compact-JSON `permissionDecisionReason` via `$py
+  -c '...json.dumps(..., separators=(",", ":"))'` — matching the contract's literal example
+  byte-for-byte (Python's default separators insert spaces, which is aesthetic and JSON-legal but
+  not what the contract shows; two of my own assertions failed against the correct-but-differently-
+  spaced output before I tightened the emission rather than loosening the test). Deliberately
+  checked LAST: an existing hard block (a plain commit to `main`, a bare force push) wins outright
+  if it also fires on the same line — this is strictly additive over what used to be a silent,
+  unexamined allow, never a downgrade of a working protection into a dismissible prompt.
+
+  **Verified:** `git-guard.test.sh` → **122 passed, 0 failed** (108 original + 14 new, all green).
+  `doc-guard.test.sh` 16/16 and `classify-git-command.test.py` 114/114 re-run and unaffected
+  (neither file touched). `shellcheck 0.11.0` clean on both changed files, zero findings. Line
+  counts: `git-guard.sh` 377 (under the 400-line house preference), `git-guard.test.sh` 764 (test
+  files in this repo already routinely exceed 400 — `judge-guard.test.sh`, `phase-guard.test.sh` —
+  so this is consistent with existing practice, not a new exception).
+
+  **The open question, answered honestly rather than guessed:** whether stderr from an exit-0 hook
+  is surfaced anywhere remains genuinely unresolved. Checked what's checkable: the hooks reference
+  embedded in the running 2.1.234 binary itself (more authoritative than the docs website, already
+  shown wrong on an adjacent point earlier in this spec) documents exactly two output-visibility
+  fields, `systemMessage` and `suppressOutput` — both about stdout, neither mentions stderr for any
+  hook event or exit code. Searching the same binary's own extractable source for the code path
+  that parses a hook's `permissionDecision` JSON found no stderr-handling logic nearby, though this
+  is inconclusive: `strings` extraction splits on non-printable bytes, not source lines, so it
+  cannot reliably reconstruct control flow in bundled, minified JS. **A live test was ruled out on
+  purpose:** this worktree's `settings.json` does not govern this session's actual hook execution
+  (that lives in the separate `~/.claude` checkout, explicitly off-limits — see the handoff's
+  never-touch list), so triggering a real `ask` decision to observe the result isn't something this
+  session can safely do, and task 9 already reserves that exact act as a human-supervised,
+  non-automatable step. Recorded plainly rather than implied: **the reason text lives in both
+  places** (stderr and `permissionDecisionReason`) precisely because which one actually reaches a
+  human is not yet known, and task 9 is where that gets settled for real.
   **Self-caught correction, before task 3 built on it:** the spec's own "Where the code lives"
   section pins `resolve_subcommand(argv)`'s return shape as the 3-tuple
   `(subcommand, rest, blocking_option)`. The first pass here shipped a 2-tuple instead, overloading

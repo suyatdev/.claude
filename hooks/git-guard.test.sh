@@ -691,5 +691,74 @@ git -C "$REBASE_APPLY_FEAT_DIR" add -- src/app.sh
 run_case_in "$REBASE_APPLY_FEAT_DIR" "row 19: rebase --apply stop (feat/x), source staged -> allow" 0 'git commit -m msg'
 
 # ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 3).
+# SCOPE_UNKNOWN -- git-guard asks rather than silently allowing OR blocking.
+# Exit code ALONE cannot tell a silent allow from an ask: both exit 0. The
+# assert_stdout calls below, checking for the ask JSON, are what actually
+# distinguishes the fix from today's bug (see the spec's own task 7 warning).
+# ---------------------------------------------------------------------------
+stage
+on_branch main
+run_case "SCOPE_UNKNOWN on main -> exits 0 (ask, not a silent allow)" 0 'git -C . commit -m x -- app.js'
+assert_stdout "$REPO" "  ...ask JSON on stdout" \
+  'git -C . commit -m x -- app.js' '"permissionDecision":"ask"'
+assert_stdout "$REPO" "  ...reason text names -C" \
+  'git -C . commit -m x -- app.js' '-C'
+
+on_branch feature
+run_case "SCOPE_UNKNOWN on a non-main branch -> still asks" 0 'git -C . commit -m x -- app.js'
+assert_stdout "$REPO" "  ...asks on a feature branch too, not only main" \
+  'git -C . commit -m x -- app.js' '"permissionDecision":"ask"'
+
+# The Examples table's own branch name, "feature/example", cannot share $REPO
+# with the "feature" branch created above -- git's loose-ref storage cannot
+# hold both a file "feature" and a directory "feature/" side by side -- so
+# this one gets its own throwaway repo.
+FEATURE_EXAMPLE_DIR="$(mktemp -d)"
+git -C "$FEATURE_EXAMPLE_DIR" init -q -b main
+git -C "$FEATURE_EXAMPLE_DIR" config user.email test@example.com
+git -C "$FEATURE_EXAMPLE_DIR" config user.name  test
+printf 'seed\n' > "$FEATURE_EXAMPLE_DIR/seed.sh"
+git -C "$FEATURE_EXAMPLE_DIR" add -A
+git -C "$FEATURE_EXAMPLE_DIR" commit -qm seed
+git -C "$FEATURE_EXAMPLE_DIR" checkout -qb feature/example
+run_case_in "$FEATURE_EXAMPLE_DIR" "SCOPE_UNKNOWN on branch 'feature/example' -> asks" 0 \
+  'git -C . commit -m x -- app.js'
+
+on_branch main
+run_case "force-push protection survives a global option -> asks, not the bare-force block" \
+  0 'git -C . push --force'
+assert_stdout "$REPO" "  ...reason names -C, not the force-push message" \
+  'git -C . push --force' '-C'
+
+run_case "unenumerated abbreviation --work-tre=/tmp -> asks" 0 'git --work-tre=/tmp commit -m x -- app.js'
+assert_stdout "$REPO" "  ...names --work-tre, without its value" \
+  'git --work-tre=/tmp commit -m x -- app.js' '--work-tre'
+
+run_case "redirecting option in a LATER segment -> still asks for the whole line" \
+  0 'echo hi && git -C /x commit -m x -- app.js'
+
+# A granting fact in one segment (a cleanly documented commit) cannot cancel
+# another segment's SCOPE_UNKNOWN. Before this task, the documented commit's
+# facts made Guard 1 fall through cleanly and the line was silently allowed
+# in full -- exactly the hole this guard closes.
+run_case "a granting fact elsewhere on the line does not cancel SCOPE_UNKNOWN -> still asks" \
+  0 'git commit -m a -- docs/a.md && git -C /x commit -m b -- app.js'
+
+# An existing hard block is NOT downgraded to a prompt: a plain commit to
+# main with no global option involved still exits 2 and writes NOTHING to
+# stdout at all -- assert_stdout has no "must be absent" mode, so this is
+# checked directly.
+stage src/app.sh
+run_case "plain commit to main, no global option -> still hard-blocked" 2 'git commit -m msg'
+got_stdout="$(cd "$REPO" && payload 'git commit -m msg' | bash "$HOOK" 2>/dev/null)"
+if [ -z "$got_stdout" ]; then
+  printf 'ok   —   ...no permissionDecision written on an ordinary hard block\n'; pass=$((pass+1))
+else
+  printf 'FAIL —   ...no permissionDecision written on an ordinary hard block\n  want: empty stdout\n  got:\n%s\n' "$got_stdout"
+  fail=$((fail+1))
+fi
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
