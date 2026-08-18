@@ -7021,3 +7021,46 @@ real finding. Recorded in the feature file's own `## Verification` section, not 
 `merge-guard.test.sh` actually run — a runner script, a git hook, or only by hand — and record the
 answer in the feature file plainly. If nothing runs them automatically, say that outright rather
 than letting the existence of the suites imply coverage no one executes.
+
+## 2026-08-17 — global-option-blindness: tasks 0c through 8 land, blocked on task 9
+
+One continuous session carried the feature from the last groundwork task through the entire
+behaviour implementation — 11 commits (`1d12f94` through `eb057f4`), every task 0c–8 ticked, every
+suite green. This is the archive entry for all of it; per-task reasoning, measurements, and
+verification detail live in the feature file's own `## Verification` section (11 dated bullets),
+not duplicated here.
+
+**What landed, in order:** task 0c (measured — no test suite in this repo runs automatically;
+by-hand only, confirmed by checking CI, `package.json`, `core.hooksPath`, and the real
+worktree-resolved git hooks directory, not assumed). Task 1 (RED — 36 new fact-level cases in
+`classify-git-command.test.py`, one deliberately left out because its full expected value depended
+on an unstated implementation choice, not a stated contract — that one moved to task 3 instead).
+Task 2 (GREEN — `resolve_subcommand()` + three bucket tables; caught and fixed its own deviation
+from the spec's pinned 3-tuple return shape before task 3 built on it — a 2-tuple with a sentinel
+string passed every test but didn't match what was written). Task 3 (git-guard's `ask` JSON on
+`SCOPE_UNKNOWN`, checked LAST so an existing hard block always wins; left the "does stderr surface
+on exit 0" question honestly unresolved — no live test was possible from this worktree, since its
+`settings.json` doesn't govern this session's actual hooks). Task 3b (the `PRINTS_AND_EXITS`
+message-only override, verified with a real hand-run mutation round: emptying the set in place
+reproduced the pre-implementation red baseline number-for-number, then restored with a clean
+`diff`). Task 4 (doc-guard needed zero code changes — both behaviours fell out transitively from
+task 2's classifier fix; verified, not assumed, with two new regression cases). Task 5
+(`classify-pr-command.py` generalised to a parameterised pair, all 51 existing cases re-run
+unmodified before touching any caller). Task 6 (merge-guard rewritten onto the shared reader,
+closing rows (d)/(e) plus a bonus stacked-wrapper gap for free). Task 7 (the six-row defect table
+re-measured end-to-end as `(exit code, stdout decision)` pairs, all nine matching "after the fix";
+one probe methodology mistake on row (f) caught and corrected in the same pass rather than
+reported wrong). Task 8 (all eight dependent suites green — 630 cases — plus the replay harness:
+378/378 pairs identical against local `main`, zero regressions).
+
+**Blocked here, not stalled:** task 9 is an explicit ❗🔴 blocking manual acceptance test — whether
+an `ask` decision actually raises an interactive prompt under this repo's actual bypassed-
+permissions launch mode, and whether declining it really stops the command. No automated test can
+close this; it needs a human watching a real prompt appear. Tasks 10 (ADR 0029) and 11
+(observability judge, then PR) both wait on it — task 9's own fallback language ("revisit bucket 2"
+if the prompt is swallowed) means its outcome could still change the design the ADR would document,
+so writing the ADR first would risk documenting a decision task 9 might overturn.
+
+**Next session (or later this one): task 9, with the user.** Two sub-checks: 9a, the prompt
+appears and its text names the triggering option; 9b, declining it actually stops the command.
+Ticking this requires pasting what was observed, not asserting it passed.
