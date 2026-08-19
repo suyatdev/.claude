@@ -1,5 +1,6 @@
 ---
 phase: review
+phase_note: went back to implementation briefly on 2026-08-19 to land the four defects the review audit found, then returned here. See `## Verification`, 2026-08-19.
 model_tier: low
 branch: feature/global-option-blindness
 revision: 4.1
@@ -1260,3 +1261,44 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
   `classify()`'s external stdout contract, which was unaffected), but it didn't match what the spec
   actually names. Fixed to the literal 3-tuple and re-verified: 114/114, 108/108, 16/16, all
   unchanged, 285 lines (no size change — this was a shape fix, not new logic).
+
+- **2026-08-19 — review-phase audit before merge, four defects found and fixed** (numbers 4 and the
+  ADR tally landed in `76ca1dc`; the rest in the commit carrying this bullet). Prompted by a concern that the session which opened PR #54 was on a low tier at ~600k
+  context and may have drifted. It had not: the commit timestamps show that session (08-18
+  11:25–11:47) produced **documentation only** — ADR 0029, the README line, the judge verdict, the
+  PR body — while every code commit landed 08-17. Re-ran all 12 hook suites independently
+  (114/59/35/151/19/10/101/141/30/34/27/19, matching the PR body's stated counts exactly),
+  shellcheck clean, no conflict markers or TODOs, and probed the live behaviour: a chained
+  `echo hi && gh pr merge 5` gives **exit 2 on this branch, exit 0 on the shared `~/.claude` hook**.
+  The replay was additionally re-run against **`origin/main`** — the original run's baseline was
+  local `main`, 23 commits stale and *not* the branch this PR merges into — giving 378/378
+  identical, 0 relaxed, so the no-regressions claim holds against the real merge target.
+  The four defects were all documentation or comments, none in shipped logic:
+  1. `rules/gates.md` still stated the chained-`gh pr merge` gap as open, in **two** bullets
+     (Chained commands, Remote-merge safety) — an always-loaded rule file that would have told
+     every future session the opposite of how `merge-guard.sh` now behaves. Never covered by any
+     checklist task, so this was a planning-phase omission, not late-session drift; the previous
+     feature did do it (`a478186`, "update the gates.md stubs it falsifies"). Now corrected.
+  2. `merge-guard.sh` quoted `classify()`'s docstring as saying "both are `gh pr <verb>`
+     operations" — a phrase that has never appeared in that docstring. Replaced with the actual
+     reason the return value reads `"PR"` for a `("pr","merge")` request.
+  3. `classify-pr-command.py`'s generalisation docstring broke off mid-sentence ("...judge-guard.sh
+     via the subprocess it stays unchanged either way"). Rewritten; the judge-guard claim in it was
+     verified against `judge-guard.sh:191` and this module's `main()`, which passes no arguments.
+  4. Two stale numbers, both re-derived from source rather than recounted: ADR 0029's bucket-1
+     tally (18 Examples **rows**, but **17** distinct options, and 17 + `--attr-source` = 18 for
+     bucket 1 entire), and task 3's "`git-guard.sh:292` confirmed correct, unchanged" — falsified
+     by task 3b in this same PR, which moved that condition to `:343` and put Guard 3 at `:397`.
+     Also added the missing `#54` to the README entry, whose neighbours all cite their PR.
+- **Blocked mid-fix by `phase-guard.sh`, and what that exposed.** Three of the four fixes touch
+  non-exempt paths (`rules/`, `hooks/`, `README.md`; only `docs/*` is exempt). The guard denied
+  them because an unrelated, never-started card — `docs/features/falsify-harness-signatures.md`,
+  `phase: planning`, `branch: none` — is open, and **a card at `phase: review` does not claim its
+  branch**: `phase-guard.sh:387` accepts only `implementation`. That contradicts the same file's
+  own comment at `:422-423` ("`review` counts as well as `implementation`"), and it means a branch
+  in review can never fix what review finds. The guard cannot fix itself either, since
+  `hooks/phase-guard.sh` is exactly the kind of path it blocks. Resolved here, at the user's
+  explicit direction, by returning this card to `phase: implementation` for the duration of the
+  fixes — honest, since four real defects meant the feature was not finished — then back to
+  `review`. **The `phase-guard.sh:387` inconsistency is left open and needs its own card**; it was
+  not touched here, and neither was the other feature's planning card.

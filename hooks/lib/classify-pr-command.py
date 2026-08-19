@@ -38,8 +38,13 @@ def classify(src, subcommand=("pr", "create"), exempt_var="JUDGE_EXEMPT"):
     Generalised (docs/features/global-option-blindness.md, task 5) from a `pr create`-only
     reader so merge-guard.sh (task 6) can call the SAME adjacent-pair scan with
     subcommand=("pr", "merge"), exempt_var="MERGE_EXEMPT" instead of carrying its own inline
-    copy. Both parameters default to today's values, so every existing caller -- this
-    module's own main(), and judge-guard.sh via the subprocess it stays unchanged either way.
+    copy. Both parameters default to today's values, so every existing caller keeps its old
+    behaviour without being touched: this module's own main(), and judge-guard.sh, which
+    reaches classify() through a subprocess and passes neither argument.
+
+    Note the kind is the literal string "PR" for ANY matched pair -- it is a match/no-match
+    signal, not a name for the subcommand that matched. A caller asking for ("pr", "merge")
+    still gets "PR" back; the pair it tested is the one it passed in.
     """
     word1, word2 = subcommand
     for assigns, argv in segments(src):

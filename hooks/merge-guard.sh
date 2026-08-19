@@ -72,8 +72,11 @@ sys.stdout.write(kind + "\n" + exempt + "\n")
 kind=$(printf '%s\n' "$classify" | sed -n '1p')
 exempt_reason=$(printf '%s\n' "$classify" | sed -n '2p')
 
-# classify() returns "PR" for a matched pair regardless of which pair was
-# asked for -- see its own docstring ("both are `gh pr <verb>` operations").
+# classify() returns the literal kind "PR" for ANY matched pair, not a kind
+# named after the pair it was asked for -- so this reads "PR" even though the
+# pair requested above was ("pr", "merge"). The string is the function's
+# match/no-match signal, not a description of the subcommand; which pair was
+# tested is decided by the argument, not read back off the return value.
 [ "$kind" = "PR" ] || exit 0
 
 # Escape hatch: a non-empty MERGE_EXEMPT reason as a leading env-assignment

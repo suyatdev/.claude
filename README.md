@@ -61,7 +61,7 @@
 - [x] Feature-state tracker: surveys which cards, branches, and PRs are in flight and proposes a merge order, backed by a versioned state store and a localhost control server (#51)
 - [x] Per-session pane-split policy with three-lane agent routing (#28)
 - [x] `phase-guard.sh` hook computationally enforcing the phase-frontmatter gate (ADR 0010's deferral overridden by ADR 0011 at the user's gate; #30)
-- [x] Fixed a blind spot where a global option ahead of the subcommand (`git -C .`, `gh -R o/r pr merge`) hid the command entirely from `git-guard`/`doc-guard`/`merge-guard`; now it either passes through, asks for confirmation, or is refused with an honest reason, never silently allowed (ADR 0029)
+- [x] Fixed a blind spot where a global option ahead of the subcommand (`git -C .`, `gh -R o/r pr merge`) hid the command entirely from `git-guard`/`doc-guard`/`merge-guard`; now it either passes through, asks for confirmation, or is refused with an honest reason, never silently allowed (ADR 0029; #54)
 - [ ] Reconcile the remaining files still describing the retired `coding-memory/branches/<branch>.md` workflow
 
 ## New machine?
