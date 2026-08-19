@@ -1,7 +1,7 @@
 ---
-phase: review
-model_tier: low
-branch: feat/tracking-feature-state
+phase: planning
+model_tier: high
+branch: fix/tracker-frontmatter-comment
 ---
 
 # Feature-state tracking with a browser UI
@@ -66,13 +66,30 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 5 — Waves, constraints and graph derivation, including the `## Depends on` reader.
 - [x] 6 — `task-tracker/store.py` + `task-tracker/test_store.py`. Criteria 3-5.
 - [x] 7 — `PORTS.md` entry for the control server, before any bind. Port is **8422**.
-- [x] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.** Every route, refusal and startup abort smoke-verified against a cmux shim; task 9 is what pins them as tests. ⚠️ **The owed edit landed** (2026-08-11, its own commit ahead of task 9): `confirm_surface()` returns `timeout` separately from `unrunnable`, and `CONFIRM_REFUSAL_REASONS` maps the two states to `confirm_timeout`/`confirm_failed` — `grep -n CONFIRM_REFUSAL_REASONS task-tracker/server.py`. §Tasks 8 in the spec half still reads "owes one edit"; correcting that is a spec edit, so it waits for `review`.
-- [x] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**. Not criterion 13. Four files, split at the repo's 800-line ceiling: `test_server.py` (wire contract), `test_server_lifetime.py` (**owns criterion 14** and every startup abort), plus `conftest.py`/`server_harness.py`. Each control was mutation-tested rather than assumed — six deliberate server defects reverted one at a time, every one caught; re-run by mutating a control and requiring its test to fail. ⚠️ **§Tasks 9's `reason` derivation undercounts, and its stated figures are stale** — `_run_send` passes `CONFIRM_REFUSAL_REASONS[state]`, a *computed* reason that no literal-matching `grep` sees. That is the "third emitting shape" the spec predicted but could not name. Re-derive as the spec's block **plus** `set(server.CONFIRM_REFUSAL_REASONS.values())`, which is what `reasons_emitted_in_source()` in `test_server.py` does; correcting the spec half's own count is a spec edit, queued for `review`.
+- [x] 8 — `task-tracker/server.py` to the wire contract in §Design 3. **Task 14 runs immediately after this one.** Every route, refusal and startup abort smoke-verified against a cmux shim; task 9 is what pins them as tests. ⚠️ **The owed edit landed** (2026-08-11, its own commit ahead of task 9): `confirm_surface()` returns `timeout` separately from `unrunnable`, and `CONFIRM_REFUSAL_REASONS` maps the two states to `confirm_timeout`/`confirm_failed` — `grep -n CONFIRM_REFUSAL_REASONS task-tracker/server.py`. §Tasks 8 in the spec half was corrected at `d142643`, in the `review` phase that forbade it earlier; nothing is outstanding on either half.
+- [x] 9 — `task-tracker/test_server.py`: criteria 6, 7, 9, 10, 11, **12 and 14**. Not criterion 13. Four files, split at the repo's 800-line ceiling: `test_server.py` (wire contract), `test_server_lifetime.py` (**owns criterion 14** and every startup abort), plus `conftest.py`/`server_harness.py`. Each control was mutation-tested rather than assumed — six deliberate server defects reverted one at a time, every one caught; re-run by mutating a control and requiring its test to fail. ⚠️ **§Tasks 9's `reason` derivation undercounts, and its stated figures are stale** — `_run_send` passes `CONFIRM_REFUSAL_REASONS[state]`, a *computed* reason that no literal-matching `grep` sees. That is the "third emitting shape" the spec predicted but could not name. Re-derive as the spec's block **plus** `set(server.CONFIRM_REFUSAL_REASONS.values())`, which is what `reasons_emitted_in_source()` in `test_server.py` does; the spec half's own count was corrected at `d142643`, in the `review` phase.
 - [x] 10 — Wire the UI's command buttons to `POST /command`; copyable text where no terminal exists. **Owns criterion 15** — the page's own failure behaviour, which no server test can reach. Handler `0fd5bcd`, buttons `8fe330a`, tests `75b3108` (written and run red first — twelve failures on the absent marker pair). Criterion 15 is 15 tests in `test_ui_commands.py`, falsified by seven handler mutations of which seven were caught. ⚠️ **The handler could not go in a new `.js` file**: the servable set is a closed sixteen-row list pinned in *both* `server.py` and §Design 3, so a new row is a spec edit and reopens criterion 13; an inline `<script>` dies on the CSP's missing `'unsafe-inline'`. It lives fenced inside the `text/x-dc` block and the test slices it out to load in `node`. **Both render modes were confirmed by an actual headless render, not by inspection** — served, the header shows three command buttons, zero copy chips and the token once; over `file://`, zero buttons and three copy chips (`/clear`, `/handoff`, `python3 task-tracker/analyze.py .`). No unresolved `{{ }}` binding in either.
 - [x] 11 — `skills/tracking-feature-state/SKILL.md`. Owns two security controls at launch. Both are written with their failure mode beside them: detaching leaves the parent-death check inert, redirecting `stderr` discards the audit log, and neither shows up in a code read. **The documented launch line was run, not reasoned about** (2026-08-12): `python3 task-tracker/server.py --repo "$PWD"` under the harness's background mode bound this session's real surface, served `/` at `200`, and wrote its startup and audit lines to captured `stderr`; `ps -o ppid=` walked the chain to `server → zsh → claude`, which is what keeps `getppid()` able to change. **Not verified, and not verifiable here:** trigger-routing accuracy — the skill is not discoverable from this worktree, and `skills/_standards/authoring-skills-and-agents.md` records that no eval harness exists in this repo.
 - [x] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`. One row, placed after `managing-session-memory` because both answer "where does this work stand"; the catalog is grouped by activity, not alphabetised. `CLAUDE.md` is the only catalog — every other file mentioning a skill name references it in prose (`grep -rln 'verifying-subagent-commits' --include='*.md' .`), so there is no second list to drift.
 - [x] 13 — Run every suite, record before/after counts in `## Verification` below. All three ran 2026-08-12, **zero failures before or after**; the before-counts came from a throwaway detached checkout of `main` at `1b983d9`, since a run in this tree is an *after* count by definition. `node --version` = v26.5.0, and the `task-tracker/` run reports **no skips at all** — so criterion 5 got its JS-engine oracle and criterion 15 is verified, not degraded. ⚠️ **The guard re-derivation overcounted by one, and is now fixed in place**: `grep -c skipif` totals 15, but `test_server.py:556` guards on `os.geteuid() == 0`, not `node` — the node-guarded figure is 14, via `grep -h 'skipif(NODE is None' task-tracker/*.py | wc -l`. This lived in the `.md` half, **not** the spec half, so it was never a spec edit; an earlier revision of this note said otherwise and was wrong.
 - [x] 14 — Vendor all six remote assets — nine local files. **Runs right after task 8**; owns criterion 13. Closed on the re-score in `§Verification` — both runs match the revised expectation exactly, on the enumerations already recorded; no new browser run was made.
+- [ ] 15 — Fix `_parse_frontmatter`'s blindness to a YAML trailing comment, which makes this
+      repo's own closed-card convention unreadable to this feature's own analyzer.
+      `analyze.py:196` splits each frontmatter line on the first `:` and keeps the remainder
+      verbatim, so `branch: none  # merged via PR #39 (cbb9f60); fix/falsifier-base-pin deleted`
+      is read as a branch *named* that entire string; the `none` test at `analyze.py:269` then
+      misses, and the card raises a false "Where is this branch?" question. Plain `branch: none`
+      is unaffected — which is why only *closed* cards misreport. Measured against the live repo
+      2026-08-19: **3 of 19** `questions[]` are this defect (`falsifier-base-pin`,
+      `memsearch-freshness`, `shell-segments-redirects`), and closing this card at task 16 would
+      have made it 4. **Red first** — a case in `task-tracker/test_analyze.py` built from one of
+      those three real spellings, run and seen to fail before the fix exists. Strip only a comment
+      introduced by whitespace-then-`#`, never a bare `#`, so a branch name legitimately carrying
+      one survives.
+- [ ] 16 — Close the card. Frontmatter to this repo's merged convention — `branch: none  # merged
+      via PR #51 (06e7c9d) …; feat/tracking-feature-state deleted 2026-08-19` — naming this
+      reopen's PR beside it. Observability judge at `implementation` stage pinning the final HEAD,
+      then the PR.
 
 ## Verification
 
@@ -259,7 +276,7 @@ does not matter here only because the skip count was zero.
 The `grep -c skipif` instruction lives only in this `.md` half; the spec half contains no such command
 (`grep -n 'skipif' <spec>` returns two unrelated lines, one of which correctly scopes "three
 `test_store.py` tests"). So it was always editable under the phase gate and cost no compliance
-re-judge — unlike the two genuine spec corrections still queued.
+re-judge — unlike the two genuine spec corrections, which landed at `d142643`.
 
 **`memsearch`'s golden and measurement tests did not run on either side, by configuration.**
 `memsearch/pyproject.toml` sets `addopts = "-m 'not golden and not measurement'"`, which is where the
@@ -267,3 +284,21 @@ re-judge — unlike the two genuine spec corrections still queued.
 either direction — deselected is neither passed nor failed, and the symmetry across before/after is
 what makes the comparison sound, not their absence.
 
+**Review-phase closeout, 2026-08-19.** Two items landed before this card reopened; both are
+permitted at `phase: review`.
+
+- Three notes in this half claimed the two spec corrections of `d142643` were still queued. They
+  were not: `d142643` landed both, but touched only the `.spec.md` half (one file, +18/−6), so the
+  pointers beside them went stale. Corrected in place at tasks 8 and 9 and in the guard-count
+  paragraph above. This is the same defect `d142643`'s own message names — "leaving a known thing
+  described as unknown" — reproduced three times by the commit that fixed two instances of it.
+- `origin/feat/tracking-feature-state` was deleted. Verified at the moment of action, not earlier:
+  `529456d`, **0 commits ahead** of `origin/main` and an ancestor of it
+  (`git merge-base --is-ancestor` → true), so nothing on it was unmerged. Restore if ever needed:
+  `git push origin 529456dc2e4be61f3a1cd4e77a25ce3749a21998:refs/heads/feat/tracking-feature-state`.
+
+**Reopened to `planning` 2026-08-19**, for task 15: the analyzer cannot read this repo's own
+closed-card convention. Per the frontmatter convention at the head of this card, the reopen keeps a
+real branch rather than resetting to `none`, and takes the literal `gate confirmed` again before
+task 15 begins. Task 16's closing frontmatter is deliberately *not* written yet — writing it now
+would seed a fourth instance of the defect task 15 exists to fix.
