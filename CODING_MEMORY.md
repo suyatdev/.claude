@@ -6914,3 +6914,196 @@ verified zero deletions) kept separate from the fact that it isn't a judge verdi
 was finished, verified, committed and pushed before this entry was written, so nothing here is a
 save-in-progress. Nothing else was left open by the merge itself; PR #52 is mergeable now and waiting
 on human review, same status as before this session except the conflict is gone.
+
+## 2026-08-17 — global-option-blindness: the gate opens, and the spec gets its own branch
+
+(Date-headed rather than numbered: the preceding entries run 79, 79-post-merge, 80, then a
+2026-08-13 "session 66" — the counter is not reliable enough to extend.)
+
+**The gate opened.** The user said the literal phrase `gate confirmed` for
+`docs/features/global-option-blindness.md` (revision 4). Both owed checkpoints were put to them
+first, in one ask: the planning→implementation model-switch checkpoint, and whether to re-run the
+compliance judge on revision 4. Answers: **switch to the smaller model**, and **yes, re-check the
+spec first**.
+
+**Consequence — the phase is deliberately still `planning`.** Those two answers are in tension with
+the standard gate sequence: `implementation` forbids spec edits, and a failing verdict would demand
+exactly that. So the branch was created and the frontmatter records it, but the phase flip is held
+until the verdict lands. A note in the feature file's own frontmatter block says so, because
+`phase: planning` on a branch that exists otherwise reads as an unopened gate.
+
+**The spec was rescued from the wrong worktree.** Revision 4 had lived its whole life as an
+*untracked* file inside the paused `feature/verification-marker-gate` worktree — one `git clean`
+from gone, and uncommittable there without landing this feature on the paused feature's branch.
+Fixed by branching `feature/global-option-blindness` off **`origin/main`** (6a2b7c5, not local
+`main`, which can lag) into a new worktree, transplanting the spec plus the three compliance
+verdicts and two architecting verdicts, and committing them there as `4c9a431`. Pushed.
+
+- The paused worktree's ledgers carried **its own** unmerged rows too (115 vs origin/main's 111).
+  Only the 5 rows belonging to this feature were moved. The append was proven to be a pure append
+  before transplanting — first N lines diffed byte-identical against HEAD — and every resulting
+  ledger line re-parsed as JSON afterwards.
+- **The transplanted verdict rows still say `branch: feature/verification-marker-gate`.** That is
+  where the judges genuinely ran. An audit row does not get rewritten to look tidier; only the
+  verdict *filenames* name the feature. Future rounds on this branch will key correctly by themselves.
+
+**Still owed, in order, by the next session:** the MUST/contract sweep of the spec (the standing
+rule written into this card after three rounds were lost to skipping it), then the compliance +
+observability judges, then — only on a pass — the phase flip and task 0a.
+
+**Noted, not fixed (own task):** `.gitignore:72` ignores all of `/.claude/`, not just the
+machine-local handoff files. `managing-session-memory` calls for the narrower form so committed
+project settings can live there. Out of scope for this feature.
+
+## 2026-08-17 — global-option-blindness: task 0a lands, groundwork begins
+
+Restored into `implementation` phase (gate opened and compliance passed at round 6 in the prior
+session on this date; see the section above). This session's only work was task 0a, the first of
+three groundwork tasks the spec requires before any behaviour task, because no harness in this
+repo could previously assert what a guard writes to **stdout** — and the new `SCOPE_UNKNOWN` "ask"
+decision this feature adds is delivered as JSON on exactly that channel.
+
+**What landed (commit `975478c`):** `hooks/lib/guard_test_helpers.sh`, a new shared file holding
+`assert_stderr` (moved out of `git-guard.test.sh` verbatim, byte-identical body — not rewritten,
+per the spec's explicit instruction) and the new `assert_stdout` beside it. Both
+`hooks/git-guard.test.sh` and `hooks/doc-guard.test.sh` now source it instead of duplicating the
+body — task 0b's `merge-guard.test.sh` (still to be created) will source the same file rather than
+becoming a third copy.
+
+**Proof, not assertion, that the new helper works:** all 108 git-guard cases and 16 doc-guard
+cases pass unchanged (no regression from the move). Then, because a check that has never been
+shown able to fail is not trustworthy by construction (`feedback_confirm_the_check_can_fail`), a
+synthetic fake hook writing distinct markers to stdout and stderr was probed directly:
+`assert_stdout` correctly failed when asked to find the stderr-only marker, and `assert_stderr`
+correctly failed when asked to find the stdout-only marker — each stream is actually isolated from
+the other, not merged and coincidentally matching. Recorded in the feature file's own
+`## Verification` section, not here, per the one-canonical-file rule; this entry exists only
+because CODING_MEMORY is the cross-session archive, not a duplicate of that section's content.
+
+**Also fixed in the same commit:** shellcheck 0.11.0 flagged the new lib file (SC2148, no shebang
+on a sourced-only file — fixed with a `# shellcheck shell=bash` directive) and both dynamic
+`source` lines (SC1091 — silenced with the same `# shellcheck disable=SC1091` pattern already used
+at `hooks/handoff/slim-session-start.test.sh:188`, rather than inventing a new convention).
+
+**Next session: task 0b.** Create `hooks/merge-guard.test.sh` (has never existed) using this
+session's shared helpers. Pin **today's** behaviour first — `gh pr merge 5` → exit 2,
+`MERGE_EXEMPT=<reason> gh pr merge 5` → allowed with the reason on stderr, an ordinary `git merge`
+→ untouched — because that is the safety net task 6's rewrite needs and has none without it.
+
+## 2026-08-17 — global-option-blindness: task 0b lands, merge-guard gets its first suite
+
+Restored into `implementation` phase (task 0a landed the prior session on this date; see the
+section above). This session's only work was task 0b, the second of three groundwork tasks —
+`merge-guard.sh` was the one hook script in the repo (of 18) with no `*.test.sh` at all, and the
+spec names it as this feature's sole *silent* failure mode: a rewrite that quietly stopped
+blocking `gh pr merge` would fail open with nothing to say so.
+
+**What landed (commit `e5d0bf2`):** `hooks/merge-guard.test.sh`, sourcing task 0a's
+`hooks/lib/guard_test_helpers.sh` rather than pasting a third copy of `assert_stderr`. Pins exactly
+the three behaviours the spec named, against a bare scratch directory rather than a git repo —
+`merge-guard.sh` only classifies the command string, it never reads or writes the checkout:
+
+- `gh pr merge 5` → exit 2, with the GitHub-UI remedy message on stderr.
+- `MERGE_EXEMPT="release cut" gh pr merge 5` → exit 0, with `MERGE_EXEMPT=release cut` echoed on
+  stderr (confirms the shlex-based value extraction in `merge-guard.sh` unquotes-and-preserves the
+  interior space correctly).
+- A plain `git merge origin/main` → exit 0, untouched.
+
+**Proof, not assertion, that the pins are real:** all 5 assertions (3 exit-code, 2 stderr-substring)
+pass against today's hook. Then, per `feedback_confirm_the_check_can_fail`, a mutation probe
+re-ran the two stderr assertions against a wrong substring and the exit-code check against a wrong
+wanted code — 2/2 FAILed, so the green run above is not vacuous. `shellcheck 0.11.0` on the new
+file returns only the same SC2016 info-level "backticks don't expand in single quotes" notice that
+`merge-guard.sh`'s own source already carries on the identical literal string — accepted, not a
+real finding. Recorded in the feature file's own `## Verification` section, not here.
+
+**Next session: task 0c.** Confirm where `git-guard.test.sh`, `doc-guard.test.sh`, and the new
+`merge-guard.test.sh` actually run — a runner script, a git hook, or only by hand — and record the
+answer in the feature file plainly. If nothing runs them automatically, say that outright rather
+than letting the existence of the suites imply coverage no one executes.
+
+## 2026-08-17 — global-option-blindness: tasks 0c through 8 land, blocked on task 9
+
+One continuous session carried the feature from the last groundwork task through the entire
+behaviour implementation — 11 commits (`1d12f94` through `eb057f4`), every task 0c–8 ticked, every
+suite green. This is the archive entry for all of it; per-task reasoning, measurements, and
+verification detail live in the feature file's own `## Verification` section (11 dated bullets),
+not duplicated here.
+
+**What landed, in order:** task 0c (measured — no test suite in this repo runs automatically;
+by-hand only, confirmed by checking CI, `package.json`, `core.hooksPath`, and the real
+worktree-resolved git hooks directory, not assumed). Task 1 (RED — 36 new fact-level cases in
+`classify-git-command.test.py`, one deliberately left out because its full expected value depended
+on an unstated implementation choice, not a stated contract — that one moved to task 3 instead).
+Task 2 (GREEN — `resolve_subcommand()` + three bucket tables; caught and fixed its own deviation
+from the spec's pinned 3-tuple return shape before task 3 built on it — a 2-tuple with a sentinel
+string passed every test but didn't match what was written). Task 3 (git-guard's `ask` JSON on
+`SCOPE_UNKNOWN`, checked LAST so an existing hard block always wins; left the "does stderr surface
+on exit 0" question honestly unresolved — no live test was possible from this worktree, since its
+`settings.json` doesn't govern this session's actual hooks). Task 3b (the `PRINTS_AND_EXITS`
+message-only override, verified with a real hand-run mutation round: emptying the set in place
+reproduced the pre-implementation red baseline number-for-number, then restored with a clean
+`diff`). Task 4 (doc-guard needed zero code changes — both behaviours fell out transitively from
+task 2's classifier fix; verified, not assumed, with two new regression cases). Task 5
+(`classify-pr-command.py` generalised to a parameterised pair, all 51 existing cases re-run
+unmodified before touching any caller). Task 6 (merge-guard rewritten onto the shared reader,
+closing rows (d)/(e) plus a bonus stacked-wrapper gap for free). Task 7 (the six-row defect table
+re-measured end-to-end as `(exit code, stdout decision)` pairs, all nine matching "after the fix";
+one probe methodology mistake on row (f) caught and corrected in the same pass rather than
+reported wrong). Task 8 (all eight dependent suites green — 630 cases — plus the replay harness:
+378/378 pairs identical against local `main`, zero regressions).
+
+**Blocked here, not stalled:** task 9 is an explicit ❗🔴 blocking manual acceptance test — whether
+an `ask` decision actually raises an interactive prompt under this repo's actual bypassed-
+permissions launch mode, and whether declining it really stops the command. No automated test can
+close this; it needs a human watching a real prompt appear. Tasks 10 (ADR 0029) and 11
+(observability judge, then PR) both wait on it — task 9's own fallback language ("revisit bucket 2"
+if the prompt is swallowed) means its outcome could still change the design the ADR would document,
+so writing the ADR first would risk documenting a decision task 9 might overturn.
+
+**Next session (or later this one): task 9, with the user.** Two sub-checks: 9a, the prompt
+appears and its text names the triggering option; 9b, declining it actually stops the command.
+Ticking this requires pasting what was observed, not asserting it passed.
+
+## 2026-08-18 — global-option-blindness: task 9 passes, ADR written, judged, PR #54 open — feature done
+
+Same session, continued. Task 9 blocked the previous entry; it's resolved now, and everything after
+it (tasks 10 and 11) landed in the same sitting. Full task-by-task detail: the feature file's own
+`## Verification`, 15 dated bullets total. PR detail: `coding-memory/pr-tracking.md`, the PR #54 entry.
+
+**Task 9, the hard part.** A first test attempt (a different live session) found no prompt and
+looked like a real negative result. It wasn't: **every hook in `settings.json` resolves via an
+absolute `$HOME/.claude/hooks/...` path**, so any session on this machine — regardless of which
+worktree or branch its own files sit on — runs hooks from the ONE shared `~/.claude` checkout,
+which doesn't have this unmerged feature yet. That session ran the old code; the "no prompt" result
+was a false negative from testing the wrong script, not evidence against the fix. Neither a
+same-branch worktree nor a project `settings.local.json` override would have fixed this (confirmed
+against the running 2.1.234 build's own hook-resolution logic, via a dispatched research agent:
+project settings only ADD a hook entry, never replace one). `CLAUDE_CONFIG_DIR` is a true
+substitution — built an isolated copy of `~/.claude` with only this feature's 5 touched files
+swapped in and its own `settings.json` repointed at itself, self-verified the swap before handing
+it to the user, and the real `~/.claude` (and the unrelated live session using it) were never
+touched. The user ran the real interactive test and pasted the verbatim prompt text and outcome —
+both sub-checks passed for real, not asserted.
+
+**ADR 0029** records the structural decision: three buckets (skip / ask-known-risky /
+ask-unrecognised), and why "cannot tell" resolves to an interactive `ask` rather than a silent
+allow (the bug) or a hard deny (rejected — bucket 2 deliberately includes options that are usually
+harmless, and that's only affordable because refusing means asking, not walling off).
+
+**Observability judge ran twice, not once — a self-caught sequencing mistake, not a retry for
+luck.** First run at `f0ba837`: risk=low, confidence=high, and it caught something this session's
+own task 8 had missed (the replay-harness regression check used a stale local `main`; the judge
+independently re-ran it against `origin/main` too, same clean result). Then a README Roadmap
+addition landed *after* that verdict, moving HEAD and invalidating it — `judge-guard.sh` needs an
+exact match. Re-ran rather than reaching for `JUDGE_EXEMPT`, which is for a genuinely exempt PR,
+not a self-inflicted sequencing slip. Second run at `5c479a9`: same verdict, unchanged.
+
+**PR #54 opened against `main`.** The verdict files were committed *after* `gh pr create`
+succeeded, not before, per the standing rule (`feedback_committing_a_verdict_invalidates_it`) — a
+committed verdict moves HEAD and invalidates itself.
+
+**Everything from task 0a through 11 is now closed.** The feature file's frontmatter reads
+`phase: review`. What's left is entirely outside this session's control: GitHub-UI review and
+merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
+the judge flagged this rollout step explicitly, since the fix does nothing until that happens.

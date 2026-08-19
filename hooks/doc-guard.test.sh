@@ -17,6 +17,8 @@
 set -u
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/doc-guard.sh"
+# shellcheck disable=SC1091  # this test's own dynamically-resolved path, not user input
+source "$(cd "$(dirname "$0")" && pwd)/lib/guard_test_helpers.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -146,6 +148,27 @@ fi
 # Control: the same staged state through the real hook still blocks, so the case
 # above is proving the fail-open path and not a broken fixture.
 run_case "control: same state, real hook -> block"          2 'git commit -m msg'
+
+# ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 4).
+# Both scenarios fall out of the classifier fix (task 2) with NO new code in
+# THIS file: doc-guard.sh only ever asks has_fact COMMIT, which the
+# classifier now correctly answers for a bucket-1-prefixed commit and
+# correctly withholds for a SCOPE_UNKNOWN-denied one. Pinned here as a real
+# regression guard, not padding -- a future edit to either file could
+# silently break either half, and nothing before this suite would catch it.
+# ---------------------------------------------------------------------------
+stage src/f1.sh src/f2.sh src/f3.sh
+run_case "bucket-1 global option no longer hides the commit -> block" 2 'git --no-pager commit -m x'
+
+stage src/f1.sh src/f2.sh src/f3.sh
+run_case "SCOPE_UNKNOWN (cannot-tell) -> doc-guard stays silent" 0 'git -C . commit -m x'
+got_stdout="$(cd "$REPO" && payload 'git -C . commit -m x' | bash "$HOOK" 2>/dev/null)"
+if [ -z "$got_stdout" ]; then
+  printf 'ok   —   ...no permissionDecision written; git-guard is the only guard that prompts\n'; pass=$((pass+1))
+else
+  printf 'FAIL —   ...no permissionDecision written\n  got:\n%s\n' "$got_stdout"; fail=$((fail+1))
+fi
 
 # ---------------------------------------------------------------------------
 printf '\ndoc-guard: %s passed, %s failed\n' "$pass" "$fail"

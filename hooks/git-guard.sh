@@ -288,9 +288,67 @@ if has_fact PUSH_LEASE && on_main; then
   exit 2
 fi
 
+# PRINTS_AND_EXITS -- message selection ONLY, never a decision input. Some
+# bucket-1 global options make git print something and exit WITHOUT ever
+# reaching the subcommand (measured, git 2.50.1: -v/--version, -h/--help,
+# --html-path, --man-path, --info-path always print and exit; bare
+# --exec-path prints the exec path and stops; bare --list-cmds errors
+# "unknown option" and also never reaches a subcommand -- --list-cmds=<group>
+# prints the list and stops. Neither --list-cmds spelling reaches the
+# subcommand, which is the set's actual invariant, not literally "prints").
+# classify() still correctly resolves these to a COMMIT fact -- bucket 1
+# means "skip it, read the subcommand normally" -- so Guard 1 below is still
+# right to refuse, but saying it "blocked a commit to main" would be a LIE:
+# no commit was ever going to happen. Deliberately kept OUT of
+# classify-git-command.py (see the feature's "Where the code lives") and
+# resolved here via resolve_subcommand() -- already tested, never
+# reimplemented -- purely to ask which bucket-1 options a COMMIT segment
+# skipped over; classify()'s own fact stream carries no such record.
+prints_and_exits_option() {
+  printf '%s' "$command_line" | "$py" -c '
+import importlib.util, sys
+
+spec = importlib.util.spec_from_file_location("classify_git_command", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+PRINTS_AND_EXITS = {
+    "-v", "--version", "-h", "--help",
+    "--html-path", "--man-path", "--info-path",
+    "--exec-path", "--list-cmds",
+}
+
+for _assigns, argv in mod.segments(sys.stdin.read()):
+    if len(argv) < 2 or argv[0] != "git":
+        continue
+    subcommand, rest, blocking = mod.resolve_subcommand(argv)
+    if subcommand != "commit":
+        continue
+    # Every token between argv[1] and the resolved subcommand was a bucket-1
+    # skip (blocking is None whenever subcommand is not None) -- re-derive
+    # that same prefix from the tuple resolve_subcommand already returned,
+    # rather than re-walking argv a second time with a second copy of the
+    # walk logic.
+    prefix_len = len(argv) - 2 - len(rest)
+    prefix = argv[1:1 + prefix_len]
+    hit = next((tok.split("=", 1)[0] for tok in prefix
+                if tok.split("=", 1)[0] in PRINTS_AND_EXITS), None)
+    if hit:
+        sys.stdout.write(hit)
+        break
+' "$CLASSIFIER" 2>/dev/null
+}
+
 # --- Guard 1: default-branch commit ---
 if has_fact COMMIT && on_main; then
   checkout_branch="$(current_branch)"
+
+  prints_and_exits="$(prints_and_exits_option)"
+  if [ -n "$prints_and_exits" ]; then
+    printf 'git-guard: this command carries %s, which prints and exits -- git never reaches the subcommand, so nothing would have been committed here.\n' "$prints_and_exits" >&2
+    exit 2
+  fi
+
   files=$(git diff --cached --name-only 2>/dev/null || echo "")
   label="Staged files"
 
@@ -334,6 +392,44 @@ if has_fact COMMIT && on_main; then
     printf '%s\n' "$(remedy_line commit "$checkout_branch")" >&2
     exit 2
   fi
+fi
+
+# --- Guard 3: cannot tell which repository or branch this line targets ---
+# SCOPE_UNKNOWN (lib/classify-git-command.py) is a global option ahead of the
+# subcommand this file cannot account for -- it may redirect the repository,
+# change what a pathspec means, or simply be unrecognised. Runs on EVERY
+# branch: the guard cannot tell WHICH branch a redirecting option targets, so
+# on_main() is not even a meaningful question here. Checked LAST, after both
+# guards above: those are proven protections and win outright if they also
+# fire on this line (an existing hard block is never downgraded to a
+# prompt) -- this is strictly additive over what used to be a silent,
+# unexamined allow, which is the whole defect this feature fixes.
+#
+# Unverified whether stderr from an exit-0 hook is surfaced anywhere -- the
+# embedded hooks reference (this binary, 2.1.234) documents `systemMessage`
+# and `suppressOutput` for stdout, and says nothing about stderr for any exit
+# code. A live check would need an actual ask decision to fire, which is
+# task 9's blocking manual acceptance test, not something to trigger here.
+# Conservative assumption either way: permissionDecisionReason is the
+# guaranteed-visible record, so the SAME text also goes to stderr for free --
+# the house convention (merge-guard.sh, judge-guard.sh, feature-sync-guard.sh
+# all `printf ... >&2`), and correct whether or not it turns out redundant.
+scope_tab=$(printf '\t')
+scope_option=$(printf '%s\n' "$facts" | grep "^SCOPE_UNKNOWN${scope_tab}" | head -1 | cut -f2-)
+if [ -n "$scope_option" ]; then
+  reason="This command carries $scope_option ahead of the subcommand, which git-guard cannot account for -- it may point git at a different repository or change how a pathspec is read. Confirm this is intended."
+  printf 'git-guard: %s\n' "$reason" >&2
+  "$py" -c '
+import json, sys
+sys.stdout.write(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "ask",
+        "permissionDecisionReason": sys.argv[1],
+    }
+}, separators=(",", ":")) + "\n")
+' "$reason"
+  exit 0
 fi
 
 exit 0

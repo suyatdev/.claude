@@ -14,6 +14,8 @@
 set -u
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/git-guard.sh"
+# shellcheck disable=SC1091  # this test's own dynamically-resolved path, not user input
+source "$(cd "$(dirname "$0")" && pwd)/lib/guard_test_helpers.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -244,19 +246,10 @@ run_case_in() { # $1 dir, $2 desc, $3 want-exit, $4 command string
   _run_case_common "$1" "$2" "$3" "$4"
 }
 
-# Re-runs the hook against the same fixture/command a run_case/run_case_in call
-# just used, and checks stderr instead of the exit code -- neither of those checks
-# it. Written AFTER git-guard.sh already renders this text (docs/features/
-# git-guard-detached-head.md, "The message contract"), so each call below is only
-# trustworthy once proven able to fail -- see the checklist's mutation round.
-assert_stderr() { # $1 dir, $2 desc, $3 command string, $4 expected substring
-  local dir="$1" desc="$2" cmd="$3" want="$4" got
-  got="$(cd "$dir" && payload "$cmd" | bash "$HOOK" 2>&1 1>/dev/null)"
-  case "$got" in
-    *"$want"*) printf 'ok   — %s\n' "$desc"; pass=$((pass+1)) ;;
-    *) printf 'FAIL — %s\n  want (substring): %s\n  got:\n%s\n' "$desc" "$want" "$got"; fail=$((fail+1)) ;;
-  esac
-}
+# assert_stderr (checks stderr against the fixture/command a run_case/run_case_in
+# call just used) and assert_stdout now live in lib/guard_test_helpers.sh, shared
+# with doc-guard.test.sh and merge-guard.test.sh. Each call site is only
+# trustworthy once proven able to fail -- see this suite's mutation-round history.
 
 # ---------------------------------------------------------------------------
 # Guard 1 — default-branch commit
@@ -696,6 +689,123 @@ mkdir -p "$REBASE_APPLY_FEAT_DIR/src"
 printf 'x\n' > "$REBASE_APPLY_FEAT_DIR/src/app.sh"
 git -C "$REBASE_APPLY_FEAT_DIR" add -- src/app.sh
 run_case_in "$REBASE_APPLY_FEAT_DIR" "row 19: rebase --apply stop (feat/x), source staged -> allow" 0 'git commit -m msg'
+
+# ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 3).
+# SCOPE_UNKNOWN -- git-guard asks rather than silently allowing OR blocking.
+# Exit code ALONE cannot tell a silent allow from an ask: both exit 0. The
+# assert_stdout calls below, checking for the ask JSON, are what actually
+# distinguishes the fix from today's bug (see the spec's own task 7 warning).
+# ---------------------------------------------------------------------------
+stage
+on_branch main
+run_case "SCOPE_UNKNOWN on main -> exits 0 (ask, not a silent allow)" 0 'git -C . commit -m x -- app.js'
+assert_stdout "$REPO" "  ...ask JSON on stdout" \
+  'git -C . commit -m x -- app.js' '"permissionDecision":"ask"'
+assert_stdout "$REPO" "  ...reason text names -C" \
+  'git -C . commit -m x -- app.js' '-C'
+
+on_branch feature
+run_case "SCOPE_UNKNOWN on a non-main branch -> still asks" 0 'git -C . commit -m x -- app.js'
+assert_stdout "$REPO" "  ...asks on a feature branch too, not only main" \
+  'git -C . commit -m x -- app.js' '"permissionDecision":"ask"'
+
+# The Examples table's own branch name, "feature/example", cannot share $REPO
+# with the "feature" branch created above -- git's loose-ref storage cannot
+# hold both a file "feature" and a directory "feature/" side by side -- so
+# this one gets its own throwaway repo.
+FEATURE_EXAMPLE_DIR="$(mktemp -d)"
+git -C "$FEATURE_EXAMPLE_DIR" init -q -b main
+git -C "$FEATURE_EXAMPLE_DIR" config user.email test@example.com
+git -C "$FEATURE_EXAMPLE_DIR" config user.name  test
+printf 'seed\n' > "$FEATURE_EXAMPLE_DIR/seed.sh"
+git -C "$FEATURE_EXAMPLE_DIR" add -A
+git -C "$FEATURE_EXAMPLE_DIR" commit -qm seed
+git -C "$FEATURE_EXAMPLE_DIR" checkout -qb feature/example
+run_case_in "$FEATURE_EXAMPLE_DIR" "SCOPE_UNKNOWN on branch 'feature/example' -> asks" 0 \
+  'git -C . commit -m x -- app.js'
+
+on_branch main
+run_case "force-push protection survives a global option -> asks, not the bare-force block" \
+  0 'git -C . push --force'
+assert_stdout "$REPO" "  ...reason names -C, not the force-push message" \
+  'git -C . push --force' '-C'
+
+run_case "unenumerated abbreviation --work-tre=/tmp -> asks" 0 'git --work-tre=/tmp commit -m x -- app.js'
+assert_stdout "$REPO" "  ...names --work-tre, without its value" \
+  'git --work-tre=/tmp commit -m x -- app.js' '--work-tre'
+
+run_case "redirecting option in a LATER segment -> still asks for the whole line" \
+  0 'echo hi && git -C /x commit -m x -- app.js'
+
+# A granting fact in one segment (a cleanly documented commit) cannot cancel
+# another segment's SCOPE_UNKNOWN. Before this task, the documented commit's
+# facts made Guard 1 fall through cleanly and the line was silently allowed
+# in full -- exactly the hole this guard closes.
+run_case "a granting fact elsewhere on the line does not cancel SCOPE_UNKNOWN -> still asks" \
+  0 'git commit -m a -- docs/a.md && git -C /x commit -m b -- app.js'
+
+# An existing hard block is NOT downgraded to a prompt: a plain commit to
+# main with no global option involved still exits 2 and writes NOTHING to
+# stdout at all -- assert_stdout has no "must be absent" mode, so this is
+# checked directly.
+stage src/app.sh
+run_case "plain commit to main, no global option -> still hard-blocked" 2 'git commit -m msg'
+got_stdout="$(cd "$REPO" && payload 'git commit -m msg' | bash "$HOOK" 2>/dev/null)"
+if [ -z "$got_stdout" ]; then
+  printf 'ok   —   ...no permissionDecision written on an ordinary hard block\n'; pass=$((pass+1))
+else
+  printf 'FAIL —   ...no permissionDecision written on an ordinary hard block\n  want: empty stdout\n  got:\n%s\n' "$got_stdout"
+  fail=$((fail+1))
+fi
+
+# ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 3b).
+# PRINTS_AND_EXITS -- message ONLY. The decision (refuse, exit 2) is
+# unchanged from Guard 1's ordinary main-branch refusal; only the reason
+# text must stop implying a commit-to-main that git itself never reaches.
+# ---------------------------------------------------------------------------
+stage
+on_branch main
+for opt in --exec-path --version -v --help -h --html-path --man-path --info-path --list-cmds '--list-cmds=main'; do
+  run_case "prints-and-exits ($opt) -> still exit 2" 2 "git $opt commit -m x -- app.js"
+  assert_stderr "$REPO" "  ...($opt) message says prints and exits" \
+    "git $opt commit -m x -- app.js" 'prints and exits'
+done
+
+# The negative half: the message must NOT claim a commit-to-main happened.
+# One representative case is enough -- there is exactly one message template
+# behind all ten spellings above, not one template per option.
+got_stderr="$(cd "$REPO" && payload 'git --version commit -m x -- app.js' | bash "$HOOK" 2>&1 1>/dev/null)"
+case "$got_stderr" in
+  *"restricted to documentation"*|*"blocked for targeting main"*)
+    printf 'FAIL —   ...message does NOT claim a commit-to-main happened\n  got:\n%s\n' "$got_stderr"
+    fail=$((fail+1)) ;;
+  *)
+    printf 'ok   —   ...message does NOT claim a commit-to-main happened\n'; pass=$((pass+1)) ;;
+esac
+
+# ---------------------------------------------------------------------------
+# global-option-blindness (docs/features/global-option-blindness.md, task 7).
+# Defect-table row (a), encoded VERBATIM -- the exact four commands the
+# original bug report measured, not just "a similar shape" to what the
+# SCOPE_UNKNOWN block above already covers. Re-running this suite from now
+# on IS re-running that row of the table. (-C . is functionally covered
+# above too, with a pathspec appended; included here anyway, bare, for exact
+# traceability to the table's own text. --work-tree=., --git-dir=.git, and
+# -c k=v are not tested anywhere else in this file.)
+# ---------------------------------------------------------------------------
+on_branch main
+run_case "defect table row (a): -C . -> ask"              0 'git -C . commit -m x'
+assert_stdout "$REPO" "  ...row (a) -C .: ask JSON present" 'git -C . commit -m x' '"permissionDecision":"ask"'
+run_case "defect table row (a): --work-tree=. -> ask"     0 'git --work-tree=. commit -m x'
+assert_stdout "$REPO" "  ...row (a) --work-tree=.: ask JSON present" \
+  'git --work-tree=. commit -m x' '"permissionDecision":"ask"'
+run_case "defect table row (a): --git-dir=.git -> ask"    0 'git --git-dir=.git commit -m x'
+assert_stdout "$REPO" "  ...row (a) --git-dir=.git: ask JSON present" \
+  'git --git-dir=.git commit -m x' '"permissionDecision":"ask"'
+run_case "defect table row (a): -c k=v -> ask"             0 'git -c k=v commit -m x'
+assert_stdout "$REPO" "  ...row (a) -c k=v: ask JSON present" 'git -c k=v commit -m x' '"permissionDecision":"ask"'
 
 # ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
