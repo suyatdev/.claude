@@ -1186,11 +1186,13 @@ forbidden by the parallel-agent invariants. Branched from `origin/main` in this 
 pushed `docs/post-merge-53:main` — permitted for `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`
 under the default-branch docs exception.
 
-## `.claude` — `feature/global-option-blindness` → PR #54 (OPEN, opened 2026-08-18)
+## `.claude` — `feature/global-option-blindness` → PR #54 (MERGED 2026-08-19)
 
 - **Repo:** `suyatdev/.claude` · **remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
 - **Branch:** `feature/global-option-blindness` · **base:** `main`
-- **PR:** https://github.com/suyatdev/.claude/pull/54 · **state:** OPEN, ready for review
+- **PR:** https://github.com/suyatdev/.claude/pull/54 · **state:** **MERGED** 2026-08-19T21:27:26Z,
+  merge commit `d8b9a84`. Verified after the fact: 0 commits ahead of `origin/main`, empty
+  `git diff origin/main fab7314`, all tasks 0a–11 closed.
 - **session_origin (created):** this session (`Claude-Session:
   https://claude.ai/code/session_01JKWWrMS5QhuyeSa1N4h7aG`) · **session_origin (last push):** same
 - **Card:** `docs/features/global-option-blindness.md` (`phase: review`, tasks 0a–11 all closed)
