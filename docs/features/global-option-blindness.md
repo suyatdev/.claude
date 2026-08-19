@@ -753,7 +753,14 @@ awk **20200816** (BSD), Claude Code **2.1.233**. Every measurement in this spec 
       an exit-0 hook surfaced at all?** Record the answer in this card either way.
       **Re-measured: `git-guard.sh:292` confirmed correct, unchanged.** New Guard 3 added after both
       existing guards, before the final `exit 0` — their code is untouched, so byte-identical is true
-      by construction, not just by test result. **Stderr question: left genuinely unresolved, recorded
+      by construction, not just by test result.
+      **Correction (2026-08-19, review-phase audit): that "unchanged" held only until task 3b.**
+      Inserting `PRINTS_AND_EXITS` above Guard 1 pushed everything down, so at `3d8f53f` the
+      condition this task told itself not to nest inside is `git-guard.sh:343`, not `:292` — `:292`
+      is now a comment line. The task's *decision* is unaffected (Guard 3 is at `:397`, after both
+      existing guards, exactly as recorded); only the coordinate rotted, inside its own PR, which
+      is the very failure this bullet's own "**`grep -n` it rather than trusting the number**"
+      warned about one line earlier. **Stderr question: left genuinely unresolved, recorded
       honestly rather than guessed** — no live "ask" has fired yet (that's task 9, and triggering one
       here to find out would be jumping ahead into a manual, human-supervised acceptance test); the
       binary's own embedded hooks reference documents `systemMessage` and `suppressOutput` for stdout

@@ -66,8 +66,11 @@ conflated even though both use the word "ask".
 ## Consequences
 
 - **Bucket 1 carries the exhaustiveness burden, and it is paid, not deferred.** Every skip-list
-  member has its own test case (`classify-git-command.test.py`, task 1) — 18 members across the
-  harmless and print-and-exit tables, plus `--attr-source`'s two standalone scenarios. An option
+  member has its own test case (`classify-git-command.test.py`, task 1) — **17** members across the
+  harmless (8) and print-and-exit (9) tables, which occupy **18** Examples rows because
+  `--list-cmds` is exercised in both its bare and `=<group>` spellings, plus `--attr-source`'s two
+  standalone scenarios. 17 + `--attr-source` is the whole of bucket 1: `len(GLOBAL_SKIP_NO_VALUE)`
+  + `len(GLOBAL_SKIP_CONSUMING)` = 18, the number to re-derive rather than copy. An option
   named in the bucket-1 prose with no scenario behind it is treated as a defect, not a shorthand —
   this caught real drift three times during the feature's own revisions (the pathspec options and
   `--list-cmds` each briefly fell out of every Examples table while still being claimed in prose).
