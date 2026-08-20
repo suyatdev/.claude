@@ -44,18 +44,29 @@ def _iter_transcripts(cfg: Config) -> list[Path]:
 
 
 ARCHIVE_FILENAME = "CODING_MEMORY.md"
+JUDGE_DIRS = frozenset({"observability-judge", "compliance-judge"})
 
 
 def _doc_source_type(path: Path, default: str) -> str:
-    """Classify the session archive by filename, not by which bucket found it.
+    """Classify by path, not by which bucket found it.
 
     The archive has three copies — the ~/.claude one reached via curated_docs
     and one inside each repo_root — and bucket-based typing would tier them
     differently (1.5 vs 1.2), ranking session narrative at or above the
     decision records it narrates. archive_doc (1.0) keeps all three
     retrievable without ever outranking a real decision record.
+
+    Judge verdicts get the same treatment one level up, keyed on the parent
+    directory name (ADR 0030): they are the one document class R9's sweep
+    measured, and coding-memory/ as a whole is 461 chunks wider than that
+    measurement. The archive check runs first, so the two rules cannot
+    disagree about a CODING_MEMORY.md sitting under a judge directory.
     """
-    return "archive_doc" if path.name == ARCHIVE_FILENAME else default
+    if path.name == ARCHIVE_FILENAME:
+        return "archive_doc"
+    if path.parent.name in JUDGE_DIRS:
+        return "judge_doc"
+    return default
 
 
 def _iter_docs(cfg: Config) -> list[tuple[Path, str, str, str]]:

@@ -12,8 +12,11 @@ from pathlib import Path
 
 import sqlite_vec
 
+from memsearch.config import SOURCE_TYPES  # noqa: F401  (re-exported: the
+# vocabulary lives with the validation that checks it; db.py stays its
+# historical import site)
+
 SCHEMA_VERSION = "1"
-SOURCE_TYPES = ("transcript_digest", "curated_doc", "repo_doc", "archive_doc")
 RECALL_TYPES = ("decision", "episodic", "doc")
 LATENCY_WINDOW = 100  # p95 computed over the most recent N queries
 
