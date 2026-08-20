@@ -8353,3 +8353,65 @@ committed verdict moves HEAD and invalidates itself.
 `phase: review`. What's left is entirely outside this session's control: GitHub-UI review and
 merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
 the judge flagged this rollout step explicitly, since the fix does nothing until that happens.
+
+## 2026-08-19 — marker-gate unpaused: the blocker had already shipped, and the pause note was wrong twice
+
+Session opened to start the queued `shell-segments-option-grammar` feature, per the 2026-08-16 pivot.
+**That feature should not be built.** Its entire scope had already landed on `main` as PR #54
+(`global-option-blindness`, ADR 0029) in the three days the branch sat paused. Verified before any
+work: `git merge-base --is-ancestor fab7314 origin/main` → `rc=0`.
+
+`hooks/lib/classify-git-command.py` supplies both queued items — `COMMIT_VALUE_FLAGS` (which
+`git commit` options consume the next token) and `resolve_subcommand()` + the three global-option
+buckets (telling `git -C x commit` from `git commit -C x`). It also resolves the exact contradiction
+the waiver recorded: `--gpg-sign` sits in `COMMIT_SAFE_FLAGS`, never in the value list, so it cannot
+eat a pathspec.
+
+**Two corrections to the pause note, both now in the card as revision 21:**
+
+1. **"Fully blocked (5/16)" overstated it.** Only tasks 2 and 3 were ever grammar-blocked. Tasks 7
+   and 9–16 are queued behind them by ordinary dependency — a distinction that changes what
+   unblocking actually costs.
+2. **The decision did not land where the card predicted.** The waiver said it would live in
+   `shell_segments.py`; it lives in the sibling `classify-git-command.py`. That is the better home —
+   `shell_segments.py` is a pure shell lexer with no git knowledge, and `classify-pr-command.py`, a
+   `gh` reader, imports it. Putting `git commit` flag tables there makes a `gh` classifier
+   transitively carry them.
+
+**Merged `origin/main` in (`af5e874`).** 44 ahead / 56 behind → 45 ahead / 0 behind. No source
+conflicts; three append-only ledgers collided and were resolved as verified unions with a
+zero-deletion proof against **both** parents (`comm -23` each parent's sorted lines against the
+result = 0): `CODING_MEMORY.md`, and the two `coding-memory/*/verdicts.jsonl` (115+117→127,
+174+177→187). The `CODING_MEMORY.md` conflict was **diff3-format** — a `|||||||` base marker my first
+marker grep did not match. Grep for all four marker types, not three.
+
+Suites re-run **in this checkout** after the merge, true exit codes captured before anything else:
+`classify-git-command.test.py` 114 passed / `shell_segments.test.py` 35 / `classify-pr-command.test.py`
+59, all `rc=0`. This closed the investigating agent's largest self-declared gap — it had only ever run
+the merged code from blobs extracted to a scratch dir.
+
+**A fail-open found outside the asked scope.** Rule-4 row 4 said a `PATHSPEC` commit is gated on
+**index** content. Real git ships the **worktree** blob — measured on git 2.50.1 with `foo.sh` at HEAD
+`v1` / index `v2` / worktree `v3`: `git commit -m msg foo.sh` → `rc=0`, `HEAD:foo.sh` = `v3`. The
+card's own scenario ("a pathspec commit is gated on worktree content, not the index") always said so;
+the table disagreed with both the scenario and git. Reading the index would have passed a file whose
+worktree content no test ever ran against — G2 re-opened, the exact hole that row exists to close.
+**Two halves of one card disagreed for 21 revisions and eight judge rounds; running the command found
+it in one probe.**
+
+**The trap recorded for whoever builds task 3.** The obvious "improvement" — adding marker-gate's
+missing spellings (`-o`, `--only`, `-u`, `--untracked-files`, `--trailer`) to the shared tables —
+flips **4 of 6** measured probe cases from "cannot tell" to a clean pathspec. `git-guard.sh:269-272`
+reads exactly that fact to grant its documentation-only exemption, so each is a **block → allow flip
+on a Tier-1 guard**. Its suite catches only the `-o` pair (112 passed / 2 failed); `--trailer` and
+`-u` flip at 114/114 green. Any such change is its own feature with its own ADR, and needs regression
+cases for the two unpinned spellings first.
+
+**Rejected the investigating agent's rename** of `classify-commit-command.py` →
+`classify-commit-form.py`. The name appears in 12 places in the card and the rename fixes nothing
+about the defect. A drive-by rename is its own task.
+
+Card reopened to `phase: planning` (revision 21, `68c06b4`) per the documented return-to-planning
+convention; branch and ticked tasks retained. **Resuming implementation needs a fresh literal
+`gate confirmed`.** The `shell-segments-option-grammar` feature is cancelled before it was ever
+created — no card was written for it.
