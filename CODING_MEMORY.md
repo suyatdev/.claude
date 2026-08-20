@@ -7107,3 +7107,51 @@ committed verdict moves HEAD and invalidates itself.
 `phase: review`. What's left is entirely outside this session's control: GitHub-UI review and
 merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
 the judge flagged this rollout step explicitly, since the fix does nothing until that happens.
+
+## 2026-08-19 — tracking-feature-state: reopened and task 15 lands; closing it is blocked on two finds
+
+Resumed expecting `global-option-blindness`; it was already merged (PR #54, 2026-08-19 21:27 UTC,
+ADR 0029 on `main`). The 52h-stale handoff's whole "two owed checkpoints" instruction was obsolete.
+Pivoted to `tracking-feature-state`, whose worktree directory name had misled: that directory was cut
+for `feat/tracking-feature-state` on 2026-08-09 and reused three times since, last onto
+`feature/verification-marker-gate` on 2026-08-14. Directory name ≠ branch.
+
+The card was `phase: review`, 14/14, PRs #48 and #51 merged — nothing left but bookkeeping. Then
+running the feature's own analyzer against the live repo turned bookkeeping into a bug fix.
+
+**Confirmed before acting, not after.** `_parse_frontmatter` (`analyze.py:196`) split a frontmatter
+line on the first `:` and kept the remainder verbatim, so this repo's own closed-card convention —
+`branch: none  # merged via PR #39 (cbb9f60); …` — parsed as a branch *named* that whole string. The
+`none` test at `analyze.py:269` then missed. Plain `branch: none` was unaffected, so only *closed*
+cards misreported: 3 of 19 `questions[]` in a live run. The closing frontmatter this session was
+about to write would have been the 4th instance — caught only because the analyzer was run before the
+edit, not after.
+
+Landed at `148c350` (fix) after `581d38c` (red, test-only): one regex cutting at whitespace-then-`#`,
+so `feat/issue#42` survives whole. Verified independently of the sub-session's report — commits in the
+right checkout, root checkout untouched, **161 passed** (from 159), zero comment-as-branch questions
+left.
+
+**The count went 19 → 20, not the 19 → 16 the dispatch brief predicted, and the sub-session said so.**
+Reading branches correctly unmasked what the bug had hidden. Three findings, all re-verified here:
+
+1. `memsearch-freshness`'s card claims `feature/memsearch-freshness deleted 2026-08-09`. It is alive
+   locally and on the remote, and is the branch checked out at `~/.claude` itself. Another live
+   session's card — flagged, not touched.
+2. `_ask_about_readiness` gates only on `not card.branch`, never on completeness, so it now asks
+   whether 6/6, 14/14 and 10/10 cards are "ready to start". It was never wrong before only because
+   every plain-`branch: none` card was 0/N; this fix produced the first complete-and-branchless cards.
+   **Closing this card to the merged convention makes it a fourth instance** — which is why task 16
+   did not proceed.
+3. The card's two halves disagree: tasks 15 and 16 exist in the `.md` half but not `.spec.md`. Adding
+   them to the spec half is a spec edit, forbidden mid-implementation — a GATE, not a workaround.
+
+Also closed en route: three notes in the `.md` half claimed `d142643`'s two spec corrections were
+still queued. They were not — `d142643` landed both but touched only the `.spec.md` half (one file,
++18/−6), so the pointers beside them went stale. That commit's own message names the defect it then
+reproduced three times: "leaving a known thing described as unknown". And
+`origin/feat/tracking-feature-state` was deleted after verifying, at the moment of action, that
+`529456d` was an ancestor of `origin/main` with 0 commits ahead.
+
+**Open:** task 16 only. It needs the readiness-gate decision and a `gate confirmed` for the spec-half
+sync. Nothing else on this card is outstanding.
