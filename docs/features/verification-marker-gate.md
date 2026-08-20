@@ -2425,11 +2425,32 @@ reason this row is a pin and not a footnote.
       derivation was written down.
 - [ ] 11. `shellcheck -x` (0.11.0) clean apart from pre-existing findings; confirm which are
       pre-existing by blame **before** claiming it, not after.
-- [ ] 12. Gate stub in `rules/gates.md`; `hooks/README.md` entry. Both must state the global-but-inert
+- [x] 12. Gate stub in `rules/gates.md`; `hooks/README.md` entry. Both must state the global-but-inert
       scope **and name `MSG_NO_PYTHON` as its one exception**, or the next reader assumes either
       `.claude`-only or unconditional inertness. **Both must also say that v1 ships no way to query
       whether the gate is armed** — see the accepted cost in §Scope — so a reader looking for a
       `--status` does not conclude the entry is stale.
+      ✅ `rules/gates.md` — one **Test-marker safety** bullet, inserted before the New-project setup
+      gate, matching the sibling guards' shape (what is blocked → which hook + Tier 1 → the bypass →
+      the ⚠️ caveat → a pointer). `hooks/README.md` — a `### test-marker-guard.sh` section after
+      `context-handoff-watch.sh`, four paragraphs plus the section's standard *Why an instruction
+      cannot do this job* close. Both carry all three required points: global-on-`Bash`-but-inert with
+      `<toplevel>/hooks/lib/write-test-marker.py` as the opt-in signal; `MSG_NO_PYTHON` named as the
+      one exception, firing before any repo can be identified; and no `--status` in v1 as an accepted
+      cost, echoing §Scope's own asymmetry framing (*a non-empty log proves the gate was armed as of
+      its last entry; an empty one proves nothing*) rather than inventing new wording.
+      Claims checked against source, not memory: the opt-in `test -r` and the `MSG_NO_PYTHON` ordering
+      against `test-marker-guard.sh:9-15,79` and `:48-53`; the exempt bound (1–200 printable ASCII) against
+      `decide-commit-gate.py:51`; the marker and log paths (`hooks/state/test-markers/`,
+      `hooks/state/test-marker.log`) against `write-test-marker.py:43-44` and
+      `test-marker-guard.sh:81-82`; the fail-closed sibling set against §Scope lines 171-178 — which
+      is why `doc-guard.sh` is listed among the globally-registered hooks but **not** among those that
+      `exit 2` on a missing interpreter (it is the family's one fail-open).
+      ⚠️ **Both entries describe the gate as registered, and task 13 has not landed yet.** On this
+      base commit `settings.json` does not name `test-marker-guard.sh`; the docs are written for the
+      shipped feature, so they are accurate only once 13 registers it. If 13 is dropped or reverted
+      alone, both entries become wrong and must be revised — that is the docs-side cost of the 7↔13
+      revert pair recorded under task 13.
 - [ ] 13. Register in `settings.json` via `update-config`, preserving `"model": "opus[1m]"`.
       ⚠️ **Tasks 7 and 13 revert as a pair, and this is the worse of the two pairs.** Registration
       names `hooks/test-marker-guard.sh` to the harness; reverting **7 without 13** leaves a
