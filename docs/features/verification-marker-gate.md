@@ -2416,6 +2416,12 @@ reason this row is a pin and not a footnote.
       Not a code defect in this commit; a measurement artifact of the dispatch environment. Worth
       remembering for any future pane-dispatched suite run: `unset CLAUDE_PANE_AGENT` before running
       pane-agent-aware suites, or measure from the orchestrator instead.
+      🔴 **Correction (post-9/15 remediation): the "all 18 wired" claim above was wrong.**
+      `hooks/lib/classify-commit-command.test.py` and `hooks/merge-guard.test.sh` were never wired —
+      found independently by tasks 9 and 15, both flagging `write-test-marker.test.py`'s
+      `check_all_pairs_wired` assertion at **57 passed, 2 failed**. Fixed by adding the same call
+      site (§1) to both: `writer unit` now **59 passed, 0 failed**. Neither suite's own assertions
+      changed — `classify-commit-command.test.py` still 52/52, `merge-guard.test.sh` still 10/10.
 - [x] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
       record the result in the checklist annotation. Re-derive the count from the flowchart before
       running it rather than trusting this number: revision 8 changed it, and a floor inherited from a
