@@ -2416,10 +2416,63 @@ reason this row is a pin and not a footnote.
       Not a code defect in this commit; a measurement artifact of the dispatch environment. Worth
       remembering for any future pane-dispatched suite run: `unset CLAUDE_PANE_AGENT` before running
       pane-agent-aware suites, or measure from the orchestrator instead.
-- [ ] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
+- [x] 9. Mutation check — the **25**-mutant floor (13 doors, 10 allow paths, two component mutants);
       record the result in the checklist annotation. Re-derive the count from the flowchart before
       running it rather than trusting this number: revision 8 changed it, and a floor inherited from a
       superseded revision is the failure this line exists to prevent.
+      ✅ **25/25 killed — 24 on the first pass, the 25th after one new test was added to close a real
+      coverage gap.** The count was re-derived off §Fail-closed contract (:1789-1836) before any mutant
+      was written, not carried in from this line: **13 doors** = the 13 `MSG_*` rows of "The doors"
+      (`MSG_BAD_PAYLOAD`, `MSG_NOTHING_RUNNABLE`, `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`,
+      `MSG_CLASSIFIER_FAILED`, `MSG_CLASSIFIER_BAD_OUTPUT`, `MSG_BAD_EXEMPT`, `MSG_UNSUPPORTED_FORM`,
+      `MSG_GIT_FAILED`, `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`, `MSG_STALE_TEST`);
+      **10 allow paths** = the ten named in "The allow paths need mutants too" (pre-filter finds no
+      `commit`; payload does not parse / carries no `cwd`; no repository; repo without the writer;
+      non-Bash tool with no command; non-`COMMIT` command; valid `TEST_EXEMPT`; `INVALID`; path set
+      with no pairs; happy path, every blob matches); **2 component mutants** = emptying
+      `hooks/lib/decide-commit-gate.py` and emptying `hooks/lib/classify-commit-command.py`. 13+10+2
+      = 25, matching the floor.
+      **Method.** One semantic mutation per item, applied by exact-string replacement — **9 in
+      `hooks/test-marker-guard.sh`, 15 in `hooks/lib/decide-commit-gate.py`** (including that file's
+      component mutant, which is truncation to empty rather than a replacement) **and 1 in
+      `hooks/lib/classify-commit-command.py`** — then `bash hooks/test-marker-guard.test.sh`, plus
+      `classify-commit-command.test.py` for the classifier mutant, then `git checkout -- <file>` before
+      the next. Door mutants turn the door's `_emit("BLOCK", …)`/`exit 2` into an allow (or misroute it
+      to a neighbouring door, for the bash-owned ones that partition on `rc`/shape); **allow-path
+      mutants invert the allow into a block**, which is the direction that matters — a gate that
+      wrongly allows is this control's whole failure mode.
+      Kills were checked by reading *which* assertion went red, not just the exit code. **The 23
+      door/allow-path mutants were each killed by an assertion naming their own door or path**, with
+      blast radius from 1 red assertion (`MSG_NO_PYTHON`, `MSG_CLASSIFIER_FAILED`, and three of the
+      four bash-owned allow paths — the writer opt-in path reddens 3) to 30 (`MSG_UNSUPPORTED_FORM`).
+      The **two component mutants are the exception, and unavoidably so**:
+      emptying either Python file takes the suite to **129 passed, 95 failed** — collateral by
+      construction, since every gated scenario in an adopting repo routes through them. What pins the
+      *specific* claim for those two is the pair of dedicated stub-based cases already in §D
+      ("component mutant: an emptied entry point" / "an emptied classifier"), which assert both land on
+      `MSG_CLASSIFIER_FAILED` by different routes; both are among the 95.
+      ⚠️ **One survivor, and it was a genuine hole, not a mutation artifact:** the allow path
+      *"a non-Bash tool with no command"* is implemented at `decide-commit-gate.py:287`
+      (`if result.tool == "Bash"`), but the suite's only non-Bash scenario
+      (`run_raw "$(payload_nocmd "$R" Edit)"`) sends a payload whose bytes **do not contain the string
+      `commit` anywhere** — so the raw-payload pre-filter at `test-marker-guard.sh:43-46` answers `exit 0`
+      first and that arm is never entered by any scenario. Mutating it to block unconditionally left
+      **224 passed, 0 failed**. Closed with one new case in §C3 of `hooks/test-marker-guard.test.sh`
+      ("a non-Bash tool with no command passes the decision call itself"): an `Edit` payload with no
+      `command` field whose `new_string` mentions commit, so the pre-filter passes it through and the
+      decision call is the thing deciding. Verified both directions — it passes clean on unmutated code
+      (**225 passed, 0 failed**) and fails, alone, under the mutant (**224 passed, 1 failed**).
+      ⚠️ **Suite count moves 224 → 225** (task 7's recorded 224 + this one new case). No implementation
+      file changed: `decide-commit-gate.py`, `classify-commit-command.py`, `test-marker-guard.sh` and
+      `write-test-marker.py` are all byte-identical to the parent commit (`git diff --stat HEAD` on
+      those four is empty). Baselines re-run after the sweep and unaffected:
+      `classify-git-command.test.py` 114/114, `shell_segments.test.py` 35/35,
+      `classify-pr-command.test.py` 59/59, `classify-commit-command.test.py` 52/52.
+      ⚠️ **Pre-existing, not caused here and not fixed here:** `write-test-marker.test.py` is
+      **57 passed, 2 failed** — assertion 1 (`check_all_pairs_wired`) reports
+      `hooks/lib/classify-commit-command.test.py` and `hooks/merge-guard.test.sh` as unwired. Confirmed
+      identical at the parent commit `979f24b` with this task's change reverted, so it is task 8
+      wiring drift, not a regression from the mutation work. Flagged for whoever owns it.
 - [x] 10. Measure the latency budgets and record **all four** numbers here — the fourth exists because
       the opt-in reorder splits the "mentions commit" case into adopting and non-adopting repos, which
       pay one `python3` start and two respectively. Revise a budget if a figure exceeds it rather than

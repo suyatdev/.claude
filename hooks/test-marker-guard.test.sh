@@ -708,6 +708,18 @@ R="$(new_repo adopt)"
 run_raw "$(payload_nocmd "$R" Edit)"
 expect_exit "a non-Bash tool with no command passes" 0
 
+# The same allow path, but reached at the node that actually implements it. The case above
+# never gets that far: its payload does not contain the string "commit" anywhere, so the
+# raw-payload pre-filter answers exit 0 and the decision call's own `tool == "Bash"` arm is
+# never entered -- measured 2026-08-20, when a mutant making that arm block unconditionally
+# survived the whole suite. This payload is an Edit whose content mentions commit, so the
+# pre-filter passes it through and the arm under test is the thing deciding.
+R="$(new_repo adopt)"
+run_raw "$(/usr/bin/jq -nc --arg d "$R" \
+  '{hook_event_name:"PreToolUse",tool_name:"Edit",cwd:$d,
+    tool_input:{file_path:"docs/notes.md",old_string:"",new_string:"commit the work"}}')"
+expect_exit "a non-Bash tool with no command passes the decision call itself" 0
+
 # subprocess.run with a list never re-lexes an operand. With shell=True this collects two
 # nonexistent paths and the git error surfaces as MSG_GIT_FAILED -- a block, so it fails closed,
 # but on a commit that was always legitimate.
