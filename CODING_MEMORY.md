@@ -8469,3 +8469,27 @@ sessions with X effort." Pane-dispatched workers are new sessions, so they inher
 last set regardless of the dispatching session's current effort at dispatch time. Whether the
 "low tier for mechanical work" convention is actually controlling worker cost, given this, is an
 open question worth its own look later.
+
+## 2026-08-20 — marker-gate: task 7's M4 correction lands, verified twice against real git
+
+The blocking error described in the previous entry is fixed. Re-ran the re-verification probe
+from `.claude/current-task.md` fresh (git 2.50.1, `/tmp/pathspec-probe`, not trusting the prior
+session's transcript): with `foo.sh`/`foo.test.sh` both committed at v2 then both edited to v3 in
+the worktree only, `git commit -m msg -- hooks/foo.sh` yields `HEAD:foo.sh` = v3 (worktree —
+naming a path in the pathspec ships whatever's on disk for it, unverified) and `HEAD:foo.test.sh`
+= v2 (base, untouched by this commit). The named file mismatches the marker and goes stale
+(`MSG_STALE_SUBJECT`); the left-out file matches the marker and does not. Confirms the diagnosis.
+
+Corrected all three inherited spots to say `MSG_STALE_SUBJECT`, not `MSG_STALE_TEST`: the
+"Measured (M4)" paragraph (`verification-marker-gate.md:964`), its Gherkin scenario
+(`:1322-1329`), and the test assertion + comment (`hooks/test-marker-guard.test.sh:389-402`).
+Landed `19f4c97`. Re-ran all five suites after the edit, not just the one touched:
+`test-marker-guard.test.sh` unchanged at 8/225 (gate script still doesn't exist — task 7's
+remaining work), `classify-git-command`/`shell_segments`/`classify-pr-command`/
+`classify-commit-command` unchanged at 114/35/59/52. Pushed at `19f4c97`.
+
+Per the plan recorded in `.claude/current-task.md`, task 7's remaining build (`hooks/lib/decide-
+commit-gate.py` + `hooks/test-marker-guard.sh`, target 225/225) is being dispatched to a fresh
+pane worker next rather than continued in-process, per `dispatching-pane-agents` and the user's
+explicit request this session. Effort convention note from the prior entry still applies: check
+what effort tier the dispatched worker actually runs at, since `/model` sets it session-wide.
