@@ -35,6 +35,11 @@ import feature_tasks  # noqa: E402  — the single checklist parser
 
 SPEC_SUFFIX = ".spec.md"
 FRONTMATTER_DELIM = "---"
+# A YAML comment opens at whitespace-then-`#`, so a `#` inside a token stays in the
+# value: this repo's closed cards write `branch: none  # merged via PR #39 (...)`,
+# while a branch legitimately named `feat/issue#42` must survive whole. Quoted
+# scalars are not modelled -- no card quotes a frontmatter value.
+FRONTMATTER_COMMENT = re.compile(r"\s+#.*$")
 NO_VALUE = "—"
 MINUS = "−"  # U+2212, as the shipped sample data uses
 DONE_MARKERS = "xX"
@@ -204,7 +209,7 @@ def _parse_frontmatter(text):
             return fields, True
         key, sep, value = line.partition(":")
         if sep:
-            fields[key.strip()] = value.strip()
+            fields[key.strip()] = FRONTMATTER_COMMENT.sub("", value).strip()
     return fields, False  # never closed
 
 
