@@ -536,6 +536,13 @@ done
 
 # --- Group 2: control-byte injection -----------------------------------------
 
+# Sentinels bounding this group in stdout, read by statusline-command.falsify.py
+# to compare historical script versions against exactly this group -- the one
+# the harness exists for -- rather than the whole suite. Group 1 grows with
+# every unrelated rendering feature; scoping to Group 2 keeps that growth from
+# forcing a recalibration of a comparison it has nothing to do with.
+echo '@@GROUP2-START@@'
+
 # Each hostile payload is compared against a BENIGN TWIN -- the same payload
 # shape with harmless field values -- rather than against one global baseline.
 # A single shared baseline only holds while every injection payload renders the
@@ -645,6 +652,8 @@ case "$OUT" in
   *aabb*) ok "path with a stripped newline is joined, not truncated" ;;
   *) bad "path truncated at the control byte: $OUT" ;;
 esac
+
+echo '@@GROUP2-END@@'
 
 # --- Width-aware wrapping -----------------------------------------------------
 # COLUMNS is the only width signal available: Claude Code captures the script's

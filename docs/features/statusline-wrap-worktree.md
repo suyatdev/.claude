@@ -187,22 +187,31 @@ gone (merged, deleted); this is a fresh branch for the remainder.
       is `statusline-wrap-worktree` here and `.claude` from the shared checkout, where it would
       look for the wrong verdict and block. Freshness is strict: the stored `head_sha` must
       equal current HEAD, so any commit after judging forces another round.
-- [ ] 9. **`statusline-command.falsify.py` reports `FALSIFICATION BROKEN` — pre-existing.**
-      Verified at HEAD *before* any change here: `f0902ed` scores 8/50 against `want 9`, and
-      `925c310` scores 9/50 against `want 10`. The harness runs the current suite against five
-      historical script versions and asserts exact pass counts, so every added test shifts all
-      five; the counts were written when the suite held 20 cases and it held 50 by the time this
-      branch opened. This branch takes it to 66 and moves them again.
+- [x] 9. **`statusline-command.falsify.py` fixed — root cause was worse than documented.**
+      Re-measured at the start of this task: the harness no longer reported the documented
+      count mismatch at all. It hard-errored — `f0902ed: extraction returned a non-script
+      (b'')` — because `f0902ed` does not exist in this repository, reachable or unreachable
+      (`git fsck --unreachable`, empty; `gh api repos/.../commits/f0902ed`, 422). It was never
+      pushed: almost certainly a local commit amended away before this branch's first push on
+      2026-07-19, later garbage-collected. Unrecoverable.
 
-      **Deliberately not "fixed" here.** Rewriting `EXPECTED` to match what is observed would
-      turn a falsification harness into a rubber stamp, and the two mismatches that predate this
-      branch are a real signal nobody has read yet. Needs its own task: decide whether the
-      harness should assert counts at all, or assert *which* named cases fail per version — the
-      latter survives adding tests, which is the whole reason it keeps going stale.
+      Measuring 925c310 directly (the earliest commit this repo still has, confirmed via
+      `git log --diff-filter=A`) showed it is actually the unfixed original the old `f0902ed`
+      label described — every Group 2 case fails except the one that passes "for the right
+      reason" regardless of stripping. Its old "route-1 fix only" label was wrong; corrected
+      in the harness.
 
-      **Owed by 2026-08-20.** A permanently-broken harness stops being read, which is the
-      failure mode ADR 0016 was written about. The cost of leaving it: this diff merges with
-      no differential coverage at all.
+      Fixed the deeper design flaw from the same root, per this task's own open question:
+      switched from asserting whole-suite pass **counts** to asserting **which named Group 2
+      (control-byte injection) cases fail**, scoped to that group only via new
+      `@@GROUP2-START@@`/`@@GROUP2-END@@` sentinels in the test file. Group 1 (rendering) grows
+      every time an unrelated feature lands and none of those tests existed in these historical
+      versions — that's what forced three recalibrations (20→50→66→68). Scoping to Group 2 and
+      matching by name is structurally immune to Group 1's growth.
+
+      Falsifiability proven both directions: the harness reports `falsification intact` against
+      the real historical shas, and correctly reports `MISMATCH` with a precise expected/actual
+      diff when a `EXPECTED` entry is deliberately corrupted (tested, then reverted — see commit).
 - [ ] 10. **A missed worktree fails into the dangerous reading.** Absence of `wt:()` is
       *defined* as "you are in the main checkout", so a detector that silently broke would look
       identical to the state this feature exists to warn about — and given the motivating
