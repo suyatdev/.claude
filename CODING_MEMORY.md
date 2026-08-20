@@ -7205,3 +7205,59 @@ at ~76k session tokens, almost entirely restore-context overhead (system prompt,
 the entire "save" for a session that did restore-and-decide only; the actual ADR design work
 (brainstorming the classification scheme, the weight value, the re-measurement plan) has not started
 and is the next session's task 12.
+
+---
+
+## 2026-08-20 (same session, continued) — ADR 0030 brainstormed, written, and judged three rounds
+
+The session did not clear when offered; the brainstorm ran on in the same context. Ran
+`superpowers:brainstorming` end to end and produced
+`docs/decisions/0030-judge-verdict-tier-and-query-time-weight.md`. Four user decisions drove it:
+ship the tier rather than chase 5-of-5; query-time weight plus a source-driven reclassify pass;
+acceptance = re-sweep now requiring strict improvement and no per-target regression; leave R9's bar
+failing rather than redraw it. Approach A (weight tier) chosen over a per-document diversity cap,
+which is recorded in the ADR as the candidate follow-up.
+
+**Two findings during exploration that the feature card never recorded, and which changed the
+design.** First, the remedy cannot close R9 at all — 1.2 reaches 3 of 5 against a 5-of-5 bar, so the
+work is an improvement, not a closure. Second, and load-bearing: **building the classifier alone
+would have changed nothing.** `_index_one` skips any file whose content hash is unchanged
+(`index.py:206-209`), and weight is frozen into each chunk row at index time (`index.py:169`,
+`db.py:134`), so re-typing judge verdicts would never have reached the 185 existing files. ADR 0020
+had already recorded the same shape one level over — chunks are deleted only inside `replace_source`
+(`0020:105-110`). That gap is why weight moved to query-time resolution.
+
+**Three judge rounds, and the last one is the entry worth reading.**
+
+- Round 1 **fail**, 4 violations — all legitimate. Worst: the ADR's own boxed promise that its
+  `memsearch-freshness.md` line citations were freshly re-derived was false, because *the same commit
+  that added the ADR* inserted 11 lines into that file.
+- Round 2 **pass**, 0 violations. Fixed by deleting every line-number citation to that file in favour
+  of section headings — two rounds of stale numbers is evidence the derivation is wrong, not the
+  arithmetic, which is the anti-staleness rule that document itself already records.
+- Round 3 **fail**, 1 violation, after the spec was edited to take the observability advisory's
+  findings. **I measured a file count correctly and then invented the explanation for why it had
+  moved** — claimed the compliance-verdict delta was this decision's own verdicts arriving; it was
+  two unrelated features judged in parallel, and this branch's verdicts land in the worktree, not the
+  primary checkout. Same species as the recorded "attributed a movement to the wrong cause" failures.
+
+**The judge's correction was itself partly wrong, and checking it mattered.** It offered three
+sub-claims; two held (the invented causality, and a `14:10Z` stamp that was really local EDT), but the
+third — that the retracted "163" came from counting the worktree — did not. The count was taken
+against `~/.claude`, where `all=163, md=162`; the extra entry is `verdicts.jsonl`, exactly as first
+written. The worktree's 163 `.md` files are a numerical coincidence. Both the correction and the
+rejection of the third sub-claim are recorded in the ADR so a later reader does not re-adopt the
+wrong fix.
+
+**The observability advisory (`risk=medium, confidence=high`) found one factual error and three real
+gaps**, all taken: the migration no longer runs from the DB-open path (a read query must not be a
+schema writer, nor contend with the scheduled indexer's lock); rollback is a pre-drop file copy
+rather than a multi-hour `index --full`; the schema is versioned via `PRAGMA user_version` instead of
+sniffing for the column; the sweep pins index state at both ends and discards itself if it moved; and
+reclassify reports a denominator and re-asserts convergence. Its first dispatch timed out at 300s
+with nothing on disk and was re-run — advisory, so it never blocked.
+
+**Stopped at the escalation tripwire, not at a pass.** The compliance skill escalates when round 3
+completes with any violation outstanding. It did, so the loop stopped and went to the user rather
+than looping to round 4 — the ADR is committed at `06a9b8c` with the round-3 violation addressed but
+**not yet re-judged**, so no fresh passing verdict exists for the current blob.
