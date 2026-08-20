@@ -1,6 +1,6 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: fix/tracker-frontmatter-comment
 ---
 
