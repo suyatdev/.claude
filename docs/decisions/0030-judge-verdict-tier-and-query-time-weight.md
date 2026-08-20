@@ -149,10 +149,7 @@ That figure moved twice during the writing of this one ADR, and both movements a
   it is recorded here because attributing a movement to the wrong cause is a failure this repo has
   hit before.*
 - **An earlier draft wrote "163 and 22".** Both were counts of *all* directory entries, including
-  `verdicts.jsonl`, which `_iter_docs` does not walk. (The compliance judge proposed instead that the
-  163 came from counting the worktree, which also holds 163 observability `.md` files — checked, and
-  it does not: the count was taken against `~/.claude`, where `all=163` and `md=162`. The worktree's
-  163 is a coincidence of arithmetic, not the cause.)
+  `verdicts.jsonl`, which `_iter_docs` does not walk.
 
 Do not pin this number. **That this ADR pinned a rotting count while arguing against pinned counts is
 itself the finding**, and it is left visible rather than quietly corrected.
