@@ -8440,3 +8440,9 @@ either way this is the second time in two sessions this file was found stale (pr
 Task 2/3 dispatched to a subagent next (TDD red/green, two commits) rather than continued in-process
 — this restore alone had already pulled the session past the 75k-token freshness-checkpoint line
 before any code was touched.
+
+Landed and independently verified: `206ba2e` (red, 52 assertions), `e073cc3` (green, 248 lines,
+52/52), `59b4c92` (checklist ticked). Confirmed on HEAD in this checkout/branch before trusting the
+report; re-ran all four suites myself rather than taking the reported counts — `classify-commit-command.test.py`
+52 passed, plus the three baselines unchanged (114/35/59). Pushed at `59b4c92`. 7 of 16 tasks done;
+task 7 (green: `hooks/test-marker-guard.sh` + `hooks/lib/decide-commit-gate.py`) is next.
