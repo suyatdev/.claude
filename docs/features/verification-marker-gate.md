@@ -2477,6 +2477,65 @@ reason this row is a pin and not a footnote.
       agreeing `$HOME` store, and a stale-marker `-p` all pass under the very defect they look
       like they test), and the two Examples tables must **drive** the test code rather than being
       hand-copied — both judges raised that independently.
+      ✅ **Swept 124 spec lines** matching `must|MUST|never|NEVER|always|ALWAYS|may not|cannot
+      be|shall` across the spec body (lines 1–2157, checklist excluded), which reduce to **65
+      distinct testable claims** about runtime behaviour once narrative, meta-commentary and
+      restatements of one claim are removed. **56 already had a falsifying test; 9 did not.**
+      **7 closed here** (9 new cases, +15 assertions: `hooks/test-marker-guard.test.sh`
+      **224 → 239 passed, 0 failed**, `shellcheck -x` 0.11.0 clean). Each was killed by a
+      temporary mutant of `hooks/lib/decide-commit-gate.py`, then re-run green against the real
+      file: (1) pair-formation step 2's *test→subject* half is **index only** — the pre-existing
+      orphan case has no subject anywhere, so index-only and index-OR-disk **agree** on it; the
+      new case drops an **untracked** subject on disk and makes them disagree; (2) M5-A, a
+      `PATHSPEC`-outside member **deleted from disk** is not ABSENT; (3) M5-B, the same member
+      with its deletion **staged** is not ABSENT — both are false-*block* cases, killed by
+      widening the `<base>` condition past `cat-file -e`; (4) M5-C, the `ALL`-outside disk
+      disjunct (base present, disk missing) — only M5-D was covered, and each disjunct is the
+      sole one that reaches its case; (5–8) three of the four marker read-side validation arms
+      (`version != 1`, a marker naming a **different pair**, a **non-hex** blob) plus an **empty**
+      marker file — `not json` was the only shape tested and it reaches only the `json.loads`
+      arm; (9) a **64-hex** blob is a *valid* marker that merely disagrees, so it must land on
+      `MSG_STALE_SUBJECT`, not `MSG_BAD_MARKER`.
+      📋 **Examples tables: table-driven inside the suite, hand-copied from the spec.** All four
+      Scenario Outlines drive their cases from a single in-suite data table read by a `while
+      read` loop — the two door tables at `test-marker-guard.test.sh:763-775`, `written_at` at
+      `:252`, the interactive triggers at `:493`, the malformed-TSV shapes at `:735` — so there
+      is one spelling of each check, which is what both judges asked for. What **no** test
+      enforces is that those copies still match this document. Compared row by row at this
+      revision: **12 door rows identical, no drift**, and the other three outlines match too.
+      The residual risk is real but unenforced; making the suite parse this file was rejected as
+      coupling the suite to prose formatting.
+      🔴 **TWO CLAIMS CANNOT BE CLOSED BY A TEST — the code does not do what §3 says. Not fixed
+      here (task 15 is test-only); both need an implementation change and a red-then-green step.**
+      - **§3's no-default-allow rule is not implemented.** `decide-commit-gate.py:292` reads
+        `if result.kind != "COMMIT": _emit("ALLOW")` and `:133-140`'s form dispatch ends
+        `else: # ALL` — both are the default arm the spec forbids by name. **Measured against
+        the real gate in a throwaway adopting repo with a staged, marker-less `hooks/foo.sh`:**
+        a stub classifier returning `kind="BANANA"` → **exit 0, the commit is allowed**; one
+        returning `form=None` for a `COMMIT` → exit 2 but at `MSG_NO_MARKER`, having silently
+        collected as `ALL`. The Edges scenario *a classifier answering with a null form fails
+        closed, not open* requires `MSG_CLASSIFIER_FAILED` for the second, and the first is the
+        literal fail-open §3 describes. **No test exists for either, and one cannot be written
+        green.**
+      - **`python3 -I` is missing at one of the two call sites, and it is a silent disarm.**
+        §3 requires `-I` at *both*; `test-marker-guard.sh:106` has it, but the inline `cwd`
+        read at `:59` is a bare `"$py" -c`, so `sys.path[0]` is the process cwd. **Measured
+        against the real gate:** with a `json.py` containing `raise RuntimeError` in the cwd,
+        the same payload that gives `exit 2 / MSG_NO_MARKER` gives **exit 0** — the `import
+        json` fails outside the script's `try`, the extraction prints nothing, and `:70`'s
+        `[ -n "$cwd" ] || exit 0` allows. Worse than the failure the spec predicts (it warns of
+        a *block*); the real effect is that any repo with a `json.py` at its root turns the gate
+        off with no message. Adding `-I` at `:59` restores `exit 2` — verified.
+      ⚠️ **This item is left UNTICKED deliberately.** The sweep ran and is complete, but the task
+      is "confirm a test exists that a wrong implementation would fail", and for the two claims
+      above no such test can exist until the code is fixed. Ticking it would record the class as
+      exhausted when two members of it are open.
+      ⚠️ Two smaller findings, recorded rather than acted on. `_BLOB_RE.match` at
+      `decide-commit-gate.py:248,251` should be `fullmatch` — the same revision-15 defect one
+      layer over (`"a"*40 + "\n"` matches), though the blast radius is only a wrong *door*
+      (`MSG_STALE_*` instead of `MSG_BAD_MARKER`), never an allow. And the marker read's
+      `errors="replace"` has no test of its own; an undecodable byte reaches a field check
+      today, but nothing would notice if the argument were dropped.
 - [ ] 16. Obs judge (implementation stage) pinning the final HEAD → PR.
 
 **Standing decisions.**

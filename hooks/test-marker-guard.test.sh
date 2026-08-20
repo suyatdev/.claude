@@ -343,6 +343,18 @@ printf 'orphan suite\n' > "$R/panes-adapters.test.sh"
 git -C "$R" add -- panes-adapters.test.sh
 allow "an orphan suite is never gated" "$R" 'git commit -m msg'
 
+# The case above AGREES under both implementations of pair-formation step 2 -- with no subject
+# anywhere, index-only and index-OR-disk both find nothing. This one makes them DISAGREE: the
+# subject exists on disk and is untracked. Step 2's test->subject half is index ONLY, mirroring
+# the writer's --error-unmatch, because widening it to the union would demand a marker the
+# writer refuses to write and block that commit forever (spec: "they must stay ungated even if
+# someone drops an untracked panes/adapters.sh into the tree").
+R="$(new_repo adopt)"
+printf 'orphan suite\n' > "$R/panes-adapters.test.sh"
+printf 'untracked subject\n' > "$R/panes-adapters.sh"
+git -C "$R" add -- panes-adapters.test.sh
+allow "an orphan suite stays ungated when an UNTRACKED subject is on disk" "$R" 'git commit -m msg'
+
 mkdir -p "$TMP/norepo"
 allow "a commit outside any repository is left to git" "$TMP/norepo" 'git commit -m msg'
 
@@ -584,6 +596,77 @@ git -C "$R" commit -qm 'untrack the suite'
 edit "$R" hooks/foo.sh 'v2 subject'
 block "an untracked pair member is ABSENT under -a, never hashed from disk" "$R" \
   'git commit -am msg' MSG_STALE_TEST
+
+# M5 case C, the OTHER disjunct of the ALL-outside row: the member is present in <base> and
+# MISSING from disk. `-a` stages that deletion, so the resulting tree holds no entry -- ABSENT.
+# The case above (base missing, disk present) is caught by the cat-file disjunct alone; this one
+# is caught by the disk disjunct alone. Each is the only one that reaches its case, which is why
+# the ALL-outside row is the table's one two-condition cell.
+# The marker is written AFTER the v2 edit so the SUBJECT half matches what -a ships; the test
+# half is then the only thing that can fail, and dropping the disk disjunct flips this case all
+# the way to exit 0 rather than merely swapping one stale door for the other.
+R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
+mark "$R" hooks/foo.test.sh
+rm -f "$R/hooks/foo.test.sh"
+block "a base-present pair member deleted from disk is ABSENT under -a" "$R" \
+  'git commit -am msg' MSG_STALE_TEST
+
+# M5 cases A and B, and both are FALSE-BLOCK cases: under PATHSPEC the tree is <base> plus the
+# named paths, so a member outside the pathspec survives into the commit byte-for-byte even when
+# it is gone from disk (A) or its deletion is already staged (B). The <base> row's condition is
+# `cat-file -e` AND NOTHING ELSE for exactly this reason -- carrying the ALL row's disk clause
+# here, or probing the index, blocks a pair the commit preserves at the version the marker
+# certifies. The marker records foo.sh at v2 (its worktree content, which the pathspec ships)
+# and foo.test.sh at v1 (its base content, which the commit does not touch).
+R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
+mark "$R" hooks/foo.test.sh
+rm -f "$R/hooks/foo.test.sh"
+allow "M5-A: a pathspec-outside member deleted from disk is NOT absent" "$R" \
+  'git commit -m msg -- hooks/foo.sh'
+
+R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
+mark "$R" hooks/foo.test.sh
+git -C "$R" rm -q --cached -- hooks/foo.test.sh
+allow "M5-B: a pathspec-outside member with a STAGED deletion is NOT absent" "$R" \
+  'git commit -m msg -- hooks/foo.sh'
+
+# Read-side validation is four checks, not one, and `not json` reaches only the first. Each row
+# below is well-formed JSON that fails exactly one of the remaining three, so dropping any one
+# check turns that row from a block into an ALLOW -- the marker's blobs are otherwise correct.
+R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
+stage "$R" hooks/foo.sh
+SBLOB="$(blob "$R" hooks/foo.sh)"
+TBLOB="$(blob "$R" hooks/foo.test.sh)"
+mkdir -p "$R/$STOREREL"
+MK="$R/$STOREREL/$(key hooks/foo.sh)"
+
+: > "$MK"
+block "an empty marker fails closed" "$R" 'git commit -m msg' MSG_BAD_MARKER
+
+printf '{"version": 2, "subject": {"path": "hooks/foo.sh", "blob": "%s"}, "test": {"path": "hooks/foo.test.sh", "blob": "%s"}, "written_at": "2026-08-14T00:00:00Z"}\n' \
+  "$SBLOB" "$TBLOB" > "$MK"
+block "a marker at an unknown schema version fails closed" "$R" 'git commit -m msg' MSG_BAD_MARKER
+
+printf '{"version": 1, "subject": {"path": "hooks/other.sh", "blob": "%s"}, "test": {"path": "hooks/foo.test.sh", "blob": "%s"}, "written_at": "2026-08-14T00:00:00Z"}\n' \
+  "$SBLOB" "$TBLOB" > "$MK"
+block "a marker naming a different pair fails closed" "$R" 'git commit -m msg' MSG_BAD_MARKER
+
+printf '{"version": 1, "subject": {"path": "hooks/foo.sh", "blob": "not-a-blob"}, "test": {"path": "hooks/foo.test.sh", "blob": "%s"}, "written_at": "2026-08-14T00:00:00Z"}\n' \
+  "$TBLOB" > "$MK"
+block "a marker whose blob is not hex fails closed" "$R" 'git commit -m msg' MSG_BAD_MARKER
+
+# The blob pattern admits 64 hex chars as well as 40, leaving room for a SHA-256 repo. Asserted
+# through the door it changes: a 64-hex marker is VALID and merely disagrees with the 40-hex blob
+# this repo computes, so it must fail at MSG_STALE_SUBJECT. Narrowing the pattern to {40} would
+# move it to MSG_BAD_MARKER, which no other case in this suite would notice.
+printf '{"version": 1, "subject": {"path": "hooks/foo.sh", "blob": "%s"}, "test": {"path": "hooks/foo.test.sh", "blob": "%s"}, "written_at": "2026-08-14T00:00:00Z"}\n' \
+  "$(printf 'a%.0s' $(seq 64))" "$TBLOB" > "$MK"
+block "a 64-hex blob is a VALID marker that merely disagrees" "$R" 'git commit -m msg' \
+  MSG_STALE_SUBJECT
 
 printf '\n### C2. TEST_EXEMPT validation — 200 bytes of 0x20-0x7E, consulted by fullmatch\n\n'
 
