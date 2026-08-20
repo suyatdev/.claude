@@ -1118,27 +1118,30 @@ correctly — nothing in it can commit.
 The filter skips only commands that could not classify as `COMMIT`, except for shapes already on the
 accepted-open list (alias and variable indirection).
 
-**Budgets — targets, not measurements; checklist task 10 measures and records all four.** The opt-in
+**Budgets — set as targets, now measured; the `measured` column is task 10's, 2026-08-20.** The opt-in
 reorder is what makes this four rows rather than three: an adopting repo pays **two** `python3` starts,
 the inline `cwd` read and the decision call, and that cost is the price of the opt-in check sitting
 above the decision call.
 
-| payload | budget | what it pays for |
-|---|---|---|
-| no `commit` substring anywhere | **≤5 ms** | pure bash, no subprocess — the pre-filter exits 0 |
-| mentions `commit`, repo has **not** opted in | **≤50 ms** | one `python3 -I` start (the inline `cwd` read) plus `rev-parse` and one `test -r`; the decision call never runs |
-| mentions `commit` but is not one, in an adopting repo (`kind: OTHER` or `NOTHING_RUNNABLE`) | **≤110 ms** | the above plus a second `python3 -I` start and classification; no git calls beyond `rev-parse` |
-| an actual `git commit` in an adopting repo | **≤200 ms** | the above plus the collection, marker and hashing calls — all inside the same process |
+| payload | budget | measured (task 10) | what it pays for |
+|---|---|---|---|
+| no `commit` substring anywhere | **≤10 ms** (was ≤5 ms) | **6.7 ms** | no `python3` — but not free: the hook's own `/bin/bash` start (~2.5 ms), the prologue's `$(cd "$(dirname "$0")" && pwd)` and `$(printf '\t')` above the filter, and `payload=$(cat)`. Budget revised because ≤5 ms was below what this shape can cost, not because the code is slow |
+| mentions `commit`, repo has **not** opted in | **≤50 ms** | **37.2 ms** | one `python3 -I` start (the inline `cwd` read) plus `rev-parse` and one `test -r`; the decision call never runs |
+| mentions `commit` but is not one, in an adopting repo (`kind: OTHER` or `NOTHING_RUNNABLE`) | **≤125 ms** (was ≤110 ms) | **112.7 ms** | the above plus a second `python3 -I` start and classification; no git calls beyond `rev-parse`. Budget revised: the second start costs more than the first (the decision call imports the classifier), so 2 × 26.6 ms was never the right ceiling |
+| an actual `git commit` in an adopting repo | **≤200 ms** | **169.3 ms** | the above plus the collection, marker and hashing calls — all inside the same process |
 
-⚠️ **Two `python3` starts is still the ceiling after ADR 0026, and the four figures above are still
-unmeasured.** The merge removed a *possible third* start, not one of these two: the classifier was
-already the second, and it is now an import inside it. ADR 0026's "process starts should go down"
-is an expectation about an implementation that does not exist — **re-measure all four against real
-code, and never revise a row from that prediction.** If a measured figure exceeds its budget, the
-number gets recorded and the budget revised; it does not get quietly dropped.
+⚠️ **Two `python3` starts is still the ceiling after ADR 0026.** The merge removed a *possible third*
+start, not one of these two: the classifier was already the second, and it is now an import inside it.
+ADR 0026's "process starts should go down" was an expectation about an implementation that did not yet
+exist, and no row here was ever revised from that prediction. **The four figures are now measured**
+(task 10, 2026-08-20, medians of 15 runs against the real hook — method and raw spread in task 10's
+annotation); two budgets were revised upward because the measurement exceeded them, which is what this
+paragraph asked for, and none was quietly dropped.
 
-The row that most deserves scepticism is the last one: it now carries marker reads and `hash-object`
-calls that revision 13 would have paid for in a separate process, so it may move in *either* direction.
+The row that most deserves scepticism was the last one: it now carries marker reads and `hash-object`
+calls that revision 13 would have paid for in a separate process, so it could move in *either*
+direction. Measured, it came in **under** budget at 169.3 ms — the in-process merge paid for itself.
+The two misses were rows 1 and 3 instead.
 
 ## Scenarios
 
@@ -2417,12 +2420,51 @@ reason this row is a pin and not a footnote.
       record the result in the checklist annotation. Re-derive the count from the flowchart before
       running it rather than trusting this number: revision 8 changed it, and a floor inherited from a
       superseded revision is the failure this line exists to prevent.
-- [ ] 10. Measure the latency budgets and record **all four** numbers here — the fourth exists because
+- [x] 10. Measure the latency budgets and record **all four** numbers here — the fourth exists because
       the opt-in reorder splits the "mentions commit" case into adopting and non-adopting repos, which
       pay one `python3` start and two respectively. Revise a budget if a figure exceeds it rather than
       dropping it. Re-measure `python3 -I` startup with the derivation in §Latency rather than citing
       a remembered figure; three different numbers were recorded for it across three dates before the
       derivation was written down.
+      ✅ **All four measured 2026-08-20** against the real `hooks/test-marker-guard.sh`, driven the
+      production way — PreToolUse JSON on stdin, built with `test-marker-guard.test.sh`'s own
+      `payload()` / `new_repo()` / `mark()` helpers copied verbatim (an `adopt` repo with the writer
+      installed, an `inert` one without). Timing: `python3` `time.perf_counter()` around
+      `subprocess.run(['/bin/bash', GATE], input=payload)`, 15 runs per case, median reported; the
+      whole sweep was repeated 4× and the four run-medians are quoted as a range.
+
+      | # | scenario | budget | median | spread of the 4 run-medians | verdict |
+      |---|---|---|---|---|---|
+      | 1 | no `commit` substring | ≤5 ms | **6.7 ms** | 6.4–7.2 | ❌ over → budget revised to ≤10 ms |
+      | 2 | mentions `commit`, non-adopting repo | ≤50 ms | **37.2 ms** | 37.0–38.3 | ✅ under |
+      | 3 | mentions `commit`, not a commit, adopting repo | ≤110 ms | **112.7 ms** | 111.7–116.4 | ❌ over → budget revised to ≤125 ms |
+      | 4 | real `git commit`, adopting repo (ALLOW, marker fresh) | ≤200 ms | **169.3 ms** | 162.6–173.9 | ✅ under |
+
+      `python3 -I` startup **re-run, not remembered**, with §Latency's own derivation script:
+      `min=24.3 median=26.6 max=29.3` (ms, n=15) — consistent with the 2026-08-13 figure (median
+      23.8) on the same machine, so that paragraph stands as written.
+      ⚠️ **Row 1's miss is a floor, not a regression** — decomposed, not guessed. Measured the same
+      way (n=15 medians): an empty bash script **2.0–2.5 ms**; that plus `payload=$(cat)` and the
+      `case` **4.2 ms**; the hook's real lines 29–46 (prologue + pre-filter, nothing else) **6.2 ms**,
+      which is essentially the whole 6.7 ms. The gap above `$(cat)` is the **prologue running before
+      the filter**: `HOOKDIR="$(cd "$(dirname "$0")" && pwd)"` (two command substitutions plus external
+      `dirname`) and `TAB="$(printf '\t')"`. So "pure bash, no subprocess" was never true of this row;
+      ≤5 ms was set below what the hook's shape costs. **Not filed as a bug** — it is ~2 ms, well
+      inside the revised ≤10 ms, and moving the prologue below the filter is a code change outside
+      this task's scope.
+      ⚠️ **Row 3's miss is small and structural.** ≤110 ms was implicitly 2 × the ~24 ms start plus
+      slack, but the *second* start is the expensive one — it is `python3 -I decide-commit-gate.py`,
+      which imports the classifier and `shell_segments`, not a bare interpreter. 112.7 ms is 2.5%
+      over; revised to ≤125 ms to sit above the observed max-median (116.4) with headroom.
+      ⚠️ Case 4 is the **ALLOW** path (staged subject + fresh marker), so it pays the full collection,
+      marker read and `hash-object` work. A BLOCK on the same fixture (marker missing) measured in the
+      same range (155–162 ms medians during setup), so the row is not sensitive to the verdict.
+      ⚠️ Absolute numbers are machine- and load-specific: taken on this darwin box with the harness
+      floor above; re-derive rather than inherit, exactly as the `python3 -I` line demands.
+      ⚠️ Getting the fixture right mattered: `write-test-marker.py` takes the **test** path
+      (`hooks/foo.test.sh`), not the subject — passing the subject exits 1 with "is not a test path"
+      and silently turned case 4 into a `MSG_NO_MARKER` block on the first attempt.
+      ⚠️ Measured with `CLAUDE_PANE_AGENT` unset in the measuring shell (task 8's recorded artifact).
 - [ ] 11. `shellcheck -x` (0.11.0) clean apart from pre-existing findings; confirm which are
       pre-existing by blame **before** claiming it, not after.
 - [ ] 12. Gate stub in `rules/gates.md`; `hooks/README.md` entry. Both must state the global-but-inert
