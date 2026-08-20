@@ -1,5 +1,5 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
 branch: worktree-fix+memsearch-r9-retrieval-quality
 ---
