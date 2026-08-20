@@ -621,7 +621,7 @@ block "a non-ASCII exemption reason is rejected" "$EXEMPT_REPO" \
 # because that independence is invisible at the call site, and because revisions 11-13 reached
 # it by pinning a locale -- a mechanism this scenario must keep passing without.
 RUN_ENV="LANG=en_US.UTF-8"
-run_hook "$EXEMPT_REPO" 'TEST_EXEMPT=vendored upstream git commit -m msg'
+run_hook "$EXEMPT_REPO" "TEST_EXEMPT='vendored upstream' git commit -m msg"
 RUN_ENV=""
 expect_exit "an ASCII exemption is accepted under a UTF-8 login locale" 0
 
@@ -631,7 +631,7 @@ block "an empty exemption is not an exemption" "$R" 'TEST_EXEMPT= git commit -m 
 
 R="$(new_repo adopt)"
 stage "$R" hooks/foo.sh
-allow "an explicit exemption is honoured" "$R" 'TEST_EXEMPT=vendored upstream git commit -m msg'
+allow "an explicit exemption is honoured" "$R" "TEST_EXEMPT='vendored upstream' git commit -m msg"
 expect_log_count "an explicit exemption is logged" "$R" 1
 expect_log_field "an explicit exemption is logged" "$R" 2 EXEMPT
 expect_log_field "an explicit exemption is logged" "$R" 3 'vendored upstream'
@@ -643,7 +643,7 @@ expect_log_field "the exemption precedes any pair, so field 4 has none to name" 
 R="$(new_repo adopt)"
 stage "$R" hooks/foo.sh
 allow "an exemption containing a backslash is honoured" "$R" \
-  'TEST_EXEMPT=vendored \upstream fix git commit -m msg'
+  "TEST_EXEMPT='vendored \upstream fix' git commit -m msg"
 expect_log_field "a backslash in the reason reaches the log intact" "$R" 3 'vendored \upstream fix'
 
 # The exemption check precedes the form decision; the reverse order makes this unreachable while
