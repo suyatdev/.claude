@@ -7163,3 +7163,37 @@ already-merged branches, the one real in-flight branch (`docs/post-merge-53` /
 the prior handoff's "Also found this session" section — were not investigated further this session.
 They remain a repo-wide backlog item, not part of this branch's scope, awaiting a user decision on
 whether/how to correct them.
+
+---
+
+## 2026-08-20 — branch/worktree cleanup: two merged branches closed out, one left as-is
+
+User asked to clean up branches and worktrees "of whatever is finished." Surveyed all 5 worktrees
+against GitHub PR state directly (`gh pr list --head <branch> --state all`), not `git branch --merged`
+alone, since a squash-merged branch never shows as merged to git. Only 2 of 5 had a merged PR:
+`feature/memsearch-freshness` (PR #45) and `fix/git-guard-detached-head` (PR #52) — this session's own
+closeout entry, immediately above. The other 3 (`docs/post-merge-53`, `fix/tracker-frontmatter-comment`,
+`feature/verification-marker-gate`) have real unmerged content and no PR; left untouched.
+
+Both merged branches had leftover memory-only content never landed on `main`: this file's own 56-line
+PR #52 closeout entry (folded in as-is, appended at the current tail rather than reinserted at its
+original chronological position, since `main`'s append-only content had grown 5 sections past the
+merge-base and a positional insert would have shifted every later line-number citation), and
+`coding-memory/compliance-judge/verdicts.jsonl` from `feature/memsearch-freshness` (safe wholesale
+checkout — `main` had never touched that file since divergence). Verified the fold-in was lossless via
+direct content match, not just a clean `git apply`, since the file positions differ. Pushed to `main`
+directly (docs-only, per `git-guard`'s exception) as `5d4d71d` before removing anything.
+
+`fix/git-guard-detached-head`'s worktree (`/Users/marksuyat/.claude/memsearch-freshness`) was a linked
+worktree — removed cleanly, branch deleted locally and on `origin`.
+
+`feature/memsearch-freshness` hit the same worktree-topology collision this file's own PR #52 entry
+already logged once: its worktree is `/Users/marksuyat/.claude`, the **primary** checkout, not a
+removable linked one, and `main` was already checked out in this session's own worktree
+(`statusline-followups`), so `git switch main` there failed closed (`fatal: 'main' is already used by
+worktree`). Confirmed first that the branch carries zero unique content — every remaining diff against
+`main` was main having moved on, not the branch holding anything main lacks. Put the same two options
+to the user this file's own history already put once (move one worktree off `main` to free it, or
+leave the stray branch checked out since nothing is at risk). **User chose leave-as-is**, matching the
+prior session's answer to the identical collision. Branch and primary worktree both left untouched;
+nothing here is data loss, only a stale branch name on a fully-superseded checkout.
