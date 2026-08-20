@@ -7107,3 +7107,59 @@ committed verdict moves HEAD and invalidates itself.
 `phase: review`. What's left is entirely outside this session's control: GitHub-UI review and
 merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
 the judge flagged this rollout step explicitly, since the fix does nothing until that happens.
+
+---
+
+## 2026-08-13 (same session, continued) — PR #52 merged; git-guard-detached-head branch closes out
+
+User merged PR #52 via the GitHub UI. Verified independently rather than trusted from the user's
+message alone: `gh pr view 52 --json state,mergedAt,mergeCommit,mergedBy` → `MERGED` at
+`2026-08-13T13:05:02Z`, merge commit `6a2b7c5`, by `suyatdev`. Confirmed the branch is fully absorbed:
+`git log origin/main..HEAD` from `fix/git-guard-detached-head` at `be00aff` returned empty. Ran
+`superpowers:finishing-a-development-branch` per the handoff's own "Merged" instruction.
+
+**Worktree topology made the standard cleanup steps not apply cleanly.** This repo runs three
+worktrees off the same `.git`: `main` lives in `statusline-followups`, `docs/post-merge-53` in
+`tracking-feature-state`, and this session's `fix/git-guard-detached-head` in a fourth
+(`/Users/marksuyat/.claude/memsearch-freshness`, not under a `worktrees/`-named path — host-managed,
+not superpowers-created). Since `main` is checked out elsewhere, this worktree cannot itself be
+switched onto `main`, and the parallel-agent invariant against touching another worktree's files rules
+out fast-forwarding it from here. Put the choice to the user rather than guessing between "delete the
+branch and leave this worktree on a detached HEAD" (which `git-guard.sh`'s own fix now fails closed
+on) and "leave everything as-is." **User chose leave-as-is.** Worktree and local branch
+`fix/git-guard-detached-head` (now fully merged, zero unmerged commits) both left untouched.
+
+**`fix/git-guard-detached-head`'s work is done.** No further scope on this branch per the handoff's
+own instruction. `docs/features/git-guard-detached-head.md` (10/10 checked) and ADR 0026 stand as the
+permanent record; this file's own session-58-through-66 entries are the narrative history.
+
+---
+
+## 2026-08-13 — session 67: restore re-verified, no drift found
+
+Restored per the standard procedure (handoff, feature file frontmatter/checklist, `git status`,
+`git log main..HEAD`) rather than trusting the handoff's header at face value — the immediately prior
+session found the header stale once already (the `CONFLICTING`/`DIRTY` surprise recorded above), so
+this restore re-checked the same claims independently instead of assuming they'd hold twice.
+
+**Everything checked out this time — no new findings.** `gh pr view 52
+--json state,mergedAt,mergeCommit` still reports `MERGED` at `6a2b7c5`. `git log HEAD..origin/main`
+shows exactly one commit not on this branch — the merge commit `6a2b7c5` itself, the expected shape
+for a branch whose PR already merged. `git log origin/main..HEAD` shows exactly one commit not on
+`origin/main` — `8dac76a`, the post-merge closeout doc from the previous session, never intended to
+merge again. Working tree clean, frontmatter (`phase: review`, `branch: fix/git-guard-detached-head`)
+matches `git branch --show-current`, all 10 checklist items still checked, worktree topology
+(`git worktree list`) unchanged from the previous session's description. This branch has no further
+scope; nothing here changes that conclusion, it just confirms it holds.
+
+**Freshness checkpoint fired on token count, not task completion** — `context-handoff-watch` tripped
+at ~96k session tokens (the feature file alone is ~860 lines) with no code or spec changes made this
+session. This entry and the session-state.md refresh are the entire "save" for a session that did
+verification only.
+
+**Backlog carried forward unchanged, still not acted on:** the 10 stale `phase: review` cards naming
+already-merged branches, the one real in-flight branch (`docs/post-merge-53` /
+`tracking-feature-state` worktree), and `falsify-harness-signatures` (0/11, untouched) — all listed in
+the prior handoff's "Also found this session" section — were not investigated further this session.
+They remain a repo-wide backlog item, not part of this branch's scope, awaiting a user decision on
+whether/how to correct them.
