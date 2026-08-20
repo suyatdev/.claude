@@ -851,6 +851,47 @@ block "component mutant: an emptied entry point" "$R" 'git commit -m msg' \
 block "component mutant: an emptied classifier" "$R" 'git commit -m msg' \
   MSG_CLASSIFIER_FAILED "" "$(stub_gate mutant-classifier REAL EMPTY)"
 
+# The no-default-allow rule (§3): an unrecognised kind/form from the classifier must raise, not
+# quietly allow. A half-upgraded classifier answering outside the domain either dispatch expects
+# would otherwise pass every other scenario in this file and ship a gate that switches itself off.
+NULL_FORM_CLASSIFIER='from collections import namedtuple
+Classification = namedtuple("Classification", ["tool", "kind", "form", "amend", "paths", "exempt"])
+def classify(tool_name, command):
+    return Classification(tool_name, "COMMIT", None, False, [], "")
+'
+block "a classifier answering with a null form fails closed, not open" "$R" 'git commit -m msg' \
+  MSG_CLASSIFIER_FAILED "" "$(stub_gate null-form REAL "$NULL_FORM_CLASSIFIER")"
+
+BAD_KIND_CLASSIFIER='from collections import namedtuple
+Classification = namedtuple("Classification", ["tool", "kind", "form", "amend", "paths", "exempt"])
+def classify(tool_name, command):
+    return Classification(tool_name, "BANANA", "NONE", False, [], "")
+'
+block "a classifier answering with an out-of-domain kind fails closed, not open" "$R" 'git commit -m msg' \
+  MSG_CLASSIFIER_FAILED "" "$(stub_gate bad-kind REAL "$BAD_KIND_CLASSIFIER")"
+
+# Node RC's inline python read the cwd WITHOUT -I, so a hostile json.py sitting in the hook
+# process's own cwd could shadow the stdlib module and silently disarm the whole gate (exit 0,
+# no error) instead of failing closed -- worse than every other failure mode in this file, since
+# it looks like nothing ran at all. run_hook never exercises this: the payload's cwd FIELD and
+# the process's real OS cwd are different things, and only the latter can shadow sys.path[0].
+R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
+stage "$R" hooks/foo.sh
+printf 'raise RuntimeError("hijacked")\n' > "$R/json.py"
+ERR="$(cd "$R" && printf '%s' "$(payload 'git commit -m msg' "$R")" | /bin/bash "$GATE" 2>&1 >/dev/null)"
+RC=$?
+rm -f "$R/json.py"
+if [ "$RC" -eq 2 ]; then
+  ok "a hostile json.py in the hook's cwd cannot shadow node RC's json import (exit 2)"
+else
+  bad "a hostile json.py in the hook's cwd cannot shadow node RC's json import (want exit 2, got $RC)"
+fi
+case "$ERR" in
+  *MSG_NO_MARKER*) ok "...and it still reaches MSG_NO_MARKER, not a silent allow" ;;
+  *) bad "...and it still reaches MSG_NO_MARKER, not a silent allow (got: $ERR)" ;;
+esac
+
 printf '\n### E. Every door that writes a line, driven from the spec Examples tables\n\n'
 
 # The two tables are transcribed once and drive the loop as data. Do not re-add a per-door copy

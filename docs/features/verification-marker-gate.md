@@ -2617,7 +2617,7 @@ reason this row is a pin and not a footnote.
       where the regex denied every exemption, and this task as written would have reported the gate
       correctly armed throughout. **A check that can only observe refusal cannot detect a control
       that refuses everything.**
-- [ ] 15. **Re-run the MUST-sweep against the code, not the prose.** For every `MUST`-shaped
+- [x] 15. **Re-run the MUST-sweep against the code, not the prose.** For every `MUST`-shaped
       sentence, bolded **never**/**always** claim, and repeated requirement in this spec, confirm a
       *test* exists that a wrong implementation would fail. **This task exists because inspection
       demonstrably does not exhaust this class:** rounds 6-10 found 2,1,1,1,2 defects of exactly
@@ -2677,10 +2677,30 @@ reason this row is a pin and not a footnote.
         `[ -n "$cwd" ] || exit 0` allows. Worse than the failure the spec predicts (it warns of
         a *block*); the real effect is that any repo with a `json.py` at its root turns the gate
         off with no message. Adding `-I` at `:59` restores `exit 2` — verified.
-      ⚠️ **This item is left UNTICKED deliberately.** The sweep ran and is complete, but the task
-      is "confirm a test exists that a wrong implementation would fail", and for the two claims
-      above no such test can exist until the code is fixed. Ticking it would record the class as
-      exhausted when two members of it are open.
+      ✅ **Both claims above fixed and now closed by a test (post-9/15 remediation), TDD in
+      order: red confirmed against the unfixed code before either fix landed.**
+      - **No-default-allow rule, now implemented.** `decide-commit-gate.py`'s kind dispatch
+        (`:286-296`) is now total over the three-value domain — `NOTHING_RUNNABLE`, `OTHER`
+        (allow), `COMMIT` (fall through) — with an explicit `else: raise` for anything else,
+        uncaught, landing on `MSG_CLASSIFIER_FAILED`. `_collect_path_set` (`:133-144`) is the
+        same shape: `PLAIN`/`PATHSPEC`/`ALL` explicit, `else: raise` for anything else, replacing
+        the old `else: # ALL` default. Two new §D scenarios (`test-marker-guard.test.sh`, using
+        the existing `stub_gate` mechanism): a stub classifier returning `kind="BANANA"`, and one
+        returning `form=None` for a `COMMIT` — both now assert `MSG_CLASSIFIER_FAILED`. Confirmed
+        red against the pre-fix code (both failed: `kind="BANANA"` got exit 0; `form=None` got
+        `MSG_NO_MARKER`), green after.
+      - **`-I` added at `test-marker-guard.sh:59`.** New §D scenario reproduces the exact repro
+        above (a hostile `json.py` in the hook's real process cwd, not the payload's `cwd`
+        *field* — `run_hook` never exercises this, so the case runs the hook directly from
+        inside a throwaway repo). Confirmed red without `-I` (exit 0, no MSG_NO_MARKER), green
+        with it (exit 2, MSG_NO_MARKER) — flipped the flag off and back to prove both directions.
+      `test-marker-guard.test.sh`: 239 (task 15's own count) → **246 passed, 0 failed** (+4 for
+      the no-default-allow pair, +2 for the `-I` pair). All baselines re-run and unaffected:
+      `classify-git-command.test.py` 114, `shell_segments.test.py` 35,
+      `classify-pr-command.test.py` 59, `classify-commit-command.test.py` 52,
+      `write-test-marker.test.py` 59 (the task-8 wiring fix, above, landed first).
+      `shellcheck -x` 0.11.0 on the modified `test-marker-guard.sh`: clean apart from the
+      already-accepted SC2174.
       ⚠️ Two smaller findings, recorded rather than acted on. `_BLOB_RE.match` at
       `decide-commit-gate.py:248,251` should be `fullmatch` — the same revision-15 defect one
       layer over (`"a"*40 + "\n"` matches), though the blast radius is only a wrong *door*

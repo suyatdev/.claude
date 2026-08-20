@@ -56,7 +56,7 @@ fi
 # The target repo is unknowable without this, so an unparseable payload or a missing cwd is
 # allowed exactly as git-guard.sh:72 allows on an empty command extraction -- accepted-open,
 # never a machine-global block (only MSG_NO_PYTHON is that).
-cwd=$(printf '%s' "$payload" | "$py" -c '
+cwd=$(printf '%s' "$payload" | "$py" -I -c '
 import json, sys
 try:
     payload = json.load(sys.stdin)

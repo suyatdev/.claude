@@ -135,8 +135,14 @@ def _collect_path_set(toplevel, base, form, paths):
         args = ["diff", "--cached", "--name-only", "--diff-filter=d", base]
     elif form == "PATHSPEC":
         args = ["diff", "--name-only", "--diff-filter=d", base, "--"] + paths
-    else:  # ALL
+    elif form == "ALL":
         args = ["diff", "--name-only", "--diff-filter=d", base]
+    else:
+        # No default-allow arm (§3): by this call site UNSUPPORTED/INVALID/NONE are already
+        # handled and returned above, so only PLAIN/PATHSPEC/ALL are legal here. Anything
+        # else -- including None from a half-upgraded classifier -- raises, uncaught, so it
+        # surfaces as MSG_CLASSIFIER_FAILED rather than silently collecting as ALL.
+        raise RuntimeError("unrecognised form for a COMMIT: {!r}".format(form))
     proc = _git(args, toplevel)
     if proc.returncode != 0:
         raise _GitFailure()
@@ -289,9 +295,15 @@ def _decide(payload):
         else:
             _emit("ALLOW")
         return
-    if result.kind != "COMMIT":
+    if result.kind == "OTHER":
         _emit("ALLOW")
         return
+    if result.kind != "COMMIT":
+        # No default-allow arm (§3): kind is a closed domain (COMMIT | OTHER |
+        # NOTHING_RUNNABLE), both handled above. Anything else means the classifier is
+        # answering outside its own contract -- raise, uncaught, so this surfaces as
+        # MSG_CLASSIFIER_FAILED rather than silently allowing the commit.
+        raise RuntimeError("classifier returned an unrecognised kind: {!r}".format(result.kind))
 
     # Node H -- checked before node I, so a non-commit carrying a stray TEST_EXEMPT can never
     # reach this validation at all (see the classify() dispatch above).
