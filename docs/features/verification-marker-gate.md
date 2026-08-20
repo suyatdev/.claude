@@ -2581,7 +2581,27 @@ reason this row is a pin and not a footnote.
       shipped feature, so they are accurate only once 13 registers it. If 13 is dropped or reverted
       alone, both entries become wrong and must be revised — that is the docs-side cost of the 7↔13
       revert pair recorded under task 13.
-- [ ] 13. Register in `settings.json` via `update-config`, preserving `"model": "opus[1m]"`.
+- [x] 13. Register in `settings.json` via `update-config`, preserving `"model": "opus[1m]"`.
+      ✅ Added one entry, `"$HOME/.claude/hooks/test-marker-guard.sh"`, to the `PreToolUse` →
+      `matcher: "Bash"` array in `settings.json` (repo root, not `.claude/settings.json` — that
+      is where all four sibling guards already live), after `feature-sync-guard.sh`, matching
+      their exact `{"type": "command", "command": "..."}` shape. `python3 -m json.tool` and
+      `jq -e` both confirm the file is valid JSON and the entry is where it should be. Diff is
+      the four added lines and nothing else. ⚠️ **`"model": "opus[1m]"` no longer exists to
+      preserve — the live value at this HEAD is `"claude-fable-5[1m]"`, and this task did not
+      touch it either way.** The checklist text is stale (the model has changed since this task
+      was written), not a live contradiction; the instruction's *intent* — don't disturb the
+      model field — was honoured.
+      ⚠️ **Live-fire proof only partly possible.** Per `update-config`'s own procedure,
+      temporarily prefixed the new entry with a sentinel write and ran a harmless `Bash` call:
+      the sentinel did **not** fire, because this session's hook config was loaded before the
+      edit landed — the documented "settings watcher" caveat, not a defect in the registration.
+      `jq -e` and the JSON-validity check both passed, which is what that procedure treats as
+      sufficient when the live-fire check is blocked by session staleness. Confirmed clean
+      (sentinel prefix removed, temp files deleted) before committing. **Takes effect for any new
+      session automatically; this session needs `/hooks` or a restart to see it live** — task 14
+      runs the arming check directly against the installed script regardless, so it does not
+      depend on this session picking up the change.
       ⚠️ **Tasks 7 and 13 revert as a pair, and this is the worse of the two pairs.** Registration
       names `hooks/test-marker-guard.sh` to the harness; reverting **7 without 13** leaves a
       registered-yet-missing hook, and a `PreToolUse` entry whose script cannot be executed fails
