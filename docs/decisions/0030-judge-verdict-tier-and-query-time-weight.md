@@ -134,13 +134,28 @@ them.*
 
 **The size of the affected population is a derivation, not a constant.** It is
 `ls ~/.claude/coding-memory/{observability,compliance}-judge/*.md | wc -l`, and only `*.md` counts,
-because that is what `_iter_docs` walks (`index.py:65`). Run at 2026-08-20 14:10Z from the primary
-checkout it gave **162** and **23**. That figure is live and rising *while this ADR is being judged*:
-an earlier count in this same session read 162 and 21, and the difference is this decision's own
-compliance verdicts landing in the directory being counted. Do not pin it — an earlier draft wrote
-"163 and 22", which was both miscounted (it included `verdicts.jsonl`, which is not walked) and
-already out of date. **That this ADR pinned a rotting count while arguing against pinned counts is
-the finding, and it is left visible rather than quietly corrected.**
+because that is what `_iter_docs` walks (`index.py:65`). Run against the **primary checkout**
+(`~/.claude`) at **2026-08-20 18:17Z** it gave **162** and **23**.
+
+That figure moved twice during the writing of this one ADR, and both movements are instructive:
+
+- **Earlier the same session it read 162 and 21.** The two new files are
+  `2026-08-20-06-deck-import-export.md` and `2026-08-20-07-badging.md` — **two unrelated features
+  being judged in parallel**, nothing to do with this decision. This branch's own verdicts land in
+  the *worktree*, not here. That makes the live-corpus point stronger than a self-referential
+  explanation would: the population this weight tier applies to moves for reasons this branch does
+  not control and cannot see. ⚠️ *A draft of this paragraph asserted the delta was this decision's
+  own verdicts arriving. That was invented — the number was measured, the explanation was not — and
+  it is recorded here because attributing a movement to the wrong cause is a failure this repo has
+  hit before.*
+- **An earlier draft wrote "163 and 22".** Both were counts of *all* directory entries, including
+  `verdicts.jsonl`, which `_iter_docs` does not walk. (The compliance judge proposed instead that the
+  163 came from counting the worktree, which also holds 163 observability `.md` files — checked, and
+  it does not: the count was taken against `~/.claude`, where `all=163` and `md=162`. The worktree's
+  163 is a coincidence of arithmetic, not the cause.)
+
+Do not pin this number. **That this ADR pinned a rotting count while arguing against pinned counts is
+itself the finding**, and it is left visible rather than quietly corrected.
 
 Matching on the parent directory name rather than a full-path substring inherits ADR 0020's *reason*,
 not merely its shape — classification follows the path, so all copies of a verdict tier identically
