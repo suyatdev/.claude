@@ -109,6 +109,35 @@ CASES = [
 ]
 
 
+# --- generalised: subcommand and exempt_var are now parameters (task 5), defaulting to
+# --- ("pr", "create") / "JUDGE_EXEMPT" -- every case above calls classify(cmd) with no
+# --- extra args, so it exercises exactly those defaults and is proof the generalisation
+# --- changed nothing for the existing caller. These cases exercise the PARAMETERS
+# --- themselves: merge-guard.sh (task 6) is the second caller, passing
+# --- subcommand=("pr", "merge"), exempt_var="MERGE_EXEMPT". The lexer (segments()) is
+# --- untouched and already proven above for chaining/quoting/wrappers against "pr create" --
+# --- re-proving every one of those shapes against "pr merge" would be redundant, since
+# --- adjacency-matching happens after lexing and does not care which pair it is comparing.
+# --- (command, subcommand, exempt_var, expected_kind, expected_exempt, why)
+PAIR_CASES = [
+    ("gh pr merge 5", ("pr", "merge"), "MERGE_EXEMPT", "PR", "", "the new pair matches"),
+    ("gh pr merge 5", ("pr", "create"), "JUDGE_EXEMPT", "NO", "",
+     "the SAME command does not match the default pair -- proves the parameter is live"),
+    ("gh pr create", ("pr", "merge"), "MERGE_EXEMPT", "NO", "",
+     "and the converse: the default-pair command does not match the new one"),
+    ("gh -R o/r pr merge 5", ("pr", "merge"), "MERGE_EXEMPT", "PR", "",
+     "a global flag before the subcommand is still valid gh, same as pr create"),
+    ("echo hi && gh pr merge 5", ("pr", "merge"), "MERGE_EXEMPT", "PR", "",
+     "chaining still works -- the lexer is unchanged"),
+    ("MERGE_EXEMPT=intentional gh pr merge 5", ("pr", "merge"), "MERGE_EXEMPT",
+     "PR", "intentional", "the new exempt_var is read from its own segment"),
+    ("JUDGE_EXEMPT=x gh pr merge 5", ("pr", "merge"), "MERGE_EXEMPT", "PR", "",
+     "the OTHER guard's exemption variable must not leak in -- asking for MERGE_EXEMPT "
+     "must not see a JUDGE_EXEMPT prefix, the same isolation the default direction already had"),
+    ("gh pr view 12", ("pr", "merge"), "MERGE_EXEMPT", "NO", "", "different subcommand, still NO"),
+]
+
+
 def main():
     passed = failed = 0
     for cmd, want_kind, want_exempt, why in CASES:
@@ -119,6 +148,15 @@ def main():
             failed += 1
             print("FAIL — {!r} ({})\n       want ({!r}, {!r}), got ({!r}, {!r})".format(
                 cmd, why, want_kind, want_exempt, got_kind, got_exempt))
+    for cmd, subcommand, exempt_var, want_kind, want_exempt, why in PAIR_CASES:
+        got_kind, got_exempt = classify(cmd, subcommand=subcommand, exempt_var=exempt_var)
+        if (got_kind, got_exempt) == (want_kind, want_exempt):
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL — {!r} subcommand={!r} exempt_var={!r} ({})\n"
+                  "       want ({!r}, {!r}), got ({!r}, {!r})".format(
+                      cmd, subcommand, exempt_var, why, want_kind, want_exempt, got_kind, got_exempt))
     print("\nclassifier unit: {} passed, {} failed".format(passed, failed))
     return 1 if failed else 0
 

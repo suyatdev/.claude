@@ -6411,6 +6411,299 @@ needs its own branch and PR rather than a direct commit to `main`.
 
 **PR #52 (`fix/git-guard-detached-head`) remains open** — a different worktree's branch, untouched.
 
+<!-- Merge note (fix/git-guard-detached-head <- origin/main, 2026-08-12): the two blocks
+below were appended independently on diverging branches and both number their entries
+"Session N" from a per-branch counter, not a repo-wide one -- the numbers below overlap
+(e.g. two different "Session 58"s) and do not represent a single global timeline. Trust
+each entry's own date header, not its session number, for ordering across the two blocks.
+Neither block's internal order was changed by this merge. -->
+
+
+## Session 58 — git-guard-detached-head: checklist step 1, and two bugs the assertions caught
+
+`docs/features/git-guard-detached-head.md` entered implementation on branch
+`fix/git-guard-detached-head` (spec exited its compliance gate at round 6 still `fail`, by explicit
+user decision — see that file's Gate record section). This session ran checklist step 1: land the
+three planning measurement scripts under `hooks/` with real assertions instead of the `printf`-only
+diagnostics they were written with in a now-collected planning sandbox.
+
+The scratchpad copies of `measure-matrix.sh`, `measure-headname.sh`, and `verify-carveout-hole.sh`
+still existed (a different session's scratchpad than this one's — path varies per session id) and
+were rewritten in place rather than hunted down further, per the prior handoff's own instruction to
+treat the spec as ground truth. Doing so surfaced two real bugs, neither in the hook itself:
+
+1. `measure-matrix.sh`'s patched hook, as scratchpaded, used the *loose* carve-out — no head-name
+   clause — which predates bound 1 in the spec. Its `rebase_edit` fixture (a rebase started FROM
+   `main`) therefore reported `0 → 0` for that cell, but the spec's own changed-cell matrix claims
+   `0 → 2` for exactly that state (the fix bound 1 exists to enforce). Landing the script unmodified
+   would have shipped an artifact contradicting the spec it's supposed to support. Fixed by patching
+   with the final tight design; the cell now correctly measures `0 → 2`.
+2. Writing the state-assertions themselves introduced a fresh bug:
+   `[ -e "$(cd "$d" && git rev-parse --git-path M)" ]` resolves the git-path string relative to the
+   *caller's* cwd, not `$d`, because the `cd` only lives inside the command-substitution subshell. It
+   silently read as correct on every absence assertion (the wrong-cwd lookup also finds nothing) and
+   failed for real on the one presence assertion it touched first (`CHERRY_PICK_HEAD`). Fixed by
+   wrapping the whole test in one subshell: `( cd "$d" && [ -e "$(git rev-parse --git-path M)" ] )`.
+   Recorded as a live instance of `feedback_confirm_the_check_can_fail` — the presence check is what
+   proved the assertion could fail at all; every absence check alone would have shipped silently
+   wrong.
+
+All three scripts now exit non-zero on any failed assertion and, run clean, reproduce every number in
+the spec's changed-cell matrix, carve-out-bounds table, and round-3 judge-findings numbers. Committed
+`2ac4d2d`, pushed. Next is checklist step 2 (state helpers in `hooks/git-guard.test.sh`) — see
+`.claude/session-state.md` for the corrected step ordering (the prior handoff had steps 2 and 3
+swapped relative to the feature file's actual checklist).
+
+## Session 59 — git-guard-detached-head: checklist step 2, ten self-asserting fixtures
+
+Restored from the session-58 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean. Ran checklist step 2 — state helpers in `hooks/git-guard.test.sh`, beside `on_branch()`.
+
+Landed `assert_symref`/`assert_marker`/`assert_headname` (hard-abort assertions matching
+`on_branch`'s own "HARNESS —" fail-loud convention) plus `mk_dir_repo` and eight fixture builders:
+`detached`, `nonrepo_dir`, `unborn_repo`, `rebase_edit_stopped`, `cherry_pick_conflict`,
+`named_main_merge_conflict`, `rebase_apply_stopped`, `master_repo`. Two of them —
+`rebase_edit_stopped` and `rebase_apply_stopped` — take the starting branch as a parameter, which is
+what lets ten checklist-listed states (rows 5/7, 8/15, 17/19) come from eight functions rather than
+ten. Directory-returning helpers build under the suite's own `$TMP` so its existing `EXIT` trap
+cleans them up, and print the repo path on stdout for the next step's `run_case_in` to consume —
+nothing is wired into `run_case` yet, by design; the checklist puts that in step 3 because `run_case`
+hardcodes `cd "$REPO"` and six of the nineteen rows need their own directory.
+
+Given `feedback_fixture_must_not_pre_create_state` and `feedback_confirm_the_check_can_fail` from
+session 58's own findings, verified both directions before calling this done, outside the committed
+suite (these helpers aren't reachable from `run_case` yet, so nothing in the suite itself could
+prove this): extracted the new function block into a scratch file, sourced it against a throwaway
+`$TMP`/`$REPO`, and invoked all ten helper calls — none hit a `HARNESS —` abort. Then fed
+`assert_symref` a deliberately wrong branch name against a real repo and confirmed it aborts with
+the mismatch reported, rather than passing silently — the falsifier check the session-58 note flagged
+as what actually proves an assertion can fail. `bash hooks/git-guard.test.sh` still reports 77
+passed, 0 failed, unchanged, since the new helpers are unwired.
+
+Committed `0e124ab`, pushed. Next is checklist step 3 — add a `run_case_in <dir> <desc> <want-exit>
+<cmd>` variant beside `run_case`, needed before any of these fixtures can actually feed a test row.
+
+## 2026-08-12 — session 60: git-guard-detached-head, checklist step 3, `run_case_in`
+
+Restored from the session-59 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean, nothing uncommitted. Ran checklist step 3 — the `run_case_in <dir> <desc> <want-exit>
+<cmd>` variant that lets a test row target its own fixture directory instead of the suite's shared
+`$REPO`.
+
+Rather than duplicate `run_case`'s body, factored the shared pass/fail bookkeeping into
+`_run_case_common <dir> <desc> <want-exit> <cmd>`; `run_case` now calls it with `"$REPO"` and
+`run_case_in` calls it with a caller-supplied directory. `run_case`'s behavior is unchanged —
+`bash hooks/git-guard.test.sh` still reports 77 passed, 0 failed — and no row calls `run_case_in`
+yet (that's checklist step 4).
+
+Verified the new helper against real hook behavior rather than just confirming it parses: built a
+throwaway non-repository directory and called `run_case_in` against it with the row-3 command,
+expecting the *post-fix* exit code (`2`). It reported `FAIL — want 2, got 0`, which is correct today
+— the fix itself doesn't land until checklist step 6, and `0` is exactly what row 3's "Before" cell
+in the spec's changed-cell matrix documents. Then called it again on the same fixture expecting `0`
+(the current real behavior) and got `ok`, confirming the pass/FAIL paths track the hook's actual
+exit code rather than one being a dead branch — the same falsifier discipline session 58 and 59
+applied to their own new assertions.
+
+Committed `9d8d128`, pushed. Next is checklist step 4 — add all 19 matrix rows as `run_case`/
+`run_case_in` lines and confirm rows 1–5, 15 and 17 fail while 6–14, 16, 18 and 19 pass (the fix
+hasn't landed yet, so the first group is expected red at this point).
+
+## 2026-08-12 — session 61: git-guard-detached-head, checklist step 4, all 19 matrix rows
+
+Restored from the session-60 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean, nothing uncommitted. Ran checklist step 4 — wired all 19 matrix rows from
+`docs/features/git-guard-detached-head.md` into `hooks/git-guard.test.sh` as `run_case`/`run_case_in`
+lines, in a new section after the orphan-classifier cases.
+
+Rows 1, 2, 6, 11–14 reuse the shared `$REPO` via `on_branch`/`detached`/`stage` and plain `run_case`;
+the other twelve get their own directory from the session-59 fixture builders (`nonrepo_dir`,
+`unborn_repo`, `rebase_edit_stopped`, `cherry_pick_conflict`, `named_main_merge_conflict`,
+`rebase_apply_stopped`, `master_repo`) via `run_case_in`. Each row's want-exit is the spec table's
+**After** column, not necessarily today's behavior — that's deliberate: rows 1–5, 15 and 17 are
+supposed to fail right now.
+
+Before writing fixtures, checked empirically (not assumed) how the *current*, unfixed
+`current_branch()` reads two of the new states, since the table's "Before" column depends on it:
+`git rev-parse --abbrev-ref HEAD` on an unborn branch prints the literal string `HEAD` to stdout (not
+the branch name) and exits 128; in a non-repository directory it prints nothing and exits 128. Both
+leave `current_branch()` returning something other than `main`/`master`, confirming rows 3–5 really
+are allowed today rather than trusting the table's claim unverified.
+
+`bash hooks/git-guard.test.sh` reports **89 passed, 7 failed**. The 7 failures are exactly rows 1, 2,
+3, 4, 5, 15 and 17 (`want 2, got 0` each); the other 12 new rows (6–14, 16, 18, 19) are green —
+77 pre-existing + 12 new = 89. This is exactly the split the checklist requires; the fix in checklist
+step 6 is what turns the 7 red rows green without disturbing anything else.
+
+Committed `e356ebf`, pushed. Next is checklist step 5 — add `checkout_desc()` and
+`rebase_head_name()`, and replace the stderr paths and remedy lines with the message contract's exact
+text. Deliberately messages-before-logic: no hook behavior changes in this step, only strings, so
+there's no window where the guard blocks but prints the old message.
+
+## 2026-08-12 — session 62: git-guard-detached-head, checklist step 5, message contract
+
+Restored from the session-61 handoff: branch, phase, and frontmatter all matched reality, working
+tree clean, nothing uncommitted, in sync with `origin/fix/git-guard-detached-head`. Ran checklist
+step 5 — landed `checkout_desc()` and `rebase_head_name()` from the spec verbatim, and swapped in the
+message contract's exact text at all three `hooks/git-guard.sh` refusal sites (`PUSH_LEASE`, Guard
+1's disallowed-path, Guard 1's empty-index path).
+
+`checkout_desc()` is safe to add ahead of the `symbolic-ref` rewrite: `on_main()` still only returns
+true for a literally-named `main`/`master` checkout today, so `checkout_desc` is only ever called
+with `$1` = `"main"` or `"master"` — its detached/non-repo arms sit unreachable until checklist step
+6 changes `current_branch()`.
+
+The remedy-line table needed one more fact than `checkout_desc` carries: whether an operation marker
+is present while sitting on a *named* `main`/`master` (row 16's shape — a merge conflict on a
+literally-checked-out `main`). Added `operation_in_progress()`, a plain five-marker existence check,
+kept deliberately separate from `sequencer_in_progress()` (checklist step 6's function): that one's
+`head-name` special case answers a *gating* question ("will finishing this move main?") that doesn't
+apply once the branch is already named — the two functions consult the same on-disk markers so they
+can never describe git's state differently, but they answer different questions.
+
+Verified behavior-neutral rather than trusting the diff by inspection: `bash hooks/git-guard.test.sh`
+still reports **89 passed, 7 failed**, the identical 7 rows (1, 2, 3, 4, 5, 15, 17) as session 61 —
+no exit code moved. Also built a real named-`main` repo by hand, staged a source file, and ran the
+hook directly to confirm the rendered text matches the contract exactly, not just that *a* string
+came out: `git-guard: refusing this commit -- the checkout is branch 'main', where commits are
+restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).` followed by `Create a
+feature branch instead (git switch -c <name>), or stage only documentation.`
+
+Committed `b68e513`, pushed. Next is checklist step 6 — rewrite `current_branch()` to
+`symbolic-ref`, add `sequencer_in_progress()` (with the `head-name` clause for both `main` and
+`master`), and rewrite `on_main()` to the `case` form. This is the step that actually changes
+behavior: run the suite afterward and confirm rows 1–5, 15 and 17 flip to green while everything
+else — including the 12 rows added in session 61 — stays green.
+
+## 2026-08-12 — session 63: git-guard-detached-head, PR #52 updated after #51 merged, checklist step 6 (the fix)
+
+User reported PR #51 (task-tracker, a different worktree/feature) had merged in another session, and
+asked to update PR #52 — which turned out to be *this* branch's own PR, opened directly by the user
+with an empty body. Wrote its description from the house template (plain-language summary, why,
+related PRs, testing instructions, risk table), with an honest "not ready to merge" banner matching
+PR #51's own convention, and set it to draft — 6 of 11 checklist items were still open at that point.
+
+**Caught and corrected my own false claim.** The first description draft said `git merge-tree` showed
+no conflict with `main` after #51. That check ran against a **stale local `main`**, two commits behind
+`origin/main`. Posted a PR comment flagging the error, fetched properly, and re-checked: real conflict
+on three append-only files both branches had independently appended to — `CODING_MEMORY.md` and both
+judge `verdicts.jsonl` logs. Resolved by union, reading git's index stages directly (`git show
+:1/:2/:3:<path>`) rather than hand-splitting `<<<<<<<`/`=======`/`>>>>>>>` markers — this repo uses
+diff3-style conflicts (an extra `|||||||` merge-base section), and a naive two-way marker split had
+already silently mis-extracted the CODING_MEMORY.md conflict once before the stage-based approach
+caught it. Verified counts rather than trusting a clean exit: compliance-judge 89 (shared) + 16
+(theirs) + 6 (ours) = 111 rows, observability-judge 148 + 15 + 6 = 169 rows, both parsing as JSON in
+full. Merged as `dada49b`, pushed; `bash hooks/git-guard.test.sh` unaffected (still 89 passed, 7
+failed — the merge touched no file under `hooks/`). Judge-verdict row citations elsewhere shifted:
+compliance rows 90→**106–111**, observability rows 149→**164–169**.
+
+User then said go ahead with checklist step 6 — the step that actually changes the guard's behavior.
+Landed `current_branch()` → `git symbolic-ref --short HEAD 2>/dev/null || echo ""`, `sequencer_in_progress()`
+with the `head-name` clause for both `main` and `master`, and `on_main()` rewritten to the `case` form
+— all verbatim from the spec's "Decision" section. `bash hooks/git-guard.test.sh`: **96 passed, 0
+failed** (was 89/7) — rows 1–5, 15 and 17 flipped green, everything else, including all 77 original
+cases, stayed green.
+
+Re-verified the three carve-out bounds live by mutation rather than trusting the green suite:
+removing the `head-name` clause reopened rows 15 and 17; hoisting `sequencer_in_progress` above the
+named-branch `case` reopened row 16; dropping `rebase-apply` from the marker loop was caught only by
+row 19 (the guard becomes *stricter*, not looser, matching the spec's own corrected claim about an
+earlier draft that got this wrong). Each mutation was restored and diffed clean against a backup
+before re-running the suite.
+
+Committed `4294728`, pushed. Next is checklist step 7 — add stderr assertions to the test suite (the
+third `checkout_desc` rendering on rows 15/17, the remedy line per state, one empty-index assertion),
+then prove each assertion can fail by reverting one `printf` in the hook and confirming the matching
+assertion goes red before restoring it. No hook edits beyond that revert.
+
+## 2026-08-12 — session 64: git-guard-detached-head, checklist step 7 — stderr assertions, and the fixture bug they caught
+
+Restored on the same branch, `55a7140` clean, PR #52 still open/draft. Frontmatter (`phase:
+implementation`, `model_tier: low`, `branch: fix/git-guard-detached-head`) matched reality; nothing to
+reconcile. Context-handoff-watch fired at 75.7k tokens immediately on restore (system-prompt/skill
+overhead, not conversation growth) — offered the user a clear-first option, they chose to continue in
+this session instead.
+
+Added `assert_stderr()` to `hooks/git-guard.test.sh` — reruns the hook against the same fixture/command
+a `run_case`/`run_case_in` call just used and checks stderr, since those two only ever checked the exit
+code. 12 calls: the new mid-rebase `checkout_desc` rendering plus its state-4 remedy on rows 15 and 17
+(main and master), the remedy line for the other four observed states (rows 1, 2, 3, 4, 16, plus the
+named-branch/no-sequencer rows already in the suite), and the empty-index message.
+
+**The assertions caught a real, pre-existing fixture bug on the very first run — not a typo in their own
+text.** Row 1 passed on exit code alone (2) but for the wrong reason: the "tracked, COMMITTED pair" setup
+(added back in `e356ebf`, the row-15/17 measurement-scripts commit) committed whatever was in the index
+without resetting first. A leftover staged `src/app.sh`, left over from an earlier `stage src/app.sh`
+call on the `feature` branch, rode along into that commit and became permanently tracked. Every later
+`stage src/app.sh` writes identical content (keyed off the script's PID), so `git add` became a no-op —
+the guard was silently hitting the empty-index path instead of the disallowed-file path row 1 claims to
+exercise, and no test before this one could see it because none checked stderr. Root-cause fix: one
+`git -C "$REPO" reset -q` before the tracked-pair commit, scoping it to the two paths it actually names.
+
+**Mutation-proved all 9 backing printfs one at a time** (`hooks/git-guard.sh` lines 163, 209, 216, 221,
+222, 228, 233, 234, 305): corrupt one word, run the suite, confirm *exactly* the expected assertion(s)
+go red and nothing else, `git checkout -- hooks/git-guard.sh` to restore, confirm back to 108 passed/0
+failed before the next line. All 9 rounds isolated cleanly — no cross-talk between assertions, no
+unrelated exit-code row moved, `git diff hooks/git-guard.sh` empty after the last restore.
+
+Committed `f0e2405` (test file + feature-file checklist update together, satisfying doc-guard), pushed.
+Next is checklist step 8 — write ADR 0026, including the rebase-replay residual hole — then step 9
+(`rules/gates.md` stubs) and step 10 (observability judge, then the already-open PR #52; the verdict
+must stay uncommitted until the PR is open since `judge-guard` compares `head_sha` to HEAD).
+
+## 2026-08-13 — session 65: git-guard-detached-head, checklist steps 8–10 — ADR 0026, gates.md, the judge, PR #52 closed out
+
+Restored on the same branch, `a605192` clean, matching the handoff. Context-handoff-watch fired at
+~92k tokens purely from restore overhead (handoff + 808-line feature file + two reference ADRs), before
+any work began — same pattern session 64 hit, and `CODING_MEMORY.md`'s own record of that precedent is
+what made this session's choice easy: asked, user chose to continue rather than clear.
+
+**Step 8 — ADR 0026** (`docs/decisions/0026-symbolic-ref-not-abbrev-ref-names-the-branch.md`). Before
+writing any claim down, re-verified rather than trusted the spec's prose: re-ran the suite (108/0,
+confirmed `git diff hooks/git-guard.sh` empty against HEAD), and independently re-derived the residual-
+hole claim straight from `classify-git-command.py` (`subcommand ==` appears exactly twice in 198
+lines — `"commit"` and `"push"` — so `merge`/`cherry-pick`/`revert`/`am`/`rebase` provably raise no
+`COMMIT` fact) rather than copying the feature file's version of it. Also re-verified the `git branch
+HEAD` collision claim independently (`fatal: 'HEAD' is not a valid branch name`) instead of citing it
+unchecked. Diagram validated with `diagramming-technical-docs`'s `validate-diagrams.sh` (1 block, 0
+failed) before shipping.
+
+**Step 9 — `rules/gates.md` stubs.** Updated the Default-branch-safety and Force-push-safety stubs
+(the project copy, not the user's global `~/.claude/rules/gates.md`) to state the new fail-closed
+behavior on a detached HEAD / outside a repository, and the sequencer carve-out exception, pointing at
+ADR 0026. Committed both docs changes together (`a478186`).
+
+**Step 10 — observability judge, then PR.** Dispatched via `dispatching-pane-agents` (judges are
+hook-routed to a pane, not in-process). Verdict: **risk=medium, confidence=high**, all ten dimensions
+pass except `checkpoint` (concern) — it flagged the open compliance gate, an uncommitted `phase:
+review` edit sitting on the judged commit, and a stale checklist checkbox (item 1, "cut the branch",
+never ticked across 8 prior sessions despite the branch clearly existing). Fixed the checkbox on
+verified current state (not a reconstructed historical claim): confirmed the branch is 8 commits behind
+a freshly fetched `origin/main`, with zero file overlap against this branch's own changes outside the
+two append-only logs. Committed the verdict artifacts + phase flip + checklist fix together (`6b86db6`)
+— safe to commit immediately rather than waiting, since PR #52 was already open from an earlier session
+and `judge-guard` only gates `gh pr create`, which was never re-invoked.
+
+PR #52's description was fully stale (written before the fix had landed — draft banner, "89 passed, 7
+failed"). Rewrote it end to end against the template (what/why/related/screenshots/testing/risk) to
+reflect the actual landed state, and marked it ready for review — both done only after explicit user
+confirmation, since editing and un-drafting a PR are actions visible to others. Added a `## Verification`
+section to the feature file summarizing tests/judge/gate/PR state, committed and pushed (`ad9fb15`).
+
+**All 10 checklist items are now checked.** The branch's active development is done; what remains is
+human review and merge. The compliance gate stays open by the same 2026-08-10 user decision recorded
+in the feature file's "Gate record" — not revisited or silently waived this session.
+
+Also mishandled `ScheduleWakeup` once — it's a `/loop`-only tool, not a general "wait for a background
+Bash task" mechanism; called it by mistake while waiting on the judge, caught it before it did anything
+useful, and cancelled it. The background task's own completion notification was what actually mattered.
+
+<!-- Merge note (fix/git-guard-detached-head <- origin/main, 2026-08-13): same shape as the note
+above -- the block below was appended independently on origin/main (PRs #53 and the session-80
+housekeeping) while this branch was open. Its own "Session N" numbers overlap this branch's and
+carry no cross-block ordering meaning; trust each entry's date header instead. Neither block's
+internal order was changed by this merge. -->
+
 ---
 
 ## Session 79 — 2026-08-12 — the Roadmap catches up, and the verdict store follows the worktree
@@ -7828,3 +8121,235 @@ wherever they sit). No feature file exists yet — create one from the template 
 suggested name `shell-segments-option-grammar`, own branch off `main` (not off
 `feature/verification-marker-gate`). **Entering-planning model-switch checkpoint is still owed** —
 not asked this session; the fresh session must ask it before brainstorming begins.
+---
+
+## 2026-08-13 — session 66: git-guard-detached-head, PR #52's second append-only conflict, resolved and re-verified mergeable
+
+Restored into `phase: review` on `fix/git-guard-detached-head` per the prior handoff — all 10
+checklist items already checked, nothing left on the feature file itself. The handoff's own
+instruction was to check `gh pr view 52 --json state,mergedAt` before assuming anything, rather than
+trust "ready for review" from the header. Doing so found the PR **still open**, but
+`gh pr view 52 --json mergeable,mergeStateStatus` returned `CONFLICTING` / `DIRTY` — new information
+the handoff didn't have, since `origin/main` had moved again (PR #53 + the session-80 housekeeping
+above) since the previous merge (`dada49b`).
+
+**Same conflict shape as before, confirmed before assuming it, not guessed from precedent.**
+`git merge-tree` against the fresh merge-base showed exactly two files "changed in both" —
+`CODING_MEMORY.md` and `coding-memory/observability-judge/verdicts.jsonl` — and reading the base side
+of each `zdiff3` hunk showed it empty: both sides purely appended past the same point, the same
+append-append shape as `dada49b`. Resolved the same way — union, both blocks kept in full, a merge
+note added explaining the two blocks' independent "Session N" counters (same pattern already on file
+from the first merge) — and this time verified two ways rather than one: `git diff` against **both**
+parents showed zero `-` lines of real content on either side, and exact line-count arithmetic
+(`base + ours-added + theirs-added == merged`) matched precisely for both files (171 = 163+7+1 for
+the JSONL; checked the same way for `CODING_MEMORY.md`). `bash hooks/git-guard.test.sh` still 108
+passed / 0 failed after the merge, unaffected — it touches no code, only the two data/doc files.
+
+Committed the merge (`a78d2b2`) and pushed. `gh pr view 52` then returned `MERGEABLE` / `CLEAN`.
+
+**PR description updated in place, not left describing the pre-merge state.** The "Related PRs"
+section only named the first merge (`dada49b`); it now names both and states the current mergeable
+status explicitly rather than leaving a reader to infer it. The risk-assessment section's claim that
+the observability judge "scored this change against the current HEAD" was true when written but went
+stale the moment the merge commit landed on top of it — corrected to name the exact SHA it was scored
+against (`ad9fb15`) and to say plainly that current HEAD (`a78d2b2`) was **not** independently
+re-judged, with the reasoning for why that's believed low-risk (two append-only files, no code,
+verified zero deletions) kept separate from the fact that it isn't a judge verdict.
+
+**This session's freshness checkpoint fires mid-task, not after it** — the merge-conflict resolution
+was finished, verified, committed and pushed before this entry was written, so nothing here is a
+save-in-progress. Nothing else was left open by the merge itself; PR #52 is mergeable now and waiting
+on human review, same status as before this session except the conflict is gone.
+
+## 2026-08-17 — global-option-blindness: the gate opens, and the spec gets its own branch
+
+(Date-headed rather than numbered: the preceding entries run 79, 79-post-merge, 80, then a
+2026-08-13 "session 66" — the counter is not reliable enough to extend.)
+
+**The gate opened.** The user said the literal phrase `gate confirmed` for
+`docs/features/global-option-blindness.md` (revision 4). Both owed checkpoints were put to them
+first, in one ask: the planning→implementation model-switch checkpoint, and whether to re-run the
+compliance judge on revision 4. Answers: **switch to the smaller model**, and **yes, re-check the
+spec first**.
+
+**Consequence — the phase is deliberately still `planning`.** Those two answers are in tension with
+the standard gate sequence: `implementation` forbids spec edits, and a failing verdict would demand
+exactly that. So the branch was created and the frontmatter records it, but the phase flip is held
+until the verdict lands. A note in the feature file's own frontmatter block says so, because
+`phase: planning` on a branch that exists otherwise reads as an unopened gate.
+
+**The spec was rescued from the wrong worktree.** Revision 4 had lived its whole life as an
+*untracked* file inside the paused `feature/verification-marker-gate` worktree — one `git clean`
+from gone, and uncommittable there without landing this feature on the paused feature's branch.
+Fixed by branching `feature/global-option-blindness` off **`origin/main`** (6a2b7c5, not local
+`main`, which can lag) into a new worktree, transplanting the spec plus the three compliance
+verdicts and two architecting verdicts, and committing them there as `4c9a431`. Pushed.
+
+- The paused worktree's ledgers carried **its own** unmerged rows too (115 vs origin/main's 111).
+  Only the 5 rows belonging to this feature were moved. The append was proven to be a pure append
+  before transplanting — first N lines diffed byte-identical against HEAD — and every resulting
+  ledger line re-parsed as JSON afterwards.
+- **The transplanted verdict rows still say `branch: feature/verification-marker-gate`.** That is
+  where the judges genuinely ran. An audit row does not get rewritten to look tidier; only the
+  verdict *filenames* name the feature. Future rounds on this branch will key correctly by themselves.
+
+**Still owed, in order, by the next session:** the MUST/contract sweep of the spec (the standing
+rule written into this card after three rounds were lost to skipping it), then the compliance +
+observability judges, then — only on a pass — the phase flip and task 0a.
+
+**Noted, not fixed (own task):** `.gitignore:72` ignores all of `/.claude/`, not just the
+machine-local handoff files. `managing-session-memory` calls for the narrower form so committed
+project settings can live there. Out of scope for this feature.
+
+## 2026-08-17 — global-option-blindness: task 0a lands, groundwork begins
+
+Restored into `implementation` phase (gate opened and compliance passed at round 6 in the prior
+session on this date; see the section above). This session's only work was task 0a, the first of
+three groundwork tasks the spec requires before any behaviour task, because no harness in this
+repo could previously assert what a guard writes to **stdout** — and the new `SCOPE_UNKNOWN` "ask"
+decision this feature adds is delivered as JSON on exactly that channel.
+
+**What landed (commit `975478c`):** `hooks/lib/guard_test_helpers.sh`, a new shared file holding
+`assert_stderr` (moved out of `git-guard.test.sh` verbatim, byte-identical body — not rewritten,
+per the spec's explicit instruction) and the new `assert_stdout` beside it. Both
+`hooks/git-guard.test.sh` and `hooks/doc-guard.test.sh` now source it instead of duplicating the
+body — task 0b's `merge-guard.test.sh` (still to be created) will source the same file rather than
+becoming a third copy.
+
+**Proof, not assertion, that the new helper works:** all 108 git-guard cases and 16 doc-guard
+cases pass unchanged (no regression from the move). Then, because a check that has never been
+shown able to fail is not trustworthy by construction (`feedback_confirm_the_check_can_fail`), a
+synthetic fake hook writing distinct markers to stdout and stderr was probed directly:
+`assert_stdout` correctly failed when asked to find the stderr-only marker, and `assert_stderr`
+correctly failed when asked to find the stdout-only marker — each stream is actually isolated from
+the other, not merged and coincidentally matching. Recorded in the feature file's own
+`## Verification` section, not here, per the one-canonical-file rule; this entry exists only
+because CODING_MEMORY is the cross-session archive, not a duplicate of that section's content.
+
+**Also fixed in the same commit:** shellcheck 0.11.0 flagged the new lib file (SC2148, no shebang
+on a sourced-only file — fixed with a `# shellcheck shell=bash` directive) and both dynamic
+`source` lines (SC1091 — silenced with the same `# shellcheck disable=SC1091` pattern already used
+at `hooks/handoff/slim-session-start.test.sh:188`, rather than inventing a new convention).
+
+**Next session: task 0b.** Create `hooks/merge-guard.test.sh` (has never existed) using this
+session's shared helpers. Pin **today's** behaviour first — `gh pr merge 5` → exit 2,
+`MERGE_EXEMPT=<reason> gh pr merge 5` → allowed with the reason on stderr, an ordinary `git merge`
+→ untouched — because that is the safety net task 6's rewrite needs and has none without it.
+
+## 2026-08-17 — global-option-blindness: task 0b lands, merge-guard gets its first suite
+
+Restored into `implementation` phase (task 0a landed the prior session on this date; see the
+section above). This session's only work was task 0b, the second of three groundwork tasks —
+`merge-guard.sh` was the one hook script in the repo (of 18) with no `*.test.sh` at all, and the
+spec names it as this feature's sole *silent* failure mode: a rewrite that quietly stopped
+blocking `gh pr merge` would fail open with nothing to say so.
+
+**What landed (commit `e5d0bf2`):** `hooks/merge-guard.test.sh`, sourcing task 0a's
+`hooks/lib/guard_test_helpers.sh` rather than pasting a third copy of `assert_stderr`. Pins exactly
+the three behaviours the spec named, against a bare scratch directory rather than a git repo —
+`merge-guard.sh` only classifies the command string, it never reads or writes the checkout:
+
+- `gh pr merge 5` → exit 2, with the GitHub-UI remedy message on stderr.
+- `MERGE_EXEMPT="release cut" gh pr merge 5` → exit 0, with `MERGE_EXEMPT=release cut` echoed on
+  stderr (confirms the shlex-based value extraction in `merge-guard.sh` unquotes-and-preserves the
+  interior space correctly).
+- A plain `git merge origin/main` → exit 0, untouched.
+
+**Proof, not assertion, that the pins are real:** all 5 assertions (3 exit-code, 2 stderr-substring)
+pass against today's hook. Then, per `feedback_confirm_the_check_can_fail`, a mutation probe
+re-ran the two stderr assertions against a wrong substring and the exit-code check against a wrong
+wanted code — 2/2 FAILed, so the green run above is not vacuous. `shellcheck 0.11.0` on the new
+file returns only the same SC2016 info-level "backticks don't expand in single quotes" notice that
+`merge-guard.sh`'s own source already carries on the identical literal string — accepted, not a
+real finding. Recorded in the feature file's own `## Verification` section, not here.
+
+**Next session: task 0c.** Confirm where `git-guard.test.sh`, `doc-guard.test.sh`, and the new
+`merge-guard.test.sh` actually run — a runner script, a git hook, or only by hand — and record the
+answer in the feature file plainly. If nothing runs them automatically, say that outright rather
+than letting the existence of the suites imply coverage no one executes.
+
+## 2026-08-17 — global-option-blindness: tasks 0c through 8 land, blocked on task 9
+
+One continuous session carried the feature from the last groundwork task through the entire
+behaviour implementation — 11 commits (`1d12f94` through `eb057f4`), every task 0c–8 ticked, every
+suite green. This is the archive entry for all of it; per-task reasoning, measurements, and
+verification detail live in the feature file's own `## Verification` section (11 dated bullets),
+not duplicated here.
+
+**What landed, in order:** task 0c (measured — no test suite in this repo runs automatically;
+by-hand only, confirmed by checking CI, `package.json`, `core.hooksPath`, and the real
+worktree-resolved git hooks directory, not assumed). Task 1 (RED — 36 new fact-level cases in
+`classify-git-command.test.py`, one deliberately left out because its full expected value depended
+on an unstated implementation choice, not a stated contract — that one moved to task 3 instead).
+Task 2 (GREEN — `resolve_subcommand()` + three bucket tables; caught and fixed its own deviation
+from the spec's pinned 3-tuple return shape before task 3 built on it — a 2-tuple with a sentinel
+string passed every test but didn't match what was written). Task 3 (git-guard's `ask` JSON on
+`SCOPE_UNKNOWN`, checked LAST so an existing hard block always wins; left the "does stderr surface
+on exit 0" question honestly unresolved — no live test was possible from this worktree, since its
+`settings.json` doesn't govern this session's actual hooks). Task 3b (the `PRINTS_AND_EXITS`
+message-only override, verified with a real hand-run mutation round: emptying the set in place
+reproduced the pre-implementation red baseline number-for-number, then restored with a clean
+`diff`). Task 4 (doc-guard needed zero code changes — both behaviours fell out transitively from
+task 2's classifier fix; verified, not assumed, with two new regression cases). Task 5
+(`classify-pr-command.py` generalised to a parameterised pair, all 51 existing cases re-run
+unmodified before touching any caller). Task 6 (merge-guard rewritten onto the shared reader,
+closing rows (d)/(e) plus a bonus stacked-wrapper gap for free). Task 7 (the six-row defect table
+re-measured end-to-end as `(exit code, stdout decision)` pairs, all nine matching "after the fix";
+one probe methodology mistake on row (f) caught and corrected in the same pass rather than
+reported wrong). Task 8 (all eight dependent suites green — 630 cases — plus the replay harness:
+378/378 pairs identical against local `main`, zero regressions).
+
+**Blocked here, not stalled:** task 9 is an explicit ❗🔴 blocking manual acceptance test — whether
+an `ask` decision actually raises an interactive prompt under this repo's actual bypassed-
+permissions launch mode, and whether declining it really stops the command. No automated test can
+close this; it needs a human watching a real prompt appear. Tasks 10 (ADR 0029) and 11
+(observability judge, then PR) both wait on it — task 9's own fallback language ("revisit bucket 2"
+if the prompt is swallowed) means its outcome could still change the design the ADR would document,
+so writing the ADR first would risk documenting a decision task 9 might overturn.
+
+**Next session (or later this one): task 9, with the user.** Two sub-checks: 9a, the prompt
+appears and its text names the triggering option; 9b, declining it actually stops the command.
+Ticking this requires pasting what was observed, not asserting it passed.
+
+## 2026-08-18 — global-option-blindness: task 9 passes, ADR written, judged, PR #54 open — feature done
+
+Same session, continued. Task 9 blocked the previous entry; it's resolved now, and everything after
+it (tasks 10 and 11) landed in the same sitting. Full task-by-task detail: the feature file's own
+`## Verification`, 15 dated bullets total. PR detail: `coding-memory/pr-tracking.md`, the PR #54 entry.
+
+**Task 9, the hard part.** A first test attempt (a different live session) found no prompt and
+looked like a real negative result. It wasn't: **every hook in `settings.json` resolves via an
+absolute `$HOME/.claude/hooks/...` path**, so any session on this machine — regardless of which
+worktree or branch its own files sit on — runs hooks from the ONE shared `~/.claude` checkout,
+which doesn't have this unmerged feature yet. That session ran the old code; the "no prompt" result
+was a false negative from testing the wrong script, not evidence against the fix. Neither a
+same-branch worktree nor a project `settings.local.json` override would have fixed this (confirmed
+against the running 2.1.234 build's own hook-resolution logic, via a dispatched research agent:
+project settings only ADD a hook entry, never replace one). `CLAUDE_CONFIG_DIR` is a true
+substitution — built an isolated copy of `~/.claude` with only this feature's 5 touched files
+swapped in and its own `settings.json` repointed at itself, self-verified the swap before handing
+it to the user, and the real `~/.claude` (and the unrelated live session using it) were never
+touched. The user ran the real interactive test and pasted the verbatim prompt text and outcome —
+both sub-checks passed for real, not asserted.
+
+**ADR 0029** records the structural decision: three buckets (skip / ask-known-risky /
+ask-unrecognised), and why "cannot tell" resolves to an interactive `ask` rather than a silent
+allow (the bug) or a hard deny (rejected — bucket 2 deliberately includes options that are usually
+harmless, and that's only affordable because refusing means asking, not walling off).
+
+**Observability judge ran twice, not once — a self-caught sequencing mistake, not a retry for
+luck.** First run at `f0ba837`: risk=low, confidence=high, and it caught something this session's
+own task 8 had missed (the replay-harness regression check used a stale local `main`; the judge
+independently re-ran it against `origin/main` too, same clean result). Then a README Roadmap
+addition landed *after* that verdict, moving HEAD and invalidating it — `judge-guard.sh` needs an
+exact match. Re-ran rather than reaching for `JUDGE_EXEMPT`, which is for a genuinely exempt PR,
+not a self-inflicted sequencing slip. Second run at `5c479a9`: same verdict, unchanged.
+
+**PR #54 opened against `main`.** The verdict files were committed *after* `gh pr create`
+succeeded, not before, per the standing rule (`feedback_committing_a_verdict_invalidates_it`) — a
+committed verdict moves HEAD and invalidates itself.
+
+**Everything from task 0a through 11 is now closed.** The feature file's frontmatter reads
+`phase: review`. What's left is entirely outside this session's control: GitHub-UI review and
+merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
+the judge flagged this rollout step explicitly, since the fix does nothing until that happens.

@@ -1185,3 +1185,42 @@ against synthetic marker text first (returned 4) so the zero is an observation, 
 forbidden by the parallel-agent invariants. Branched from `origin/main` in this worktree instead and
 pushed `docs/post-merge-53:main` — permitted for `CODING_MEMORY.md`, `coding-memory/*`, `docs/*.md`
 under the default-branch docs exception.
+
+## `.claude` — `feature/global-option-blindness` → PR #54 (MERGED 2026-08-19)
+
+- **Repo:** `suyatdev/.claude` · **remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
+- **Branch:** `feature/global-option-blindness` · **base:** `main`
+- **PR:** https://github.com/suyatdev/.claude/pull/54 · **state:** **MERGED** 2026-08-19T21:27:26Z,
+  merge commit `d8b9a84`. Verified after the fact: 0 commits ahead of `origin/main`, empty
+  `git diff origin/main fab7314`, all tasks 0a–11 closed.
+- **session_origin (created):** this session (`Claude-Session:
+  https://claude.ai/code/session_01JKWWrMS5QhuyeSa1N4h7aG`) · **session_origin (last push):** same
+- **Card:** `docs/features/global-option-blindness.md` (`phase: review`, tasks 0a–11 all closed)
+- **Scope at open:** 28 commits, 20 files, +3248/−67 — the compliance-judged spec, 3 groundwork
+  tasks, the classifier fix (`resolve_subcommand()` + 3 bucket tables), `git-guard.sh`'s new ask
+  path and its honest print-and-exit message, `doc-guard.sh` (verified needing zero changes),
+  `classify-pr-command.py`'s generalisation, `merge-guard.sh`'s rewrite onto it, the full
+  defect-table re-measurement, ADR 0029, and the README Roadmap line.
+- **Judge:** observability, `implementation` stage — **first run** at `f0ba837`: `risk=low`,
+  `confidence=high`. A trailing README commit (`5c479a9`) moved `HEAD` before the PR opened, which
+  invalidated that verdict; **re-run** at `5c479a9`: `risk=low`, `confidence=high`, unchanged — the
+  second run correctly identified the intervening commit as doc-only and didn't need to re-verify
+  the substance. Both landed in **this worktree's** `coding-memory/observability-judge/`, confirmed
+  no stray duplicate in `$HOME/.claude`'s.
+- **Verdict committed only after the PR was open**, same reasoning as PR #53: `judge-guard.sh`
+  requires `head_sha == HEAD`, so committing the verdict first would have moved HEAD and invalidated
+  the verdict that was about to authorise the PR.
+- 🔴 **Task 9 (the feature's own blocking manual acceptance test) needed a genuinely isolated test
+  rig, not just a careful test plan.** Every hook in `settings.json` resolves via an absolute
+  `$HOME/.claude/hooks/...` path — so ANY session on this machine, regardless of which worktree or
+  branch its own files sit on, runs hooks from the one shared `~/.claude` checkout. A first attempt
+  from a different live session produced a false negative (no prompt) for exactly this reason: it
+  ran the old, unfixed hook. Neither a same-branch worktree nor a project `settings.local.json`
+  would have fixed this (the latter only ADDS a hook entry, never replaces one — confirmed against
+  the running 2.1.234 build's own hook-resolution logic, not assumed). `CLAUDE_CONFIG_DIR` is a true
+  substitution; built an isolated copy of `~/.claude` with only this feature's 5 touched files
+  swapped in, self-verified it, handed it to the user, and got a pasted, verbatim transcript back —
+  full detail in the feature file's own `## Verification`, task 9.
+- next: review → merge via GitHub UI → update the shared `~/.claude` checkout (the judge's own
+  flagged rollout step — the fix protects nobody until that happens) → prune branch local+remote →
+  backfill this PR's verdict `outcome`.

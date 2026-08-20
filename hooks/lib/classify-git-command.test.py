@@ -212,6 +212,119 @@ CASES = [
     ("git commit -m a -- docs/a.md && git commit -m b -- docs/b.md",
      ["COMMIT", "COMMIT_PATH\tdocs/a.md", "COMMIT_PATH\tdocs/b.md", "COMMIT_PATHSPEC"],
      "every commit names its own paths, so their union IS the line's file set"),
+
+    # =========================================================================
+    # global-option-blindness (docs/features/global-option-blindness.md, task 1,
+    # RED). Today argv[1] is read as the subcommand unconditionally, so a leading
+    # global option makes the whole segment yield NO facts at all -- the bug this
+    # feature exists to fix. Fact output only, per this file's own docstring:
+    # the SAME options also get hook-level exit-code/ask-decision cases in
+    # git-guard.test.sh (task 3) and doc-guard.test.sh (task 4) -- not here.
+    # =========================================================================
+
+    # --- bucket 1, table 1: harmless, no value, command still seen ---
+    ("git --no-pager commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git -p commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git --paginate commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git --no-optional-locks commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git --no-advice commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git --no-replace-objects commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git --no-lazy-fetch commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+    ("git -P commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 harmless-skip"),
+
+    # --- bucket 1, table 2: the print-and-exit set. Same fact-level outcome as
+    # --- table 1 -- classify() does not model "prints and exits"; only
+    # --- git-guard.sh's MESSAGE differs for these (task 3b), never the fact.
+    ("git --exec-path commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"],
+     "bucket 1, attach-only: must not swallow the subcommand as its value"),
+    ("git --version commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git -v commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git --help commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git -h commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git --html-path commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git --man-path commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git --info-path commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1 print-and-exit"),
+    ("git --list-cmds commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"], "bucket 1, attached value form"),
+    ("git --list-cmds=main commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"],
+     "attached spelling with a value must not eat the subcommand either"),
+
+    # --attr-source is bucket 1 but CONSUMES a value, so it needs its own two
+    # scenarios rather than the shared table template (neither table can host
+    # it). Measured against git 2.50.1 -- see the spec's own measurement.
+    ("git --attr-source .gitattributes commit -m x -- app.js",
+     ["COMMIT", "COMMIT_PATH\tapp.js", "COMMIT_PATHSPEC"],
+     "the value is consumed; the subcommand still resolves to commit"),
+    ("git --attr-source commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t-m"],
+     "commit is consumed as attr-source's VALUE, so git itself commits nothing; "
+     "-m is left in subcommand position, unrecognised -> bucket 3"),
+
+    # --- bucket 2: repo-redirecting, refused and asked. Fact level: exactly one
+    # --- SCOPE_UNKNOWN fact naming the option, and no COMMIT fact for the segment.
+    ("git -C commit -m x -- app.js", ["SCOPE_UNKNOWN\t-C"], "bucket 2 redirecting"),
+    ("git --git-dir commit -m x -- app.js", ["SCOPE_UNKNOWN\t--git-dir"], "bucket 2 redirecting"),
+    ("git --work-tree commit -m x -- app.js", ["SCOPE_UNKNOWN\t--work-tree"], "bucket 2 redirecting"),
+    ("git --namespace commit -m x -- app.js", ["SCOPE_UNKNOWN\t--namespace"], "bucket 2 redirecting"),
+    ("git --bare commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t--bare"],
+     "takes no value but still redirects the repo -- bucket 2, not bucket 1"),
+    ("git -c commit -m x -- app.js", ["SCOPE_UNKNOWN\t-c"], "bucket 2 redirecting"),
+    ("git --config-env commit -m x -- app.js", ["SCOPE_UNKNOWN\t--config-env"], "bucket 2 redirecting"),
+    ("git --literal-pathspecs commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t--literal-pathspecs"],
+     "changes what a pathspec MEANS, which doc-guard's exemption is decided from"),
+    ("git --glob-pathspecs commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t--glob-pathspecs"], "bucket 2, pathspec-modifying"),
+    ("git --noglob-pathspecs commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t--noglob-pathspecs"], "bucket 2, pathspec-modifying"),
+    ("git --icase-pathspecs commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t--icase-pathspecs"], "bucket 2, pathspec-modifying"),
+
+    # --- bucket 3: unrecognised, including an abbreviation nobody enumerated --
+    # --- git honours unambiguous abbreviations, so a list of exact spellings
+    # --- can never be complete.
+    ("git --work-tre=/tmp commit -m x -- app.js",
+     ["SCOPE_UNKNOWN\t--work-tre"],
+     "an abbreviated option nobody enumerated is still refused, named without its value"),
+
+    # A value-consuming bucket-2 option's value is never mistaken for the
+    # subcommand or a pathspec -- the fact set has nothing but the one denial.
+    ("git --git-dir /tmp/x commit -m y -- app.js",
+     ["SCOPE_UNKNOWN\t--git-dir"],
+     "/tmp/x is the option's value, never a subcommand or a pathspec"),
+
+    # SCOPE_UNKNOWN is a DENYING fact: it suppresses PUSH*/PUSH_FORCE for its own
+    # segment too, not just COMMIT*. No scenario elsewhere used push, so nothing
+    # could fail if an implementer wired the suppression to commit only.
+    ("git -C . push --force", ["SCOPE_UNKNOWN\t-C"],
+     "force-push protection survives a global option -- no PUSH or PUSH_FORCE fact"),
+
+    # At most once per line, from the FIRST triggering option.
+    ("git -c a=b -C /x commit -m x -- app.js", ["SCOPE_UNKNOWN\t-c"],
+     "two triggering options in one segment -- exactly one fact, naming the first"),
+
+    # SCOPE_UNKNOWN denies the whole LINE even from a non-first segment, because
+    # it is a denying fact under the module's existing granting/denying rule.
+    ("echo hi && git -C /x commit -m x -- app.js", ["SCOPE_UNKNOWN\t-C"],
+     "a redirecting option in a later segment still denies the whole line"),
 ]
 
 
