@@ -1,7 +1,7 @@
 ---
-phase: review
-model_tier: low
-branch: none  # merged via PR #45 (65ebf81); feature/memsearch-freshness deleted 2026-08-09
+phase: planning
+model_tier: high
+branch: worktree-fix+memsearch-r9-retrieval-quality
 ---
 
 > **Frontmatter note (2026-08-09):** `branch:` read `feature/memsearch-freshness` for three sessions
@@ -9,6 +9,18 @@ branch: none  # merged via PR #45 (65ebf81); feature/memsearch-freshness deleted
 > every checkout. Corrected to `none`. Review-phase follow-ups since then have run on their own short
 > branches (`docs/post-merge-followups-45`, `docs/r9-counterfactual-control`); this field names the
 > *feature's* branch, and the feature no longer has one.
+
+> **Frontmatter note (2026-08-20):** Reopened to `phase: planning` for R9 remedy work — the R9
+> acceptance bar (5 of 5 measurement queries, `:315-331`) has never passed; the best measured state is
+> 3 of 5 (`:2333`), gated on a `curated_doc` weight tier for judge verdicts that does not exist yet
+> (`:2341-2358`). One-canonical-file discipline: this stays the same feature file rather than a new
+> one (see task 12). `branch:` now names `worktree-fix+memsearch-r9-retrieval-quality`, pre-provisioned
+> by `EnterWorktree` before this session decided to reopen planning — not created at the
+> planning→implementation gate the template assumes; it carries through to implementation rather than
+> a second branch being cut. The remedy section's own forward-reference to "ADR 0021" (`:2341`) is
+> stale: that number was already claimed by the launchd/run-recency decision (task 2, below) before
+> this section was written. Next free ADR number as of 2026-08-20 was **0030** (`ls docs/decisions/`)
+> — re-derive at time of use, other parallel branches may claim it first.
 
 # memsearch freshness — refresh trigger and staleness reporting
 
@@ -1509,6 +1521,16 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         commit. `judge-guard.sh` gates `gh pr create`, not an already-open PR, so nothing re-runs.
       - The checkbox was left unticked when the PR was opened; ticked here in the review phase to stop
         the record claiming the judge round never ran.
+- [ ] 12 — **R9 remedy planning.** R9 has never reached 5 of 5 (`:325-331`); the best measured state
+      is 3 of 5 at judge-verdict weight 1.2, requiring a `curated_doc` split that doesn't exist
+      (`:2333`, `:2341-2358`). This phase's output: a new ADR (next free number, re-derived at time of
+      use — not 0021, which task 2 above already claimed) deciding the path-keyed classification
+      (`coding-memory/observability-judge/` and `coding-memory/compliance-judge/`, not all of
+      `coding-memory/`, per `:2354`) and the weight value; and a plan for re-running the R9 measurement
+      suite against it. The standing open item the remedy inherits: the regression itself is still
+      unexplained (`:2387-2390`), so this is tuning against a symptom, not a diagnosed cause — the plan
+      should state how that gets treated (accepted as a known limitation vs. investigated further)
+      rather than silently dropping it.
 
 ## Verification
 

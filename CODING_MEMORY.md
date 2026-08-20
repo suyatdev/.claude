@@ -7163,3 +7163,45 @@ already-merged branches, the one real in-flight branch (`docs/post-merge-53` /
 the prior handoff's "Also found this session" section — were not investigated further this session.
 They remain a repo-wide backlog item, not part of this branch's scope, awaiting a user decision on
 whether/how to correct them.
+
+---
+
+## 2026-08-20 — session in `worktree-fix+memsearch-r9-retrieval-quality`: R9 reopened to planning
+
+Prior session (2026-08-20, same worktree) had only cut the worktree and left the open question
+unanswered: R9's acceptance bar (`docs/features/memsearch-freshness.md:315-331`, 5 of 5 measurement
+queries at `k=6`) has never passed — stuck at 2 of 5 since the original merge, with a proposed judge-
+verdict weight tier (1.5 → 1.2) reaching only 3 of 5 and needing a classification tier that doesn't
+exist yet. This session's task was the decision the handoff deferred: does closing that gap mean
+`phase: planning` on the existing feature file, or a new spec section elsewhere.
+
+**Restored and re-verified rather than trusted at face value.** Read the handoff, the feature file's
+frontmatter (`phase: review`, `branch: none`) and R9/remedy sections, ran `git status` and
+`git log main..HEAD` — clean, zero commits ahead, frontmatter matched the handoff's claim exactly, no
+drift to reconcile.
+
+**Decision: reopened the same feature file to `phase: planning`, not a new document.** One-canonical-
+file discipline — R9 is unmet acceptance on this exact feature, not new-feature scope. Added task 12
+(unchecked) framing the planning output: a new ADR for the path-keyed judge-verdict weight
+classification and its value, plus a re-measurement plan, explicitly required to say how the still-
+unassigned regression cause gets treated rather than silently dropped.
+
+**Two corrections folded into the frontmatter note while reopening, not left for a later round to
+re-discover:** the remedy section's own text names "ADR 0021" as the number that will cover this
+decision (`:2341`) — that number was already claimed by the launchd/run-recency ADR (task 2) before
+the remedy section was written, so it's stale; next free is **0030** as of this session
+(`ls docs/decisions/`), consistent with the prior handoff's own note, re-derive at time of use. And
+`branch:` now names `worktree-fix+memsearch-r9-retrieval-quality` — pre-provisioned by `EnterWorktree`
+before this session existed, not created at the planning→implementation gate the template assumes;
+recorded as reality rather than left `none` while sitting on a real branch.
+
+**Model-switch checkpoint (entering planning) asked and answered:** high/frontier tier, for the
+whole planning pass — the remedy is architecture-level (new classification mechanism, an ADR, an
+unexplained regression), not routine continuation.
+
+**Freshness checkpoint fired on token count, not task completion** — `context-handoff-watch` tripped
+at ~76k session tokens, almost entirely restore-context overhead (system prompt, memory, skill load,
+2390-line feature file reads) rather than new work. This entry, the frontmatter edit, and task 12 are
+the entire "save" for a session that did restore-and-decide only; the actual ADR design work
+(brainstorming the classification scheme, the weight value, the re-measurement plan) has not started
+and is the next session's task 12.
