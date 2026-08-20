@@ -212,14 +212,20 @@ gone (merged, deleted); this is a fresh branch for the remainder.
       Falsifiability proven both directions: the harness reports `falsification intact` against
       the real historical shas, and correctly reports `MISMATCH` with a precise expected/actual
       diff when a `EXPECTED` entry is deliberately corrupted (tested, then reverted — see commit).
-- [ ] 10. **A missed worktree fails into the dangerous reading.** Absence of `wt:()` is
-      *defined* as "you are in the main checkout", so a detector that silently broke would look
-      identical to the state this feature exists to warn about — and given the motivating
-      incident (a session switching the shared checkout's branch while another worked in it),
-      that is the worst direction to fail in. Raised by the judge; not fixed here because the
-      fix is a design question, not a patch: it needs a distinguishable "unknown" rendering,
-      which is a change to what the segment *means*, and that was an explicit non-goal of this
-      branch.
+- [x] 10. **A missed worktree fails into the dangerous reading — fixed with `wt:(?)`.**
+      `git_dir=$(git ... rev-parse --absolute-git-dir 2>/dev/null)` can come back empty for
+      reasons unrelated to "this is the main checkout" (transient failure, permissions, a git
+      bug) while the outer `--is-inside-work-tree` check already confirmed we ARE in a work
+      tree. Previously that emptiness was indistinguishable from a real main checkout — both
+      rendered no `wt:()` segment at all. Now: `git_dir` empty *despite* being confirmed inside
+      a work tree renders `wt:(?)`; `git_dir` resolved with no `gitdir` file (a real main
+      checkout) still renders nothing, unchanged.
+
+      TDD: red test first, via a PATH shim that fails only the `rev-parse --absolute-git-dir`
+      call and passes every other git invocation through to the real binary (first version of
+      the shim had a shell-semantics bug — `PATH=... printf ... | bash "$SCRIPT"` scopes the
+      assignment to `printf` alone, not the pipeline; fixed to `export PATH=...` inside the
+      subshell). Confirmed the test fails against the unfixed script, then implemented. 69/69.
 - [ ] 11. **Absurd `COLUMNS` values print bash arithmetic noise to stderr.** A value longer
       than 19 digits overflows int64; the script still correctly declines to wrap, so the
       status line itself is unaffected and this is cosmetic. Written down because it has now

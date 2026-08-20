@@ -783,6 +783,34 @@ case "$(plain "$(render "$(wt_payload "$WT_ROOT/mainrepo/nested/deep")")")" in
   *) ok "a subdirectory of the main tree is not misreported as a worktree" ;;
 esac
 
+# Absence of wt:() is DEFINED as "you are in the main checkout". A git-dir
+# lookup that fails for an unrelated reason -- while genuinely inside a work
+# tree -- must not render identically to that, or the one case this feature
+# exists to warn about (a session in the wrong checkout) becomes silently
+# indistinguishable from a clean detection failure. Simulated with a PATH
+# shim that fails only the specific rev-parse call the detector depends on;
+# every other git invocation still reaches the real binary.
+REAL_GIT="$(command -v git)"
+GITSHIM="$(mktemp -d)"
+cat > "$GITSHIM/git" <<SHIMEOF
+#!/usr/bin/env bash
+case "\$*" in
+  *"rev-parse --absolute-git-dir"*) exit 1 ;;
+esac
+exec "$REAL_GIT" "\$@"
+SHIMEOF
+chmod +x "$GITSHIM/git"
+# The PATH override must be `export`ed rather than prefixed on `printf`: a
+# prefix assignment scopes to that one command, not the rest of the pipeline,
+# so a prefixed form would leave `bash "$SCRIPT"` running against the real
+# git and prove nothing.
+OUT="$(cd "$WT_ROOT/mainrepo" && export PATH="$GITSHIM:$PATH" && printf '%s' '{}' | bash "$SCRIPT")"
+rm -rf "$GITSHIM"
+case "$(plain "$OUT")" in
+  *"wt:(?)"*) ok "a failed git-dir lookup renders unknown, not the main-checkout reading" ;;
+  *) bad "a failed git-dir lookup was indistinguishable from the main checkout: $OUT" ;;
+esac
+
 # The width case up in the wrapping group renders /tmp, which is not a repo: no
 # branch, no wt:(), and a head barely a third of the terminal. It therefore
 # could not fail for the one shape that actually overflows -- a LONG head, which

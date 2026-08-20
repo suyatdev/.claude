@@ -9,6 +9,10 @@
 # wt:(<worktree>) appears only in a LINKED git worktree -- in the main checkout
 # the <dir> segment already names it. Parallel agents run in worktrees by
 # design, and the directory name alone does not say which checkout is which.
+# wt:(?) means detection itself failed while genuinely inside a work tree --
+# deliberately distinct from no wt:() segment at all, which means "confirmed
+# main checkout". The two must never look the same; see the git_dir check
+# below for why.
 # The line is packed to the terminal width and may occupy more than one row;
 # see the packing section at the foot of this file.
 # Σ is cumulative input+output tokens for this session (cache traffic excluded
@@ -191,7 +195,14 @@ if git -C "$cwd" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 
   #     repo that merely lives under a directory of that name.
   # The file test is a fact about git's own layout and survives both.
   git_dir=$(git -C "$cwd" --no-optional-locks rev-parse --absolute-git-dir 2>/dev/null)
-  if [ -n "$git_dir" ] && [ -f "$git_dir/gitdir" ]; then
+  if [ -z "$git_dir" ]; then
+    # We are confirmed inside a work tree (the outer check passed), but this
+    # specific lookup failed anyway. Absence of wt:() is defined as "this is
+    # the main checkout" -- rendering nothing here would make that reading
+    # indistinguishable from a detection failure, which is the one direction
+    # this feature must not fail in.
+    worktree="?"
+  elif [ -f "$git_dir/gitdir" ]; then
     worktree=$(basename "$(git -C "$cwd" --no-optional-locks rev-parse --show-toplevel 2>/dev/null)")
     # A directory name is externally sourced, exactly like $cwd above, and is
     # stripped at its source for the same reason.
