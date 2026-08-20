@@ -8542,3 +8542,28 @@ unconditional `chmod 0700` follows) and left for task 11.
 
 Session tracking files updated: `.claude/current-task.md` deleted (task done, nothing pending),
 `.claude/session-state.md` rewritten to reflect 8/16 done and no active task.
+
+## 2026-08-20 — marker-gate: tasks 9-16 dependency analysis, 5-way parallel split decided
+
+Fresh session after the task-7 handoff (8/16 done, HEAD `dd3f5d8`, clean). User asked whether any
+of the remaining 8 tasks could run as parallel worktree/pane work. Read the full checklist (tasks
+9-16) to map dependencies rather than assume "the rest" is one batch:
+
+- **Independent (no dependency on each other or on 13/14/16):** 9 (mutation-floor check), 10
+  (latency measurement), 11 (`shellcheck -x`), 12 (gates.md/README docs), 15 (MUST-sweep vs
+  tests). All read/measure/document the already-built code; none require another of these five to
+  land first.
+- **Forced serial, in this exact order, done directly by the orchestrator rather than delegated:**
+  13 (registers the hook in `settings.json` — the spec's own revert-pair table names this the
+  worse of two pairs: a half-registration blocks every Bash call in the session, not just
+  commits) → 14 (arming check; only meaningful once 13's installed hook exists) → 16 (obs judge on
+  the final HEAD; has to run after everything else is merged, by definition of "final").
+- Noted a secondary, lower risk: tasks 9 and 15 could both want to add assertions to the same test
+  suite file (closing a surviving mutant vs. closing a spec-coverage gap) — not a hard
+  dependency, just a reason to merge them sequentially rather than simultaneously.
+
+User confirmed: 5-way parallel now for {9, 10, 11, 12, 15} via worktrees + pane-dispatched
+workers, pane-split policy set to `panes max=5`. 13/14/16 held for a serial pass after the
+parallel batch merges. No code changed yet this session; this entry records the plan before the
+dispatch phase, per the freshness checkpoint firing at 79k session tokens with no prior save point
+this session.
