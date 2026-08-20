@@ -2162,7 +2162,7 @@ reason this row is a pin and not a footnote.
       `main` tops at 0025 but 0026 is already on this branch, so checking `main` alone would have
       collided. One inherited citation corrected rather than propagated — `hooks/README.md:34,140`
       carries a path-fidelity principle, not the test invocation `CODING_MEMORY.md:503` claims.
-- [ ] 2. Red: `classify-commit-command.test.py` — **only what the shared grammar does not already
+- [x] 2. Red: `classify-commit-command.test.py` — **only what the shared grammar does not already
       decide.** The waiver is discharged (see the callout in §"The command grammar"), so this suite no
       longer re-tests the shared layer; it tests the layer above it.
       **Do NOT assert these — they are landed and covered by `hooks/lib/classify-git-command.test.py`
@@ -2197,7 +2197,12 @@ reason this row is a pin and not a footnote.
       a line; **`3` — and only `3` — for an unreadable payload**) and is task 6's, asserted by stubbing
       the entry point. The shared classifier always exits 0 by contract
       (`classify-git-command.py:5`), and so does this one — it is imported, not executed.
-- [ ] 3. Green: `hooks/lib/classify-commit-command.py` — **classification only, no I/O**. It is
+      ✅ `hooks/lib/classify-commit-command.test.py`, **52 assertions**, one flat suite (no
+      check-group split — the cases are independent, not staged fixtures). Red confirmed by
+      import failure: `classify-commit-command.py` did not exist yet, so the run raised
+      `FileNotFoundError` rather than an assertion failure — the expected first-red state for a
+      brand-new module, not a "test errors, fix and re-run" defect.
+- [x] 3. Green: `hooks/lib/classify-commit-command.py` — **classification only, no I/O**. It is
       imported, not executed: the entry point in task 7 owns stdin, the git calls, the markers and the
       TSV line. A classifier that reads a payload or prints anything is the pre-ADR-0026 design.
       **It declares no option table of its own.** Import them — `segments` and `WRAPPERS` from
@@ -2222,6 +2227,22 @@ reason this row is a pin and not a footnote.
       Any such change is its own feature with its own ADR, and needs a regression case for the two
       unpinned spellings first.
       ⚠️ **Task 3 is a revert partner of task 7** (see the revert-pair table under task 13).
+      ✅ 248 lines, **52/52** green against task 2's suite. Written from the suite; bundle
+      decomposition (rule 1) is applied as a preprocessing pass — expanding a short-flag token
+      before the value/safe-flag walk — rather than reimplemented inside `commit_scan()`, so the
+      shared tables genuinely stay untouched. `-o`/`--only` and the four local `UNSUPPORTED`
+      triggers are filtered out of the token stream before it reaches any shared lookup, for the
+      same reason. One gotcha found while building it: `commit_scan()` cannot be reused for
+      operand collection at all, not just for the bundle case — it treats a bare pathspec operand
+      with no `--` (G2) as an unrecognised "cannot tell" stray token and discards it, which is
+      exactly the fail-open this feature exists to close, so the walk over rule 3 (operand
+      detection) had to be original rather than delegated. A second gotcha, not a bug: `seen_all`
+      and `seen_amend` are plain membership checks against the token stream, so `git commit -m
+      --amend` would misread the literal string `--amend` as the flag rather than as `-m`'s
+      value — an accepted inheritance of the shared layer's own stated, tested design (`git commit
+      -m '-a'` → `COMMIT_ALL` at `classify-git-command.test.py:103`), not a new gap this classifier
+      introduces. Baselines re-run unchanged: `classify-git-command.test.py` 114 passed,
+      `shell_segments.test.py` 35 passed, `classify-pr-command.test.py` 59 passed.
 - [x] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
       schema, mode, failure exits. **No inventory assertion yet** — see task 8.
       ✅ `hooks/lib/write-test-marker.test.py`, 29 assertions across 7 check groups. Validated three
