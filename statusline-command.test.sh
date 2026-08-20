@@ -853,8 +853,29 @@ fi
 # spurious blank leading row -- 7 rows, which passed the loose form of this very
 # assertion along with the rest of the suite. A bound with slack in it is a bound
 # that admits the off-by-one it exists to catch.
+# The off-by-one mutant above (dropping `[ $i -gt 0 ]`) only produces its
+# spurious blank leading row when segment 0 (arrow+user@host) alone exceeds
+# wrap_at -- i.e. when len(user)+len(host) > 18 at COLUMNS=24. That is a fact
+# about whoever runs the suite, not about the code under test: this machine's
+# marksuyat@Marks-Mac-Studio comfortably exceeds it, but a CI container
+# running as `root` with a short hostname could measure well under it, and
+# the assertion would stop catching that mutant while still reporting green.
+# whoami/hostname are pinned behind a PATH shim so the row count -- and what
+# it can detect -- do not depend on who or where this suite runs.
 EXPECTED_ROWS=6
-ROWS="$(line_count "$(render_cols 24 "$WIDE_HEAD_PAYLOAD")")"
+WHOSHIM="$(mktemp -d)"
+cat > "$WHOSHIM/whoami" <<'SHIMEOF'
+#!/usr/bin/env bash
+printf '%s\n' "fixture-user"
+SHIMEOF
+cat > "$WHOSHIM/hostname" <<'SHIMEOF'
+#!/usr/bin/env bash
+printf '%s\n' "fixture-host-name"
+SHIMEOF
+chmod +x "$WHOSHIM/whoami" "$WHOSHIM/hostname"
+OUT="$(export PATH="$WHOSHIM:$PATH" && printf '%s' "$WIDE_HEAD_PAYLOAD" | COLUMNS=24 bash "$SCRIPT")"
+rm -rf "$WHOSHIM"
+ROWS="$(line_count "$OUT")"
 if [ "$ROWS" -le "$EXPECTED_ROWS" ]; then
   ok "row count stays inside the segment-count bound (rows=$ROWS<=$EXPECTED_ROWS)"
 else

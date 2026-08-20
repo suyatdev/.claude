@@ -240,11 +240,15 @@ gone (merged, deleted); this is a fresh branch for the remainder.
       bash-startup noise disappears entirely, and only the script's own `[: ... integer
       expression expected` error remained on the unfixed blob. Verified the fix against that
       same non-interactive harness, not the interactive shell that showed the unrelated noise.
-- [ ] 12. **The row assertion's mutation-sensitivity is environment-dependent.** Raised by the
-      round-4 judge. Segment 0 is `➜  $(whoami)@$(hostname -s)`, built from the machine and not
-      from the fixture, so the off-by-one mutant only misbehaves when segment 0 alone exceeds
-      `wrap_at` — i.e. when `len(user) + len(host) > 18`. This machine measures 25 and the
-      canary works; a CI container running `root` with a short hostname measures ~16 and it
-      would silently stop working. The assertion still bounds rows correctly either way; it is
-      its power to *detect* a regression that varies. Fix is to pin `whoami`/`hostname` behind a
-      `PATH` shim in the fixture, as the judge did to measure both sides.
+- [x] 12. **The row assertion's mutation-sensitivity is environment-dependent — fixed.** Pinned
+      `whoami`/`hostname` behind a `PATH` shim in the row-bound fixture, returning fixed
+      `fixture-user`/`fixture-host-name` values instead of the real machine's — same technique
+      as the judge used to measure both sides, and the same one used for task 10's git shim.
+      Segment 0's width no longer depends on who or where the suite runs, so the off-by-one
+      mutant's detectability doesn't either.
+
+      Proved it matters, not just changed it: temporarily reintroduced the actual mutant
+      (dropped `[ $i -gt 0 ]`), confirmed the shimmed assertion fails correctly
+      (`rows=7>6`), then reverted. Real script still passes (`rows=6<=6`) — segment 0 always
+      opens line 1 regardless of its width, so widening the fixture's user/host changes nothing
+      about correct behavior, only the mutant's visibility.
