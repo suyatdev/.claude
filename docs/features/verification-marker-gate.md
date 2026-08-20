@@ -2465,8 +2465,37 @@ reason this row is a pin and not a footnote.
       (`hooks/foo.test.sh`), not the subject — passing the subject exits 1 with "is not a test path"
       and silently turned case 4 into a `MSG_NO_MARKER` block on the first attempt.
       ⚠️ Measured with `CLAUDE_PANE_AGENT` unset in the measuring shell (task 8's recorded artifact).
-- [ ] 11. `shellcheck -x` (0.11.0) clean apart from pre-existing findings; confirm which are
+- [x] 11. `shellcheck -x` (0.11.0) clean apart from pre-existing findings; confirm which are
       pre-existing by blame **before** claiming it, not after.
+      ✅ **shellcheck 0.11.0** (`shellcheck --version` → `version: 0.11.0`, matching the pin in
+      §Versions) run with `-x` over **all 16 feature-touched `.sh` files**
+      (`git diff --name-only main...HEAD | grep '\.sh$'`), not just the new gate — task 8 modified 14
+      existing suites, and "clean apart from pre-existing" is only meaningful across the whole touched
+      surface. **25 findings total: 24 pre-existing, 1 feature-introduced (the known SC2174), 0 needing
+      a fix.** Every finding blamed with `git blame -L n,n --porcelain`, and each blamed sha then
+      independently confirmed with `git merge-base --is-ancestor <sha> main`:
+      - `hooks/test-marker-guard.sh:89` **SC2174** — `26f8116` (task 7), **not** an ancestor of `main`:
+        **feature-introduced, accepted-known**. Line 90 is an unconditional `chmod 0700 "$STATE_DIR"`,
+        so the warning (`-m` only applies to the deepest directory) is inert in context. Not
+        re-litigated; the suite proves the mitigation directly — `pre-existing 0755 store, gate runs:
+        repaired to 0700 — mode 700`.
+      - `hooks/memsearch-nudge.test.sh` — **20** findings (SC2088 at line 65; SC2046 at 82, 92, 93, 99,
+        100, 107, 117, 125, 131, 143, 144, 149, 153, 158, 164, 170, 178, 184, 185), all `db0df0c9`
+        (2026-08-07), ancestor of `main`: **pre-existing**.
+      - `hooks/judge-guard.test.sh:209,226` — 2×SC2016, `ea2ee95b` / `f461f1fd` (2026-07-30), both
+        ancestors of `main`: **pre-existing**.
+      - `statusline-command.test.sh:477,707` — 2×SC2015, `05175ca4` (2026-07-19) / `dbf1bbc6`
+        (2026-08-06), both ancestors of `main`: **pre-existing**.
+      The other 12 touched files exit 0 clean, **including this feature's second new shell file
+      `hooks/test-marker-guard.test.sh`** — so **task 8's wiring introduced zero new findings** across
+      the 14 suites it modified. **No `.sh` file was edited**: the only feature-introduced finding is
+      the accepted one, leaving nothing trivial-and-not-pre-existing to fix. Suite re-run to record
+      the state alongside: **224 passed, 0 failed, exit 0**.
+      ⚠️ Two method notes for whoever repeats this. (a) Use `-f gcc`; grepping shellcheck's default
+      caret output undercounted `memsearch-nudge.test.sh` at **1 finding when it actually has 20**,
+      because only some caret lines match a `^-- SC` pattern — the per-file exit code tells you a file
+      is dirty but not how dirty. (b) `unset CLAUDE_PANE_AGENT` first, per task 8's 🔴 correction:
+      this run was pane-dispatched and the variable was ambient in the shell.
 - [ ] 12. Gate stub in `rules/gates.md`; `hooks/README.md` entry. Both must state the global-but-inert
       scope **and name `MSG_NO_PYTHON` as its one exception**, or the next reader assumes either
       `.claude`-only or unconditional inertness. **Both must also say that v1 ships no way to query
