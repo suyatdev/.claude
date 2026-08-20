@@ -8446,3 +8446,26 @@ Landed and independently verified: `206ba2e` (red, 52 assertions), `e073cc3` (gr
 report; re-ran all four suites myself rather than taking the reported counts — `classify-commit-command.test.py`
 52 passed, plus the three baselines unchanged (114/35/59). Pushed at `59b4c92`. 7 of 16 tasks done;
 task 7 (green: `hooks/test-marker-guard.sh` + `hooks/lib/decide-commit-gate.py`) is next.
+
+**Task 7 attempted twice this session, both stopped correctly instead of guessing.** First
+implementer hit the `TEST_EXEMPT` quoting/ordering bugs above and stopped with no code written;
+fixed and re-dispatched. Second implementer got further (into the staleness-comparison logic)
+before finding that `hooks/test-marker-guard.test.sh:399-401`, its Gherkin twin
+(`verification-marker-gate.md:1322-1329`), and the "Measured (M4)" paragraph a few hundred lines
+earlier (`:964`) all assert the wrong outcome for one scenario: committing a file by name while a
+different, paired file was edited but left out of that commit. All three currently say the
+left-out file goes stale (`MSG_STALE_TEST`); independently verified with real git (twice,
+separately from the implementer's own check) that it's backwards — the *named* file is the one
+that ships unverified worktree content and goes stale (`MSG_STALE_SUBJECT`); the left-out file
+ships its last-committed content unchanged and still matches the marker. This is the same rule
+revision 21 already corrected elsewhere in this document; these three spots were never updated to
+match. Not yet fixed — session paused for a model-tier switch back to high effort to make the
+correction, per the "spec proves wrong mid-implementation → stop, switch tier, fix" convention.
+Full detail and the exact re-verification recipe: `.claude/current-task.md` (machine-local).
+
+**Also discovered, not yet acted on:** `/model` sets the default effort for every *new* session,
+not just the live session it's run in — its own output says "saved as your default for new
+sessions with X effort." Pane-dispatched workers are new sessions, so they inherit whatever was
+last set regardless of the dispatching session's current effort at dispatch time. Whether the
+"low tier for mechanical work" convention is actually controlling worker cost, given this, is an
+open question worth its own look later.
