@@ -388,8 +388,9 @@ edit "$R" hooks/foo.sh 'v2 subject'
 block "a pathspec commit is gated on worktree content, not the index" "$R" \
   'git commit -m msg -- hooks/foo.sh' MSG_STALE_SUBJECT
 
-# Measured (M4): the commit ships foo.sh v2 alongside the OLD foo.test.sh -- a combination no
-# suite run certified. The marker's test blob is compared against the base blob.
+# Measured (M4): naming foo.sh in the pathspec ships its WORKTREE content (v3), which
+# mismatches the marker's recorded v2 -- MSG_STALE_SUBJECT. foo.test.sh, left out of the
+# pathspec, ships its BASE content (v2, untouched by this commit) and still matches the marker.
 R="$(new_repo adopt)"
 edit "$R" hooks/foo.sh 'v2 subject'
 edit "$R" hooks/foo.test.sh 'v2 suite'
@@ -398,7 +399,7 @@ mark "$R" hooks/foo.test.sh
 edit "$R" hooks/foo.sh 'v3 subject'
 edit "$R" hooks/foo.test.sh 'v3 suite'
 block "a pair member outside the pathspec is compared against base, not the worktree" "$R" \
-  'git commit -m msg -- hooks/foo.sh' MSG_STALE_TEST
+  'git commit -m msg -- hooks/foo.sh' MSG_STALE_SUBJECT
 
 # Measured: `git diff --cached` returns zero paths here, so a gate collecting from the index
 # finds no pairs and allows.

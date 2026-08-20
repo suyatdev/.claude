@@ -962,10 +962,12 @@ tree with no entry at `note.txt`. Naming `<base>` makes the untracked case fall 
 than needing a clause.
 
 **Measured (M4):** with `foo.sh` and `foo.test.sh` both modified in the worktree,
-`git commit -m x -- foo.sh` yields `HEAD:foo.test.sh` = the **old** content, while the worktree holds
-the new one, and the two blobs differ. So a pair whose test was edited but not committed is compared
-against the base blob and **blocks with `MSG_STALE_TEST`** — correct and fail-closed: the shipped
-combination of new subject and old test is one no suite run ever certified.
+`git commit -m x -- foo.sh` yields `HEAD:foo.sh` = the **new** (worktree) content, since naming a
+path in the pathspec ships whatever is currently on disk for it, unverified. That mismatches the
+marker's recorded blob, so the pair **blocks with `MSG_STALE_SUBJECT`** — correct and fail-closed:
+the shipped subject is one no suite run ever certified. `HEAD:foo.test.sh`, left out of the
+pathspec, stays at the **old** (base) content, which still matches the marker — the left-out half
+of the pair is not what goes stale here.
 
 **ABSENT is a defined result, not a git failure.** There is **one** definition:
 
@@ -1324,9 +1326,9 @@ Scenario: a pair member left outside the pathspec is compared against base, not 
   Given the suite passed against hooks/foo.sh v2 and hooks/foo.test.sh v2
     And both are modified in the worktree and neither is staged
    When "git commit -m msg -- hooks/foo.sh" runs
-   Then the hook exits 2 with MSG_STALE_TEST
-   # measured (M4): the commit ships foo.sh v2 alongside the OLD foo.test.sh, a combination
-   # no suite run certified; the marker's test blob is compared against the base blob
+   Then the hook exits 2 with MSG_STALE_SUBJECT
+   # measured (M4): naming foo.sh ships its worktree content, which mismatches the marker;
+   # foo.test.sh, left out of the pathspec, still matches the marker at its base content
 
 Scenario: git commit -a does not escape the gate
   Given the suite passed, then hooks/foo.sh was edited but never staged
