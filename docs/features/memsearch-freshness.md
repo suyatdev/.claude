@@ -1531,6 +1531,17 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       unexplained (`:2387-2390`), so this is tuning against a symptom, not a diagnosed cause — the plan
       should state how that gets treated (accepted as a known limitation vs. investigated further)
       rather than silently dropping it.
+      - **ADR written: `docs/decisions/0030-judge-verdict-tier-and-query-time-weight.md`** (2026-08-20).
+        Number re-derived against every remote branch, not just local `main` — `origin/main` tops out
+        at 0029, and `origin/feature/verification-marker-gate` carries **two** files numbered 0026,
+        which is the silent-collision shape this repo has hit before.
+      - Decisions it records: tier keyed on the `observability-judge`/`compliance-judge` parent
+        directory name; weight resolved from config at query time instead of frozen into each chunk
+        row, with the `weight` column dropped; a source-driven `index --reclassify` pass to re-type
+        existing rows without re-embedding; R9's 5-of-5 bar left untouched and recorded as failing;
+        the per-document diversity cap recorded as the candidate follow-up rather than built.
+      - The regression cause is **accepted as a known limitation**, not investigated — the pinned
+        state the investigation needs no longer exists.
 
 ## Verification
 
