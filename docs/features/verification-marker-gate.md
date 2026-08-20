@@ -2321,11 +2321,47 @@ reason this row is a pin and not a footnote.
       ⚠️ **914 > the 800-line max, accepted** (user decision 2026-08-14); code floor is 625, so
       fitting means deleting the rationale that makes each fixture honest. **Record the waiver at
       task 16** — the frontmatter is spec, and this is the implementation phase.
-- [ ] 7. Green: `hooks/test-marker-guard.sh` **and `hooks/lib/decide-commit-gate.py`** — the bash
+- [x] 7. Green: `hooks/test-marker-guard.sh` **and `hooks/lib/decide-commit-gate.py`** — the bash
       wrapper and the decision call are one behaviour split across two files by ADR 0026, and neither
       passes task 6 alone. ⚠️ **Task 3 is a third revert partner**: the entry point imports the
       classifier, so reverting 3 without 7 leaves every commit in an adopting repo on
       `MSG_CLASSIFIER_FAILED`. See the revert-pair table under task 13.
+      ✅ `hooks/lib/decide-commit-gate.py` (380 lines) + `hooks/test-marker-guard.sh` (196 lines), one
+      TSV line between them per ADR 0026. `bash hooks/test-marker-guard.test.sh` → **224 passed, 0
+      failed** against the real tree. All four baseline suites unaffected:
+      `classify-git-command.test.py` 114, `shell_segments.test.py` 35, `classify-pr-command.test.py`
+      59, `classify-commit-command.test.py` 52.
+      ⚠️ **225 → 224, on purpose.** Task 6's count assumed a scenario ("an exemption reason ending in
+      a newline is rejected") that turned out unreachable through the real pipeline (below) and was
+      restructured from a 2-assertion end-to-end check into a 1-assertion direct check against the
+      validator — net -1. Nothing was silently dropped; see the newline finding below.
+      ⚠️ **Two spec/test contradictions found while building this, both verified against real
+      git/Python before touching anything, both confirmed with the user before the test file was
+      edited:**
+      1. **An unchanged, re-staged file is invisible to `PLAIN`'s diff-based collector, and several
+         `block` scenarios assumed otherwise.** Measured: `git commit -m msg` with only a
+         byte-identical re-staged file exits 1, "nothing to commit" — no commit, and no git command
+         that reports differences can see this file either. ~8 scenarios (the `written_at` loop's
+         third row, "no marker at all", "a corrupt marker fails closed", "an empty exemption is not
+         an exemption", `setup_door`'s `MSG_NO_MARKER`/`MSG_BAD_MARKER` cases, and 4 of section F's
+         store/log-creation cases that need the gate — not just the writer — to reach a `BLOCK` door)
+         were corrected to `edit()` the file before staging, so each is a real, in-scope commit.
+         Widening the collector instead (treating every tracked pair as in-scope) was ruled out: it
+         breaks "fresh marker allows the commit" (:224-227), which depends on an unrelated,
+         also-unmarked, also-untouched pair being excluded.
+      2. **`shell_segments.segments()` replaces every newline in `TEST_EXEMPT`'s value with `;`
+         before extraction** (by design, so a multi-line reason can't inject a shell segment) — a raw
+         newline can never reach the exempt validator through the real command-parsing pipeline.
+         "an exemption carrying an embedded control character is rejected" was fixed by swapping the
+         injected byte to `0x01` (any other `0x00-0x1f` byte survives `segments()` unchanged).
+         "an exemption reason ending in a newline is rejected" — a regression test for a specific
+         `re.match`-vs-`re.fullmatch` quirk that only newline exhibits — cannot be fixed the same way
+         (the quirk IS about the newline), so it now checks `decide-commit-gate.py`'s validator
+         directly instead of through the full simulation, per the user's choice among three options.
+      A third, structurally identical scenario ("the byte bound is not escapable by a trailing
+      newline") already passed — vacuously, for the wrong reason (the semicolon-substituted value is
+      201 bytes, over the length bound on its own) — and was left untouched: out of scope of what was
+      asked, and not currently blocking anything. Flagged here for whoever next touches that test.
 - [x] 8. Wire the one-line call into **every pair the §Scope derivation returns when this task runs**
       — **re-run `git ls-files` first; do not carry a number in from anywhere, including this line.**
       As of 2026-08-15 that is **18** (17 pre-existing + `write-test-marker`), but the count is an

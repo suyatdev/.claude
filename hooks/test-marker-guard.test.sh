@@ -232,6 +232,11 @@ allow "fresh marker allows the commit" "$R" 'git commit -m msg'
 while IFS='|' read -r stamp blobs want door; do
   [ -n "$stamp" ] || continue
   R="$(new_repo adopt)"
+  # A staged-but-unchanged foo.sh produces no diff against base at all (measured, 2026-08-20:
+  # git status/diff show nothing for a re-added identical file, and a real `git commit` with
+  # only that staged refuses with "nothing to commit"), so PLAIN's diff-based collector can never
+  # see it. Editing it first keeps this row a genuine, git-observable in-scope commit.
+  edit "$R" hooks/foo.sh 'v2 subject'
   if [ "$blobs" = match ]; then
     hand_marker "$R" hooks/foo.sh hooks/foo.test.sh \
       "$(blob "$R" hooks/foo.sh)" "$(blob "$R" hooks/foo.test.sh)" "$stamp"
@@ -359,6 +364,9 @@ allow "the first commit in a writer-installed repo is not a git failure" "$UNBOR
 printf '\n### B. Incorrect behaviour the gate must catch\n\n'
 
 R="$(new_repo adopt)"
+# Unchanged content is invisible to the diff-based collector (see the written_at loop's note
+# above) -- edit before staging so this is a real, in-scope commit.
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 block "no marker at all" "$R" 'git commit -m msg' MSG_NO_MARKER 'bash hooks/foo.test.sh'
 
@@ -511,6 +519,7 @@ printf '\n### C. Edges\n\n'
 R="$(new_repo adopt)"
 mkdir -p "$R/$STOREREL"
 printf 'not json' > "$R/$STOREREL/$(key hooks/foo.sh)"
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 block "a corrupt marker fails closed" "$R" 'git commit -m msg' MSG_BAD_MARKER
 
@@ -582,19 +591,33 @@ R="$(new_repo adopt)"
 stage "$R" hooks/foo.sh
 EXEMPT_REPO="$R"
 
-# An embedded newline is refused by BOTH re.match and re.fullmatch, so this scenario passes with
-# the revision-15 defect present. It is here for the control-character rule; the two below are
-# the ones that discriminate.
+# shell_segments.segments() replaces every embedded newline with ';' before TEST_EXEMPT is ever
+# extracted (measured 2026-08-20), and ';' is printable ASCII -- a raw \n can never reach this
+# validator through the real pipeline, so this scenario uses 0x01 (SOH) instead, a different
+# byte in the same rejected 0x00-0x1f range that segments() passes through unchanged.
 block "an exemption carrying an embedded control character is rejected" "$EXEMPT_REPO" \
-  "TEST_EXEMPT='vendored
-upstream' git commit -m msg" MSG_BAD_EXEMPT
+  "$(printf "TEST_EXEMPT='vendored\001upstream' git commit -m msg")" MSG_BAD_EXEMPT
 
-# Regression test for revision 15. Python's `$` matches just before a single trailing newline,
-# so re.match ADMITS this value -- measured on 3.9.6 -- while re.fullmatch refuses it. Move the
-# newline into the middle and the scenario certifies the defect as fixed.
-block "an exemption reason ending in a newline is rejected" "$EXEMPT_REPO" \
-  "TEST_EXEMPT='vendored upstream
-' git commit -m msg" MSG_BAD_EXEMPT
+# Regression test for revision 15: Python's `$` matches just before a single trailing newline,
+# so re.match ADMITS a value ending in one -- measured on 3.9.6 -- while re.fullmatch refuses it.
+# This can no longer be exercised end-to-end: shell_segments.segments() replaces every embedded
+# or trailing newline with ';' before TEST_EXEMPT is extracted (measured 2026-08-20), and the
+# spec requires exempt come from exactly that extraction (:2191) -- so a raw trailing newline can
+# never reach decide-commit-gate.py through the real pipeline. Checked directly against the
+# validator instead, which still proves fullmatch (not match) is the implementation in place.
+if python3 -c "
+import importlib.util
+spec = importlib.util.spec_from_file_location('decide_commit_gate', '$HOOKS/lib/decide-commit-gate.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+value = 'vendored upstream\n'
+assert mod._EXEMPT_RE.match(value.encode()) is not None, 're.match should (wrongly) admit a trailing newline'
+assert mod._valid_exempt(value) is False, '_valid_exempt must reject a trailing newline via fullmatch'
+" 2>/dev/null; then
+  ok "the exempt validator rejects a trailing newline via fullmatch, not match"
+else
+  bad "the exempt validator rejects a trailing newline via fullmatch, not match"
+fi
 
 # The same defect reached through the length door: under re.match the {1,200} quantifier
 # consumes the 200 printable bytes and `$` matches before the newline, so 201 bytes pass.
@@ -627,6 +650,7 @@ RUN_ENV=""
 expect_exit "an ASCII exemption is accepted under a UTF-8 login locale" 0
 
 R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 block "an empty exemption is not an exemption" "$R" 'TEST_EXEMPT= git commit -m msg' MSG_NO_MARKER
 
@@ -771,10 +795,12 @@ setup_door() {
     MSG_GIT_FAILED)
       printf 'garbage' > "$repo/.git/index" ;;
     MSG_NO_MARKER)
+      edit "$repo" hooks/foo.sh 'v2 subject'
       stage "$repo" hooks/foo.sh ;;
     MSG_BAD_MARKER)
       mkdir -p "$repo/$STOREREL"
       printf 'not json' > "$repo/$STOREREL/$(key hooks/foo.sh)"
+      edit "$repo" hooks/foo.sh 'v2 subject'
       stage "$repo" hooks/foo.sh ;;
     MSG_STALE_SUBJECT)
       mark "$repo" hooks/foo.test.sh
@@ -864,6 +890,9 @@ printf '\n### F. The store and the log are default-deny, and both components can
 # The umask is set explicitly in every case here: inheriting 0077 reports 0600 on a 0644 file.
 
 R="$(new_repo adopt)"
+# ALLOW never calls write_log (exit 0 is silent, by design -- header comment, line 24), so this
+# repo needs the gate to actually reach a BLOCK door to exercise store creation at all.
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 ( umask 022; run_hook "$R" 'git commit -m msg' )
 expect_mode "gate first: hooks/state/ is created 0700" "$R/hooks/state" 700
@@ -889,6 +918,7 @@ chmod 755 "$R/hooks/state"
 expect_mode "pre-existing 0755 store, writer runs: repaired to 0700" "$R/hooks/state" 700
 
 R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 mkdir -p "$R/hooks/state"
 chmod 755 "$R/hooks/state"
@@ -898,11 +928,13 @@ expect_mode "pre-existing 0755 store, gate runs: repaired to 0700" "$R/hooks/sta
 # `>>` alone creates the log 0644 under a default umask, which is why the spec requires a
 # touch-then-chmod before the first append. Every other log scenario passes against a 0644 log.
 R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 ( umask 022; run_hook "$R" 'git commit -m msg' )
 expect_mode "a log created under umask 022 is 0600, not the append default" "$R/$LOGREL" 600
 
 R="$(new_repo adopt)"
+edit "$R" hooks/foo.sh 'v2 subject'
 stage "$R" hooks/foo.sh
 mkdir -p "$R/hooks/state"
 : > "$R/$LOGREL"
