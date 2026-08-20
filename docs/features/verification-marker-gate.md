@@ -1,11 +1,29 @@
 ---
-phase: implementation
-model_tier: low
+phase: planning
+model_tier: high
 branch: feature/verification-marker-gate
-revision: 20
-revision_status: complete  # planning closed at revision 20; gate confirmed 2026-08-15. Spec is frozen — a needed change is a GATE announcement, not an edit.
+revision: 21
+revision_status: in-revision  # reopened 2026-08-19 at user direction, per the documented "return to planning to revise" convention: revision 20 froze the spec around a waiver that has since been discharged by PR #54. Ticked tasks and the branch are retained. Resuming implementation needs a fresh literal `gate confirmed`.
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
+
+> **Revision 21 — the waiver is discharged; the block was narrower than recorded.** The pause note of
+> 2026-08-16 said this feature was blocked on a shared-lexer decision that did not exist. That
+> decision landed on `main` as **PR #54** (`global-option-blindness`, **ADR 0029**) and was merged
+> into this branch on 2026-08-19 (`af5e874`; no source conflicts, three append-only ledgers unioned
+> with zero lines dropped). Re-measured after the merge, in this checkout:
+> `classify-git-command.test.py` **114 passed**, `shell_segments.test.py` **35 passed**,
+> `classify-pr-command.test.py` **59 passed**, all `rc=0`.
+>
+> Two corrections to the record this revision makes:
+>
+> 1. **Only tasks 2 and 3 were ever grammar-blocked.** Tasks 7 and 9–16 are queued behind them by
+>    ordinary dependency, not by the waiver. The pause note's "fully blocked (5/16)" overstated it.
+> 2. **The decision did not land where this card predicted.** It is in
+>    `hooks/lib/classify-git-command.py`, not `hooks/lib/shell_segments.py`. See §The command grammar.
+>
+> `waived:` keeps `writing-specs/command-grammar` as the record that the waiver was taken; the
+> callout in §The command grammar records that it is now discharged.
 
 # verification-marker gate
 
@@ -764,7 +782,7 @@ staged `v2`, worktree `v3`; `bar.md` modified in the worktree only*:
    | 1 | `INVALID` | `-a`/`--all` together with any pathspec operand (G8, G9) | **allow** | **Git itself refuses the command — exit 128, nothing is committed.** Nothing downstream can matter, so this resolves before every block. |
    | 2 | `UNSUPPORTED` | **any** of: a `cd`, `git -C`, `--git-dir` or `--work-tree` anywhere before the commit; `-i`/`--include` or `--pathspec-from-file`; `-p`/`--patch` or `--interactive`; **any option not in the whitelist** | block, `MSG_UNSUPPORTED_FORM` | Each trigger makes the commit's contents, or the repo they belong to, unknowable before the hook returns. See "What `UNSUPPORTED` absorbs" below. |
    | 3 | `ALL` | `-a`/`--all` with **no** operand | proceed, worktree content | |
-   | 4 | `PATHSPEC` | any operand, with or without `--`, including via `-o`/`--only` | proceed, index content | |
+   | 4 | `PATHSPEC` | any operand, with or without `--`, including via `-o`/`--only` | proceed, **worktree** content | ⚠️ Corrected in revision 21; this cell read "index content" through revision 20. A pathspec commit ships the **worktree** blob, not the index's. Measured on git 2.50.1 with `foo.sh` at HEAD `v1` / index `v2` / worktree `v3`: `git commit -m msg foo.sh` → `rc=0`, `HEAD:foo.sh` = `v3`. Reading the index would have compared `v2`, passed a file whose worktree content no test ever ran against, and re-opened G2 — the fail-open this row exists to close. The scenario "a pathspec commit is gated on worktree content, not the index" always said this; the table disagreed with it and with git. |
    | 5 | `PLAIN` | none of the above | proceed, index content | The default, reached only by exhausting the list. |
 
    `NONE` is the value whenever `kind` is not `COMMIT`, and is not part of this resolution.
@@ -778,22 +796,49 @@ pathspec (G5). Two groups, and the distinction is load-bearing:
 - **Optional value, attached only** — these must **never** consume the next token, or they would eat
   a pathspec: `-u/--untracked-files`, `-S/--gpg-sign`.
 
-> ⚠️ **UNRESOLVED — user-waived (`writing-specs/command-grammar`), decided elsewhere.
-> Do not implement rule 2 as written.** Rule 2's unqualified "`--opt value` consumes the next token"
-> contradicts the group immediately above it, which names `--untracked-files` and `--gpg-sign` as long
-> options that must never consume one. Measured on git 2.50.1:
-> `git commit -m msg --untracked-files foo.sh` ships the **worktree** blob, because `foo.sh` is a
-> pathspec — so a classifier applying rule 2 literally reports `PLAIN`, hashes the index, and re-opens
-> G2, the exact fail-open this section exists to close. The section also does not state how the command
-> string becomes tokens, how `git <global-opts> commit` is told from `git commit <opts>` (which the
-> `-C` trigger depends on), or how a `git add … && git commit …` chain is segmented.
+> ✅ **RESOLVED (revision 21) — the shared decision landed, and this section now cites it rather than
+> restating it.** The waiver `writing-specs/command-grammar` is discharged for rule 2. **Rule 2 as
+> originally written is still not what gets implemented** — the resolution is a table lookup, not a
+> rule:
 >
-> **Deferred, not dismissed.** This is the same tokenisation question `hooks/lib/shell_segments.py`
-> already answers for `git-guard`, `doc-guard` and `classify-pr-command.py`, and the open defect where
-> a redirection after a pathspec becomes a phantom operand is a defect in *that* file. Writing a
-> second, independent grammar here is precisely how the two would drift apart. **The decision is made
-> once, in the shared lexer, and this section then cites it rather than restating it.** Implementation
-> of this feature is blocked on that decision landing; the rest of the spec is not.
+> - **Consumes the next token** iff the option's name (the part before any `=`) is in
+>   `COMMIT_VALUE_FLAGS` (`hooks/lib/classify-git-command.py:89-94`). A `--opt=value` spelling carries
+>   its value inline and consumes nothing (`:202`).
+> - **Never consumes the next token** iff the name is in `COMMIT_SAFE_FLAGS` (`:103-111`).
+>   `-S`/`--gpg-sign` live here — exactly the attach-only case rule 2 contradicted. Measured:
+>   `git commit -m msg -S foo.sh` leaves `foo.sh` visible as an operand.
+> - **Anything on neither table is unrecognised and blocks** (`commit_scan():204-206`). This closes the
+>   abbreviation hole — `--amen` is a valid spelling of `--amend` to git, so testing for the exact
+>   string is not a test for amending. `--pathspec-from-file` is absent from both tables deliberately,
+>   for the same reason.
+>
+> The three questions this callout also raised are answered in the same place: the command becomes
+> tokens via `hooks/lib/shell_segments.py` (`segments()`), which also strips `WRAPPERS` (`:64`,
+> `:146-147`) and segments a `git add … && git commit …` chain; `git <global-opts> commit` is told
+> from `git commit <opts>` by `resolve_subcommand()` (`classify-git-command.py:152-176`), which sorts
+> global options into three buckets and yields `SCOPE_UNKNOWN` for `-C`, `--git-dir`, `--work-tree`
+> and anything unrecognised. Rationale and the measured git 2.50.1 grammar: **ADR 0029**
+> (`docs/decisions/0029-three-buckets-and-cannot-tell-asks.md`) and
+> `docs/features/global-option-blindness.md`.
+>
+> ⚠️ **One correction to this callout's own premise.** It predicted the decision would land in
+> `shell_segments.py`. It landed in the sibling `classify-git-command.py`, and that is the better
+> place: `shell_segments.py` is a pure shell lexer with no git knowledge, and `classify-pr-command.py`
+> — a `gh` reader — imports it. Putting `git commit` flag tables there would make a `gh` classifier
+> transitively carry them. **Cite the sibling for anything about `git commit` flags; cite the lexer
+> for tokenisation and wrapper stripping.**
+>
+> ⚠️ **Three spellings this spec names are NOT in the shared tables, and one is a live contradiction.**
+> `-u`/`--untracked-files` and `--trailer` are on neither table, so both currently block.
+> **`-o`/`--only` is the contradiction**: this spec calls it `PATHSPEC`-equivalent (G7, and real
+> git 2.50.1 agrees — measured `rc=0`, ships worktree content, leaves other staged files alone), while
+> `classify-git-command.py` treats it as unrecognised and **two tests pin that as deliberate**.
+> Measured: adding these spellings to the shared tables removes `COMMIT_BARE_ARGS` from 4 of 6 probe
+> cases, and git-guard's documentation-only exemption reads exactly that fact
+> (`hooks/git-guard.sh:269-272`) — so each is a **block → allow flip on a Tier-1 guard**, and only the
+> `-o` pair is caught by a test. **Resolving `-o` is a user decision with its own ADR, not a drafting
+> choice, and this feature does not make it.** Until it is made, this feature resolves `-o`/`--only`
+> in its own form resolver and changes nothing shared.
 
 ##### What `UNSUPPORTED` absorbs, and why each trigger blocks rather than guesses
 
@@ -2117,22 +2162,66 @@ reason this row is a pin and not a footnote.
       `main` tops at 0025 but 0026 is already on this branch, so checking `main` alone would have
       collided. One inherited citation corrected rather than propagated — `hooks/README.md:34,140`
       carries a path-fidelity principle, not the test invocation `CODING_MEMORY.md:503` claims.
-- [ ] 2. Red: `classify-commit-command.test.py` — **the grammar first** (G1-G9, bundles, value-taking
-      flags in both groups, `--opt=value`, `--` inside a value), **plus rule 0's wrapper stripping for
-      every member of `WRAPPERS` — `rtk git commit …` must classify exactly as `git commit …`, and that
-      case is the difference between an armed gate and a dead one** — and the closed whitelist:
-      an abbreviated-but-valid option (`--am`, measured accepted by git 2.50.1) must resolve to
-      `UNSUPPORTED` and **block**, not fall through to `PLAIN`. Then every `form` **in the order rule 4
-      fixes**, including a command firing two triggers at once, `--amend`, raw `exempt` passthrough,
-      **each `UNSUPPORTED` trigger asserted separately so the fold cannot silently drop one**, exit 3,
-      ignored and genuinely accepted-open shapes (alias and variable indirection only),
-      **and all 15 cells of the `kind` × field totality matrix** — 15, not the 18 revisions 1–13 said:
-      revision 14 deleted the `v` sentinel row (§3). ⚠️ The grammar's rule 2 is
-      user-waived and unresolved — see the callout in §"The command grammar". Do not encode rule 2
-      literally; this task is blocked on the shared-lexer decision landing in `shell_segments.py`.
+- [ ] 2. Red: `classify-commit-command.test.py` — **only what the shared grammar does not already
+      decide.** The waiver is discharged (see the callout in §"The command grammar"), so this suite no
+      longer re-tests the shared layer; it tests the layer above it.
+      **Do NOT assert these — they are landed and covered by `hooks/lib/classify-git-command.test.py`
+      (114 passed, 0 failed, `rc=0`, re-run in this checkout after the merge):** rule 0 wrapper
+      stripping for every member of `WRAPPERS`; `git add … && git commit …` segmentation;
+      `--opt=value` self-containment (G3); a value-taking flag consuming the next token (G5); `--`
+      inside a value not being a separator (G6); `-S`/`--gpg-sign` never eating a pathspec; `--amend`
+      when fully spelled; an abbreviated-but-valid option (`--am`) refusing to fall through to
+      `PLAIN`; and `git -C` / `--git-dir` / `--work-tree` as repo-redirect triggers.
+      **DO assert these — the shared layer supplies none of them:**
+      **(a) rule 1, bundle decomposition** — `-am`, `-amHELLO` (G4), `-qam`, `-vam` must all resolve to
+      `ALL`; the shared code enumerates the literal `-am` only, so every other bundle currently reads
+      as "cannot tell". **(b) G2, a bare operand is a pathspec** — `git commit -m msg foo.sh` must
+      yield `paths: ['foo.sh']`; `commit_scan()` discards it (`classify-git-command.py:198`).
+      **(c) `INVALID` resolving before every block** (G8, G9) — measured `rc=128` on git 2.50.1,
+      nothing committed; the shared `classify()` returns the same facts for these as for G1, so this
+      distinction exists only here. **(d) each of the five `form` values in the order rule 4 fixes**,
+      including a command firing two triggers at once. **(e) each `UNSUPPORTED` trigger asserted
+      separately so the fold cannot silently drop one** — including **`cd` before the commit**, which
+      the shared layer does not implement at all (measured: `cd /other && git commit -m msg` →
+      `['COMMIT']`), and `-i`/`--include`, `-p`/`--patch`, `--interactive`, `--pathspec-from-file`, all
+      four of which the shared layer collapses into one `COMMIT_BARE_ARGS` bucket.
+      **(f) `-o`/`--only` as `PATHSPEC`-equivalent** — resolved locally, because the shared tables pin
+      the opposite; see the ⚠️ in §"The command grammar". **(g) `kind`: `OTHER` vs `NOTHING_RUNNABLE`**
+      — `git status` and `echo hello` are indistinguishable to `classify()` (both `[]`) and must not be
+      here. **(h) raw `exempt` passthrough**, taken from `shell_segments.segments()`'s assignment map,
+      **not** from `classify-git-command.py`, which discards it (`:224`); match the variable name
+      exactly, never by suffix (`classify-pr-command.py:63` is the precedent and the reason).
+      **(i) all 15 cells of the `kind` × field totality matrix** — 15, not the 18 revisions 1–13 said:
+      revision 14 deleted the `v` sentinel row (§3).
+      **Exit 3 is NOT asserted here.** It belongs to the entry point (§3: exit `0` whenever it produced
+      a line; **`3` — and only `3` — for an unreadable payload**) and is task 6's, asserted by stubbing
+      the entry point. The shared classifier always exits 0 by contract
+      (`classify-git-command.py:5`), and so does this one — it is imported, not executed.
 - [ ] 3. Green: `hooks/lib/classify-commit-command.py` — **classification only, no I/O**. It is
       imported, not executed: the entry point in task 7 owns stdin, the git calls, the markers and the
       TSV line. A classifier that reads a payload or prints anything is the pre-ADR-0026 design.
+      **It declares no option table of its own.** Import them — `segments` and `WRAPPERS` from
+      `hooks/lib/shell_segments.py`; `resolve_subcommand`, `commit_scan`, `COMMIT_VALUE_FLAGS`,
+      `COMMIT_SAFE_FLAGS`, `GLOBAL_SKIP_NO_VALUE`, `GLOBAL_SKIP_CONSUMING` and `GLOBAL_REDIRECT` from
+      `hooks/lib/classify-git-command.py` — via `importlib.util.spec_from_file_location` (the
+      filenames' hyphens forbid a plain `import`; the loader is the one §3 already mandates).
+      **This is a second instance of a shipped pattern, not a new one:** `hooks/git-guard.sh:307-332`
+      importlib-loads the same module and calls `mod.segments()` and `mod.resolve_subcommand()` to ask
+      a question `classify()`'s fact stream cannot answer — "already tested, never reimplemented", in
+      its own words (`git-guard.sh:302-306`). Do the same.
+      **Do NOT call `classify()`.** Its fact set is lossy by design for a block/allow guard and
+      collapses `PATHSPEC`, `ALL` and `UNSUPPORTED` into one `COMMIT_BARE_ARGS` bucket — precisely the
+      distinction this feature needs. Building on it would also over-block the routine case:
+      `git commit -m msg foo.sh` and `git commit -o -m msg -- foo.sh` are both ordinary, both legal,
+      and both come back "cannot tell".
+      ⚠️ **Never edit the shared tables to suit this feature.** Measured: adding `-o`, `--only`, `-u`,
+      `--untracked-files`, `--trailer` to them flips 4 of 6 probe cases from "cannot tell" to a clean
+      pathspec, and `hooks/git-guard.sh:269-272` reads exactly that fact to grant its
+      documentation-only exemption — a block → allow change on a Tier-1 guard, of which its suite
+      catches only the `-o` pair (112 passed, 2 failed). `--trailer` and `-u` flip at 114/114 green.
+      Any such change is its own feature with its own ADR, and needs a regression case for the two
+      unpinned spellings first.
+      ⚠️ **Task 3 is a revert partner of task 7** (see the revert-pair table under task 13).
 - [x] 4. Red: `write-test-marker.test.py` — derivation, normalisation, no-subject skip, atomic write,
       schema, mode, failure exits. **No inventory assertion yet** — see task 8.
       ✅ `hooks/lib/write-test-marker.test.py`, 29 assertions across 7 check groups. Validated three
@@ -2338,8 +2427,11 @@ reason this row is a pin and not a footnote.
   Invoking this needs an explicit decision from the user, never a silent one.
 - **Waivers — two, both recorded in the frontmatter, both user decisions.** A judge citing either is
   arguing with a settled decision.
-  1. `writing-specs/command-grammar` — rule 2 is unresolved and deferred to the shared lexer; see the
-     callout in §The command grammar.
+  1. `writing-specs/command-grammar` — **discharged in revision 21.** Rule 2 was deferred to a shared
+     decision that has since landed (PR #54 / ADR 0029, merged here as `af5e874`) and is now cited
+     rather than restated; see the callout in §The command grammar. The entry stays in `waived:` as
+     the record that the waiver was taken, not as an open exemption. It landed in
+     `classify-git-command.py`, not the lexer this entry predicted.
   2. `core-conduct/file-size-convention` — granted 2026-08-13 **after** the scope cut failed to reach
      800 and the composition measurement below showed why nothing else would. This reverses the
      earlier "no size waiver is to be sought" decision of the same date, which was taken while the
