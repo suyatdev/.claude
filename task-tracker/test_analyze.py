@@ -313,6 +313,46 @@ def test_criterion_2_drift_does_not_fire_for_an_unrelated_branch(repo):
         "a branch not named for the card is not that card's drift"
 
 
+def test_a_yaml_trailing_comment_is_not_part_of_the_branch(repo):
+    """`branch: none  # merged via ...` declares no branch — the comment is not a name.
+
+    Verbatim from `docs/features/falsifier-base-pin.md` in this repo. Closed cards record
+    where the branch went in a trailing comment, so before this was handled every closed
+    card asked "Where is `<card>`'s branch none  # merged ...?" — the `none` test read the
+    comment as part of the value and missed. Plain `branch: none` was never affected,
+    which is why only closed cards misreported.
+    """
+    declared = "none  # merged via PR #39 (cbb9f60); fix/falsifier-base-pin deleted"
+    repo.card("falsifier-base-pin", tasks=[(True, "one")], branch=declared)
+    repo.commit("cards")
+
+    run = analyzer.analyze(repo.root)
+
+    asked = [q["q"] for q in _questions_mentioning(run, "falsifier-base-pin")]
+    assert not [q for q in asked if q.startswith("Where is")], \
+        "a commented branch: none still declares no branch, so nothing is missing: %s" % asked
+    assert _feature(run, "falsifier-base-pin")["tasks"][0]["branch"] == NO_BRANCH, \
+        "the comment must not be adopted as the branch name"
+
+
+def test_a_hash_not_preceded_by_whitespace_stays_in_the_branch(repo):
+    """Only whitespace-then-`#` opens a comment; `feat/issue#42` is one branch name.
+
+    The boundary of the test above. Stripping from any `#` would truncate this to
+    `feat/issue`, inventing a branch that does not exist and losing the one that does.
+    """
+    repo.card("hashy", tasks=[(False, "one")], branch="feat/issue#42")
+    repo.commit("cards")
+    repo.add_worktree("feat/issue#42")
+
+    run = analyzer.analyze(repo.root)
+
+    assert _feature(run, "hashy")["tasks"][0]["branch"] == "feat/issue#42", \
+        "a `#` with no whitespace before it is part of the branch name"
+    assert not _questions_mentioning(run, "hashy"), \
+        "the branch exists and matches the card — there is nothing to ask"
+
+
 # ------------------------------------------------------------------ branches[] from git
 
 
