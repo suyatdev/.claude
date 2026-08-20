@@ -749,6 +749,11 @@ WRAP_MIN_WIDTH=12
 wrap_at=0
 case "${COLUMNS:-}" in
   ''|*[!0-9]*) ;;
+  # More than 15 digits is already an absurd terminal width and, unfiltered,
+  # reaches bash's signed 64-bit arithmetic below -- which prints "integer
+  # expression expected" or "number truncated" to stderr instead of quietly
+  # declining to wrap like every other degenerate value does.
+  ????????????????*) ;;
   *) [ "$COLUMNS" -gt 0 ] && wrap_at=$((COLUMNS - WRAP_SAFETY_MARGIN)) ;;
 esac
 [ "$wrap_at" -lt "$WRAP_MIN_WIDTH" ] && wrap_at=0

@@ -226,11 +226,20 @@ gone (merged, deleted); this is a fresh branch for the remainder.
       the shim had a shell-semantics bug — `PATH=... printf ... | bash "$SCRIPT"` scopes the
       assignment to `printf` alone, not the pipeline; fixed to `export PATH=...` inside the
       subshell). Confirmed the test fails against the unfixed script, then implemented. 69/69.
-- [ ] 11. **Absurd `COLUMNS` values print bash arithmetic noise to stderr.** A value longer
-      than 19 digits overflows int64; the script still correctly declines to wrap, so the
-      status line itself is unaffected and this is cosmetic. Written down because it has now
-      survived three judge rounds as an unlogged observation, which is how cosmetic defects
-      become permanent.
+- [x] 11. **Absurd `COLUMNS` values print bash arithmetic noise to stderr — fixed.** The
+      degenerate-value guard rejected non-digit and non-positive strings but never bounded
+      digit COUNT, so a value past bash's signed 64-bit ceiling reached `[ "$COLUMNS" -gt 0 ]`
+      unfiltered and printed `integer expression expected` to stderr. Fixed by rejecting
+      16+-digit strings in the same case pattern, before either comparison runs.
+
+      One dead end during verification, recorded because it cost real time: `bash`'s own
+      `checkwinsize` startup behavior *also* prints `number truncated after 19 digits` for an
+      absurd `COLUMNS` in the environment — but only when the enclosing shell is interactive.
+      Confirmed by reproducing with a nested non-interactive script (`bash outer.sh` invoking
+      `bash statusline-command.sh`, matching how Claude Code actually runs this script): the
+      bash-startup noise disappears entirely, and only the script's own `[: ... integer
+      expression expected` error remained on the unfixed blob. Verified the fix against that
+      same non-interactive harness, not the interactive shell that showed the unrelated noise.
 - [ ] 12. **The row assertion's mutation-sensitivity is environment-dependent.** Raised by the
       round-4 judge. Segment 0 is `➜  $(whoami)@$(hostname -s)`, built from the machine and not
       from the fixture, so the off-by-one mutant only misbehaves when segment 0 alone exceeds

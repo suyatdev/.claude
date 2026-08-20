@@ -732,6 +732,20 @@ else
   bad "absent COLUMNS wrapped into $(line_count "$OUT") lines"
 fi
 
+# The degenerate-value guard above only rejects non-digit and non-positive
+# strings -- it never bounded how MANY digits are allowed through, so a value
+# long enough to overflow bash's signed 64-bit arithmetic reached the
+# subtraction below unfiltered and printed "number truncated after 19 digits"
+# to stderr. The status line itself still rendered correctly (wrapping just
+# declines, same as any other degenerate value); only stderr is under test.
+ABSURD_COLUMNS="99999999999999999999" # 20 digits, past bash's int64 ceiling
+STDERR_OUT="$(printf '%s' "$WRAP_PAYLOAD" | COLUMNS="$ABSURD_COLUMNS" bash "$SCRIPT" 2>&1 1>/dev/null)"
+if [ -z "$STDERR_OUT" ]; then
+  ok "an absurd COLUMNS value produces no stderr noise"
+else
+  bad "an absurd COLUMNS value printed to stderr: $STDERR_OUT"
+fi
+
 # A segment wider than the whole terminal cannot be honoured. It must still
 # arrive intact on its own line rather than being chopped mid-escape.
 LONG_NAME="$(printf 'M%.0s' $(seq 1 120))"
