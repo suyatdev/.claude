@@ -8493,3 +8493,52 @@ commit-gate.py` + `hooks/test-marker-guard.sh`, target 225/225) is being dispatc
 pane worker next rather than continued in-process, per `dispatching-pane-agents` and the user's
 explicit request this session. Effort convention note from the prior entry still applies: check
 what effort tier the dispatched worker actually runs at, since `/model` sets it session-wide.
+
+## 2026-08-20 — marker-gate: task 7 lands green, two more spec contradictions found and resolved
+
+Dispatched task 7's build (`hooks/lib/decide-commit-gate.py` + `hooks/test-marker-guard.sh`) to a
+pane-dispatched `general-purpose` worker per the user's explicit request. The worker's `wait`
+timed out once at 1800s; its `claude -p` process was still alive with 30+ minutes of accumulated
+CPU time, so the wait was re-armed rather than treated as a failure — it reported back clean on
+the second window.
+
+The worker got to 196/225 and correctly stopped rather than guess, reporting two further
+spec/test contradictions (on top of the M4 one fixed earlier today). Both independently
+re-verified from scratch before acting on them, including re-reading the exact spec/test lines
+and running real git and Python, not trusting the worker's paraphrase:
+
+1. **A file re-staged with unchanged content is invisible to `PLAIN`'s diff-based path collector,
+   and ~8 `block` scenarios assumed the gate would still catch it.** Confirmed with a real probe:
+   `git commit -m msg` with only such a file staged exits 1, "nothing to commit" — no commit ever
+   happens, and no git command that reports differences can see the file either (tested several).
+   Traced every affected scenario in `hooks/test-marker-guard.test.sh` back to `new_repo`'s seed
+   commit plus a bare `stage()` with no preceding `edit()`. Ruled out widening the collector
+   (treating every tracked pair as in-scope) — it breaks "fresh marker allows the commit"
+   (:224-227), which depends on an unrelated, unmarked, untouched pair being excluded.
+2. **`shell_segments.segments()` replaces every newline in a `TEST_EXEMPT` value with `;` before
+   extraction**, confirmed by running it directly — a raw newline can never reach the exempt
+   validator through the real pipeline. One scenario ("embedded control character") is fixable by
+   swapping to a different `0x00-0x1f` byte (confirmed several survive `segments()` unchanged).
+   The other ("ending in a newline is rejected") is a regression test for a `re.match`-vs-
+   `re.fullmatch` quirk specific to the newline byte itself, so it cannot be fixed by swapping the
+   byte — it now checks the validator directly instead of through the full command simulation.
+
+Per `core-conduct`'s architecture-decisions-stay-human-owned rule, stopped and asked the user
+before touching the pinned test file further — two `AskUserQuestion` calls, each with a
+recommendation, both accepted as recommended. Applied 8 test-scenario edits (6 add-an-edit-before-
+stage, 1 byte swap, 1 full rewrite as a direct check) myself, as a test-suite correction kept
+separate from the (already-built) implementation step. Landed `26f8116`: `test-marker-guard.test.sh`
+**224/224** (225 → 224 on purpose — the rewritten scenario went from a 2-assertion end-to-end
+check to a 1-assertion direct one; documented in the checklist, not silently dropped). All four
+baseline suites re-confirmed unaffected: 114/35/59/52. Task 7 ticked with full detail. Pushed.
+
+Also found, left untouched (out of scope of what was asked, not currently blocking anything): a
+third scenario structurally identical to the newline-in-exempt issue ("the byte bound is not
+escapable by a trailing newline") already passes, but vacuously — the semicolon-substituted value
+happens to be 201 bytes, over the length bound on its own, so it never exercises the newline-at-
+end-of-string quirk its comment claims to test. Flagged in the checklist for whoever next touches
+that test. One shellcheck warning (SC2174) in the new `hooks/test-marker-guard.sh` is harmless (an
+unconditional `chmod 0700` follows) and left for task 11.
+
+Session tracking files updated: `.claude/current-task.md` deleted (task done, nothing pending),
+`.claude/session-state.md` rewritten to reflect 8/16 done and no active task.
