@@ -73,7 +73,7 @@ it belongs in the spec half, and it is what keeps this file readable at session 
 - [x] 12 — Add the skill to the Skills Catalog in `CLAUDE.md`. One row, placed after `managing-session-memory` because both answer "where does this work stand"; the catalog is grouped by activity, not alphabetised. `CLAUDE.md` is the only catalog — every other file mentioning a skill name references it in prose (`grep -rln 'verifying-subagent-commits' --include='*.md' .`), so there is no second list to drift.
 - [x] 13 — Run every suite, record before/after counts in `## Verification` below. All three ran 2026-08-12, **zero failures before or after**; the before-counts came from a throwaway detached checkout of `main` at `1b983d9`, since a run in this tree is an *after* count by definition. `node --version` = v26.5.0, and the `task-tracker/` run reports **no skips at all** — so criterion 5 got its JS-engine oracle and criterion 15 is verified, not degraded. ⚠️ **The guard re-derivation overcounted by one, and is now fixed in place**: `grep -c skipif` totals 15, but `test_server.py:556` guards on `os.geteuid() == 0`, not `node` — the node-guarded figure is 14, via `grep -h 'skipif(NODE is None' task-tracker/*.py | wc -l`. This lived in the `.md` half, **not** the spec half, so it was never a spec edit; an earlier revision of this note said otherwise and was wrong.
 - [x] 14 — Vendor all six remote assets — nine local files. **Runs right after task 8**; owns criterion 13. Closed on the re-score in `§Verification` — both runs match the revised expectation exactly, on the enumerations already recorded; no new browser run was made.
-- [ ] 15 — Fix `_parse_frontmatter`'s blindness to a YAML trailing comment, which makes this
+- [x] 15 — Fix `_parse_frontmatter`'s blindness to a YAML trailing comment, which makes this
       repo's own closed-card convention unreadable to this feature's own analyzer.
       `analyze.py:196` splits each frontmatter line on the first `:` and keeps the remainder
       verbatim, so `branch: none  # merged via PR #39 (cbb9f60); fix/falsifier-base-pin deleted`
@@ -86,6 +86,26 @@ it belongs in the spec half, and it is what keeps this file readable at session 
       those three real spellings, run and seen to fail before the fix exists. Strip only a comment
       introduced by whitespace-then-`#`, never a bare `#`, so a branch name legitimately carrying
       one survives.
+      **Done.** One regex applied in `_parse_frontmatter` to every frontmatter value, not just
+      `branch:` — `FRONTMATTER_COMMENT = re.compile(r"\s+#.*$")`; `analyze.py:269`'s `none` test
+      was left alone, and proved not to need changing. Red first (`581d38c`): the
+      `falsifier-base-pin` spelling verbatim, run and seen to fail on the live "Where is …?"
+      string. Its boundary guard (`feat/issue#42` survives whole) passes today, so it was proved
+      falsifiable separately — a temporary strip-on-any-`#` truncated it to `feat/issue`. Suite
+      **159 → 161, zero failures on either side**, both runs in this worktree (an archive of
+      `8f15c6e` under `/tmp` reports two extra server failures; it is not a git repo, and
+      re-analyze needs one — an environment artifact, not a baseline).
+      ⚠️ **The analyzer's question count went 19 → 20, not 19 → 16.** All three false questions
+      are gone and all three cards now report no branch (`—`), but reading those cards correctly
+      exposed four questions the bogus branch had been masking, and none is a regression:
+      one is **true** — `feature/memsearch-freshness` is not deleted as its card's comment
+      claims, it is the branch checked out at `~/.claude` itself — and three are a **second,
+      separate defect**: `_ask_about_readiness` gates only on `not card.branch` and never on
+      completeness, so it now asks whether a 14/14 card is "ready to start". It was never wrong
+      before only because the repo's three plain-`branch: none` cards are all 0/N; this fix
+      produced the first complete-and-branchless cards. **Not fixed here** — a distinct defect
+      with its own design question, and out of this task's scope. It bears on task 16: closing
+      this card to the merged convention makes `tracking-feature-state` the fourth such card.
 - [ ] 16 — Close the card. Frontmatter to this repo's merged convention — `branch: none  # merged
       via PR #51 (06e7c9d) …; feat/tracking-feature-state deleted 2026-08-19` — naming this
       reopen's PR beside it. Observability judge at `implementation` stage pinning the final HEAD,
