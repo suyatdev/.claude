@@ -1,7 +1,7 @@
 ---
-phase: review
+phase: implementation
 model_tier: high
-branch: feat/statusline-wrap-worktree
+branch: fix/statusline-wrap-worktree-followups
 ---
 
 # statusline — width-aware wrapping and worktree name
@@ -152,6 +152,10 @@ Rationale for reversing the documented "output can never be split across lines" 
 **ADR 0018**.
 
 ## Tasks
+
+Reopened 2026-08-20 on `fix/statusline-wrap-worktree-followups` (off `main` @ `7fcfd95`) to close
+tasks 9-12, which PR #43 shipped without. The original `feat/statusline-wrap-worktree` branch is
+gone (merged, deleted); this is a fresh branch for the remainder.
 
 - [x] 1. Write the wrap + worktree tests against the **unmodified** script; confirm they fail.
       Red phase: 4 failures, `widest=83>60` proving the overflow.
