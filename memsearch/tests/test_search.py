@@ -131,3 +131,52 @@ def test_latency_logged_and_fts_syntax_safe(tmp_path):
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
     assert conn.execute("SELECT count(*) FROM query_log").fetchone()[0] >= 1
     conn.close()
+
+
+def test_score_uses_config_weight_not_the_stored_column(tmp_path):
+    """The regression this task exists to prevent: two chunks whose STORED
+    weights are the inverse of config's. Under index-time weight the digest
+    wins; under query-time weight the curated doc does (ADR 0030)."""
+    cfg = make_cfg(tmp_path)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    same_vec = vec(1.0, 0.0, 0.0)
+    dbmod.replace_source(conn, "/a", "doc", "ha", [make_chunk(
+        content="chunking strategy decision", source_type="curated_doc",
+        weight=1.0, file_path="/curated.md")], [same_vec])
+    dbmod.replace_source(conn, "/b", "doc", "hb", [make_chunk(
+        content="chunking strategy decision", source_type="transcript_digest",
+        weight=1.5, file_path="/digest.jsonl")], [same_vec])
+    conn.close()
+    out = search(cfg, "chunking strategy", k=2, embedder=near(1.0, 0.0, 0.0))
+    assert out[0]["file_path"] == "/curated.md"
+
+
+def test_judge_doc_scores_at_its_configured_weight(tmp_path):
+    cfg = make_cfg(tmp_path, weights={
+        "curated_doc": 1.5, "repo_doc": 1.2, "judge_doc": 0.5,
+        "transcript_digest": 1.0, "archive_doc": 1.0})
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    same_vec = vec(1.0, 0.0, 0.0)
+    dbmod.replace_source(conn, "/v", "doc", "hv", [make_chunk(
+        content="verdict on the change", source_type="judge_doc",
+        weight=1.5, file_path="/observability-judge/v.md")], [same_vec])
+    dbmod.replace_source(conn, "/s", "doc", "hs", [make_chunk(
+        content="verdict on the change", source_type="curated_doc",
+        weight=1.5, file_path="/spec.md")], [same_vec])
+    conn.close()
+    out = search(cfg, "verdict on the change", k=2, embedder=near(1.0, 0.0, 0.0))
+    assert [r["file_path"] for r in out] == ["/spec.md", "/observability-judge/v.md"]
+
+
+def test_stored_source_type_with_no_configured_weight_fails_closed(tmp_path):
+    """Gap 1 in the plan: config validation covers config-known types, not a
+    stored row config no longer names. A silent default would reintroduce this
+    feature's own failure mode — a wrong value reporting success."""
+    cfg = make_cfg(tmp_path)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    dbmod.replace_source(conn, "/m", "doc", "hm", [make_chunk(
+        content="an orphaned tier", source_type="mystery_doc",
+        file_path="/mystery.md")], [vec(1.0, 0.0, 0.0)])
+    conn.close()
+    with pytest.raises(SystemExit, match="reclassify"):
+        search(cfg, "an orphaned tier", k=1, embedder=near(1.0, 0.0, 0.0))
