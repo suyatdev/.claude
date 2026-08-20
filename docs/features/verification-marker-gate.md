@@ -2614,7 +2614,7 @@ reason this row is a pin and not a footnote.
       | 5 ↔ 8 | 8 then 5 | every wired suite calls a deleted writer (18 as of 2026-08-15) |
       | 3 ↔ 7 | 7 then 3 | the entry point imports a deleted classifier — every commit in an adopting repo blocks on `MSG_CLASSIFIER_FAILED` |
       | 7 ↔ 13 | **13 then 7** | **every Bash call in the session is blocked** |
-- [ ] 14. **First-arming check — the only proof v1 has that the gate is armed.** With `--status`
+- [x] 14. **First-arming check — the only proof v1 has that the gate is armed.** With `--status`
       deferred there is no query path, so this runs against the *installed* hook: pipe a real
       `git commit` payload in and expect a readable exit 2, not a silent 0 and not a hang; pipe a
       `git commit -am msg` payload and expect the same, since that spelling is the one the grammar
@@ -2637,6 +2637,26 @@ reason this row is a pin and not a footnote.
       where the regex denied every exemption, and this task as written would have reported the gate
       correctly armed throughout. **A check that can only observe refusal cannot detect a control
       that refuses everything.**
+      ✅ **Ran all six cases against a fresh `git clone` of the pushed branch at `6a152b9`
+      (task 13's HEAD), not this worktree** — the exact gap that made the check meaningful:
+      a fresh clone only has what's actually committed, so a file present locally but never
+      `git add`ed would surface here and nowhere else this feature has tested from. Confirmed
+      clean (`git status --porcelain` empty) before running anything.
+      | case | expect | got |
+      |---|---|---|
+      | real `git commit`, adopting repo | readable exit 2 | `exit 2`, `MSG_NO_MARKER -- ...` |
+      | `git commit -am msg` | same | `exit 2`, same message |
+      | `rtk git commit -m msg` | same | `exit 2`, same message |
+      | no writer | exit 0 | `exit 0` |
+      | no writer + classifier renamed in the installed copy | exit 0 | `exit 0` |
+      | valid `TEST_EXEMPT='vendored upstream' git commit -m msg` | exit 0, EXEMPT logged | `exit 0`; log 4 fields, field 2 = `EXEMPT` exactly |
+      All six pass. The positive-path case used the exact quoted form from
+      `test-marker-guard.test.sh:742` (`TEST_EXEMPT='<value with a space>' git commit ...`) — an
+      unquoted multi-word value was tried first and silently lexed wrong (no log line at all),
+      which is itself a small confirmation that the classifier does not accept a sloppily-quoted
+      exemption string. Classifier rename (case 5) done on the fresh clone's own copy, restored
+      immediately after, verified restored before moving on. Clone and both throwaway repos
+      deleted afterward; this worktree untouched throughout (`git status --porcelain` empty).
 - [x] 15. **Re-run the MUST-sweep against the code, not the prose.** For every `MUST`-shaped
       sentence, bolded **never**/**always** claim, and repeated requirement in this spec, confirm a
       *test* exists that a wrong implementation would fail. **This task exists because inspection
