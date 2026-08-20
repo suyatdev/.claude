@@ -652,7 +652,7 @@ FOREIGN="$(new_repo adopt)"
 R="$(new_repo adopt)"
 stage "$R" hooks/foo.sh
 allow "an exemption rescues a commit aimed at another repo" "$R" \
-  "TEST_EXEMPT=other repo cd $FOREIGN && git commit -m msg"
+  "cd $FOREIGN && TEST_EXEMPT='other repo' git commit -m msg"
 expect_log_field "the rescued foreign commit is logged EXEMPT" "$R" 2 EXEMPT
 
 # The exempt regex is checked at node H, only once kind is COMMIT. Folding it into shape
