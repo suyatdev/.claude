@@ -117,13 +117,30 @@ Clause 2's per-target requirement is the point of the rule, not decoration: the 
 sweep table carried a verdict-level "anything regress?" column and it would have printed "no" through
 a PASS(4) → PASS(3) erosion. A pass-count-only rule reproduces exactly that blindness.
 
+**"The same index state" must be proved, not assumed.** The corpus is live and a scheduled `launchd`
+indexer writes to it — this feature installed that scheduler — so a sweep can be silently invalidated
+mid-run by the very automation the feature added. The sweep therefore records the chunk count and the
+database mtime **before the first row and after the last**, and **discards the whole sweep if either
+moved**. Without that, "measured at one index state" is a hope rather than a claim, and every
+comparison between rows is between two different corpora. This is the failure the remedy section hit
+from the other side: it could not reconstruct its own pinned state afterwards.
+
 The scope is load-bearing and was corrected three times before landing. `coding-memory/`
 as a whole holds **2866** chunks against the sweep's **2405**; the extra **461** are brainstorms,
 branch notes and `pr-tracking.md`, which the remedy section ran as its own variant and found inert.
 Keyed on the wider directory, the knob would not reproduce the measurement that justifies it. *Those
 three counts are quoted from the remedy section, not re-measured here — the implementation re-derives
-them.* What is measured here: on 2026-08-20 the two directories hold **163** and **22** files, 185
-together.
+them.*
+
+**The size of the affected population is a derivation, not a constant.** It is
+`ls ~/.claude/coding-memory/{observability,compliance}-judge/*.md | wc -l`, and only `*.md` counts,
+because that is what `_iter_docs` walks (`index.py:65`). Run at 2026-08-20 14:10Z from the primary
+checkout it gave **162** and **23**. That figure is live and rising *while this ADR is being judged*:
+an earlier count in this same session read 162 and 21, and the difference is this decision's own
+compliance verdicts landing in the directory being counted. Do not pin it — an earlier draft wrote
+"163 and 22", which was both miscounted (it included `verdicts.jsonl`, which is not walked) and
+already out of date. **That this ADR pinned a rotting count while arguing against pinned counts is
+the finding, and it is left visible rather than quietly corrected.**
 
 Matching on the parent directory name rather than a full-path substring inherits ADR 0020's *reason*,
 not merely its shape — classification follows the path, so all copies of a verdict tier identically
@@ -154,23 +171,38 @@ with a named message instead of surfacing as a `KeyError` mid-query.
 
 ### Dropping the column is a one-way migration, and is treated as one
 
-**Trigger and ordering.** The drop runs from the database-open path, not from `index`, so it applies
-to whichever command first touches the DB after the upgrade — a query must not meet a schema the
-running code no longer matches. It reads `PRAGMA table_info(chunks)`, drops `weight` only if present,
-and is a no-op afterwards; running it twice is safe, and a fresh database never has the column
-because the `CREATE TABLE` no longer names it.
+**Only a write command migrates.** The drop runs from `index`, never from `query`. The tempting
+design — migrate on the database-open path, so whichever command arrives first repairs the schema —
+would make a plain read a schema writer, including the `SessionStart` nudge's query, and put it in
+lock contention with the scheduled indexer that writes the same file. A read path that can block on,
+or be blocked by, a multi-hour backfill is a worse failure than an unmigrated read.
 
-**It is one-way.** Old code against a migrated database fails on `SELECT ... weight`. There is no
-down-migration and none is offered: restoring the column would mean repopulating it, and the value it
-held is exactly the stale copy this change exists to remove. The rollback is `index --full`, which
-ADR 0020 already records as a multi-hour rebuild (`0020:105-110`). **Anyone reverting past this
-commit must be told the rebuild is the price** — the same warning that ADR attached to re-excluding
-the archive, for the same reason.
+`query` against an unmigrated database therefore **fails closed** with a named error naming
+`memsearch index` as the fix. It does not fall back to the stored column: a run that silently kept
+using frozen weights would reintroduce this defect while reporting success, which is this feature's
+original failure mode one field over.
+
+**Versioned, not sniffed.** The schema carries `PRAGMA user_version`. Detecting the old shape by
+inspecting `PRAGMA table_info(chunks)` for a `weight` column works exactly once and leaves the next
+migration with nothing to test against; a version integer is the thing that generalizes. The
+migration is idempotent — it runs only when `user_version` is below this change's, and a fresh
+database is created at the current version with no column to drop.
+
+**Rollback is a file copy, taken before the drop.** `index` copies `memory.db` beside itself before
+migrating and names the copy in its output. The database is a single file, so restoring it is a
+`cp` — seconds, against the multi-hour `index --full` that ADR 0020 records as the cost of rebuilding
+(`0020:105-110`). An earlier draft of this ADR named that rebuild as *the* rollback; that was true
+but needlessly expensive, and offering it as the only route would have made an easily reversible
+change look irreversible. The copy is deleted on the next successful migration, not kept forever.
+
+**It is still one-way in code terms.** Old code against a migrated database fails on
+`SELECT ... weight`. No down-migration is offered: restoring the column would mean repopulating it,
+and the value it held is exactly the stale copy this change exists to remove. Anyone reverting past
+this commit restores the pre-drop copy, or pays for `index --full`.
 
 **Failure is closed.** If the `ALTER TABLE` fails — locked database, or a SQLite older than 3.35 —
-the open path aborts with a named error naming `index --full` as the recovery. It does not fall back
-to reading the stored column: a run that silently kept using frozen weights would reintroduce the
-defect while reporting success, which is this feature's original failure mode one field over.
+the migration aborts, leaves `user_version` unchanged, and reports the copy it already took. A
+half-migrated database is never left behind.
 
 The payoff is larger than this change. Weight tuning becomes a config edit, permanently, and the
 weight sweep becomes a repeatable experiment instead of database surgery — which is what the remedy
@@ -183,6 +215,12 @@ source type, compares it against what is stored, and updates only where they dis
 no embedding: chunk text is untouched, so re-embedding would buy nothing.
 
 It reports **per-transition counts** — `curated_doc → judge_doc: N files, M chunks` — not a total.
+It also reports the **denominator**: files walked, files unchanged, files re-typed. A transition
+count alone says what moved but not whether the walk was complete, and "N files re-typed" reads
+identically whether the pass visited the whole corpus or died a third of the way in. It then
+**re-runs its own comparison and asserts zero remaining disagreements** before reporting success —
+proving the walk converged rather than asserting it, which is the distinction this feature exists to
+enforce.
 The remedy section's own warning — *"the 'anything regress?' column is verdict-level only"* — is that
 such a summary hid a real regression; a bare "185 files updated" would let a wrong-direction move pass
 unnoticed.
