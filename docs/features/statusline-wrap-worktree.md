@@ -252,3 +252,17 @@ gone (merged, deleted); this is a fresh branch for the remainder.
       (`rows=7>6`), then reverted. Real script still passes (`rows=6<=6`) — segment 0 always
       opens line 1 regardless of its width, so widening the fixture's user/host changes nothing
       about correct behavior, only the mutant's visibility.
+
+## Verification
+
+Observability judge (implementation stage, 2026-08-20): **risk=low, confidence=high**. Verified
+independently — ran the suite and harness itself, confirmed `f0902ed` is genuinely gone, and broke
+each of the four fixes on temp copies (COLUMNS guard, `wt:(?)` branch, the row-bound off-by-one
+guard, a corrupted harness expectation) to confirm every new/changed assertion fails correctly, not
+just decoratively. Full verdict: `coding-memory/observability-judge/2026-08-20-fix-statusline-wrap-worktree-followups.md`.
+
+One non-blocking nit raised, deferred rather than reopening implementation for it: the falsify
+harness's module docstring says two Group 2 cases pass "for the right reason" for `925c310`, but
+only one is visible in `EXPECTED`'s explicit subtraction — the other is baked into `GROUP2_TEMPLATES`
+omitting the literal-backslash case entirely, which is correct but less discoverable from the
+docstring alone. Worth tightening next time that file is touched.
