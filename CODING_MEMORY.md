@@ -8415,3 +8415,28 @@ Card reopened to `phase: planning` (revision 21, `68c06b4`) per the documented r
 convention; branch and ticked tasks retained. **Resuming implementation needs a fresh literal
 `gate confirmed`.** The `shell-segments-option-grammar` feature is cancelled before it was ever
 created — no card was written for it.
+
+## 2026-08-20 — marker-gate: gate confirmed, implementation reopened at task 2
+
+Revision 21's reopening (previous entry) asked for a fresh literal `gate confirmed` before
+resuming. Received it at session start. Frontmatter updated: `phase: implementation`,
+`model_tier: low`, `revision_status: complete`. Branch unchanged (`feature/verification-marker-gate`,
+already recorded). Only tasks 2 and 3 are unchecked and unblocked — everything else in the
+5-completed/16-total state from before the pause stands.
+
+**A stale/misattached session handoff was caught and set aside, not acted on.** The SessionStart hook
+injected a "you are on task 16 of tracking-feature-state, branch fix/tracker-frontmatter-comment,
+work directory .../tracker-frontmatter-comment" note. None of that matched this checkout: `git branch
+--show-current` was `feature/verification-marker-gate`, and this repo's own `docs/features/` has no
+task-16 activity pending. `.claude/session-state.md` in *this* checkout (machine-local, gitignored)
+did describe this feature correctly but was itself a session behind — it still said phase
+`implementation` / revision 20 frozen / 5 of 16 done, predating the revision-21 pause-and-reopen. The
+feature file's own frontmatter was the only source that agreed with `git log` and `git status`, so it
+won. **Flagging for whoever owns the handoff hook:** worth checking whether `session-state.md` is
+somehow being read across worktrees, or the hook's `written:` timestamp just wasn't being trusted —
+either way this is the second time in two sessions this file was found stale (previous entry, the
+6/14/10-card readiness-check misfires), which is enough repeats to suspect the hook, not the data.
+
+Task 2/3 dispatched to a subagent next (TDD red/green, two commits) rather than continued in-process
+— this restore alone had already pulled the session past the 75k-token freshness-checkpoint line
+before any code was touched.

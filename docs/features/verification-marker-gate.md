@@ -1,9 +1,9 @@
 ---
-phase: planning
-model_tier: high
+phase: implementation
+model_tier: low
 branch: feature/verification-marker-gate
 revision: 21
-revision_status: in-revision  # reopened 2026-08-19 at user direction, per the documented "return to planning to revise" convention: revision 20 froze the spec around a waiver that has since been discharged by PR #54. Ticked tasks and the branch are retained. Resuming implementation needs a fresh literal `gate confirmed`.
+revision_status: complete  # gate confirmed 2026-08-20; resumes at task 2 (tasks 2/3 were the only ones blocked, per the revision 21 correction — not 5/16 as the pre-revision handoff said).
 waived: [writing-specs/command-grammar, core-conduct/file-size-convention]
 ---
 
