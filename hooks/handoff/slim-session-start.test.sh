@@ -4,6 +4,13 @@
 # touched), covering the Gherkin scenarios in docs/features/memory-system-split.md
 # under "Feature: Session start loads the live thread and nothing else."
 # Run: bash hooks/handoff/slim-session-start.test.sh
+#
+# ⚠️ RUN THIS WITH `env -u CLAUDE_PANE_AGENT` IF YOU ARE A PANED AGENT.
+# slim-session-start.sh:53 short-circuits to exit 0 whenever CLAUDE_PANE_AGENT is
+# set -- by design, so a pane agent never emits a handoff envelope. That variable
+# is set inside every pane, so running this suite there gives a reproducible
+# 13/29, exit 1. It is not a regression and the 16 "failures" are phantom.
+# Measured 2026-08-20: CLAUDE_PANE_AGENT=1 -> 13/29; env -u -> 29/29.
 set -u
 MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1

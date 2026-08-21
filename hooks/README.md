@@ -73,12 +73,12 @@ Invoked with no payload (`checkpoint-before-modify.sh <repo-dir>`) it checks the
 
 Two deterministic guards, both matched on `tool_input.command`:
 
-1. **Default-branch commit guard.** Blocks `git commit` while `main`/`master` is checked out, unless every staged file is `CODING_MEMORY.md` or under `coding-memory/` — the brainstorm-then-branch exception in `preparing-pull-requests`.
+1. **Default-branch commit guard.** Blocks `git commit` while `main`/`master` is checked out, unless every staged file is a **markdown file under `docs/`** (`docs/*.md`, by file type — a script under `docs/` gets no free ride) — the brainstorm-then-branch exception in `preparing-pull-requests`. Until ADR 0031 the allowlist also carried `CODING_MEMORY.md` and `coding-memory/*`; that tree is retired and untracked, so those entries were removed.
 2. **Force-push guard.** Blocks a bare `git push --force`/`-f` on any branch. `--force-with-lease` is allowed, except while `main`/`master` is checked out, where it is blocked too.
 
 It also unwraps an `rtk ` prefix before matching: the RTK hook is registered ahead of this one on the same `Bash` matcher and rewrites plain git commands, so by the time this guard runs the command it sees may already read `rtk git commit -m x`.
 
-*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/gates.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `CODING_MEMORY.md` and `coding-memory/*`, nothing else.
+*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/gates.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `docs/*.md`, nothing else. (It was `CODING_MEMORY.md` and `coding-memory/*` until ADR 0031 retired that tree. The principle is the point, not the specific paths — when the workflow's one legal commit changes, this allowlist changes with it, or the guard starts enforcing a rule nobody follows.)
 
 Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, alongside `doc-guard.sh` and `judge-guard.sh` (see below), because this repo is the global config every other repo inherits, and the two guards it enforces (`rules/gates.md`) apply here first.
 
@@ -288,7 +288,7 @@ Takes the repo directory as `$1` and reads `tool_input.command` from the payload
 
 ### Git safety guard on shell commands
 
-Reads `tool_input.command` from the payload directly — no argument, unlike the checkpoint guard above. Blocks a `git commit` on `main`/`master` unless every staged file is `CODING_MEMORY.md` or under `coding-memory/`, and blocks a bare `git push --force`/`-f` everywhere (`--force-with-lease` is also blocked on `main`/`master`). It unwraps a leading `rtk ` prefix first, so it still matches after the RTK hook above it has rewritten the command.
+Reads `tool_input.command` from the payload directly — no argument, unlike the checkpoint guard above. Blocks a `git commit` on `main`/`master` unless every staged file is a markdown file under `docs/` (`docs/*.md` — see ADR 0031; `CODING_MEMORY.md` and `coding-memory/*` were allowed here until that tree was retired), and blocks a bare `git push --force`/`-f` everywhere (`--force-with-lease` is also blocked on `main`/`master`). It unwraps a leading `rtk ` prefix first, so it still matches after the RTK hook above it has rewritten the command.
 
 This is the one hook in this file that **is** installed — appended to this repo's own `settings.json`, after the existing `rtk hook claude` entry, because this repo is the global config every other repo inherits:
 

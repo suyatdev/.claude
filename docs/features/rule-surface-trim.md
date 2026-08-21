@@ -282,10 +282,44 @@ Task 10's file list omitted the skill. Rewritten: GitHub is the record of PR *st
 `docs/features/` carries the *reasoning* GitHub cannot hold.
 
 **This was the third instruction file found still prescribing the retired tree** (after
-`context-handoff-watch.sh` and `setting-up-a-new-project`). Three instances of one class means the
-class is the finding — the surviving sweep is `grep -rn "CODING_MEMORY\|coding-memory" rules/
-skills/ CLAUDE.md README.md hooks/ panes/`, and every remaining hit is either historical prose or
-the hook's own retired-path comment.
+`context-handoff-watch.sh` and `setting-up-a-new-project`).
+
+> ⚠️ **The completeness claim originally written here was false and is retracted.** It said the
+> remaining hits were "either historical prose or the hook's own retired-path comment." Round 2
+> disproved it with a grep. See the enumeration below — that is what should have been done at the
+> third instance instead of asserting the sweep was clean.
+
+### Round 3 — the enumeration that should have happened at instance three
+
+Round 2 found a **fourth** instance (`hooks/README.md`, three places, one of them a rationale
+paragraph arguing *against* this branch's own change). Four instances of one class means the class
+is the finding, so the surface was enumerated rather than patched again:
+`grep -rln "CODING_MEMORY\|coding-memory"` over `*.md`/`*.sh`/`*.py`/`*.json`, excluding the retired
+tree itself — **569 hits across 65 files.** Classified:
+
+| File | Verdict |
+|---|---|
+| `hooks/README.md:76,81,291` | **FALSE** — described the pre-change allowlist as live. Fixed. |
+| `agents/compliance-judge.md:60` | **FALSE** — hardcoded `~/.claude/…`, so every verdict from a worktree or another repo landed in the wrong store. Pre-existing; the retirement made it worse. Fixed: resolve relative to the judged repo. |
+| `skills/preparing-pull-requests/SKILL.md:29` | Dangling pointer left by round 1's own fix — `:25` said "no local copy", `:29` said "consult the saved PR metadata". Fixed. |
+| `skills/writing-project-readmes/SKILL.md:64` | Stale trigger phrasing. Fixed. |
+| `agents/observability-judge.md:42,44` | **CORRECT** — repo-relative, and the ledger it names is still tracked. Left. |
+| `skills/running-the-{observability,compliance}-judge/SKILL.md` | **CORRECT** — point at the tracked `verdicts.jsonl`. Left. |
+| `memsearch/config.json:11`, `memsearch/**` | **CORRECT** — corpus paths; files remain on disk. Left. |
+| `docs/decisions/*`, `docs/features/*` (other cards), `docs/superpowers/*` | **HISTORICAL** — dated records of what was true then. Left deliberately. |
+| `hooks/*.test.sh`, `hooks/lib/*.test.py` | **FIXTURES** — they assert the retired paths are now *blocked* or *ignored*. Left; changing them would delete the coverage. |
+| `hooks/git-guard.sh:8`, `hooks/phase-guard.sh` case arm | **HISTORICAL COMMENT / defensive** — deliberate. Left. |
+
+The lesson, recorded because it recurred four times: **when a second instance of one class appears,
+enumerate the surface; do not patch the instance and assert the rest is clean.** Each of rounds
+1–2 fixed the instance in front of it and stated a completeness the evidence did not support.
+
+### A trap for future paned agents — `CLAUDE_PANE_AGENT`
+
+`hooks/handoff/slim-session-start.test.sh` reports **13/29, exit 1** when run inside a pane agent,
+and **29/29** under `env -u CLAUDE_PANE_AGENT`. Cause: `slim-session-start.sh:53` short-circuits on
+that variable by design. Pre-existing (from `ca2c969`), undocumented until now, and precisely the
+kind of thing a future agent "fixes" while chasing 16 phantom failures.
 
 Also fixed:
 

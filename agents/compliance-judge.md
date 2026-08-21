@@ -57,7 +57,13 @@ A pass that silently skipped half the rubric is worse than no verdict.
 5. Verdict is `pass` iff `violations` is empty.
 
 ## Output
-Write ONLY under `~/.claude/coding-memory/compliance-judge/` (never elsewhere):
+Write ONLY under `coding-memory/compliance-judge/` **of the repo being judged** — resolve it
+relative to the judged repo's root, never to `~/.claude`. A hardcoded `$HOME` path sends every
+verdict from a worktree or another repository into the wrong store, which is the defect this
+wording previously had. Note that `verdicts.jsonl` is tracked while the prose verdicts are
+gitignored (ADR 0031): the ledger is the durable record, the prose is a local artifact.
+
+Write nothing outside that directory:
 1. The per-spec writeup: glob the store for an existing `????-??-??-<spec_slug>.md` (a file
    whose name after the leading `YYYY-MM-DD-` is exactly `<spec_slug>.md`) and append this
    round's section there; only if none exists, create `<YYYY-MM-DD>-<spec_slug>.md` dated today
