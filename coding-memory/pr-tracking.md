@@ -1224,3 +1224,49 @@ under the default-branch docs exception.
 - next: review → merge via GitHub UI → update the shared `~/.claude` checkout (the judge's own
   flagged rollout step — the fix protects nobody until that happens) → prune branch local+remote →
   backfill this PR's verdict `outcome`.
+
+## `.claude` — `worktree-fix+memsearch-r9-retrieval-quality` → PR #60 (**OPEN**, 2026-08-21)
+
+- **Repo:** `suyatdev/.claude` · **remote:** `origin` (`git@github.com:suyatdev/.claude.git`)
+- **Branch:** `worktree-fix+memsearch-r9-retrieval-quality`, worked from the worktree
+  `.claude/worktrees/fix+memsearch-r9-retrieval-quality` · **base:** `main`
+- **PR:** https://github.com/suyatdev/.claude/pull/60 · opened at `eef95be`
+- **session_origin (opened):** `session_01FuGrnizbmnJmt9wMXfTmsi` (Opus 5, 1M context)
+- **session_origin (last push):** same session, `45dccfc`
+- **Feature file:** `docs/features/memsearch-freshness.md` — R9 remedy, tasks 12–13
+- **ADR:** `docs/decisions/0030-judge-verdict-tier-and-query-time-weight.md` (accepted,
+  compliance-passed over four rounds)
+- **What it does:** ADR 0030 — judge verdicts classified as their own `judge_doc` source type;
+  chunk weight resolved from `config.json` at query time with the stored `chunks.weight` column
+  dropped under a versioned one-way migration; `index --reclassify` to re-type stored rows without
+  re-embedding; `judge_doc = 1.2` adopted by a measured sweep.
+- **R9 does not close.** 2 of 5 → 3 of 5 against a 5-of-5 bar. The bar was left untouched and the
+  failure is stated in the PR body, the ADR, and the card. The underlying regression stays
+  **accepted as a known limitation, not diagnosed** — the pinned index state it would need is gone.
+- **Judge:** observability, `implementation` stage, two runs. **Round 1** at `ee81648`:
+  `risk=medium`, `confidence=high`, no failing dimensions, seven concerns. Its top concern (the
+  post-merge reclassify pass being README prose with no tracked owner) was taken — task 13 added to
+  the card, plus the README Roadmap line the PR rule requires — so **round 2** re-ran at `eef95be`:
+  `risk=medium`, `confidence=high`, same three `concern` dimensions (`regression`, `traceability`,
+  `success_masking`). Both verdicts written to **this worktree's** `coding-memory/`, overridden in
+  the judge prompt away from the hardcoded `$HOME/.claude`.
+- **Round 1's rollback advice was wrong and was not followed.** It said to confirm `<db>.pre-v0.bak`
+  exists before running the migration; the migration itself takes that copy (`_take_backup`,
+  `memsearch/memsearch/db.py:135-152`, called at `:175`), so it cannot exist beforehand. Round 2
+  re-read the code and confirmed the correction.
+- **Verdicts committed only after the PR was open** (`45dccfc`), same reasoning as PRs #53 and #54:
+  `judge-guard.sh` requires `head_sha == HEAD` at `gh pr create`.
+- 🔴 **Open decision for the user:** ADR 0030 knowingly keeps two statements that are wrong — its
+  `with conn:` migration sketch and its "1.5 baseline == today's effective behaviour" claim. Both
+  are corrected in the feature card, which says so, but the ADR carries **no forward pointer** to
+  those corrections. Round 2 called this its "one real pushback": the cost of editing the ADR is a
+  compliance-judge round, which is a process cost, not a correctness argument. Parked, not waived.
+- 🔴 **`104 passed` is green about the wrong thing.** `memsearch/pyproject.toml:26` sets
+  `addopts = "-m 'not golden and not measurement'"`, so the 23 deselected tests are exactly the ones
+  that touch the real index — including R9's own measurement suite. The suite covers the migration,
+  the query-time weight, reclassify and the classifier; R9's numbers come from the sweep harness.
+- next: review → merge via GitHub UI → **run task 13's two commands in order** (`memsearch index`,
+  then `memsearch index --reclassify`) and check the acceptance number (`judge_doc` in the thousands,
+  not ~108) → `pytest -m measurement` against the migrated index to confirm R9 is still 3 of 5 →
+  settle the ADR forward-pointer decision → prune branch local+remote → backfill this PR's verdict
+  `outcome`.

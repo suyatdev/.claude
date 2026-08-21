@@ -7261,3 +7261,35 @@ with nothing on disk and was re-run — advisory, so it never blocked.
 completes with any violation outstanding. It did, so the loop stopped and went to the user rather
 than looping to round 4 — the ADR is committed at `06a9b8c` with the round-3 violation addressed but
 **not yet re-judged**, so no fresh passing verdict exists for the current blob.
+
+## PR #60 — ADR 0030 shipped; R9 improved but not closed (2026-08-21)
+
+The R9 remedy is open as **PR #60**, branch `worktree-fix+memsearch-r9-retrieval-quality`, at
+`45dccfc`. Full detail: `coding-memory/pr-tracking.md`, the PR #60 entry. Feature detail:
+`docs/features/memsearch-freshness.md` (tasks 12–13) and ADR 0030. Nothing is restated here.
+
+**Two things a later session should not have to re-derive.**
+
+**R9 does not close, and that is the shipped result.** 2 of 5 → 3 of 5 against a 5-of-5 bar, with the
+bar deliberately left where it is. The regression behind it stays accepted as a known limitation
+rather than diagnosed, because the pinned index state an investigation needs no longer exists. Any
+later reading of "R9 improved" that does not carry "still failing" is a misreading.
+
+**A green suite here is green about the wrong thing.** `memsearch/pyproject.toml:26` deselects the
+`golden` and `measurement` marks by default, and those are exactly the tests that touch the real
+index — R9's own measurement suite among them. `104 passed, 23 deselected` covers the migration, the
+query-time weight resolution, reclassify and the classifier. It says nothing about retrieval quality.
+The observability judge caught this in round 2; I had quoted the number in the PR body as if it were
+evidence for R9 before the judge named the gap, and the body now says what it does and does not cover.
+
+**The judge was wrong once, and checking it mattered again.** Round 1 advised confirming the
+`<db>.pre-v0.bak` rollback copy exists *before* running the migration. The migration itself takes
+that copy (`_take_backup`, `memsearch/memsearch/db.py:135-152`, called at `:175`), so it cannot exist
+beforehand — the check belongs *between* the two post-merge commands. Round 2 re-read the code and
+confirmed the correction. Same shape as the ADR 0030 round: a judge correction is a claim to verify,
+not a finding to apply.
+
+**The one open decision the user still owns:** ADR 0030 knowingly retains two wrong statements, both
+corrected in the feature card, with no forward pointer from the ADR to those corrections. Round 2
+called it its one real pushback — the cost of the edit is a compliance round, which is a process
+cost, not a correctness argument. Parked, not waived.
