@@ -56,6 +56,68 @@ Design the probe so it can fail: register a hook in each file, trigger both, and
 If it replaces, fall back to keeping all hooks in the tracked file and accepting the orca absolute
 paths as a separate problem (or templating them via `$HOME`).
 
+### Task 1 outcome — answered, and it is a STOP
+
+Run 2026-08-21 against `claude 2.1.238` (`~/.local/share/claude/versions/2.1.238`) on branch
+`chore/settings-split` @ `fcbcba6`. Probe: give each settings file a `SessionStart` hook that
+appends a distinct marker to a log, point `CLAUDE_CONFIG_DIR` at a scratch dir, run
+`claude -p … --allow-dangerously-skip-permissions`, then read the log. `SessionStart` hooks fire
+*before* the login check, so every case below reports `claude exit 1 · Not logged in` and the
+marker log is still the full answer — the sandbox config dir has no credentials of its own
+(Keychain services are `Claude Code-credentials-<hash-of-config-dir>`).
+
+| case | settings files present | markers that fired |
+|---|---|---|
+| A | user `settings.json` | `TRACKED` |
+| B | user `settings.local.json` | **(none)** |
+| C | user `settings.json` + user `settings.local.json` | `TRACKED` |
+| D | user `settings.json` + **malformed** user `settings.local.json` | `TRACKED`, and **no parse error** |
+| E | user `settings.json` + project `<cwd>/.claude/settings.local.json` | `TRACKED` + `LOCAL` |
+| F | E plus project `<cwd>/.claude/settings.json` | `TRACKED` + `PROJECT` + `LOCAL` |
+
+**Two findings, and the second one kills the design in the table above.**
+
+1. **`hooks` MERGE — they never replace.** Case F fired three hooks for one event from three
+   different scopes. The feared failure mode does not exist.
+2. **There is no user-scope `settings.local.json`.** Case B is silent while case E — the same
+   filename, the same hook, the same probe — fires. Case E is the falsifier that makes case B
+   mean something: the probe is demonstrably *able* to see a `settings.local.json` hook, so B's
+   silence is about the scope, not the probe. Case D confirms the file is never even opened: a
+   deliberately malformed `~/.claude/settings.local.json` produces no warning at all. The binary
+   agrees — its settings scopes are `userSettings` / `projectSettings` / `localSettings` /
+   `policySettings`, and every path string for the local scope is `.claude/settings.local.json`,
+   i.e. project-relative. The card's own supporting evidence (`strings … | grep -c
+   settings.local.json` → 103) counted a **project**-scope feature and read it as a user-scope one.
+
+So `~/.claude/settings.local.json` is not a quieter place to put `model`/`effortLevel` — it is
+`/dev/null`. Moving them there would silently drop the model default, the effort level, the theme
+and all ten orca hooks. **Stopped before task 3, per this card's own instruction.**
+
+What survives the finding: the orca hooks' 10 hardcoded `/Users/marksuyat` paths are all the same
+one-line command and are `$HOME`-substitutable, so the "no absolute paths in committed files" rule
+can be satisfied inside the tracked file, with no second file involved.
+
+What still needs a decision: `model` and `effortLevel` are written into `~/.claude/settings.json`
+by `/model`, and there is no user-scope override file to divert them to. Either the churn is
+accepted in the tracked file, or it is hidden with a `.gitattributes` clean filter that strips
+those keys on the way into the index.
+
+### The probe, reproduced
+
+```bash
+CFG=$(mktemp -d); CWD=$(mktemp -d); LOG=$(mktemp)
+cp ~/.claude.json "$CFG/.claude.json"          # otherwise: "Not logged in" even earlier
+hook () { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s >> %s"}]}]}}\n' "$2" "$LOG" > "$1"; }
+hook "$CFG/settings.json"               TRACKED
+hook "$CWD/.claude/settings.local.json" LOCAL    # mkdir -p "$CWD/.claude" first
+cd "$CWD" && CLAUDE_CONFIG_DIR="$CFG" claude -p 'reply DONE' --allow-dangerously-skip-permissions
+sort "$LOG" | uniq -c                            # both markers => hooks merge across scopes
+```
+
+Swap which files `hook` writes to reproduce cases A–F. The control that matters is running it once
+with the marker in `$CFG/settings.local.json` (silent) and once in
+`$CWD/.claude/settings.local.json` (fires).
+
 ## `.gitignore` changes
 
 - **Remove** line 23 `settings.json`.
@@ -65,11 +127,20 @@ paths as a separate problem (or templating them via `$HOME`).
 
 ## Tasks
 
-- [ ] 0. Branch `chore/settings-split` + worktree. **Only after `gate confirmed`.**
-- [ ] 1. **Answer the merge-vs-replace question by experiment.** Record the probe and its output in
+- [x] 0. Branch `chore/settings-split` + worktree. **Only after `gate confirmed`.**
+      Worktree `.claude/worktrees/settings-split`; `origin/main` merged in at `fcbcba6` (the branch
+      had been cut from a local `main` that was 27 commits behind).
+- [x] 1. **Answer the merge-vs-replace question by experiment.** Record the probe and its output in
       this card. If it replaces, stop and re-plan — do not proceed to task 3.
-- [ ] 2. **Red:** confirm the three registration tests fail for the stated reason (absent file), not
+      → Hooks merge; but the destination file does not exist at user scope. **Stopped.** See
+      "Task 1 outcome" above.
+- [x] 2. **Red:** confirm the three registration tests fail for the stated reason (absent file), not
       some other one. They are the acceptance criteria; watch them fail first.
+      Run on `fcbcba6`, counts read off the runs, not off this card:
+      `feature-sync-guard` **29 passed, 1 failed**; `memsearch-nudge` **26/27**;
+      `slim-session-start` (under `env -u CLAUDE_PANE_AGENT`) **28/29**. All three name the same
+      cause — `settings.json` not found in the worktree — and each suite's paired
+      "registration check can fail" case still passes, so the assertions are not stuck-green.
 - [ ] 3. Write `settings.local.json` with the machine-specific keys; strip them from `settings.json`.
       Verify `model`/`effortLevel` still take effect and the orca hooks still fire.
 - [ ] 4. `.gitignore` per above. Re-track with `git add -f settings.json` (still ignored at that
