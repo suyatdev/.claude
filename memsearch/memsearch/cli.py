@@ -58,6 +58,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config(args.config)
         if args.cmd == "index":
             report = indexmod.run_index(cfg, full=args.full, limit=args.limit)
+            if report["migration"]:
+                m = report["migration"]
+                print(f"schema {m['from_version']} -> {m['to_version']}; "
+                      f"rollback copy: {m['backup']}")
             print(f"processed={report['processed']} skipped={report['skipped']} "
                   f"chunks_added={report['chunks_added']} "
                   f"errors={len(report['errors'])}")

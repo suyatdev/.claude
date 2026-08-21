@@ -21,18 +21,18 @@ def seed(cfg):
         # (path, chunk, vector) — vec axes are a fake semantic space
         ("/x/docs/decisions/0002-sqlite.md", make_chunk(
             content="We chose SQLite over Qdrant for zero idle RAM.",
-            recall_type="decision", weight=1.5,
+            recall_type="decision",
             file_path="/x/docs/decisions/0002-sqlite.md",
             session_date="2026-07-17"), vec(1.0, 0.0, 0.0)),
         ("/x/projects/p/s1.jsonl", make_chunk(
             content="[session s1] Bugs & Fixes\n- ERR_AUTH_401 fixed in auth.py",
-            source_type="transcript_digest", recall_type="episodic", weight=1.0,
+            source_type="transcript_digest", recall_type="episodic",
             file_path="/x/projects/p/s1.jsonl", session_id="s1",
             repo_id="myrepo", repo_name="myrepo",
             session_date="2026-06-01"), vec(0.0, 1.0, 0.0)),
         ("/x/myrepo/docs/arch.md", make_chunk(
             content="The scheduler uses a priority queue design.",
-            source_type="repo_doc", recall_type="doc", weight=1.2,
+            source_type="repo_doc", recall_type="doc",
             file_path="/x/myrepo/docs/arch.md", repo_id="myrepo",
             repo_name="myrepo", session_date="2026-05-01"),
          vec(0.0, 0.0, 1.0)),
@@ -69,11 +69,11 @@ def test_weight_boosts_curated_over_digest(tmp_path):
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
     same_vec = vec(1.0, 0.0, 0.0)
     dbmod.replace_source(conn, "/a", "doc", "ha", [make_chunk(
-        content="chunking strategy decision", weight=1.5,
+        content="chunking strategy decision",
         file_path="/curated.md")], [same_vec])
     dbmod.replace_source(conn, "/b", "doc", "hb", [make_chunk(
         content="chunking strategy decision", source_type="transcript_digest",
-        weight=1.0, file_path="/digest.jsonl")], [same_vec])
+        file_path="/digest.jsonl")], [same_vec])
     conn.close()
     out = search(cfg, "chunking strategy", k=2, embedder=near(1.0, 0.0, 0.0))
     assert out[0]["file_path"] == "/curated.md"
@@ -133,22 +133,25 @@ def test_latency_logged_and_fts_syntax_safe(tmp_path):
     conn.close()
 
 
-def test_score_uses_config_weight_not_the_stored_column(tmp_path):
-    """The regression this task exists to prevent: two chunks whose STORED
-    weights are the inverse of config's. Under index-time weight the digest
-    wins; under query-time weight the curated doc does (ADR 0030)."""
-    cfg = make_cfg(tmp_path)
+def test_score_uses_config_weight(tmp_path):
+    """Post-migration form of the query-time-weight test: there is no stored
+    weight left to contradict, so the guarantee is now structural — ordering
+    follows cfg.weights and nothing else."""
+    cfg = make_cfg(tmp_path, weights={
+        "curated_doc": 1.0, "repo_doc": 1.2, "judge_doc": 1.2,
+        "transcript_digest": 1.5, "archive_doc": 1.0})
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
     same_vec = vec(1.0, 0.0, 0.0)
     dbmod.replace_source(conn, "/a", "doc", "ha", [make_chunk(
         content="chunking strategy decision", source_type="curated_doc",
-        weight=1.0, file_path="/curated.md")], [same_vec])
+        file_path="/curated.md")], [same_vec])
     dbmod.replace_source(conn, "/b", "doc", "hb", [make_chunk(
         content="chunking strategy decision", source_type="transcript_digest",
-        weight=1.5, file_path="/digest.jsonl")], [same_vec])
+        file_path="/digest.jsonl")], [same_vec])
     conn.close()
     out = search(cfg, "chunking strategy", k=2, embedder=near(1.0, 0.0, 0.0))
-    assert out[0]["file_path"] == "/curated.md"
+    # config inverts the usual order, and the ranking follows config.
+    assert out[0]["file_path"] == "/digest.jsonl"
 
 
 def test_judge_doc_scores_at_its_configured_weight(tmp_path):
@@ -159,10 +162,10 @@ def test_judge_doc_scores_at_its_configured_weight(tmp_path):
     same_vec = vec(1.0, 0.0, 0.0)
     dbmod.replace_source(conn, "/v", "doc", "hv", [make_chunk(
         content="verdict on the change", source_type="judge_doc",
-        weight=1.5, file_path="/observability-judge/v.md")], [same_vec])
+        file_path="/observability-judge/v.md")], [same_vec])
     dbmod.replace_source(conn, "/s", "doc", "hs", [make_chunk(
         content="verdict on the change", source_type="curated_doc",
-        weight=1.5, file_path="/spec.md")], [same_vec])
+        file_path="/spec.md")], [same_vec])
     conn.close()
     out = search(cfg, "verdict on the change", k=2, embedder=near(1.0, 0.0, 0.0))
     # 1.5 vs 0.5 on a tied base score. Tolerance is the 6-decimal rounding in

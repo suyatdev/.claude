@@ -53,6 +53,10 @@ def search(cfg: Config, query: str, k: int = 6, repo: str | None = None,
     mismatch = dbmod.model_mismatch(conn, cfg.embed_model, cfg.embed_dim)
     if mismatch:
         raise SystemExit(f"memsearch: {mismatch}")
+    stale = dbmod.migration_required(conn)
+    if stale:
+        conn.close()
+        raise SystemExit(f"memsearch: {stale}")
     t0 = time.perf_counter()
 
     qvec = embedder([query])[0]

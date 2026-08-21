@@ -190,12 +190,13 @@ def archive_rows(cfg, column: str) -> list:
 
 def test_archive_doc_gets_its_own_weight_tier(tmp_path):
     """1.0, not curated_doc's 1.5: session narrative must stay retrievable
-    without ever outranking the decision records it narrates."""
+    without ever outranking the decision records it narrates. Weight is no
+    longer stored (ADR 0030), so the tier is asserted where it now lives —
+    the source_type on the row, and the number in config."""
     cfg = make_cfg(tmp_path)
     run_index(cfg, embedder=stub_embedder, digester=stub_digester,
               progress=lambda _: None)
     assert archive_rows(cfg, "source_type") == ["archive_doc"]
-    assert archive_rows(cfg, "weight") == [1.0]
     assert cfg.weights["archive_doc"] < cfg.weights["curated_doc"]
 
 

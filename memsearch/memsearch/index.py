@@ -158,6 +158,10 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
               embedder=None, digester=None, progress=print) -> dict:
     if full and cfg.db_path.exists():
         cfg.db_path.unlink()  # model/dim may have changed: rebuild from scratch
+    # Before connect(): the only command that may write schema is this one.
+    # After the unlink, so --full never migrates a database it just deleted.
+    migration = dbmod.migrate(cfg.db_path, cfg.embed_model, cfg.embed_dim,
+                              progress)
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
     mismatch = dbmod.model_mismatch(conn, cfg.embed_model, cfg.embed_dim)
     if mismatch:
@@ -165,7 +169,8 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
     embedder = embedder or partial(
         ollama.embed, model=cfg.embed_model, base_url=cfg.ollama_url)
     digester = digester or partial(digestmod.digest_session, cfg=cfg)
-    report = {"processed": 0, "skipped": 0, "chunks_added": 0, "errors": []}
+    report = {"processed": 0, "skipped": 0, "chunks_added": 0, "errors": [],
+              "migration": migration}
     # After the mismatch check on purpose: a config error that indexes nothing
     # must not leave a phantom in-progress marker for the nudge to decay into a
     # stuck run. A genuinely killed run does leave run_started > last_run.
@@ -177,7 +182,6 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
                    make_chunks=lambda p=path, rid=repo_id, rname=repo_name,
                    st=source_type: chunk_doc(
                        p, p.read_text(errors="replace"), rid, rname, st,
-                       float(cfg.weights[st]),
                        _mtime_date(p)),
                    embedder=embedder)
 
@@ -207,8 +211,7 @@ def _transcript_chunks(path: Path, cfg: Config, digester) -> list:
         return []
     repo_id, repo_name = repo_for_cwd(extract.cwd, cfg)
     digest_md = digester(extract)
-    return chunk_digest(digest_md, extract, repo_id, repo_name,
-                        float(cfg.weights["transcript_digest"]), str(path))
+    return chunk_digest(digest_md, extract, repo_id, repo_name, str(path))
 
 
 def _index_one(conn, cfg: Config, report: dict, path: Path, progress,

@@ -17,6 +17,8 @@ from memsearch.config import SOURCE_TYPES  # noqa: F401  (re-exported: the
 # historical import site)
 
 SCHEMA_VERSION = "1"
+USER_VERSION = 1      # PRAGMA user_version. 0 = pre-ADR-0030: chunks.weight
+BACKUP_SUFFIX = ".bak"
 RECALL_TYPES = ("decision", "episodic", "doc")
 LATENCY_WINDOW = 100  # p95 computed over the most recent N queries
 
@@ -33,7 +35,6 @@ class Chunk:
     line_start: int
     line_end: int
     session_id: str | None
-    weight: float
 
 
 def sha256_text(text: str) -> str:
@@ -60,6 +61,11 @@ def connect(db_path: Path, embed_model: str, embed_dim: int) -> sqlite3.Connecti
 
 
 def _init_schema(conn: sqlite3.Connection, embed_model: str, embed_dim: int) -> None:
+    # Decided before the CREATE below: a database that already has chunks is
+    # pre-existing, and only migrate() may move its version.
+    is_fresh = conn.execute(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='chunks'"
+    ).fetchone()[0] == 0
     with conn:
         conn.execute("CREATE TABLE IF NOT EXISTS meta("
                      "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -75,7 +81,7 @@ def _init_schema(conn: sqlite3.Connection, embed_model: str, embed_dim: int) -> 
             "source_type TEXT NOT NULL, recall_type TEXT NOT NULL,"
             "session_date TEXT NOT NULL, file_path TEXT NOT NULL,"
             "line_start INTEGER NOT NULL, line_end INTEGER NOT NULL,"
-            "session_id TEXT, weight REAL NOT NULL, content_hash TEXT NOT NULL)")
+            "session_id TEXT, content_hash TEXT NOT NULL)")
         conn.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vec USING vec0("
             f"embedding float[{int(embed_dim)}] distance_metric=cosine)")
@@ -90,6 +96,11 @@ def _init_schema(conn: sqlite3.Connection, embed_model: str, embed_dim: int) -> 
                      (embed_model,))
         conn.execute("INSERT OR IGNORE INTO meta VALUES('embed_dim', ?)",
                      (str(embed_dim),))
+        if is_fresh:
+            # PRAGMA takes no bound parameter; USER_VERSION is a module
+            # constant, never user input — the same reasoning as the inlined
+            # KNN LIMIT at search.py:44-45.
+            conn.execute(f"PRAGMA user_version = {USER_VERSION}")
 
 
 def model_mismatch(conn: sqlite3.Connection, embed_model: str,
@@ -100,6 +111,93 @@ def model_mismatch(conn: sqlite3.Connection, embed_model: str,
         return None
     return (f"DB was built with {stored[0]}/{stored[1]}-dim but config says "
             f"{embed_model}/{embed_dim}-dim — run `memsearch index --full` to rebuild")
+
+
+def schema_version(conn: sqlite3.Connection) -> int:
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def migration_required(conn: sqlite3.Connection) -> str | None:
+    """A ready-to-print message, or None. Read paths call this and refuse;
+    they never migrate — a plain query must not become a schema writer, and
+    must not queue behind a multi-hour backfill (ADR 0030)."""
+    found = schema_version(conn)
+    if found >= USER_VERSION:
+        return None
+    return (f"index database is at schema version {found}, this build needs "
+            f"{USER_VERSION} — run `memsearch index` to migrate it")
+
+
+def _backup_path(db_path: Path, from_version: int) -> Path:
+    return db_path.parent / f"{db_path.name}.pre-v{from_version}{BACKUP_SUFFIX}"
+
+
+def _take_backup(conn: sqlite3.Connection, db_path: Path,
+                 from_version: int) -> Path:
+    """Rollback is a file copy, taken before the drop: the database is one
+    file, so restoring it is a cp — seconds, against the multi-hour
+    `index --full` (ADR 0030). Copies from earlier migrations are removed
+    here, so one stale copy never outlives the schema it belonged to."""
+    target = _backup_path(db_path, from_version)
+    for old in db_path.parent.glob(f"{db_path.name}.pre-v*{BACKUP_SUFFIX}"):
+        if old != target:
+            old.unlink()
+    target.unlink(missing_ok=True)
+    dest = sqlite3.connect(target)
+    try:
+        with dest:
+            conn.backup(dest)      # page-level copy: consistent under a hot DB
+    finally:
+        dest.close()
+    return target
+
+
+def _drop_weight_column(conn: sqlite3.Connection) -> None:
+    """Factored out so a test can make it fail. Guarded because a database may
+    reach version 0 without the column (a fresh DB from a build between the
+    column's removal and the version stamp)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(chunks)")]
+    if "weight" in cols:
+        conn.execute("ALTER TABLE chunks DROP COLUMN weight")
+
+
+def migrate(db_path: Path, embed_model: str, embed_dim: int,
+            progress=print) -> dict | None:
+    """One-way, versioned, and run only from a write command. Returns None when
+    there is nothing to do — a missing database, or one already current."""
+    if not db_path.exists():
+        return None
+    conn = connect(db_path, embed_model, embed_dim)
+    try:
+        found = schema_version(conn)
+        if found >= USER_VERSION:
+            return None
+        backup = _take_backup(conn, db_path, found)
+        try:
+            # An explicit BEGIN, not `with conn:`: sqlite3 opens a transaction
+            # implicitly only for DML, so under the connection's default
+            # transaction control the DDL and the version stamp would each
+            # autocommit and a failure between them would leave the column
+            # dropped at version 0 — the half-migrated state this must never
+            # produce.
+            conn.execute("BEGIN IMMEDIATE")
+            _drop_weight_column(conn)
+            conn.execute(f"PRAGMA user_version = {USER_VERSION}")
+            conn.commit()
+        except Exception as e:
+            # Fail closed: the transaction rolled back, so user_version and the
+            # column are both as they were. Name the copy already on disk.
+            conn.rollback()
+            raise SystemExit(
+                f"memsearch: schema migration {found} -> {USER_VERSION} failed "
+                f"({e}) — the database is unchanged; a pre-migration copy is at "
+                f"{backup}") from None
+        progress(f"migrated schema {found} -> {USER_VERSION}; "
+                 f"pre-migration copy at {backup}")
+        return {"from_version": found, "to_version": USER_VERSION,
+                "backup": str(backup)}
+    finally:
+        conn.close()
 
 
 def now_iso() -> str:
@@ -134,12 +232,12 @@ def replace_source(conn: sqlite3.Connection, path: str, kind: str,
             cid = conn.execute(
                 "INSERT INTO chunks(source_id, content, repo_id, repo_name,"
                 "source_type, recall_type, session_date, file_path, line_start,"
-                "line_end, session_id, weight, content_hash) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "line_end, session_id, content_hash) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (sid, chunk.content, chunk.repo_id, chunk.repo_name,
                  chunk.source_type, chunk.recall_type, chunk.session_date,
                  chunk.file_path, chunk.line_start, chunk.line_end,
-                 chunk.session_id, chunk.weight,
+                 chunk.session_id,
                  sha256_text(chunk.content))).lastrowid
             conn.execute("INSERT INTO chunk_vec(rowid, embedding) VALUES(?,?)",
                          (cid, sqlite_vec.serialize_float32(emb)))
