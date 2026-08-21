@@ -284,9 +284,17 @@ esac
 # projects/*/memory/* is where the harness's own memory tool writes. It is the
 # memory DIRECTORY that is exempt, not projects/ at large: a repo may keep source
 # under projects/, and mid-planning that source is exactly what this hook guards.
+#
+# rules/* and skills/* hold the instruction surface, and this guard exists to stop
+# IMPLEMENTATION CODE landing during planning -- a rule or skill file is not that.
+# Without them, two parked planning cards for unrelated features made every rule and
+# skill file unwritable repo-wide, so maintaining the rule surface was blocked by
+# work it had nothing to do with. Scoped to the directories for the same reason
+# projects/*/memory/* is: a file merely named rules.sh is source, and stays guarded.
 case "$rel" in
   CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
   projects/*/memory/*) exit 0 ;;
+  rules/*|skills/*) exit 0 ;;
 esac
 
 # --- Step 7: which feature files sit at phase: planning? --------------------------------

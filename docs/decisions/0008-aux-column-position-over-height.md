@@ -82,3 +82,20 @@ in the `layout_rightmost_surface` header comment.
   `panes/cmux-layout-probe.sh` after an upgrade is still the confirming step.
 - Revisit if cmux ever re-enables dock placement or exposes pane geometry/nesting in
   `--json tree`; either one makes option 3 reachable and this ADR supersedable.
+
+## Alternatives considered — upstream of the anchor question
+
+Two other ways of placing panes *at all* were weighed in the `pane-layout-v2` brainstorm
+(2026-07-21) and rejected before this ADR's anchor choice arose. Recorded here so neither is
+re-derived from scratch; the chosen approach was **A**, a live-derived layout read per dispatch
+from `cmux --json tree`, whose far-right anchor is what this ADR is about.
+
+- **B. Persistent slot map** in `state/workspaces/<ws>/slots.json` — an explicit slot→ref map
+  written from `--json new-split` output. Rejected because refs are app-session-scoped and die on
+  app restart, so **every read must revalidate against the live tree — B degenerates into A plus a
+  cache with staleness bugs**, plus the new-state/stale-cleanup burden, plus desync when the user
+  closes panes manually.
+- **C. Layout policy in the dispatcher + new adapter primitives** (`open_pane_at <slot>`,
+  `open_tab_in <pane>`, `query_layout`) — adapter-agnostic and testable without cmux, but the
+  widest blast radius (dispatcher + 4 adapters + both suites), building generality the cmux-only
+  scope explicitly declined. YAGNI.

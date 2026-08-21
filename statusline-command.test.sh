@@ -22,6 +22,8 @@
 #
 # Run: bash statusline-command.test.sh
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/statusline-command.sh"
 
@@ -536,6 +538,13 @@ done
 
 # --- Group 2: control-byte injection -----------------------------------------
 
+# Sentinels bounding this group in stdout, read by statusline-command.falsify.py
+# to compare historical script versions against exactly this group -- the one
+# the harness exists for -- rather than the whole suite. Group 1 grows with
+# every unrelated rendering feature; scoping to Group 2 keeps that growth from
+# forcing a recalibration of a comparison it has nothing to do with.
+echo '@@GROUP2-START@@'
+
 # Each hostile payload is compared against a BENIGN TWIN -- the same payload
 # shape with harmless field values -- rather than against one global baseline.
 # A single shared baseline only holds while every injection payload renders the
@@ -646,6 +655,8 @@ case "$OUT" in
   *) bad "path truncated at the control byte: $OUT" ;;
 esac
 
+echo '@@GROUP2-END@@'
+
 # --- Width-aware wrapping -----------------------------------------------------
 # COLUMNS is the only width signal available: Claude Code captures the script's
 # stdout, so tput and every language-level width probe read a pipe, not a
@@ -723,6 +734,20 @@ else
   bad "absent COLUMNS wrapped into $(line_count "$OUT") lines"
 fi
 
+# The degenerate-value guard above only rejects non-digit and non-positive
+# strings -- it never bounded how MANY digits are allowed through, so a value
+# long enough to overflow bash's signed 64-bit arithmetic reached the
+# subtraction below unfiltered and printed "number truncated after 19 digits"
+# to stderr. The status line itself still rendered correctly (wrapping just
+# declines, same as any other degenerate value); only stderr is under test.
+ABSURD_COLUMNS="99999999999999999999" # 20 digits, past bash's int64 ceiling
+STDERR_OUT="$(printf '%s' "$WRAP_PAYLOAD" | COLUMNS="$ABSURD_COLUMNS" bash "$SCRIPT" 2>&1 1>/dev/null)"
+if [ -z "$STDERR_OUT" ]; then
+  ok "an absurd COLUMNS value produces no stderr noise"
+else
+  bad "an absurd COLUMNS value printed to stderr: $STDERR_OUT"
+fi
+
 # A segment wider than the whole terminal cannot be honoured. It must still
 # arrive intact on its own line rather than being chopped mid-escape.
 LONG_NAME="$(printf 'M%.0s' $(seq 1 120))"
@@ -774,6 +799,34 @@ case "$(plain "$(render "$(wt_payload "$WT_ROOT/mainrepo/nested/deep")")")" in
   *) ok "a subdirectory of the main tree is not misreported as a worktree" ;;
 esac
 
+# Absence of wt:() is DEFINED as "you are in the main checkout". A git-dir
+# lookup that fails for an unrelated reason -- while genuinely inside a work
+# tree -- must not render identically to that, or the one case this feature
+# exists to warn about (a session in the wrong checkout) becomes silently
+# indistinguishable from a clean detection failure. Simulated with a PATH
+# shim that fails only the specific rev-parse call the detector depends on;
+# every other git invocation still reaches the real binary.
+REAL_GIT="$(command -v git)"
+GITSHIM="$(mktemp -d)"
+cat > "$GITSHIM/git" <<SHIMEOF
+#!/usr/bin/env bash
+case "\$*" in
+  *"rev-parse --absolute-git-dir"*) exit 1 ;;
+esac
+exec "$REAL_GIT" "\$@"
+SHIMEOF
+chmod +x "$GITSHIM/git"
+# The PATH override must be `export`ed rather than prefixed on `printf`: a
+# prefix assignment scopes to that one command, not the rest of the pipeline,
+# so a prefixed form would leave `bash "$SCRIPT"` running against the real
+# git and prove nothing.
+OUT="$(cd "$WT_ROOT/mainrepo" && export PATH="$GITSHIM:$PATH" && printf '%s' '{}' | bash "$SCRIPT")"
+rm -rf "$GITSHIM"
+case "$(plain "$OUT")" in
+  *"wt:(?)"*) ok "a failed git-dir lookup renders unknown, not the main-checkout reading" ;;
+  *) bad "a failed git-dir lookup was indistinguishable from the main checkout: $OUT" ;;
+esac
+
 # The width case up in the wrapping group renders /tmp, which is not a repo: no
 # branch, no wt:(), and a head barely a third of the terminal. It therefore
 # could not fail for the one shape that actually overflows -- a LONG head, which
@@ -802,8 +855,29 @@ fi
 # spurious blank leading row -- 7 rows, which passed the loose form of this very
 # assertion along with the rest of the suite. A bound with slack in it is a bound
 # that admits the off-by-one it exists to catch.
+# The off-by-one mutant above (dropping `[ $i -gt 0 ]`) only produces its
+# spurious blank leading row when segment 0 (arrow+user@host) alone exceeds
+# wrap_at -- i.e. when len(user)+len(host) > 18 at COLUMNS=24. That is a fact
+# about whoever runs the suite, not about the code under test: this machine's
+# marksuyat@Marks-Mac-Studio comfortably exceeds it, but a CI container
+# running as `root` with a short hostname could measure well under it, and
+# the assertion would stop catching that mutant while still reporting green.
+# whoami/hostname are pinned behind a PATH shim so the row count -- and what
+# it can detect -- do not depend on who or where this suite runs.
 EXPECTED_ROWS=6
-ROWS="$(line_count "$(render_cols 24 "$WIDE_HEAD_PAYLOAD")")"
+WHOSHIM="$(mktemp -d)"
+cat > "$WHOSHIM/whoami" <<'SHIMEOF'
+#!/usr/bin/env bash
+printf '%s\n' "fixture-user"
+SHIMEOF
+cat > "$WHOSHIM/hostname" <<'SHIMEOF'
+#!/usr/bin/env bash
+printf '%s\n' "fixture-host-name"
+SHIMEOF
+chmod +x "$WHOSHIM/whoami" "$WHOSHIM/hostname"
+OUT="$(export PATH="$WHOSHIM:$PATH" && printf '%s' "$WIDE_HEAD_PAYLOAD" | COLUMNS=24 bash "$SCRIPT")"
+rm -rf "$WHOSHIM"
+ROWS="$(line_count "$OUT")"
 if [ "$ROWS" -le "$EXPECTED_ROWS" ]; then
   ok "row count stays inside the segment-count bound (rows=$ROWS<=$EXPECTED_ROWS)"
 else
@@ -842,4 +916,6 @@ case "$(plain "$OUT")" in
 esac
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]

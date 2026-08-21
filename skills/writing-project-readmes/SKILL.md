@@ -61,6 +61,6 @@ Positive — this skill should fire:
 
 Negative — this skill should *not* fire:
 
-- "update CODING_MEMORY for this session" → `managing-session-memory`
+- "save this session's memory" / "update the feature card" → `managing-session-memory`
 - "write the PR description" → `preparing-pull-requests`
 - "write a spec for the parser" → `writing-specs`

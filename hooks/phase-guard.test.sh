@@ -4,6 +4,8 @@
 # inside throwaway git repos, so no real repo, branch, or session-flag state is touched.
 # Run: bash hooks/phase-guard.test.sh
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/phase-guard.sh"
 # Physical path, not the one mktemp hands back. On macOS `mktemp -d` returns the
@@ -212,9 +214,23 @@ allow_silent "A1.6 path outside the repository root (step 5)"   "$OPTED"  "$(pay
 for rel in docs/features/a.md docs/decisions/0011.md CODING_MEMORY.md coding-memory/x.md \
            .claude/session-state.md settings.json \
            projects/-Users-x--claude/memory/feedback_x.md \
-           projects/-Users-x--claude/memory/MEMORY.md; do
+           projects/-Users-x--claude/memory/MEMORY.md \
+           rules/gates.md rules/core-conduct.md \
+           skills/writing-specs/SKILL.md skills/_standards/authoring.md; do
   allow_silent "unguarded path: $rel" "$OPTED" "$(payload Write file_path "$OPTED/$rel")"
 done
+
+# rules/ and skills/ carry the instruction surface, not implementation code. Two PARKED
+# planning cards for unrelated features once made every rule and skill file unwritable
+# repo-wide, so maintenance of the rule surface was blocked by features that had nothing
+# to do with it. The fixture above is the real denying one -- $OPTED holds an un-superseded
+# planning card on an unclaimed branch, which is why the B1 deny below shares it -- so these
+# entries pass because the exemption fired, not because nothing was guarding.
+#
+# Scoped to the DIRECTORIES, exactly as projects/*/memory/* is: a repo may hold source in a
+# file merely named for them, and mid-planning that source is what this hook guards.
+deny "a file merely NAMED rules is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/rules.sh")"
+deny "a file merely NAMED skills is not exempt" "$OPTED" "$(payload Write file_path "$OPTED/skills.sh")"
 
 # projects/*/memory/* is where the harness's own memory tool writes. Omitting it
 # meant EVERY memory write was refused while any feature file sat at planning --
@@ -1221,4 +1237,6 @@ else
 fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]

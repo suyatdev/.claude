@@ -1563,7 +1563,8 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
       - The regression cause is **accepted as a known limitation**, not investigated — the pinned
         state the investigation needs no longer exists.
       - **Implemented and shipped as PR #60** (https://github.com/suyatdev/.claude/pull/60), opened
-        at `eef95be`. Two implementation-stage observability rounds, both `risk=medium`,
+        at `eef95be`. See `### PR #60` under `## Verification` for the reasoning the
+        retired memory tree used to carry. Two implementation-stage observability rounds, both `risk=medium`,
         `confidence=high`, no failing dimensions. Ticked on entering the review phase, per task 11's
         precedent — the planning output (ADR 0030) and the plan it called for both exist, and the
         implementation is on the PR. Task 13 below is the only work this card still has open, and it
@@ -2757,3 +2758,46 @@ And the standing caveat over all of it: **the regression itself is still unexpla
 1.2 sweep is tuning against a symptom whose cause was never found. Blocking open item, promoted from
 a footnote: reconstruct 10b's index state. Until then R9's monitor has a reopened decision, one
 measured improvement, and no assigned cause.
+### PR #60 — the record the retired memory tree used to hold (2026-08-21)
+
+PR #60 opened while ADR 0031 was in flight on `main`. Its audit trail was written to
+`CODING_MEMORY.md` and `coding-memory/pr-tracking.md`, both of which ADR 0031 retired and gitignored
+between the PR opening and the merge of `origin/main` into this branch. Per
+`skills/preparing-pull-requests` under the new regime — GitHub holds PR *state*, this card holds the
+*reasoning* — the four things worth keeping are carried here. The retired files stay on local disk
+and in git history; nothing was lost, it just stopped being pushed.
+
+**1. `104 passed` is green about the wrong thing.** `memsearch/pyproject.toml:26` sets
+`addopts = "-m 'not golden and not measurement'"`, so the deselected tests are exactly the ones that
+touch the real index — R9's own measurement suite among them. The suite covers the migration, the
+query-time weight resolution, reclassify and the classifier. It says nothing about retrieval quality;
+R9's numbers come from the sweep harness recorded above. The observability judge named this in round
+2, after I had already quoted the number in the PR body as if it were evidence for R9. The body now
+states what it does and does not cover.
+
+**2. R9 does not close, and that is the shipped result.** 2 of 5 → 3 of 5 against a 5-of-5 bar left
+deliberately where it was. Any later reading of "R9 improved" that does not carry "still failing" is
+a misreading.
+
+**3. The judge was wrong once, and checking it mattered.** Round 1 advised confirming the
+`<db>.pre-v0.bak` rollback copy exists *before* running the migration. The migration itself creates
+it (`_take_backup`, `memsearch/memsearch/db.py:135-152`, called at `:175`), so the check belongs
+*between* the two commands in task 13. Round 2 re-read the code and confirmed the correction. A judge
+correction is a claim to verify, not a finding to apply.
+
+**4. Open, and the user's to settle: ADR 0030 has no forward pointer to its own corrections.** It
+knowingly retains two wrong statements — the `with conn:` migration sketch, and the "1.5 baseline ==
+today's effective behaviour" claim — both corrected in this card, which says so. The ADR does not
+point here. Round 2 called this its one real pushback: the cost of the edit is a compliance-judge
+round, which is a process cost, not a correctness argument. Parked, not waived.
+
+**Judge history.** Implementation stage, two rounds, both `risk=medium` / `confidence=high` with no
+failing dimensions: round 1 at `ee81648` (seven concerns), round 2 at `eef95be` after task 13 and the
+Roadmap line landed (concerns on `regression`, `traceability`, `success_masking`). Rows are in the
+tracked `coding-memory/observability-judge/verdicts.jsonl`; the prose verdicts are local-only under
+ADR 0031. Verdicts were committed only *after* the PR opened — `judge-guard.sh` requires
+`head_sha == HEAD` at `gh pr create`.
+
+**The `origin/main` merge carries no fresh verdict, deliberately.** `judge-guard.sh` gates
+`gh pr create`, not pushes to an already-open PR, so merging 138 commits of `main` in does not
+re-trigger it. Same precedent as task 11's `08b779d`.

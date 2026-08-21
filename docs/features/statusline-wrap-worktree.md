@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: high
-branch: feat/statusline-wrap-worktree
+branch: fix/statusline-wrap-worktree-followups
 ---
 
 # statusline — width-aware wrapping and worktree name
@@ -153,6 +153,10 @@ Rationale for reversing the documented "output can never be split across lines" 
 
 ## Tasks
 
+Reopened 2026-08-20 on `fix/statusline-wrap-worktree-followups` (off `main` @ `7fcfd95`) to close
+tasks 9-12, which PR #43 shipped without. The original `feat/statusline-wrap-worktree` branch is
+gone (merged, deleted); this is a fresh branch for the remainder.
+
 - [x] 1. Write the wrap + worktree tests against the **unmodified** script; confirm they fail.
       Red phase: 4 failures, `widest=83>60` proving the overflow.
 - [x] 2. Pin the existing injection tests to a wide `COLUMNS` so `nl=0` stays a real assertion
@@ -183,40 +187,82 @@ Rationale for reversing the documented "output can never be split across lines" 
       is `statusline-wrap-worktree` here and `.claude` from the shared checkout, where it would
       look for the wrong verdict and block. Freshness is strict: the stored `head_sha` must
       equal current HEAD, so any commit after judging forces another round.
-- [ ] 9. **`statusline-command.falsify.py` reports `FALSIFICATION BROKEN` — pre-existing.**
-      Verified at HEAD *before* any change here: `f0902ed` scores 8/50 against `want 9`, and
-      `925c310` scores 9/50 against `want 10`. The harness runs the current suite against five
-      historical script versions and asserts exact pass counts, so every added test shifts all
-      five; the counts were written when the suite held 20 cases and it held 50 by the time this
-      branch opened. This branch takes it to 66 and moves them again.
+- [x] 9. **`statusline-command.falsify.py` fixed — root cause was worse than documented.**
+      Re-measured at the start of this task: the harness no longer reported the documented
+      count mismatch at all. It hard-errored — `f0902ed: extraction returned a non-script
+      (b'')` — because `f0902ed` does not exist in this repository, reachable or unreachable
+      (`git fsck --unreachable`, empty; `gh api repos/.../commits/f0902ed`, 422). It was never
+      pushed: almost certainly a local commit amended away before this branch's first push on
+      2026-07-19, later garbage-collected. Unrecoverable.
 
-      **Deliberately not "fixed" here.** Rewriting `EXPECTED` to match what is observed would
-      turn a falsification harness into a rubber stamp, and the two mismatches that predate this
-      branch are a real signal nobody has read yet. Needs its own task: decide whether the
-      harness should assert counts at all, or assert *which* named cases fail per version — the
-      latter survives adding tests, which is the whole reason it keeps going stale.
+      Measuring 925c310 directly (the earliest commit this repo still has, confirmed via
+      `git log --diff-filter=A`) showed it is actually the unfixed original the old `f0902ed`
+      label described — every Group 2 case fails except the one that passes "for the right
+      reason" regardless of stripping. Its old "route-1 fix only" label was wrong; corrected
+      in the harness.
 
-      **Owed by 2026-08-20.** A permanently-broken harness stops being read, which is the
-      failure mode ADR 0016 was written about. The cost of leaving it: this diff merges with
-      no differential coverage at all.
-- [ ] 10. **A missed worktree fails into the dangerous reading.** Absence of `wt:()` is
-      *defined* as "you are in the main checkout", so a detector that silently broke would look
-      identical to the state this feature exists to warn about — and given the motivating
-      incident (a session switching the shared checkout's branch while another worked in it),
-      that is the worst direction to fail in. Raised by the judge; not fixed here because the
-      fix is a design question, not a patch: it needs a distinguishable "unknown" rendering,
-      which is a change to what the segment *means*, and that was an explicit non-goal of this
-      branch.
-- [ ] 11. **Absurd `COLUMNS` values print bash arithmetic noise to stderr.** A value longer
-      than 19 digits overflows int64; the script still correctly declines to wrap, so the
-      status line itself is unaffected and this is cosmetic. Written down because it has now
-      survived three judge rounds as an unlogged observation, which is how cosmetic defects
-      become permanent.
-- [ ] 12. **The row assertion's mutation-sensitivity is environment-dependent.** Raised by the
-      round-4 judge. Segment 0 is `➜  $(whoami)@$(hostname -s)`, built from the machine and not
-      from the fixture, so the off-by-one mutant only misbehaves when segment 0 alone exceeds
-      `wrap_at` — i.e. when `len(user) + len(host) > 18`. This machine measures 25 and the
-      canary works; a CI container running `root` with a short hostname measures ~16 and it
-      would silently stop working. The assertion still bounds rows correctly either way; it is
-      its power to *detect* a regression that varies. Fix is to pin `whoami`/`hostname` behind a
-      `PATH` shim in the fixture, as the judge did to measure both sides.
+      Fixed the deeper design flaw from the same root, per this task's own open question:
+      switched from asserting whole-suite pass **counts** to asserting **which named Group 2
+      (control-byte injection) cases fail**, scoped to that group only via new
+      `@@GROUP2-START@@`/`@@GROUP2-END@@` sentinels in the test file. Group 1 (rendering) grows
+      every time an unrelated feature lands and none of those tests existed in these historical
+      versions — that's what forced three recalibrations (20→50→66→68). Scoping to Group 2 and
+      matching by name is structurally immune to Group 1's growth.
+
+      Falsifiability proven both directions: the harness reports `falsification intact` against
+      the real historical shas, and correctly reports `MISMATCH` with a precise expected/actual
+      diff when a `EXPECTED` entry is deliberately corrupted (tested, then reverted — see commit).
+- [x] 10. **A missed worktree fails into the dangerous reading — fixed with `wt:(?)`.**
+      `git_dir=$(git ... rev-parse --absolute-git-dir 2>/dev/null)` can come back empty for
+      reasons unrelated to "this is the main checkout" (transient failure, permissions, a git
+      bug) while the outer `--is-inside-work-tree` check already confirmed we ARE in a work
+      tree. Previously that emptiness was indistinguishable from a real main checkout — both
+      rendered no `wt:()` segment at all. Now: `git_dir` empty *despite* being confirmed inside
+      a work tree renders `wt:(?)`; `git_dir` resolved with no `gitdir` file (a real main
+      checkout) still renders nothing, unchanged.
+
+      TDD: red test first, via a PATH shim that fails only the `rev-parse --absolute-git-dir`
+      call and passes every other git invocation through to the real binary (first version of
+      the shim had a shell-semantics bug — `PATH=... printf ... | bash "$SCRIPT"` scopes the
+      assignment to `printf` alone, not the pipeline; fixed to `export PATH=...` inside the
+      subshell). Confirmed the test fails against the unfixed script, then implemented. 69/69.
+- [x] 11. **Absurd `COLUMNS` values print bash arithmetic noise to stderr — fixed.** The
+      degenerate-value guard rejected non-digit and non-positive strings but never bounded
+      digit COUNT, so a value past bash's signed 64-bit ceiling reached `[ "$COLUMNS" -gt 0 ]`
+      unfiltered and printed `integer expression expected` to stderr. Fixed by rejecting
+      16+-digit strings in the same case pattern, before either comparison runs.
+
+      One dead end during verification, recorded because it cost real time: `bash`'s own
+      `checkwinsize` startup behavior *also* prints `number truncated after 19 digits` for an
+      absurd `COLUMNS` in the environment — but only when the enclosing shell is interactive.
+      Confirmed by reproducing with a nested non-interactive script (`bash outer.sh` invoking
+      `bash statusline-command.sh`, matching how Claude Code actually runs this script): the
+      bash-startup noise disappears entirely, and only the script's own `[: ... integer
+      expression expected` error remained on the unfixed blob. Verified the fix against that
+      same non-interactive harness, not the interactive shell that showed the unrelated noise.
+- [x] 12. **The row assertion's mutation-sensitivity is environment-dependent — fixed.** Pinned
+      `whoami`/`hostname` behind a `PATH` shim in the row-bound fixture, returning fixed
+      `fixture-user`/`fixture-host-name` values instead of the real machine's — same technique
+      as the judge used to measure both sides, and the same one used for task 10's git shim.
+      Segment 0's width no longer depends on who or where the suite runs, so the off-by-one
+      mutant's detectability doesn't either.
+
+      Proved it matters, not just changed it: temporarily reintroduced the actual mutant
+      (dropped `[ $i -gt 0 ]`), confirmed the shimmed assertion fails correctly
+      (`rows=7>6`), then reverted. Real script still passes (`rows=6<=6`) — segment 0 always
+      opens line 1 regardless of its width, so widening the fixture's user/host changes nothing
+      about correct behavior, only the mutant's visibility.
+
+## Verification
+
+Observability judge (implementation stage, 2026-08-20): **risk=low, confidence=high**. Verified
+independently — ran the suite and harness itself, confirmed `f0902ed` is genuinely gone, and broke
+each of the four fixes on temp copies (COLUMNS guard, `wt:(?)` branch, the row-bound off-by-one
+guard, a corrupted harness expectation) to confirm every new/changed assertion fails correctly, not
+just decoratively. Full verdict: `coding-memory/observability-judge/2026-08-20-fix-statusline-wrap-worktree-followups.md`.
+
+One non-blocking nit raised, deferred rather than reopening implementation for it: the falsify
+harness's module docstring says two Group 2 cases pass "for the right reason" for `925c310`, but
+only one is visible in `EXPECTED`'s explicit subtraction — the other is baked into `GROUP2_TEMPLATES`
+omitting the literal-backslash case entirely, which is correct but less discoverable from the
+docstring alone. Worth tightening next time that file is touched.

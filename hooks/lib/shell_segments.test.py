@@ -15,7 +15,14 @@ unilateral call, and this has to run anywhere the hook runs.
 
 import importlib.util
 import os
+import subprocess
 import sys
+
+MARKER_SELF = os.path.abspath(__file__)
+# cwd=dirname(MARKER_SELF), never the inherited process cwd -- mirrors classify-pr-command.test.py,
+# the sibling this repo's suites nest-invoke from inside a throwaway repo.
+MARKER_ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=os.path.dirname(MARKER_SELF),
+                             capture_output=True, text=True, check=True).stdout.strip()
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SPEC = importlib.util.spec_from_file_location(
@@ -218,4 +225,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _rc = main()
+    if _rc == 0:
+        subprocess.run([sys.executable, "-I", "hooks/lib/write-test-marker.py", MARKER_SELF],
+                       cwd=MARKER_ROOT, check=True)
+    sys.exit(_rc)

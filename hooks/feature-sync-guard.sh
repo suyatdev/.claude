@@ -114,8 +114,10 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 # Escape hatch. Read from the assignments of the segment that runs `git commit`, via
 # the same lexer, so an assignment belonging to some other segment cannot excuse this
 # commit. No apostrophes below: this python lives inside a single-quoted shell string,
-# and one apostrophe in a comment terminates it and breaks the whole hook (the trap
-# recorded against classify-git-command.py in CODING_MEMORY.md).
+# and one apostrophe in a comment terminates it and breaks the whole hook (this exact
+# trap fired before against classify-git-command.py; CODING_MEMORY.md has the history
+# but is retired and untracked, so don't count on that citation resolving in a fresh
+# clone — it was never re-recorded anywhere tracked).
 export FSG_HOOK_DIR="$HOOK_DIR"
 exempt_reason=$(printf '%s' "$command_line" | "$py" -c '
 import os, sys

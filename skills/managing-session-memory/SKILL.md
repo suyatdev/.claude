@@ -7,7 +7,7 @@ description: Use at the start of every session to restore the active feature fil
 
 An agent's context resets between sessions. What survives is what was written down — so every procedure here exists to keep that written record trustworthy: accurate about what is done, small enough to read in full, and never the reason a later session repeats work or contradicts a decision.
 
-Two artifacts carry it. The **feature file** (`docs/features/<name>.md`) is the single canonical document for one feature — frontmatter, spec, task checklist. **`CODING_MEMORY.md`** is the cross-feature index that points at them.
+Two artifacts carry it. The **feature file** (`docs/features/<name>.md`) is the single canonical document for one feature — frontmatter, spec, task checklist. **`.claude/session-state.md`** is the live, machine-local handoff that says which feature file is active and where the last session stopped.
 
 Feature-scale work earns a feature file. A typo fix or a one-line config change does not — forcing ceremony onto small work is how the ceremony gets abandoned for the work that needed it.
 
@@ -67,17 +67,17 @@ Three, one per phase boundary. Each is its own checkpoint — none is satisfied 
 - **Verification results** go in a short `## Verification` section appended to the feature file: pass/fail per area and open issues only.
 - **ADRs still stand for the big three.** A decision that is (a) structural/architectural, (b) affects business logic, or (c) pivots a feature's technological direction earns its own numbered, immutable record under `docs/decisions/` — the options weighed, why this one won, the consequences. Task bullets carry ordinary gotchas; they are the wrong home for a rationale that has to outlive the feature file being trimmed. When the decision has structure or a tradeoff space, embed a rendered Mermaid diagram — `diagramming-technical-docs`.
 
-## CODING_MEMORY.md
+## CODING_MEMORY.md and coding-memory/ — frozen archive
 
-**Retired as a read target.** It is a committed, append-only archive of what happened — not an index, and nothing loads it automatically. The old shape (an "index" capped at ≤200 lines) is what let the file grow past 2,600 lines while still claiming to be capped: a cap with no trim mechanism isn't one. There is no cap now, by design — other documents cite this file by line number, so trimming or renumbering would silently break every citation. Append-only is a correctness requirement, not a preference.
+**Retired. Nothing is appended to either, ever again.** They stay on local disk and in git history as a lookup-only record of what happened before the split; they are no longer tracked or pushed (`.gitignore`), so a fresh clone or worktree will not have them. `CODING_MEMORY.md` is also deliberately **not** trimmed, reordered, or renumbered — other documents cite it by line number, and renumbering would silently break those citations. Its own header says the same.
 
-**What answers "what were we doing" now is `.claude/session-state.md`**, the live, machine-local handoff kept current by the per-prompt `live-handoff.sh` directive and auto-surfaced at every SessionStart — see Restore below. CODING_MEMORY.md answers a different question, "what happened, across sessions, in order," and is reached by lookup, not by loading it into context.
+**Two files under `coding-memory/` are still tracked**: `observability-judge/verdicts.jsonl` and `compliance-judge/verdicts.jsonl`. They are kept because they are the accumulated judge record — 179 observability and 123 compliance rows at the time of the split — which untracking would fragment per worktree, leaving no structured verdict history at all. **Not** because a missing ledger blocks a PR: measured in a fresh detached worktree, `judge-guard` exits 2 either way, and only its message changes.
 
-**Update discipline:** at each Session Freshness Checkpoint, append one new dated section (`## YYYY-MM-DD — session N: ...`) archiving that session's work before `session-state.md` is overwritten by the next one. Do not extend the file's old `## Active Session` block — that section is the legacy shape this split retires; it stays as history, but nothing new gets appended under it.
+**What answers "what were we doing" is `.claude/session-state.md`**, the live, machine-local handoff kept current by the per-prompt `live-handoff.sh` directive and auto-surfaced at every SessionStart — see Restore below. The archive answers a different question, "what happened, across sessions, in order."
 
-**Reaching it:** by targeted lookup only, never a full read — `memsearch query "<question>"` once its index is trustworthy, grep in the meantime. The index has been measured stale (18+ days) and blind to `docs/features/`; until that's fixed (Phase 2), don't treat a memsearch result as ground truth without checking the source line it names.
+**Reaching it:** by targeted lookup only, never a full read — `memsearch query "<question>"` once its index is trustworthy, grep in the meantime. The index has been measured stale (18+ days) and blind to `docs/features/`; until that's fixed, don't treat a memsearch result as ground truth without checking the source line it names.
 
-If a repo has no `CODING_MEMORY.md` and no `docs/features/`, ask before substantive work whether to initialize them. Create only on yes, and don't re-ask in the same session if declined.
+If a repo has no `docs/features/`, ask before substantive work whether to initialize it. Create only on yes, and don't re-ask in the same session if declined.
 
 ## Restore (on "continue")
 
@@ -108,7 +108,7 @@ Also on restore:
 
 Save and offer a clear on two triggers: after completing a major task, or after roughly every ~35k tokens of new conversation since the last checkpoint — incremental growth, estimated, not the absolute context total.
 
-In this order: finish the current step cleanly, update the feature file and `CODING_MEMORY.md`, push, **then** prompt the user to clear. Never prompt to clear before the save+push — a `/clear` run mid-checkpoint is a session gone before its state was captured, and the next session inherits an out-of-sync record.
+In this order: finish the current step cleanly, update the feature file, push, **then** prompt the user to clear. Never prompt to clear before the save+push — a `/clear` run mid-checkpoint is a session gone before its state was captured, and the next session inherits an out-of-sync record.
 
 `/handoff` is the user-facing manual checkpoint command; it captures the machine-local session state and complements the save+push, never replaces it.
 

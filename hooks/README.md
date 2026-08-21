@@ -73,12 +73,12 @@ Invoked with no payload (`checkpoint-before-modify.sh <repo-dir>`) it checks the
 
 Two deterministic guards, both matched on `tool_input.command`:
 
-1. **Default-branch commit guard.** Blocks `git commit` while `main`/`master` is checked out, unless every staged file is `CODING_MEMORY.md` or under `coding-memory/` — the brainstorm-then-branch exception in `preparing-pull-requests`.
+1. **Default-branch commit guard.** Blocks `git commit` while `main`/`master` is checked out, unless every staged file is a **markdown file under `docs/`** (`docs/*.md`, by file type — a script under `docs/` gets no free ride) — the brainstorm-then-branch exception in `preparing-pull-requests`. Until ADR 0031 the allowlist also carried `CODING_MEMORY.md` and `coding-memory/*`; that tree is retired and untracked, so those entries were removed.
 2. **Force-push guard.** Blocks a bare `git push --force`/`-f` on any branch. `--force-with-lease` is allowed, except while `main`/`master` is checked out, where it is blocked too.
 
 It also unwraps an `rtk ` prefix before matching: the RTK hook is registered ahead of this one on the same `Bash` matcher and rewrites plain git commands, so by the time this guard runs the command it sees may already read `rtk git commit -m x`.
 
-*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/gates.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `CODING_MEMORY.md` and `coding-memory/*`, nothing else.
+*Why an instruction cannot do this job:* "never commit to main" and "never force-push" are two of the most-repeated rules in `rules/gates.md`, and both fail the same way — under momentum, mid-session, with a confident model that has just finished a brainstorm and wants to save the result. The brainstorm-then-branch exception makes the naive version of this guard wrong (a flat "no commits on main" would also block the one commit the workflow requires), so the allowlist has to be as precise as the rule it enforces: `docs/*.md`, nothing else. (It was `CODING_MEMORY.md` and `coding-memory/*` until ADR 0031 retired that tree. The principle is the point, not the specific paths — when the workflow's one legal commit changes, this allowlist changes with it, or the guard starts enforcing a rule nobody follows.)
 
 Unlike the other four hooks in this file, `git-guard.sh` **is installed** — it runs in this repo's own `settings.json` today, alongside `doc-guard.sh` and `judge-guard.sh` (see below), because this repo is the global config every other repo inherits, and the two guards it enforces (`rules/gates.md`) apply here first.
 
@@ -124,6 +124,45 @@ usage entry sums to ≥75k tokens, it writes a fired-flag, prepares a press-Ente
 handoff pane (`dispatch-pane-agent.sh handoff`), and nudges the freshness
 checkpoint via `additionalContext`. The fired-flag check precedes any transcript
 parsing, so after firing the per-call cost is one stat. Never blocks.
+
+### `test-marker-guard.sh`
+
+PreToolUse, matcher `Bash`. Blocks a `git commit` that stages a file with a sibling test (the
+`X.sh`↔`X.test.sh` / `X.py`↔`X.test.py` convention) at a version that test suite has never passed
+against. The marker under `hooks/state/test-markers/` is a **receipt, not a grade** (ADR 0027): it
+proves the suite ran against those exact bytes, never that the suite is any good. A thin bash
+wrapper around one `python3` decision call in `lib/decide-commit-gate.py` (ADR 0026) — exit 2 with a
+named `MSG_*` reason on stderr, silent exit 0 otherwise. Escape hatch: `TEST_EXEMPT='<reason>' git
+commit ...`, 1–200 printable ASCII bytes, validated and logged to `hooks/state/test-marker.log`,
+never silently discarded.
+
+**Registered globally, but INERT until a repo opts in.** It sits on the same `Bash` matcher as
+`git-guard.sh`, `doc-guard.sh`, `judge-guard.sh` and `merge-guard.sh`, so it runs for every repo on
+this machine — and does nothing unless `<toplevel>/hooks/lib/write-test-marker.py` exists and is
+readable. That file is the opt-in signal, deliberately a file rather than a config key: a repo with
+no writer cannot be held to a receipt it has no way to issue.
+
+**Inertness has exactly one exception: `MSG_NO_PYTHON`.** A missing or unusable `python3` fires
+before the payload can be read at all, so before any repo can be identified — that one door blocks a
+non-adopting repo too. It is not a new hazard: `git-guard.sh`, `judge-guard.sh` and `merge-guard.sh`
+are globally registered today and all `exit 2` when the interpreter is gone. Every other door is
+downstream of the opt-in check and cannot reach a repo that has not opted in.
+
+**v1 ships no way to ask whether the gate is armed here — an accepted cost, not a stale entry.** A
+hook that allows is silent, so nothing in a normal commit distinguishes "allowed, verified" from
+"allowed, inert"; a `--status` subcommand was considered and remains deferred. What v1 has instead
+is two partial answers: a one-off arming proof run at install time, and the decision log, whose
+evidence is asymmetric — *a non-empty log proves the gate was armed and firing **as of its last
+entry**; an empty one proves nothing*, since "armed and nothing has gone wrong" and "armed but
+silently never pairing" look identical. Neither is a live arming check, so a gate that goes inert
+*later*, in a repo where nothing has tripped it, stays invisible until someone re-runs the arming
+proof by hand.
+
+*Why an instruction cannot do this job:* "run the tests before you commit" is a rule nobody
+disputes and everybody skips at exactly the moment it matters — the change is small, the suite is
+slow, the session is long. The failure is not ignorance of the rule but the absence of any record of
+whether it happened, and a memory of having run the tests is not evidence about the bytes now
+staged. Only a mechanical check can compare the two.
 
 ---
 
@@ -249,7 +288,7 @@ Takes the repo directory as `$1` and reads `tool_input.command` from the payload
 
 ### Git safety guard on shell commands
 
-Reads `tool_input.command` from the payload directly — no argument, unlike the checkpoint guard above. Blocks a `git commit` on `main`/`master` unless every staged file is `CODING_MEMORY.md` or under `coding-memory/`, and blocks a bare `git push --force`/`-f` everywhere (`--force-with-lease` is also blocked on `main`/`master`). It unwraps a leading `rtk ` prefix first, so it still matches after the RTK hook above it has rewritten the command.
+Reads `tool_input.command` from the payload directly — no argument, unlike the checkpoint guard above. Blocks a `git commit` on `main`/`master` unless every staged file is a markdown file under `docs/` (`docs/*.md` — see ADR 0031; `CODING_MEMORY.md` and `coding-memory/*` were allowed here until that tree was retired), and blocks a bare `git push --force`/`-f` everywhere (`--force-with-lease` is also blocked on `main`/`master`). It unwraps a leading `rtk ` prefix first, so it still matches after the RTK hook above it has rewritten the command.
 
 This is the one hook in this file that **is** installed — appended to this repo's own `settings.json`, after the existing `rtk hook claude` entry, because this repo is the global config every other repo inherits:
 

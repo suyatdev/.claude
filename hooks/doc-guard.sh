@@ -8,14 +8,14 @@
 #   1. PreToolUse (matcher: Bash) — block-at-commit. A `git commit` whose staged
 #      change is a SUBSTANTIAL source change (>= DOC_GUARD_THRESH_FILES files or
 #      >= DOC_GUARD_THRESH_LINES changed lines) but stages no documentation
-#      (CODING_MEMORY.md, coding-memory/, docs/) is blocked. Bypass with a
-#      `Doc-Exempt: <reason>` trailer for genuinely trivial/mechanical commits.
-#      Trivial source-only commits pass silently, so the many small commits of an
-#      SDD run are not held hostage.
+#      (docs/) is blocked. Bypass with a `Doc-Exempt: <reason>` trailer for
+#      genuinely trivial/mechanical commits. Trivial source-only commits pass
+#      silently, so the many small commits of an SDD run are not held hostage.
 #
 #   2. PreCompact (manual/auto) — before compaction, if the working tree has
-#      uncommitted tracked changes, inject a warning to save CODING_MEMORY.md and
-#      commit first (compacting with unsaved state is how it gets lost).
+#      uncommitted tracked changes, inject a warning to save docs/features/ and
+#      docs/decisions/ entries and commit first (compacting with unsaved state
+#      is how it gets lost).
 #
 #   3. SessionStart (any source) — at the start of a session, INCLUDING the one
 #      that follows a /clear or /compact, if the working tree has uncommitted
@@ -78,11 +78,11 @@ status = sys.stdin.read().rstrip("\n")
 ctx = (
     "⚠️ doc-guard: the working tree has uncommitted tracked changes:\n"
     + status
-    + "\n\nPer managing-session-memory, save CODING_MEMORY.md and any docs/decisions "
-      "or coding-memory entries and commit before continuing, clearing, or compacting "
-      "— a session cleared before its checkpoint loses this. If a change here "
-      "affects business logic or pivots the direction of a feature, it also needs an "
-      "ADR under docs/decisions/."
+    + "\n\nPer managing-session-memory, save any docs/features/ and docs/decisions/ "
+      "entries and commit before continuing, clearing, or compacting — a session "
+      "cleared before its checkpoint loses this. If a change here affects business "
+      "logic or pivots the direction of a feature, it also needs an ADR under "
+      "docs/decisions/."
 )
 print(json.dumps({"hookSpecificOutput": {"hookEventName": ev, "additionalContext": ctx}}))
 ' "$ev"
@@ -167,7 +167,7 @@ while IFS=$'\t' read -r add del path; do
     # "did documentation ride along with this commit?", and a diagram or screenshot
     # counts. git-guard asks "may this reach main unreviewed?", where it must not.
     # The two rules are not meant to agree — do not align them.
-    CODING_MEMORY.md|coding-memory/*|docs/*) has_doc=1; continue ;;
+    docs/*) has_doc=1; continue ;;
   esac
   src_files=$((src_files + 1))
   [[ "$add" =~ ^[0-9]+$ ]] && src_lines=$((src_lines + add))
@@ -181,8 +181,8 @@ done <<< "$numstat"
 if [ "$src_files" -ge "$DOC_GUARD_THRESH_FILES" ] || [ "$src_lines" -ge "$DOC_GUARD_THRESH_LINES" ]; then
   {
     printf 'doc-guard: this commit makes a substantial source change (%s file(s), %s line(s)) but records no documentation.\n' "$src_files" "$src_lines"
-    printf 'Nothing staged under CODING_MEMORY.md, coding-memory/, or docs/ (incl. docs/decisions/, docs/specs/).\n\n'
-    printf 'If it affects business logic or pivots the direction of a feature: add an ADR under docs/decisions/ and a CODING_MEMORY.md pointer (see managing-session-memory), then re-commit.\n'
+    printf 'Nothing staged under docs/ (incl. docs/features/, docs/decisions/, docs/specs/).\n\n'
+    printf 'If it affects business logic or pivots the direction of a feature: update the docs/features/ entry and add an ADR under docs/decisions/ (see managing-session-memory), then re-commit.\n'
     printf 'If it is genuinely trivial (refactor, formatting, mechanical): add a  Doc-Exempt: <reason>  trailer to the commit message.\n'
   } >&2
   exit 2

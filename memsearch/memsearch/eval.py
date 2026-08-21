@@ -1,7 +1,7 @@
 """Systematic digest-accuracy audit (observability-judge flag b): a scripted,
 seeded, repeatable check — not a vibe spot-check. Each sampled digest is
 verified against its re-extracted source transcript by the local digest
-model; results are persisted under coding-memory/memsearch-evals/."""
+model; results are persisted under docs/memsearch-evals/."""
 from __future__ import annotations
 
 import random
@@ -29,7 +29,11 @@ Source transcript (extracted):
 {transcript}
 ---"""
 
-DEFAULT_REPORT_DIR = Path.home() / ".claude" / "coding-memory" / "memsearch-evals"
+# Anchored to this checkout (…/memsearch/memsearch/eval.py -> repo root), not to
+# $HOME: the report is meant to be committed, so it must land in the working tree
+# the code is running from — a worktree included.
+DEFAULT_REPORT_DIR = (Path(__file__).resolve().parent.parent.parent
+                      / "docs" / "memsearch-evals")
 
 
 def audit_digests(cfg: Config, sample: int = 12, seed: int = 17,
