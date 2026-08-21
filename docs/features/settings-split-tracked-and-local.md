@@ -91,7 +91,7 @@ and are `$HOME`-substitutable, so `core-conduct`'s no-absolute-paths rule is sat
 tracked file with no second file involved. Note the paths sit inside **single** quotes today, which
 suppress expansion — they must become double quotes.
 
-`~/.claude/.claude/settings.local.json` — project scope, already gitignored by `.gitignore:75`
+`~/.claude/.claude/settings.local.json` — project scope, already gitignored by `.gitignore:78`
 (`/.claude/`), already holding `permissions.allow` grants and `"outputStyle": "Concise"` — is the
 real local-settings file and is left exactly as it is. It is out of scope here because it applies
 only to sessions whose project root is `~/.claude`; every worktree is its own root with its own
@@ -213,7 +213,7 @@ with `[ -e ] && exit 1` on the way in and an `EXIT` trap on the way out.
 - **Remove** line 23 `settings.json`.
 - ~~**Add** `settings.local.json`.~~ Dropped with the split — there is no user-scope file of that
   name to ignore, and the project-scope one at `.claude/settings.local.json` is already covered by
-  `.gitignore:75` (`/.claude/`).
+  `.gitignore:78` (`/.claude/`).
 - **Keep** `settings.json.bak` (line 20) and `stats-cache.json` — a genuine runtime cache, correctly
   untracked by `9cc792f`; this card does not re-track it.
 
@@ -279,16 +279,23 @@ file; they are replaced, not merely reworded.
         branch**: the identical `21 failed, 2 passed` reproduces in the `rule-surface-trim`
         worktree, which carries the same post-PR-#60 memsearch code and none of these changes.
         It is PR #60's documented post-merge migration pass.
-- [ ] 9. Fix `SETUP.md:28` (claims the file is tracked — true again once this lands) and
+- [x] 9. Fix `SETUP.md:28` (claims the file is tracked — true again once this lands) and
       `README.md:42` ("Hooks, enabled plugins, and TUI preferences" — now accurate as written,
       re-read before editing).
-- [ ] 10. ADR under `docs/decisions/`: why the whole file is tracked rather than split, the three
+      Both sentences were already true once this lands, so both were extended rather than
+      corrected: `SETUP.md` now says *why* the file is tracked and carries the move-aside step;
+      `README.md` says the same in one row and names the `/model` churn.
+- [x] 10. ADR under `docs/decisions/`: why the whole file is tracked rather than split, the three
       experiments that ruled out the alternatives, and that `9cc792f` solved a real churn problem
       by disabling the guards. Record the checkout/merge hazard so the clean filter is not
       re-proposed later.
-- [ ] 11. Rollout note: a checkout that pulls this commit will refuse to overwrite an existing
+      `docs/decisions/0032-track-settings-json-whole.md`. Number checked free against `origin/main`
+      and against every ref (`git log --all --diff-filter=A -- 'docs/decisions/0032*'` → empty),
+      not against the local `main`, which is 27 commits behind.
+- [x] 11. Rollout note: a checkout that pulls this commit will refuse to overwrite an existing
       untracked `~/.claude/settings.json` unless the bytes match exactly, and the `$HOME` rewrite
       guarantees they will not. Document the move-aside step.
+      In `SETUP.md` § 3, with the `diff` reconciliation line.
 - [ ] 12. Observability judge, then draft PR.
 
 ## Risks
