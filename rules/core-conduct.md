@@ -32,4 +32,4 @@ Multiple Claude instances may run concurrently via git worktrees. Never touch fi
 
 ## Context Discipline
 
-Context is a budget, not a vessel to fill — every token costs attention regardless of window size. Task-specific knowledge belongs in a skill, not a static rule. Suspect the harness before the model: most misbehavior traces to a missing tool, a vague rule, or a noisy context.
+Context is a budget, not a vessel to fill — every token costs attention regardless of window size. Task-specific knowledge belongs in a skill, not a static rule. (Making the always-on set conditional instead was considered and rejected: `@import` resolves before the prompt exists, so a rule can't gate itself, and a hook could only safely defer the non-safety rules — the ones you can't predict you'll need, which is exactly when you need them present.) Suspect the harness before the model: most misbehavior traces to a missing tool, a vague rule, or a noisy context.
