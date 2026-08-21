@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: worktree-fix+memsearch-r9-retrieval-quality
 ---
@@ -1541,7 +1541,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         commit. `judge-guard.sh` gates `gh pr create`, not an already-open PR, so nothing re-runs.
       - The checkbox was left unticked when the PR was opened; ticked here in the review phase to stop
         the record claiming the judge round never ran.
-- [ ] 12 — **R9 remedy planning.** R9 has never reached 5 of 5 (`:325-331`); the best measured state
+- [x] 12 — **R9 remedy planning.** R9 has never reached 5 of 5 (`:325-331`); the best measured state
       is 3 of 5 at judge-verdict weight 1.2, requiring a `curated_doc` split that doesn't exist
       (`:2333`, `:2341-2358`). This phase's output: a new ADR (next free number, re-derived at time of
       use — not 0021, which task 2 above already claimed) deciding the path-keyed classification
@@ -1562,6 +1562,12 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         the per-document diversity cap recorded as the candidate follow-up rather than built.
       - The regression cause is **accepted as a known limitation**, not investigated — the pinned
         state the investigation needs no longer exists.
+      - **Implemented and shipped as PR #60** (https://github.com/suyatdev/.claude/pull/60), opened
+        at `eef95be`. Two implementation-stage observability rounds, both `risk=medium`,
+        `confidence=high`, no failing dimensions. Ticked on entering the review phase, per task 11's
+        precedent — the planning output (ADR 0030) and the plan it called for both exist, and the
+        implementation is on the PR. Task 13 below is the only work this card still has open, and it
+        cannot run until the PR merges. PR detail: `coding-memory/pr-tracking.md`, the PR #60 entry.
 - [ ] 13 — **Post-merge, once, in this order — the step that makes ADR 0030 take effect.** Tracked as
       a task rather than left to `memsearch/README.md` prose because the failure is silent: skip it
       and every test still passes, `memsearch status` still reports a healthy index, and roughly 97%
