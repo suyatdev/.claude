@@ -271,6 +271,46 @@ Four of my own, each caught only by checking a result rather than an exit code:
    A JSON parse gives 69. The wrong figure reached `.gitignore` and a commit message before a
    worker caught it.
 
+### Post-judge round (risk=medium, confidence=high) — three fixes
+
+The observability judge found a defect the card's own task list had missed, and it is the silent
+kind. `skills/preparing-pull-requests/SKILL.md` still routed PR state into the retired tree — in
+the very skill the migration worker had edited. Line 12 fails **loudly** (it instructed committing
+`CODING_MEMORY.md` to `main`, which this branch's own `git-guard` tightening now blocks); lines
+25/30/46 fail **silently** — the write lands in a gitignored file and never leaves the machine.
+Task 10's file list omitted the skill. Rewritten: GitHub is the record of PR *state*,
+`docs/features/` carries the *reasoning* GitHub cannot hold.
+
+**This was the third instruction file found still prescribing the retired tree** (after
+`context-handoff-watch.sh` and `setting-up-a-new-project`). Three instances of one class means the
+class is the finding — the surviving sweep is `grep -rn "CODING_MEMORY\|coding-memory" rules/
+skills/ CLAUDE.md README.md hooks/ panes/`, and every remaining hit is either historical prose or
+the hook's own retired-path comment.
+
+Also fixed:
+
+- **`.gitignore` cited exact ledger row counts, and they went stale inside this session** — the
+  judge's own verdict appended a row, moving 179/123 to 194/133. Replaced with the derivation plus
+  the warning that grepping `outcome` overcounts by matching the space in `"outcome": null`.
+- **`git-guard.replay.sh` reported `N unexpected` and still exited 0** — a report, not a gate. It
+  now exits 1 on any `relaxed` or `unexpected`. Both halves proven: the clean run is
+  `8 stricter (0 unexpected)` → exit 0; a mutant with one `EXPECTED_STRICTER` entry removed is
+  `8 stricter (4 unexpected)` → exit 1, **still reporting 63 commands**, which is what proves the
+  mutant tested the case instead of dropping it from the matrix.
+  - Controller error worth recording: the first mutant `sed` deleted the entry from **both**
+    `CMDS` and `EXPECTED_STRICTER` — the exact invalid falsifier the git-guard implementer had
+    already documented in its own report. Rebuilt scoped to the array line.
+
+### Judge concerns recorded but NOT acted on — user's call
+
+- **`rules/*|skills/*` globs span `/`**, so `skills/**/*.sh` executables are exempt from the phase
+  gate too (one file today). The exemption was argued as "a rule file is not implementation code";
+  a shell script under `skills/` arguably is. Narrowing it would change what was approved, so it is
+  left as-is and flagged rather than quietly scoped down.
+- The judge verified 460 of the 737 cases; it did not run `test-marker-guard` (248) or
+  `slim-session-start` (29). Both were run by the controller in the merged tree — this is the
+  judge's coverage limit, not an unverified claim.
+
 ### Known gaps, stated rather than closed
 
 - `docs/superpowers/plans/2026-07-17-memory-rag-index.md:2202,2301,2329` still embed the old

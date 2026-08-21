@@ -288,3 +288,16 @@ printf 'DISTINCT COMMANDS base=%s (%s) BLOCKS and %s ALLOWS:\n' "$BASE_SHA" "$BA
 sort -u "$TMP/relaxed" | sed 's/^/  /'
 printf '\nbase=%s (%s) — %s commands x 6 states = %s pairs: %s identical, %s stricter (%s unexpected), %s relaxed (%s distinct commands)\n' \
   "$BASE_SHA" "$BASE_REV" "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$unexpected" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)"
+
+# Gate, don't just report (observability judge, 2026-08-20, ADR 0031). Until now
+# this harness printed `N unexpected` and still exited 0, so a caller running it
+# in a chain -- or a human skimming the last line -- could not tell a clean run
+# from a divergent one. `relaxed` breaks the stated "never weaker than main"
+# contract; `unexpected` means a stricter divergence nobody declared in
+# EXPECTED_STRICTER, which is indistinguishable from a regression.
+if [ "$relaxed" -gt 0 ] || [ "$unexpected" -gt 0 ]; then
+  printf 'REPLAY FAILED: %s relaxed, %s unexpected stricter — inspect before trusting this run.\n' \
+    "$relaxed" "$unexpected" >&2
+  exit 1
+fi
+exit 0
