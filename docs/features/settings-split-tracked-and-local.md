@@ -186,7 +186,10 @@ experiments backed the decision:
 `settings.json` alone are harmless. But a branch that *changes* `settings.json` — the whole point
 of tracking it — wipes the local keys on both `git checkout` and `git merge`, because a clean
 filter with no smudge half materialises the stored blob over the working file. Reproduce with
-`.probe-tmp/filter-test2.sh`.
+a throwaway repo: `git config filter.prefs.clean "python3 strip.py"` where `strip.py` deletes the
+two keys, `echo 'settings.json filter=prefs' > .gitattributes`, commit, then branch, commit a
+*different* `settings.json` on the branch, and check the working copy back on either side. Switching
+between branches that leave the file alone is harmless — that variant passes and proves nothing.
 
 ### The probe, reproduced
 
@@ -250,7 +253,11 @@ file; they are replaced, not merely reworded.
       Run through Claude Code's own hook runner, not `sh -c`: the rewritten guard reported
       `ORCA-REACHED`, a control hook of identical shape pointing at a non-existent file reported
       `CONTROL-MISSED`, and a third printed `HOME-IS=/Users/marksuyat`. The control is what makes
-      the first result mean something. Reproduce: `.probe-tmp/home-expand.sh`.
+      the first result mean something. Reproduce: put three `SessionStart` hooks in a scratch
+      `CLAUDE_CONFIG_DIR` — the real guard expression, the same expression against a filename that
+      does not exist, and `echo HOME-IS=$HOME` — each appending to one log, then run
+      `claude -p 'say ok'`. The log is readable even though the sandbox session exits
+      "Not logged in", because `SessionStart` fires before that check.
 - [x] 5. `.gitignore`: remove line 23 `settings.json`, then `git add settings.json`. Confirm which
       order actually works rather than guessing — `git add -f` while still ignored is the fallback.
       Plain `git add` sufficed once the line was gone (`git check-ignore -v settings.json` → exit 1,
@@ -269,7 +276,10 @@ file; they are replaced, not merely reworded.
       26/27), `slim-session-start` **29/29** (was 28/29). Exactly +3 pass / −3 fail.
       **The 817 figure could not be reproduced and should not be quoted.** There is no committed
       full-suite runner; 817 was summed by hand before the 27 merged commits landed. Measured here
-      with a runner that prints every file it ran (`.probe-tmp/run-all-tests.sh`):
+      with a throwaway runner over `find . -name '*.test.sh'` that prints every file it ran and
+      every one it could not parse — note **macOS has no `timeout`**, and wrapping the suites in it
+      made all 19 exit 127, which only the "unparsed" branch caught; a naive runner would have
+      reported zero failures:
       - 19 `*.test.sh` suites — **1198 passed, 0 failed**
       - 5 `hooks/lib/*.test.py` — **319 passed, 0 failed**
       - `memsearch` pytest, repo default config — **104 passed, 0 failed, 23 deselected**
