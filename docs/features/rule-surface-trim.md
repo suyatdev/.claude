@@ -298,12 +298,18 @@ is the finding, so the surface was enumerated rather than patched again.
 The derivation, so the figure can be re-checked instead of trusted — run it, do not copy the number:
 
 ```sh
-git grep -n 'CODING_MEMORY\|coding-memory' -- '*.md' '*.sh' '*.py' '*.json' \
+git grep -n 'CODING_MEMORY\|coding-memory' becfca1 -- '*.md' '*.sh' '*.py' '*.json' \
   ':!coding-memory/**' ':!CODING_MEMORY.md'
 ```
 
-At `becfca1`: **568 hits across 79 files** (`wc -l`; `cut -d: -f1 | sort -u | wc -l`).
-At `09d8cc9`, before this round's fix: 569 across 80.
+At `becfca1`: **568 hits across 79 files** — `wc -l`, and `cut -d: -f2 | sort -u | wc -l` for the
+files. At `09d8cc9`, before that round's fix: 569 across 80.
+
+The **revision is part of the command** for two reasons, both learned the hard way here. It makes
+the command reproduce its own recorded number instead of drifting — run without `becfca1` today and
+you get 569, because the commit that corrected this very paragraph added another occurrence to it.
+And with a revision `git grep` prefixes each line with the rev, so the file field moves from `-f1`
+to `-f2`; the earlier `-f1` form was right only for the unpinned command it was written against.
 
 > ⚠️ **The figures first written here — "569 hits across 65 files" — were wrong, and the stated
 > derivation did not produce them.** `569` was the *pre-fix* count, already stale when written; `65`
@@ -314,6 +320,15 @@ At `09d8cc9`, before this round's fix: 569 across 80.
 > Use `git grep`, `command grep`, or `find | xargs grep`; the shadowed `grep` cannot be audited from
 > the command line you wrote down. Round 3 caught this; the wrong count also reached `89e0407`'s
 > commit message, which cannot be edited.
+>
+> **Round 4 then caught the same species inside the fix for it.** The table row below originally
+> said `hooks/git-guard.replay.sh` **(10 lines)**; there are **12**, and the full list had been on
+> screen when the "10" was typed. Every *cited line number* in that row was correct — only the
+> summarised count was wrong. The damage was not the trivia but the sentence beside it, "every hit
+> re-read individually": a count of 10 is evidence that 12 things were not counted one at a time.
+> The row now **lists the twelve line numbers** rather than counting them. That is the general fix —
+> **enumerate in the artifact itself, so the reader can recount; a summary count is an unverifiable
+> claim wearing a number.** Four rounds, four figures written without re-deriving them.
 
 Classified:
 
@@ -329,7 +344,8 @@ Classified:
 | `docs/decisions/*`, `docs/features/*` (other cards), `docs/superpowers/*` | **HISTORICAL** — dated records of what was true then. Left deliberately. |
 | `hooks/*.test.sh`, `hooks/lib/*.test.py` | **FIXTURES** — they assert the retired paths are now *blocked* or *ignored*. Left; changing them would delete the coverage. |
 | `hooks/git-guard.sh:8`, `hooks/phase-guard.sh` case arm | **HISTORICAL COMMENT / defensive** — deliberate. Left. |
-| `README.md:45,67`, `rules/gates.md:5,12`, `hooks/judge-guard.sh:34,39`, `hooks/git-guard.replay.sh` (10 lines), `hooks/feature-sync-guard.sh:118`, `hooks/handoff/slim-session-start.sh:10`, `skills/managing-session-memory/SKILL.md:70,72,74,88`, `skills/setting-up-a-new-project/SKILL.md:75`, `skills/running-the-compliance-judge/tests/README.md:13` | **CORRECT** — nine live files the first version of this table omitted entirely, found by round 3. Every hit re-read individually: each either describes the retirement accurately (past tense, or naming the two ledgers that remain tracked), is a replay fixture, or points at the still-tracked `verdicts.jsonl`. None is a false pointer. Listed so the table is a census rather than a sample. |
+| `README.md:45,67`, `rules/gates.md:5,12`, `hooks/judge-guard.sh:34,39`, `hooks/git-guard.replay.sh:149,151,188,189,190,191,233,236,248,249,251,252`,
+`hooks/feature-sync-guard.sh:118`, `hooks/handoff/slim-session-start.sh:10`, `skills/managing-session-memory/SKILL.md:70,72,74,88`, `skills/setting-up-a-new-project/SKILL.md:75`, `skills/running-the-compliance-judge/tests/README.md:13` | **CORRECT** — nine live files the first version of this table omitted entirely, found by round 3. Every hit re-read individually: each either describes the retirement accurately (past tense, or naming the two ledgers that remain tracked), is a replay fixture, or points at the still-tracked `verdicts.jsonl`. None is a false pointer. Listed so the table is a census rather than a sample. |
 
 The lesson, recorded because it recurred four times: **when a second instance of one class appears,
 enumerate the surface; do not patch the instance and assert the rest is clean.** Each of rounds
