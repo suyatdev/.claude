@@ -20,6 +20,9 @@
 settings.json.bak
 backups/
 
+settings.json
+stats-cache.json
+
 # Cache & downloaded content
 cache/
 downloads/
