@@ -669,6 +669,17 @@ unauditable exemption. This check runs **only once `kind == COMMIT`** (node `H`,
 checking it earlier would let `TEST_EXEMPT=$'a\nb' ls` — a non-commit — block the session, so the
 order is load-bearing rather than incidental.
 
+> ⚠️ **`TEST_EXEMPT` is not a universal escape hatch — it can only rescue a door node `H` can
+> reach.** Node `H` sits *inside* the decision call, so `TEST_EXEMPT` is read only after nodes
+> `NP`, `RC`, `F`, `G` and `CM` have already passed. **Measured**: with `decide-commit-gate.py`
+> renamed away in a throwaway repo, `TEST_EXEMPT='...' git commit -m msg` still exits 2 at
+> `MSG_CLASSIFIER_MISSING` — the same as an unexempted commit, because there is no decision call
+> left to read the exemption from. The five bash-owned doors (`MSG_NO_PYTHON`,
+> `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED`,
+> `MSG_CLASSIFIER_BAD_OUTPUT`) are never reachable by `TEST_EXEMPT`; recovery from one of those
+> means fixing the file with a non-`Bash` tool (`Edit`/`Write`), not typing an exemption. The
+> eight decision-call doors — every real gate *decision* — are what `TEST_EXEMPT` actually covers.
+
 > ⚠️ **The bound is 200 bytes.** The ERE quantifier revisions 11–13 wrote, `{1,200}`, means *between
 > 1 and 200*; ADR 0026's prose "a byte-counted `1,200` bound" quotes that quantifier and is not a bound
 > of 1,200. Stated as a number here so no implementation has to interpret a comma.
