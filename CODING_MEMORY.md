@@ -1,8 +1,10 @@
 # CODING_MEMORY
 
-This is an index only, kept at or under 200 lines. Full history lives in `coding-memory/` — follow the
-pointers below for detail instead of reading everything here. See `managing-session-memory` for
-how this file and its linked files should be written (plain language, major changes only).
+**RETIRED AND FROZEN.** No new entries are appended here or to `coding-memory/`; both are kept only
+for historical lookup by grep or memsearch. Active session/feature memory now lives under
+`docs/features/` and `docs/decisions/` — see `managing-session-memory`. This file is deliberately
+**not** trimmed, reordered, or renumbered below this header, because other documents cite it by
+line number and renumbering would silently break those citations.
 
 ## Active Session
 - **CURRENT: `fix/judge-guard-verdict-lookup` — implementation, `model_tier: high` (Opus 5 1M;
