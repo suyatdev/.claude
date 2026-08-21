@@ -74,20 +74,38 @@ marker log is still the full answer — the sandbox config dir has no credential
 | D | user `settings.json` + **malformed** user `settings.local.json` | `TRACKED`, and **no parse error** |
 | E | user `settings.json` + project `<cwd>/.claude/settings.local.json` | `TRACKED` + `LOCAL` |
 | F | E plus project `<cwd>/.claude/settings.json` | `TRACKED` + `PROJECT` + `LOCAL` |
+| G | **real `~/.claude`**: `~/.claude/settings.local.json` + project `<cwd>/.claude/settings.local.json` | `LOCALPROJ` only |
+
+Case G exists because cases B and D had a confound: `CLAUDE_CONFIG_DIR` demonstrably relocates
+`settings.json` (case A), but if the *local* user-scope file were resolved from a literal
+`~/.claude` the sandbox would have been blind and would have looked exactly like "not supported".
+G runs against the real config dir with no sandbox — fully authenticated, `exit 0`, replied
+`DONE` — with a marker hook in `~/.claude/settings.local.json` and in
+`<cwd>/.claude/settings.local.json` at the same time. Only the project-scope one fired. The
+user-scope file was created for that one run and removed in an `EXIT` trap; the run's own cleanup
+check confirms it is gone.
 
 **Two findings, and the second one kills the design in the table above.**
 
 1. **`hooks` MERGE — they never replace.** Case F fired three hooks for one event from three
    different scopes. The feared failure mode does not exist.
-2. **There is no user-scope `settings.local.json`.** Case B is silent while case E — the same
-   filename, the same hook, the same probe — fires. Case E is the falsifier that makes case B
-   mean something: the probe is demonstrably *able* to see a `settings.local.json` hook, so B's
-   silence is about the scope, not the probe. Case D confirms the file is never even opened: a
-   deliberately malformed `~/.claude/settings.local.json` produces no warning at all. The binary
-   agrees — its settings scopes are `userSettings` / `projectSettings` / `localSettings` /
-   `policySettings`, and every path string for the local scope is `.claude/settings.local.json`,
-   i.e. project-relative. The card's own supporting evidence (`strings … | grep -c
-   settings.local.json` → 103) counted a **project**-scope feature and read it as a user-scope one.
+2. **There is no user-scope `settings.local.json`.** Case G is the load-bearing one: against the
+   real `~/.claude`, with a marker hook in `~/.claude/settings.local.json` and one in
+   `<cwd>/.claude/settings.local.json` simultaneously, only the project-scope hook fired. Cases B
+   and E say the same thing in the sandbox, and E is what makes B's silence mean something — the
+   probe is demonstrably *able* to see a `settings.local.json` hook. Case D adds that the file is
+   never even opened: a deliberately malformed `~/.claude/settings.local.json` produces no warning
+   at all. The binary agrees — its settings scopes are `userSettings` / `projectSettings` /
+   `localSettings` / `policySettings`, and every path string for the local scope is
+   `.claude/settings.local.json`, i.e. project-relative. The card's own supporting evidence
+   (`strings … | grep -c settings.local.json` → 103) counted a **project**-scope feature and read
+   it as a user-scope one.
+
+   `~/.claude/settings.json` *is* the user-scope settings file — that part of the card is right.
+   It is the `.local.json` variant specifically that has no user-scope member. A fifth source
+   exists, `claude --settings <file-or-json>`, but it does not help: `/model` still writes back to
+   `~/.claude/settings.json`, and the flag only reaches sessions launched through the shell alias,
+   not desktop/IDE/cmux-spawned ones.
 
 So `~/.claude/settings.local.json` is not a quieter place to put `model`/`effortLevel` — it is
 `/dev/null`. Moving them there would silently drop the model default, the effort level, the theme
@@ -117,6 +135,10 @@ sort "$LOG" | uniq -c                            # both markers => hooks merge a
 Swap which files `hook` writes to reproduce cases A–F. The control that matters is running it once
 with the marker in `$CFG/settings.local.json` (silent) and once in
 `$CWD/.claude/settings.local.json` (fires).
+
+For case G, drop `CLAUDE_CONFIG_DIR` and the `.claude.json` copy, write the two markers to
+`~/.claude/settings.local.json` and `$CWD/.claude/settings.local.json`, and guard the real file
+with `[ -e ] && exit 1` on the way in and an `EXIT` trap on the way out.
 
 ## `.gitignore` changes
 
