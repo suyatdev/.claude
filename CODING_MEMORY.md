@@ -8567,3 +8567,54 @@ workers, pane-split policy set to `panes max=5`. 13/14/16 held for a serial pass
 parallel batch merges. No code changed yet this session; this entry records the plan before the
 dispatch phase, per the freshness checkpoint firing at 79k session tokens with no prior save point
 this session.
+
+## 2026-08-20/21 — marker-gate: tasks 9-16 landed, four judge rounds, PR #58 open, feature complete
+
+Continuing the 5-way parallel dispatch recorded above. All 5 workers (tasks 9, 10, 11, 12, 15)
+reported DONE; each commit independently verified in its own worktree/branch before trusting it.
+Merged serially (10, 11, 12, 9, 15) into the main worktree — three trivial checklist-checkbox
+conflicts resolved by hand, one real content merge (test-marker-guard.test.sh, tasks 9+15 both
+added cases) resolved cleanly by git. 240/240 after merge, all baselines held except one
+pre-existing gap both task 9 and task 15 independently flagged: task 8's "all 18 pairs wired"
+claim was wrong — `classify-commit-command.test.py` and `merge-guard.test.sh` were never wired.
+Fixed with the established call-site pattern; `write-test-marker.test.py` 57→59.
+
+**Task 15's MUST-sweep found two real production bugs, not just missing tests** — both violations
+of §3's no-default-allow rule: `decide-commit-gate.py`'s kind and form dispatches both had a
+default-allow arm (an out-of-domain classifier answer would ALLOW the commit instead of raising).
+Separately, `test-marker-guard.sh:59`'s inline `cwd` read was missing `-I`, unlike its sibling call
+— a hostile `json.py` in the hook's own process cwd could shadow the stdlib `json` module and
+silently disarm the entire gate (exit 0, no error). Per user decision, fixed both before task 13
+(global registration) rather than ship a globally-registered hook with a known silent-disarm hole.
+Reproduced each bug for real before fixing, wrote failing tests first, fixed, confirmed green, then
+flipped the `-I` fix off/on to prove the new test genuinely catches it. Suite → 246/246.
+
+Task 13 (registration): added one entry to `settings.json`'s existing `PreToolUse`→`Bash` array,
+matching the sibling guards' shape exactly. The checklist's "preserve model: opus[1m]" was stale —
+live value had drifted to `claude-fable-5[1m]` — honored the intent (don't touch it) over the
+literal. Live-fire sentinel proof didn't fire (this session's hook config predates the edit — the
+documented settings-watcher staleness, not a defect); `jq -e` + JSON validity were sufficient per
+the update-config skill's own fallback.
+
+Task 14 (arming check): ran all six required cases against a **fresh `git clone` of the pushed
+branch**, not the local worktree — the specific failure mode the task exists to catch (a file
+present locally but never committed). All six passed.
+
+**Observability judge, four rounds, each closing a real finding from the last:**
+1. `e0fd411` — risk=low/confidence=high, no failing dimension. Flagged `rules/gates.md`'s new
+   bullet as the file's longest (1608 chars) and suggested hand-verifying the TEST_EXEMPT lockout
+   path.
+2. `54ae987` (bullet trimmed to ~920 chars, lockout path hand-verified and documented — confirmed
+   by hand that TEST_EXEMPT does NOT rescue a lockout caused by decide-commit-gate.py itself being
+   missing, correctly by design) — risk=low again, flagged the lockout claim had no automated test.
+3. `22ae1b0` (added and mutation-proved that test) — risk=low/confidence=high, nothing new.
+4. `3247040` — **process mistake, not a code one**: committed round 3's own verdict *before*
+   opening the PR, which moved HEAD and invalidated it against `judge-guard.sh`'s strict same-SHA
+   check — exactly the trap `feedback_committing_a_verdict_invalidates_it.md` already named.
+   Re-scored the resulting pure-doc HEAD (risk=low, nothing new), this time opened PR #58
+   *before* committing round 4's verdict, then pushed the verdict + README Roadmap entry as
+   follow-ups (pushes to an already-open PR don't re-trigger judge-guard, only `gh pr create`
+   does).
+
+All 16 checklist items complete. Feature file frontmatter moved to `phase: review`. PR:
+https://github.com/suyatdev/.claude/pull/58
