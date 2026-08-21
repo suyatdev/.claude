@@ -1,7 +1,8 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: chore/rule-surface-trim
+pr: 59
 ---
 
 # Rule-surface trim — retire the coding-memory duplication and the hooks that enforce it
