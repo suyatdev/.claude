@@ -2,6 +2,8 @@
 # run-pane-agent.test.sh — exercises the result-file contract with a stubbed
 # claude binary. Run: bash panes/run-pane-agent.test.sh
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 RUNNER="$(cd "$(dirname "$0")" && pwd)/run-pane-agent.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -88,4 +90,6 @@ if [ ! -e "$TMP/agent-exit" ]; then
 else printf 'FAIL — shape guard: no marker outside runs dirs\n'; fail=$((fail+1)); fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]

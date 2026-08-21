@@ -13,7 +13,15 @@ has to run anywhere the hook runs.
 
 import importlib.util
 import os
+import subprocess
 import sys
+
+MARKER_SELF = os.path.abspath(__file__)
+# cwd=dirname(MARKER_SELF), never the inherited process cwd: this file is also run as a nested
+# subprocess by judge-guard.test.sh from inside a throwaway repo, where the ambient cwd resolves
+# to that fixture's toplevel, not this one's.
+MARKER_ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=os.path.dirname(MARKER_SELF),
+                             capture_output=True, text=True, check=True).stdout.strip()
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SPEC = importlib.util.spec_from_file_location(
@@ -154,4 +162,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _rc = main()
+    if _rc == 0:
+        subprocess.run([sys.executable, "-I", "hooks/lib/write-test-marker.py", MARKER_SELF],
+                       cwd=MARKER_ROOT, check=True)
+    sys.exit(_rc)
