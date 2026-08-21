@@ -10,17 +10,36 @@ branch: worktree-fix+memsearch-r9-retrieval-quality
 > branches (`docs/post-merge-followups-45`, `docs/r9-counterfactual-control`); this field names the
 > *feature's* branch, and the feature no longer has one.
 
-> **Frontmatter note (2026-08-20):** Reopened to `phase: planning` for R9 remedy work — the R9
-> acceptance bar (5 of 5 measurement queries, `:315-331`) has never passed; the best measured state is
-> 3 of 5 (`:2333`), gated on a `curated_doc` weight tier for judge verdicts that does not exist yet
-> (`:2341-2358`). One-canonical-file discipline: this stays the same feature file rather than a new
-> one (see task 12). `branch:` now names `worktree-fix+memsearch-r9-retrieval-quality`, pre-provisioned
-> by `EnterWorktree` before this session decided to reopen planning — not created at the
+> **Frontmatter note (2026-08-20, revised 2026-08-21):** Reopened to `phase: planning` for R9 remedy
+> work, and now in `implementation` on this branch. The R9 acceptance bar — 5 of 5 measurement
+> queries, stated under **R9 — retrieval is measured against a stated bar** in `### Requirements` —
+> has never passed. The best measured state is still **3 of 5**: first as an unbuilt lead in
+> `#### The remedy the enumeration does *not* rule out`, now as a shipped, re-measured result in
+> `### Task 5 (ADR 0030) — the weight sweep, and the value it selects`. The judge-verdict weight tier
+> that lead was gated on **now exists** — a `judge_doc` source type, weighted at query time from
+> `config.json` (`search.py:34-44`, applied at `:99`) — so what remains open is the last two
+> queries, not a missing knob. One-canonical-file discipline: this stays the same feature file
+> rather than a new one
+> (see task 12). `branch:` names `worktree-fix+memsearch-r9-retrieval-quality`, pre-provisioned by
+> `EnterWorktree` before this session decided to reopen planning — not created at the
 > planning→implementation gate the template assumes; it carries through to implementation rather than
-> a second branch being cut. The remedy section's own forward-reference to "ADR 0021" (`:2341`) is
-> stale: that number was already claimed by the launchd/run-recency decision (task 2, below) before
-> this section was written. Next free ADR number as of 2026-08-20 was **0030** (`ls docs/decisions/`)
-> — re-derive at time of use, other parallel branches may claim it first.
+> a second branch being cut.
+>
+> **The ADR renumbering is done — this note no longer describes a live defect.** The remedy section
+> was written forward-referencing "ADR 0021", a number the launchd/run-recency decision (task 2,
+> below) had already claimed. The seven occurrences that meant the deferred planning pass now read
+> **ADR 0030** (`docs/decisions/0030-judge-verdict-tier-and-query-time-weight.md`). Two occurrences of
+> that older number survive deliberately: this sentence, and task 2's decision list, where it is the
+> correct reference. `grep -c` for it against this file should return **2** — any other count means
+> the renumbering has drifted again.
+>
+> **References in this note are section headings, not line numbers, on purpose.** All three citations
+> it originally carried had gone wrong, in two different ways. `:2333` and `:2341-2358` were shifted
+> **+186** by this branch's own insertion of the Task 5 results section, within a day of being
+> written — the remedy heading moved `2350 → 2536` between `b8e0aff^` and `b8e0aff` — so they now
+> land in unrelated prose. `:315-331` was never shifted by that insertion, being above it, and was
+> simply imprecise from the start: at `b8e0aff` it opened twelve lines above R9, in the middle of R8.
+> Positional citations into a file this long survive neither its edits nor their own transcription.
 
 # memsearch freshness — refresh trigger and staleness reporting
 
@@ -1496,7 +1515,7 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         frame is not absence of effect.** Dropping the archive flips both moved queries; dropping
         this file flips none. Full control table under `## Verification`.
       - **Whether `falsifier-base-pin`'s regression is an accepted cost of R10 is now an open
-        decision**, not a recorded fact. ADR 0021 must inherit the corrected attribution.
+        decision**, not a recorded fact. ADR 0030 must inherit the corrected attribution.
 - [x] 10c — **Evaluate every falsifier clause and record the result, one line each.** Clauses (a)
       through (j), by letter, each marked held / falsified / not yet observable, with the evidence
       or the reason it cannot yet be judged. ⚠️ **Added in round 8 because nothing scheduled it:**
@@ -1628,6 +1647,17 @@ hook and the `local.memsearch-index` launchd job until this branch merges. The l
 once to make the copy and never written: `sha256 dd5917ef334b4f722104b0c5235a0d2b4cdb7c9f519ae7f3bf7646e56d3c616b`,
 82739200 bytes, before and after this task.
 
+**The copy measured the shipping configuration.** Its `config.json` differs from
+`memsearch/config.json` in `db_path` **only**; the `weights` dict is identical in both, and identical
+to what this branch ships:
+
+```
+"weights": {"curated_doc": 1.5, "repo_doc": 1.2, "judge_doc": 1.2,
+            "transcript_digest": 1.0, "archive_doc": 1.0}
+```
+
+The sweep overrides `judge_doc` per row in memory (`dataclasses.replace`) and writes neither file.
+
 #### Populations, re-derived
 
 `ls ~/.claude/coding-memory/<judge>/*.md | wc -l`, as of **2026-08-21T01:24Z** — `*.md` only, because
@@ -1711,6 +1741,41 @@ index state after : chunks=12040 vectors=12040 fingerprint=a1724f75397c95427288c
 from the committed script: output identical line-for-line apart from those two `mtime`/`query_log`
 lines, same fingerprint, same adoption.
 
+**The instrument change is not outcome-bearing — observed, not argued.** That re-run tests
+reproducibility, not the substitution: both arms used the new predicate. The discarded first run's
+per-row table had never been captured, so the one artefact that could settle the question was
+missing. It was therefore reconstructed: the sweep was run again against the same copy under **ADR
+0030's original predicate**, restored verbatim (`chunk count + mtime`, discard on inequality) in a
+throwaway module held outside the repo, which imports `WEIGHTS`, `measure`, `print_row` and
+`is_eligible` unmodified from the committed script — so only the discard clause differs. It reached
+the first run's verdict:
+
+```
+index state before: chunks=12040 mtime=1787275892.7653863
+index state after:  chunks=12040 mtime=1787276697.1573184
+
+SWEEP DISCARDED — the index moved mid-sweep, so every comparison above is between two different
+corpora. Re-run it (ADR 0030).
+```
+
+The six per-weight blocks it printed *before* that verdict — 36 lines, six headers and thirty
+per-target lines carrying every hit count, `top_belongs` flag and top-hit path — are **byte-identical
+to the accepted run's**:
+
+```
+$ diff rows-accepted.txt rows-legacy.txt && echo IDENTICAL
+IDENTICAL
+$ shasum -a 256 rows-accepted.txt rows-legacy.txt
+12070fbb8f270112fbdead0b69c9a6051917f1749e2e2b1eeb21c6c1d7f20dd4  rows-accepted.txt
+12070fbb8f270112fbdead0b69c9a6051917f1749e2e2b1eeb21c6c1d7f20dd4  rows-legacy.txt
+```
+
+So the substitution changed which runs are *kept*, never what a run *measures* — and the discarded
+run, had anyone read its table, carried the same six rows and would have selected the same 1.2. The
+committed script was not edited to obtain this: `git diff --quiet HEAD --
+memsearch/tests/sweep_judge_weight.py` passes. What is **not** claimed: the legacy re-run's exit code
+was not captured, only its printed verdict.
+
 #### The sweep
 
 `memsearch/tests/sweep_judge_weight.py` — deliberately not named `test_*`, so pytest never collects
@@ -1783,6 +1848,28 @@ Both failures fail clause 2 only — each now has its ≥2 hits, and each is out
 appears anywhere in either failing target's top-6, at rank 4; rank 1 for both is a `curated_doc` chunk
 of **this file**. That holds at every swept weight — `memsearch-freshness.md` is the top hit for both
 failures at 1.5 through 1.0 alike, so no weight in the swept range dislodges it.
+
+⚠️ **And this section did not measure itself — the two blocking chunks are Task 8b's own text, from
+before this commit existed.** The indexed body of `memsearch-freshness.md` is the primary checkout's
+copy at `content_hash f21c53f0…`, `indexed_at 2026-08-20T01:41:24+00:00` — both earlier than commit
+`b8e0aff`, and the hash still matches that file on disk byte-for-byte. None of this section's 186
+inserted lines are in the corpus at all; that copy is 113 chunks spanning `:1-2390`, its full length.
+In *its* numbering, `:1547-1573` and `:1574-1583` fall between
+`### Task 8b — R9 baseline, measured pre-R10` (`:1515`) and `### Task 9` (`:1584`) — they are Task 8b's
+own per-query rank tables, `:1547-1573` covering `falsifier-base-pin`, `git-guard-empty-index` and
+`verification-marker-gate`, `:1574-1583` covering `phase-guard-hook`.
+
+One observation, offered as an observation and not as an established mechanism: each blocking chunk
+contains, **verbatim**, the query string of the target it blocks — `:1547-1573` holds
+`'how does the verification marker gate know the test suite really ran'` and `:1574-1583` holds
+`'how does phase-guard scope write permission to the current branch'`, because Task 8b's record
+prints each query above its rank table (`test_measurement_queries.py:204`). Checked against
+`measurement_queries.json`: the containment is exact. It is **not** sufficient on its own —
+`:1547-1573` also holds the queries of `falsifier-base-pin` and `git-guard-empty-index`, both of which
+pass — so containment predicts nothing by itself, and no control was run to establish why these two
+chunks take rank 1. None is claimed. The self-measurement worry is nonetheless answered for this
+run: the block predates the commit. It becomes live at the **next** index run, which will see these
+186 lines for the first time.
 
 ⚠️ **Not attributed.** Why those two targets gain hits as the weight falls (`verification-marker-gate`
 1 → 2 → 3) is *not* established here: per-rank identity was captured only for the 1.2 row, so which
@@ -2092,7 +2179,7 @@ left for a reader to discover in the table.
 how a known cost becomes an unknown one, and R9 is the *only* instrument that sees this drift while
 `pyproject.toml:26` deselects it from a default run.
 
-- **Owner:** the deferred planning pass (ADR 0021), which inherits **this** attribution — not the
+- **Owner:** the deferred planning pass (ADR 0030), which inherits **this** attribution — not the
   retracted one, and not the "flips none" phrasing.
 - **Trigger:** re-run `-m measurement` after the **first scheduled index run that includes these
   commits** and record the delta. The decision above was taken against an index whose `last_run`
@@ -2198,7 +2285,7 @@ measurement.** Until it is, the observed facts are the table and the swap; the c
 without perturbing the instrument. Noted rather than resolved; the counterfactual run is what
 separates them, and it must be run against a stated index state, not "current".
 
-**Owner unchanged:** the deferred planning pass (ADR 0021). What it inherits is now a *reopened*
+**Owner unchanged:** the deferred planning pass (ADR 0030). What it inherits is now a *reopened*
 decision plus one unrun control, not an accepted cost. ⇒ **The control has since been run — see the
 next section. Neither of the two populations this section suspected turns out to move the verdict.**
 
@@ -2220,7 +2307,7 @@ next section. Neither of the two populations this section suspected turns out to
 >    `1.5 → 1.2` takes R9 from **2 of 5 to 3 of 5** with **nothing regressing**. This is the only
 >    actionable result in the section, and it was the last thing found. Two caveats travel with it and
 >    are not optional: it is **judge chunks only, and no such knob exists yet** — `curated_doc` is one
->    bucket, so this is a `source_type` split for ADR 0021, not a number change — and it is one index
+>    bucket, so this is a `source_type` split for ADR 0030, not a number change — and it is one index
 >    state on five queries, a lead to **re-confirm, not to apply blind**.
 > 4. **The instrument is sound but shallow.** Embedding noise never moves a verdict (8/8), while the
 >    margin under test is three ranks deep — so R9's clause 1 is far more sensitive to corpus growth
@@ -2469,7 +2556,7 @@ about any document in the corpus.
 **What survives, because it needs no counterfactual:** a **639-line** judge verdict about
 `git-guard-empty-index` outranks the **375-line** spec it grades, and verdicts sit at `curated_doc`
 weight **1.5** — the same weight as the specs they are *about* (`config.json`). That is checkable from
-file lengths and config alone. It is **not** shown to have caused anything measured here, and ADR 0021
+file lengths and config alone. It is **not** shown to have caused anything measured here, and ADR 0030
 should treat it as a structural observation worth a decision, not as a finding this control produced.
 
 #### ⚠️ And this control does **not** explain the regression it was run to explain
@@ -2488,7 +2575,7 @@ So the two questions come apart, and the section above answers only the second:
 The framing "the control will assign the cause of the regression" — carried since `:1958` — was
 **wrong about what the instrument can do**, and no amount of care in running it would have fixed
 that. Reconstructing 10b's index state is therefore not an optional tidy-up; it is the only thing
-that can answer the first question, and it is now the blocking open item for ADR 0021.
+that can answer the first question, and it is now the blocking open item for ADR 0030.
 
 **Retained as the useful result:** a concrete, cheap, verified lead on *restoring* R9's second hit
 for one query, and a demonstration that neither this file nor the archive is implicated at this state.
@@ -2502,7 +2589,7 @@ claim that 10b mis-attributed is *not* supported by anything measured. Reconstru
 state is the open item.
 
 **Monitor status:** the decision stays **reopened**, and the owner is unchanged (the deferred
-planning pass, ADR 0021).
+planning pass, ADR 0030).
 
 **Stated at the strength the evidence supports, no further** — this section reached its conclusion in
 three passes, and each pass had to narrow the previous one:
