@@ -41,7 +41,8 @@
 | `rules/` | Focused rule files loaded by Claude on every task. |
 | `settings.json` | Hooks, enabled plugins, and TUI preferences. |
 | `statusline-command.sh` | Status line renderer — oh-my-zsh `robbyrussell` prompt plus model and token count. Tests: `statusline-command.test.sh`; falsification harness: `statusline-command.falsify.py`. |
-| `CODING_MEMORY.md` | Running session memory — decisions, state, next steps. |
+| `docs/features/`, `docs/decisions/` | Active session memory: feature cards (phase frontmatter, spec, checklist) and ADRs. |
+| `CODING_MEMORY.md`, `coding-memory/` | Retired and frozen — local-only history, still greppable on disk and in git history, no longer tracked or pushed. The two judge verdict ledgers under `coding-memory/` are the exception and stay tracked. |
 | `SETUP.md` | New machine checklist: plugins, verification steps. |
 
 ## Rules at a glance
