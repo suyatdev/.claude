@@ -1562,6 +1562,27 @@ Model per task set at checkpoint 2, asked and answered 2026-08-07: **Sonnet 5**.
         the per-document diversity cap recorded as the candidate follow-up rather than built.
       - The regression cause is **accepted as a known limitation**, not investigated — the pinned
         state the investigation needs no longer exists.
+- [ ] 13 — **Post-merge, once, in this order — the step that makes ADR 0030 take effect.** Tracked as
+      a task rather than left to `memsearch/README.md` prose because the failure is silent: skip it
+      and every test still passes, `memsearch status` still reports a healthy index, and roughly 97%
+      of this change is inert with no runtime signal anywhere.
+
+          ~/.claude/memsearch/bin/memsearch index              # 1. migrates the database
+          ~/.claude/memsearch/bin/memsearch index --reclassify # 2. re-types the judge documents
+
+      - Step 1 is what the `launchd` job runs every 6h, so it happens on its own within that window;
+        until it does, `memsearch query` refuses with a migration error while the SessionStart line —
+        which reads `status.json`, written only by the migrating command — still reports the index
+        healthy. Running step 1 by hand closes that window.
+      - Step 2 never happens on its own: an ordinary index run skips unchanged files by content hash,
+        so it re-types nothing already stored.
+      - **Acceptance:** `memsearch status`'s `by source_type` shows `judge_doc` in the **thousands**,
+        not ~108. On the copy this was measured against: 108 chunks after a plain run, 3609 after the
+        reclassify pass. That one number is the whole difference.
+      - The migration is one-way, and the only way back is the pre-migration copy the migration itself
+        takes (`_take_backup`, `memsearch/memsearch/db.py:135-152`, called at `:175`) — so it does not
+        exist until step 1 has run. Between the two steps, confirm `<db_path>.pre-v0.bak` is present
+        and non-empty; a later migration deletes it (`db.py:142-144`).
 
 ## Verification
 

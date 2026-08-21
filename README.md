@@ -62,6 +62,7 @@
 - [x] Per-session pane-split policy with three-lane agent routing (#28)
 - [x] `phase-guard.sh` hook computationally enforcing the phase-frontmatter gate (ADR 0010's deferral overridden by ADR 0011 at the user's gate; #30)
 - [x] Fixed a blind spot where a global option ahead of the subcommand (`git -C .`, `gh -R o/r pr merge`) hid the command entirely from `git-guard`/`doc-guard`/`merge-guard`; now it either passes through, asks for confirmation, or is refused with an honest reason, never silently allowed (ADR 0029; #54)
+- [x] Judge verdicts ranked as their own retrieval tier, and `memsearch` chunk weights resolved from config at query time instead of frozen into each row — retuning a weight is a config edit plus an `index --reclassify` pass, not a full re-embed (ADR 0030)
 - [ ] Reconcile the remaining files still describing the retired `coding-memory/branches/<branch>.md` workflow
 
 ## New machine?
