@@ -8783,3 +8783,31 @@ Housekeeping candidate, not yet acted on: per the branch/worktree cleanup patter
 this worktree's branch now has a merged PR and is a candidate for the same removal treatment PR #52/#45
 got — deferred to the user rather than done unilaterally, since worktree/branch deletion is destructive
 and out of scope for a status question.
+
+## 2026-08-21 — marker-gate: task 14's live arming check, run for real against the primary checkout
+
+Closed the one open item from the entry above. First pull attempt hit a live collision — the primary
+checkout (`/Users/marksuyat/.claude`) had a transient uncommitted change to `settings.json` and an
+untracked `docs/features/rule-surface-trim.md` in the way, and `origin/main` moved from 91 to 129
+commits ahead in about two minutes — clear signs another session was actively writing there. `git pull
+--ff-only` refused cleanly (autostash created and reapplied, `HEAD` unmoved, nothing lost). Waited and
+retried: the other session had already pulled on its own by then, so `git -C /Users/marksuyat/.claude`
+`HEAD` matched `origin/main` (`981f447`) with no pull needed from this session. Confirmed the
+verification-marker-gate merge commit (`c523090`) is an ancestor of that `HEAD`, and that
+`hooks/test-marker-guard.sh` is now present and registered in that checkout's `settings.json`.
+
+Then ran the actual live check task 14 could only simulate against a fresh clone: staged a throwaway
+`armcheck-live.sh`/`.test.sh` pair with no marker in this worktree (itself an adopting repo, no `cd`
+or `-C` needed to avoid the `UNSUPPORTED`/`FOREIGN_REPO` form) and ran a real `git commit`. The
+**harness's own `PreToolUse` hook refused the tool call outright** — `MSG_NO_MARKER`, not a subprocess
+exit code inspected after the fact. A second pair with a properly recorded passing marker
+(`write-test-marker.py`) committed clean, `exit 0`, proving the gate discriminates rather than
+fail-closing on everything (the exact blind spot the feature file flagged for this task). Both are the
+strongest form of "does it arm" available: the actual Claude Code harness, live, blocking and allowing
+correctly.
+
+Cleaned up completely: `git reset --hard` to the last pushed SHA (`176541d`) removed the one throwaway
+commit the positive-path test made (local-only, never pushed), throwaway files removed, and the one
+leftover entry in the gitignored `hooks/state/test-markers/` store deleted. Worktree confirmed clean
+afterward. Task 14's residual gap — "armed against a fresh clone, not the live primary checkout" — is
+now closed with direct evidence rather than inference.
