@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: low
-branch: fix/tracker-frontmatter-comment
+branch: none  # merged via PR #56 (7fcfd95); fix/tracker-frontmatter-comment deleted 2026-08-20
 ---
 
 # Feature-state tracking with a browser UI
@@ -106,10 +106,15 @@ it belongs in the spec half, and it is what keeps this file readable at session 
       produced the first complete-and-branchless cards. **Not fixed here** — a distinct defect
       with its own design question, and out of this task's scope. It bears on task 16: closing
       this card to the merged convention makes `tracking-feature-state` the fourth such card.
-- [ ] 16 — Close the card. Frontmatter to this repo's merged convention — `branch: none  # merged
+- [x] 16 — Close the card. Frontmatter to this repo's merged convention — `branch: none  # merged
       via PR #51 (06e7c9d) …; feat/tracking-feature-state deleted 2026-08-19` — naming this
       reopen's PR beside it. Observability judge at `implementation` stage pinning the final HEAD,
       then the PR.
+      ✅ This reopen's PR was **#56** (`fix/tracker-frontmatter-comment`), merged `7fcfd95` on
+      2026-08-20, branch auto-deleted the same day (verified via `gh api .../pulls/56` and the PR
+      timeline's `head_ref_deleted` event, not assumed from merge time). Implementation-stage judge
+      verdict already on record, pinning the pre-merge head: `coding-memory/observability-judge/
+      2026-08-20-fix-tracker-frontmatter-comment.md` @ `9056081`. Frontmatter updated above.
 
 ## Verification
 
