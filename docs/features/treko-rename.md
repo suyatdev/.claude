@@ -33,12 +33,27 @@ Re-derive rather than trusting this paragraph:
 diff "$PROTO/Task Tracker.dc.html" task-tracker/"Task Tracker.dc.html"
 ```
 
-On 2026-08-21 that diff showed the prototype already carrying: the Treko icon in place of the
+On 2026-08-21 that diff was **422 changed lines** over two files of near-identical length (repo
+639 lines, prototype 637). The prototype's side carried: the Treko icon in place of the
 `ph-crosshair` glyph, the sidebar title "Treko", nested feature → story → task rows with Rally
 links, a per-run delete affordance, a re-analyze button, and a retinted accent palette
-(`--color-accent:#38c4e3`). It also carries markup this card does **not** adopt — an agent panel
-(`agentOpen`, `agentMsgs`, `agentH`), a resizable sidebar (`taskTracker.sidebar`) and an expand
-overlay — all of which are card 3 and card 4 work with no backend behind them.
+(`--color-accent:#38c4e3`). Of those, this card adopts **only the icon, the title and the palette**;
+the rest have no backend and the nested rows have no data at all (§"The nested rows are not portable
+yet").
+
+**The two pages are sibling revisions, not superset and subset.** This correction matters because
+the first draft of this card got it backwards. The agent panel, the resizable sidebar and the
+resolved-toggle are **already in this repo's committed page** — they did not arrive with the
+prototype:
+
+```sh
+for k in agentOpen agentMsgs agentH agentQ agentHandleDown resolved; do
+  printf '%-18s %s\n' "$k" "$(grep -c "$k" task-tracker/'Task Tracker.dc.html')"; done
+# 2026-08-21: agentOpen 7, agentMsgs 8, agentH 8, agentQ 5, agentHandleDown 3, resolved 4
+```
+
+So cards 3 and 4 are **backend-only** work behind front-end markup this repo has carried all along.
+Card 1 adopts none of it either way — it changes branding and nothing behavioural.
 
 Two requested behaviours exist in **neither** place, and are named as future work rather than
 silently assumed: renaming a run (`grep -ci 'pencil\|rename'` over the prototype page returns `0`)
@@ -53,17 +68,30 @@ The prototype's `Ledger.dc.html` has no counterpart in this repo at all. It is c
 owned by the Nocturne export, not by this repo, and that this repo's analyzer is a *producer*
 conforming to it. Its stated rule is "read the schema, do not redesign it."
 
-The owner has not moved. Measured in the prototype on 2026-08-21:
+The owner has not moved. A bare occurrence count here would not be a measurement — it changes with
+the file set you count over, and the first draft of this card printed one without saying which set
+it used. The command is therefore part of the claim:
 
-| identifier | occurrences |
-|---|---|
-| `tracker-data.js` | 11 |
-| `window.TRACKER_DATA` | 7 |
-| `taskTracker.*` localStorage keys | 24 across 7 distinct keys |
+```sh
+cd "$PROTO" && grep -o -h 'tracker-data\.js' *.html *.js | wc -l          # top-level pages + scripts
+```
 
-Three of those keys — `taskTracker.sidebar`, `taskTracker.agentH`, `taskTracker.resolved` — are
-**new in the prototype**, added for the very features cards 3 and 4 will build. So the owner is
-actively extending the old namespace, not retiring it.
+| identifier | occurrences | scope |
+|---|---|---|
+| `tracker-data.js` | 11 | `$PROTO/*.html` + `$PROTO/*.js`, top level only |
+| `tracker-data.js` | 8 | `Ledger.dc.html` + `Task Tracker.dc.html` only |
+| `tracker-data.js` | 13 | `grep -ro` over the whole `$PROTO` tree |
+| `window.TRACKER_DATA` | 7 | top level only |
+| `taskTracker.*` keys | 24 over 7 distinct keys | top level only |
+
+All three scopes say the same thing, which is the only thing the decision rests on: **the external
+owner still uses these names, everywhere, with no deprecation in sight.**
+
+Of the 7 keys, three (`sidebar`, `agentH`, `resolved`) are **not** new — they are already in this
+repo's committed page, as §"What already exists" shows. The keys new to the prototype are
+`deletedRuns`, `localRuns` and `queued`, and they arrive with `Ledger.dc.html`, the card-2 page. So
+the owner is **extending** the old namespace with new features, not retiring it — which is the
+inference that matters, and it survives the corrected attribution.
 
 Renaming these on our side would therefore not complete the rename; it would fork us from the design
 source and turn every future export into a manual merge — the exact cost ADR 0023 exists to prevent.
@@ -165,6 +193,55 @@ The probe is `GET /` with a 2s timeout, and it may only distinguish two outcomes
 back* or *it did not*. It must not attempt to identify **which** session owns it — nothing in the
 response can answer that, and a confident-sounding guess there is worse than none.
 
+### The nested rows are not portable yet
+
+The prototype's page renders a three-level feature → story → task list with links out to Rally. It
+is the most visible improvement in that file, and it is the one piece of its markup this card must
+**not** take, because the data behind it does not exist:
+
+```sh
+# every identifier the prototype's nested rows read:
+grep -o 'f\.rally[A-Za-z]*\|f\.stories\|st\.tasks' "$PROTO/Task Tracker.dc.html" | sort | uniq -c
+#   5 f.rally   1 f.rallyId   1 f.rallyUrl   4 f.stories   2 st.tasks
+# and what the producer side actually has:
+grep -c '"rally"\|"rallyId"\|"rallyUrl"\|"stories"\|"story"' task-tracker/tracker-data.js
+#   0        (same for tracker-data.sample.js, and for analyze.py)
+```
+
+Measured 2026-08-21. The analyzer emits no Rally field and no story level — its features contain
+tasks directly. Beware one false positive when re-deriving: a case-insensitive `grep rally` over
+`analyze.py` returns one hit, and it is the word "lite**rally**" in a comment on line 11.
+
+Shipping that markup has exactly two outcomes and both break a promise this card makes. Either the
+section renders empty — a UI element that looks like a measurement and reports nothing, which
+`rules/core-conduct.md` names directly ("never render a metric the payload cannot source") — or
+someone extends the store to fill it, which is the ad-hoc schema extension **ADR 0023 forbids**
+without a `questions[]` entry and a conversation with the export's owner.
+
+Note that this card already leaves out the prototype's per-run delete and re-analyze affordances for
+the same reason: no backend. The nested rows are the same class of thing and get the same treatment.
+Card 3 owns them, and its first task is the schema conversation, not the markup.
+
+### Auto-launch must start the server the way the docs tell a human to
+
+The skill's two "both fail silently" warnings — **never detach the process**, **never redirect
+stderr** — currently govern a command a human types. Auto-launch makes that command something the
+code issues, and a warning aimed at a reader does not bind a caller. Restate it as a requirement:
+
+- The launcher **must** leave the server as a direct child of the Claude session: no `nohup`, no
+  `setsid`, no `&` into a disowned shell, no launchd job. The parent-pid watchdog is what makes the
+  control channel die with the session, and detaching silently disables it — `os.getppid()` never
+  changes again, so the check never fires.
+- The launcher **must not** redirect or capture stderr into a file or `/dev/null`. Every request
+  writes one audit line there naming the outcome, the resolved surface, and whether a keystroke was
+  sent. That stream is the only record of where keystrokes went.
+- Opening the browser **must not** fork a process that becomes the server's new parent. Call
+  `webbrowser.open()` from inside the already-running server process, after a successful bind and
+  before `serve_forever`, so the process tree is unchanged.
+
+This is the same failure class the card is built to avoid, one level removed: a control that is
+present in the code and inert, where neither a code read nor the test suite notices.
+
 ### Serving a `.png`
 
 `server.py` serves a closed list (`STATIC_MANIFEST`) and refuses to start if any entry's extension is
@@ -222,11 +299,36 @@ A launched page that reaches the network at all is a defect, not a cosmetic issu
     `<head>` in `Treko.dc.html` and the per-launch token is injected at request time — never written
     to disk.
 13. **Given** the store written by the renamed tool, **when** the prototype's unmodified
-    `Ledger.dc.html` and `Task Tracker.dc.html` load it over `file://`, **then** both render — proving
-    the data contract was not forked.
+    `Ledger.dc.html` and `Task Tracker.dc.html` load it over `file://`, **then** the contract holds by
+    these four checks, not by eyeball: (a) `window.TRACKER_DATA` is defined and `runs` is a non-empty
+    array; (b) the browser console reports zero uncaught errors; (c) the board's run count and the
+    Ledger's `runCount` both equal `TRACKER_DATA.runs.length`; (d) for the first run, `features`,
+    `branches` and `waves` each render at least one row when the store has at least one. A page that
+    renders its chrome while silently dropping a section passes an eyeball check and fails (c)/(d),
+    which is the failure this criterion exists to catch.
 14. **Given** this card's branch, **when** `docs/decisions/` is listed, **then** exactly one new ADR
     exists recording the rename and the ADR 0023 ruling, and ADRs 0022–0025 are byte-identical to
     their state on `main`.
+15. **Given** `CMUX_SURFACE_ID` is unset, **when** the skill auto-launches, **then** the server exits
+    `2` naming that reason and no browser opens — the pre-rename behaviour, asserted rather than
+    assumed, because auto-launch is what turns this from a rare path into a common one. This is the
+    behaviour §Deferred proposes to change later; pinning it now means that later change has a test
+    to flip rather than a gap to fill.
+16. **Given** the running server, **when** its process tree and file descriptors are inspected,
+    **then** its parent is the Claude session (not `1`), and its stderr is a terminal or the
+    session's captured stream — not a file and not `/dev/null`. Auto-launch must satisfy the same
+    contract the docs impose on a human (§"Auto-launch must start the server the way the docs tell a
+    human to").
+17. **Given** the ported page at this card's merge commit, **when** it is searched for the five
+    identifiers the prototype's nested rows read (`f.rally`, `f.rallyId`, `f.rallyUrl`, `f.stories`,
+    `st.tasks`), **then** none appear. **What this proves and what it does not:** it catches the
+    realistic failure — task 6 copying the prototype's rows verbatim — and nothing more. It is a
+    string match against five names the prototype uses today, so it would not see the same feature
+    re-implemented under different bindings, nor a hardcoded placeholder that reads no data at all.
+    Those need someone to work around task 6 rather than slip past it, so the guard is sized to the
+    mistake, not to the space of all mistakes. Do not cite a pass here as evidence of the broader
+    claim.
+
 
 ## Deferred
 
@@ -238,6 +340,10 @@ Named here so cards 2–5 inherit them explicitly, and so no reader mistakes the
   degraded, no-control-channel page outside cmux — buttons become copy-chips, `reanalyze` still
   works because it sends no keystroke, `POST /command` returns `503` — is agreed follow-up work and
   is not in this card. Decided 2026-08-21.
+- **The nested feature → story → task rows and their Rally links** (card 3). The markup exists in
+  the prototype; the `rally`/`stories` fields it reads exist nowhere on the producer side. Card 3
+  must open the ADR 0023 conversation with the schema owner **before** the markup lands, not after.
+  See §"The nested rows are not portable yet".
 - **Renaming a run** (card 3) exists in neither the repo nor the prototype.
 - **The agent panel's token counter** (card 4) has **no data source today**. The cmux channel is
   write-only: it types characters at a terminal and cannot read a token count back. Any number shown
@@ -267,8 +373,20 @@ No new dependency is added by this card. Adding one would need a separate ask
 ## Tasks
 
 - [ ] 0. Branch `feat/treko-rename` + worktree. **Only after `gate confirmed`.**
-- [ ] 1. **Red first.** Add the failing tests for criteria 5, 6, 7, 8, 9 and 11 against the *current*
-      names, and confirm each fails for the stated reason. Do not touch implementation in this step.
+- [ ] 1. **Red first.** Add the failing tests for criteria 5, 6, 7, 8, 9, 11 and 16 against the
+      *current* names, and confirm each fails for the stated reason. Do not touch implementation in
+      this step.
+
+      **Criteria 15 and 17 are green today and are pinned, not driven.** Write both, record that
+      each passes on the pre-change tree, and say why rather than manufacturing a red state:
+
+      - 15 (no cmux surface → exit `2`) is today's behaviour, pinned so the §Deferred change to it
+        has a test to flip rather than a gap to fill.
+      - 17 (the page contains none of `f.rally`, `f.rallyId`, `f.rallyUrl`, `f.stories`, `st.tasks`)
+        is a **regression guard**, not a driver. Verified 2026-08-21: all five are `0` in
+        `task-tracker/Task Tracker.dc.html` today. It exists to fail the moment task 6 ports more of
+        the prototype's page than branding — which is precisely the mistake this card's own first
+        draft made.
 - [ ] 2. Record the pre-rename suite count from an actual run; paste the output into §Verification.
 - [ ] 3. `git mv task-tracker treko` and `git mv skills/tracking-feature-state skills/treko`. Fix
       `SERVE_ROOT`-relative paths, `conftest.py`, `server_harness.py` and the five test modules until
@@ -277,21 +395,31 @@ No new dependency is added by this card. Adding one would need a separate ask
       (criterion 5) — a silent fallback is the failure mode here.
 - [ ] 5. `git mv "treko/Task Tracker.dc.html" treko/Treko.dc.html`; update `INDEX_FILE` and
       `check_index_injectable`'s message.
-- [ ] 6. Port the prototype page's markup: Treko icon, sidebar title, retinted accent palette, nested
-      rows. Swap the three CDN references back to vendored paths and re-add the two script tags
-      (§Re-vendoring). Copy `treko-icon.png` in; add its manifest row and `.png` type entry.
+- [ ] 6. Port **only the branding** from the prototype page: Treko icon, sidebar title, retinted
+      accent palette. Swap the three CDN references back to vendored paths and re-add the two script
+      tags (§Re-vendoring). Copy `treko-icon.png` in; add its manifest row and `.png` type entry.
+      **Do not port the nested feature → story → task rows or the Rally links** — see
+      §"The nested rows are not portable yet". Porting them is card 3, after the schema conversation.
 - [ ] 7. **Prove no network egress** (criterion 10). A grep for `http` in the page is not sufficient
       evidence — load the served page with the network down, or assert on the request log. State
       which check was run and what it cannot see.
 - [ ] 8. Implement auto-launch: `--open`, no-path repo resolution via `git rev-parse --show-toplevel`,
       first-run-only analysis, and the busy-port probe that reports and exits without opening.
+      `webbrowser.open()` is called from inside the server process after bind, never as a forked
+      child — criterion 16 asserts the resulting process tree and stderr, not the intent.
+      **The repo path is an argv element, never shell-interpolated.** Every `git` and `analyze.py`
+      invocation on this path uses a `subprocess` argument list with `shell=False`; no f-string, no
+      `os.system`, no `shell=True`. A directory name is attacker-controllable in the general case,
+      and the launcher now runs unattended, which is the pairing that turns a quoting bug into
+      command execution. See `writing-secure-code`.
 - [ ] 9. Rewrite `skills/treko/SKILL.md`: `name: treko`, the description, the single launch command,
       and the trigger phrases. Keep the two "both fail silently" warnings about detaching and
       redirecting stderr — auto-launch does not retire either.
 - [ ] 10. `PORTS.md` row, `README.md:62` roadmap entry, `CLAUDE.md` skills-catalog line, `.gitignore`
       comment.
-- [ ] 11. Verify criterion 13 by hand: load the prototype's two unmodified pages against the store
-      this tool writes.
+- [ ] 11. Verify criterion 13: load the prototype's two unmodified pages against the store this tool
+      writes and run all four checks (a)-(d). Record which check caught what; "both rendered" is not
+      an acceptable entry in §Verification.
 - [ ] 12. ADR `docs/decisions/0033-…` — the rename, and why the data contract was exempted. Confirm
       `0033` is still free against `origin/main` **and** every other ref at the moment of writing;
       `0032` is already taken on another branch, `0028` is a gap, and `0030` exists on `origin/main` but
