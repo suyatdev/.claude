@@ -8755,3 +8755,31 @@ to the user this file's own history already put once (move one worktree off `mai
 leave the stray branch checked out since nothing is at risk). **User chose leave-as-is**, matching the
 prior session's answer to the identical collision. Branch and primary worktree both left untouched;
 nothing here is data loss, only a stale branch name on a fully-superseded checkout.
+
+## 2026-08-21 — marker-gate: PR #58 merged; worktree status check on session restore
+
+User asked what work remained on this worktree after a `/clear`. The prior handoff (written
+02:25:00Z) said PR #58 was "open and MERGEABLE" — re-checked live via `gh pr view 58` and found it
+had merged 11 minutes later, at `02:36:14Z`, as merge commit `c523090` into `main`. Working tree is
+clean, `feature/verification-marker-gate` (`c767669`) matches `origin`.
+
+Two real pieces of remaining work, both already named in the feature file itself rather than newly
+discovered:
+
+1. **The gate has not actually gone live yet.** The primary checkout (`/Users/marksuyat/.claude`,
+   branch `main`) is 91 commits behind `origin/main` — it has not pulled PR #58. The feature file's
+   own bootstrap note says the hook "is not armed during development because the harness loads the
+   primary checkout's copy... expect it to arm only after merge, and treat task 14 as the first real
+   test of that." Task 14 so far only verified arming against a *fresh clone* of the pushed branch,
+   not the live primary checkout — that live re-test is still open.
+2. **Seven deliberately-deferred v2 follow-ups**, listed in the feature file's own "Follow-ups this
+   feature deliberately does not do" section: `--status` subcommand, `-i`/`--include` and
+   `--pathspec-from-file` support, renaming `cmux-exec.test.sh` to match `cmux.sh`, bringing
+   `memsearch/tests/` under a sibling layout, a timeout on helper invocations, unifying the four
+   `git commit` lexers, and — flagged as its own separate, ungated piece of work — the `^git`-anchored
+   fail-open confirmed live in `git-guard.sh:89`, `doc-guard.sh:123`, `checkpoint-before-modify.sh:97`.
+
+Housekeeping candidate, not yet acted on: per the branch/worktree cleanup pattern immediately above,
+this worktree's branch now has a merged PR and is a candidate for the same removal treatment PR #52/#45
+got — deferred to the user rather than done unilaterally, since worktree/branch deletion is destructive
+and out of scope for a status question.
