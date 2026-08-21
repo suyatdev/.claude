@@ -91,6 +91,32 @@ exercised; the claim covers the three scopes actually tested.
   carries the move-aside step.
 - The failure mode to watch is a stray `git commit -a` sweeping someone's model choice into the
   repo. No guard covers that; it is a two-line revert when it happens.
+- **The committed file is a snapshot of one machine, and four values drifted from the last tracked
+  version without anyone noticing.** Found by the observability judge, which diffed against
+  `9cc792f^` — a comparison neither the card nor this ADR had made, because both checked only the
+  keys they expected to be interesting. Confirmed independently before recording:
+
+  | Key | `9cc792f^` | committed now | |
+  |---|---|---|---|
+  | `permissions.defaultMode` | `bypassPermissions` | `default` | a **tightening**, and the best accidental side effect here — a clone no longer boots in bypass-permissions mode |
+  | `remoteControlAtStartup` | `false` | `true` | a relaxation, kept deliberately as of this ADR |
+  | `model` | `claude-fable-5[1m]` | `opus[1m]` | intended |
+  | `inputNeededNotifEnabled` | *(absent)* | `false` | trivial |
+
+  `skipDangerousModePermissionPrompt: true` also ships as the boot default. It was already tracked
+  at that value before `9cc792f`, so it is a restoration rather than a new decision — but it is
+  worth knowing that a fresh clone starts with the dangerous-mode confirmation suppressed.
+
+  The hook wiring itself did **not** drift: 28 hook commands across 12 events before and after.
+
+  **Generalisable lesson:** re-tracking a file that was untracked for a while commits every change
+  made in the interval, not just the one you are making. Diff against the last tracked version, not
+  only against the live file.
+- **There is still no runtime signal that the hooks failed to register**, and structurally there
+  cannot be one via hooks — if `settings.json` is missing, the hook that would report its absence
+  is unregistered too. The three registration suites prove the repo's checkout is correct, not that
+  any given machine's live file is. This decision is the largest available improvement (switching a
+  guard off is a reviewable diff again) and it does not close that gap.
 - `~/.claude/.claude/settings.local.json` — project scope, already gitignored by `.gitignore:78`
   (`/.claude/`), already holding `permissions.allow` grants and `outputStyle` — is untouched. It
   remains the right home for preferences that only apply to sessions rooted in this repo, and the

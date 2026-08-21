@@ -306,7 +306,23 @@ file; they are replaced, not merely reworded.
       untracked `~/.claude/settings.json` unless the bytes match exactly, and the `$HOME` rewrite
       guarantees they will not. Document the move-aside step.
       In `SETUP.md` § 3, with the `diff` reconciliation line.
-- [ ] 12. Observability judge, then draft PR.
+- [x] 12. Observability judge, then draft PR.
+      Verdict `risk: medium · confidence: high` at `c974c6c` (`coding-memory/observability-judge/`,
+      ledger row appended +1/−0). Draft PR **#63**. The judge reproduced every headline number
+      independently and rebuilt an `origin/main` checkout to confirm the red baseline was real.
+      It found one thing this card had missed: nobody diffed the committed file against the **last
+      tracked** version (`9cc792f^`), only against the live one. Four values had drifted with the
+      machine snapshot — `permissions.defaultMode` `bypassPermissions`→`default` (a tightening),
+      `remoteControlAtStartup` `false`→`true`, `model`, `inputNeededNotifEnabled`. Verified
+      independently, then recorded in ADR 0032. Hook wiring did not drift: 28 commands, 12 events,
+      both sides.
+- [ ] 13. Open concerns carried on PR #63, not silently closed:
+      - no runtime signal that hooks failed to register — structurally impossible via hooks, since
+        a missing `settings.json` also unregisters the hook that would report it
+      - `policySettings` merge behaviour never exercised
+      - commit `44948e9` (the `judge-ledger-commitability` card) rides along in the diff, inherited
+        from the stale local `main` this branch was cut from; docs-only and byte-identical, so no
+        conflict, but disclosed in the PR body rather than rebased out
 
 ## Risks
 

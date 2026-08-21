@@ -18,6 +18,7 @@
 
 # Backup files
 settings.json.bak
+settings.json.mine
 backups/
 
 # settings.json is deliberately TRACKED: it is the only thing that registers the hooks in
