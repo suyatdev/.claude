@@ -236,20 +236,49 @@ with `[ -e ] && exit 1` on the way in and an `EXIT` trap on the way out.
 Tasks 3–8 were rewritten on 2026-08-21 when the split was dropped. The originals assumed a second
 file; they are replaced, not merely reworded.
 
-- [ ] 3. Bring the live `~/.claude/settings.json` into the worktree unchanged, then rewrite the ten
+- [x] 3. Bring the live `~/.claude/settings.json` into the worktree unchanged, then rewrite the ten
       orca entries from `'/Users/marksuyat/.orca/…'` to `"$HOME/.orca/…"`. **Double quotes** — the
       current single quotes suppress expansion. Nothing else about the file changes; `model` and
       `effortLevel` stay.
-- [ ] 4. Confirm the rewritten orca hook still fires before trusting the substitution. A silent
+      Copied byte-identical first (`sha256 8b633a53…` on both). The substitution replaced **40**
+      occurrences, not 10 — the path appears four times per entry (`-f`, `-r`, `-x`, then the
+      invocation). A key-by-key comparison of the parsed JSON against the live file reports zero
+      keys added, zero removed, and exactly 10 values changed — the 10 command strings, which now
+      collapse to **one** distinct string.
+- [x] 4. Confirm the rewritten orca hook still fires before trusting the substitution. A silent
       no-op looks identical to a hook that was never registered.
-- [ ] 5. `.gitignore`: remove line 23 `settings.json`, then `git add settings.json`. Confirm which
+      Run through Claude Code's own hook runner, not `sh -c`: the rewritten guard reported
+      `ORCA-REACHED`, a control hook of identical shape pointing at a non-existent file reported
+      `CONTROL-MISSED`, and a third printed `HOME-IS=/Users/marksuyat`. The control is what makes
+      the first result mean something. Reproduce: `.probe-tmp/home-expand.sh`.
+- [x] 5. `.gitignore`: remove line 23 `settings.json`, then `git add settings.json`. Confirm which
       order actually works rather than guessing — `git add -f` while still ignored is the fallback.
-- [ ] 6. **Assert no absolute path survives** in the tracked file:
+      Plain `git add` sufficed once the line was gone (`git check-ignore -v settings.json` → exit 1,
+      no match). `-f` was not needed. The removed line is replaced by a comment saying why the file
+      is tracked, so the next reader does not re-ignore it.
+- [x] 6. **Assert no absolute path survives** in the tracked file:
       `command grep -c '/Users/' settings.json` → 0. Use `command grep`; the bare `grep` here is
       ugrep with `--ignore-files` and honours `.gitignore`.
-- [ ] 7. Confirm the committed `model` is the one a fresh clone should boot on — expected
+      **0**, measured against the staged blob (`git show :settings.json | command grep -c '/Users/'`),
+      not the working file.
+- [x] 7. Confirm the committed `model` is the one a fresh clone should boot on — expected
       `opus[1m]` / `xhigh`. Read it out of the staged blob, not out of this card.
-- [ ] 8. Three suites green; then the full suite — expect **817/0**. Record counts run, not read.
+      Staged blob: `model = opus[1m]`, `effortLevel = xhigh`, 12 hook events registered.
+- [x] 8. Three suites green; then the full suite — expect **817/0**. Record counts run, not read.
+      Three suites: `feature-sync-guard` **30/0** (was 29/1), `memsearch-nudge` **27/27** (was
+      26/27), `slim-session-start` **29/29** (was 28/29). Exactly +3 pass / −3 fail.
+      **The 817 figure could not be reproduced and should not be quoted.** There is no committed
+      full-suite runner; 817 was summed by hand before the 27 merged commits landed. Measured here
+      with a runner that prints every file it ran (`.probe-tmp/run-all-tests.sh`):
+      - 19 `*.test.sh` suites — **1198 passed, 0 failed**
+      - 5 `hooks/lib/*.test.py` — **319 passed, 0 failed**
+      - `memsearch` pytest, repo default config — **104 passed, 0 failed, 23 deselected**
+        (`pyproject.toml:26` sets `addopts = "-m 'not golden and not measurement'"`)
+      - those 23 run explicitly — **2 passed, 21 failed**, every failure
+        `index database is at schema version 0, this build needs …`. **Pre-existing, not this
+        branch**: the identical `21 failed, 2 passed` reproduces in the `rule-surface-trim`
+        worktree, which carries the same post-PR-#60 memsearch code and none of these changes.
+        It is PR #60's documented post-merge migration pass.
 - [ ] 9. Fix `SETUP.md:28` (claims the file is tracked — true again once this lands) and
       `README.md:42` ("Hooks, enabled plugins, and TUI preferences" — now accurate as written,
       re-read before editing).
