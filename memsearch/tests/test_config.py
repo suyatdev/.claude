@@ -48,3 +48,28 @@ def test_is_excluded():
     assert is_excluded(
         Path("/x/Snatch-Bracket/backend/lib/site-packages/fastapi/LICENSE.md"),
         cfg)
+
+
+def test_real_config_weights_cover_every_known_source_type():
+    from memsearch.config import SOURCE_TYPES
+    cfg = load_config(REAL_CONFIG)
+    assert set(SOURCE_TYPES) <= set(cfg.weights)
+    assert cfg.weights["judge_doc"] == 1.2
+
+
+def test_weights_missing_a_known_source_type_is_refused(tmp_path):
+    """A missing key must fail at load with a named message, not surface as a
+    KeyError halfway through a query (ADR 0030)."""
+    p = write_cfg(tmp_path, weights={
+        "curated_doc": 1.5, "repo_doc": 1.2,
+        "transcript_digest": 1.0, "archive_doc": 1.0})
+    with pytest.raises(ConfigError, match="judge_doc"):
+        load_config(p)
+
+
+def test_non_numeric_weight_is_refused(tmp_path):
+    p = write_cfg(tmp_path, weights={
+        "curated_doc": "heavy", "repo_doc": 1.2, "judge_doc": 1.2,
+        "transcript_digest": 1.0, "archive_doc": 1.0})
+    with pytest.raises(ConfigError, match="curated_doc"):
+        load_config(p)
