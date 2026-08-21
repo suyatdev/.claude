@@ -4,8 +4,9 @@
 #
 # Two deterministic guards an instruction alone cannot hold under momentum:
 #   1. Default-branch commit guard: blocks `git commit` on main/master unless
-#      every staged file is CODING_MEMORY.md, under coding-memory/, or a MARKDOWN
-#      file under docs/ (the brainstorm-then-branch and documentation exceptions).
+#      every staged file is a MARKDOWN file under docs/ (the documentation
+#      exception).  CODING_MEMORY.md and coding-memory/ were permitted here until
+#      that tree was retired -- docs/features/rule-surface-trim.md.
 #      The docs/ exception is deliberately by file type, not by directory: an
 #      executable dropped under docs/ must not inherit a free ride onto main.
 #      doc-guard.sh deliberately uses the BROADER `docs/*` for the same directory.
@@ -372,9 +373,8 @@ if has_fact COMMIT && on_main; then
     [ -z "$f" ] && continue
     case "$f" in
       # A `..` COMPONENT means the string matched here and the file git will
-      # actually commit are two different things: `coding-memory/../src/app.sh`
-      # satisfies `coding-memory/*`, and `docs/../notes.md` satisfies `docs/*.md`
-      # from anywhere in the repo. The hook may only judge what it has read, so a
+      # actually commit are two different things: `docs/../notes.md` and
+      # `docs/../src/app.md` both satisfy `docs/*.md` from anywhere in the repo. The hook may only judge what it has read, so a
       # traversing path is refused rather than resolved — resolving it would mean
       # answering "relative to which directory?", which is Defect C's question and
       # is not settled here. A `..` inside a file NAME (`docs/v1..v2.md`) traverses
@@ -382,12 +382,12 @@ if has_fact COMMIT && on_main; then
       ..|../*|*/../*|*/..) allowed=0 ;;
       # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
       # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
-      CODING_MEMORY.md|coding-memory/*|docs/*.md) ;;
+      docs/*.md) ;;
       *) allowed=0 ;;
     esac
   done <<< "$files"
   if [ "$allowed" -ne 1 ]; then
-    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (CODING_MEMORY.md, coding-memory/*, docs/*.md).\n' "$(checkout_desc "$checkout_branch")" >&2
+    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (docs/*.md).\n' "$(checkout_desc "$checkout_branch")" >&2
     printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2
     printf '%s\n' "$(remedy_line commit "$checkout_branch")" >&2
     exit 2

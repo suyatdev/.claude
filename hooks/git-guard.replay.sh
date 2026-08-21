@@ -146,6 +146,8 @@ fi
 REPO="$TMP/repo"; mkdir -p "$REPO"
 git -C "$REPO" init -q -b main
 git -C "$REPO" config user.email t@e.com; git -C "$REPO" config user.name t
+# CODING_MEMORY.md stays a FIXTURE file (the matrix still names it) but is no
+# longer a PERMITTED path on main -- docs/features/rule-surface-trim.md.
 printf 'seed\n' > "$REPO/CODING_MEMORY.md"
 mkdir -p "$REPO/src" "$REPO/docs"
 printf 'v1\n' > "$REPO/src/tracked.sh"; printf 'v1\n' > "$REPO/docs/tracked.md"
@@ -182,6 +184,9 @@ CMDS=(
   'git commit -m msg -- docs/tracked.md'
   'git commit -m msg -- src/tracked.sh'
   'git commit -m msg -- docs/tracked.md src/tracked.sh'
+  # These two are EXPECTED to report stricter against any base predating
+  # docs/features/rule-surface-trim.md, which removed CODING_MEMORY.md and
+  # coding-memory/* from the main-branch allowlist. See EXPECTED_STRICTER below.
   'git commit -m msg -- CODING_MEMORY.md'
   'git commit -m msg -- coding-memory/x.jsonl'
   'git commit -m msg -- docs/tool.sh'
@@ -223,6 +228,11 @@ CMDS=(
   'git commit -m a -- docs/tracked.md && git commit -a -m b'
   'git commit -m a -- docs/tracked.md && git commit -m b -- src/tracked.sh'
   'git commit -m a -- docs/tracked.md && git commit -m b -- docs/tracked.md'
+  # Blocked on BOTH sides, so it does NOT diverge -- but the REASON changed with
+  # docs/features/rule-surface-trim.md: it used to be the `..` arm rescuing a
+  # string that satisfied `coding-memory/*`, and is now simply a prefix that is
+  # not allowlisted at all. `docs/../notes.md` below is what exercises the `..`
+  # arm now.
   'git commit -m msg -- coding-memory/../src/tracked.sh'
   'git commit -m msg -- docs/../notes.md'
   'git commit -m msg -- ../docs/tracked.md'
@@ -232,10 +242,28 @@ CMDS=(
   'echo "remember to git commit later"'
 )
 
+# Commands this branch deliberately began BLOCKING that the base allowed. Without
+# this list an intended narrowing is indistinguishable from a regression: both
+# just print `stricter`. Each entry needs a reason in the matrix above.
+#   docs/features/rule-surface-trim.md -- retired CODING_MEMORY.md and
+#   coding-memory/* from the main-branch documentation allowlist.
+EXPECTED_STRICTER=(
+  'git commit -m msg -- CODING_MEMORY.md'
+  'git commit -m msg -- coding-memory/x.jsonl'
+)
+
+is_expected_stricter() {
+  local e
+  for e in "${EXPECTED_STRICTER[@]}"; do
+    [ "$1" = "$e" ] && return 0
+  done
+  return 1
+}
+
 # Every case where main BLOCKS and the candidate ALLOWS is a relaxation. Each one
 # has to be inspected: a relaxation is intended ONLY where the commit names its own
 # documentation paths. Printed once per distinct command, not once per state.
-relaxed=0; stricter=0; same=0
+relaxed=0; stricter=0; same=0; unexpected=0
 : > "$TMP/relaxed"
 for state in empty-clean empty-docs empty-src empty-both staged-docs staged-src; do
   for c in "${CMDS[@]}"; do
@@ -244,7 +272,13 @@ for state in empty-clean empty-docs empty-src empty-both staged-docs staged-src;
     if [ "$a" = 2 ] && [ "$b" = 0 ]; then
       relaxed=$((relaxed+1)); printf '%s\n' "$c" >> "$TMP/relaxed"
     elif [ "$a" = 0 ] && [ "$b" = 2 ]; then
-      stricter=$((stricter+1)); printf 'stricter [%s] %s\n' "$state" "$c"
+      stricter=$((stricter+1))
+      if is_expected_stricter "$c"; then
+        printf 'stricter (EXPECTED, rule-surface-trim) [%s] %s\n' "$state" "$c"
+      else
+        unexpected=$((unexpected+1))
+        printf 'stricter (UNEXPECTED -- inspect this) [%s] %s\n' "$state" "$c"
+      fi
     else
       same=$((same+1))
     fi
@@ -252,5 +286,5 @@ for state in empty-clean empty-docs empty-src empty-both staged-docs staged-src;
 done
 printf 'DISTINCT COMMANDS base=%s (%s) BLOCKS and %s ALLOWS:\n' "$BASE_SHA" "$BASE_REV" "$UNDER_TEST"
 sort -u "$TMP/relaxed" | sed 's/^/  /'
-printf '\nbase=%s (%s) — %s commands x 6 states = %s pairs: %s identical, %s stricter, %s relaxed (%s distinct commands)\n' \
-  "$BASE_SHA" "$BASE_REV" "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)"
+printf '\nbase=%s (%s) — %s commands x 6 states = %s pairs: %s identical, %s stricter (%s unexpected), %s relaxed (%s distinct commands)\n' \
+  "$BASE_SHA" "$BASE_REV" "${#CMDS[@]}" "$((relaxed+stricter+same))" "$same" "$stricter" "$unexpected" "$relaxed" "$(sort -u "$TMP/relaxed" | grep -c . || true)"
