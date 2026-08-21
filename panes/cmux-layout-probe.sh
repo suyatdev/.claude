@@ -7,7 +7,7 @@
 # on, prints a P1..P7 findings report, captures the scratch workspace tree as
 # the committed test fixture, and cleans up.
 #
-# Findings are recorded in coding-memory/branches/pane-layout-v2.md. This
+# Findings are recorded in docs/features/pane-layout-v2.md. This
 # script is EVIDENCE-GATHERING, not a contract — when cmux changes, update the
 # expectations here and re-record the findings rather than trusting the old ones.
 set -u
