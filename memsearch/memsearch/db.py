@@ -99,7 +99,7 @@ def _init_schema(conn: sqlite3.Connection, embed_model: str, embed_dim: int) -> 
         if is_fresh:
             # PRAGMA takes no bound parameter; USER_VERSION is a module
             # constant, never user input — the same reasoning as the inlined
-            # KNN LIMIT at search.py:44-45.
+            # KNN LIMIT in search.py's `search`.
             conn.execute(f"PRAGMA user_version = {USER_VERSION}")
 
 

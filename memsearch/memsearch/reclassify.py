@@ -58,8 +58,9 @@ def run_reclassify(cfg: Config, walker=None, progress=print) -> dict:
             try:
                 path.stat()   # the entry may have gone since enumeration
             except OSError as e:
-                # One bad source never kills the run — index.py:217-219's
-                # contract. Recorded, and the exit code carries it out.
+                # One bad source never kills the run — `_index_one`'s
+                # record-and-continue contract. Recorded, and the exit code
+                # carries it out.
                 skipped.append(f"{key}: {e}")
                 progress(f"SKIPPED {key}: {e}")
                 continue

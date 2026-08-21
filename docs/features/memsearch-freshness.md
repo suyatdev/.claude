@@ -38,7 +38,8 @@ branch: worktree-fix+memsearch-r9-retrieval-quality
 > **+186** by this branch's own insertion of the Task 5 results section, within a day of being
 > written — the remedy heading moved `2350 → 2536` between `b8e0aff^` and `b8e0aff` — so they now
 > land in unrelated prose. `:315-331` was never shifted by that insertion, being above it, and was
-> simply imprecise from the start: at `b8e0aff` it opened twelve lines above R9, in the middle of R8.
+> simply imprecise from the start: at `b8e0aff` it opened twelve lines above R9, in the middle of R7
+> (`:315` is R7's uninstall-is-first-class prose; R8's heading is `:320`).
 > Positional citations into a file this long survive neither its edits nor their own transcription.
 
 # memsearch freshness — refresh trigger and staleness reporting
@@ -1770,11 +1771,16 @@ $ shasum -a 256 rows-accepted.txt rows-legacy.txt
 12070fbb8f270112fbdead0b69c9a6051917f1749e2e2b1eeb21c6c1d7f20dd4  rows-legacy.txt
 ```
 
-So the substitution changed which runs are *kept*, never what a run *measures* — and the discarded
-run, had anyone read its table, carried the same six rows and would have selected the same 1.2. The
-committed script was not edited to obtain this: `git diff --quiet HEAD --
-memsearch/tests/sweep_judge_weight.py` passes. What is **not** claimed: the legacy re-run's exit code
-was not captured, only its printed verdict.
+So the substitution changed which runs are *kept*, never what a run *measures*. The committed script
+was not edited to obtain this: `git diff --quiet HEAD -- memsearch/tests/sweep_judge_weight.py`
+passes.
+
+What is **not** claimed, and does not belong under that heading: the legacy re-run's exit code was
+not captured, only its printed verdict — and that the **original** discarded run carried these same
+six rows and would have selected the same 1.2 is **inference, not observation**. Its table was never
+captured and never can be. The inference rests on the reconstruction reaching the same verdict from
+the same copy under the same restored predicate, which is a strong reason to believe it and not a
+record of it.
 
 #### The sweep
 
@@ -1814,6 +1820,28 @@ still-failing targets keep improving below the adopted value (`verification-mark
 hits) without ever taking the top rank back from `memsearch-freshness.md`: below 1.2 the extra
 movement buys hits, not passes.
 
+#### The 1.5 baseline is not strictly pre-branch behaviour
+
+ADR 0030 describes the sweep's 1.5 baseline as "equal to `curated_doc`, i.e. today's behaviour" and
+"behaviourally identical to today." **That is inaccurate for 153 chunks.** The 21 judge directories
+under the two configured repo roots were `repo_doc` — weight **1.2** — before this branch, not
+`curated_doc` 1.5; the reclassify transcript above records them on their own line (`repo_doc ->
+judge_doc: 21 files, 153 chunks`), and `test_judge_directory_files_get_their_own_source_type`
+(`memsearch/tests/test_index.py:411-422`) pins that exposure deliberately. At the baseline row those
+153 chunks scored 25% above their true prior weight, so the baseline row is not strictly pre-branch
+behaviour and the ADR's sentence overstates what it is.
+
+**The adoption is unaffected, and that was verified — by the final whole-branch review, not by this
+task.** That review ran the counterfactual against this same sweep copy: all five R9 queries at 1.5
+and at 1.2, tagging every repo-root `judge_doc` hit, and **zero** appear in any target's top-6 at
+either weight. The inflation therefore displaced nothing at `k=6`, the 2-of-5 baseline stands, and
+that run reproduced the table above exactly. This paragraph records the review's result; it is not a
+control run here, and no leave-one-out arm is claimed.
+
+⚠️ **ADR 0030 still carries the uncorrected sentence.** The ADR is deliberately not edited — it has
+passed its compliance gate — so a reader who meets the baseline description there, rather than here,
+does not meet this correction with it.
+
 #### R9 after the change — still failing, bar untouched
 
 `pytest -m measurement`, pointed at the copy: **2 failed, 5 passed, 119 deselected**. Of R9's five
@@ -1852,8 +1880,11 @@ failures at 1.5 through 1.0 alike, so no weight in the swept range dislodges it.
 ⚠️ **And this section did not measure itself — the two blocking chunks are Task 8b's own text, from
 before this commit existed.** The indexed body of `memsearch-freshness.md` is the primary checkout's
 copy at `content_hash f21c53f0…`, `indexed_at 2026-08-20T01:41:24+00:00` — both earlier than commit
-`b8e0aff`, and the hash still matches that file on disk byte-for-byte. None of this section's 186
-inserted lines are in the corpus at all; that copy is 113 chunks spanning `:1-2390`, its full length.
+`b8e0aff`, and the hash still matches that file on disk byte-for-byte. None of the lines `b8e0aff`
+added here are in the corpus at all — **186** in the results-section hunk with no deletions, **189
+insertions against 3 deletions** across the whole commit (`git show --numstat b8e0aff --
+docs/features/memsearch-freshness.md`); 186 is the section's insertion count and the file-wide *net*,
+never the commit's insertion count. That copy is 113 chunks spanning `:1-2390`, its full length.
 In *its* numbering, `:1547-1573` and `:1574-1583` fall between
 `### Task 8b — R9 baseline, measured pre-R10` (`:1515`) and `### Task 9` (`:1584`) — they are Task 8b's
 own per-query rank tables, `:1547-1573` covering `falsifier-base-pin`, `git-guard-empty-index` and
@@ -1868,8 +1899,12 @@ prints each query above its rank table (`test_measurement_queries.py:204`). Chec
 `:1547-1573` also holds the queries of `falsifier-base-pin` and `git-guard-empty-index`, both of which
 pass — so containment predicts nothing by itself, and no control was run to establish why these two
 chunks take rank 1. None is claimed. The self-measurement worry is nonetheless answered for this
-run: the block predates the commit. It becomes live at the **next** index run, which will see these
-186 lines for the first time.
+run: the block predates the commit. It becomes live at the **next** index run, which will see for the
+first time every line this branch has added to this file since the indexed copy — **the derivation,
+not a constant**: `git diff --numstat main...HEAD -- docs/features/memsearch-freshness.md`. Any
+literal here goes stale within the branch that writes it; the earlier draft said "186" and `69f13a7`
+had already added 68 more lines to this section (104 insertions against 17 deletions file-wide) by
+the time it was committed.
 
 ⚠️ **Not attributed.** Why those two targets gain hits as the weight falls (`verification-marker-gate`
 1 → 2 → 3) is *not* established here: per-rank identity was captured only for the 1.2 row, so which
