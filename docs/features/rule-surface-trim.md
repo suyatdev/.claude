@@ -293,9 +293,29 @@ Task 10's file list omitted the skill. Rewritten: GitHub is the record of PR *st
 
 Round 2 found a **fourth** instance (`hooks/README.md`, three places, one of them a rationale
 paragraph arguing *against* this branch's own change). Four instances of one class means the class
-is the finding, so the surface was enumerated rather than patched again:
-`grep -rln "CODING_MEMORY\|coding-memory"` over `*.md`/`*.sh`/`*.py`/`*.json`, excluding the retired
-tree itself — **569 hits across 65 files.** Classified:
+is the finding, so the surface was enumerated rather than patched again.
+
+The derivation, so the figure can be re-checked instead of trusted — run it, do not copy the number:
+
+```sh
+git grep -n 'CODING_MEMORY\|coding-memory' -- '*.md' '*.sh' '*.py' '*.json' \
+  ':!coding-memory/**' ':!CODING_MEMORY.md'
+```
+
+At `becfca1`: **568 hits across 79 files** (`wc -l`; `cut -d: -f1 | sort -u | wc -l`).
+At `09d8cc9`, before this round's fix: 569 across 80.
+
+> ⚠️ **The figures first written here — "569 hits across 65 files" — were wrong, and the stated
+> derivation did not produce them.** `569` was the *pre-fix* count, already stale when written; `65`
+> matches no run at either commit. Two causes, both worth keeping: `grep -rln` prints *files*, so it
+> cannot yield a hit count at all, and `grep` in this environment is **shadowed by a shell function
+> that runs `ugrep --ignore-files`** (`shell-snapshots/…`), which honours `.gitignore` — so it
+> silently skipped the retired tree *by accident*, not by the `--exclude-dir` the text claimed.
+> Use `git grep`, `command grep`, or `find | xargs grep`; the shadowed `grep` cannot be audited from
+> the command line you wrote down. Round 3 caught this; the wrong count also reached `89e0407`'s
+> commit message, which cannot be edited.
+
+Classified:
 
 | File | Verdict |
 |---|---|
@@ -309,6 +329,7 @@ tree itself — **569 hits across 65 files.** Classified:
 | `docs/decisions/*`, `docs/features/*` (other cards), `docs/superpowers/*` | **HISTORICAL** — dated records of what was true then. Left deliberately. |
 | `hooks/*.test.sh`, `hooks/lib/*.test.py` | **FIXTURES** — they assert the retired paths are now *blocked* or *ignored*. Left; changing them would delete the coverage. |
 | `hooks/git-guard.sh:8`, `hooks/phase-guard.sh` case arm | **HISTORICAL COMMENT / defensive** — deliberate. Left. |
+| `README.md:45,67`, `rules/gates.md:5,12`, `hooks/judge-guard.sh:34,39`, `hooks/git-guard.replay.sh` (10 lines), `hooks/feature-sync-guard.sh:118`, `hooks/handoff/slim-session-start.sh:10`, `skills/managing-session-memory/SKILL.md:70,72,74,88`, `skills/setting-up-a-new-project/SKILL.md:75`, `skills/running-the-compliance-judge/tests/README.md:13` | **CORRECT** — nine live files the first version of this table omitted entirely, found by round 3. Every hit re-read individually: each either describes the retirement accurately (past tense, or naming the two ledgers that remain tracked), is a replay fixture, or points at the still-tracked `verdicts.jsonl`. None is a false pointer. Listed so the table is a census rather than a sample. |
 
 The lesson, recorded because it recurred four times: **when a second instance of one class appears,
 enumerate the surface; do not patch the instance and assert the rest is clean.** Each of rounds
@@ -344,6 +365,17 @@ Also fixed:
 - The judge verified 460 of the 737 cases; it did not run `test-marker-guard` (248) or
   `slim-session-start` (29). Both were run by the controller in the merged tree — this is the
   judge's coverage limit, not an unverified claim.
+- **The always-on surface grew, on a branch named "trim" — asked and decided, not a side effect.**
+  Measured `wc -w` over `CLAUDE.md` + `rules/core-conduct.md` + `rules/gates.md` at `origin/main`
+  vs. this branch: **2,809 → 3,007 words, +198 (+7.0%)** — `core-conduct` +157, `gates` +41,
+  `CLAUDE.md` unchanged. `gates`'s share is not optional: it documents the narrowed `git-guard`
+  allowlist and the `phase-guard` exemptions this branch created, and a gate stub that describes a
+  guard incorrectly is worse than a longer one. `core-conduct`'s share is the "never render a metric
+  the payload cannot source" rule plus the parenthetical recording why the always-on set cannot
+  simply be made conditional. **Round 3 put the case for the first one better than the argument
+  did:** the defect it found was a fabricated count inside this card's own retraction of a
+  fabricated claim. Both kept, deliberately — the trim this branch delivers is one duplicated record
+  tree and ~61k tracked lines, not a smaller prompt.
 
 ### Known gaps, stated rather than closed
 
