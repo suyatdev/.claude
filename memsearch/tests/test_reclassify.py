@@ -167,6 +167,21 @@ def test_cli_reclassify_reports_and_exits_zero(tmp_path, capsys):
     assert "walked=2" in out and "unchanged=1" in out
 
 
+def test_cli_reclassify_exits_non_zero_when_an_entry_is_skipped(tmp_path, monkeypatch):
+    cfg_path = str(tmp_path / "config.json")
+    cfg = corpus_cfg(tmp_path)          # writes tmp_path/config.json
+    seed_pre_0030(cfg)
+    real_iter_docs = reclassify._iter_docs
+
+    def walker(c):
+        return [(tmp_path / "gone.md", ".claude", ".claude", "curated_doc"),
+                *real_iter_docs(c)]
+
+    monkeypatch.setattr(reclassify, "_iter_docs", walker)
+    rc = cli.main(["--config", cfg_path, "index", "--reclassify"])
+    assert rc == 1
+
+
 def test_cli_reclassify_and_full_are_mutually_exclusive(tmp_path):
     cfg = corpus_cfg(tmp_path)
     with pytest.raises(SystemExit) as e:
