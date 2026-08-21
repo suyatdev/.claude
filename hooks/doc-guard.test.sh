@@ -93,8 +93,10 @@ run_case "1 file over the line threshold, CHAINED -> block" 2 'git add -- src/f1
 # ---------------------------------------------------------------------------
 # Satisfied, or not substantial enough to care about
 # ---------------------------------------------------------------------------
-stage src/f1.sh src/f2.sh src/f3.sh CODING_MEMORY.md
+stage src/f1.sh src/f2.sh src/f3.sh docs/decisions/adr.md
 run_case "docs ride along, CHAINED -> allow"                0 'git add -A && git commit -m msg'
+stage src/f1.sh src/f2.sh src/f3.sh CODING_MEMORY.md
+run_case "CODING_MEMORY.md alone no longer satisfies has_doc -> block" 2 'git add -A && git commit -m msg'
 stage src/f1.sh src/f2.sh src/f3.sh docs/note.md
 run_case "docs/ ride along, CHAINED -> allow"               0 'git add -A && git commit -m msg'
 stage src/f1.sh src/f2.sh src/f3.sh
