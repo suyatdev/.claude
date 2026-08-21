@@ -10,6 +10,9 @@ decision: `../docs/decisions/0002-sqlite-over-qdrant.md`.
 
     ~/.claude/memsearch/bin/memsearch index              # incremental (hash-diff)
     ~/.claude/memsearch/bin/memsearch index --full       # rebuild (model change)
+    ~/.claude/memsearch/bin/memsearch index --reclassify # re-type stored chunks from the source
+                                                          # enumeration (no re-embed); exits 1 if
+                                                          # any source was skipped
     ~/.claude/memsearch/bin/memsearch query "why did we choose X" \
         [--repo R] [--type decision|episodic|doc] [--since 2026-01-01] [-k 6]
     ~/.claude/memsearch/bin/memsearch rename OldRepo NewRepo   # zero re-embed
