@@ -1822,11 +1822,12 @@ movement buys hits, not passes.
 
 #### The 1.5 baseline is not strictly pre-branch behaviour
 
-ADR 0030 describes the sweep's 1.5 baseline as "equal to `curated_doc`, i.e. today's behaviour" and
-"behaviourally identical to today." **That is inaccurate for 153 chunks.** The 21 judge directories
-under the two configured repo roots were `repo_doc` — weight **1.2** — before this branch, not
-`curated_doc` 1.5; the reclassify transcript above records them on their own line (`repo_doc ->
-judge_doc: 21 files, 153 chunks`), and `test_judge_directory_files_get_their_own_source_type`
+ADR 0030 describes the sweep's 1.5 baseline as "equal to `curated_doc`, i.e. today's effective
+behaviour" and "behaviourally identical to today." **That is inaccurate for 153 chunks.** The 21
+judge directories under the two configured repo roots were `repo_doc` — weight **1.2** — before
+this branch, not `curated_doc` 1.5; the reclassify transcript above records them on their own line
+(`repo_doc -> judge_doc: 21 files, 153 chunks`), and
+`test_judge_directory_files_get_their_own_source_type`
 (`memsearch/tests/test_index.py:411-422`) pins that exposure deliberately. At the baseline row those
 153 chunks scored 25% above their true prior weight, so the baseline row is not strictly pre-branch
 behaviour and the ADR's sentence overstates what it is.

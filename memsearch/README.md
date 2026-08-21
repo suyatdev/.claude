@@ -21,8 +21,9 @@ decision: `../docs/decisions/0002-sqlite-over-qdrant.md`.
 
 ## One-time step after this change merges
 
-ADR 0030 changes the stored schema and the stored source types, and neither
-converts itself. Run both, in this order:
+ADR 0030 changes the stored schema and the stored source types. The schema
+migrates on the next `index` run; the stored source types never re-type on their
+own. Run both, in this order:
 
     ~/.claude/memsearch/bin/memsearch index              # 1. migrates the database
     ~/.claude/memsearch/bin/memsearch index --reclassify # 2. re-types the judge documents
