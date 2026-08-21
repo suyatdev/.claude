@@ -2758,6 +2758,14 @@ reason this row is a pin and not a footnote.
       (`MSG_STALE_*` instead of `MSG_BAD_MARKER`), never an allow. And the marker read's
       `errors="replace"` has no test of its own; an undecodable byte reaches a field check
       today, but nothing would notice if the argument were dropped.
+      ✅ **One more gap closed post-16's judge round (below): `TEST_EXEMPT` cannot rescue a
+      missing entry point, and that claim was only hand-verified until now.** The implementation
+      stage judge flagged that a manual repro protects nothing across a refactor. Added
+      `test-marker-guard.test.sh`'s "TEST_EXEMPT cannot rescue a missing entry point" case
+      (`stub_gate ... OMIT REAL` + a valid `TEST_EXEMPT`, still expects `MSG_CLASSIFIER_MISSING`).
+      Confirmed it kills a mutant that fast-paths any `TEST_EXEMPT=`-bearing payload to `exit 0`
+      right after the pre-filter (26 failures under the mutant, including this one), then
+      reverted the mutant and re-ran clean. **248 passed, 0 failed.**
 - [ ] 16. Obs judge (implementation stage) pinning the final HEAD → PR.
 
 **Standing decisions.**

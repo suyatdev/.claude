@@ -526,6 +526,14 @@ block "a missing entry point blocks in a repo that HAS opted in" "$R" 'git commi
 block "a missing classifier blocks at a DIFFERENT door" "$R" 'git commit -m msg' \
   MSG_CLASSIFIER_FAILED "" "$(stub_gate adopt-noclassifier REAL OMIT)"
 
+# TEST_EXEMPT is read by the decision call, at node H -- so it cannot rescue a lockout caused by
+# the decision call itself being missing. This is correct by design (there is nothing left to
+# read the exemption from) but easy for a future change to break silently, since a naive fix that
+# moved the exemption check earlier in the flow would make this pass instead of block.
+block "TEST_EXEMPT cannot rescue a missing entry point -- there is nothing left to read it" "$R" \
+  "TEST_EXEMPT='rescue me' git commit -m msg" \
+  MSG_CLASSIFIER_MISSING "" "$(stub_gate adopt-noentry-exempt OMIT REAL)"
+
 printf '\n### C. Edges\n\n'
 
 R="$(new_repo adopt)"
