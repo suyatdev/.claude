@@ -12,6 +12,7 @@ from memsearch import db as dbmod
 from memsearch.config import load_config
 from memsearch.index import run_index
 from memsearch.search import search
+from memsearch.status import status_report
 from tests.conftest import DIM, vec
 from tests.test_config import write_cfg
 
@@ -189,3 +190,14 @@ def test_a_failure_after_the_drop_rolls_the_drop_back(tmp_path, monkeypatch):
                       progress=lambda _: None)
     assert version(cfg) == 0
     assert "weight" in columns(cfg)
+
+
+def test_status_flags_a_database_that_query_would_refuse(tmp_path):
+    """`status` must not vouch for an index every query is rejecting. The
+    SessionStart nudge reads status.json and never calls the CLI, so this line
+    is the only human-facing surface the migration debt can reach."""
+    cfg = make_cfg(tmp_path)
+    build_v0(cfg)
+    out = status_report(cfg)
+    assert "MIGRATION REQUIRED:" in out
+    assert "memsearch index" in out
