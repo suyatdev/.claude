@@ -76,7 +76,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Retired memory tree (docs/features/rule-surface-trim.md, ADR 0030).
+# Retired memory tree (docs/features/rule-surface-trim.md, ADR 0031).
 # CODING_MEMORY.md and coding-memory/ are frozen and local-only: they stay on
 # disk, greppable and memsearch-able, and stay in git history, but are no longer
 # pushed. The two verdict ledgers are the deliberate exception, and NOT because

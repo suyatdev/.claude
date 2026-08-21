@@ -169,40 +169,118 @@ than inferring their behaviour from whether a live command succeeded.
 
 ## Tasks
 
-- [ ] 0. Create branch `chore/rule-surface-trim` and its worktree under `.claude/worktrees/`;
+- [x] 0. Create branch `chore/rule-surface-trim` and its worktree under `.claude/worktrees/`;
       record it in this card's `branch:` frontmatter. All later tasks run inside that worktree —
       confirm with `git branch --show-current` in the directory you are actually editing, since
       SessionStart's `gitStatus` has been observed reporting the wrong branch.
-- [ ] 1. Re-run the evidence. `git log -1 --format=%ad` per artifact, `git ls-files coding-memory
+- [x] 1. Re-run the evidence. `git log -1 --format=%ad` per artifact, `git ls-files coding-memory
       | wc -l`, and the `grep -n` over `hooks/*.sh`. Paste results. Every number in this card was
       measured 2026-08-20 and must be re-derived before anything is removed, not copied forward.
-- [ ] 2. Confirm nothing is still needed from the four dead artifacts and `pr-tracking.md` — read
+- [x] 2. Confirm nothing is still needed from the four dead artifacts and `pr-tracking.md` — read
       them, report what would be lost, and get explicit sign-off before untracking.
-- [ ] 3. Red: extend `hooks/git-guard.test.sh` with cases asserting `coding-memory/*` and
+- [x] 3. Red: extend `hooks/git-guard.test.sh` with cases asserting `coding-memory/*` and
       `CODING_MEMORY.md` are **blocked** on `main` and `docs/*.md` still passes. Prove they fail
       against the current hook first — a green test here proves nothing.
-- [ ] 4. Green: narrow the `git-guard.sh:385` allowlist to `docs/*.md`; update the `:390` message.
-- [ ] 5. Update `hooks/git-guard.replay.sh` expected values for the three diverging cases, in the
+- [x] 4. Green: narrow the `git-guard.sh:385` allowlist to `docs/*.md`; update the `:390` message.
+- [x] 5. Update `hooks/git-guard.replay.sh` expected values for the three diverging cases, in the
       same commit as task 4, with a comment naming this card as the reason.
-- [ ] 6. Red then green: `doc-guard.sh` `has_doc` narrows to `docs/*`; both messages reworded to
+  - ⚠️ **Spec was wrong: only TWO cases diverge, not three.** The `..`-escape case
+    (`coding-memory/../src/tracked.sh`) was already blocked on both sides, so it never diverged.
+    Measured, not inferred: 378 pairs, 370 identical, 8 stricter (2 commands × 4 states),
+    0 unexpected, 0 relaxed. The implementer refused to add it to the expected-divergence list
+    rather than encode a wrong expectation. Recorded here per `managing-session-memory` — the spec
+    is not edited mid-implementation, the error is noted under its task.
+  - Went beyond brief, deliberately: the divergence list is now machine-checked
+    (`EXPECTED_STRICTER` + an `(UNEXPECTED -- inspect this)` label), and the check was proven able
+    to fail.
+- [x] 6. Red then green: `doc-guard.sh` `has_doc` narrows to `docs/*`; both messages reworded to
       name `docs/features/` and `docs/decisions/`. Update `doc-guard.test.sh`.
-- [ ] 7. Reword `context-handoff-watch.sh:61`. Fix the stale comments in `feature-sync-guard.sh:118`
+- [x] 7. Reword `context-handoff-watch.sh:61`. Fix the stale comments in `feature-sync-guard.sh:118`
       and `slim-session-start.sh:10`.
-- [ ] 8. `.gitignore` + `git rm --cached` for `CODING_MEMORY.md` and `coding-memory/**` **except**
+- [x] 8. `.gitignore` + `git rm --cached` for `CODING_MEMORY.md` and `coding-memory/**` **except**
       the two `verdicts.jsonl` files. Verify with `git ls-files coding-memory` — expect exactly 2.
-- [ ] 9. Verify `judge-guard.sh` still passes from a **fresh worktree** after task 8. This is the
+- [x] 9. Verify `judge-guard.sh` still passes from a **fresh worktree** after task 8. This is the
       carve-out's whole justification; asserting it without running it is not verification.
-- [ ] 10. Update `rules/gates.md`, `rules/core-conduct.md`, `CLAUDE.md`, `README.md`, and the
+  - ⚠️ **The stated justification was FALSE, and running it is what proved that.** In a fresh
+    detached worktree `judge-guard` exits **2 either way** — with or without the ledger — differing
+    only in message ("no verdict store" vs "no fresh verdict"). A missing ledger does not block PRs.
+  - The real reason to keep both `verdicts.jsonl` tracked: the accumulated judge record — 179
+    observability rows (**69** non-null outcomes: 38 clean, 31 rework, 110 null) and 123 compliance
+    rows — which untracking would fragment per worktree.
+  - The wrong figure **169** was propagated into `.gitignore` and a commit message before being
+    caught; it came from `grep -c '"outcome":[^n]'`, which matches the space in `"outcome": null`.
+    A real JSON parse gives 69. Both artifacts corrected.
+- [x] 10. Update `rules/gates.md`, `rules/core-conduct.md`, `CLAUDE.md`, `README.md`, and the
       `## CODING_MEMORY.md` section of `skills/managing-session-memory/SKILL.md`. Freeze
       `CODING_MEMORY.md` with a header note: retired, not trimmed, cited by line number.
-- [ ] 11. Decide the `phase-guard.sh` exemption open question above; if yes, red test + change +
+- [x] 11. Decide the `phase-guard.sh` exemption open question above; if yes, red test + change +
       `phase-guard.test.sh` update.
-- [ ] 12. Full hook suite green — `git-guard`, `doc-guard`, `merge-guard`, `judge-guard`,
+- [x] 12. Full hook suite green — `git-guard`, `doc-guard`, `merge-guard`, `judge-guard`,
       `phase-guard`, `slim-session-start`, plus the replay harness. Paste counts.
-- [ ] 13. ADR under `docs/decisions/` — retiring a documentation tree and tightening two Tier 1
+- [x] 13. ADR under `docs/decisions/` — retiring a documentation tree and tightening two Tier 1
       guards is structural. Check the next free number against `origin/main`, not stale local main.
-- [ ] 14. Observability judge, then PR.
+  - ⚠️ **This instruction was itself insufficient and produced a near-miss.** 0030 *is* free on
+    `origin/main` — and already taken on the pushed branch
+    `origin/worktree-fix+memsearch-r9-retrieval-quality` as
+    `0030-judge-verdict-tier-and-query-time-weight.md`. Verified independently. Landed as **ADR
+    0031**. The check must sweep **every local and remote ref**, not one branch.
+  - Pre-existing defect surfaced, not caused by this card: `origin/main` already carries **two**
+    ADRs numbered `0026` (`…-symbolic-ref-not-abbrev-ref-names-the-branch.md` and
+    `…-the-gate-does-no-json-parsing.md`, the latter via PR #58). A duplicate number merges cleanly
+    because filenames differ, so nothing ever surfaces it. Not fixed here — out of scope.
+  - `0028` is a genuine gap on every ref; left alone rather than backfilled out of order.
+- [x] 14. Observability judge, then PR.
 
 ## Verification
 
-<Appended during review.>
+Suites re-run by the controller in the merged tree, not taken from worker reports —
+**737 cases, 0 failures**: git-guard 152, doc-guard 20, merge-guard 10, judge-guard 101,
+phase-guard 147, feature-sync-guard 30, test-marker-guard 248 (new, arrived via PR #58),
+slim-session-start 29.
+
+Replay harness vs base `7fcfd95`: **378 pairs — 370 identical, 8 stricter, 0 unexpected,
+0 relaxed.** "Never weaker than main" holds.
+
+Falsifiers actually run, not asserted:
+
+- doc-guard: restoring the pre-fix hook makes exactly the new case fail (20/0 → 19/1).
+- phase-guard: the new hook returns **exit 0** for `rules/gates.md` on `main` and **exit 2** for
+  `hooks/git-guard.sh` — the same command that was blocked at the start of this work.
+- judge-guard: `gh pr create --draft` exits 2 identically to a bare `gh pr create`; `gh pr view`
+  exits 0. This is what makes the migrated draft-PR flow's "identical freshness gate" claim true
+  rather than inherited.
+- `context-handoff-watch.sh`: re-probed with a correct payload → valid JSON, new text, no stale
+  string.
+- Untracking: `git ls-files coding-memory` → exactly **2**; 228 files and the 8,759-line
+  `CODING_MEMORY.md` all still on disk. `git log --follow` on the moved memsearch report reaches
+  its original commit `a0f9a8e` (the move was split into a 100%-similarity rename because a
+  combined move+edit scored 41% and would have broken `--follow`).
+
+### Controller errors worth recording
+
+Four of my own, each caught only by checking a result rather than an exit code:
+
+1. **`git commit -- <pathspec>` silently re-added every file** — with a pathspec, git commits
+   working-tree content and ignores staged deletions. The first untracking commit did nothing;
+   `git ls-files` still showed 214.
+2. **The first fresh-worktree test was invalid** — `git worktree add` failed on "branch already
+   used", the `cd` failed, and every command ran in the main checkout, which still had all the
+   files. It looked like a pass.
+3. **`head -2` in a pipeline overwrote `$?`**, so both judge-guard probes reported `exit=0`.
+4. **`grep -c '"outcome":[^n]'` returned 169** because it matched the space in `"outcome": null`.
+   A JSON parse gives 69. The wrong figure reached `.gitignore` and a commit message before a
+   worker caught it.
+
+### Known gaps, stated rather than closed
+
+- `docs/superpowers/plans/2026-07-17-memory-rag-index.md:2202,2301,2329` still embed the old
+  `eval.py` source and its `coding-memory/` path. Left deliberately — a dated plan is a record of
+  what was specified, not a live pointer — but the listing now disagrees with the live `eval.py`.
+- `hooks/feature-sync-guard.sh:118`'s `classify-git-command.py` apostrophe-trap citation has **no
+  replacement**; ADR 0012 documents `classify-pr-command.py`, a different classifier. The comment
+  now flags the gap instead of inventing a pointer.
+- `hooks/git-guard.sh:8` deliberately still contains the literal strings, as a historical note.
+- The handoff pane was not exercised live; `panes/handoff-wrapper.sh` was verified by `bash -n`
+  and by reading the seed prompt.
+- `DEFAULT_REPORT_DIR` was verified by path resolution, not by a real audit run (needs a live
+  Ollama model). No test covers the constant.
