@@ -8,6 +8,8 @@ from pathlib import Path
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 _MODEL_KEYS = ("embed_model", "digest_model", "embed_fallback_model")
+SOURCE_TYPES = ("transcript_digest", "curated_doc", "repo_doc", "archive_doc",
+                "judge_doc")
 
 
 class ConfigError(ValueError):
@@ -47,6 +49,25 @@ def _refuse_cloud(model: str) -> None:
         )
 
 
+def _validate_weights(raw: dict) -> dict:
+    """Every known source type needs a weight, checked once at load. Weight is
+    resolved per result at query time (ADR 0030), so a missing key would
+    otherwise surface as a KeyError mid-query — after the search has run."""
+    missing = [t for t in SOURCE_TYPES if t not in raw]
+    if missing:
+        raise ConfigError(
+            "weights is missing an entry for known source type(s): "
+            f"{', '.join(missing)} — add them to config.json's `weights` map")
+    out = {}
+    for name, value in raw.items():
+        try:
+            out[name] = float(value)
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"weight for {name!r} is not a number: {value!r}") from None
+    return out
+
+
 def load_config(path: Path | None = None) -> Config:
     path = path or DEFAULT_CONFIG_PATH
     raw = json.loads(path.read_text())
@@ -68,7 +89,7 @@ def load_config(path: Path | None = None) -> Config:
             for r in raw.get("repo_roots", ())
         ),
         exclude_paths=excludes,
-        weights=dict(raw["weights"]),
+        weights=_validate_weights(raw["weights"]),
     )
 
 

@@ -190,12 +190,13 @@ def archive_rows(cfg, column: str) -> list:
 
 def test_archive_doc_gets_its_own_weight_tier(tmp_path):
     """1.0, not curated_doc's 1.5: session narrative must stay retrievable
-    without ever outranking the decision records it narrates."""
+    without ever outranking the decision records it narrates. Weight is no
+    longer stored (ADR 0030), so the tier is asserted where it now lives —
+    the source_type on the row, and the number in config."""
     cfg = make_cfg(tmp_path)
     run_index(cfg, embedder=stub_embedder, digester=stub_digester,
               progress=lambda _: None)
     assert archive_rows(cfg, "source_type") == ["archive_doc"]
-    assert archive_rows(cfg, "weight") == [1.0]
     assert cfg.weights["archive_doc"] < cfg.weights["curated_doc"]
 
 
@@ -405,3 +406,70 @@ def test_glob_reachable_subagents_transcript_is_excluded(tmp_path):
     # word "subagents" — a naive substring assertion would false-positive on
     # every source path regardless of whether the excluded file leaked in.
     assert str(sub_path) not in sources
+
+
+def test_judge_directory_files_get_their_own_source_type():
+    """Keyed on the PARENT DIRECTORY name, not a full-path substring: a verdict
+    tiers identically no matter which config bucket enumerated it (ADR 0030)."""
+    from memsearch.index import _doc_source_type
+    obs = Path("/x/coding-memory/observability-judge/2026-08-20-verdict.md")
+    comp = Path("/x/coding-memory/compliance-judge/2026-08-20-verdict.md")
+    assert _doc_source_type(obs, "curated_doc") == "judge_doc"
+    assert _doc_source_type(comp, "curated_doc") == "judge_doc"
+    # the accepted exposure, pinned so a later change has to argue with it:
+    # any repo-root directory of that name tiers the same way.
+    assert _doc_source_type(
+        Path("/x/myrepo/observability-judge/note.md"), "repo_doc") == "judge_doc"
+
+
+def test_non_judge_curated_docs_are_unchanged():
+    from memsearch.index import _doc_source_type
+    assert _doc_source_type(
+        Path("/x/coding-memory/pr-tracking.md"), "curated_doc") == "curated_doc"
+    assert _doc_source_type(
+        Path("/x/coding-memory/judge-notes/x.md"), "curated_doc") == "curated_doc"
+    assert _doc_source_type(
+        Path("/x/docs/decisions/0030-x.md"), "curated_doc") == "curated_doc"
+
+
+def test_archive_filename_wins_over_the_judge_directory():
+    """Precedence is stated, not incidental: the archive carve-out is checked
+    first, so a CODING_MEMORY.md parked in a judge directory stays archive_doc
+    (1.0) rather than being promoted into the verdict tier."""
+    from memsearch.index import _doc_source_type
+    assert _doc_source_type(
+        Path("/x/coding-memory/compliance-judge/CODING_MEMORY.md"),
+        "curated_doc") == "archive_doc"
+
+
+def judge_corpus_cfg(tmp_path: Path):
+    """A corpus of its own — deliberately NOT setup_corpus(), whose file count
+    is asserted verbatim by test_full_run_indexes_all_sources_newest_first
+    (`processed == 5`) and test_second_run_is_idempotent (`skipped == 5`)."""
+    curated = tmp_path / "coding-memory"
+    (curated / "observability-judge").mkdir(parents=True)
+    (curated / "observability-judge" / "2026-08-20-verdict.md").write_text(
+        "# Verdict\n\nScored the change against the rubrics.\n")
+    (curated / "decisions.md").write_text("# Decisions\n\nWe decided things.\n")
+    p = write_cfg(tmp_path, **{
+        "embed_model": "test-embed", "embed_dim": DIM,
+        "db_path": str(tmp_path / "memory-index" / "memory.db"),
+        "transcripts_glob": str(tmp_path / "no-transcripts" / "*.jsonl"),
+        "curated_docs": [str(curated)],
+        "repo_roots": [],
+    })
+    return load_config(p)
+
+
+def test_indexing_stores_judge_doc_for_verdict_files(tmp_path):
+    cfg = judge_corpus_cfg(tmp_path)
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    types = dict(conn.execute(
+        "SELECT file_path, source_type FROM chunks GROUP BY file_path"))
+    conn.close()
+    verdict = next(p for p in types if p.endswith("2026-08-20-verdict.md"))
+    plain = next(p for p in types if p.endswith("decisions.md"))
+    assert types[verdict] == "judge_doc"
+    assert types[plain] == "curated_doc"

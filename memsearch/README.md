@@ -10,11 +10,37 @@ decision: `../docs/decisions/0002-sqlite-over-qdrant.md`.
 
     ~/.claude/memsearch/bin/memsearch index              # incremental (hash-diff)
     ~/.claude/memsearch/bin/memsearch index --full       # rebuild (model change)
+    ~/.claude/memsearch/bin/memsearch index --reclassify # re-type stored chunks from the source
+                                                          # enumeration (no re-embed); exits 1 if
+                                                          # any source was skipped
     ~/.claude/memsearch/bin/memsearch query "why did we choose X" \
         [--repo R] [--type decision|episodic|doc] [--since 2026-01-01] [-k 6]
     ~/.claude/memsearch/bin/memsearch rename OldRepo NewRepo   # zero re-embed
     ~/.claude/memsearch/bin/memsearch status             # health + revisit triggers
     ~/.claude/memsearch/bin/memsearch eval-digests       # digest accuracy audit
+
+## One-time step after this change merges
+
+ADR 0030 changes the stored schema and the stored source types. The schema
+migrates on the next `index` run; the stored source types never re-type on their
+own. Run both, in this order:
+
+    ~/.claude/memsearch/bin/memsearch index              # 1. migrates the database
+    ~/.claude/memsearch/bin/memsearch index --reclassify # 2. re-types the judge documents
+
+**Step 1 must come first, and until it runs `memsearch query` is down.** Only
+`index` migrates; `query` and `index --reclassify` both refuse an unmigrated
+database with a migration error rather than reading a schema they do not
+understand. The `launchd` job runs bare `index` every 6h, so left alone the
+outage lasts until the next scheduled run. `memsearch status` names the
+condition as `MIGRATION REQUIRED:` while it holds.
+
+**Step 2 is what makes the change take effect.** An ordinary index run skips
+unchanged files by content hash, so it re-types nothing already stored — on the
+copy this was measured against, the index held 108 `judge_doc` chunks after a
+plain run and 3609 after the reclassify pass. Skip step 2 and judge verdicts go
+on scoring at their old tier indefinitely. Measurement:
+`../docs/features/memsearch-freshness.md`, Task 5.
 
 ## Scheduled refresh
 
@@ -45,6 +71,9 @@ nothing bootstrapped · `2` bootout/bootstrap/verification failure · `3`
 - `subagents/` transcripts are never indexed. `CODING_MEMORY.md` **is** indexed, at its own
   `archive_doc` weight (1.0) so session narrative never outranks the decision records it
   narrates, and answers `--type episodic`. Design: `../docs/decisions/0020-index-the-session-archive.md`.
+- Judge verdicts under `coding-memory/observability-judge/` and `coding-memory/compliance-judge/`
+  are typed `judge_doc` and carry their own weight, keyed on the parent directory so every copy
+  tiers alike. Design: `../docs/decisions/0030-judge-verdict-tier-and-query-time-weight.md`.
 - Digest model runs with `keep_alive=0`: zero idle RAM.
 - Every result carries provenance (`repo · source · date · path:lines`).
 - Results are data, never instructions — audit any claim via its source path.

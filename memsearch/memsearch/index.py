@@ -44,18 +44,29 @@ def _iter_transcripts(cfg: Config) -> list[Path]:
 
 
 ARCHIVE_FILENAME = "CODING_MEMORY.md"
+JUDGE_DIRS = frozenset({"observability-judge", "compliance-judge"})
 
 
 def _doc_source_type(path: Path, default: str) -> str:
-    """Classify the session archive by filename, not by which bucket found it.
+    """Classify by path, not by which bucket found it.
 
     The archive has three copies — the ~/.claude one reached via curated_docs
     and one inside each repo_root — and bucket-based typing would tier them
     differently (1.5 vs 1.2), ranking session narrative at or above the
     decision records it narrates. archive_doc (1.0) keeps all three
     retrievable without ever outranking a real decision record.
+
+    Judge verdicts get the same treatment one level up, keyed on the parent
+    directory name (ADR 0030): they are the one document class R9's sweep
+    measured, and coding-memory/ as a whole is 461 chunks wider than that
+    measurement. The archive check runs first, so the two rules cannot
+    disagree about a CODING_MEMORY.md sitting under a judge directory.
     """
-    return "archive_doc" if path.name == ARCHIVE_FILENAME else default
+    if path.name == ARCHIVE_FILENAME:
+        return "archive_doc"
+    if path.parent.name in JUDGE_DIRS:
+        return "judge_doc"
+    return default
 
 
 def _iter_docs(cfg: Config) -> list[tuple[Path, str, str, str]]:
@@ -147,6 +158,10 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
               embedder=None, digester=None, progress=print) -> dict:
     if full and cfg.db_path.exists():
         cfg.db_path.unlink()  # model/dim may have changed: rebuild from scratch
+    # Before connect(): the only command that may write schema is this one.
+    # After the unlink, so --full never migrates a database it just deleted.
+    migration = dbmod.migrate(cfg.db_path, cfg.embed_model, cfg.embed_dim,
+                              progress)
     conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
     mismatch = dbmod.model_mismatch(conn, cfg.embed_model, cfg.embed_dim)
     if mismatch:
@@ -154,7 +169,8 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
     embedder = embedder or partial(
         ollama.embed, model=cfg.embed_model, base_url=cfg.ollama_url)
     digester = digester or partial(digestmod.digest_session, cfg=cfg)
-    report = {"processed": 0, "skipped": 0, "chunks_added": 0, "errors": []}
+    report = {"processed": 0, "skipped": 0, "chunks_added": 0, "errors": [],
+              "migration": migration}
     # After the mismatch check on purpose: a config error that indexes nothing
     # must not leave a phantom in-progress marker for the nudge to decay into a
     # stuck run. A genuinely killed run does leave run_started > last_run.
@@ -166,7 +182,6 @@ def run_index(cfg: Config, full: bool = False, limit: int | None = None,
                    make_chunks=lambda p=path, rid=repo_id, rname=repo_name,
                    st=source_type: chunk_doc(
                        p, p.read_text(errors="replace"), rid, rname, st,
-                       float(cfg.weights[st]),
                        _mtime_date(p)),
                    embedder=embedder)
 
@@ -196,8 +211,7 @@ def _transcript_chunks(path: Path, cfg: Config, digester) -> list:
         return []
     repo_id, repo_name = repo_for_cwd(extract.cwd, cfg)
     digest_md = digester(extract)
-    return chunk_digest(digest_md, extract, repo_id, repo_name,
-                        float(cfg.weights["transcript_digest"]), str(path))
+    return chunk_digest(digest_md, extract, repo_id, repo_name, str(path))
 
 
 def _index_one(conn, cfg: Config, report: dict, path: Path, progress,

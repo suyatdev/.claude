@@ -22,7 +22,6 @@ def make_chunk(**overrides) -> dbmod.Chunk:
         line_start=1,
         line_end=10,
         session_id=None,
-        weight=1.5,
     )
     base.update(overrides)
     return dbmod.Chunk(**base)

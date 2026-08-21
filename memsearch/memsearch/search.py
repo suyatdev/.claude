@@ -1,8 +1,10 @@
 """Hybrid retrieval: exact brute-force cosine KNN (sqlite-vec) fused with
-BM25 keyword rank (FTS5) via Reciprocal Rank Fusion, then multiplied by
-source weight (curated > repo doc > digest). Filters are applied after
-fusion over a wide candidate pool (CANDIDATES per branch), which is exact
-enough at this corpus size and keeps the SQL trivial."""
+BM25 keyword rank (FTS5) via Reciprocal Rank Fusion, then multiplied by the
+source weight config assigns that source type — resolved per result at query
+time, never read from the row, so a config edit moves a ranking without a
+re-index (ADR 0030). Filters are applied after fusion over a wide candidate
+pool (CANDIDATES per branch), which is exact enough at this corpus size and
+keeps the SQL trivial."""
 from __future__ import annotations
 
 import re
@@ -21,12 +23,25 @@ _TOKEN = re.compile(r"[A-Za-z0-9_./-]+")
 
 _CHUNK_COLS = ("content", "repo_id", "repo_name", "source_type", "recall_type",
                "session_date", "file_path", "line_start", "line_end",
-               "session_id", "weight")
+               "session_id")
 
 
 def _fts_query(query: str) -> str:
     tokens = _TOKEN.findall(query)
     return " OR ".join(f'"{t}"' for t in tokens)
+
+
+def _weight_for(cfg: Config, source_type: str) -> float:
+    """Weight is config, not storage (ADR 0030). An indexed type config does
+    not name fails closed: a default multiplier would score the row with a
+    number nobody chose and report success."""
+    try:
+        return cfg.weights[source_type]
+    except KeyError:
+        raise SystemExit(
+            f"memsearch: indexed chunks carry source_type {source_type!r}, "
+            "which has no weight in config.json — add the key, or re-type the "
+            "rows with `memsearch index --reclassify`") from None
 
 
 def search(cfg: Config, query: str, k: int = 6, repo: str | None = None,
@@ -38,6 +53,10 @@ def search(cfg: Config, query: str, k: int = 6, repo: str | None = None,
     mismatch = dbmod.model_mismatch(conn, cfg.embed_model, cfg.embed_dim)
     if mismatch:
         raise SystemExit(f"memsearch: {mismatch}")
+    stale = dbmod.migration_required(conn)
+    if stale:
+        conn.close()
+        raise SystemExit(f"memsearch: {stale}")
     t0 = time.perf_counter()
 
     qvec = embedder([query])[0]
@@ -77,7 +96,7 @@ def search(cfg: Config, query: str, k: int = 6, repo: str | None = None,
             continue
         if since and r["session_date"] < since:
             continue
-        r["score"] = round(base_score * r.pop("weight"), 6)
+        r["score"] = round(base_score * _weight_for(cfg, r["source_type"]), 6)
         results.append(r)
     results.sort(key=lambda r: -r["score"])
 

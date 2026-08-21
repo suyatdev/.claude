@@ -9,6 +9,7 @@ from pathlib import Path
 
 from memsearch import eval as evalmod
 from memsearch import index as indexmod
+from memsearch import reclassify as reclassifymod
 from memsearch import ollama, search, status
 from memsearch.config import ConfigError, load_config
 from memsearch.rename import rename_repo
@@ -27,8 +28,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("index", help="incremental index (hash-diff)")
-    pi.add_argument("--full", action="store_true",
-                    help="rebuild from scratch (required after model change)")
+    mode = pi.add_mutually_exclusive_group()
+    mode.add_argument("--full", action="store_true",
+                      help="rebuild from scratch (required after model change)")
+    mode.add_argument("--reclassify", action="store_true",
+                      help="re-type stored chunks from the source enumeration "
+                           "(no chunking, no embedding)")
     pi.add_argument("--limit", type=int, default=None,
                     help="cap transcripts processed this run")
 
@@ -56,8 +61,26 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
         cfg = load_config(args.config)
+        if args.cmd == "index" and args.reclassify:
+            r = reclassifymod.run_reclassify(cfg)
+            for name, t in sorted(r["transitions"].items()):
+                was, now = name.split("->")
+                print(f"{was} -> {now}: {t['files']} files, "
+                      f"{t['chunks']} chunks")
+            print(f"walked={r['walked']} unchanged={r['unchanged']} "
+                  f"retyped={r['retyped_files']} "
+                  f"vanished_sources={r['vanished_sources']} "
+                  f"skipped={len(r['skipped'])}")
+            for s in r["skipped"]:
+                print(f"  skipped: {s}", file=sys.stderr)
+            # A partial walk must not read as a clean one.
+            return 1 if r["skipped"] else 0
         if args.cmd == "index":
             report = indexmod.run_index(cfg, full=args.full, limit=args.limit)
+            if report["migration"]:
+                m = report["migration"]
+                print(f"schema {m['from_version']} -> {m['to_version']}; "
+                      f"rollback copy: {m['backup']}")
             print(f"processed={report['processed']} skipped={report['skipped']} "
                   f"chunks_added={report['chunks_added']} "
                   f"errors={len(report['errors'])}")
