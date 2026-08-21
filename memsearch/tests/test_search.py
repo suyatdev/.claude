@@ -165,7 +165,9 @@ def test_judge_doc_scores_at_its_configured_weight(tmp_path):
         weight=1.5, file_path="/spec.md")], [same_vec])
     conn.close()
     out = search(cfg, "verdict on the change", k=2, embedder=near(1.0, 0.0, 0.0))
-    assert [r["file_path"] for r in out] == ["/spec.md", "/observability-judge/v.md"]
+    # 1.5 vs 0.5 on a tied base score. Tolerance is the 6-decimal rounding in
+    # search(): out[0] carries <=5e-7 of it, 3 * out[1] carries <=1.5e-6.
+    assert out[0]["score"] == pytest.approx(3 * out[1]["score"], abs=2e-6)
 
 
 def test_stored_source_type_with_no_configured_weight_fails_closed(tmp_path):
