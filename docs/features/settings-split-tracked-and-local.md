@@ -32,7 +32,13 @@ Consequences, all measured on `c4abf65`:
 
 ## Fix
 
-Split by *what the file is for*, not by convenience:
+> **Superseded 2026-08-21.** The split below cannot be built: `~/.claude/settings.local.json` is
+> not a settings source, and `/model` writes `model` into the tracked file by design, so no split
+> would hold even if it were. Kept for the record; the design that ships is **Fix (revised)**.
+> Evidence: "Task 1 outcome" below.
+
+<details>
+<summary>Original plan — split by <em>what the file is for</em>, not by convenience</summary>
 
 | Stays tracked in `settings.json` | Moves to gitignored `settings.local.json` |
 |---|---|
@@ -43,6 +49,53 @@ Split by *what the file is for*, not by convenience:
 
 `settings.local.json` is genuinely supported — verified against the installed binary
 (`strings ~/.local/bin/claude | grep -c settings.local.json` → 103), not from memory.
+*(That count is a project-scope feature misread as a user-scope one — see finding 2.)*
+
+</details>
+
+## Fix (revised)
+
+**There is no split.** `settings.json` goes back under version control whole, with the ten
+`/Users/marksuyat` orca paths rewritten to `"$HOME"` so nothing absolute is committed. `model` and
+`effortLevel` stay in it and are committed at their current values.
+
+Why no split, in one line each:
+
+- **The destination is not read.** `~/.claude/settings.local.json` containing
+  `{"model": "claude-haiku-4-5-20251001"}` had no effect — the session still ran
+  `claude-opus-5[1m]`. The identical file at `<cwd>/.claude/settings.local.json` did switch it to
+  haiku. The key is fine; the location has no reader.
+- **Nothing would stay split anyway.** `/model` writes `model` and `effortLevel` into
+  `~/.claude/settings.json`. Measured on this machine: both keys changed there at 12:31 on
+  2026-08-21 when the session moved from `sonnet`/`medium` to `opus[1m]`/`xhigh`. Hand-moving them
+  out lasts until the next `/model`.
+- **A `.gitattributes` clean filter is not a safe substitute.** It works for `git status` — the
+  stored blob really does lose `model`/`effortLevel` and the tree reads clean — but with no smudge
+  half, any checkout or merge that *changes* `settings.json` materialises the stripped blob over
+  the working copy and silently wipes the local values. Confirmed in a throwaway repo for both
+  `git checkout` and `git merge`. Registering a new hook is exactly such a change, so the failure
+  fires on the one operation this card exists to enable.
+
+**The churn is accepted, and it is smaller than it looked.** Only a deliberate `/model` rewrites
+the file: `settings.json` was last modified at 12:31 and was still untouched at 13:49 across
+roughly eight intervening headless sessions. So the cost is a two-line diff after an intentional
+model switch, not continuous noise.
+
+**The card's stated top risk has inverted.** It warned that re-tracking would "bake in
+`model: sonnet` as everyone's default". The value that gets committed today is `opus[1m]` at
+`xhigh` — the correct default for a fresh clone. Re-check this before committing rather than
+trusting this sentence.
+
+What *does* still hold from the original: the ten orca entries are all the same one-line command
+and are `$HOME`-substitutable, so `core-conduct`'s no-absolute-paths rule is satisfied inside the
+tracked file with no second file involved. Note the paths sit inside **single** quotes today, which
+suppress expansion — they must become double quotes.
+
+`~/.claude/.claude/settings.local.json` — project scope, already gitignored by `.gitignore:75`
+(`/.claude/`), already holding `permissions.allow` grants and `"outputStyle": "Concise"` — is the
+real local-settings file and is left exactly as it is. It is out of scope here because it applies
+only to sessions whose project root is `~/.claude`; every worktree is its own root with its own
+copy, and sessions in other repositories read none of them.
 
 ## ⚠️ The open question that gates the whole design
 
@@ -115,10 +168,25 @@ What survives the finding: the orca hooks' 10 hardcoded `/Users/marksuyat` paths
 one-line command and are `$HOME`-substitutable, so the "no absolute paths in committed files" rule
 can be satisfied inside the tracked file, with no second file involved.
 
-What still needs a decision: `model` and `effortLevel` are written into `~/.claude/settings.json`
-by `/model`, and there is no user-scope override file to divert them to. Either the churn is
-accepted in the tracked file, or it is hidden with a `.gitattributes` clean filter that strips
-those keys on the way into the index.
+**Decided 2026-08-21 by the user: accept the churn, no split.** See **Fix (revised)**. Two further
+experiments backed the decision:
+
+*The model demo* — the card's plan, run end to end. Same key, same value, two locations, one
+`claude -p … --output-format json` per row:
+
+| `model` set in | model the session actually used |
+|---|---|
+| nothing (baseline, `settings.json` says `opus[1m]`) | `claude-opus-5[1m]` |
+| `~/.claude/settings.local.json` = `claude-haiku-4-5-20251001` | `claude-opus-5[1m]` — **ignored** |
+| `<cwd>/.claude/settings.local.json` = `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
+
+*The clean-filter test* — a throwaway repo, `settings.json filter=prefs`, clean script deleting
+`model`/`effortLevel`. Storage and status behave: the committed blob is `{"hooks": "GUARDS"}` and
+`git status` is clean with the keys still in the working copy. Branch switches that leave
+`settings.json` alone are harmless. But a branch that *changes* `settings.json` — the whole point
+of tracking it — wipes the local keys on both `git checkout` and `git merge`, because a clean
+filter with no smudge half materialises the stored blob over the working file. Reproduce with
+`.probe-tmp/filter-test2.sh`.
 
 ### The probe, reproduced
 
@@ -143,7 +211,9 @@ with `[ -e ] && exit 1` on the way in and an `EXIT` trap on the way out.
 ## `.gitignore` changes
 
 - **Remove** line 23 `settings.json`.
-- **Add** `settings.local.json`.
+- ~~**Add** `settings.local.json`.~~ Dropped with the split — there is no user-scope file of that
+  name to ignore, and the project-scope one at `.claude/settings.local.json` is already covered by
+  `.gitignore:75` (`/.claude/`).
 - **Keep** `settings.json.bak` (line 20) and `stats-cache.json` — a genuine runtime cache, correctly
   untracked by `9cc792f`; this card does not re-track it.
 
@@ -163,25 +233,51 @@ with `[ -e ] && exit 1` on the way in and an `EXIT` trap on the way out.
       `slim-session-start` (under `env -u CLAUDE_PANE_AGENT`) **28/29**. All three name the same
       cause — `settings.json` not found in the worktree — and each suite's paired
       "registration check can fail" case still passes, so the assertions are not stuck-green.
-- [ ] 3. Write `settings.local.json` with the machine-specific keys; strip them from `settings.json`.
-      Verify `model`/`effortLevel` still take effect and the orca hooks still fire.
-- [ ] 4. `.gitignore` per above. Re-track with `git add -f settings.json` (still ignored at that
-      point) or after the ignore line is removed — confirm which, do not guess.
-- [ ] 5. **Assert no absolute path survives** in the tracked file:
+Tasks 3–8 were rewritten on 2026-08-21 when the split was dropped. The originals assumed a second
+file; they are replaced, not merely reworded.
+
+- [ ] 3. Bring the live `~/.claude/settings.json` into the worktree unchanged, then rewrite the ten
+      orca entries from `'/Users/marksuyat/.orca/…'` to `"$HOME/.orca/…"`. **Double quotes** — the
+      current single quotes suppress expansion. Nothing else about the file changes; `model` and
+      `effortLevel` stay.
+- [ ] 4. Confirm the rewritten orca hook still fires before trusting the substitution. A silent
+      no-op looks identical to a hook that was never registered.
+- [ ] 5. `.gitignore`: remove line 23 `settings.json`, then `git add settings.json`. Confirm which
+      order actually works rather than guessing — `git add -f` while still ignored is the fallback.
+- [ ] 6. **Assert no absolute path survives** in the tracked file:
       `command grep -c '/Users/' settings.json` → 0. Use `command grep`; the bare `grep` here is
       ugrep with `--ignore-files` and honours `.gitignore`.
-- [ ] 6. Three suites green; then the full suite — expect **817/0**. Record counts run, not read.
-- [ ] 7. Fix `SETUP.md:28` and `README.md:42` (describes `settings.json` as "Hooks, enabled plugins,
-      and TUI preferences" — TUI prefs move out).
-- [ ] 8. ADR under `docs/decisions/`: why the wiring is tracked and the preferences are not, and
-      that `9cc792f` solved a real churn problem the wrong way round.
-- [ ] 9. Observability judge, then draft PR.
+- [ ] 7. Confirm the committed `model` is the one a fresh clone should boot on — expected
+      `opus[1m]` / `xhigh`. Read it out of the staged blob, not out of this card.
+- [ ] 8. Three suites green; then the full suite — expect **817/0**. Record counts run, not read.
+- [ ] 9. Fix `SETUP.md:28` (claims the file is tracked — true again once this lands) and
+      `README.md:42` ("Hooks, enabled plugins, and TUI preferences" — now accurate as written,
+      re-read before editing).
+- [ ] 10. ADR under `docs/decisions/`: why the whole file is tracked rather than split, the three
+      experiments that ruled out the alternatives, and that `9cc792f` solved a real churn problem
+      by disabling the guards. Record the checkout/merge hazard so the clean filter is not
+      re-proposed later.
+- [ ] 11. Rollout note: a checkout that pulls this commit will refuse to overwrite an existing
+      untracked `~/.claude/settings.json` unless the bytes match exactly, and the `$HOME` rewrite
+      guarantees they will not. Document the move-aside step.
+- [ ] 12. Observability judge, then draft PR.
 
 ## Risks
 
-- **Re-tracking commits whatever is on this machine today.** Task 3 must strip the machine-specific
-  keys *before* task 4, or the first commit bakes in `model: sonnet` as everyone's default.
-- **A stale `settings.local.json` on another machine** could shadow a future tracked change. Out of
-  scope here; note it in the ADR.
+- ~~**Re-tracking commits whatever is on this machine today.** Task 3 must strip the machine-specific
+  keys *before* task 4, or the first commit bakes in `model: sonnet` as everyone's default.~~
+  **Inverted.** There is nowhere to strip them to, and the value on this machine is now `opus[1m]`
+  / `xhigh` — the right default for a fresh clone. Task 7 re-reads it from the staged blob rather
+  than trusting that. The residual risk is the opposite one: a future re-track done while a
+  throwaway model is selected would commit *that*.
+- **A pull will refuse to land this commit** on any checkout holding an untracked
+  `~/.claude/settings.json` whose bytes differ from the committed blob — which the `$HOME` rewrite
+  guarantees. Task 11 documents the move-aside.
+- ~~**A stale `settings.local.json` on another machine** could shadow a future tracked change.~~
+  Moot with the split dropped — no such file is created.
+- **The next `/model` on any machine dirties the tracked file.** Accepted, and bounded: only a
+  deliberate switch writes it (measured — untouched 12:31 → 13:49 across ~8 sessions). The failure
+  mode to watch is a stray `git commit -a` sweeping someone's model choice into the repo.
 - This card touches the file that configures the hooks that guard the repo. A mistake disables the
-  guards silently — which is why task 1 is an experiment and task 2 is a red test.
+  guards silently — which is why task 1 is an experiment, task 2 is a red test, and task 4 fires
+  the rewritten orca hook instead of eyeballing the substitution.
