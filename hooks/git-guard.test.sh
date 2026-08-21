@@ -275,12 +275,17 @@ run_case "commit named inside a quoted message -> allow"     0 'echo "remember t
 run_case "commit as a commit-message substring -> allow"     0 'git log --grep "git commit"'
 run_case "unrelated command -> allow"                        0 'ls -la'
 
-# The brainstorm exception, and the docs/** widening that keeps the real
-# workflow legal once the guard actually evaluates.
+# The documentation exception, now narrowed to docs/*.md alone.
+# CODING_MEMORY.md and coding-memory/ are being retired as a tracked tree
+# (docs/features/rule-surface-trim.md), so they are no longer permitted on main;
+# these two cases previously asserted the opposite and are inverted, not dropped,
+# because the paths still need coverage. CODING_MEMORY.md remains a FIXTURE file
+# at the top of this suite -- seeded so the repo has a tracked file to commit --
+# which is exactly why it must be asserted as no longer privileged.
 stage CODING_MEMORY.md
-run_case "CODING_MEMORY.md only on main -> allow"            0 'git commit -m notes'
+run_case "CODING_MEMORY.md only on main -> block"            2 'git commit -m notes'
 stage coding-memory/verdicts.jsonl
-run_case "coding-memory/* on main -> allow"                  0 'git commit -m verdicts'
+run_case "coding-memory/* on main -> block"                  2 'git commit -m verdicts'
 stage docs/features/x.md
 run_case "docs/** on main -> allow (widened)"                0 'git commit -m spec'
 stage docs/features/x.md
@@ -475,14 +480,22 @@ run_case "BOTH commits name only docs -> allow"             0 'git commit -m a -
 # ---------------------------------------------------------------------------
 # Guard 1 — A PATHSPEC IS JUDGED AS A PATH, NOT AS A STRING.
 #
-# The allowlist is a `case` over the literal token, so `coding-memory/../src/x`
-# satisfied `coding-memory/*` while git resolves it to a source file, and a .md
-# file anywhere in the repo satisfied `docs/*.md` by way of `docs/../`. A `..`
-# COMPONENT means the string the hook read and the file git will commit are two
-# different things, and the hook may only judge what it has actually read. A `..`
-# inside a file NAME traverses nothing and stays allowed.
+# The allowlist is a `case` over the literal token, so a `..` component lets the
+# string the hook read and the file git will actually commit be two different
+# things: `docs/../src/tracked.md` satisfies `docs/*.md` while git resolves it
+# outside docs/ entirely. The hook may only judge what it has actually read, so a
+# traversing path is refused rather than resolved. A `..` inside a file NAME
+# traverses nothing and stays allowed.
+#
+# This hazard used to be demonstrated against `coding-memory/*` as well
+# (`coding-memory/../src/x` satisfied it). With that pattern retired
+# (docs/features/rule-surface-trim.md) the escape now applies only to the
+# surviving `docs/*.md`, so the equivalent case is pointed there. The
+# coding-memory row is kept as a regression anchor, but note it no longer
+# exercises the `..` arm at all -- the prefix is simply not allowlisted anymore.
 # ---------------------------------------------------------------------------
-run_case "a .. component escapes coding-memory/ -> block"   2 'git commit -m msg -- coding-memory/../src/tracked.sh'
+run_case "a .. component escapes docs/ into source -> block" 2 'git commit -m msg -- docs/../src/tracked.md'
+run_case "coding-memory/ prefix is no longer allowlisted"   2 'git commit -m msg -- coding-memory/../src/tracked.sh'
 run_case "a .. component escapes docs/ -> block"            2 'git commit -m msg -- docs/../notes.md'
 run_case "a leading ../ -> block"                           2 'git commit -m msg -- ../docs/tracked.md'
 run_case ".. inside a FILENAME is not traversal -> allow"   0 'git commit -m msg -- docs/v1..v2.md'
