@@ -374,7 +374,8 @@ if has_fact COMMIT && on_main; then
     case "$f" in
       # A `..` COMPONENT means the string matched here and the file git will
       # actually commit are two different things: `docs/../notes.md` and
-      # `docs/../src/app.md` both satisfy `docs/*.md` from anywhere in the repo. The hook may only judge what it has read, so a
+      # `docs/../src/app.md` both satisfy `docs/*.md` from anywhere in the repo.
+      # The hook may only judge what it has read, so a
       # traversing path is refused rather than resolved — resolving it would mean
       # answering "relative to which directory?", which is Defect C's question and
       # is not settled here. A `..` inside a file NAME (`docs/v1..v2.md`) traverses

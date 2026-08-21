@@ -344,8 +344,7 @@ Classified:
 | `docs/decisions/*`, `docs/features/*` (other cards), `docs/superpowers/*` | **HISTORICAL** — dated records of what was true then. Left deliberately. |
 | `hooks/*.test.sh`, `hooks/lib/*.test.py` | **FIXTURES** — they assert the retired paths are now *blocked* or *ignored*. Left; changing them would delete the coverage. |
 | `hooks/git-guard.sh:8`, `hooks/phase-guard.sh` case arm | **HISTORICAL COMMENT / defensive** — deliberate. Left. |
-| `README.md:45,67`, `rules/gates.md:5,12`, `hooks/judge-guard.sh:34,39`, `hooks/git-guard.replay.sh:149,151,188,189,190,191,233,236,248,249,251,252`,
-`hooks/feature-sync-guard.sh:118`, `hooks/handoff/slim-session-start.sh:10`, `skills/managing-session-memory/SKILL.md:70,72,74,88`, `skills/setting-up-a-new-project/SKILL.md:75`, `skills/running-the-compliance-judge/tests/README.md:13` | **CORRECT** — nine live files the first version of this table omitted entirely, found by round 3. Every hit re-read individually: each either describes the retirement accurately (past tense, or naming the two ledgers that remain tracked), is a replay fixture, or points at the still-tracked `verdicts.jsonl`. None is a false pointer. Listed so the table is a census rather than a sample. |
+| `README.md:45,67`, `rules/gates.md:5,12`, `hooks/judge-guard.sh:34,39`, `hooks/git-guard.replay.sh:149,151,188,189,190,191,233,236,248,249,251,252`, `hooks/feature-sync-guard.sh:118`, `hooks/handoff/slim-session-start.sh:10`, `skills/managing-session-memory/SKILL.md:70,72,74,88`, `skills/setting-up-a-new-project/SKILL.md:75`, `skills/running-the-compliance-judge/tests/README.md:13` | **CORRECT** — nine live files the first version of this table omitted entirely, found by round 3. Every hit re-read individually: each either describes the retirement accurately (past tense, or naming the two ledgers that remain tracked), is a replay fixture, or points at the still-tracked `verdicts.jsonl`. None is a false pointer. Listed so the table is a census rather than a sample. |
 
 The lesson, recorded because it recurred four times: **when a second instance of one class appears,
 enumerate the surface; do not patch the instance and assert the rest is clean.** Each of rounds
@@ -406,3 +405,13 @@ Also fixed:
   and by reading the seed prompt.
 - `DEFAULT_REPORT_DIR` was verified by path resolution, not by a real audit run (needs a live
   Ollama model). No test covers the constant.
+- **`skills/managing-session-memory/SKILL.md:74` records exact ledger counts (179 / 123) on a branch
+  whose own `.gitignore` note says exact counts must not be written down because they drift** —
+  measured in this working tree at `6e58174` they are **198 / 133** (`wc -l` on each ledger; three
+  of the 198 are this session's still-uncommitted round 3–5 rows, so the committed count is 195).
+  Left as-is, deliberately: that sentence is anchored to a past event
+  ("at the time of the split"), so it is a dated fact rather than a live figure and cannot go stale.
+  Recorded because the *appearance* of self-contradiction is real even though the claim is not
+  false, and a future reader deserves the reasoning rather than a silent edit. Round 5 raised it as
+  non-blocking; the alternative — rewriting it as a derivation — would change a historical statement
+  into a query about the present, which is a different claim.
