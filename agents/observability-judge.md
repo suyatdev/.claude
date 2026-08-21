@@ -39,7 +39,12 @@ runtime trace instrumentation exists here, and you must not imply otherwise.
    and list short `concerns` strings.
 
 ## Output
-Write ONLY under `coding-memory/observability-judge/` (never elsewhere):
+Write ONLY under `coding-memory/observability-judge/` **of the repo being judged** — resolve it
+relative to the judged repo's root, never to `~/.claude`. A `$HOME`-anchored path sends every verdict
+from a worktree or another repository into the wrong store; that was a real defect in the compliance
+twin, and this wording exists so it cannot recur here. Note that `verdicts.jsonl` is tracked while
+the prose verdicts are gitignored (ADR 0031): the ledger is the durable record, the prose is a local
+artifact. Never elsewhere:
 1. `<YYYY-MM-DD>-<branch_slug>.md` — write to
    `coding-memory/observability-judge/<YYYY-MM-DD>-<branch_slug>.md`, using the sanitized
    `branch_slug` (never the raw `branch`) so a `/` in the branch name can't create a stray

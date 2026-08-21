@@ -58,7 +58,7 @@ fi
 "$JQ_BIN" -nc --arg fill "$fill" --arg pane "$pane_note" '{
   hookSpecificOutput: {
     hookEventName: "PostToolUse",
-    additionalContext: ("context-handoff-watch: session context is at \($fill) tokens (>= 75k). Run the freshness checkpoint now — update CODING_MEMORY.md, commit, push." + $pane)
+    additionalContext: ("context-handoff-watch: session context is at \($fill) tokens (>= 75k). Run the freshness checkpoint now — update the active feature card under docs/features/, commit, push." + $pane)
   }
 }'
 exit 0

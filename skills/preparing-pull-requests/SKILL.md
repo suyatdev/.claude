@@ -9,9 +9,9 @@ description: Use when naming a branch, writing a commit message, opening or upda
 
 - **Name branches after what changed, not who or when:** `feature/short-description`, `bugfix/short-description`, or `chore/short-description` — readable as a plain-English summary of the PR's purpose (`feature/user-auth-flow`, not `feature/session-2026-07-10` or `feature/mark-changes`).
 - **Main-to-feature:** if currently on `main`/`master`, update it, do the brainstorm, then create and switch to a new feature branch before any implementation.
-- **Brainstorm-then-branch:** brainstorming and planning happen while on `main`/`master`. When the brainstorm is done, commit the updated `CODING_MEMORY.md` — and only `CODING_MEMORY.md`, no code — to `main`/`master`, then check out the feature branch. This is an **archive append, not a context hand-off**: `CODING_MEMORY.md` is retired as an auto-loaded read target (`managing-session-memory`), so the feature branch does not inherit the brainstorm automatically. For feature-scale work, the brainstorm's decisions carry forward in the feature file's spec, created before the branch exists; for everything else, the handoff and commit history are what the next session actually reads.
+- **Brainstorm-then-branch:** brainstorming and planning happen while on `main`/`master`. When the brainstorm is done, commit the feature card under `docs/features/` — documentation only, no code — to `main`/`master`, then check out the feature branch. `git-guard` permits exactly this and nothing else on the default branch: since ADR 0031 the allowlist is `docs/*.md` alone, so the older instruction to commit `CODING_MEMORY.md` here is now **blocked**, not merely stale. For feature-scale work the brainstorm's decisions carry forward in the card's spec, created before the branch exists; for everything else, the handoff and commit history are what the next session actually reads.
 - **Working-branch freshness:** before adding more implementation commits to an existing branch, make sure it's up to date with its tracked remote/base, while still following the PR/remote-first checks below.
-- **Branch resume:** before continuing work on an existing branch, follow `managing-session-memory`'s restore procedure — the live handoff and, for feature-scale branches, `docs/features/<name>.md` are the primary source, not `CODING_MEMORY.md`. Reach `CODING_MEMORY.md` only by targeted lookup (grep or `memsearch query`), never a full read, and mainly for non-feature-scale branches that have no feature file.
+- **Branch resume:** before continuing work on an existing branch, follow `managing-session-memory`'s restore procedure — the live handoff and, for feature-scale branches, `docs/features/<name>.md` are the primary source, not `CODING_MEMORY.md`. Reach `CODING_MEMORY.md` only by targeted lookup (grep or `memsearch query`), never a full read, and mainly for non-feature-scale branches that have no feature file — and note it is now a **frozen, machine-local** archive (ADR 0031), so it will not exist in a fresh clone and nothing new is appended to it.
 
 ## Commit Messages
 
@@ -22,9 +22,12 @@ Format every commit via Conventional Commits: `feat(api): add validation checks`
 - **PR/remote-first:** before any pull/sync step, check whether an open PR already exists for the current repo/branch and whether a remote already exists for pushing updates.
 - **Never pull-first:** don't start a session by pulling from remote just to "update first."
 - **Existing PR → update it:** if an open PR and remote already exist for this branch, push to that existing branch/PR rather than opening a new one.
-- **No PR yet → create one:** push once, create the PR, and immediately save the PR metadata (below) in `CODING_MEMORY.md`.
-- **Later sessions:** consult the saved PR metadata before deciding whether any pull is necessary — don't re-derive it by guessing.
-- **Cross-environment continuity:** resuming a PR from a different environment (desktop/remote/browser) than the one that opened it — note the switch in `CODING_MEMORY.md` and verify the branch tip matches the remote before pushing. The session with the most recent push is the most up to date.
+- **No PR yet → create one:** push once, create the PR — as a draft, per the flow below. The PR's own metadata needs no local copy; `gh pr view` is the record (see PR Memory Tracking).
+- **Open every PR as a draft:** `gh pr create --draft` → commit and push the audit trail → `gh pr ready`. This is enforceable rather than advisory: GitHub refuses to merge a draft, and `hooks/judge-guard.sh` matches on `gh pr create`, so a draft clears the *identical* freshness gate with no hook change. It removes the Merge button for exactly the window that causes stranding, instead of asking a human to remember.
+- **Why advisory versions were abandoned:** the mitigation this replaced was "remember to say it out loud" — a promise written after each of three stranding incidents and each time followed by another. Advisory mitigations are **0-for-3** by the record's own evidence, and a chat message never reaches whoever clicks Merge days later.
+- **Check reachability after a merge:** always verify `git merge-base --is-ancestor <tip> origin/main` after a PR merges — never assume the merge captured the branch tip.
+- **Later sessions:** query the PR's live state with `gh pr view` before deciding whether any pull is necessary — don't guess, and don't look for a saved local copy; there isn't one any more.
+- **Cross-environment continuity:** resuming a PR from a different environment (desktop/remote/browser) than the one that opened it — note the switch in the branch's `docs/features/<name>.md` (or the PR description, for non-feature-scale work) and verify the branch tip matches the remote before pushing. The session with the most recent push is the most up to date. Note that `.claude/session-state.md` is machine-local and will be absent here, so it cannot carry the handover.
 - **A merged PR is closed, not paused:** if you push new commits to a branch whose PR already merged, that push does **not** reopen the old PR — GitHub does not resurrect a merged PR from a later push. Check the PR's actual state (e.g. `gh pr view <n> --json state,mergedAt`) before assuming "push to the existing branch" satisfies the "update the existing PR" rule; if it's already merged, open a new PR for the new commits instead.
 
 ## The PR Description Template
@@ -40,10 +43,10 @@ Every PR description covers, in this order:
 
 ## PR Memory Tracking
 
-- Track PR status per repository in `CODING_MEMORY.md` (pointer) and `coding-memory/pr-tracking.md` (detail).
-- Per repo, record: repo identifier, branch name, remote name/URL, PR URL or number, whether it's currently open, the `session_origin` that created the PR, and the `session_origin` of the most recent push.
-- For feature-scale branches, implementation state lives in the branch's `docs/features/<name>.md` (frontmatter + checklist) per `managing-session-memory` — `coding-memory/branches/<branch>.md` is retired for new work. Non-feature-scale branches (a fix, a chore) have no such file; `CODING_MEMORY.md` and the commit history are the record.
-- Commit and push these memory updates as part of the same branch, so continuity context ships inside the PR itself.
+- **GitHub is the record of PR state.** Branch, remote, PR number, open/closed, and merge commit are all derivable with `gh pr view` / `gh pr list --state all` — do not maintain a parallel copy. `CODING_MEMORY.md` and `coding-memory/pr-tracking.md` are **retired and gitignored** (ADR 0031): writing PR state there now succeeds locally and never leaves the machine, which is worse than not recording it.
+- What GitHub does *not* hold, and therefore still gets written down: the **reasoning** — why a PR was closed unmerged, a decision taken mid-review, a cross-environment handover. That goes in the branch's `docs/features/<name>.md`, or an ADR under `docs/decisions/` if it is structural.
+- For feature-scale branches, implementation state lives in the branch's `docs/features/<name>.md` (frontmatter + checklist) per `managing-session-memory`. Non-feature-scale branches (a fix, a chore) have no such file; the commit history and the PR description are the record.
+- Commit and push these updates as part of the same branch, so continuity context ships inside the PR itself.
 
 ## Before Requesting Review
 

@@ -75,3 +75,28 @@ tasks/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Retired memory tree (docs/features/rule-surface-trim.md, ADR 0031).
+# CODING_MEMORY.md and coding-memory/ are frozen and local-only: they stay on
+# disk, greppable and memsearch-able, and stay in git history, but are no longer
+# pushed. The two verdict ledgers are the deliberate exception, and NOT because
+# a missing one blocks PRs -- measured 2026-08-20 in a fresh detached worktree:
+# judge-guard exits 2 either way, it only changes the message ("no verdict store"
+# vs "no fresh verdict"). They are kept because they are the accumulated judge
+# record -- both ledgers were already hundreds of rows deep at the split, a
+# meaningful fraction carrying a calibration outcome. (Exact counts are
+# deliberately not written here: they grow every judge run, and one written into
+# this file went stale during the very session that added it. Derive them:
+# `wc -l` the ledger, and parse `outcome` as JSON -- a grep for it matches the
+# space in `"outcome": null` and overcounts.) Untracking them would fragment
+# that history per
+# worktree and leave the repo with no structured verdict record once the prose
+# verdicts stop being tracked.
+/CODING_MEMORY.md
+/coding-memory/*
+!/coding-memory/observability-judge/
+/coding-memory/observability-judge/*
+!/coding-memory/observability-judge/verdicts.jsonl
+!/coding-memory/compliance-judge/
+/coding-memory/compliance-judge/*
+!/coding-memory/compliance-judge/verdicts.jsonl

@@ -7,7 +7,7 @@
 # written). A case-insensitive sanitizer additionally neutralizes any body line
 # that itself looks like a marker — belt-and-braces for a human skimming the
 # transcript, not the boundary itself. Reads session-state.md only; never
-# context.md, task-history.md, recent-prompts.md, or CODING_MEMORY.md. Models on
+# context.md, task-history.md, recent-prompts.md, or the retired CODING_MEMORY.md. Models on
 # memsearch-nudge.sh: silent on every failure, never delays or breaks a session
 # start. Design, contract and scenarios: docs/features/memory-system-split.md.
 #

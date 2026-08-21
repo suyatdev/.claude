@@ -3047,7 +3047,7 @@ Acceptance: **every `must` test passes.** Negative and stretch misses surface as
 ~/.claude/memsearch/bin/memsearch eval-digests --sample 12 --seed 17
 ```
 
-Expected: `unsupported=[]` and a report under `coding-memory/memsearch-evals/`. If >10% of sampled digests are UNSUPPORTED, revise `digest.DIGEST_SYSTEM`/`_TEMPLATE` wording, re-digest the flagged sessions (`touch` won't help — delete their `sources` rows or bump the template into the hash), and re-audit. Commit the report either way — the audit trail is the point.
+Expected: `unsupported=[]` and a report under `docs/memsearch-evals/`. If >10% of sampled digests are UNSUPPORTED, revise `digest.DIGEST_SYSTEM`/`_TEMPLATE` wording, re-digest the flagged sessions (`touch` won't help — delete their `sources` rows or bump the template into the hash), and re-audit. Commit the report either way — the audit trail is the point.
 
 - [ ] **Step 6: Final verification + commit**
 

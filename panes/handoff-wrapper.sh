@@ -8,7 +8,7 @@
 # interactive session and must run all hooks normally.
 set -u
 CLAUDE_BIN="$HOME/.local/bin/claude"
-SEED_PROMPT="Read .claude/session-state.md and CODING_MEMORY.md, then continue the work in progress."
+SEED_PROMPT="Read .claude/session-state.md and the active feature card under docs/features/, then continue the work in progress."
 
 target_cwd="${1:-$PWD}"
 cd "$target_cwd" 2>/dev/null || printf 'handoff: warning — could not cd to %s, starting here\n' "$target_cwd"

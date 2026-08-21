@@ -3,7 +3,7 @@
 # (spec: docs/superpowers/specs/2026-07-22-pane-split-policy-design.md). Run it
 # from a cmux pane after any cmux upgrade, BEFORE trusting cmux.sh open_tab.
 # EVIDENCE-GATHERING, not a contract: when cmux changes, update the expectations
-# here and re-record the findings in coding-memory/branches/pane-split-policy.md.
+# here and re-record the findings in docs/features/pane-split-policy.md.
 set -u
 CMUX_BIN="${PANE_CMUX_BIN:-/Applications/cmux.app/Contents/Resources/bin/cmux}"
 JQ_BIN="${PANE_JQ_BIN:-/usr/bin/jq}"
