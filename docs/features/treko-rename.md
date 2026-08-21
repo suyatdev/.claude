@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feat/treko-rename
 ---
 
 # Treko: rename the tracker, and launch it without being asked
@@ -372,7 +372,11 @@ No new dependency is added by this card. Adding one would need a separate ask
 
 ## Tasks
 
-- [ ] 0. Branch `feat/treko-rename` + worktree. **Only after `gate confirmed`.**
+- [x] 0. Branch `feat/treko-rename` + worktree. **Only after `gate confirmed`.**
+      Gate confirmed 2026-08-21. Branched from `treko-uddate` @ `29503ff`, which already
+      carries this spec and its judge verdicts, so spec and implementation land in one PR.
+      Reused the existing `treko-ui-update` worktree rather than cutting a new one — it is
+      already an isolated checkout and nothing else is in flight in it.
 - [ ] 1. **Red first.** Add the failing tests for criteria 5, 6, 7, 8, 9, 11 and 16 against the
       *current* names, and confirm each fails for the stated reason. Do not touch implementation in
       this step.
