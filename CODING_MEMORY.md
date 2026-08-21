@@ -6875,6 +6875,1252 @@ is what kept the guard from blocking this session's own record.
 `phase: planning` with `branch: none`, which is why **every source write in this repo is currently
 denied**. Neither was started. `## What's in here` still has no `task-tracker/` or `skills/` row.
 
+## Session 81 — 2026-08-12 — marker-gate round 6 finished, and three of its "gaps" were live wrong claims
+
+Closed the remaining **7** open items on `docs/features/verification-marker-gate.md` (revision 6,
+`revision_status: complete`), folded `docs/marker-gate-defect-checklist.md` into the card and **deleted
+it** — the one-canonical-file violation that file itself admitted to. Card is still `phase: planning`,
+`branch: none`, 0/15. Not yet judged.
+
+**The framing that turned out to be wrong: these were not missing paragraphs.** Three of the seven were
+*corrections to statements the spec asserted confidently*, and two of those failed in the dangerous
+direction — toward blocking work that should pass, or blocking it permanently.
+
+**`commit-form-coverage` — measured, not reasoned, and the reasoning would have been wrong.** Rounds
+3–5 wrote one `<base>` ABSENT row covering both `PATHSPEC`-outside-pathspec and `ALL`-outside-path-set,
+with the condition "`cat-file -e` fails **or** the path is missing on disk". Four cases on git 2.50.1
+(base tree `foo.sh`/`bar.md`/`gone.md`) settled it:
+
+| case | form | `gone.md` state | in resulting tree |
+|---|---|---|---|
+| A | `commit -m x -- foo.sh` | deleted on disk, unstaged | **yes** |
+| B | `commit -m x -- foo.sh` | deletion **staged** | **yes** |
+| C | `commit -a -m x` | deleted on disk | no |
+| D | `commit -a -m x` | untracked, on disk | no |
+
+The pathspec form builds its tree from `<base>` **plus the named paths** and consults neither worktree
+nor index for anything else — B is the sharp one, a *staged* deletion outside the pathspec still
+survives. So the disk clause is right for `ALL` and produces a **false block** for `PATHSPEC`, on a
+pair the commit preserves byte-for-byte at the certified version. Split into two rows.
+
+**`pair-formation-rule` — writing the predicate down is what exposed the contradiction.** The spec
+never said what "has a sibling test" means, and the two passages that implied an answer disagreed:
+§Scope ("a file with no sibling test is never gated") vs. the `-am` scenario, which forms a pair with an
+**untracked** test. The naive fix — a symmetric index ∪ disk union — is a **permanent block**: in the
+test→subject direction the writer refuses to write a marker for an untracked subject, so the gate would
+demand a marker nothing can produce, with `MSG_NO_MARKER`'s remedy re-running a suite that correctly
+writes nothing. Rule is therefore **asymmetric**: subject→test uses index ∪ disk (fail-closed, always
+clearable by `git add`), test→subject uses the index alone. **An unstated predicate is not neutral — it
+lets two halves of a document drift apart while both look right in isolation.**
+
+**N1 — the number *and* the mechanism were wrong.** `git diff --cached --name-only` outside a repo exits
+**129**, not 128: with no repo `git diff` falls back to `--no-index`, whose option table has no
+`--cached`, so it is a usage error with a usage dump on stderr — not "not a git repository". The three
+neighbouring 128s were separately re-measured and are all correct (`rev-parse --show-toplevel` outside a
+repo; `rev-parse --verify HEAD` and `diff --cached --name-only HEAD` on an unborn HEAD; `HEAD^` on a root
+commit). Bonus: *inside* a repo with unborn HEAD, `diff --cached --name-only` exits **0** with empty
+stdout — which is exactly why the stdout-only fail-open the section warns about is real.
+
+**O1 — deleting a false claim, not adding a missing one.** Task 8 said "reverting the *hook* (task 7)
+alone is harmless." That stops being true the moment task 13 registers the hook in `settings.json`: a
+`PreToolUse` entry whose script cannot be executed fails **every Bash call in the session**, not just
+commits. Now a two-row revert table with explicit order — 5↔8 revert 8-then-5; 7↔13 revert **13-then-7**.
+
+**D4/D5 — logged the blocks and made the storage decision a decision.** Exemptions were logged, blocks
+were not, so "how often is this bypassed" was answerable and "does this gate ever fire" was not. One
+file (`hooks/state/test-marker.log`, renamed from `test-exempt.log`, all 5 references updated and
+verified 0 remaining) with an `EXEMPT`/`BLOCK` column; allows deliberately unlogged; read back by
+`--status`, because a log nothing reads is the same defect one indirection away. D4 answered honestly
+rather than fixed: the log is gitignored and machine-local **by decision**, delivering self-audit and a
+rate signal, **not** organisational assurance — a developer can delete it. Written down so no later
+reader claims this feature provides an audit trail.
+
+**Also folded in from the checklist:** the accepted ceiling that was nowhere in the card — **the marker
+is a receipt, not a grade.** A blob hash proves the suite ran against this exact pair of versions, never
+that the suite is good; a test gutted to `exit 0` earns a valid marker. That is the ceiling on the whole
+feature. Plus the standing exit criterion (recurring ids → stop specifying and build, user decision
+only), the waiver policy (`command-grammar` is the only one, ever), and **O3, the shrink, still owed** —
+the file is now 1419 lines against a <400 standard, and its own diagnosis is that prose consistency at
+this size, not the design, is what five rounds failed on. Deliberately not bundled with a defect round.
+
+**Still open:** `falsify-harness-signatures` (0/11) and `verification-marker-gate` (0/15) both remain
+`phase: planning` / `branch: none`, so **every source write in this repo is still denied** by
+`phase-guard.sh`.
+
+## 2026-08-13 — marker-gate round 6 judged: both judges hit the same defect, independently
+
+Both judges were collected at spec blob `a6fa6de1`, HEAD `287add5`. **Compliance: FAIL** (round 1 of the
+re-entry cycle, 2 violations). **Observability: risk=medium**, `stage: architecting`, 4 concerns. Round 6
+did genuinely close all five of round 5's ids — the compliance judge re-derived each from scratch rather
+than trusting the card's own "closed" claims, and specifically could not find the fail-open it was asked
+to hunt for in the asymmetric pairing predicate. **None of round 5's ids recur.**
+
+**The convergence is the finding.** Two judges with different rubrics, dispatched in parallel, both
+landed on the *flowchart's node order* — not on any prose either was pointed at:
+
+- `writing-specs/opt-in-fail-closed-conflict` — §Scope (l.124-134, l.197) and the Fail-closed contract
+  (l.1202-1206) both promise **absolutely** that a repo without the writer installed is never blocked.
+  The flowchart's own nodes NP/CM/CF/CO/C (l.59-71) fire **before** the toplevel-resolution and
+  writer-installed nodes F/G (l.73-76). So doors 1-6 block every commit in every repo on the machine —
+  the exact global lockout opt-in exists to prevent. The doc never reconciles the two claims.
+- Observability, arrived at separately: log **field 4 ("the pair") is undefined for 10 of the 14 doors**,
+  and for `FOREIGN`+`TEST_EXEMPT` it is *unknowable by that door's own definition*. Same root cause —
+  doors that fire before a repo or a pair exists. The log's write-target `<repo>/hooks/state/` is
+  equally undefined there.
+
+**Measured this session, and it splits the violation in two** (`settings.json`, hook sources):
+`git-guard`, `judge-guard`, `merge-guard` are all `PreToolUse`/`Bash` **globally registered** and all
+**fail CLOSED (exit 2) on missing python3** — `hooks/git-guard.sh:53-57`. `doc-guard` alone fails **open**
+(`hooks/doc-guard.sh:54`, `[ -n "$py" ] || exit 0`). Therefore:
+
+- **Door 3 `MSG_NO_PYTHON` is not a new hazard** — a broken `python3` already blocks every commit on this
+  machine today, via three existing hooks, before this feature exists. Precedent, verifiable, accepted.
+- **Doors 1, 4, 5, 6 ARE a new hazard.** They depend on `classify-commit-command.py`, a *new file this
+  feature adds*. git-guard's classifier is a different file (`classify-git-command.py`), so no existing
+  precedent covers them. A missing or corrupt new classifier would be a machine-global lockout that does
+  not exist today.
+
+**Fix direction (not yet applied, not yet judged):** read the payload's `cwd` with an inline `python3`
+JSON read — exactly the shape `git-guard.sh:59-65` already uses — then resolve toplevel and check
+writer-installed *before* invoking the classifier. That moves doors 1, 4, 5, 6 behind the opt-in check,
+leaves only door 3 machine-global (where precedent covers it), and simultaneously makes field 4 and the
+log write-target well-defined for every door but that one. Reorders the flowchart, the door table, the
+fail-closed contract, and the logging section.
+
+- `core-conduct/file-size-convention` — 1,419 lines against the **800 hard ceiling** (1.8x). The judge's
+  argument for why **O3 can no longer be deferred** is the sharp part: O3's own justification is that
+  prose consistency at this size is what keeps failing, and violation 1 *is that failure mode, already
+  happened, inside the revision whose stated goal was closing this class of defect* — one guarantee
+  asserted twice, ~1,000 lines apart, drifted apart. Note the shrink is **not** satisfied by an ADR-0017
+  `.md`/`.spec.md` split alone: that pattern needed **explicit user waivers** for both halves on
+  `tracking-feature-state`, and no such waiver exists here. Much of the bulk is round-by-round
+  archaeology ("Round 2 named eleven — and miscounted its own table…") which is *history*, belonging to
+  git and the judge ledger, not to a spec an agent builds from.
+
+**USER DECISION 2026-08-13 — how O3 gets done: cut the round-by-round history, do NOT split.** Delete
+the archaeology, keep the design. The ADR-0017 `.md`/`.spec.md` split was **considered and rejected**:
+it relocates bulk rather than reducing it, and the one feature that used it needed explicit user waivers
+for *both* halves anyway. **No size waiver is to be sought for this spec.** Target under 800; <400 is the
+standard. This attacks the size itself, which is the judge's stated cause of the defect class.
+
+**Also still open, from observability (advisory):** the `>=56ms` python3-startup figure attributed to
+that judge is **the third different number it has recorded for the same quantity** across three dates
+(56.3ms 08-02 → 20-30ms 08-04 → ~40ms measured 08-13). Round 6's "closed all seven" framing does not
+surface it as open. Checklist task 10 is the safety net, but an inflated figure makes the latency budget
+impossible to fail. Also: no allow-path signal means the log cannot distinguish "gate healthy and quiet"
+from "gate on but silently never pairing" — both are an empty log forever.
+
+## 2026-08-13 — marker-gate round 7: the flowchart fix landed; the 800-line target did not
+
+Commit `36a0880` on `docs/post-merge-53`. **Violation 1 closed, violation 2 open and reported as open.**
+
+**`writing-specs/opt-in-fail-closed-conflict` — fixed.** The node order now reads pre-filter → python3
+→ inline JSON read of payload `cwd` → toplevel → writer-installed → classifier. Every door except
+`MSG_NO_PYTHON` sits below the opt-in check. Precedent for that one exception was **verified, not
+inherited**: `git-guard.sh:53-57`, `judge-guard.sh:44-48`, `merge-guard.sh:39-43` all exit 2 on a
+missing python3 and are all globally registered; `doc-guard.sh:54` is the family's lone fail-open. The
+three classifier doors were the ones that actually mattered — `classify-commit-command.py` is a file
+this feature *adds*, so no sibling guard's precedent covered a missing copy of it.
+
+Knock-ons carried through rather than left to drift: allow paths 9→10, mutation floor 24→25, budgets
+3→4 (an adopting repo pays two python3 starts now), log field 4 made total with `-`, and the two doors
+that fire before a repo is known now say explicitly that they write no line.
+
+**`python3 -I` startup re-measured: 23.8 ms median, n=15 (min 23.2, max 26.0).** This is the *fourth*
+figure for one quantity (56.3 → 20-30 → ~40 → 23.8). The spec now carries the derivation command, not
+just the number, so the next reader re-runs it instead of inheriting it. Cause of the drift was that
+nobody ever recorded how it was measured.
+
+**`core-conduct/file-size-convention` — NOT closed, and the agreed method cannot close it.** Measured,
+not estimated: the rewrite deleted **332** lines and added **361** (`git diff --numstat`), leaving
+**1,448**. Composition: 374 lines of Gherkin across 56 scenarios, 124 contract-table rows, 239 blank
+lines, ~711 prose. **Deleting every line of prose still leaves ~740** — so 800 is not reachable while
+the spec keeps its acceptance scenarios and contract tables.
+
+⚠️ **The three standing constraints — under 800, do not split, seek no waiver — are jointly
+unsatisfiable at this feature's scope.** History was never the bulk; the design is. Recorded here
+rather than resolved silently, because picking which constraint gives is a user decision. Do not open
+a round-2 judge dispatch until it is answered: the size id will be re-cited verbatim and burn a round.
+
+**USER DECISION 2026-08-13 — the size fix is a scope cut, not more deleting.** Shrink the *feature*, so
+there is less to specify, rather than relocating text. Chosen over an ADR move (relocates bulk — the
+same objection that killed the split), a size waiver, and cutting acceptance scenarios.
+
+**Deferred out of v1** (each becomes a follow-up feature, named in §Follow-ups):
+
+- **The decision log in full** — `<repo>/hooks/state/test-marker.log`, the four-field table, the
+  machine-local storage decision, the `0600`/`0700` modes on the log, and its four scenarios. The
+  marker store keeps its own modes; only the log goes. ~70 lines + 4 scenarios.
+- **`--status`** — ACTIVE/INERT, decision counts, pair count, and the "inertness must be observable"
+  rationale. Task 14's arming check pipes a real payload instead. ~30 lines + 1 scenario.
+- **`INCLUDE` as a door of its own** — `-i`/`--include` and `--pathspec-from-file` still **block**,
+  folded into `UNSUPPORTED`. Loses one door, one form value, one resolution row and the specific
+  remedy string.
+
+⚠️ **`FOREIGN` keeps its behaviour — do not read the option label as licence to drop the block.**
+Reading another repo's markers is the worst failure this gate has; a `cd`/`-C`/`--git-dir`/`--work-tree`
+commit must still refuse. What gets cut is the *elaboration*: its dedicated door and message, and the
+accepted-cost analysis of the same-repo `cd "$HOME/.claude"` false block. Fold the trigger into
+`UNSUPPORTED` so the block survives and the prose does not. Same test for anything else on the
+deferral list: **cut the elaboration, never the fail-closed behaviour.**
+
+Knock-ons the next pass must carry through, or it re-opens the class round 7 just closed: doors
+14 → ~11, allow paths 10 → 9 (no `TEST_EXEMPT` log line to describe, exemption itself stays as the
+escape hatch), mutation floor recomputed from both, budgets still four, and §Testing requirements plus
+tasks 6, 9, 10, 12 and 14 all re-derived. Expect ~650-750 lines. **Do the cut in one pass** — a
+half-applied scope cut leaves two descriptions of one feature, which is the defect being fixed.
+
+## 2026-08-13 — marker-gate revision 8: the scope cut landed, and it does not reach 800 either
+
+Applied in one pass on `docs/post-merge-53`. All four deferrals went in together; **nothing is
+half-cut.** Counts re-derived from the flowchart rather than inherited, and every one of the three
+predictions in the round-7 note turned out wrong in the direction that mattered.
+
+**What the cut removed.** The decision log in full (`test-marker.log`, its four-field table, the
+machine-local storage decision, the `0600`/`0700` modes on the log, five scenarios that asserted log
+lines); `--status` and its scenario; `INCLUDE` and `FOREIGN` as forms of their own. The marker store
+keeps its own `0700`/`0600` modes — only the log's went. **Every deferred trigger still blocks**:
+`-i`/`--include`, `--pathspec-from-file`, and `cd`/`-C`/`--git-dir`/`--work-tree` all fold into
+`UNSUPPORTED`, and `MSG_UNSUPPORTED_FORM`'s message now names which of the four fired so the remedies
+stay distinguishable.
+
+**Three round-7 predictions were wrong, each verified rather than carried:**
+
+- **Doors 14 → 13, not "~11".** Only `MSG_FOREIGN_REPO` disappears. `INCLUDE` was never its own door —
+  it already shared `MSG_UNSUPPORTED_FORM` — so folding it removes a *form value* and a resolution
+  row, not a door. Verified: door table 13 rows, flowchart 13 distinct `MSG_*` constants, equal.
+- **Allow paths stay 10, not 9.** The note reasoned "no `TEST_EXEMPT` log line to describe", but
+  logging was never an allow path — deferring the log changed what an exemption *records*, never that
+  it allows. Verified by counting edges into the flowchart's `P` node: 9 bare `--> P` plus the
+  pre-filter edge that declares the node = 10.
+- **Mutation floor 25 → 24** (13 + 10 + 1), which coincidentally returns to the pre-round-7 figure for
+  an unrelated reason. Task 9 now carries an instruction to re-derive it from the flowchart rather
+  than trust the written number, because inheriting it across a revision is exactly how it went stale.
+
+**⚠️ The size finding — 800 is unreachable, and this is now measured twice.** 1,448 → **1,380**, a net
+**68 lines**: the deferrals took ~103 out, and the notes that keep them honest (the accepted cost of
+shipping no `--status`, the `UNSUPPORTED` fold, the follow-up register) put ~35 back. Composition
+measured with `wc`/`grep`, not estimated:
+
+| component | lines |
+|---|---|
+| Gherkin, 52 scenarios | 337 |
+| contract + measurement table rows | 114 |
+| code blocks (mermaid, sh, python, json) | 67 |
+| blank | 223 |
+| **non-prose floor** | **741** |
+| prose | 639 |
+
+**The floor is the whole finding.** Deleting every line of prose leaves **741**, so an 800-line version
+has a total prose budget of **59 lines** against the 639 the spec currently needs for its contracts,
+orderings and measured hazards. Round 7 measured the same floor at ~740 and read it as "prose deletion
+cannot close this"; revision 8 proves the stronger claim — **scope cutting cannot close it either**,
+because the bulk is Gherkin and contract tables, and cutting those is precisely what the user rejected
+when choosing the scope cut over them. `core-conduct/file-size-convention` stays **OPEN** and is
+reported as open in the spec's own header. **Do not shave at this file again**; the three constraints
+(under 800, do not split, seek no waiver) are jointly unsatisfiable and which one gives is a user
+decision.
+
+**One guarantee was genuinely lost, and it is stated rather than dropped.** Revision 7 argued
+"inertness must be observable, or the gate becomes decorative without anyone noticing"
+(`judge-guard.sh:204` is that exact failure in this family). `--status` was the answer; deferring it
+means v1 ships **no way to query whether the gate is armed**. Task 14 becomes the only arming proof —
+a one-off install-time check that pipes real payloads (plain, `-am`, and `rtk`-wrapped) into the
+installed hook — and the residual risk is the gate going inert *later*, silently. `--status` is
+follow-up 1 for that reason, and task 12 must say so in `rules/gates.md` and `hooks/README.md` so the
+next reader does not read the missing subcommand as a stale doc.
+
+**Next:** re-dispatch **both** judges at **round 2** of the re-entry cycle, passing the round-1 ids
+(`writing-specs/opt-in-fail-closed-conflict`, `core-conduct/file-size-convention`) so recurring ones
+keep their id. Expect the size id to be re-cited — the spec now answers it with a measurement and a
+"this is a user decision" rather than a fix, which is the honest position, not a fixable violation.
+
+**USER DECISION 2026-08-13 (same day, reversing an earlier one) — the size ceiling is WAIVED for this
+file.** `core-conduct/file-size-convention` joins `writing-specs/command-grammar` in the card's
+frontmatter. The earlier "no size waiver is to be sought" call was taken while the scope cut was still
+expected to reach 800; the cut landed at 1,380 and the composition measurement showed a 741-line
+non-prose floor, so **the premise was measured false and the decision changed.** Rejected alongside it:
+splitting (considered a third time, still relocates bulk), and cutting Gherkin/contract tables (the
+thing the scope cut was chosen over). The size is now a recorded accepted cost, not an open defect —
+**a judge citing this id is arguing with a settled decision**, and both the header and §Standing
+decisions say so. Round 2 can now be dispatched without burning itself on an unfixable id.
+
+## 2026-08-13 — marker-gate round 2 judged: the size paragraph went stale while being written
+
+Both judges pane-dispatched, both returned DONE. **Compliance = FAIL, 1 violation, and it is new, not
+a recurrence.** Observability = advisory, risk=medium.
+
+**Round 1's substantive id is confirmed closed.** The compliance judge re-traced the flowchart edge by
+edge rather than trusting the spec's own "fixed it" callout: the writer-installed check really does sit
+above every door but `MSG_NO_PYTHON`, and 13/10/24 agree everywhere they are stated. It also confirmed
+the scope cut left **no stale reference to a deferred feature** and did **not** weaken the foreign-repo
+refusal. `writing-specs/command-grammar` and `core-conduct/file-size-convention` were recorded as
+waived, not re-cited — passing the waivers in the prompt worked.
+
+**⚠️ `core-conduct/verify-before-claim` — my error, and verification found it was worse than cited.**
+The judge said the file claimed 1,380 lines but measured 1,413. Re-measuring rather than accepting the
+report turned up a **second** instance the judge could not see: `git show fa44399:<path> | wc -l` is
+**1,402**, so the scope-cut commit's own *message* also recorded 1,380. The 1,380 was a transient
+working-tree state that was measured, written down as settled, and then edited twice more before
+either the file or the commit message was finalised.
+
+**The mechanism is worth naming because it is self-referential: a composition table counts itself.**
+Adding the table added table rows and blank lines to the very counts it reported. Measuring, then
+editing, then committing without re-measuring is not a slip that attention fixes — the act of writing
+the measurement down changes the measured quantity. Every earlier "line count went stale inside its own
+paragraph" entry is this same shape.
+
+**Fix applied (revision 9), and it is the derivation, not the number.** The spec now carries the
+`wc`/`grep`/`awk` composition command inline, a git-measured progression table
+(`36a0880` 1,448 → `fa44399` 1,402 → `0294809` 1,413 → rev 9 1,434), and an explicit warning not to
+trust any line count in the file without re-running it. Convergence method that actually works, since
+editing changes the count: get the structure final, measure, then **swap digits only** — a within-line
+edit is line-count-neutral, so it terminates in one pass. Also fixed a flaw in the derivation itself:
+the awk fences were anchored `^```` and silently miscounted **indented** code blocks as prose.
+
+Re-measured composition as of revision 9: 337 Gherkin (52 scenarios), 128 table rows, 72 code, 230
+blank → **767 floor**, 667 prose, so an 800-line file has a **33-line** prose budget. Every
+re-measurement has moved the floor **up**, never toward 800 — the waiver's basis is unchanged and if
+anything stronger.
+
+**Observability (advisory, non-blocking) — the scope cut removed both observability surfaces, and the
+judge's ranking is that the LOG matters more than `--status`.** `TEST_EXEMPT` is validated for shape
+and then **discarded**, so bypass rate is permanently unmeasurable in v1 — which undercuts the
+feature's own justification, since the escape valve becomes exactly as invisible as the soft warning
+the gate was built to replace. `--status` at least has a partial substitute in task 14; the log has
+none. Judge recommends restoring **the log first**, before implementation starts. It also independently
+re-ran the `python3 -I` derivation and confirmed the 23.8 ms figure.
+
+**Open decision for the user — do not dispatch round 3 until it is answered:** whether the decision log
+returns to v1. Restoring it changes the spec materially and would invalidate a round-3 verdict taken
+now. Round 3 otherwise only has to confirm a number correction.
+
+**USER DECISION 2026-08-13 — the decision log is RESTORED to v1.** Taken on the round-2 observability
+read. The reasoning that settled it: **the log was cut for exactly one reason — hitting 800 — and that
+ceiling is now waived, so the premise is gone.** The judge's independent argument was that
+`TEST_EXEMPT` was validated for shape and then discarded, making bypass rate permanently unmeasurable
+and hollowing out the feature's own justification (a gate built because soft warnings get rationalised
+past should not hand out an invisible escape hatch). Restored from `36a0880` via git rather than
+rewritten — the design was already judged sound.
+
+Counts re-derived for **13** doors rather than inherited from revision 7's 14: field 4 names a pair for
+**4** doors, writes `-` for **8**, and **1** (`MSG_NO_PYTHON`) writes no line at all because no repo is
+known yet. Revision 7 called that last case "two doors"; one of them was the unreadable-payload
+**allow**, which never wanted a line since allows are not logged. Added a scenario pinning the no-line
+door, which revision 7 never had.
+
+⚠️ **v1 now ships the log's writer and no reader** — `--status` stays deferred, so an empty log is
+still ambiguous between "armed and quiet" and "armed but never pairing". Recorded in §Decision logging
+as a stated half-measure, and `--status` is promoted to follow-up 1. The §Scope note was rewritten from
+"inertness is NOT observable" to the accurate asymmetry: **a non-empty log proves the gate is armed and
+firing; an empty one proves nothing.**
+
+**The size finding crossed a threshold and is now decisive rather than arguable.** 1,434 → **1,539**,
+and the **non-prose floor is 822** — *above* the 800 ceiling on its own. Deleting every line of prose
+still leaves the file over. The prose budget for an 800-line version is **negative 22**. Four
+re-measurements, every one moving the floor up; the waiver is no longer a judgement call.
+
+**Convergence method, now used twice and worth keeping:** a composition table counts itself, so
+measure → edit → measure loops forever. Get the structure final, measure, then **swap digits only** —
+a within-line edit is line-count-neutral, so it terminates. Two swaps were needed here because a
+one-line precision fix moved the Gherkin count.
+
+## 2026-08-13 — marker-gate round 3: compliance PASSES; three advisory findings applied as revision 10
+
+**`core-conduct/verify-before-claim` CLOSED. Compliance verdict = PASS, violations `[]`.** The judge
+re-derived rather than re-read: it ran the embedded `wc`/`grep`/`awk` command against the live file
+(1,539 / 822 / 717, matched) **and** pulled all five commits the progression table cites straight from
+git (1,448 / 1,402 / 1,413 / 1,434 / 1,539 — every one matched). It also checked the log arithmetic
+door-by-door against the doors table (4 + 8 + 1 = 13) rather than trusting the prose asserting it, and
+confirmed no "log is deferred" text survived the restore across header, §Scope, §Decision logging,
+§Follow-ups and task 6. Both waived ids recorded, not re-cited. **Three consecutive rounds have now
+shown that passing the waived ids in the prompt works** — neither has been re-cited since.
+
+**Observability round 3: risk=medium, confidence=high, three findings — all three verified myself
+before acting, all three real.**
+
+1. **The log's stated read method could not answer the question it claimed.** The spec said the erosion
+   question is answered with `wc -l` and `cut`; `wc -l` cannot separate `EXEMPT` from `BLOCK`, which is
+   the whole question. Every other measured claim in the spec ships a copy-pasteable command and this
+   one did not — the same *store the derivation, not the number* rule, violated one section after
+   being applied. Fixed with three literal one-liners (`cut -f2 | sort | uniq -c`, an `awk` day-bucket
+   for the rate signal, and a door histogram), plus the note that tab-exclusion in the exemption regex
+   is what makes `-F'\t'` parsing safe — **load-bearing for parseability, not only display.**
+2. **The "a non-empty log proves the gate is armed" claim was true only as of the log's last entry**,
+   and the caveat sat two sections from the claim. Merged the as-of qualifier into the claim itself.
+3. **🔴 The exemption regex admits invisible Unicode — verified by running it, not reading it.**
+   `^[^\x00-\x1f\x7f]{1,200}$` blocks tab, newline, ESC and DEL (so **log integrity holds** — no reason
+   string can forge a field or line), but **U+200B, U+200D and U+202E (RTL override) all match.**
+   Confirmed `hooks/scan-invisible-unicode.sh` exists and is **not** in `settings.json` — one of the
+   four dormant hooks. **Disclosed in the spec, deliberately not decided**: severity is low
+   (`0600`, machine-local, gitignored, read by whoever wrote the entry, deletable by them anyway), but
+   this repo owns a control for exactly this class and it is unwired. Tighten / route through the
+   scanner / accept is a **user decision, still open**.
+
+⚠️ **The PASS verdict is now STALE by construction** — it is pinned to blob `28ff93a1` and revision 10
+changed the file. Not a defect; the freshness rule working. A round-4 compliance dispatch is needed
+before `superpowers:writing-plans`, not before the user's own review.
+
+Size after revision 10: **1,576**, non-prose floor **834**, prose budget for an 800-line file
+**negative 34**. Fifth consecutive re-measurement, fifth move upward.
+
+## 2026-08-13 — marker-gate revision 11: the exemption regex was Python syntax in a bash gate
+
+**The open decision was answered against the wrong engine, and the defect underneath it was worse than
+the one being disclosed.**
+
+Revisions 1–10 carried `^[^\x00-\x1f\x7f]{1,200}$` as the `TEST_EXEMPT` validation regex, with a
+disclosed open question: it blocks tab and newline but admits U+200B, U+200D and U+202E. That
+disclosure was verified by running the regex — **in Python**, where `\xNN` is an escape. The gate that
+runs it, `hooks/test-marker-guard.sh` (spec line 168), is **bash**, where it is not.
+
+Measured on bash 3.2.57, not read:
+
+```
+re='^[^\x00-\x1f\x7f]{1,200}$'; [[ "vendored upstream" =~ $re ]]; echo $?
+2      # regcomp failure — distinct from 1/no-match
+```
+
+- `[[ ]]` reads a non-zero exit as false, so **`MSG_BAD_EXEMPT` fired on every exemption**. The escape
+  hatch was inert in every revision that specified it.
+- Dropping `{1,200}` makes it compile and still reject every ordinary reason (lower, UPPER, digits) —
+  the bracket set is not remotely what the spec claimed.
+- The scenario "an explicit exemption is honoured and logged to a file" **could not have passed**.
+- The log-integrity argument ("the regex excludes `\x00-\x1f`, so no reason can forge a field") was
+  resting on a regex that never evaluated anything.
+
+**Fix, user-chosen: `^[[:print:]]{1,200}$` evaluated under a pinned `LC_ALL=C`.** Measured under both
+`LC_ALL=C` and `en_US.UTF-8`: admits `routine cleanup`, rejects tab, newline, U+200B, U+200D and
+U+202E **in both**. Accented letters were the only locale-variant row (admitted under UTF-8, rejected
+under C) — which is what the pin settles, and it makes the `1,200` bound byte-counted. The disclosed
+Unicode gap therefore closed as a side effect, taking **no** dependency on the dormant
+`hooks/scan-invisible-unicode.sh`.
+
+Two regression scenarios shipped in the same edit as the control (58 scenarios now, was 56): U+202E
+rejected, and an ASCII reason accepted under a UTF-8 login locale — the second because the pin is
+invisible at the call site.
+
+**Composition re-derived at revision 11** (structure final → measure → swap digits only; re-measured
+after the swap and every figure matched): total **1,614**, Gherkin 387, table rows 137, code 79, blank
+252, **non-prose floor 855**, prose 759. The floor moved 834 → **855**, so the 800 ceiling is more
+decisively unreachable than when the waiver was recorded — the waiver's arithmetic basis strengthened,
+it did not need revisiting.
+
+**Method note worth keeping: a verification is only as good as the engine it ran in.** The prior
+session did run the regex rather than eyeball it, and still got the wrong answer, because it ran it in
+the language the regex was *written in* rather than the one that would *execute* it. Ask which
+interpreter the artifact will meet in production before trusting the probe.
+
+## 2026-08-13 — marker-gate round 4: FAIL on one violation, and it was revision 11's own fix
+
+**Compliance round 4 = FAIL, 1 violation. Observability = risk low, confidence high, one advisory
+that mattered more than its label.**
+
+### The violation: `writing-specs/locale-pin-mechanism`
+
+Revision 11 required the exemption regex to be "evaluated under `LC_ALL=C`" but never said how that
+pin is scoped to a bash `[[ ]]` test. The judge tested the spelling an engineer reaches for first and
+found it is not merely wrong but a crash — independently reproduced here:
+
+```
+LC_ALL=C [[ "$s" =~ $re ]]   ->  "[[: command not found", exit 127
+( export LC_ALL=C; [[ ... ]] ) ->  exit 0
+```
+
+`[[` is a bash **reserved word**, not a command; an assignment prefix makes bash search for a command
+by that name. **This is the same defect class as revision 11 itself, one layer down** — a requirement
+written in the idiom of one context and destined to execute in another. Revision 11 fixed the regex's
+engine mismatch and re-introduced the species in the sentence describing the fix. Revision 12 states
+the subshell form explicitly, shows the wrong form with its measured exit code, and gives the reason
+for the subshell: the gate's other comparisons must keep the caller's locale (verified — the pin does
+not leak).
+
+### The advisory that mattered: an arming check that can only observe refusal
+
+Checklist task 14 is v1's **only** proof the gate is armed, and every one of its cases asserted the
+door *shuts* (exit 2) or that an opt-out is honoured (exit 0 because the gate is inert). None fed a
+valid `TEST_EXEMPT` and expected acceptance. So the arming check would have passed cleanly throughout
+revisions 1–10, while the escape hatch was dead — the exact state that shipped. **A check that can
+only observe refusal cannot detect a control that refuses everything.** Revision 12 adds the positive
+path: valid reason → exit 0 → `EXEMPT` line in the log.
+
+Related, recorded rather than fixed: a `MSG_BAD_EXEMPT` log line records that validation refused,
+never why, so a checker rejecting *everything* looks like a dense run of typos. Recording the failing
+sub-rule would not close it — a `regcomp`-level break fails before any sub-rule runs. The task-14
+positive path is what actually separates the two.
+
+### Enumeration, done rather than deferred
+
+Rather than wait for round 5 to find a third instance, the whole class was swept: every regex-shaped
+construct in the spec, attributed to the engine that will run it (guard = bash; classifier and writer
+= Python). `^([0-9a-f]{40}|[0-9a-f]{64})$` is valid and correct in both, ran clean on bash 3.2.57;
+`^-[A-Za-z]+` belongs to the Python classifier; no bash-4 constructs against the 3.2 pin; `[[:print:]]`
+appears only in bash contexts. The first sweep only saw backticked inline spans, so it was re-run
+inside code fences and Gherkin — the acknowledged blind spot — and found nothing further.
+**Result: one instance, already fixed, plus the one the judge found in the fix.**
+
+### Process note
+
+The compliance judge wrote its round-4 markdown by **appending** to the per-spec file
+`coding-memory/compliance-judge/2026-08-01-verification-marker-gate.md` (now nine rounds) rather than
+the round-suffixed filename the prompt specified. Diff verified: **80 added, 0 deleted.** Its own
+summary claimed the specified path, so the claim was wrong while the behaviour was right — and the
+repo convention it followed is the better one. Check the diff, not the report.
+
+Composition re-derived at revision 12: total **1,652**, floor **867** (855 → 867), prose 785, 58
+scenarios. Floor still rising; the 800 waiver holds on stronger arithmetic each round.
+
+## 2026-08-13 — marker-gate round 5: compliance PASSES; a third instance of the class surfaces
+
+**Compliance round 5 = PASS, 0 violations, confidence high, pinned to spec blob `e3f25495` / HEAD
+`f95e94b`.** `writing-specs/locale-pin-mechanism` did **not** recur, so no escalation. The judge ran
+both revision-12 snippets on the pinned bash 3.2.57 rather than reading them (wrong form → exit 127;
+subshell form → correct, no locale leak), re-ran the line-count derivation cold (`total=1652
+floor=867`), pulled all 8 cited historical blobs, and diffed rev 11 → 12 to confirm nothing else moved.
+**The spec-compliance gate is satisfied.**
+
+**Observability round 5: risk=medium (up from low), confidence high — and it found the third
+instance of the defect class**, in the place I had explicitly told it my own sweep was blind:
+non-regex idiom mismatches.
+
+### The finding: the log write side is unpinned, so `echo` silently corrupts the log
+
+The decision log is TSV and the spec's own documented maintenance commands are `cut -f2` and
+`awk -F'\t'`. Nothing pins *how* the line is written. Reproduced here on bash 3.2.57:
+
+```
+echo "…Z\tEXEMPT\t…"   -> bytes are literal \ t   (bash 3.2 echo does not expand \t without -e)
+   cut -f2   -> returns THE ENTIRE LINE   (no tabs → one field)
+   awk -F'\t' -> returns EMPTY
+printf "…Z\tEXEMPT\t…\n" -> real tab bytes; cut -f2 -> EXEMPT
+```
+
+Both read commands fail **silently — no error, no warning, plausible-looking output.** That is the
+exact quietly-wrong failure mode this whole feature exists to prevent, and it is the third layer of
+the same species: rev 11 (regex written for Python, run in bash), rev 12 (locale pin written as an
+assignment prefix, invalid before `[[`), and now the log writer (`echo` where only `printf` is
+portable). **The pattern is not "a regex bug" — it is that this spec repeatedly names a behaviour
+without pinning the command that produces it.**
+
+Two smaller advisories, both real: the new task-14 positive path asserts only that a log line
+*appeared*, not that its fields are populated — so it would pass against an `echo`-corrupted log; and
+the claim that both creation paths yield identical `hooks/state/` permissions has no test covering
+both orderings.
+
+### Next revision (13) — advisory, not blocking
+
+Pin the log write to `printf` and name `echo` as the trap, **exactly parallel to how revision 12
+treats the locale pin**; make the arming check inspect field contents, not line presence; add the
+permission-ordering test. ⚠️ Applying any of this **invalidates the round-5 PASS** (pinned to blob
+`e3f25495`) and requires round 6. That is the freshness rule working, not a defect.
+
+## 2026-08-13 — marker-gate revision 13: the `printf` pin, and a contradiction the third fix exposed
+
+Applied all three round-5 advisories. Card now `revision: 13`, still `phase: planning`, branch
+`docs/post-merge-53`. **The round-5 PASS is now invalidated** — the spec blob moved off `e3f25495` —
+so round 6 is owed before the user review gate. Expected, not a defect.
+
+### Re-derived rather than trusted, and it mattered
+
+The prior session marked the `echo`/`printf` finding "settled, do not re-derive." I ran it anyway on
+`/bin/bash` 3.2.57 before writing it into the spec, because this feature's entire defect history is
+probes run against the wrong interpreter. It reproduced exactly: `od -c` shows literal `\` `t` bytes,
+`cut -f2` returns **the whole line**, `awk -F'\t'` returns **empty**. Cheap to confirm, and the one
+check that would have caught revisions 11 and 12 before they shipped.
+
+Second measurement, this one **new** and not in the handoff: `mkdir -p -m 0700` against a directory
+that already exists at `0755` **exits 0 and leaves it `0755`**. `-m` applies only when the call
+actually creates the directory. So the second component to arrive can neither fail nor repair — a
+loose mode is permanent and silent. The spec now requires `mkdir -p -m` **and** a following `chmod`,
+which is idempotent and makes call order stop mattering.
+
+### The third advisory was mis-scoped in the handoff, and reading it properly found more
+
+The handoff framed it as "no test covers both orderings of the permission race." True, but reading
+both paragraphs together showed the spec **contradicted itself**: §Marker store said "the writer is
+the only component that creates it, so the mode is set in exactly one place," while §Decision logging
+said "both the writer and the gate can be the first to create it." The second is correct — the gate
+appends its decision line to the same directory and reaches it first in any repo where a commit is
+blocked before a marker was ever written, i.e. the *normal* first encounter with a newly armed gate.
+
+Fixed per `feedback_delete_the_duplicate_dont_sync_it`: §Decision logging is now the **single
+authority** for directory creation; the §Marker store bullet governs only marker-file `0600` and
+points at it. **A missing test was the symptom; two paragraphs disagreeing was the cause.**
+
+### The line-count trap, avoided deliberately
+
+Added the O3 row with the literal token `PENDING`, measured `wc -l` → 1,721, then swapped `PENDING`
+for `1,721` — a same-line substitution that cannot change the count. Verified after the edit: actual
+1,721, recorded 1,721. This is the exact failure that shipped wrong numbers in revisions 8 and 9.
+
+### Still open
+
+Round 6 (both judges) is owed. Waivers unchanged and not to be re-litigated:
+`writing-specs/command-grammar`, `core-conduct/file-size-convention` (non-prose floor now above 867
+against an 800 ceiling — the file grew again, to 1,721).
+
+## 2026-08-13 — marker-gate round 6: compliance FAILS on the fifth instance, and it is structural
+
+Round 6 (both judges paned, parallel, against revision 13 / commit `3f068d9`):
+
+- **compliance: FAIL, 2 violations** — `unpinned-json-parse-classifier-output`,
+  `unpinned-json-parse-marker-read`. Both new ids; round 5 had passed clean.
+- **observability: risk=medium, confidence=high** — 7 pass / 3 concern.
+
+### The compliance finding is the same defect class, at architecture scale
+
+The gate is bash and was specified to parse two JSON payloads — the classifier's stdout (with an
+`exempt` field the spec says is **unsanitised**) and the on-disk marker files. bash 3.2.57 has no JSON
+parser, no `jq` is pinned, and the latency budget provisions **exactly two `python3` starts**, neither
+covering these. The judge's sharpest point: the spec **cites a precedent it does not follow** —
+`git-guard.sh:59-72` has python3 hand bash a plain string and bash never re-parses JSON.
+
+**User decision → ADR 0026:** no JSON crosses into bash. Classification and marker reading merge into
+one `python3` entry point returning plain tab-separated lines. Rejected: pinning `jq` (new dependency),
+a third `python3` start (budget was deliberate), flat key=value everywhere (close second — still leaves
+two components to sync).
+
+⚠️ **Highest-risk consequence, open for revision 14:** the opt-in ordering rule (classifier runs before
+any repo-state touch) becomes *internal to Python* rather than enforced by bash call sequence. And the
+"process starts go down" claim in ADR 0026 is a **prediction, not a measurement** — the merged entry
+point does not exist. Re-measure the budget against real code.
+
+### The observability finding is my own fix's blind spot
+
+`test-marker.log`'s `0600` is stated 4× and enforced nowhere. Reproduced: the spec's own
+`printf … >> "$LOG"` yields **0644** under umask 022, **0664** under 002. I had fixed the *directory*
+mode race in revision 13 and missed the *file* sibling two paragraphs away. The judge named the
+pattern: "for the second round running the author's sweep fixed exactly the flagged instance and
+missed the adjacent sibling of the same defect class."
+
+Tempering it accurately: the parent dir is `0700`, so another user cannot traverse to the file. Real
+defect (defence-in-depth; last line if the dir mode loosens) but **not** the "world-readable" the
+verdict's prose implies. Recorded as measured, not as narrated.
+
+### Method note — what actually caught things this round
+
+My rev-13 sweep scanned code blocks for *wrong commands* and found nothing new. Both real findings came
+from a different question: **"which stated behaviours have no enforcing command at all?"** — the log
+mode, and the JSON parses. Scanning what is written cannot find what was never written. Next sweep
+enumerates required behaviours and asks which lack a construct, not the reverse.
+
+Also confirmed independently by both judges and by me: all three revision-13 fixes work by execution.
+Non-prose floor re-derived live at **887** (was 867) — the size waiver holds and keeps widening.
+
+### Two non-blocking items queued for revision 14
+
+- Percent-encoding order (`:320`) is silently order-dependent: `/`→`%2F` before `%`→`%25` turns
+  `hooks/100%-done.sh` into `hooks%252F100%25-done.sh`. Encode `%` **first**. Zero blast radius today.
+- The `mkdir`/`chmod` snippet is shell-only though the requirement also binds the Python writer;
+  `os.makedirs(mode=…, exist_ok=True)` has the identical race and identical fix.
+- (mine) §Pinned versions omits `awk`/`cut`/`sort`/`uniq`, which revision 13 made the queries depend
+  on. Verified working under this machine's BSD awk `20200816` — a pinning gap, not a live bug.
+
+## 2026-08-14 — marker-gate implementation opens: task 1, ADR 0027
+
+First session of the implementation phase. Restored from the handoff, verified frontmatter against
+reality (`phase: implementation`, branch `feature/verification-marker-gate`, clean at `02b71d4`),
+and executed **checklist task 1 only**. Committed `9783956`.
+
+**ADR 0027 — `docs/decisions/0027-the-marker-is-a-receipt-not-a-grade.md`.** Records the six things
+task 1 names: the receipt-not-a-grade framing and the ceiling it puts on the whole feature; the
+three rejected designs with their reasons (PostToolUse observer — rests on unmeasured harness
+semantics that could not be confirmed upstream; `bin/run-tests` wrapper — changes the habit; mutual
+certification — a hash says a test *changed*, never that it got *weaker*); the global-but-inert
+scope decision **with a Mermaid flowchart of the node ordering that makes it true**, since the
+"only `MSG_NO_PYTHON` is machine-global" promise is a claim about position in the flow and prose
+states it without showing it; the `UNSUPPORTED` fold and the four triggers whose refusal it kept;
+the two accepted-open shapes; and the `cmux.sh` hole.
+
+**Numbering: 0027, and the task's own instruction would have collided.** Task 1 says "check the next
+free ADR number against `main` first" — `main` tops at 0025, but 0026 landed earlier on this branch.
+Checked both.
+
+### The one thing worth carrying forward: an inherited citation that did not verify
+
+Six file:line citations were being copied out of the spec and the archive into a new durable
+artifact, so all six were re-checked first. **Five hold exactly** (`git-guard.sh:53-57`,
+`judge-guard.sh:44-48`, `merge-guard.sh:39-43`, `doc-guard.sh:54`, `judge-guard.sh:204`).
+
+**One does not.** `CODING_MEMORY.md:503` rejects the wrapper-runner design partly because it
+"invalidates the invocation this repo documents at `hooks/README.md:34,140`". That file documents
+**no suite invocation anywhere in its 284 lines** — `grep 'test\.sh'` over it returns nothing. Lines
+34 and 140 carry a different and more useful claim: *test the code path that will actually run.*
+That principle supports the same rejection by a different route (a wrapper makes the
+marker-producing path differ from the path a developer invokes), so the **conclusion survives and
+the citation was corrected in place** in the ADR rather than inherited. Recorded here because the
+archive line is still wrong where it sits, and append-only means it stays wrong — a later reader
+following that citation lands on unrelated text.
+
+Generalisation, and it is the standing one: a citation copied from an audit trail into a *new* audit
+trail is laundered, not verified. The cost of checking six was minutes; one was wrong.
+
+### Archive gap, flagged not filled
+
+The marker-gate thread in this file stops at **round 6** (`:7169`). Rounds 7–10 and revisions 15–19
+happened and are in git, but were never appended here. Not backfilled — reconstructing them from
+commits would be re-derivation presented as record, which is the failure this file exists to avoid.
+Git is the record for that span; `docs/features/verification-marker-gate.md` carries the outcomes.
+
+### State at close
+
+Task 1 ticked, **1/16**. Next is **task 2**, which is **blocked** on the shared-lexer decision
+landing in `shell_segments.py` (grammar rule 2, user-waived) — so **task 3 may need to lead the
+code**. Spec remains frozen at revision 19; a needed change is a `GATE:` announcement, not an edit.
+
+## 2026-08-14 — marker-gate task 4: the writer's red suite, and a duplicated ADR number
+
+### Task 4 landed — 35 assertions, proven able to fail *and* to pass
+
+`hooks/lib/write-test-marker.test.py` (`36f3004`, row 5 added in `2235b8d`): sibling derivation
+driven from the step-1 table, percent-encoding against **literal** expected keys, absolute-path
+normalisation, the no-subject skip, schema, mode, atomic write, failure exits, non-test paths.
+
+The method is the part worth keeping. The card is explicit that inspection does not exhaust this
+class of defect, so the suite was validated three ways instead: with no module it goes red; against
+a **deliberately-wrong stub** the checks fire on exactly the defects they target; against a
+**correct throwaway oracle** it reaches 35/35. Both stubs were deleted. A suite proven only to fail
+has not been proven satisfiable, and one proven only to pass is worthless — the pair is the point.
+
+### The probe found a defect that passed 20 of 29 assertions
+
+The first version of the normalisation check was wrong, and finding out why exposed the trap task 5
+must avoid: after `git ls-files --full-name` yields a **repo-relative** subject, handing that value
+to a later git call from a different cwd makes git resolve it against *that* cwd
+(`panes/panes/adapters/…`), so a tracked subject reports as missing. The call site pins
+`cwd = MARKER_ROOT` precisely for this. A wrong test found a real defect — the inverse of the usual
+failure, and only because the wrong-stub probe forced both to be explained.
+
+Also pulled back an over-assertion: the mode was being checked on `hooks/state/test-markers/`, but
+§2 modes only `hooks/state/`. Asserting a mode the spec never states would have forced task 5 to
+satisfy an invented requirement.
+
+### ADR 0026 is duplicated, and the numbering rule was wrong
+
+`origin/main` carries `0026-symbolic-ref-not-abbrev-ref-names-the-branch.md` (merged via PR #52);
+this branch carries `0026-the-gate-does-no-json-parsing.md`. **The filenames differ, so git merges
+both cleanly and no conflict will ever surface it.**
+
+Root cause: task 1 checked the next free number against **local `main`**, which is 10+ commits
+behind `origin/main`. The rule is now explicit — **check ADR numbers against `origin/main`, never
+the local ref.** 0027 turned out free anyway, so task 1's ADR stands, but by luck rather than by the
+check. Renumbering this branch's 0026 → 0028 is deferred to **task 16**, when spec edits reopen; it
+touches the card (18 lines), this file, two `coding-memory/` judge records and both ADRs.
+
+### Row 5 was unspecified, and was raised rather than invented
+
+The step-1 table never said what the writer does with a path forming no pair. No assertion was
+written for it until the user decided (2026-08-14): **fail loudly, non-zero + stderr**. It follows
+from the card's own rule that a failed marker write fails the suite; the legitimate orphan case is
+the separate no-subject skip, which exits 0 on purpose.
+
+### Task 2's blocker re-verified, not inherited
+
+`hooks/lib/shell_segments.py` is **byte-identical to `origin/main`** (155 lines) — segmentation and
+wrapper stripping only, no option grammar, nothing that knows `--untracked-files`/`--gpg-sign` must
+not consume the next token. Its citation `shell_segments.py:64` for `WRAPPERS` was re-opened and is
+correct. Superseding the previous section's close: **2↔3 are NOT inverted** (user decision) — task 3
+implements rule 2, so it is blocked identically, and inverting would write code before its test.
+
+### State at close
+
+Tasks 1 and 4 ticked, **2/16**. Next is **task 5** (green: `hooks/lib/write-test-marker.py`), now
+unblocked, to be written **fresh from the tests** rather than adapted from the throwaway oracle.
+Tasks 2 and 3 remain blocked on the shared lexer. Spec frozen at revision 19.
+
+## 2026-08-14 — task 5 green, and what a green suite still could not see
+
+### The suite passing was the weaker half of the evidence
+
+`hooks/lib/write-test-marker.py` (229 lines) takes the writer's suite to **35/35**. Written from the
+tests; task 4's throwaway oracle was deleted first, so the two never met.
+
+The load-bearing check was **not** the green run. Five mutants were applied to the finished file and
+the suite re-run against each; **three survived**, and each had to be explained before the task
+could close. Explaining them is what separated the one real gap from two false alarms:
+
+| mutant | suite | verdict |
+|---|---|---|
+| non-test path returns silently | 31/35 | caught — row 5 holds |
+| percent-encoding order reversed | 31/35 | caught — the normative order holds |
+| `--full-name` dropped | **35/35** | redundant: every git call is pinned `-C <root>` |
+| marker `chmod` dropped | **35/35** | equivalent: `mkstemp` already creates at `0600` |
+| `os.chmod(state, 0700)` dropped | **35/35** | **real blind spot — see below** |
+
+### Two mechanisms enforcing one property make each other unobservable
+
+`--full-name` is mandated by §1 and it is genuinely dead weight *in this implementation*, because
+resolving the toplevel first and then pinning `-C <root>` on every subsequent call already makes
+every output repo-relative. It stays: it is spec-mandated, and it keeps the function correct if the
+`-C` pin is ever lost. But a mutation score cannot be read as coverage here — the survivor is
+telling the truth about redundancy, not about a missing test.
+
+The same shape, one layer down: the marker's explicit `chmod 0600` is unobservable because
+`tempfile.mkstemp` documents that mode. Kept as defence against a future rewrite reaching for
+`open()`, where the umask would decide instead.
+
+### The one that matters: a repair with nothing asserting it
+
+Dropping `os.chmod(state, 0o700)` costs the suite nothing, because the fixture always lets the
+writer *create* `hooks/state/` — and `os.makedirs(mode=0o700)` is correct for a directory it makes.
+The card's whole argument for the chmod is the case the fixture never builds: a directory that
+**already exists at `0755`**, which `makedirs(exist_ok=True)` silently leaves alone.
+
+Verified by hand rather than left inferred — pre-created `hooks/state/` at `0755`, ran the writer
+from the repo root, directory ended **`0700`**, marker **`0600`**, exit 0. So the code is right.
+**Task 6 owns the assertion** ("pre-create at `0755`, run either component"), so this is deferred by
+design; until it lands, the repair is real code that no test would notice losing.
+
+### State at close
+
+Tasks 1, 4, 5 ticked, **3/16**. Next is **task 6** (red: `hooks/test-marker-guard.test.sh`), which
+must include the pre-existing-`0755` case above for the writer as well as the gate. Tasks 2 and 3
+remain blocked on the shared lexer. Spec frozen at revision 19; ADR 0026 still needs renumbering to
+0028 at task 16.
+
+## 2026-08-14 — task 6 is clear to write; task 7 is not, and nobody had checked
+
+### The assessment the handoff kept deferring
+
+Every prior session recorded tasks 6–16 as "reasoning only, never checked". Two of them are now
+checked. The answers point in opposite directions, which is why assuming either would have been
+wrong.
+
+**Task 6 is unblocked.** The block on tasks 2 and 3 is the waived, unresolved grammar rule 2, and
+rule 2 is unresolved *only* where it collides with the optional-value flags `-u/--untracked-files`
+and `-S/--gpg-sign` — the group the spec says must never consume the next token. So the question is
+not "does task 6 depend on the grammar" (it does, everywhere) but "does any scenario task 6 must
+encode turn on the one case nobody has decided". Derivation rather than reading:
+
+```
+grep -n "untracked-files\|gpg-sign\|-u \|-S " docs/features/verification-marker-gate.md
+```
+
+Three hits, all inside §The command grammar and its UNRESOLVED callout. **No scenario uses either
+flag.** The commands the scenarios actually drive are `-m`, `-am`, `-F`, `-p`, `--amend`, `-i`, and
+bare/`--`-separated pathspecs — all of them settled rows G1–G9. Writing task 6 therefore encodes no
+waived decision.
+
+**Task 7 is blocked, and it is the one that stalls the branch.** Its own text names the mechanism:
+the entry point *imports* the classifier, which is why the spec carries a scenario asserting a
+deleted classifier surfaces as `MSG_CLASSIFIER_FAILED` at a different door than a deleted entry
+point. Task 7 cannot go green while task 3 is blocked — no import, no decision call, no gate.
+
+### What that means for sequencing
+
+Task 6 lands a suite that stays red until an out-of-scope decision lands in `shell_segments.py`.
+That is the correct state for a red task and not a reason to defer it — but it does mean the branch
+has **one task of forward motion left** before it parks, unless the shared-lexer work is scheduled.
+
+⚠️ **Tasks 8–16 remain unassessed. Do not infer they are blocked by 7** — task 8 wires the
+*writer's* call site into the 14 paired suites and may well be independent of the gate. That is a
+guess, and this file has been burned by exactly that kind of guess before. Check it before picking
+it up.
+
+### Method note
+
+Task 4's precedent — validate a red suite against a correct throwaway oracle, so it is proven
+satisfiable and not merely proven to fail — **cannot be met for task 6's scenario half**, because
+building that oracle means building the gate, which means the classifier. The parts that exercise
+the *writer* (the `hooks/state/` mode cases, including the pre-existing-`0755` case task 5 left
+deferred) can be validated now, because the writer exists. Say which half was proven, rather than
+letting "red suite written" imply the stronger claim.
+
+## 2026-08-14 — task 6 red: the gate's suite, and which half of it was actually proven
+
+`hooks/test-marker-guard.test.sh` lands at **914 lines** (code floor **625**), driving **225
+assertions**. Against the real tree: **8 pass, 217 fail** — the gate does not exist, so every case
+that invokes it exits 127. That is the correct red state, not a defect in the suite.
+
+### The honest split — read this before trusting the word "red"
+
+**Proven able to fail *and* able to pass: the six writer-facing mode assertions only.** Two mutants
+of a throwaway copy of the writer (never the repo's), each run against the unmodified suite:
+
+| mutant | effect |
+|---|---|
+| delete `os.chmod(state, STATE_MODE)` | flips **1** case: *pre-existing 0755 store, writer runs* |
+| `STATE_MODE = 0o755`, `MARKER_MODE = 0o644` | flips **all 6** |
+
+The first mutant is the one that matters: it is the case `mkdir -p -m` and `os.makedirs(mode=…)`
+both fail to satisfy, and it is exactly the case task 5 deferred. It flips alone, so it is not
+riding on the other five.
+
+**Not proven satisfiable: the other 219.** Task 4's precedent — validate a red suite against a
+correct throwaway oracle — is unreachable here, because that oracle *is* the gate, which needs the
+classifier, which is task 3. These 219 are proven able to *fail* and nothing more. **"Red suite
+written" must not be read as the stronger claim**, and two assertions inside that set currently pass
+**vacuously**: *an allowed commit writes no log line* and *the door that fires before a repo is
+known writes no line* both read 0 lines from a log that no component has yet been able to create.
+They become real only once the gate runs.
+
+Likewise, *gate first, then writer* and *writer first, then gate* are named for an ordering that
+does not yet exist — today both only exercise the writer. The names are right for task 7's world.
+
+### Decisions taken while writing it
+
+- **File size: 914 > the 800 max, accepted** (user decision, 2026-08-14). Trimming to fit means
+  cutting ~113 lines of rationale, and the rationale is the discipline — each comment names the
+  defect that passes when its case is absent. Splitting the file is a spec change (the spec names
+  one file; task 8 wires one call site), so it would need the GATE. **Record the waiver at task
+  16**, not now: the frontmatter is spec, and this is the implementation phase.
+- **Repo fixtures come from `mktemp -d`, not a counter.** `setup_door` runs inside a command
+  substitution, so a `SEQ` incremented there is lost and the next door silently reuses the path —
+  caught before it could make two door cases share one repo.
+- **`shellcheck -x` clean at 0.11.0**, with one directive: `SC2086` on `$RUN_ENV`, which *must*
+  word-split — a quoted empty string hands `env` an argument it reads as a command name.
+- **stderr is empty** on a full run (measured: 253 stdout lines, 0 stderr).
+
+### What the suite refuses to do, deliberately
+
+- Log assertions read **by field** (`awk -F'\t'`), never by `grep`.
+- Every mode case sets **`umask 022`** explicitly; a suite inheriting `0077` reports 0600 on a file
+  the gate created 0644.
+- Fixtures **disagree on purpose**: `$HOME`'s store is stale, the main checkout's marker is stale
+  against the linked worktree's, `written_at` is varied in both directions.
+- The door cases are driven from the spec's **two Examples tables** as data (`DOORS_TSV`,
+  `DOORS_BASH`). A door added to the spec table becomes a case; there is no second spelling to sync.
+- The `-` placeholder is used for an absent `desc` in `setup_door`'s output, for the same reason the
+  TSV contract uses it: a tab is IFS whitespace, so an empty field vanishes and shifts the rest.
+
+### Still true, still blocking
+
+Task 7 needs task 3 needs the `shell_segments.py` option grammar. **Task 6 was the last forward
+motion on this branch** unless that work is scheduled. Tasks 8–16 remain unassessed — task 8 wires
+the *writer's* call site and may be independent. Re-derive before picking one up.
+
+## 2026-08-15 — tasks 8–16 assessed at last: one root blocker, one live thread
+
+### The previous line was right to hedge — task 8 *is* independent, and nearly ready
+
+Restored to find the handoff one commit stale: it read `NEXT: task 6`, but `c3dedc8` had already
+landed task 6's red suite. Actual state **4/16** (tasks 1, 4, 5, 6), clean, level with origin, no PR.
+Re-ran the writer before trusting it: **35/35**.
+
+Then assessed 8–16, which no prior session had done:
+
+| task | needs | verdict |
+|---|---|---|
+| 2, 3 | grammar rule 2 (waived, unresolved) | blocked on the shared lexer |
+| 7 | *imports* the classifier | blocked on 3 |
+| **8** | row 12's suite = task 2's artifact | **13 of 14 present** |
+| 9–11, 13–15 | the gate itself | blocked on 7 |
+| 16 | everything | blocked |
+
+**One root cause, not twelve.** `hooks/lib/shell_segments.py` re-verified byte-identical to
+`origin/main`, still 155 lines, no option grammar.
+
+### Why task 8 survives the block — three measured facts
+
+1. **The call site touches only the writer.** Spec lines 311–330 invoke
+   `hooks/lib/write-test-marker.py` and nothing else. No classifier, no gate, no TSV boundary.
+2. **13 of the 14 suites exist**, checked file-by-file, not inferred: rows 1–11 all present, row 13
+   present, **row 14 present** (task 6 created `hooks/test-marker-guard.test.sh`). Only row 12,
+   `hooks/lib/classify-commit-command.test.py`, is missing — it is task 2's artifact.
+3. **The spec's own enforcement is already built for this.** Assertion 1 (lines 290–292) enumerates
+   `git ls-files`, keeps only suites whose subject is **tracked**, and "self-extends to pairs 12–14
+   instead of contradicting them"; the section below it explicitly tolerates a transient orphan
+   during TDD. So wiring the 13 satisfies assertion 1 *today*, and the assertion turns red on its own
+   if task 3 ever lands its suite unwired. The deferral needs no new mechanism.
+
+**Row 14 is safe to wire despite having no subject.** The writer derives
+`hooks/test-marker-guard.sh`, finds it untracked, takes the no-subject skip and exits 0. Wiring it
+now is correct and inert.
+
+### User decision (2026-08-15) — task 8 partial
+
+Wire the 13 that exist; **leave row 12 to task 3's commit**. The checklist box stays **UNTICKED**
+with a completion note naming row 12 as the remainder — partial work recorded as partial. Ticking it
+against "all 14" would be a false claim in an audit trail. This is *not* a spec change and needs no
+GATE: the task's scope is unchanged, one input simply does not exist yet.
+
+**Two costs flagged and accepted before the decision**, both real:
+- 13 suites gain a call that spawns the writer on pass, and **a writer error fails the suite** — in
+  suites other live sessions may be running, while the gate itself is nowhere near shipping.
+- Touching 13 shared test files raises the merge-conflict surface against `feature/memsearch-freshness`
+  and `fix/git-guard-detached-head`.
+
+### Sequencing after this
+
+Task 8 partial is the **last** forward motion on this branch. Everything remaining routes through the
+`shell_segments.py` option-grammar work, which is scoped **off** this branch by user decision — so it
+wants its own feature before tasks 2/3/7 can move. ADR 0026's duplicate renumber (→ **0028**) is still
+parked at task 16.
+
+## 2026-08-15 — task 8 STOPPED at a GATE: §Scope's table is stale by six pairs
+
+**The premise under yesterday's "wire the 13" decision was never measured, and it is false.** That
+decision checked that each of the table's 14 rows *exists*. It never asked the inverse question —
+whether any tracked pair exists **outside** the table. Measured from source just now:
+
+```
+git ls-files '*.test.sh' '*.test.py'   # 22 suite files
+  -> 18 tracked pairs, 4 orphan suites
+```
+
+Not 11 pairs + 3 of this feature's own = 14. **Eighteen.** Six tracked pairs are absent from
+§Scope's first table entirely:
+
+| suite | subject | suite first appeared |
+|---|---|---|
+| `hooks/doc-guard.test.sh` | `hooks/doc-guard.sh` | 2026-08-03 `ac5afa2` |
+| `hooks/git-guard.test.sh` | `hooks/git-guard.sh` | 2026-08-03 `ac5afa2` |
+| `hooks/lib/classify-git-command.test.py` | `hooks/lib/classify-git-command.py` | 2026-08-03 `ac5afa2` |
+| `hooks/lib/shell_segments.test.py` | `hooks/lib/shell_segments.py` | 2026-08-04 `64ba2fa` |
+| `hooks/feature-sync-guard.test.sh` | `hooks/feature-sync-guard.sh` | 2026-08-06 `7f9bb6f` |
+| `hooks/handoff/slim-session-start.test.sh` | `hooks/handoff/slim-session-start.sh` | 2026-08-06 `ca2c969` |
+
+**Every one landed AFTER 2026-08-02**, the date §Scope stamps on its own measurement — "Measured
+2026-08-02 from `git ls-files`, not recalled — 13 tracked suite files, 11 conforming pairs (10 shell
++ 1 Python), 2 orphan suites." The table did not drift; the repo grew past it, in exactly the four
+days after it was taken. The dated stamp is what made this findable, and nothing before now went
+looking.
+
+There is also a **third real orphan** the spec does not name: `memsearch/bin/install-schedule.test.sh`
+(no `install-schedule.sh`). So the orphan count is 3 real + 1 transient (`test-marker-guard.test.sh`,
+whose subject lands at task 7), not 2.
+
+### Why this is a GATE and not a judgement call
+
+The spec's *criterion* is right and its *enumeration* is wrong, and the two now contradict each other:
+
+- **The criterion** (§Scope): "The wiring criterion is therefore **every pair**, 14 of them at task 8
+  — never a literal carried over from the table above." It even names this failure mode.
+- **Assertion 1** (spec 290–292), which task 8 must land in the same commit, enumerates
+  `git ls-files`, keeps suites whose subject is tracked, and asserts each contains the call line. As
+  specified it demands **all 18**. Wiring 13 makes assertion 1 **red on landing** — and red for a
+  correct reason.
+- **Task 8's text** says "all 14 paired suites — the 11 in §Scope's first table plus this feature's
+  own 3." That set is now factually wrong.
+
+So yesterday's point 3 — "wiring the 13 satisfies assertion 1 *today*" — is **withdrawn**. It was
+derived from the table rather than from `git ls-files`, which is the one source assertion 1 actually
+consults.
+
+**The cost of shipping the 13-suite reading is not cosmetic.** The gate demands a marker for any
+tracked subject with a sibling suite. Wire 13 of 18 and the moment the gate arms, six subjects become
+uncommittable with no way to earn a receipt: `doc-guard.sh`, `git-guard.sh`, `feature-sync-guard.sh`,
+`slim-session-start.sh`, `classify-git-command.py`, `shell_segments.py` — four of them live hook
+scripts, and `git-guard.sh` is the one that guards `main`.
+
+### State at the stop
+
+**Nothing was committed.** No suite was modified. HEAD is still `63881ea`, tree clean apart from this
+file and `.claude/session-state.md`.
+
+The before-baseline was taken and is worth keeping — it is the neutrality control task 8 needs
+whenever it resumes, and it reproduces the handoff's numbers exactly:
+
+| suite | rc | result |
+|---|---|---|
+| 11 shell suites (rows 1–11) | 0 | all green |
+| `hooks/lib/classify-pr-command.test.py` | 0 | 51 passed, 0 failed |
+| `hooks/lib/write-test-marker.test.py` | 0 | 35 passed, 0 failed |
+| `hooks/test-marker-guard.test.sh` | 1 | **8 passed, 217 failed** (task 6's red suite, expected) |
+
+Also measured while reading the suites, and unchanged by the gate finding: all 11 shell suites share
+one shape — `set -u`, **no `set -e`**, a tally `printf`, then `[ "$fail" -eq 0 ]` as the final
+command. Only `hooks/judge-guard.test.sh:13` cds at top level, confirming the spec's measured claim.
+Both Python suites end `sys.exit(main())` where `main()` returns `1 if failed else 0`, so the
+spec's `if failures == 0` maps to `if rc == 0` with no new variable.
+
+### What the revision has to decide (not for the low tier to guess)
+
+1. Re-measure §Scope's first table, or replace it with the `git ls-files` derivation and drop the
+   frozen count — the table is a dated measurement that has now gone stale once.
+2. Whether all six newcomers are **in** scope. `shell_segments.py` is the awkward one: tasks 2/3 are
+   already blocked on its missing option grammar, and wiring its suite pulls a file this branch was
+   explicitly told not to expand into.
+3. Whether the third orphan (`install-schedule.test.sh`) joins assertion 2's named set or gets an
+   §Scope "out" line of its own.
+4. Task 9's **25**-mutant floor and task 14's arming check both counted doors against the old
+   inventory; neither was re-derived here.
+
+### Task 12 assessed — blocked on 7, and the branch is now fully blocked
+
+Task 12 was never assessed. The table above jumps from 8 to "9–11, 13–15"; 12 is absent from it, and
+the "one live thread" conclusion was drawn without it. Assessed now, and it is **blocked on task 7** —
+for a different reason than 9–11/13–16, which need the gate to *run*:
+
+Verified: `hooks/test-marker-guard.sh` does not exist; `test-marker` appears **0 times** in
+`settings.json`, `rules/gates.md`, and `hooks/README.md`. Task 12's entire deliverable is behavioural
+claims about that script — global-but-inert scope, `MSG_NO_PYTHON` as the one exception, and that v1
+ships no way to query whether the gate is armed. Every one is a **write-down that cannot be verified
+first**, into `rules/gates.md`, the file every session loads every turn.
+
+The dormant-hook precedent does not stretch to cover it. README documents `scan-secrets.sh`,
+`scan-invisible-unicode.sh`, `checkpoint-before-modify.sh` and `require-project-standards.sh` — all
+four **exist as files** and are merely unregistered. Documenting a script that does not exist at all
+has no precedent here, and `rules/gates.md` already names that exact failure: "advertised protection
+that is not currently protecting anything."
+
+**Result: 4/16 and no task can move.** Everything routes through one of two unblockers, neither
+available at this tier — the high-tier spec revision (task 8), or the `shell_segments.py`
+option-grammar work (tasks 2/3/7 →  everything else), scoped off this branch by user decision.
+The ADR 0026 → 0028 renumber is **not** available as filler: it edits the card, which the freeze
+forbids. Recording this so the next session does not re-derive a task-shaped substitute.
+
+## 2026-08-15 — revision 20: the enumeration becomes a derivation
+
+Card reopened to `phase: planning`, `model_tier: high`, `revision: 20`, `revision_status: in-progress`
+(user decision). Implementation resumes only on a fresh `gate confirmed`. Note `hooks/phase-guard.sh`
+re-arms the moment the card leaves `implementation` — no card records this branch as implementing any
+more, so source writes are denied until the gate reopens. That is the intent, not a side effect.
+
+**The fix is structural, not arithmetic.** §Scope no longer lists the covered set; it *derives* it:
+
+```sh
+git ls-files '*.test.sh' '*.test.py'   # strip .test.*, add .sh/.py, keep tracked subjects
+```
+
+with a normative line — no task, test or judge may substitute a number or a hand-written list. The
+snapshot is kept but demoted to illustration and stamped. Replacing the list rather than re-measuring
+it is the whole point: revision 19 already *warned* against "a literal carried over from the table
+above" and shipped one anyway, because the warning sat next to the literal it forbade.
+
+**User decision: `hooks/lib/shell_segments.py` is IN scope.** Wiring its suite touches neither the
+option grammar nor the subject file, so the standing "do not expand scope into `shell_segments.py`"
+boundary holds. Excluding it was rejected as the *more* expensive option — the design has no exclusion
+mechanism for a suite whose subject is tracked, so an unwired `shell_segments.py` would be permanently
+uncommittable without a `TEST_EXEMPT` on every commit.
+
+### Measured at revision 20 — every number re-derived, none carried
+
+| quantity | value | note |
+|---|---|---|
+| tracked suite files | **22** | 18 + 4 balances |
+| tracked pairs | **18** | 17 pre-existing + `write-test-marker` |
+| orphan suites | **4** | 3 permanent + 1 transient (`test-marker-guard.test.sh`, task 7) |
+| shell / Python split | **14 / 4** | Python four all under `hooks/lib/` |
+| directories / depths | **6 / 3** | `.`, `hooks/`, `hooks/handoff/`, `hooks/lib/`, `panes/`, `panes/adapters/` |
+| suites directly in `hooks/` | **8** | 13 are somewhere under `hooks/`; only 8 at top level |
+| expected end state | **20** | +row 12 at task 3, +row 14 at task 7 — expected, not prescribed |
+
+**Two inherited numbers were wrong on their own terms, independent of the staleness:**
+- "four different directory depths" — wrong when written; the 11-pair set was **5 directories at 3
+  depths**. Corrected in place rather than carried forward.
+- "the 5 suites under `hooks/`" — **8** sit directly in `hooks/`.
+
+Five residual stale counts were swept out beyond the table itself (§1's call-site prose, the
+fail-closed Gherkin comment, the "two orphan suites" line in the flowchart narrative, and both halves
+of the 5↔8 revert-pair note). Found by grepping the literals, not by re-reading — the same class the
+revision exists to kill.
+
+### 🔴 Correction — a claim from earlier today was wrong
+
+The gate announcement listed as decision (4): *"task 9's 25-mutant floor and task 14's arming check
+both counted doors against the old inventory; neither was re-derived."* **That is false.** The floor
+is `13 doors + 10 allow paths + 2 component mutants` (spec §Mutation floor) — all properties of the
+gate's decision logic and its two Python files, none of the pair inventory. Task 14 pipes payloads at
+the installed hook and likewise never counts pairs. **Tasks 9 and 14 needed no change and got none.**
+The claim was asserted from the shape of the finding rather than checked against the derivation, which
+is exactly the error the revision is about.
+
+### The third orphan is a different species than first recorded
+
+`memsearch/bin/install-schedule.test.sh` is not a test with no subject. **The subject exists** —
+`memsearch/bin/install-schedule` — but carries **no `.sh` extension**, so the suffix derivation looks
+for `install-schedule.sh` and finds nothing. That is a distinct failure mode from `cmux.sh`, where the
+*test* is misnamed; here the test name is right and the **subject** name is unmatchable. It recurs for
+every extensionless executable (`memsearch/bin/memsearch` is the other, with no sibling test at all).
+Fixing it would mean pairing on shebang or content instead of suffix — a redesign of the pairing rule,
+so it is recorded as a follow-up, not folded in.
+
+### Compliance gate — deliberately skipped for revision 20 (user decision, 2026-08-15)
+
+The spec-compliance gate calls for a judge run after *any* later spec edit. **Not run for revision
+20**, on the user's standing "proceed without a passing compliance verdict" decision, reaffirmed
+explicitly when the cost was put to them. Recorded here because a skipped gate that leaves no trace
+is indistinguishable from a forgotten one — that asymmetry is the whole reason this line exists.
+Round 10's `fail` remains stale and closed by rev 19; no verdict exists for rev 20 and none is
+pending. The observability judge at task 16 is unaffected and still required before any PR.
+
+## 2026-08-15 — session restored after accidental close; state verified consistent
+
+Prior session ended without a clean handoff. Restored from the handoff trio's
+`.claude/session-state.md` and checked it against reality rather than trusting it on read, per the
+handoff/restore discipline: branch is `feature/verification-marker-gate` (matches), working tree
+clean and pushed, no PR (matches). Card frontmatter — `phase: planning`, `revision: 20`,
+`revision_status: in-progress` — matches the handoff. One drift found: the handoff's recorded HEAD
+(`8db8132`) was one commit behind actual HEAD (`747d8ef`, the compliance-skip memory commit above);
+corrected in the scratch state file. No branch/phase mismatch, so nothing escalated.
+
+No new engineering decisions this turn. `.claude/session-state.md` was trimmed to drop measured-number
+detail already durable here (`CODING_MEMORY.md:7694-7699`, `:7623-7628`) per the handoff-discipline
+rule against restating spec content in a scratch file; `.claude/current-task.md` was corrected from a
+stale 2/16-tasks, revision-19 snapshot to the current 4/16, revision-20 state. This entry exists
+because `context-handoff-watch.sh` fired its ≥75k-token freshness checkpoint at session start (system
+prompt + skill catalog overhead, not new conversation growth) — logged so the checkpoint isn't a
+silent no-op. Still waiting on the user to review revision 20 and say the literal `gate confirmed`.
+
+## 2026-08-15 — gate confirmed at revision 20; task 8 lands (`d0d935f`, corrected `43d070f`)
+
+User said the literal `gate confirmed`. Frontmatter flipped to `phase: implementation,
+model_tier: low` (user chose low tier when asked the unskippable planning→implementation
+model-switch checkpoint — its own ask, not inferred from "gate confirmed" itself). User also
+explicitly overrode the skill's mandatory-`/clear`-point with "continue here," and asked to be
+prompted at 165k tokens instead of the default checkpoint cadence — both honored as explicit
+in-session instruction, noted here so the departure from the default isn't silently invisible.
+
+Task 8 (wire the marker-write call into every live `§Scope`-derived pair) was dispatched to a
+paned `general-purpose` implementer — first worker dispatch this session, so the pane-split policy
+was asked and set to `panes max=2`. It landed as `d0d935f`: live-derived 18 pairs / 4 orphans
+(matching the 2026-08-15 snapshot, re-confirmed rather than trusted), wired all 18, added the two
+inventory assertions to `write-test-marker.test.py` (35 → 56 assertions), and found one real bug
+not called out in the spec: the four Python suites' `MARKER_ROOT`, resolved via `git rev-parse
+--show-toplevel` in the ambient cwd, returns the wrong toplevel when `judge-guard.test.sh` (which
+`cd`s into a throwaway repo) nest-invokes `classify-pr-command.test.py` as an internal check — the
+child inherits the fixture's cwd. Fixed by anchoring all four to `cwd=dirname(MARKER_SELF)`.
+
+**Independent verification (per `verifying-subagent-commits`) caught one report inaccuracy.** The
+implementer's self-report claimed `slim-session-start.test.sh` was pre-existing red at 13/29,
+unchanged by the wiring. Re-run directly it is **29/29** — on the parent commit and on HEAD alike.
+Root cause: the implementer ran *as* a pane agent, so `CLAUDE_PANE_AGENT` was ambient in its own
+shell; the suite's subject script goes silent under that variable, failing 16 of 29 assertions
+that expect verbose output while 13 incidentally still pass — reproduced exactly with
+`CLAUDE_PANE_AGENT=1 bash hooks/handoff/slim-session-start.test.sh`. The wiring itself was never
+wrong; only the report was. Corrected in the checklist note by `43d070f` rather than left standing
+as settled fact. **General lesson for future pane-dispatched verification:** a pane-agent-run test
+suite can spuriously fail (or pass) any assertion that depends on `CLAUDE_PANE_AGENT` being unset,
+for scripts that intentionally special-case it — `unset` it before the suite runs inside a pane,
+or re-verify from the orchestrator's own (non-pane) shell as was done here.
+
+All other 17 suites' before/after counts, independently re-run from the orchestrator's shell,
+matched the implementer's report exactly; marker files exist under `hooks/state/test-markers/` for
+all 18 pairs (dir `0700`, files `0600`). Branch is 3 commits ahead of `origin` (not pushed yet:
+`6ad7e43`, `d0d935f`, `43d070f`). Next: task 9 and everything after remains blocked on tasks 2/3/7
+per the standing assessment; nothing new is unblocked by task 8 landing.
+
+## 2026-08-16 — pivot: verification-marker-gate paused, a new feature queued to unblock it
+
+`verification-marker-gate` stays fully blocked (5/16; tasks 2/3/7/9–16 all downstream of one
+shared-lexer decision) and nothing changes that from inside this branch. User directed starting
+the blocking feature next, in a fresh session, rather than continuing to sit on the block.
+
+**What the new feature has to resolve** — waiver `writing-specs/command-grammar`, card
+`docs/features/verification-marker-gate.md:781-796`: rule 2 ("a long option that takes a value
+consumes the next token") contradicts the same section's own list of attach-only long options
+(`--untracked-files`, `--gpg-sign`, which must never consume the next token). Not just imprecise
+wording — measured on git 2.50.1, `git commit -m msg --untracked-files foo.sh` ships the
+**worktree** blob of `foo.sh` because `foo.sh` is a real pathspec operand; a classifier applying
+rule 2 literally reads `foo.sh` as `--untracked-files`'s value instead, calls the command `PLAIN`,
+and hashes the wrong (stale) content — reopening the exact fail-open (`G2` in the grammar table)
+the whole feature exists to close.
+
+**Confirmed before the pivot:** `hooks/lib/shell_segments.py` — the shared tokenizer `git-guard`,
+`doc-guard`, and `classify-pr-command.py` already depend on, and where this decision is spec-
+mandated to live rather than be reimplemented locally — is byte-identical to `origin/main`. It
+currently does segment-level splitting only (chained commands, redirects, wrapper stripping); zero
+flag-level parsing exists anywhere in the repo today. This is new capability, not a patch.
+
+**Scope for the new feature:** (1) the complete value-consuming vs. attach-only long-option list for
+`git commit`; (2) how `git <global-opts> commit <opts>` tells global git options (`-C`, `--git-dir`,
+`--work-tree`) from the subcommand's own options — both currently unanswered, both required by
+verification-marker-gate's task 2 (`UNSUPPORTED` trigger fires on `-C`/`--git-dir`/`--work-tree`
+wherever they sit). No feature file exists yet — create one from the template at planning start;
+suggested name `shell-segments-option-grammar`, own branch off `main` (not off
+`feature/verification-marker-gate`). **Entering-planning model-switch checkpoint is still owed** —
+not asked this session; the fresh session must ask it before brainstorming begins.
 ---
 
 ## 2026-08-13 — session 66: git-guard-detached-head, PR #52's second append-only conflict, resolved and re-verified mergeable
@@ -7108,6 +8354,270 @@ committed verdict moves HEAD and invalidates itself.
 merge, then updating the shared `~/.claude` checkout so the fix actually protects live sessions —
 the judge flagged this rollout step explicitly, since the fix does nothing until that happens.
 
+## 2026-08-19 — marker-gate unpaused: the blocker had already shipped, and the pause note was wrong twice
+
+Session opened to start the queued `shell-segments-option-grammar` feature, per the 2026-08-16 pivot.
+**That feature should not be built.** Its entire scope had already landed on `main` as PR #54
+(`global-option-blindness`, ADR 0029) in the three days the branch sat paused. Verified before any
+work: `git merge-base --is-ancestor fab7314 origin/main` → `rc=0`.
+
+`hooks/lib/classify-git-command.py` supplies both queued items — `COMMIT_VALUE_FLAGS` (which
+`git commit` options consume the next token) and `resolve_subcommand()` + the three global-option
+buckets (telling `git -C x commit` from `git commit -C x`). It also resolves the exact contradiction
+the waiver recorded: `--gpg-sign` sits in `COMMIT_SAFE_FLAGS`, never in the value list, so it cannot
+eat a pathspec.
+
+**Two corrections to the pause note, both now in the card as revision 21:**
+
+1. **"Fully blocked (5/16)" overstated it.** Only tasks 2 and 3 were ever grammar-blocked. Tasks 7
+   and 9–16 are queued behind them by ordinary dependency — a distinction that changes what
+   unblocking actually costs.
+2. **The decision did not land where the card predicted.** The waiver said it would live in
+   `shell_segments.py`; it lives in the sibling `classify-git-command.py`. That is the better home —
+   `shell_segments.py` is a pure shell lexer with no git knowledge, and `classify-pr-command.py`, a
+   `gh` reader, imports it. Putting `git commit` flag tables there makes a `gh` classifier
+   transitively carry them.
+
+**Merged `origin/main` in (`af5e874`).** 44 ahead / 56 behind → 45 ahead / 0 behind. No source
+conflicts; three append-only ledgers collided and were resolved as verified unions with a
+zero-deletion proof against **both** parents (`comm -23` each parent's sorted lines against the
+result = 0): `CODING_MEMORY.md`, and the two `coding-memory/*/verdicts.jsonl` (115+117→127,
+174+177→187). The `CODING_MEMORY.md` conflict was **diff3-format** — a `|||||||` base marker my first
+marker grep did not match. Grep for all four marker types, not three.
+
+Suites re-run **in this checkout** after the merge, true exit codes captured before anything else:
+`classify-git-command.test.py` 114 passed / `shell_segments.test.py` 35 / `classify-pr-command.test.py`
+59, all `rc=0`. This closed the investigating agent's largest self-declared gap — it had only ever run
+the merged code from blobs extracted to a scratch dir.
+
+**A fail-open found outside the asked scope.** Rule-4 row 4 said a `PATHSPEC` commit is gated on
+**index** content. Real git ships the **worktree** blob — measured on git 2.50.1 with `foo.sh` at HEAD
+`v1` / index `v2` / worktree `v3`: `git commit -m msg foo.sh` → `rc=0`, `HEAD:foo.sh` = `v3`. The
+card's own scenario ("a pathspec commit is gated on worktree content, not the index") always said so;
+the table disagreed with both the scenario and git. Reading the index would have passed a file whose
+worktree content no test ever ran against — G2 re-opened, the exact hole that row exists to close.
+**Two halves of one card disagreed for 21 revisions and eight judge rounds; running the command found
+it in one probe.**
+
+**The trap recorded for whoever builds task 3.** The obvious "improvement" — adding marker-gate's
+missing spellings (`-o`, `--only`, `-u`, `--untracked-files`, `--trailer`) to the shared tables —
+flips **4 of 6** measured probe cases from "cannot tell" to a clean pathspec. `git-guard.sh:269-272`
+reads exactly that fact to grant its documentation-only exemption, so each is a **block → allow flip
+on a Tier-1 guard**. Its suite catches only the `-o` pair (112 passed / 2 failed); `--trailer` and
+`-u` flip at 114/114 green. Any such change is its own feature with its own ADR, and needs regression
+cases for the two unpinned spellings first.
+
+**Rejected the investigating agent's rename** of `classify-commit-command.py` →
+`classify-commit-form.py`. The name appears in 12 places in the card and the rename fixes nothing
+about the defect. A drive-by rename is its own task.
+
+Card reopened to `phase: planning` (revision 21, `68c06b4`) per the documented return-to-planning
+convention; branch and ticked tasks retained. **Resuming implementation needs a fresh literal
+`gate confirmed`.** The `shell-segments-option-grammar` feature is cancelled before it was ever
+created — no card was written for it.
+
+## 2026-08-20 — marker-gate: gate confirmed, implementation reopened at task 2
+
+Revision 21's reopening (previous entry) asked for a fresh literal `gate confirmed` before
+resuming. Received it at session start. Frontmatter updated: `phase: implementation`,
+`model_tier: low`, `revision_status: complete`. Branch unchanged (`feature/verification-marker-gate`,
+already recorded). Only tasks 2 and 3 are unchecked and unblocked — everything else in the
+5-completed/16-total state from before the pause stands.
+
+**A stale/misattached session handoff was caught and set aside, not acted on.** The SessionStart hook
+injected a "you are on task 16 of tracking-feature-state, branch fix/tracker-frontmatter-comment,
+work directory .../tracker-frontmatter-comment" note. None of that matched this checkout: `git branch
+--show-current` was `feature/verification-marker-gate`, and this repo's own `docs/features/` has no
+task-16 activity pending. `.claude/session-state.md` in *this* checkout (machine-local, gitignored)
+did describe this feature correctly but was itself a session behind — it still said phase
+`implementation` / revision 20 frozen / 5 of 16 done, predating the revision-21 pause-and-reopen. The
+feature file's own frontmatter was the only source that agreed with `git log` and `git status`, so it
+won. **Flagging for whoever owns the handoff hook:** worth checking whether `session-state.md` is
+somehow being read across worktrees, or the hook's `written:` timestamp just wasn't being trusted —
+either way this is the second time in two sessions this file was found stale (previous entry, the
+6/14/10-card readiness-check misfires), which is enough repeats to suspect the hook, not the data.
+
+Task 2/3 dispatched to a subagent next (TDD red/green, two commits) rather than continued in-process
+— this restore alone had already pulled the session past the 75k-token freshness-checkpoint line
+before any code was touched.
+
+Landed and independently verified: `206ba2e` (red, 52 assertions), `e073cc3` (green, 248 lines,
+52/52), `59b4c92` (checklist ticked). Confirmed on HEAD in this checkout/branch before trusting the
+report; re-ran all four suites myself rather than taking the reported counts — `classify-commit-command.test.py`
+52 passed, plus the three baselines unchanged (114/35/59). Pushed at `59b4c92`. 7 of 16 tasks done;
+task 7 (green: `hooks/test-marker-guard.sh` + `hooks/lib/decide-commit-gate.py`) is next.
+
+**Task 7 attempted twice this session, both stopped correctly instead of guessing.** First
+implementer hit the `TEST_EXEMPT` quoting/ordering bugs above and stopped with no code written;
+fixed and re-dispatched. Second implementer got further (into the staleness-comparison logic)
+before finding that `hooks/test-marker-guard.test.sh:399-401`, its Gherkin twin
+(`verification-marker-gate.md:1322-1329`), and the "Measured (M4)" paragraph a few hundred lines
+earlier (`:964`) all assert the wrong outcome for one scenario: committing a file by name while a
+different, paired file was edited but left out of that commit. All three currently say the
+left-out file goes stale (`MSG_STALE_TEST`); independently verified with real git (twice,
+separately from the implementer's own check) that it's backwards — the *named* file is the one
+that ships unverified worktree content and goes stale (`MSG_STALE_SUBJECT`); the left-out file
+ships its last-committed content unchanged and still matches the marker. This is the same rule
+revision 21 already corrected elsewhere in this document; these three spots were never updated to
+match. Not yet fixed — session paused for a model-tier switch back to high effort to make the
+correction, per the "spec proves wrong mid-implementation → stop, switch tier, fix" convention.
+Full detail and the exact re-verification recipe: `.claude/current-task.md` (machine-local).
+
+**Also discovered, not yet acted on:** `/model` sets the default effort for every *new* session,
+not just the live session it's run in — its own output says "saved as your default for new
+sessions with X effort." Pane-dispatched workers are new sessions, so they inherit whatever was
+last set regardless of the dispatching session's current effort at dispatch time. Whether the
+"low tier for mechanical work" convention is actually controlling worker cost, given this, is an
+open question worth its own look later.
+
+## 2026-08-20 — marker-gate: task 7's M4 correction lands, verified twice against real git
+
+The blocking error described in the previous entry is fixed. Re-ran the re-verification probe
+from `.claude/current-task.md` fresh (git 2.50.1, `/tmp/pathspec-probe`, not trusting the prior
+session's transcript): with `foo.sh`/`foo.test.sh` both committed at v2 then both edited to v3 in
+the worktree only, `git commit -m msg -- hooks/foo.sh` yields `HEAD:foo.sh` = v3 (worktree —
+naming a path in the pathspec ships whatever's on disk for it, unverified) and `HEAD:foo.test.sh`
+= v2 (base, untouched by this commit). The named file mismatches the marker and goes stale
+(`MSG_STALE_SUBJECT`); the left-out file matches the marker and does not. Confirms the diagnosis.
+
+Corrected all three inherited spots to say `MSG_STALE_SUBJECT`, not `MSG_STALE_TEST`: the
+"Measured (M4)" paragraph (`verification-marker-gate.md:964`), its Gherkin scenario
+(`:1322-1329`), and the test assertion + comment (`hooks/test-marker-guard.test.sh:389-402`).
+Landed `19f4c97`. Re-ran all five suites after the edit, not just the one touched:
+`test-marker-guard.test.sh` unchanged at 8/225 (gate script still doesn't exist — task 7's
+remaining work), `classify-git-command`/`shell_segments`/`classify-pr-command`/
+`classify-commit-command` unchanged at 114/35/59/52. Pushed at `19f4c97`.
+
+Per the plan recorded in `.claude/current-task.md`, task 7's remaining build (`hooks/lib/decide-
+commit-gate.py` + `hooks/test-marker-guard.sh`, target 225/225) is being dispatched to a fresh
+pane worker next rather than continued in-process, per `dispatching-pane-agents` and the user's
+explicit request this session. Effort convention note from the prior entry still applies: check
+what effort tier the dispatched worker actually runs at, since `/model` sets it session-wide.
+
+## 2026-08-20 — marker-gate: task 7 lands green, two more spec contradictions found and resolved
+
+Dispatched task 7's build (`hooks/lib/decide-commit-gate.py` + `hooks/test-marker-guard.sh`) to a
+pane-dispatched `general-purpose` worker per the user's explicit request. The worker's `wait`
+timed out once at 1800s; its `claude -p` process was still alive with 30+ minutes of accumulated
+CPU time, so the wait was re-armed rather than treated as a failure — it reported back clean on
+the second window.
+
+The worker got to 196/225 and correctly stopped rather than guess, reporting two further
+spec/test contradictions (on top of the M4 one fixed earlier today). Both independently
+re-verified from scratch before acting on them, including re-reading the exact spec/test lines
+and running real git and Python, not trusting the worker's paraphrase:
+
+1. **A file re-staged with unchanged content is invisible to `PLAIN`'s diff-based path collector,
+   and ~8 `block` scenarios assumed the gate would still catch it.** Confirmed with a real probe:
+   `git commit -m msg` with only such a file staged exits 1, "nothing to commit" — no commit ever
+   happens, and no git command that reports differences can see the file either (tested several).
+   Traced every affected scenario in `hooks/test-marker-guard.test.sh` back to `new_repo`'s seed
+   commit plus a bare `stage()` with no preceding `edit()`. Ruled out widening the collector
+   (treating every tracked pair as in-scope) — it breaks "fresh marker allows the commit"
+   (:224-227), which depends on an unrelated, unmarked, untouched pair being excluded.
+2. **`shell_segments.segments()` replaces every newline in a `TEST_EXEMPT` value with `;` before
+   extraction**, confirmed by running it directly — a raw newline can never reach the exempt
+   validator through the real pipeline. One scenario ("embedded control character") is fixable by
+   swapping to a different `0x00-0x1f` byte (confirmed several survive `segments()` unchanged).
+   The other ("ending in a newline is rejected") is a regression test for a `re.match`-vs-
+   `re.fullmatch` quirk specific to the newline byte itself, so it cannot be fixed by swapping the
+   byte — it now checks the validator directly instead of through the full command simulation.
+
+Per `core-conduct`'s architecture-decisions-stay-human-owned rule, stopped and asked the user
+before touching the pinned test file further — two `AskUserQuestion` calls, each with a
+recommendation, both accepted as recommended. Applied 8 test-scenario edits (6 add-an-edit-before-
+stage, 1 byte swap, 1 full rewrite as a direct check) myself, as a test-suite correction kept
+separate from the (already-built) implementation step. Landed `26f8116`: `test-marker-guard.test.sh`
+**224/224** (225 → 224 on purpose — the rewritten scenario went from a 2-assertion end-to-end
+check to a 1-assertion direct one; documented in the checklist, not silently dropped). All four
+baseline suites re-confirmed unaffected: 114/35/59/52. Task 7 ticked with full detail. Pushed.
+
+Also found, left untouched (out of scope of what was asked, not currently blocking anything): a
+third scenario structurally identical to the newline-in-exempt issue ("the byte bound is not
+escapable by a trailing newline") already passes, but vacuously — the semicolon-substituted value
+happens to be 201 bytes, over the length bound on its own, so it never exercises the newline-at-
+end-of-string quirk its comment claims to test. Flagged in the checklist for whoever next touches
+that test. One shellcheck warning (SC2174) in the new `hooks/test-marker-guard.sh` is harmless (an
+unconditional `chmod 0700` follows) and left for task 11.
+
+Session tracking files updated: `.claude/current-task.md` deleted (task done, nothing pending),
+`.claude/session-state.md` rewritten to reflect 8/16 done and no active task.
+
+## 2026-08-20 — marker-gate: tasks 9-16 dependency analysis, 5-way parallel split decided
+
+Fresh session after the task-7 handoff (8/16 done, HEAD `dd3f5d8`, clean). User asked whether any
+of the remaining 8 tasks could run as parallel worktree/pane work. Read the full checklist (tasks
+9-16) to map dependencies rather than assume "the rest" is one batch:
+
+- **Independent (no dependency on each other or on 13/14/16):** 9 (mutation-floor check), 10
+  (latency measurement), 11 (`shellcheck -x`), 12 (gates.md/README docs), 15 (MUST-sweep vs
+  tests). All read/measure/document the already-built code; none require another of these five to
+  land first.
+- **Forced serial, in this exact order, done directly by the orchestrator rather than delegated:**
+  13 (registers the hook in `settings.json` — the spec's own revert-pair table names this the
+  worse of two pairs: a half-registration blocks every Bash call in the session, not just
+  commits) → 14 (arming check; only meaningful once 13's installed hook exists) → 16 (obs judge on
+  the final HEAD; has to run after everything else is merged, by definition of "final").
+- Noted a secondary, lower risk: tasks 9 and 15 could both want to add assertions to the same test
+  suite file (closing a surviving mutant vs. closing a spec-coverage gap) — not a hard
+  dependency, just a reason to merge them sequentially rather than simultaneously.
+
+User confirmed: 5-way parallel now for {9, 10, 11, 12, 15} via worktrees + pane-dispatched
+workers, pane-split policy set to `panes max=5`. 13/14/16 held for a serial pass after the
+parallel batch merges. No code changed yet this session; this entry records the plan before the
+dispatch phase, per the freshness checkpoint firing at 79k session tokens with no prior save point
+this session.
+
+## 2026-08-20/21 — marker-gate: tasks 9-16 landed, four judge rounds, PR #58 open, feature complete
+
+Continuing the 5-way parallel dispatch recorded above. All 5 workers (tasks 9, 10, 11, 12, 15)
+reported DONE; each commit independently verified in its own worktree/branch before trusting it.
+Merged serially (10, 11, 12, 9, 15) into the main worktree — three trivial checklist-checkbox
+conflicts resolved by hand, one real content merge (test-marker-guard.test.sh, tasks 9+15 both
+added cases) resolved cleanly by git. 240/240 after merge, all baselines held except one
+pre-existing gap both task 9 and task 15 independently flagged: task 8's "all 18 pairs wired"
+claim was wrong — `classify-commit-command.test.py` and `merge-guard.test.sh` were never wired.
+Fixed with the established call-site pattern; `write-test-marker.test.py` 57→59.
+
+**Task 15's MUST-sweep found two real production bugs, not just missing tests** — both violations
+of §3's no-default-allow rule: `decide-commit-gate.py`'s kind and form dispatches both had a
+default-allow arm (an out-of-domain classifier answer would ALLOW the commit instead of raising).
+Separately, `test-marker-guard.sh:59`'s inline `cwd` read was missing `-I`, unlike its sibling call
+— a hostile `json.py` in the hook's own process cwd could shadow the stdlib `json` module and
+silently disarm the entire gate (exit 0, no error). Per user decision, fixed both before task 13
+(global registration) rather than ship a globally-registered hook with a known silent-disarm hole.
+Reproduced each bug for real before fixing, wrote failing tests first, fixed, confirmed green, then
+flipped the `-I` fix off/on to prove the new test genuinely catches it. Suite → 246/246.
+
+Task 13 (registration): added one entry to `settings.json`'s existing `PreToolUse`→`Bash` array,
+matching the sibling guards' shape exactly. The checklist's "preserve model: opus[1m]" was stale —
+live value had drifted to `claude-fable-5[1m]` — honored the intent (don't touch it) over the
+literal. Live-fire sentinel proof didn't fire (this session's hook config predates the edit — the
+documented settings-watcher staleness, not a defect); `jq -e` + JSON validity were sufficient per
+the update-config skill's own fallback.
+
+Task 14 (arming check): ran all six required cases against a **fresh `git clone` of the pushed
+branch**, not the local worktree — the specific failure mode the task exists to catch (a file
+present locally but never committed). All six passed.
+
+**Observability judge, four rounds, each closing a real finding from the last:**
+1. `e0fd411` — risk=low/confidence=high, no failing dimension. Flagged `rules/gates.md`'s new
+   bullet as the file's longest (1608 chars) and suggested hand-verifying the TEST_EXEMPT lockout
+   path.
+2. `54ae987` (bullet trimmed to ~920 chars, lockout path hand-verified and documented — confirmed
+   by hand that TEST_EXEMPT does NOT rescue a lockout caused by decide-commit-gate.py itself being
+   missing, correctly by design) — risk=low again, flagged the lockout claim had no automated test.
+3. `22ae1b0` (added and mutation-proved that test) — risk=low/confidence=high, nothing new.
+4. `3247040` — **process mistake, not a code one**: committed round 3's own verdict *before*
+   opening the PR, which moved HEAD and invalidated it against `judge-guard.sh`'s strict same-SHA
+   check — exactly the trap `feedback_committing_a_verdict_invalidates_it.md` already named.
+   Re-scored the resulting pure-doc HEAD (risk=low, nothing new), this time opened PR #58
+   *before* committing round 4's verdict, then pushed the verdict + README Roadmap entry as
+   follow-ups (pushes to an already-open PR don't re-trigger judge-guard, only `gh pr create`
+   does).
+
+All 16 checklist items complete. Feature file frontmatter moved to `phase: review`. PR:
+https://github.com/suyatdev/.claude/pull/58
 ## 2026-08-19 — tracking-feature-state: reopened and task 15 lands; closing it is blocked on two finds
 
 Resumed expecting `global-option-blindness`; it was already merged (PR #54, 2026-08-19 21:27 UTC,

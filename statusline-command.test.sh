@@ -22,6 +22,8 @@
 #
 # Run: bash statusline-command.test.sh
 set -u
+MARKER_SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+MARKER_ROOT="$(git rev-parse --show-toplevel)" || exit 1
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/statusline-command.sh"
 
@@ -914,4 +916,6 @@ case "$(plain "$OUT")" in
 esac
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
+[ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
+  "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
 [ "$fail" -eq 0 ]

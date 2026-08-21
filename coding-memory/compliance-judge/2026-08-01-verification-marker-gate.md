@@ -585,3 +585,967 @@ and complete); scope boundary; `writer-call-site-cwd` — **closed, verified lin
   contradiction in place and states that implementation is blocked on that decision, frontmatter
   carries `waived: [writing-specs/command-grammar]`, and checklist task 2 (l.1117–1119) repeats the
   block. Recorded, not counted toward this verdict.
+
+## Round 1 (re-entry, judged against spec revision 6) — 2026-08-13T01:49:34Z · **FAIL** (2 violations) · confidence: high
+
+HEAD `287add5bd94cc07c1bf433be55e011ec4e752fda` · spec blob `a6fa6de17181d8fa527b7c8f8d6a4f72e0004bea`
+· 1,419 lines · round counter restarted per the skill's re-entry rule (round 5's `fail` on revision 5
+sat unaddressed for eight days before round 6 revised the document)
+
+### Layman summary
+
+Round 6's own closure claims hold up under re-verification. I re-derived the pairing predicate from
+scratch rather than trusting the prose, and it is genuinely total (every path gets exactly one role
+under the ordered suffix rule) and the subject→test / test→subject asymmetry is sound: the union
+direction is the fail-closed one precisely where fail-closed is needed (a subject shipping with only
+an on-disk test gets caught, not waved through), and the index-only direction is the one direction
+where widening to a union would create a pair no marker could ever satisfy. I did not find the
+fail-open the dispatch prompt asked me to hunt for. The M5 four-case split of the `<base>` ABSENT row
+is correct and matches its own measurement table. `api-contracts`, `latency-budget-count`, and
+`default-deny-store` are all closed as claimed — I checked the totality matrix, checklist task 10, and
+the explicit `0700`/`0600` modes on both `hooks/state/` and `test-marker.log` line by line. The log
+rename (`test-exempt.log` → `test-marker.log`) is consistent everywhere it appears; no stale spelling
+survived. None of the five ids from round 5 recur.
+
+But tracing the flowchart's actual node order — not just the prose claims about it — surfaced a
+contradiction round 6 did not touch, in territory this spec has fought over before. §Scope states, in
+an explicit "would be a lockout" callout, that the gate is **inert until a repo opts in**, and the
+Fail-closed contract repeats this as an absolute: "any repo without the writer installed" is on the
+list of things that "do not, and are accepted" as blocking. Both statements are false as the flowchart
+is drawn: `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED`,
+`MSG_CLASSIFIER_BAD_OUTPUT`, and `MSG_NOTHING_RUNNABLE` all sit at flowchart nodes strictly before the
+toplevel-resolution node `F` and the writer-installed node `G` — meaning a broken interpreter or a
+corrupted classifier in the primary checkout blocks every `git commit` whose raw payload merely
+mentions "commit", in **every** repo on the machine, adopting or not. That is the exact global lockout
+§Scope's callout says the opt-in design exists to prevent, just triggered by infra failure instead of
+a missing writer, and the two absolute claims are never reconciled — no scenario tests the compound
+case (classifier broken **and** repo never installed the writer). The same ordering leaves an
+unanswered question in the logging design the dispatch prompt asked me to scrutinise: the log's field
+4 is "the pairs skipped (`EXEMPT`) or the pair that failed (`BLOCK`)", but ten of the fourteen doors —
+including all six named above — fire before any pair exists to name, and six of those also fire before
+`<repo>` (the log's own path prefix) is known. This is the same species of defect that closed
+`writing-specs/scope-boundary` in round 3 was supposed to have retired: a guarantee about non-adopting
+repos stated confidently in one place and not actually delivered by the control flow. It recurred in a
+different guise the earlier check did not exercise, so I am citing it fresh rather than reusing that
+id — round 5's violation list (the only list this round's persistence check is scoped to) has nothing
+matching it.
+
+Separately, the dispatch prompt asked whether length is now causing violations rather than merely
+being unwieldy. It is: the contradiction above is a textbook instance of the failure mode O3 itself
+names as the reason to eventually shrink this file ("prose consistency at this size... is what keeps
+failing") — the same guarantee asserted ~1,000 lines apart, drifted apart, unnoticed through a revision
+whose stated goal was closing exactly this class of defect. Deferring O3 was a defensible call when it
+was made in round 5-adjacent rounds; carrying it forward now, after the predicted failure mode has
+materialised inside this very revision, is not.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/opt-in-fail-closed-conflict` *(new)* | `~/.claude/skills/writing-specs/SKILL.md` | "Requirements, not one-liners: break the feature into concrete requirements the agent can satisfy and you can check" and "Anything you leave implicit, the agent infers — and inference is where the defects come from" (§What a Spec Must Contain) | §Scope → "Where the gate is active" (l.124–134, l.197); §3 the gate → "Fail-closed contract" → "These do not, and are accepted" (l.1202–1206); flowchart nodes `NP`/`CM`/`CF`/`CO`/`C` (l.59–71) vs. `F`/`G` (l.73–76); §"Decision logging" field 4 (l.1260–1265) | §Scope asserts the gate is "inert until a repo opts in" and the Fail-closed contract repeats, unconditionally, that "any repo without the writer installed" is never blocked. The flowchart places `MSG_NO_PYTHON`, `MSG_CLASSIFIER_MISSING`, `MSG_BAD_PAYLOAD`, `MSG_CLASSIFIER_FAILED`, `MSG_CLASSIFIER_BAD_OUTPUT`, and `MSG_NOTHING_RUNNABLE` all before node `F` (toplevel resolution) and node `G` (the writer-installed / opt-in check), so a broken `python3` or a missing/corrupt classifier in the primary checkout blocks every commit containing the substring "commit", in every repo on the machine, including repos that never installed the writer — the exact lockout §Scope's own callout says opt-in prevents. The two claims are never reconciled, and the compound case (infra broken, repo not opted in) has no scenario. The same ordering leaves the log's write-target and field-4 content undefined for the ten doors that fire before a pair (and, for six of them, before `<repo>` itself) is known. |
+| 2 | `core-conduct/file-size-convention` *(new)* | `~/.claude/rules/core-conduct.md` | "Many small, focused files (<400 lines, 800 max) over few large ones" (§Code Style) | Whole document, 1,419 lines; "Standing decisions → O3 — the shrink, still owed" (l.1402–1406) | The file is 3.5x the 400-line target and 1.8x the 800-line hard ceiling. O3 defers the shrink on the theory that "prose consistency at this size... is what keeps failing," and round 6 is direct evidence the theory is already right: violation 1 above is exactly that failure — the same opt-in guarantee asserted twice, ~1,000 lines apart, and drifted apart inside a revision whose explicit goal was closing this class of defect. Deferring the shrink after the predicted failure has occurred inside the deferral window is no longer a defensible sequencing call as currently framed; it needs to be re-affirmed as a decision that accounts for this evidence, not carried forward unchanged. |
+
+### Notes (non-blocking)
+
+- **Pairing predicate — cleared, not just re-asserted.** I traced every combination of (subject in path
+  set / test in path set / sibling tracked / sibling on disk only / sibling absent entirely) against
+  the writer's own `--error-unmatch` behaviour and found no case where the asymmetry lets an uncertified
+  subject ship. The "block that commit forever" framing (l.784–787) is accurate for the narrow claim it
+  makes — the *standard* remedy (re-run the suite) cannot satisfy it while the sibling stays untracked —
+  but is not literally forever; tracking the sibling in the same commit resolves it. Not a defect, but
+  the wording invites the stronger reading; worth a half-sentence in a future round, not a violation.
+- **M5's four-case table (l.677–691) is reproducible reasoning**, not just plausible — cases A/B/C/D each
+  isolate exactly one of the two ABSENT disjuncts for `ALL`, and the `PATHSPEC` row correctly drops the
+  disk clause. No arithmetic or logic error found.
+- **The rename to `test-marker.log` is complete.** Grepped every occurrence of the old and new names;
+  no stale `test-exempt.log` spelling remains anywhere in the document, including the checklist and the
+  Gherkin scenarios that assert log lines.
+- **`hooks/lib/shell_segments.py:64`'s `WRAPPERS` tuple was checked against the file directly** (not
+  just the spec's citation of it) and matches: `("rtk", "time", "eval", "command", "builtin", "exec",
+  "nohup")` exists at that path.
+- Confidence is **high**: every citation in this round was traced against the live flowchart text or an
+  independent re-derivation, not against the round-6 callout's own account of itself, per the dispatch
+  instruction to treat that callout as a claim rather than evidence.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived: [writing-specs/command-grammar]`)
+  and re-confirmed present in the artifact at the unresolved-callout under §"The command grammar"
+  (l.531–547) and checklist task 2's cross-reference (l.1339–1341). Not re-argued; not counted toward
+  this verdict.
+
+## Round 2 (re-entry, judged against spec revision 8) — 2026-08-13T03:56:18Z · **FAIL** (1 violation) · confidence: high
+
+HEAD `029480968e5e149abe8a7e8314a7c732a8774532` · spec blob `c32b5788eb2559fc524e32b66e2757a0f9fe2be9`
+· 1,413 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 1's finding is fixed, not just claimed fixed. I re-traced the flowchart node by node rather than
+trusting the "every door except MSG_NO_PYTHON is downstream of node G" callout as evidence of itself:
+the ordering is now pre-filter → python3 check → inline `cwd` JSON read → toplevel resolution → writer-
+installed check → classifier, and every one of the twelve remaining blocking doors sits after the
+writer-installed node. The door count (13), the allow-path count (10), and the mutation floor (24) all
+still agree with each other, with the flowchart, and with the checklist. `writing-specs/opt-in-fail-
+closed-conflict` is closed.
+
+Revision 8's scope cut — deferring the decision log, `--status`, and dedicated `INCLUDE`/`FOREIGN`
+forms, folding all three into existing structures — also held up under a line-by-line recheck. Nothing
+in the current text refers to any of the three deferred items as though they still ship; the fold left
+the foreign-repo trigger's refusal completely unchanged (it still blocks, still names itself in
+`MSG_UNSUPPORTED_FORM`, still carries its own scenario); and the loss of a queryable `--status` is
+disclosed rather than quietly dropped — flagged with warning callouts in §Scope, required reading in the
+gates.md/README entry at checklist task 12, and given a one-off substitute at task 14. That is adequate
+disclosure of an accepted cost, not a violation.
+
+What the recheck did surface is new, and it sits exactly where this spec's own house style says a
+defect like this hides: a stale number presented as a fresh measurement. §Standing decisions → O3
+states the file "landed at **1,380**" lines and gives a `wc`/`grep` composition table explicitly
+described as "measured... rather than estimated" — the same phrase the frontmatter comment repeats
+("size measured and reported, not claimed"). `wc -l` on the actual judged file returns **1,413**, a
+33-line gap the O3 section never re-measured. The internal arithmetic inside O3 is fine on its own
+terms; it just no longer describes the artifact it is embedded in. This file spends real ink telling
+its own implementer to re-derive rather than trust a remembered number (the `python3 -I` latency figure,
+re-measured after three prior values disagreed; the mutation floor, explicitly told to be re-derived
+"before running it rather than trusting this number") — and then does not hold its own size claim to
+that standard. It does not reopen the waiver (either number is far past 800, and the waiver is a
+settled user decision I'm not re-arguing), but it is a live, checkable inaccuracy in a durable artifact,
+which is exactly what the project's own core-conduct rule on verification-before-claim exists to catch.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `core-conduct/verify-before-claim` *(new)* | `rules/core-conduct.md` (project layer, this worktree) | "Verification precedes both the claim and the write-down — never record that claim in a durable artifact (ADR, memory file, commit message, PR body, handoff, spec), until you have actually run it and re-read the output" (§Session Defaults) | §Standing decisions → O3, "Composition of the 1,380, measured with `wc`/`grep` rather than estimated" | The O3 section presents a specific line-count total (1,380) and a component breakdown as a completed, re-runnable measurement backing the file-size waiver, but `wc -l docs/features/verification-marker-gate.md` on the judged blob (`c32b5788e...`) returns **1,413** — a 33-line drift never re-measured after later edits (plausibly the waiver-recording text itself) grew the file past the number the derivation reports. The arithmetic inside O3 is internally consistent (1,448 − 68 = 1,380; 103 − 35 = 68) but no longer matches the file it describes — a claim recorded as settled before being re-checked, the exact failure mode this file's own recurring "measured, not estimated" callouts elsewhere (§Latency's `python3 -I` re-derivation, checklist task 9's mutation-floor re-derivation warning) exist to prevent. |
+
+### Notes (non-blocking)
+
+- **Round-1 fix verified, not just re-read.** Traced every flowchart edge from `A` to each terminal
+  node: `D3` (`MSG_NO_PYTHON`) is the only block before node `G`; all of `D4`, `X`, `D5`, `D6`, `Y`,
+  `BE`, `UF`, `U`, `Z` (2 messages), `W` (2 messages) sit strictly downstream of `G`. 13 doors, 10 allow
+  paths, 24 mutation floor — all cross-checked against the door table, the allow-path enumeration, and
+  checklist tasks 6/9, no drift found.
+- **No surviving reference to deferred v2 items.** Grepped the whole file for `FOREIGN`, `INCLUDE`,
+  `--status`, and `test-marker.log` — every occurrence outside the revision-8 callout and the
+  §Follow-ups register is either historical narration or an explicit "deferred" statement; nothing
+  treats a cut feature as shipping.
+- **Foreign-repo behaviour unweakened by the fold.** The scenario "a commit aimed at another repo
+  cannot be verified, so it blocks" still exits 2 with `MSG_UNSUPPORTED_FORM` naming the foreign-repo
+  trigger; §"What `UNSUPPORTED` absorbs" states explicitly that "the folding is a prose change, never a
+  licence to allow."
+- **`--status` loss disclosed, not buried.** §Scope's accepted-cost callout, checklist task 12's
+  documentation requirement, and task 14's one-off installed-hook arming proof together make the gap
+  observable to the next reader rather than silently absent. Adequate.
+- **Cross-document counts all reconciled:** 52 Gherkin scenarios (counted directly, matches O3's
+  claim), 18 `kind`×field matrix cells (6 fields × 3 kinds), 14 paired suites (11 pre-existing + 3 new),
+  12 doors downstream of `G` (13 total − `MSG_NO_PYTHON`) — no arithmetic disagreement found anywhere
+  in the document except the one cited above.
+- Confidence is **high**: the cited violation is a direct `wc -l` measurement against the exact judged
+  blob, not an inference.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`) and confirmed present in the
+  artifact at the UNRESOLVED callout under §"The command grammar" and checklist task 2's cross-
+  reference. Not re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list, confirmed present in
+  the revision-8 callout at the top of the document and restated in §Standing decisions → Waivers and
+  O3. Not re-argued; not counted toward this verdict. Note for whoever next touches this file: the O3
+  measurement backing this waiver is the same one flagged stale above (1,380 claimed vs. 1,413 actual)
+  — the waiver itself is not in question (both figures clear 800 by a wide margin), but the next edit
+  to this section should re-run the `wc`/`grep` derivation rather than adjust the number by hand.
+
+## Round 3 (re-entry, judged against spec revision 9) — 2026-08-13T04:44:35Z · **PASS** (0 violations) · confidence: high
+
+HEAD `925121815ac31994aa13ecaec128fbcee8782943` · spec blob `28ff93a1eb9e7a214c9a8cdd3432fce31851b38a`
+· 1,539 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 2's one finding — a stale line count presented as a fresh, re-runnable measurement — is fixed,
+and I did not take the fix's own word for it. I re-ran the exact `wc`/`grep`/`awk` derivation now
+embedded in §Standing decisions → O3 against the live file and got **total=1539, floor=822, prose=717,
+blank=245, tbl=135, gherkin=370, code=72** — every one of those matches the composition table in the
+spec exactly. I then went further than the derivation asks and pulled every historical commit the O3
+table cites (`36a0880`, `fa44399`, `0294809`, `17d2379`, current HEAD) with `git show <sha>:<path> |
+wc -l` rather than trusting the table's own arithmetic: `1,448 / 1,402 / 1,413 / 1,434 / 1,539` — all
+five numbers match. The spec's own explanation for *why* round 2 caught what it did (a composition
+table counts itself, so the file grew while the paragraph describing its size was being written) also
+checks out against the commit history: `fa44399` really did ship 1,402 lines while both that commit's
+message and this table's earlier draft recorded 1,380. `core-conduct/verify-before-claim` does not
+recur.
+
+This round's real job was checking that restoring the decision log — cut in revision 8 to hit 800,
+put back once that ceiling was waived — didn't quietly reopen anything round 2 had already closed, or
+introduce something new that isn't actually true. Four things, all independently checked:
+
+1. **The log's field-4 arithmetic.** The spec claims 4 of 13 doors name a pair, 8 write `-`, and 1
+   (`MSG_NO_PYTHON`) writes nothing at all. I cross-checked this against the doors table (§The doors,
+   13 rows) rather than the prose: rows 10–13 (`MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`,
+   `MSG_STALE_TEST`) are the 4 that fire after pair formation; row 3 (`MSG_NO_PYTHON`) is the 1 that
+   fires before any repo is known; the remaining 8 rows write `-`. 4 + 8 + 1 = 13, and it also matches
+   a second statement in the same section ("nine of the thirteen doors fire before a pair exists, and
+   eight of those can still write a line") — 8 + 1 = 9 pre-pair doors + 4 post-pair doors = 13. The
+   correction of revision 7's "two doors write no line" is also sound: the unreadable-payload allow
+   path resolves no toplevel but was never a *door* (allows aren't logged at all), so it never wanted
+   a line in the first place — the fix is a category correction, not a new claim.
+2. **No stale "v1 has no log" text.** Grepped every occurrence of "decision log" and `test-marker.log`
+   in the file: the header callout, §Scope's asymmetry paragraph, §Decision logging, §Follow-ups, and
+   checklist task 6 all agree the log ships in v1, and every remaining "deferred" statement in the
+   document is scoped to `--status` or the `INCLUDE`/`FOREIGN` fold specifically, never to the log
+   itself.
+3. **The half-measure disclosure.** v1 ships the log's writer with no reader — an empty log cannot
+   distinguish "armed and quiet" from "armed but never pairing." The spec states this with a ⚠️ callout
+   in §Decision logging and mirrors the identical asymmetry in §Scope ("a non-empty log proves the gate
+   is armed and firing; an empty one proves nothing"), rather than presenting the log as complete
+   evidence. That is an honest characterization of a real gap, not an overclaim — it says what the log
+   proves and, explicitly, what it does not ("instrumentation, not evidence").
+4. **`TEST_EXEMPT` as new log-write surface.** Node H's validation (`^[^\x00-\x1f\x7f]{1,200}$`,
+   reject-not-truncate) excludes the tab and newline bytes, which is also the log's own field and line
+   separator — so a value that reaches the log has already been proven incapable of forging an extra
+   field or an extra line in a tab-separated file, even though the classifier upstream deliberately does
+   not sanitize it (single-sourced: "the classifier reports, the hook decides"). That is adequate
+   handling of the surface the round asked me to check.
+
+No new violations found in a broader pass either: the marker store and log both carry explicit
+`0700`/`0600` modes (default-deny), pinned tool versions are dated and machine-measured, every Gherkin
+scenario I sampled (including the two "no line is written" edge cases task 6 calls out) is internally
+consistent with the doors/allow-path tables, and no placeholder or TBD text exists anywhere in the file.
+
+### Violations
+
+None.
+
+### Notes (non-blocking)
+
+- **`core-conduct/verify-before-claim` (round 2) closed, and independently re-derived rather than just
+  re-read** — current file and all five historical commits in the O3 table checked directly against
+  git, not against the spec's own arithmetic.
+- **Log arithmetic (4 + 8 + 1 = 13) verified against the doors table**, not just the prose asserting it.
+- **No surviving "log is deferred" text** across header callout, §Scope, §Decision logging,
+  §Follow-ups, and checklist task 6.
+- **`TEST_EXEMPT` log-injection surface checked**: the validation regex at node H structurally excludes
+  the log's own field/line separators, so the classifier's deliberate non-sanitization does not leak
+  into the log.
+- Confidence is **high**: the primary finding this round revisits (line counts) was checked by direct
+  command execution against the live file and five historical git blobs, not by re-reading prose.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" and checklist task 2. Not re-argued.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. The basis has
+  strengthened since round 2: §Standing decisions → O3 now shows the non-prose floor (822 lines: blank
+  + Gherkin + tables + code) is itself over the 800 ceiling, so no amount of prose deletion reaches 800
+  without cutting acceptance scenarios or contract tables, which the user has rejected twice. Not
+  re-argued; not counted toward this verdict.
+
+## Round 4 (re-entry, judged against spec revision 11) — 2026-08-13T16:29:34Z · **FAIL** (1 violation) · confidence: high
+
+HEAD `33d9ff978947d2a10d63b62216dd3449164a5999` · spec blob `6c9622a6cbe5ed54dbcef49f9e32b32df85a28de`
+· 1,614 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 3 passed with zero findings. Since then two revisions landed: revision 10 (observability-judge
+advisories — log read commands, an as-of caveat, the invisible-Unicode disclosure) and revision 11, the
+substantive one, which repairs a real bug in the spec itself — the `TEST_EXEMPT` validation regex was
+written in Python escape syntax (`\x00-\x1f`) but the component that runs it, `hooks/test-marker-guard.sh`,
+is bash, where that escape doesn't exist. Measured on bash 3.2.57, the old regex failed to compile on
+every input, so the escape hatch this feature's whole design leans on ("a soft warning gets rationalised
+past, so make the block computational, with a logged exemption for real cases") would have been silently
+dead from day one. Revision 11 replaces it with `^[[:print:]]{1,200}$` pinned to `LC_ALL=C`.
+
+I re-ran every measurable claim revision 11 makes rather than trusting the prose: the new regex compiles
+and matches correctly on the pinned bash version; it rejects U+200B, U+200D, and U+202E under both
+`LC_ALL=C` and `en_US.UTF-8` exactly as claimed; it rejects an accented character under `C` and admits it
+under UTF-8, also exactly as claimed. The composition arithmetic (total 1,614, non-prose floor 855, prose
+759, 58 Gherkin scenarios) reproduces exactly against the live file via the spec's own `wc`/`grep`/`awk`
+derivation. None of that is in question.
+
+What I went on to check was the round's explicit ask: is this the *only* place a construct is specified in
+one language's syntax but destined to run in another? It is not. The fix states the exemption check must
+be "evaluated under `LC_ALL=C`" but never states *how* that pin is scoped to the bash `[[ =~ ]]` builtin
+that node H's own measurement confirms is the actual mechanism. I tested the reading an implementer would
+most naturally reach for — prefixing the assignment directly onto the check, `LC_ALL=C [[ "$s" =~ $re ]]`,
+mirroring how an env var pins an external command — and on the pinned bash 3.2.57 it is not valid syntax:
+bash's reserved-word recognition for `[[` does not survive a leading variable assignment, so the shell
+reports "command not found" (exit 127) instead of running the comparison at all. `( export LC_ALL=C;
+[[ ... ]] )` and `( LC_ALL=C; [[ ... ]] )` both work; the bare prefix does not. This is the same species of
+defect revision 11 exists to close — a requirement stated in prose that maps naturally to syntax the actual
+execution engine rejects — just one level down, in the mechanism for applying the fix rather than in the
+fix's own regex. Because this feature is still 0/15 tasks, phase: planning, nothing has been implemented
+yet to catch this in TDD; the spec is exactly where core-conduct/writing-specs says a defect like this is
+cheapest to fix.
+
+### Violations
+
+| # | id | rule source | rule | where | why |
+|---|---|---|---|---|---|
+| 1 | `writing-specs/locale-pin-mechanism` *(new)* | `~/.claude/skills/writing-specs/SKILL.md` | "State explicitly what correct looks like... Anything you leave implicit, the agent infers — and inference is where the defects come from"; "no placeholders, TBDs, or requirements readable two ways" | §3 `hooks/test-marker-guard.sh` — the gate → Validation order, node H, `docs/features/verification-marker-gate.md:419-443`; recurs unresolved at the doors table row 7 (`:1272`) and the two locale scenarios (`:1051-1063`) | The spec requires the `TEST_EXEMPT` regex to be "evaluated under `LC_ALL=C`" against a bash `[[ =~ ]]` check (confirmed as the mechanism by node H's own "Measured on bash 3.2.57 ... `[[ "vendored upstream" =~ $re ]]`" quote) but never states how the pin is scoped to that specific builtin invocation. The natural implementation — `LC_ALL=C [[ "$s" =~ $re ]]` — is invalid bash syntax on the pinned bash 3.2.57 (`command not found`, exit 127: a leading assignment strips `[[`'s reserved-word status), while `( export LC_ALL=C; [[ ... ]] )` works. This is the same syntax-vs-execution-engine mismatch class that made revisions 1–10's regex inert, now one layer down in the fix that closed it, and it is undetected by any Gherkin scenario because the scenarios assert outcomes, not the shell mechanism that must produce them. |
+
+### Notes (non-blocking)
+
+- **Revision 11's measured claims independently reproduced, not re-read.** On the pinned bash 3.2.57:
+  the old regex's regcomp failure (exit 2, not 1) confirmed for the string it never accepted; the new
+  regex compiles and matches ASCII; rejects U+200B, U+200D, U+202E under both `LC_ALL=C` and
+  `en_US.UTF-8`; rejects an accented character under `C` and admits it under UTF-8 — all four claims hold.
+- **Composition figures reproduced exactly**: `total=1614 floor=855 prose=759` and `58` `Scenario:` lines,
+  matching the spec's own table verbatim, via the spec's own derivation command re-run against the live
+  file rather than trusted from the table.
+- **The blob-hash regex is not a second instance of the same bug.** `^([0-9a-f]{40}|[0-9a-f]{64})$` (the
+  marker's read-side validation, §2 the store) uses no `\x`-style escapes and was directly tested to
+  compile and match identically as bash ERE and as Python `re` — syntax-compatible either way, so no
+  finding there regardless of which component ends up evaluating it.
+- **Which component reads/validates the marker file (node M) is left implicit** — the classifier's JSON
+  contract stops at `form`/`paths`/`exempt`; percent-encoding the subject path and parsing the marker
+  JSON for node M is presumably the bash gate's own job, by the same "inline `python3` JSON read" pattern
+  already named for the `cwd` field (citing `git-guard.sh:59-72`), but that pattern is never explicitly
+  extended to marker reads. Not cited as a violation — the precedent is stated elsewhere in the document
+  and a competent implementer has a concrete pattern to follow — but worth a line in the next revision if
+  this file is touched again.
+- Confidence is **high**: the cited violation is a live, reproduced shell result on the pinned bash
+  version named in the spec's own §Pinned versions, not an inference from reading the prose.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" and checklist task 2. Not re-argued; not counted toward this
+  verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. The basis is
+  unchanged in kind and stronger in degree since round 3: §Standing decisions → O3 now measures the
+  non-prose floor at **855** lines (up from 822 at round 3), re-derived this round and matching the
+  spec's own table exactly, so the 800 ceiling remains arithmetically unreachable without cutting
+  acceptance scenarios or contract tables — rejected twice already by the user. Not re-argued; not
+  counted toward this verdict.
+
+## Round 5 (re-entry, judged against spec revision 12) — 2026-08-13T18:20:41Z · **PASS** (0 violations) · confidence: high
+
+HEAD `f95e94b42c2f914dde057f7f8eadefe8f7c46690` · spec blob `e3f25495ed482c125bf4133ef635061d340cefae`
+· 1,652 lines · branch `docs/post-merge-53`
+
+### Layman summary
+
+Round 4's one finding, `writing-specs/locale-pin-mechanism`, is closed — and I did not accept revision
+12's snippet because it reads correctly, per the dispatch instruction. I typed both code blocks in
+verbatim and ran them on `/bin/bash`, which this machine reports as `GNU bash, version 3.2.57(1)-release
+(arm64-apple-darwin25)` — the exact version the spec pins.
+
+- **The WRONG form, run as written:** `LC_ALL=C [[ "$exempt" =~ $re ]]` → `bash: line 3: [[: command not
+  found`, exit **127**. Matches the spec's claim exactly, including the exact wording.
+- **The CORRECT form, run as written:** `if ( export LC_ALL=C; [[ "$exempt" =~ ^[[:print:]]{1,200}$ ]] );
+  then …` — matched a valid ASCII reason (exit 0) and rejected a byte-0x01 control character (falls to
+  the `else` branch), i.e. it does exactly what node H's contract requires.
+- **The stated reason for the subshell** — "the pin cannot leak into the rest of the gate" — I confirmed
+  mechanically: after the subshell returns, `$LC_ALL` in the parent shell is unset, as subshells always
+  imply for exported-then-forgotten variables.
+
+That closes the recurring id. I also re-ran the O3 composition derivation the spec embeds, cold, against
+the live file rather than trusting the table: `total=1652 floor=867 blank=256 tbl=138 gherkin=387
+code=86`, `grep -c "^Scenario:"` = `58` — every one of those numbers matches the spec's own table for
+"as of revision 12" exactly. I went further and pulled every historical commit the O3 table now cites
+with `git show <sha>:<path> | wc -l`: `36a0880`→1448, `fa44399`→1402, `0294809`→1413, `17d2379`→1434,
+`9251218`→1539, `df7c0ba` (revision 10)→1576, `33d9ff9` (revision 11)→1614, `f95e94b` (revision
+12, HEAD)→1652 — all eight match. The `core-conduct/file-size-convention` waiver's basis (non-prose
+floor 867 > 800 ceiling) is real, not stale.
+
+I diffed revision 11 → revision 12 directly (`git diff 33d9ff9 f95e94b -- docs/features/...`) rather
+than re-reading the whole 1,652-line document from scratch, since ten prior rounds have already
+line-by-line verified everything the diff does not touch. The diff is narrow and matches exactly what
+the dispatch prompt described: frontmatter (`revision: 12`), the node-H addition (WRONG/CORRECT snippet
++ rationale), the "nor does it distinguish user typo from broken checker" note under Decision logging,
+checklist task 14's new positive-`TEST_EXEMPT` case, and the O3 table/composition update. Nothing else
+in the file changed, so the ten previously-closed ids (`verified-scope-inventory`, `edge-cases`,
+`api-contracts`, `commit-form-coverage` ×4, `scope-boundary`, `writer-call-site-cwd` ×2,
+`pair-formation-rule`, `latency-budget-count`, `default-deny-store`, `opt-in-fail-closed-conflict`,
+`core-conduct/verify-before-claim`) all remain closed on the same text this ledger already verified them
+against.
+
+Per the dispatch's explicit ask, I looked for a **third instance** of the syntax-vs-execution-engine
+mismatch class in the places the earlier regex-only sweep could not see — exit-code semantics, JSON
+handling, quoting, `printf` format strings, option-parsing idioms — rather than trusting that the sweep
+already enumerated in the dispatch prompt was exhaustive. Checked: the `python3 -I` and `sys.executable
+-I` call sites (both valid in the pinned Python 3.9.6, no shell involved); the JSON field table's
+`json.dumps`/`json.loads` round trip (pure Python on both ends, no bash JSON parsing anywhere in the
+document); the doors-table log line's tab-separated `awk -F'\t'` read commands (bash/awk, consistent,
+no cross-engine claim); the store's `^([0-9a-f]{40}|[0-9a-f]{64})$` regex (already cleared in round 4 —
+no `\x` escapes, compiles identically as bash ERE and Python `re`); the percent-encoding order note
+(pure arithmetic, not language-specific); and the `[[:print:]]` regex itself, which is POSIX bracket-
+class syntax valid in both bash ERE and Python `re`, so no second engine-mismatch hides inside it. Found
+nothing. That is a negative result on a targeted search, not a certification that no such defect exists
+anywhere in 1,652 lines — noted as the residual gap.
+
+### Violations
+
+None.
+
+### Notes (non-blocking)
+
+- **`writing-specs/locale-pin-mechanism` — closed, verified by execution, not by reading.** Both
+  snippets run verbatim on the pinned bash 3.2.57, both produce exactly the result the spec claims for
+  them (exit 127 command-not-found for WRONG; correct match/reject for CORRECT), and the subshell's
+  locale isolation was independently checked, not assumed.
+- **O3 composition and historical line counts fully re-derived, not re-read**: 8 of 8 numbers (current
+  file + 7 historical blobs) match the spec's own table.
+- **Checklist task 14's positive path is a real control, not decorative.** It is the only case in the
+  task that can fail if the escape hatch is dead — exactly the state revisions 1–10 shipped
+  undetected — and the diff shows it was added exactly where the round-4 dispatch asked for it.
+- **Targeted third-instance sweep, negative result.** Checked call-site language pairing, JSON framing,
+  tab-separated log parsing, the marker-blob regex, and percent-encoding arithmetic for the
+  syntax-vs-execution-engine defect class; found none. This is a bounded check, not a proof of absence.
+- **Not re-derived this round, relied on prior rounds' verification since the governing text is
+  byte-identical:** the pairing predicate, the `kind`×field totality matrix, the ABSENT probe table, the
+  writer call-site cwd fix, the exemption log's `0700`/`0600` modes, and the `TEST_EXEMPT` control-
+  character exclusion from the log's own field/line separators (writing-secure-code territory: log
+  injection via a user-controlled string) — all confirmed present in the diff as untouched, not
+  re-measured from scratch.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived: [writing-specs/command-grammar,
+  core-conduct/file-size-convention]`), still present at the UNRESOLVED callout under §"The command
+  grammar" and checklist task 2's cross-reference. Not re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. Basis re-verified this
+  round: non-prose floor is now **867** (up from 855 at round 4), re-derived live and matching the
+  spec's own table, so the 800 ceiling remains arithmetically unreachable without cutting acceptance
+  scenarios or contract tables the user has rejected cutting three times now. Not re-argued; not counted
+  toward this verdict.
+
+## Round 6 (re-entry, judged against spec revision 13) — 2026-08-13T20:00:15Z · **FAIL** (2 violations) · confidence: high
+
+### Layman summary
+
+Round 5 passed clean, but the spec was then edited (revision 13) to apply three fixes the round-5
+observability judge had flagged: the decision log's writer now uses `printf` instead of `echo` (bash's
+`echo` silently fails to write a real tab byte), the `hooks/state/` directory-creation race between the
+writer and the gate was resolved with a `mkdir -m` + `chmod` pair, and two checklist tasks now check log
+contents field-by-field instead of by `grep`. I re-verified all three fixes by actually running them on
+this machine's bash (3.2.57) rather than trusting the prose, and all three do exactly what the spec now
+claims.
+
+The dispatch also asked for a full sweep for the *next* instance of this spec's recurring defect —
+"a behaviour is required but the command that produces it is never pinned, and gets built by whatever
+interpreter is nearest, which is usually the wrong one" — since that pattern has now bitten three
+revisions running (11: a Python-syntax regex fed to bash; 12: an env-assignment prefix on bash's `[[`
+reserved word; 13: `echo` where only `printf` writes a tab). I found the same species again, in a bigger
+place this time: **the gate itself needs to parse two different JSON payloads from bash — the
+classifier's stdout and the on-disk marker file — and no producing construct is pinned for either.**
+Bash has no JSON parser, no JSON tool (`jq` or otherwise) is in §Pinned versions, and the spec's own
+latency budget accounts for exactly two `python3` processes total for the whole flow, with no third one
+left over for this. That leaves the actual implementer to invent an ad-hoc bash-side JSON reader — the
+same unpinned-construct shape that broke three revisions in a row, except this time it also sits at the
+boundary that reads an attacker-influenced `TEST_EXEMPT` value and a commit's own path list, which is
+exactly the kind of boundary `writing-secure-code` says needs a real schema validator, not a hand-rolled
+one.
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/unpinned-json-parse-classifier-output` | `~/.claude/skills/writing-specs/SKILL.md` | `docs/features/verification-marker-gate.md:405-436` (§3 "the gate" → Wire contract / Validation order, flowchart node `CO` at `:50`) and `:828-838` (§Latency budget table) | The hook must parse and domain-validate the classifier's one-line JSON output — confirming `paths` is a list of strings and `exempt` a string the classifier explicitly "does not sanitise" (`:403`) — but the gate is bash, no JSON tool is pinned in §Pinned versions (no `jq`), and the latency budget accounts for exactly two `python3` starts total for the whole flow (cwd read + classification, `:836-838`), leaving no third call for this validation. The producing construct for a security-relevant parse of adversarial-influenced fields is unpinned — confirmed by grepping the spec's own text for every `python3` mention (12 hits, none covering this step) and by reading `git-guard.sh:59-72`, the precedent this spec cites for its cwd read, which sidesteps the problem entirely by having `python3` hand bash a plain string rather than JSON to re-parse — a pattern this spec does not follow at node `CO`. |
+| `writing-specs/unpinned-json-parse-marker-read` | `~/.claude/skills/writing-specs/SKILL.md` | `docs/features/verification-marker-gate.md:337-353` (§2 marker store → schema and read-side validation) and flowchart node `M` at `:68-69` | The gate must read a JSON marker file, validate its `version`/`blob`/`path` fields against the schema, and independently re-derive the writer's percent-encoded lookup filename (`:320`) — all from bash — but no producing construct is pinned for either the JSON parse or the encode step, and by the same latency-budget accounting as the sibling violation above, no `python3` call is provisioned for it either. Nothing in the document tells the implementer how the 0700/0600-protected marker actually gets read, only what it must contain once read. |
+
+### Targeted sweep — every remaining unpinned-command/non-bash-idiom site checked, on the pinned bash 3.2.57
+
+Ran, not read, on this machine's `/bin/bash` (confirmed `GNU bash, version 3.2.57(1)-release`) unless
+marked otherwise:
+
+1. **`printf '%s\t%s\t%s\t%s\n' … >> "$LOG"`** (the revision-13 fix, `:1363`) — writes a real tab byte
+   (`od -c`: `\t` between fields). **Fine.**
+2. **The `echo "...\t..."` counter-example** (`:1360`) — writes the two literal characters `\` `t`, not a
+   tab, exactly as the spec's WRONG-example claims. **Fine** (correctly labeled wrong in the spec).
+3. **`cut -f2`** against a printf-written log vs. the echo-written one — returns `EXEMPT` correctly
+   against the former, the *entire line* against the latter (no delimiter found). Matches the spec's
+   claim verbatim. **Fine.**
+4. **`awk -F'\t' '{print $2}'`** against both logs — `EXEMPT` against the printf log, an *empty string*
+   against the echo log. Matches the spec's claim verbatim, including that this fails silently rather
+   than erroring. **Fine.**
+5. **`if ( export LC_ALL=C; [[ "$exempt" =~ ^[[:print:]]{1,200}$ ]] ); then …`** (`:463`) — accepts
+   `"routine cleanup"`, rejects a string carrying an embedded U+200B. Matches spec claims. **Fine.**
+6. **The WRONG form, `LC_ALL=C [[ "$exempt" =~ … ]]`** (`:459`) — reproduces `[[: command not found`,
+   exit 127, exactly as the callout states. **Fine** (correctly labeled wrong).
+7. **`mkdir -p -m 0700 "$STATE_DIR"`** against a directory that already exists at `0755` — exits 0,
+   leaves it `0755` (confirmed with `ls -ld`). Matches the spec's measured claim; the mandated follow-up
+   `chmod 0700` is load-bearing, not decorative. **Fine.**
+8. **`os.makedirs(path, mode=0o700, exist_ok=True)` in Python 3.9.6** against the same pre-existing
+   `0755` directory (not asked for by the spec, but relevant since the writer that must also run this
+   fix is Python, not bash) — leaves the directory `0755`, identical race to the shell case. **Checked,
+   not a violation on its own**: the fix (`chmod`/`os.chmod`, unconditional either way) closes the race
+   identically in both idioms, so there is no *wrong-answer* trap here the way there was for the regex,
+   the locale pin, or the tab. Noted only because the spec gives one shell-form snippet as what "both
+   components" run (`:1483-1488`) without mirroring it into a Python form the way the writer call-site
+   section explicitly does (`:275-297`, "the two forms are written as mirrors") — an inconsistency in
+   presentation, not a defect in outcome.
+9. **The marker call-site shell block** (`:277-282`) — ran verbatim in a throwaway repo (`MARKER_SELF`,
+   `MARKER_ROOT`, subshell writer invocation); resolved and executed correctly, exit 0. **Fine.**
+10. **Percent-encoding order** (`:320`, "`/`→`%2F`, `%`→`%25`") — applying the two replacements in the
+    order literally listed (`/` first, then `%`) double-encodes any path containing a literal `%`:
+    measured in Python, `hooks/100%-done.sh` becomes `hooks%252F100%25-done.sh` instead of the correct
+    `hooks%2F100%25-done.sh`. **Noted, not a blocking violation**: none of the 14 files this feature
+    actually covers (§Scope's inventory table) contains a `%`, so the blast radius today is zero, but
+    the order is unstated as normative anywhere, unlike every other order-sensitive construct in this
+    file (`mkdir` before `chmod`, the `LC_ALL` subshell scope), which are spelled out explicitly.
+11. **The O3 composition/derivation script** (`:1666-1671`) — ran verbatim: `total=1721`, matching the
+    file's actual line count and the frontmatter's `revision: 13`. Pure bash/`awk`/`grep`, no
+    cross-interpreter claim to check. **Fine.**
+12. **`git-guard.sh:59-72`'s inline `python3` JSON read**, cited as this spec's precedent for extracting
+    `cwd` (`:361-362`) — read directly: confirmed a real, already-shipped, working pattern, but it
+    **does not** cover the harder need this spec has at nodes `CO`/`M`. `git-guard.sh`'s `python3` call
+    parses the JSON itself and hands bash back one **plain string** (the command text); bash never
+    re-parses JSON. This spec's gate, by contrast, is described as validating a full JSON *object's*
+    shape (node `CO`) and a JSON *file's* schema (node `M`) directly — the two violations above.
+13. **`classify-commit-command.py`'s JSON stdout and the on-disk marker file** — see Violations, above.
+
+**What this sweep could not see:** nothing under this feature exists yet (`phase: planning`, confirmed —
+`hooks/lib/write-test-marker.py`, `hooks/lib/classify-commit-command.py`, and
+`hooks/test-marker-guard.sh` are all absent from the tree today), so every check above is against a
+literal snippet quoted in the spec, or against a directly analogous standalone construct (the `mkdir`/
+`chmod` race, the percent-encoding order), never against the feature's own code. I did not attempt to
+hand-write a bash-native JSON parser and prove every way it could be tricked; I inferred infeasibility
+from the absence of a pinned JSON tool, the two-`python3`-start budget ceiling, and the general
+difficulty of safely regex-parsing adversarial `paths`/`exempt` content — I did not exhaustively catalog
+every injection shape a hypothetical hand-rolled parser could mishandle, since no such parser is
+specified to test against.
+
+### Notes (non-blocking)
+
+- **All three round-5-driven fixes (printf pin, state-dir race, field-based checklist assertions)
+  verified by execution this round**, not by re-reading the prose — see sweep items 1, 2, 3, 4, 7 above.
+- **Percent-encoding replacement order** (`:320`) is silently order-dependent; see sweep item 10.
+  Zero blast radius against the feature's actual 14-file inventory today; flagged for the implementer's
+  awareness, not blocking.
+- **The `mkdir`/`chmod` snippet given for "both components"** (`:1483-1488`) is presented once, in shell
+  form, for a requirement that also binds the Python writer; see sweep item 8. No wrong-answer trap
+  found, only a presentation gap relative to the writer call-site section's explicit twin-form pattern.
+- **Ten previously-closed ids** (`verified-scope-inventory`, `edge-cases`, `api-contracts`,
+  `commit-form-coverage` ×4, `scope-boundary`, `writer-call-site-cwd` ×2, `pair-formation-rule`,
+  `latency-budget-count`, `default-deny-store`, `opt-in-fail-closed-conflict`,
+  `core-conduct/verify-before-claim`, `writing-specs/locale-pin-mechanism`) were not re-litigated: the
+  revision-13 diff (frontmatter, printf pin, state-dir race resolution, task 6/14 field assertions) does
+  not touch the text those ids were closed against.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" (`:544-559`) and checklist task 2's cross-reference. Not
+  re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. File is 1,721 lines
+  against an 800 ceiling; the non-prose floor (Gherkin + tables + code + blanks) alone measures 887
+  lines this round (re-derived live via the O3 script, sweep item 11), still over 800 on its own. Not
+  re-argued; not counted toward this verdict.
+
+## Round 7 (judged against spec revision 14, ADR 0026 applied) — 2026-08-13T23:23:07Z · **FAIL** (1 violation) · confidence: high
+
+### Layman summary
+
+Revision 14 rewrote the whole wire between bash and the classifier so that no JSON crosses into bash
+anymore — everything (classification, path collection, pairing, marker reading, blob comparison) now
+runs inside one Python process that hands bash back a single tab-separated line. I checked both of
+round 6's findings (bash had no pinned way to parse the classifier's JSON output, and no pinned way to
+read the on-disk JSON marker file) against this rewrite, and **both are genuinely closed**: the
+bash-side `read` of the TSV line is fully pinned with measured WRONG/CORRECT examples covering exactly
+the historical footguns (`echo` vs `printf`, IFS collapsing empty fields, missing `-r`, a pipe running
+`read` in a subshell), and the marker JSON now never reaches bash at all — it's parsed in Python with
+`json.load`, on the interpreter this spec already pins.
+
+But the rewrite introduced a new file: the `TEST_EXEMPT` validity check moved from a bash regex into a
+Python one, and the spec presents a specific "CORRECT" Python regex as measured to reject any newline in
+the exemption string. I ran that exact regex on the pinned Python 3.9.6 and it does **not** reject a
+value that ends in exactly one newline character — `re`'s `$` anchor matches just before a single
+trailing newline even without `re.MULTILINE`, a well-known Python quirk. A caller can set
+`TEST_EXEMPT` to something like `"vendored upstream\n"` and this validation reports it valid, which
+contradicts both the spec's own "Measured: ... tab and newline are refused" claim and the Gherkin
+scenario that requires a newline-carrying exemption to be rejected with `MSG_BAD_EXEMPT`. The fix is a
+one-word change (`.match` → `.fullmatch`), but as written the spec's own pinned construct doesn't do
+what its accompanying prose says it does.
+
+### Round-6 violations — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/unpinned-json-parse-classifier-output` | **Closed** | The classifier's output is no longer a wire at all — it is an in-process Python object returned by a function call (§3, "The classifier's contract is in-process, and it is a function, not a wire"). The only remaining bash-side parse is the four-field TSV line, which is pinned with measured `read -r … <<<` examples (§3 "The wire is one tab-separated line", ~lines 545–567) that explicitly close the exact historical footguns (no `-r`, a piped subshell, IFS collapsing an empty field). |
+| `writing-specs/unpinned-json-parse-marker-read` | **Closed** | "It is validated in Python, by the decision call, and bash never sees this JSON" (§2 marker store, ~line 399). The parsing construct is named (`json.load`, `errors="replace"` on the read) against the pinned Python 3.9.6, and the schema check (`version == 1`, blob regex, path equality) is spelled out immediately above it. Bash's only remaining involvement with this data is reading the TSV verdict, covered by the sibling violation's closure. |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/exempt-regex-trailing-newline` | `skills/writing-specs/SKILL.md` (contract/construct correctness — no requirement readable two ways; also implicates `rules/core-conduct.md` § Session Defaults, "verification precedes both the claim and the write-down") | §3 → "Validating the exemption in Python", the "CORRECT" code block at `EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")` (~lines 616–619), reused as closure evidence at the invisible-Unicode note (~lines 1708–1711), and the Gherkin scenario "an exemption reason carrying control characters is rejected" (~lines 1265–1270) | Measured directly against the pinned Python 3.9.6: `re.compile(rb"^[ -~]{1,200}$").match(b"vendored upstream\n")` returns a match, and so does the same pattern against a 201-byte value ending in `\n` — Python's `$` anchor matches immediately before a single trailing newline even without `re.MULTILINE`, so this "CORRECT", "Measured" construct silently admits exactly the byte class (newline) and violates exactly the length bound (>200 bytes) the surrounding prose claims it refuses; the fix is `EXEMPT_RE.fullmatch(...)` instead of `.match(...)`, and as written an implementer following this spec verbatim ships a `TEST_EXEMPT` value that should block with `MSG_BAD_EXEMPT` but doesn't, for the one specific newline placement (trailing, not embedded) that the spec's own scenario text doesn't pin down precisely enough to force a test that would have caught it. |
+
+### Verification method
+
+Per the dispatch's stated productive method — check which interpreter the artifact actually meets in
+production — I ran the exact "CORRECT" snippet against the pinned Python 3.9.6 on this machine:
+
+```
+$ python3 -c "
+import re
+EXEMPT_RE = re.compile(rb'^[ -~]{1,200}\$')
+for t in [b'vendored upstream', b'vendored upstream\n', b'line1\nline2', b'a'*200+b'\n']:
+    print(repr(t), '->', 'MATCH' if EXEMPT_RE.match(t) else 'no match')
+"
+b'vendored upstream' -> MATCH
+b'vendored upstream\n' -> MATCH        # should be rejected per spec prose; is not
+b'line1\nline2' -> no match            # embedded (non-trailing) newline correctly rejected
+b'aaa...a\n' (201 bytes) -> MATCH      # should be rejected as over-length; is not
+```
+
+An embedded (mid-string) newline is correctly rejected — that is almost certainly the shape an
+implementer's own test would use, which is why this defect could ship undetected even by a careful
+reader. `.fullmatch(...)` in place of `.match(...)` closes it; verified the same run with `fullmatch`
+returns `None` for the trailing-newline case.
+
+### Notes (non-blocking)
+
+- The Python-side construction of the four-field TSV *output* line (in `decide-commit-gate.py`) has no
+  code example the way its bash-side *consumption* does — every other parsing-adjacent construct in this
+  file gets a measured WRONG/CORRECT pair. Not cited as a violation: Python string literals interpret
+  `\t` identically regardless of which idiom (`"\t".join(...)`, an f-string, `%`-format) is used, so
+  there is no analogous wrong-spelling trap to pin against, unlike bash's `echo`/`printf` split.
+- The "hook buffers the payload from stdin once, then extracts `cwd` ... and later hands the same bytes
+  to the decision call" requirement (§3, ~line 418) has no inline bash snippet of its own, but it is
+  explicitly attributed to "the shape `git-guard.sh:59-72` already uses" — read directly, that file does
+  buffer stdin once (`payload=$(cat)`) and re-feed it via `printf '%s' "$payload" | "$py" ...` to two
+  separate `python3` invocations. Treated as adequately pinned by reference to an existing, line-cited,
+  working file, the same way the `WRAPPERS` set is deferred to `hooks/lib/shell_segments.py:64` rather
+  than re-spelled.
+- The marker-blob regex (`^([0-9a-f]{40}|[0-9a-f]{64})$`) was not separately re-tested for the same
+  anchor quirk: its inputs come from the trusted writer's own `git hash-object` output rather than
+  adversarial `TEST_EXEMPT` text, and no "Measured: ... refused" claim is made about it, so the stakes
+  and the false-claim angle both differ from the cited violation. Flagged here only so a later round
+  does not need to re-derive why it was left out.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived: [writing-specs/command-grammar,
+  core-conduct/file-size-convention]`), still present at the UNRESOLVED callout under §"The command
+  grammar" and checklist task 2's cross-reference. Not re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing decisions →
+  O3 now reports the revision-14-complete measurement (total 2,085, non-prose floor 1,070) read back
+  from the staged blob, showing the 800-line ceiling unreachable even with all prose deleted. Not
+  re-argued; not counted toward this verdict.
+
+## Round 8 (judged against spec revision 15, HEAD `263e430ec8767f73503f0be63d41092f83d6d2f1`) — 2026-08-14T00:55:40Z · **FAIL** (1 violation) · confidence: high
+
+### Layman summary
+
+Revision 15 was meant to close round 7's finding (a Python regex meant to reject any newline in a
+`TEST_EXEMPT` reason actually let a *trailing* newline through) and to answer round 7's observability
+advisory about how the decision log's "reason" field is filled in. I re-ran the fix myself rather than
+trusting the spec's own re-measurement, and it holds: switching `.match(...)` to `.fullmatch(...)`
+does reject the trailing-newline case and the 201-byte-with-trailing-newline case on the pinned Python
+3.9.6, and the two new Gherkin scenarios (newline last; 200 printable bytes + a newline) are exactly
+the cases needed to pin that fix rather than one that happens to pass either way. **That finding is
+genuinely closed — I am not re-citing it.**
+
+The new decision-logging section, though, states its own test-coverage requirement and then doesn't
+meet it inside the same revision. It says, in its own words, that the scenarios pinning this section
+"MUST assert the value of field 3 for every one of the eight doors, not for one representative door."
+Counting the actual Gherkin scenarios in the file, only one of those eight doors (`MSG_NO_MARKER`) has
+a scenario that checks what the log's field 3 actually contains; the other seven have scenarios that
+check the exit code and the door name printed to the user, but none that reads the log file and checks
+what got written to it. That gap matters here specifically because the section's own worked example
+(a uniform `reason=$f3` instead of the correct `case`-based mapping) is a bug that produces a
+well-formed, still-parseable log line with the wrong text in it — exactly the kind of defect that an
+exit-code assertion cannot catch and only a field-level log read can. As written, the checklist task
+that turns scenarios into tests (task 6) is scoped to add a log assertion "wherever a scenario names
+one," so it would inherit this same gap rather than close it.
+
+### Round-7 violation — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/exempt-regex-trailing-newline` | **Closed** | Independently re-ran the pinned construct on Python 3.9.6 (not taken on trust). `EXEMPT_RE = re.compile(rb"^[ -~]{1,200}$")`: `.match(b"vendored upstream\n")` → `True` (still admits it, confirming the old defect existed), `.fullmatch(b"vendored upstream\n")` → `False` (now correctly refused). Same pattern against `b"a"*200 + b"\n"` (201 bytes): `.match` → `True`, `.fullmatch` → `False`. The spec's CORRECT block (`:625-630`) now calls `.fullmatch`, the superseded `.match` form is shown explicitly as WRONG with accurate measured behaviour (`:616-623`), and the two new scenarios "an exemption reason ending in a newline is rejected" (`:1293-1300`) and "the byte bound is not escapable by a trailing newline" (`:1302-1310`) place the newline last rather than embedded, which is the one placement that discriminates `.match` from `.fullmatch`. The pre-existing "carrying control characters" scenario (`:1283-1291`) is now explicitly annotated as *not* the regression test, which is correct — it passes under both spellings. |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/decision-log-field3-per-door` | `skills/writing-specs/SKILL.md` ("Good, bad, and edge-case scenarios: state explicitly what correct looks like ... anything you leave implicit, the agent infers — and inference is where the defects come from") | §3 → "Decision logging — exemptions and blocks" (`:1656-1685`), cross-referenced against `## Scenarios` → "Edges" (`:1372-1419`) and checklist task 6 (`:1947-1953`) | The section states its own MUST — "the scenarios that pin this section MUST assert the value of field 3 for every one of the eight doors" (`:1680-1681`) — immediately after showing a WRONG mapping (`reason=$f3`) whose defect is door-specific: it produces a well-formed log line with the wrong text for every one of the eight `BLOCK` doors (`-` for six, the remedy command for `MSG_NO_MARKER`, the trigger name for `MSG_UNSUPPORTED_FORM`), never errors, and cannot be caught by an exit-code or stderr-message assertion. Counting the actual scenarios: only `MSG_NO_MARKER`'s ("a block is logged with the message constant that fired", `:1393-1397`) asserts what field 3 contains. `MSG_UNSUPPORTED_FORM`'s companion scenario ("a block with no pair still writes a well-formed line", `:1399-1403`) checks only field 4. The remaining five doors that write a log line (`MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`, `MSG_STALE_TEST`, `MSG_NOTHING_RUNNABLE`, `MSG_GIT_FAILED`) have scenarios elsewhere in the file asserting exit code and door name (e.g. `:1141`, `:1147`, `:1266`, `:1459`) but none of them names the log at all. Checklist task 6 turns scenarios into tests by adding "the `test-marker.log` line wherever a scenario names one" (`:1949-1950`) — a scope explicitly tied to what the scenarios already name — so an implementer following the spec as written would ship exactly the `reason=$f3` defect class for seven of the eight doors without any scenario catching it, which is the same "stated behaviour with no enforcing command" defect shape this card has repeatedly shipped and repeatedly had to close in earlier rounds. |
+
+### Verification method
+
+Independently reproduced the `.fullmatch` fix on the pinned Python 3.9.6 before trusting the spec's own
+"Measured" claims (per the dispatch's instruction not to take the reproduction on trust):
+
+```
+$ python3 -c "
+import re
+EXEMPT_RE = re.compile(rb'^[ -~]{1,200}\$')
+tests = {
+  'trailing_newline_17': b'vendored upstream\n',
+  '200_then_newline_201': b'a'*200 + b'\n',
+  'embedded_newline': b'ab\ncd',
+  '200_ok': b'a'*200,
+  '201_fail': b'a'*201,
+}
+for name, val in tests.items():
+    print(name, 'match=', EXEMPT_RE.match(val) is not None, 'fullmatch=', EXEMPT_RE.fullmatch(val) is not None)
+"
+trailing_newline_17  match= True  fullmatch= False
+200_then_newline_201 match= True  fullmatch= False
+embedded_newline     match= False fullmatch= False
+200_ok                match= True  fullmatch= True
+201_fail              match= False fullmatch= False
+```
+
+For the new violation, verified by exhaustive count rather than sampling: grepped every `Scenario:` /
+`Scenario Outline:` block in the file (66 total, matching the spec's own claimed count), identified the
+subset naming `MSG_NO_MARKER`, `MSG_BAD_MARKER`, `MSG_STALE_SUBJECT`, `MSG_STALE_TEST`,
+`MSG_NOTHING_RUNNABLE`, `MSG_BAD_EXEMPT`, `MSG_GIT_FAILED`, and `MSG_UNSUPPORTED_FORM`, and separately
+the subset that also mentions "log" or "field" in its Then clause. The intersection is one scenario
+(`MSG_NO_MARKER`), against the section's own stated requirement of eight.
+
+### Notes (non-blocking)
+
+- The pinned timestamp command for the log (`ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)`, `:1674`) was run on
+  this machine's bash 3.2.57 / macOS `date` and produces the claimed ISO-8601 form; only one call site
+  exists in the file, so there is no second spelling to drift from it.
+- The `reason=$f3` / `case`-based `reason` mapping is internally consistent with the wire table in §3
+  (`:536-543`): for `BLOCK`, wire field 2 is always the door's own `MSG_*` constant and field 3 is
+  door-specific detail (`-`, a trigger name, or a remedy command), so `reason=$f2` for `BLOCK` is
+  correct and `reason=$f3` for `BLOCK` is wrong for all eight doors, not just some — the section's
+  "zero of the eight" claim checks out arithmetically (6 doors carry `-`, 1 carries a remedy command, 1
+  carries a trigger name; none carries a door name).
+- Field-4 and field-2 total counts in §Decision logging (`:1702-1707`, "eight write `-`... exactly
+  four... run after pair formation") were cross-checked against the 13-door table (`:1569-1587`) and
+  are arithmetically consistent once `MSG_NO_PYTHON`'s "writes no line at all" exception is accounted
+  for (13 doors − 1 that logs nothing − 4 that carry a pair = 8 that carry `-`).
+- §Latency's four budgets are correctly presented as targets pending checklist task 10's measurement,
+  not as achieved results — the ⚠️ callout at `:1026-1031` explicitly forbids revising a row from ADR
+  0026's prediction, and no other passage in this revision states a budget as met. Not treated as
+  settled, per the dispatch's instruction.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the UNRESOLVED
+  callout under §"The command grammar" and checklist task 2's cross-reference. Not re-argued; not
+  counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing decisions →
+  O3 reports the revision-15 measurement, read back from the staged blob: total **2,163** lines
+  (matches `wc -l` on this checkout), non-prose floor **1,127** — 327 over the 800 ceiling even with
+  every line of prose deleted. Not re-argued; not counted toward this verdict.
+
+## Round 9 (judged against spec revision 16, HEAD `859f303f107dfc57170ce4620d5ff040b2d0e039`) — 2026-08-14T01:39:49Z · **FAIL** (1 violation) · confidence: high
+
+### Layman summary
+
+Two things this round: whether revision 16 actually closed round 8's finding, and whether the
+line-count numbers revision 16 shipped are real. Both check out. I re-ran the corrected `awk`
+line-classifier from §Standing decisions → O3 myself against the exact committed blob rather than
+trusting the spec's own arithmetic, and got exactly what it claims — `total=2239 floor=1140
+prose=1099 sum=2239` (the `sum` field equalling `total` proves every line landed in exactly one
+bucket) and 66 `Scenario`/`Scenario Outline` blocks. I also re-ran the same command against
+revision 15's committed blob and got the corrected retroactive figures the spec now states for it
+(`floor=1089 prose=1074`), confirming the earlier four-grep form really had been double-counting.
+And the round-8 gap is genuinely closed: the single `MSG_NO_MARKER`-only scenario is gone, replaced
+by one Scenario Outline with two Examples tables (8 rows for the doors the Python decision call
+reports, 4 for the doors bash raises itself) that asserts both field 3 and field 4 for all 12
+doors that write a log line, plus a separate scenario for the 13th door (`MSG_NO_PYTHON`) that
+writes none. **I am not re-citing that id.**
+
+Sweeping the rest of the file for the same defect shape the spec itself names — a `MUST`-shaped
+sentence with no scenario that would catch its violation — turned up one new instance the spec has
+not yet closed: the marker schema's `written_at` field is declared "informational only and MUST NOT
+influence any decision," but nothing in the 66 scenarios exercises that claim. There is no scenario
+giving a marker whose blobs match but whose `written_at` is old (or missing, or in the future) and
+asserting the commit still allows — so an implementer who added "reject markers older than N days"
+would pass every scenario in this file while silently reintroducing the exact staleness problem the
+blob-keyed design exists to dissolve.
+
+### Round-8 violation — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/decision-log-field3-per-door` | **Closed** | Read the replacement text directly (`:1393-1429`): `Scenario Outline: every door that writes a line writes the constant that fired in field 3` asserts `Then the hook exits 2 with <door> / And exactly one BLOCK line is appended ... / And field 3 of that line is "<door>" / And field 4 of that line is <field 4>` against two Examples tables. Cross-checked both tables' door lists against the two authoritative partitions elsewhere in the file: the first 8 rows (`MSG_NOTHING_RUNNABLE, MSG_BAD_EXEMPT, MSG_UNSUPPORTED_FORM, MSG_GIT_FAILED, MSG_NO_MARKER, MSG_BAD_MARKER, MSG_STALE_SUBJECT, MSG_STALE_TEST`) exactly match the 8 `BLOCK` rows of the field-1/2/3/4 wire table at `:536-543`; the second 4 (`MSG_CLASSIFIER_MISSING, MSG_BAD_PAYLOAD, MSG_CLASSIFIER_FAILED, MSG_CLASSIFIER_BAD_OUTPUT`) exactly match the "five doors are bash's" list at `:584-585` minus `MSG_NO_PYTHON`, which is separately asserted to write no line at all (`:1447-1453`). 8 + 4 + 1 = 13, matching "The doors" table's total. No per-door scenario was re-added beside the outline (which the spec's own comment at `:1401-1403` warns against as "two spellings of one check"), and each door's *setup* (the Given clause the outline's `<door>` abstracts over) is independently established by a concrete scenario earlier in the file — e.g. `MSG_STALE_SUBJECT` at `:1138-1141`, `MSG_UNSUPPORTED_FORM` at `:1228-1233`, `MSG_CLASSIFIER_FAILED` at `:1242-1248` — so the outline is grounded, not free-floating prose. |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/written-at-no-enforcing-scenario` | `skills/writing-specs/SKILL.md` ("Good, bad, and edge-case scenarios: state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from") | §2 → "`<repo>/hooks/state/test-markers/` — the store", marker schema and the `written_at` sentence (`:381-393`), cross-referenced against "Read-side validation" (`:395-397`) and the full `## Scenarios` block (66 scenarios, `:1040-1558`) | The spec states a design invariant as a MUST NOT — `written_at` is "informational only and MUST NOT influence any decision," with "Freshness is decided by content hashes alone — a timestamp rule would re-admit the staleness problem the blob key dissolves" (`:392-393`) — and the read-side validation rule immediately below correctly omits any check of `written_at` (`:395-397`, validates only `version`, `blob`, `path`). But no scenario in the file ever varies `written_at` independently of the blobs: the positive scenario "fresh marker allows the commit" (`:1041-1045`) uses "the current content of both" without touching the timestamp, and grepping the whole file for `written_at` returns exactly the two hits above — the schema definition and the MUST NOT sentence — never a `Given`/`Then`. This is the identical defect shape the spec's own §Standing decisions history names as its recurring class (`:1903-1908`, "which stated behaviours have no enforcing command at all... asked against every MUST-shaped sentence") and the shape round 8 closed for the decision log: a stated invariant that nothing in the 66 scenarios or the 25-mutant floor (§The doors, `:1643-1648` — no mutant targets a timestamp-based rejection) would catch if violated. An implementer adding a plausible-sounding "stale marker" staleness check by elapsed time — exactly the kind of addition a reviewer unfamiliar with this paragraph might propose — would pass every scenario in this file while reintroducing the staleness problem the blob key was built to dissolve. |
+
+### Verification method
+
+Independently re-ran the corrected O3 measurement against the exact committed blobs rather than
+trusting the spec's own arithmetic:
+
+```
+$ git show bfe7ad457022ae582726bcbbee1a10f83ee3ac37 | awk '<the pinned classifier from §Standing decisions>'
+total=2239 floor=1140 prose=1099 sum=2239
+$ git show bfe7ad4... | grep -cE "^(Scenario:|Scenario Outline:)"
+66
+$ git rev-parse HEAD:docs/features/verification-marker-gate.md
+bfe7ad457022ae582726bcbbee1a10f83ee3ac37   # matches the dispatched spec_blob_sha exactly
+$ git show 263e430:docs/features/verification-marker-gate.md | awk '<same classifier>'   # revision 15
+total=2163 floor=1089 prose=1074 sum=2163   # matches the "corrected" retroactive figures the spec now states for revision 15
+```
+
+`sum == total` in both runs confirms the classifier's own falsifier holds (no line double-counted or
+dropped), and both results match the spec's claims exactly — nothing was taken on trust.
+
+For the round-8 closure, read the replacement Scenario Outline directly and cross-checked its two
+Examples tables against the two authoritative door-partition lists elsewhere in the file (wire table
+at `:536-543`, bash-doors list at `:584-585`) rather than counting scenario mentions, since round 8's
+own finding was that a superficial count ("a scenario exists for this door") had missed that the
+scenario didn't check field 3.
+
+For the new finding, applied the round's stated method exhaustively rather than sampling: grepped
+every `MUST`/`MUST NOT`/`must not`/`must never` sentence in the file (7 hits total, listed at
+`:392, 276, 347, 676-677, 726, 754→"deliberately", 975`) and checked each against the scenario set
+for a discriminating `Given`/`Then`. Six have direct enforcement (e.g. the `--` -inside-a-value rule
+at `:677` is pinned by scenario `:1193-1197`; the "collectors must not walk into" exit-129 hazard at
+`:975` is pinned by "a git failure is never read as 'nothing to check'" at `:1263-1266`, which covers
+any non-zero-exit-with-empty-stdout case generically). `written_at` at `:392` is the one exception —
+confirmed by a second, independent grep for the literal string `written_at` across the whole file,
+which returns only the schema definition and the MUST NOT sentence itself.
+
+### Notes (non-blocking)
+
+- §Decision logging's own cross-reference calls the Scenario Outline's location "§Acceptance"
+  (`:1720, 1728`), but no heading in the file is titled "Acceptance" — the actual location is
+  `## Scenarios` → `### Edges`. Not treated as a violation because the scenario itself is present and
+  auditable at that location; a reader following the literal pointer would not find a matching
+  heading, though, and this is the kind of small drift the file's own "two spellings of one check"
+  warning is aimed at.
+- §Latency's four budgets remain correctly presented as unmeasured targets pending checklist task 10
+  (`:1014-1031`) — no passage in revision 16 revises a budget from ADR 0026's prediction, and the
+  ⚠️ callout explicitly forbids doing so. Confirmed not settled, per this round's dispatch instruction.
+- ADR 0026 (`docs/decisions/0026-the-gate-does-no-json-parsing.md`) exists on disk with
+  `Status: Accepted (2026-08-13)`, matching every citation of it in the spec (the intro callout, §3,
+  and the "`v` schema sentinel is deleted" note).
+- The spec's own checklist (0/15) and frontmatter (`phase: planning`, `revision: 16`) are internally
+  consistent with the dispatch's description of the card's state.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the
+  UNRESOLVED callout under §"The command grammar" and checklist task 2's cross-reference. Not
+  re-argued; not counted toward this verdict.
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing decisions
+  → O3 now reports the corrected revision-16 measurement, independently re-derived above: total
+  **2,239**, non-prose floor **1,140** — 340 over the 800 ceiling even with every line of prose
+  deleted, and the correction (revision 15 was actually 1,089/1,074, not the 1,127/1,036 it shipped
+  with) does not change the waiver's conclusion. Not re-argued; not counted toward this verdict.
+
+## Round 10 (judged against spec revision 18, HEAD `c6bf55665b5eb0b23efceb065e58bd7003f3edd8`) — 2026-08-14T02:48:44Z · **FAIL** (2 violations) · confidence: high
+
+### Layman summary
+
+This round's spec revision claims to have done something the last several rounds only did
+piecemeal: swept the *entire* file for every "MUST"-shaped sentence and every bolded
+never/always claim, checking each one for a matching test scenario, instead of only re-checking
+the section that was just edited. It found and fixed three real gaps (the marker store's location
+— never `$HOME`, read back correctly inside a worktree — and the store's `0700`/`0600` file
+permissions). I re-verified all three fixes are genuinely closed, then re-ran that same sweep
+myself, independently, looking specifically for the same defect shape under phrasings the sweep
+might have missed (unbolded "never"/"cannot"/"only", table cells, blockquotes). I found two more
+instances the sweep didn't catch, both of the identical shape as the last five rounds' findings:
+a real, specific, testable requirement stated in prose — with code fixes attached, in one case —
+that no scenario in the file would catch if an implementation got it wrong.
+
+First: the gate names exactly **four** distinct trigger reasons for its `MSG_UNSUPPORTED_FORM`
+door, and says four separate times (the doors table, the testing requirements, and two checklist
+tasks) that each one needs its own scenario "so the fold cannot silently drop one." Three do.
+The fourth — committing with `-p`/`--patch` or `--interactive` — has none anywhere in the file.
+
+Second: the spec specifies, with actual shell and Python code, that the decision log file
+(`test-marker.log`) must end up at file-permission `0600`, and that a directory left at the wrong
+permission by a losing race must get repaired rather than left alone — but neither of those two
+requirements has a matching scenario. Only the *directory's* from-scratch creation case (not the
+log file, and not the repair-after-a-bad-start case) is covered.
+
+Both are new findings, not a recurrence of round 9's `written_at` finding — that one is
+genuinely fixed and I am not re-citing its id.
+
+### Round-9 violation and revision-18's own three fixes — re-verified closed, not re-cited
+
+| id | status | verification |
+|---|---|---|
+| `writing-specs/written-at-no-enforcing-scenario` | **Closed** | `Scenario Outline: written_at never changes a decision, in either direction` (`:1053-1069`) varies `written_at` across `1970-01-01`, `2099-01-01`, and "the current time," crossed against matching/non-matching blobs, and asserts the outcome in **both** directions (an ancient/future timestamp does not rescue a stale pair; matching blobs still allow regardless of timestamp). This is the shape the round-9 finding demanded — one direction alone would pass an implementation that reads the clock. |
+| (unlabeled — the `$HOME` half of the same §The marker sweep) | **Closed, and adversarial** | `Scenario: the marker is read from the repo's own toplevel, never from $HOME` (`:1071-1080`) deliberately makes the two stores **disagree** (a stale `$HOME` copy alongside a valid repo-local one) rather than merely being absent — the only shape that discriminates a `$HOME`-reading implementation from a correct one, per the file's own note that an agreeing or empty `$HOME` store passes under either. |
+| (unlabeled — the worktree half) | **Closed, and adversarial** | `Scenario: a marker written inside a linked worktree is read back inside that worktree` (`:1082-1088`) uses the same disagreeing-stores construction against the main checkout instead of `$HOME`, a distinct resolver path per the spec's own note that "neither substitutes for the other." |
+| (unlabeled — the store-permissions half) | **Closed** | `Scenario: the generated store is not world-readable` (`:1090-1098`) asserts `hooks/state/` at `0700` and marker files at `0600` on first write. (This scenario's own scope is narrower than the claims made elsewhere about the same directory — see the new findings below.) |
+
+### Violations
+
+| id | rule_source | where | why |
+|---|---|---|---|
+| `writing-specs/unsupported-form-trigger-no-enforcing-scenario` | `skills/writing-specs/SKILL.md` ("Good, bad, and edge-case scenarios: state explicitly what correct looks like, what wrong looks like, and enumerate the edges. Anything you leave implicit, the agent infers — and inference is where the defects come from.") | §"The command grammar" → rule 4 resolution table, row 2 (`:713`) and "What `UNSUPPORTED` absorbs" (`:769-771`); §3 → the wire's field-2 domain (`:546`) and "The doors" row 8 (`:1666`); Testing requirements (`:2007-2008`) and checklist tasks 2 (`:2034`) and 6 (`:2047-2048`); vs. the full `## Scenarios` block | The spec names exactly four `MSG_UNSUPPORTED_FORM` triggers — `FOREIGN_REPO`, `INCLUDE_OR_FROM_FILE`, `PATCH_OR_INTERACTIVE`, `OFF_WHITELIST` — and states four separate times that each must be asserted individually "by the trigger its message names ... so the fold cannot silently drop one" (checklist task 6's exact words). Three have a dedicated scenario: foreign-repo (`:1280-1285`), `-i` (`:1265-1271`), and off-whitelist via `--am` (`:1258-1263`). `PATCH_OR_INTERACTIVE` (`-p`/`--patch`, `--interactive`) has none — grepping the whole `## Scenarios` block (case-insensitive) for "patch" or "interactive" returns nothing. It is the only one of the gate's thirteen doors, and the only one of its own four named `UNSUPPORTED` sub-triggers, with zero enforcing scenario, so an implementation that silently drops this trigger from the fold — precisely the failure checklist task 2 names — would pass every scenario in the file. |
+| `writing-specs/store-mode-repair-no-enforcing-scenario` | `skills/writing-specs/SKILL.md` (same rule as above) | §2 → marker store bullet (`:370-382`); §3 → Decision logging mode paragraphs (`:1895-1945`); checklist task 6 (`:2053-2065`); vs. the single mode-related scenario, `:1090-1098` | Two MUST-shaped, code-backed requirements have no enforcing scenario. **(a)** `test-marker.log`'s own `0600` mode is asserted four times in prose and fixed with an explicit `touch`+`chmod` pair (revision 14, because a bare `>>` alone creates the file at `0644` under umask `022`, measured) — but no scenario in `## Scenarios` ever creates or inspects `test-marker.log`'s file mode; the one mode-related scenario asserts only `hooks/state/`'s `0700` and marker files' `0600`, never the log. **(b)** the state-dir repair race — "the mode must be set by whichever component wins, because the loser cannot repair it," measured that `mkdir -p -m 0700` and `os.makedirs(..., mode=0o700)` both leave a pre-existing `0755` directory unrepaired — has no scenario either; the one existing store scenario's `Given` is "`hooks/state/` does not exist yet," which never exercises the pre-existing-wrong-mode repair case checklist task 6 calls out by name as "the one `mkdir -p -m` alone does not satisfy." Checklist task 6 hands both gaps to the implementer as bare prose test-case instructions with no spec-level `Given`/`When`/`Then` to build them from — breaking the pairing this same section's revision-18 fixes just established for the marker store three paragraphs above it. |
+
+### Verification method
+
+Re-ran the O3 line-classifier independently against the exact committed blob (not taken on trust):
+
+```
+$ git hash-object docs/features/verification-marker-gate.md
+f596c35f62cdd1a9eb2092f44a90b8479eb6c825   # matches the dispatched spec_blob_sha exactly
+$ git cat-file -p f596c35f62cdd1a9eb2092f44a90b8479eb6c825 | diff - docs/features/verification-marker-gate.md
+(no output — HEAD, blob sha, and working tree are all identical)
+$ awk '<the pinned §Standing decisions classifier>' docs/features/verification-marker-gate.md
+total=2311 floor=1188 prose=1123 sum=2311
+$ grep -c '^Scenario:' docs/features/verification-marker-gate.md   # 67
+$ grep -c '^Scenario Outline:' docs/features/verification-marker-gate.md   # 3
+```
+
+All four figures (2,311 / 1,188 / 1,123 / 70 scenarios) match revision 18's own claims exactly,
+and `sum == total` confirms the classifier's own falsifier holds.
+
+For the sweep itself, applied the round's stated method — search for claim shapes the exhaustive
+sweep might not have matched (unbolded "never"/"cannot"/"only"/"is refused"/"is rejected"/"fails
+closed", and requirements inside tables or blockquotes rather than prose sentences) — against the
+whole file, then checked each hit against the `## Scenarios` block for a discriminating
+`Given`/`Then`. Grepped `MUST`, `MUST NOT`, `**never**`, `**always**`, `is total`, `fails
+closed`/`fail-closed`, `cannot`, `is refused`, `is rejected` as whole-file passes; cross-checked
+every hit that named a still-open behavioural commitment (as opposed to a measured fact or an
+explanatory aside) against a scenario. Two hits had none: `PATCH_OR_INTERACTIVE` (found via the
+doors-table sweep) and the log-file/state-dir-repair mode pair (found via the `fails
+closed`/`cannot repair` sweep of §Decision logging). One additional candidate — "Optional value,
+attached only — these must **never** consume the next token" for `-u`/`--untracked-files` and
+`-S`/`--gpg-sign` (`:726-728`) — also has no scenario, but sits inside the user-waived,
+unresolved tokenisation callout immediately below it (`:729-744`), which explicitly names "how the
+command string becomes tokens" as deferred to `hooks/lib/shell_segments.py`; not cited as a new
+violation, since it is the same open question the existing `writing-specs/command-grammar` waiver
+already covers. Rule 0's wrapper-stripping (`rtk git commit …`, `:690-699`) is likewise unscenario'd
+but explicitly sourced from the same deferred module ("segmentation ... comes from the same
+module, for the same reason") and treated the same way.
+
+### Notes (non-blocking)
+
+- §Decision logging's and §Marker store's repeated cross-references to "§Acceptance" (`:366, 397,
+  1772, 1780`) still point at a heading that does not exist in the file (the actual location is
+  `## Scenarios`); flagged as a non-blocking drift by round 9 and still present, unchanged, in
+  revision 18. Not treated as a violation for the same reason as before: the referenced scenarios
+  are present and auditable at their real location, only mislabeled.
+- §Latency's four budgets remain correctly presented as unmeasured targets pending checklist task
+  10 (`:1020-1037`); no passage revises a budget from ADR 0026's prediction, consistent with this
+  round's dispatch instruction not to treat them as settled.
+- v1's log-writer-with-no-reader gap and the `MSG_NO_PYTHON` no-trace gap are both stated as
+  accepted, open follow-ups in the spec's own text (§Decision logging, §Scope) and were not
+  re-litigated as violations, per this round's dispatch instruction.
+- `docs/decisions/0026-the-gate-does-no-json-parsing.md` exists on disk, `Status: Accepted
+  (2026-08-13)`, matching every citation of it in the spec.
+- The frontmatter's `revision_status: complete # exhaustive MUST-sweep: 3 unenforced claims in
+  §The marker closed. Round 10 (confirming) is owed.` accurately describes what revision 18 did —
+  it does not claim the sweep found everything, and this round's two new findings are consistent
+  with "confirming," not contradicting, that self-description.
+
+### Waivers
+
+- **`writing-specs/command-grammar`** — recorded in frontmatter (`waived:
+  [writing-specs/command-grammar, core-conduct/file-size-convention]`), still present at the
+  UNRESOLVED callout under §"The command grammar" (`:729-744`) and checklist task 2's
+  cross-reference (`:2038-2039`). Not re-argued; not counted toward this verdict. (Also covers the
+  `-u`/`-S` "never consume" and rule-0 wrapper-stripping gaps noted above — see Verification
+  method.)
+- **`core-conduct/file-size-convention`** — recorded in the same frontmatter list. §Standing
+  decisions → O3 reports the revision-18 measurement, independently re-derived above: total
+  **2,311**, non-prose floor **1,188** — 388 over the 800 ceiling even with every line of prose
+  deleted. Not re-argued; not counted toward this verdict.
