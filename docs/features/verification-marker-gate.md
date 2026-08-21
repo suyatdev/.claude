@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: feature/verification-marker-gate
 revision: 21
@@ -2766,7 +2766,29 @@ reason this row is a pin and not a footnote.
       Confirmed it kills a mutant that fast-paths any `TEST_EXEMPT=`-bearing payload to `exit 0`
       right after the pre-filter (26 failures under the mutant, including this one), then
       reverted the mutant and re-ran clean. **248 passed, 0 failed.**
-- [ ] 16. Obs judge (implementation stage) pinning the final HEAD → PR.
+- [x] 16. Obs judge (implementation stage) pinning the final HEAD → PR.
+      ✅ **Four rounds**, each closing a real finding from the round before, converging to
+      "nothing new" — full verdicts: `coding-memory/observability-judge/2026-08-2{0,1}-feature-
+      verification-marker-gate*.md`.
+      1. `e0fd411` — risk=low, confidence=high, no failing dimension. Flagged the `rules/gates.md`
+         bullet as the file's longest (1608 chars) and suggested hand-verifying the `TEST_EXEMPT`
+         lockout path.
+      2. `54ae987` (after trimming the bullet to ~920 chars and documenting the lockout path) —
+         risk=low again. Flagged that the lockout claim was hand-verified only, no regression test.
+      3. `22ae1b0` (after adding that test, mutation-proven) — risk=low, confidence=high, nothing
+         new.
+      4. `3247040` — exists only because round 3's own verdict got committed *before* the PR
+         opened, moving HEAD and invalidating it against `judge-guard.sh`'s strict same-SHA check
+         (a process mistake, not a code one — see `feedback_committing_a_verdict_invalidates_it`
+         in memory, which named exactly this trap and got walked into anyway). Re-scored the
+         resulting pure-documentation HEAD: risk=low, confidence=high, nothing new. This time PR
+         **#58** (`gh pr create` → `https://github.com/suyatdev/.claude/pull/58`) was opened while
+         round 4's verdict was still uncommitted and matched HEAD exactly; the verdict and the
+         README Roadmap entry were committed and pushed as follow-ups after the PR existed, which
+         does not re-trigger `judge-guard.sh` (only `gh pr create` itself is gated).
+      All four rounds independently re-ran the full test suite themselves rather than trusting
+      reported numbers, and round 3's mutation-testing claim was checked for internal consistency
+      (clean `git diff` after revert) though not independently re-reproduced by any judge.
 
 **Standing decisions.**
 
