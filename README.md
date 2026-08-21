@@ -65,6 +65,7 @@
 - [x] Fixed a blind spot where a global option ahead of the subcommand (`git -C .`, `gh -R o/r pr merge`) hid the command entirely from `git-guard`/`doc-guard`/`merge-guard`; now it either passes through, asks for confirmation, or is refused with an honest reason, never silently allowed (ADR 0029; #54)
 - [x] Verification-marker gate: blocks a `git commit` on a file whose paired test has never actually passed against that exact version, using a hash receipt each test suite leaves behind when it goes green — a computational form of "reproduce before fixing, verify before claiming" (ADR 0027)
 - [x] Reconcile the remaining files still describing the retired `coding-memory/branches/<branch>.md` workflow (ADR 0031; #59) — the surface was enumerated rather than patched instance-by-instance, and this line is now the only live mention left
+- [x] Judge verdicts ranked as their own retrieval tier, and `memsearch` chunk weights resolved from config at query time instead of frozen into each row — retuning a weight is a config edit plus an `index --reclassify` pass, not a full re-embed (ADR 0030; #60)
 
 ## New machine?
 

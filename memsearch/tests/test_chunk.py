@@ -64,12 +64,12 @@ def test_oversized_paragraph_without_blank_lines_is_hard_split():
 
 def test_chunk_doc_decision_detection():
     chunks = chunk_doc(Path("/x/docs/decisions/0002-a.md"), DOC, ".claude",
-                       ".claude", "curated_doc", 1.5, "2026-07-17")
+                       ".claude", "curated_doc", "2026-07-17")
     assert all(c.recall_type == "decision" for c in chunks)
-    assert all(c.source_type == "curated_doc" and c.weight == 1.5 for c in chunks)
+    assert all(c.source_type == "curated_doc" for c in chunks)
     assert all(c.file_path == "/x/docs/decisions/0002-a.md" for c in chunks)
     other = chunk_doc(Path("/x/docs/spec.md"), DOC, ".claude", ".claude",
-                      "curated_doc", 1.5, "2026-07-17")
+                      "curated_doc", "2026-07-17")
     assert all(c.recall_type == "doc" for c in other)
 
 
@@ -89,7 +89,7 @@ Worked on auth bug; fixed and merged.
 
 def test_chunk_digest_maps_recall_types():
     ex = SessionExtract("sess-9", "2026-07-10", "/Users/x/repo", "…")
-    chunks = chunk_digest(DIGEST, ex, "repo", "repo", 1.0,
+    chunks = chunk_digest(DIGEST, ex, "repo", "repo",
                           "/x/projects/p/sess-9.jsonl")
     by_heading = {c.content.splitlines()[0]: c for c in chunks}
     assert len(chunks) == 4
