@@ -39,7 +39,7 @@
 |---|---|
 | `CLAUDE.md` | Root entry point. Imports all rule files. |
 | `rules/` | Focused rule files loaded by Claude on every task. |
-| `settings.json` | Hooks, enabled plugins, and TUI preferences. |
+| `settings.json` | Hooks, enabled plugins, and TUI preferences. Tracked on purpose — it is the only thing that registers the scripts in `hooks/`, so an untracked copy leaves a clone with the guards installed and switched off. Carries `model`/`effortLevel` too, which churn after a deliberate `/model`. |
 | `statusline-command.sh` | Status line renderer — oh-my-zsh `robbyrussell` prompt plus model and token count. Tests: `statusline-command.test.sh`; falsification harness: `statusline-command.falsify.py`. |
 | `docs/features/`, `docs/decisions/` | Active session memory: feature cards (phase frontmatter, spec, checklist) and ADRs. |
 | `CODING_MEMORY.md`, `coding-memory/` | Retired and frozen — local-only history, still greppable on disk and in git history, no longer tracked or pushed. The two judge verdict ledgers under `coding-memory/` are the exception and stay tracked. |

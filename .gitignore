@@ -18,9 +18,13 @@
 
 # Backup files
 settings.json.bak
+settings.json.mine
 backups/
 
-settings.json
+# settings.json is deliberately TRACKED: it is the only thing that registers the hooks in
+# hooks/, so an untracked copy means a fresh clone gets the guard scripts and none of the guards.
+# `model`/`effortLevel` churn in it after a deliberate /model; that is accepted. See
+# docs/features/settings-split-tracked-and-local.md.
 stats-cache.json
 
 # Cache & downloaded content
