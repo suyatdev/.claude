@@ -108,6 +108,15 @@ if either side is not an object — a key that changed type, or is absent entire
 sub-key to name and the key-level line stays. `hooks` keeps its existing per-script phrasing, which
 is already more useful than a sub-key path would be.
 
+**Redaction, added in the same review round after the judge flagged it.** Printing values is new
+here, and it is the one leak surface this change introduced. A value whose sub-key name *or* whose
+own text matches `key|token|secret|password|credential|auth|bearer` prints as `<redacted>`, with the
+sub-key still named — knowing a secret-shaped setting moved is the finding; printing it is not.
+`settings.json` is not supposed to hold credentials, and `env` is excluded from the compared keys
+for that reason, but this check exists *because* conventions drift unobserved, so it does not stake
+anything on one. The pattern is deliberately broad and fails safe: a false redaction costs one line
+of detail, a false negative writes a credential into every session transcript.
+
 ### Non-goals, stated so the card cannot over-promise
 
 - **It cannot detect its own absence.** If `settings.json` vanishes, the `SessionStart` hook
@@ -326,6 +335,25 @@ Scenario: an unparseable command string is not reported as broken
         `live "permissions" differs from HEAD:settings.json`; it now prints
         `permissions.defaultMode: live "bypassPermissions", HEAD "default"`. That is the difference
         between a finding you can act on and one that only tells you to go looking.
+- [x] 10a. **Redaction, from verdict 208.** The judge scored the change `risk=low confidence=high`
+      but flagged the one surface it added: values now reach session-start stdout, and the safety of
+      that rested on the "no secrets in `settings.json`" convention, which nothing in the diff
+      verified. Measured first — the live file's three wiring keys hold a mode, a command path and
+      five plugin ids, 26/78/238 chars, zero matches for any sensitive word — so the risk was
+      theoretical *today*, which is the exact word this card has already been burned by twice.
+      - Three cases added red-first, then implemented: `SENSITIVE` matched against the sub-key name
+        **and** the rendered value, printing `<redacted>` while still naming the sub-key. **28/28.**
+      - **Proven able to fail**, by restoring `dc898d4`'s hook under a trap and re-running: both
+        redaction cases go red there, and the failure detail reads
+        `unwanted:<sk-live-must-not-appear>` — the pre-change hook really was printing the secret,
+        so this is a demonstrated leak closed, not a hypothetical one.
+      - **A test was wrong and the code was right.** The first version set the secret only in the
+        live file, which exercises the *added*-sub-key branch — and that branch renders no value at
+        all, so there was nothing to redact. Rewritten to commit the key to HEAD first. The
+        never-renders-a-value property of the added/removed branches is now pinned by its own case
+        rather than left as an accident.
+      - Full repo suite **25/25**; runtime **43/45 ms** (budget ≤150 ms); silent against the real
+        live config. The regex costs nothing measurable.
 
 ## Risks
 
@@ -387,7 +415,7 @@ was re-read, not from an expectation.
 
 | Area | Result |
 |---|---|
-| `hooks/verify-hook-wiring.test.sh` | **25/25 pass** (20 at first ship, 5 added by task 10). Against the no-op stub it was 10/20 — the red run happened first, and task 10's five were watched going red too |
+| `hooks/verify-hook-wiring.test.sh` | **28/28 pass** (20 at first ship, 5 from task 10, 3 from task 10a). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
 | Full repo suite | **25/25 suites pass** (20 `*.test.sh`, 5 `*.test.py`) |
 | Can it go red? | Yes — `verify-hook-wiring.probe.sh`, four break/restore cycles against the real config in a scratch `$HOME` |
 | False alarms on real data | None. The live `settings.json` — 27 command hooks: 16 distinct scripts, 10 orca conditionals, plus 1 `statusLine` — produces **0 findings**, and the probe's scratch `$HOME` has no `.orca/` at all, so all 10 conditionals pointed at a file that was not there |

@@ -50,6 +50,7 @@ fi
 HEAD_SETTINGS="$HEAD_JSON" python3 - "$SETTINGS" <<'PY' 2>/dev/null
 import json
 import os
+import re
 import shlex
 import sys
 
@@ -161,10 +162,24 @@ def drift_line(detail):
 # than dropped: knowing a long value moved is still worth more than silence.
 VALUE_LIMIT = 60
 
+# Naming a drifted setting means printing its value into session-start stdout,
+# which nothing here did before. settings.json is not supposed to carry
+# credentials — `env` is excluded from WIRING_KEYS for exactly that reason — but
+# "supposed to" is a convention, and a check built because conventions drift
+# unobserved should not stake anything on one. Matched against the sub-key name
+# AND the rendered value, so a secret is caught under an innocuous name too.
+# Deliberately broad: a false redaction costs a little detail in one line, while
+# a false negative writes a credential into every session transcript. "author"
+# matching "auth" is a price worth paying.
+SENSITIVE = re.compile(r"key|token|secret|password|credential|auth|bearer", re.I)
+REDACTED = "<redacted>"
 
-def render(value):
+
+def render(value, name=""):
     """A one-line rendering of a config value, short enough to sit in a line."""
     text = json.dumps(value, sort_keys=True)
+    if SENSITIVE.search(name) or SENSITIVE.search(text):
+        return REDACTED
     return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
 
 
@@ -189,7 +204,12 @@ def subkey_drift(key, live_value, head_value):
             findings.append(
                 drift_line(
                     "%s.%s: live %s, HEAD %s"
-                    % (key, name, render(live_value[name]), render(head_value[name]))
+                    % (
+                        key,
+                        name,
+                        render(live_value[name], name),
+                        render(head_value[name], name),
+                    )
                 )
             )
         elif in_live:

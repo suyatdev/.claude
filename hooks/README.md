@@ -196,6 +196,15 @@ Two checks, both cheap:
    an object, or is absent from one side entirely, there is no sub-key to name and the key-level
    line remains.
 
+   **Values matching `key|token|secret|password|credential|auth|bearer` — in the sub-key name or
+   in the value itself — print as `<redacted>`, and the sub-key is still named.** `settings.json`
+   is not supposed to carry credentials (`env` is excluded from the compared keys for that reason),
+   but this check exists because conventions drift unobserved, so it does not stake anything on
+   one. The pattern is deliberately broad and fails safe: a false redaction costs one line of
+   detail, a false negative writes a credential into every session transcript. `author` matching
+   `auth` is a price worth paying. The added- and removed-sub-key lines never render a value at
+   all, so nothing can leak through those.
+
 **`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
 accepted that `/model` rewrites them in place, so comparing them would fire this check after every
 model switch — and a check that cries wolf is one you learn to skip, which is the exact failure this

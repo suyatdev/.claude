@@ -277,6 +277,41 @@ check "a statusLine sub-key is named like any other" "$H" 1 \
   "$PFX|statusLine.command|other-line.sh" \
   "not executable|no such file|$ORCA"
 
+# Printing values is new, and it is the one thing this change added that could
+# leak. settings.json is not supposed to hold credentials — `env` is excluded
+# from WIRING_KEYS for that reason — but "supposed to" is a convention, and this
+# check exists precisely because conventions drift unobserved. These two cases
+# turn it into a mechanism. Both must still NAME the sub-key: knowing a secret-
+# shaped setting moved is the finding; printing it is not.
+# Both sides must HOLD the key for the value-printing path to run at all, so
+# this one commits it to HEAD first and then changes it live. Written the naive
+# way first — set it only in the live file — which turned out to exercise the
+# added-sub-key branch instead, and that branch prints no value to redact. The
+# test was wrong, not the hook.
+H="$(new_home redactname)"
+edit_json "$H/.claude/settings.json" 'd["permissions"]["apiKey"] = "sk-head-must-not-appear"'
+git -C "$H/.claude" commit -qam withkey
+edit_json "$H/.claude/settings.json" 'd["permissions"]["apiKey"] = "sk-live-must-not-appear"'
+check "a secret-shaped sub-key name redacts both values" "$H" 1 \
+  "$PFX|permissions.apiKey|redacted" \
+  "sk-live-must-not-appear|sk-head-must-not-appear|not executable|no such file|$ORCA|$SL"
+
+# The added/removed branches never render a value, so a secret arriving under a
+# brand-new key cannot leak through them. Asserted rather than assumed, because
+# that is a property of the code today and nothing else pins it.
+H="$(new_home redactadded)"
+edit_json "$H/.claude/settings.json" 'd["permissions"]["apiKey"] = "sk-live-must-not-appear"'
+check "a secret added under a new sub-key names the key without its value" "$H" 1 \
+  "$PFX|permissions.apiKey|absent from HEAD" \
+  "sk-live-must-not-appear|not executable|no such file|$ORCA|$SL"
+
+H="$(new_home redactvalue)"
+edit_json "$H/.claude/settings.json" \
+  'd["permissions"]["defaultMode"] = "default AUTH_TOKEN=must-not-appear"'
+check "a secret-shaped value redacts even under a plain name" "$H" 1 \
+  "$PFX|permissions.defaultMode|redacted" \
+  "must-not-appear|not executable|no such file|$ORCA|$SL"
+
 # When a wiring key stops being an object there is no sub-key to name, so the
 # key-level line has to remain — recursion must not become the only path.
 H="$(new_home slscalar)"
