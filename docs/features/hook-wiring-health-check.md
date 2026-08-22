@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: xhigh
 branch: chore/hook-wiring-health-check
 ---
@@ -103,10 +103,13 @@ verify-hook-wiring: settings.json drift — permissions.defaultMode: live "bypas
 ```
 
 Bounds, so this does not grow into a JSON differ: one level only (deeper nesting costs line length
-and buys little); values truncated at 60 characters (knowing a long value moved beats silence); and
-if either side is not an object — a key that changed type, or is absent entirely — there is no
-sub-key to name and the key-level line stays. `hooks` keeps its existing per-script phrasing, which
-is already more useful than a sub-key path would be.
+and buys little); and if either side is not an object — a key that changed type, or is absent
+entirely — there is no sub-key to name and the key-level line stays. `hooks` keeps its existing
+per-script phrasing, which is already more useful than a sub-key path would be.
+
+*(This paragraph originally read "values truncated at 60 characters". That bound was replaced in
+task 10b — a truncated credential is still a credential — and then replaced again in 10c by
+default-deny rendering. Corrected here rather than left to contradict the tasks below.)*
 
 **Redaction, added in the same review round after the judge flagged it.** Printing values is new
 here, and it is the leak surface this change introduced. ~~the one leak surface~~ — **corrected by
@@ -612,3 +615,27 @@ Open issues:
   made this card's judge report a failing suite that is not failing. The fix is one `unset` in that
   suite, but it belongs to the handoff feature, not this one — a drive-by edit here would put a
   change to another feature's test inside a PR about hook wiring.
+
+## Judge trail and where it stopped
+
+Eight observability passes, rows 205–212, one per commit that moved HEAD (`judge-guard` requires
+`head_sha == HEAD`). Risk read medium, low, low, low, medium, high, high across them — the rises
+are findings, not regressions: rounds 5–8 each found a real leak in the value-rendering path that
+the previous round's own measurement had missed.
+
+**The loop was stopped deliberately at verdict 212, not because it converged.** Four rounds running,
+a "0 leaks out of N" measurement was true for the families it tested and blind to one it did not:
+truncated prefixes, then standard base64, then chunked secrets, then check 1's paths. Each fix was
+correct; each measurement was narrower than the claim built on it. That pattern says the next round
+would probably find a fifth — and it also says the remaining question is no longer a defect to
+patch but a scope decision: **what is this check for?**
+
+`c422e9a` is therefore unjudged. It changes no behaviour — two false claims corrected, one test
+pinning existing behaviour — and its content is the argument for handing the decision over.
+
+**The open decision, for the feature's owner:** should check 1 filter the hook script paths it
+prints? Filtering defends against a hook living in a directory named after a credential, and costs
+every ordinary finding its actionability. Not filtering keeps `no such file: …/judge-guard.sh`
+useful and leaves an unbounded unfiltered string in session-start stdout. This session's judgement
+on this exact surface has been overturned three times, which is itself the reason to stop deciding
+it alone.
