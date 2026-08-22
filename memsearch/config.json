@@ -14,5 +14,5 @@
     {"id": "snatch-bracket", "name": "Snatch-Bracket", "root": "~/Other Docs/AI/AI_Projx/Snatch-Bracket"}
   ],
   "exclude_paths": ["/subagents/", "/node_modules/", "/.git/", "/dist/", "/build/", "/.venv/", "/site-packages/", "/.pytest_cache/"],
-  "weights": {"curated_doc": 1.5, "repo_doc": 1.2, "transcript_digest": 1.0, "archive_doc": 1.0}
+  "weights": {"curated_doc": 1.5, "repo_doc": 1.2, "judge_doc": 1.2, "transcript_digest": 1.0, "archive_doc": 1.0}
 }

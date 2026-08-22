@@ -32,6 +32,7 @@ def status_report(cfg: Config) -> str:
     s = dbmod.stats(conn)
     p95 = dbmod.p95_latency(conn)
     mismatch = dbmod.model_mismatch(conn, cfg.embed_model, cfg.embed_dim)
+    stale = dbmod.migration_required(conn)
     conn.close()
 
     lines = [
@@ -50,6 +51,11 @@ def status_report(cfg: Config) -> str:
     ]
     if mismatch:
         lines.append(f"MISMATCH: {mismatch}")
+    if stale:
+        # `query` refuses this database outright (ADR 0030), so a status that
+        # omitted it would vouch for an index nothing can read — and the
+        # SessionStart nudge reads status.json alone, never the CLI.
+        lines.append(f"MIGRATION REQUIRED: {stale}")
     if s["chunks"] > REVISIT_CHUNKS or (p95 or 0) > REVISIT_P95_MS:
         lines.append(
             "REVISIT: store revisit trigger hit — reconsider Qdrant "

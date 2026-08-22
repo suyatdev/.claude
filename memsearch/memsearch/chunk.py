@@ -107,7 +107,7 @@ def _split_oversized(sections: list[Section]) -> list[Section]:
 
 
 def chunk_doc(path: Path, text: str, repo_id: str, repo_name: str,
-              source_type: str, weight: float, session_date: str) -> list[Chunk]:
+              source_type: str, session_date: str) -> list[Chunk]:
     # The archive is session narrative, so it answers --type episodic — the
     # bucket transcript digests already use — not the generic doc bucket a
     # path-substring test would put it in.
@@ -119,14 +119,13 @@ def chunk_doc(path: Path, text: str, repo_id: str, repo_name: str,
               source_type=source_type, recall_type=recall,
               session_date=session_date, file_path=str(path),
               line_start=s.line_start, line_end=s.line_end,
-              session_id=None, weight=weight)
+              session_id=None)
         for s in split_markdown(text)
     ]
 
 
 def chunk_digest(digest_md: str, extract: SessionExtract, repo_id: str,
-                 repo_name: str, weight: float,
-                 transcript_path: str) -> list[Chunk]:
+                 repo_name: str, transcript_path: str) -> list[Chunk]:
     # One chunk per H2 section, split directly — digest sections are small by
     # design, so split_markdown's tiny-section merge would wrongly collapse them.
     context = (f"[session {extract.session_id} · {extract.session_date} · "
@@ -150,5 +149,5 @@ def chunk_digest(digest_md: str, extract: SessionExtract, repo_id: str,
             source_type="transcript_digest", recall_type=recall,
             session_date=extract.session_date, file_path=transcript_path,
             line_start=a + 1, line_end=b,
-            session_id=extract.session_id, weight=weight))
+            session_id=extract.session_id))
     return chunks
