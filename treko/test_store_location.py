@@ -1,11 +1,19 @@
-"""Red tests for `store_location.read_store_dir` and `store_location.ensure_store_dir`.
+"""Red tests for `store_location.read_store_dir`, `store_location.ensure_store_dir` and
+`store_location.adopt_legacy_store`.
 
-`docs/features/treko-store-location.md` SS D1 and SS D2 are authoritative; the values below
-are transcribed from the design table and the Scenarios block rather than read back out of
-an implementation, because `treko/store_location.py` does not exist yet -- these tests define
-what "done" means for tasks 2 and 3, not confirm it.
+`docs/features/treko-store-location.md` SS D1, SS D2 and SS D4 are authoritative; the values
+below are transcribed from the design table and the Scenarios block rather than read back out
+of an implementation, because `treko/store_location.py` does not have these functions yet --
+these tests define what "done" means for tasks 2, 3 and 5, not confirm it.
 
-Covers acceptance criteria 1, 3, 10 and 11.
+Covers acceptance criteria 1, 3, 4, 10, 11 and 12.
+
+**D4's two contract points are pinned here, not just described.** The design says
+`adopt_legacy_store` "announces which of its three outcomes happened" and returns something "a
+caller can act on... without parsing English", but does not spell out the return value's exact
+form -- so this file pins it: three plain strings, `"copied"`, `"already_present"` and
+`"no_legacy"`, one per outcome in the same order as D4's three stderr lines. Task 6's
+implementer is being given this same wording as the contract to build against.
 
 **`environ` carries only what the design says the process actually reads.** `TREKO_STORE_DIR`
 and `XDG_STATE_HOME` are read from the injected mapping, mirroring how `read_port` and
@@ -21,11 +29,18 @@ modules can import it; today it still lives in `server.py`, so this import is it
 the red state on purpose -- it fails alongside the rest of the module until task 4 lands, and
 needs no edit here once it does.
 
-**What this file does not cover.** `adopt_legacy_store` (D4, task 5) and the `_serve_static`
-branch plus the startup banner (D3, task 7) are separate dispatches with their own red steps.
-Nor does it drive `read_store_dir()` called with no argument at all -- that path reads the
-live process environment and cannot be asserted deterministically from a test process whose
-own HOME and XDG_STATE_HOME are whatever the machine running the suite happens to have.
+**What this file does not cover.** The `_serve_static` branch plus the startup banner (D3,
+task 7) is a separate dispatch with its own red steps. Nor does it drive `read_store_dir()`
+called with no argument at all -- that path reads the live process environment and cannot be
+asserted deterministically from a test process whose own HOME and XDG_STATE_HOME are whatever
+the machine running the suite happens to have.
+
+**Every D4 fixture is synthesised inside `tmp_path`.** The real `treko/tracker-data.js` holds
+four snapshots dated 2026-08-20T03:07:28Z that cannot be regenerated (the card's Risks
+section) -- no test here reads, writes, or depends on it. Legacy envelopes are built through
+`store.new_store` / `store.upsert_run` / `store.write_store` so the fixtures stay valid if the
+envelope shape changes, except for the corrupt-file case, which is deliberately hand-written
+garbage.
 """
 
 import errno
@@ -39,7 +54,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from store_location import StartupAbort, ensure_store_dir, read_store_dir  # noqa: E402
+import store  # noqa: E402
+from store_location import (  # noqa: E402
+    StartupAbort,
+    adopt_legacy_store,
+    ensure_store_dir,
+    read_store_dir,
+)
 
 
 # --------------------------------------------------------------------------
@@ -222,3 +243,109 @@ def test_an_existing_directorys_mode_is_left_alone(tmp_path):
     ensure_store_dir(target)
 
     assert stat.S_IMODE(target.stat().st_mode) == 0o755
+
+
+# --------------------------------------------------------------------------
+# D4 -- the one-time legacy-store copy (criteria 4, 12)
+# --------------------------------------------------------------------------
+
+
+def _write_legacy_envelope(path, run_ids):
+    """Build a real envelope through store.py, not hand-written JS text (see module docstring)."""
+    data = store.new_store()
+    for run_id in run_ids:
+        data = store.upsert_run(data, {"id": run_id})
+    store.write_store(path, data)
+    return data
+
+
+def test_adopts_a_legacy_store_once_comparing_by_run_id(tmp_path, capsys):
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+    run_ids = ["run-a", "run-b", "run-c", "run-d"]
+    _write_legacy_envelope(legacy_path, run_ids)
+
+    outcome = adopt_legacy_store(store_path, legacy_path)
+
+    assert outcome == "copied"
+    adopted_ids = {run["id"] for run in store.read_store(store_path)["runs"]}
+    assert adopted_ids == set(run_ids)  # a count would pass even for four empty runs
+
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == [
+        "copied %d runs from %s" % (len(run_ids), legacy_path)
+    ]
+
+
+def test_a_second_launch_does_not_rewrite_the_already_adopted_store(tmp_path, capsys):
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+    _write_legacy_envelope(legacy_path, ["run-a", "run-b", "run-c", "run-d"])
+
+    adopt_legacy_store(store_path, legacy_path)
+    capsys.readouterr()  # discard the first launch's stderr line
+    before_bytes = store_path.read_bytes()
+    before_mtime_ns = store_path.stat().st_mtime_ns
+
+    outcome = adopt_legacy_store(store_path, legacy_path)
+
+    assert outcome == "already_present"
+    assert store_path.read_bytes() == before_bytes
+    assert store_path.stat().st_mtime_ns == before_mtime_ns  # untouched, not merely unchanged
+
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["store already present, legacy file ignored"]
+
+
+def test_an_existing_real_store_is_never_overwritten_by_the_legacy_file(tmp_path):
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+    _write_legacy_envelope(legacy_path, ["legacy-1", "legacy-2", "legacy-3", "legacy-4"])
+    _write_legacy_envelope(store_path, ["real-run"])
+
+    outcome = adopt_legacy_store(store_path, legacy_path)
+
+    assert outcome == "already_present"
+    remaining_ids = {run["id"] for run in store.read_store(store_path)["runs"]}
+    assert remaining_ids == {"real-run"}  # the guard against destroying unregenerable snapshots
+
+
+def test_a_corrupt_legacy_file_aborts_and_never_creates_the_configured_store(tmp_path):
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_text("this is not a tracker-data.js envelope at all")
+
+    with pytest.raises(StartupAbort) as excinfo:
+        adopt_legacy_store(store_path, legacy_path)
+
+    assert str(legacy_path) in str(excinfo.value)
+    assert not store_path.exists()  # silently starting empty is how snapshots disappear
+
+
+def test_no_legacy_store_to_adopt_when_neither_file_exists(tmp_path, capsys):
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+
+    outcome = adopt_legacy_store(store_path, legacy_path)
+
+    assert outcome == "no_legacy"
+    assert not store_path.exists()
+
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["no legacy store to adopt"]
+
+
+def test_the_copied_message_names_the_real_run_count_not_a_fixed_number(tmp_path, capsys):
+    """A different N than the other tests' 4, so a hardcoded "copied 4 runs" cannot pass."""
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+    run_ids = ["only-run-1", "only-run-2"]
+    _write_legacy_envelope(legacy_path, run_ids)
+
+    adopt_legacy_store(store_path, legacy_path)
+
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == [
+        "copied %d runs from %s" % (len(run_ids), legacy_path)
+    ]

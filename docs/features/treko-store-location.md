@@ -462,7 +462,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       directory already exists.
 - [x] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
       `StartupAbort` somewhere both modules import; tasks 2-3 go green.
-- [ ] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
+- [x] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
 - [ ] 6. Implement `adopt_legacy_store`; task 5's tests go green.
 - [ ] 7. Red tests for D3: serves configured bytes, 404 absent, **403 on a symlink out of the store
       dir**, **200 through a symlinked store dir**, manifest still closed. **Plus the banner's new
@@ -618,3 +618,44 @@ wc -l treko/server.py treko/store_location.py                # 787, 88
 206 = task 4's 205 + the one test step 1 added, zero pre-existing test lost or changed. Neither
 test in `test_store_location.py` needed editing for step 2 to pass. `server.py` is unchanged at
 787 lines; `store_location.py` moved from 81 to 88 lines.
+
+### Task 5 — red tests for D4
+
+`treko/test_store_location.py` gained 6 tests covering `adopt_legacy_store(store_path,
+legacy_path)`: adopts once (compared by run id, not count), a second launch does not rewrite
+(bytes and `st_mtime_ns` both unchanged), an existing real store is never overwritten by a
+different legacy file (the destructive-overwrite guard, tested directly rather than as a
+corollary), a corrupt legacy file raises `StartupAbort` naming the file and never creates the
+destination, no legacy file yields `"no_legacy"` with no file created, and the `copied N runs`
+line is checked against a 2-run fixture (distinct from the other tests' 4) so a hardcoded
+`"copied 4 runs"` cannot pass. Every stderr assertion checks `capsys`'s captured lines equal a
+one-element list, not merely that the expected text appears. D4 does not spell out the return
+value's exact form, so this file pins one: three plain strings, `"copied"`, `"already_present"`
+and `"no_legacy"` — the contract task 6 is being given.
+
+**Red for the right reason**, 2026-08-22, this worktree: a throwaway stub
+(`adopt_legacy_store` raising `NotImplementedError`, never committed) was added to
+`treko/store_location.py` so the 6 new tests' failures could be told apart from the existing
+14's, then removed.
+
+```
+cd treko && python3 -m pytest test_store_location.py -v
+# 6 failed, 14 passed in 0.05s — each new test fails on its own assertion or on
+# NotImplementedError; none on a collection error; all 14 D1/D2 tests still pass
+git diff HEAD -- treko/store_location.py   # empty after the stub was reverted
+```
+
+Without the stub, `adopt_legacy_store` does not exist at all, so the module-level import at
+the top of `test_store_location.py` fails and the *whole file* — including the 14 tests tasks
+2-3 already turned green — errors at collection, the same shape task 1's baseline had before
+task 4 landed:
+
+```
+cd treko && python3 -m pytest -q --continue-on-collection-errors
+# 192 passed, 1 error in 119.27s — the 192 matches task 1's baseline exactly; the 1 error is
+# test_store_location.py's ImportError: cannot import name 'adopt_legacy_store'
+```
+
+192 + 1 error is expected and correct for a tests-only commit: `adopt_legacy_store` is task 6's
+job. The 14 tests hidden behind that collection error are proven still-passing above, by the
+stub run, per this task's instructions.
