@@ -267,15 +267,18 @@ check "two changed sub-keys produce two lines" "$H" 2 \
   "$PFX|permissions.defaultMode|permissions.deny" \
   "not executable|no such file|$ORCA|$SL"
 
-# statusLine is an object too, so it gets the same treatment. $SL is NOT
-# forbidden here: HEAD's value legitimately contains that filename, and printing
-# the old value is the point.
+# statusLine is an object too, so it gets the same treatment — the sub-key is
+# named. Its value is deliberately NOT printed: a command string carries quotes,
+# `$HOME` and a path, so it fails the safe-value shape, and of everything under
+# the wiring keys it is the likeliest place for a credential to be hiding in an
+# argument. Naming `statusLine.command` already tells the reader a status-line
+# command changed, which is the actionable part.
 H="$(new_home slkey)"
 edit_json "$H/.claude/settings.json" \
   'd["statusLine"]["command"] = "bash \"$HOME/.claude/other-line.sh\""'
-check "a statusLine sub-key is named like any other" "$H" 1 \
-  "$PFX|statusLine.command|other-line.sh" \
-  "not executable|no such file|$ORCA"
+check "a statusLine sub-key is named, its command withheld" "$H" 1 \
+  "$PFX|statusLine.command|changed" \
+  "other-line.sh|not executable|no such file|$ORCA|$SL"
 
 # Printing values is new, and it is the one thing this change added that could
 # leak. settings.json is not supposed to hold credentials — `env` is excluded
@@ -318,6 +321,27 @@ edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$OPAQUE
 check "an opaque token under a plain name is withheld" "$H" 1 \
   "$PFX|permissions.defaultMode" \
   "$OPAQUE|not executable|no such file|$ORCA|$SL"
+
+# Verdict 210: standard base64 uses + and /, which BREAK a [A-Za-z0-9_-] run
+# into harmless-looking pieces. A 40-byte secret encodes to ~56 characters —
+# under the old 60-char cap — so neither the length nor the shape test caught
+# it. Measured at roughly one in six random AWS-length keys. This is the case
+# that forced the renderer to default-deny instead of default-print.
+B64='Xy9+aB/cD3eF+gH4iJ/kL5mN+oP6qR/sT7uV+wX8yZ0='
+H="$(new_home base64secret)"
+edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$B64'"
+check "a standard-base64 secret is withheld" "$H" 1 \
+  "$PFX|permissions.defaultMode" \
+  "$B64|Xy9+aB|not executable|no such file|$ORCA|$SL"
+
+# A structure is not a legible value: there is no one-line rendering of a list
+# that helps a reader, and plenty that could hide a credential inside.
+H="$(new_home structure)"
+edit_json "$H/.claude/settings.json" \
+  'd["permissions"]["defaultMode"] = {"nested": "Xy9+aB/cD3eF+gH4iJ/kL5mN"}'
+check "a structured value is withheld, not rendered" "$H" 1 \
+  "$PFX|permissions.defaultMode|changed" \
+  "Xy9+aB|nested|not executable|no such file|$ORCA|$SL"
 
 # The added/removed branches never render a value, so a secret arriving under a
 # brand-new key cannot leak through them. Asserted rather than assumed, because

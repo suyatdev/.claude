@@ -175,11 +175,20 @@ SENSITIVE = re.compile(r"key|token|secret|password|credential|auth|bearer", re.I
 REDACTED = "<redacted>"
 WITHHELD = "<changed>"
 
-# The word list above only catches a LABELLED secret, and real credentials are
-# usually opaque strings under ordinary names. This is the shape test for those:
-# a long unbroken run of credential characters mixing letters and digits. Config
-# values that a human needs to read break on "/", ".", spaces, quotes and
-# brackets long before 20 characters; an API key or a JWT segment does not.
+# A value is printed only if it MATCHES this — default-deny, not default-print.
+# Two earlier attempts went the other way, enumerating what to hide, and both
+# leaked: first a truncated JWT prefix, then standard base64, whose "+" and "/"
+# split a deny-list run test into harmless-looking pieces (measured at roughly
+# one in six random 40-byte keys, verdict 210). Enumerating what a credential
+# looks like is unbounded; enumerating what a readable setting looks like is not.
+#
+# A letter, then letters, digits, spaces, dots, underscores or hyphens. No
+# quotes, no "$", no "/", no "+", no "=" — so command strings, paths and every
+# base64 alphabet fall out, and "default"/"bypassPermissions"/"acceptEdits" stay.
+SAFE_VALUE = re.compile(r"^[A-Za-z][A-Za-z0-9 ._-]{0,%d}$" % (VALUE_LIMIT - 1))
+
+# Even inside that shape, a long letters-and-digits run is token-like, not
+# setting-like: "a1b2c3d4e5f6g7h8i9j0" passes SAFE_VALUE but is nobody's config.
 OPAQUE_RUN = re.compile(r"[A-Za-z0-9_-]{20,}")
 
 
@@ -192,20 +201,28 @@ def looks_opaque(text):
 
 
 def render(value, name=""):
-    """A one-line rendering of a config value, short enough to sit in a line.
+    """A one-line rendering of a config value, or a marker standing in for it.
 
-    Over-long values are WITHHELD, never truncated. Truncating and printing the
-    prefix leaks a credential just as thoroughly as printing all of it — 57
-    characters of a JWT is still a JWT — and the reader learns nothing from a
-    severed string anyway. The sub-key is still named either way, which is the
-    part that makes the finding actionable.
+    Nothing is truncated: printing a prefix leaks a credential as thoroughly as
+    printing all of it — 57 characters of a JWT is still a JWT — and a severed
+    string tells the reader nothing. The sub-key is named either way, which is
+    the part that makes a finding actionable; the value is a convenience, and
+    the convenience is what gets dropped when it cannot be shown safely.
     """
-    text = json.dumps(value, sort_keys=True)
-    if SENSITIVE.search(name) or SENSITIVE.search(text):
+    if SENSITIVE.search(name):
         return REDACTED
-    if len(text) > VALUE_LIMIT or looks_opaque(text):
+    # Scalars carry no room for a secret and read well inline.
+    if value is None or isinstance(value, (bool, int, float)):
+        return json.dumps(value)
+    # A list or dict is a structure, not a legible one-line value, and is a
+    # perfectly good hiding place for a credential.
+    if not isinstance(value, str):
         return WITHHELD
-    return text
+    if SENSITIVE.search(value):
+        return REDACTED
+    if not SAFE_VALUE.match(value) or looks_opaque(value):
+        return WITHHELD
+    return json.dumps(value)
 
 
 def subkey_drift(key, live_value, head_value):

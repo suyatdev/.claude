@@ -371,10 +371,39 @@ Scenario: an unparseable command string is not reported as broken
       - **Regression that mattered most:** the motivating case must not be hardened into
         uselessness. `probe.sh` C3 still prints
         `permissions.defaultMode: live "bypassPermissions", HEAD "default"` in full.
-      - **Residual gap, stated rather than implied away:** a *short* opaque secret with no
-        letter-plus-digit run and no telltale word — sixteen lowercase letters under an innocuous
-        key — still prints. Narrow, not zero. This is a diagnostic line, not a secret scanner;
-        `hooks/scan-secrets.sh` is that tool and is one of the four dormant hooks.
+      - **Residual gap as understood at the time** — corrected by task 10c below, which found the
+        real gap was materially larger than this described. Left in place because an inaccurate
+        disclosure that was quietly deleted teaches nothing.
+- [x] 10c. **Invert the renderer to default-deny.** Verdict 210 passed the change
+      (`risk=medium confidence=high`, nothing failed) and then measured the disclosure above to be
+      wrong: **standard base64 uses `+` and `/`, which split a `[A-Za-z0-9_-]` run test into
+      innocent-looking pieces.** It generated 2,000 AWS-key-length values and saw roughly one in six
+      print in full, confirmed against the shipped hook with a real git-tracked fixture. The card
+      called the gap "narrow, not zero"; it was neither.
+      - **The pattern was not the bug — the direction was.** Two rounds had enumerated what a
+        credential *looks like* and leaked twice. Enumerating credentials is unbounded; enumerating
+        what a *readable setting* looks like is not. `render()` now prints only `null`, booleans,
+        numbers, and strings matching `^[A-Za-z][A-Za-z0-9 ._-]{0,59}$` with no 20+ character
+        letters-and-digits run. Lists and objects are never rendered. Nothing is ever truncated.
+      - **Measured, not argued:** `hooks/verify-hook-wiring.leakcheck.py` — seven credential
+        families, 2000 samples each, fixed seed, `render()` extracted from the live hook rather than
+        reimplemented. **0 / 14000.**
+      - **The leak checker is itself falsified**, because a checker that has never reported a leak
+        proves nothing. Pointed at `2fad70f`'s renderer it reports **995**: 123/2000 standard base64
+        (matching verdict 210 independently) and **871/2000 short base64** — a 43% leak rate in a
+        family nobody had measured, including the judge.
+      - Three cases added red-first (`29/32`), then green: **32/32**. Repo **25/25**. Runtime
+        **43/46 ms**, budget ≤150 ms. `probe.sh` C3 still prints
+        `permissions.defaultMode: live "bypassPermissions", HEAD "default"` in full — hardening must
+        not blunt the motivating case, and it did not.
+      - **Deliberate loss:** `statusLine.command` no longer prints its value. A command string
+        carries quotes, `$HOME` and a path, so it fails the safe shape — and of everything under the
+        wiring keys it is the likeliest place for a credential to sit in an argument. The sub-key is
+        still named, which is the actionable part.
+      - **Residual gap, re-derived rather than restated:** a lowercase-only string with no digits and
+        no telltale word — `abcdefghijklmnopqrst` — matches the safe shape and prints. Confirmed by
+        running `render()` on that exact value. Not what credentials look like, but not zero.
+        `hooks/scan-secrets.sh` is the real tool for that job and is one of the four dormant hooks.
 
 ## Risks
 
@@ -436,7 +465,8 @@ was re-read, not from an expectation.
 
 | Area | Result |
 |---|---|
-| `hooks/verify-hook-wiring.test.sh` | **30/30 pass** (20 at first ship, 5 from task 10, 3 from 10a, 2 from 10b). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
+| `hooks/verify-hook-wiring.test.sh` | **32/32 pass** (20 at first ship; 5 from task 10; 3, 2 and 3 from 10a–10c, one of 10c's replacing a case whose expectation the redesign deliberately changed). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
+| Value-leak rate (`verify-hook-wiring.leakcheck.py`) | **0 / 14000** — seven credential families, 2000 samples each, fixed seed, `render()` extracted from the live hook. The checker is proven able to fail: **995** against `2fad70f`'s renderer, including 871/2000 short base64 |
 | Full repo suite | **25/25 suites pass** (20 `*.test.sh`, 5 `*.test.py`) |
 | Can it go red? | Yes — `verify-hook-wiring.probe.sh`, four break/restore cycles against the real config in a scratch `$HOME` |
 | False alarms on real data | None. The live `settings.json` — 27 command hooks: 16 distinct scripts, 10 orca conditionals, plus 1 `statusLine` — produces **0 findings**, and the probe's scratch `$HOME` has no `.orca/` at all, so all 10 conditionals pointed at a file that was not there |

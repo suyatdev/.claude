@@ -196,31 +196,30 @@ Two checks, both cheap:
    an object, or is absent from one side entirely, there is no sub-key to name and the key-level
    line remains.
 
-   **Three filters stand between a config value and your session transcript**, and the sub-key is
-   named regardless of which one fires — knowing *that* a setting moved is the finding; printing it
-   is a convenience:
+   **A value is printed only if it is provably safe to print — default-deny.** The sub-key is named
+   either way; knowing *that* a setting moved is the finding, and the value is a convenience that
+   gets dropped whenever it cannot be shown safely. Printed: `null`, booleans, numbers, and a string
+   matching `^[A-Za-z][A-Za-z0-9 ._-]{0,59}$` that contains no 20+ character letters-and-digits run.
+   Everything else prints `<changed>`, and anything whose sub-key name or text matches
+   `key|token|secret|password|credential|auth|bearer` prints `<redacted>`. Lists and objects are
+   structures, not legible one-line values, and are never rendered. **Nothing is ever truncated** —
+   printing a prefix leaks a credential as thoroughly as printing all of it, and a severed string
+   tells the reader nothing.
 
-   | Filter | Prints | Catches |
-   |---|---|---|
-   | `key\|token\|secret\|password\|credential\|auth\|bearer`, in the sub-key name **or** the value | `<redacted>` | a labelled secret |
-   | value longer than 60 characters | `<changed>` | a JWT, a long API key |
-   | a 20+ character unbroken run of `[A-Za-z0-9_-]` mixing letters and digits | `<changed>` | an opaque token under an ordinary name |
+   Default-deny is the second design, and the first one's failure is why. Enumerating what a
+   credential *looks like* leaked twice: first a truncated JWT prefix, then standard base64, whose
+   `+` and `/` split a deny-list run test into innocent-looking pieces. Enumerating what a
+   *readable setting* looks like is a bounded problem; enumerating credentials is not.
 
-   `settings.json` is not supposed to carry credentials — `env` is excluded from the compared keys
-   for that reason — but this check exists *because* conventions drift unobserved, so it stakes
-   nothing on one. All three fail safe: a false positive costs one line of detail, a false negative
-   writes a credential into every session transcript. `author` matching `auth` is a price worth
-   paying.
+   `hooks/verify-hook-wiring.leakcheck.py` measures this — seven credential families, 2000 samples
+   each, fixed seed. **0 / 14000 today; 995 against the pre-fix renderer.** Re-run it rather than
+   trusting this paragraph.
 
-   **Over-long values are withheld, never truncated.** Truncating and printing the prefix leaks a
-   credential just as thoroughly as printing all of it — 57 characters of a JWT is still a JWT —
-   and a severed string tells the reader nothing anyway. The added- and removed-sub-key lines never
-   render a value at all, so nothing can leak through those.
-
-   **What still gets through, stated plainly:** a *short* opaque secret with no letters-and-digits
-   run and no telltale word — say sixteen lowercase letters under an innocuous key. Narrow, but not
-   zero. This is a diagnostic line, not a secret scanner; `hooks/scan-secrets.sh` is the tool for
-   that job and is currently dormant (see the top of this file).
+   **What still gets through:** a short, lowercase-only secret with no digits and no telltale word —
+   `abcdefghijklmnopqrst` under an innocuous key — matches the safe-value shape and prints. That is
+   not what credentials look like, but it is not zero. This is a diagnostic line, not a secret
+   scanner; `hooks/scan-secrets.sh` is that tool, and is currently dormant (see the top of this
+   file).
 
 **`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
 accepted that `/model` rewrites them in place, so comparing them would fire this check after every
