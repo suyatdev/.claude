@@ -473,7 +473,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       branch, and the banner line. Task 7's tests go green.
 - [x] 9. Untrack `treko/tracker-data.js`, add the `.gitignore` entry, verify the sample and fallback
       are still tracked.
-- [ ] 10. **ADR 0034** — the trust-boundary change, where the tool's data lives, and the accepted
+- [x] 10. **ADR 0034** — the trust-boundary change, where the tool's data lives, and the accepted
       `file://` degradation. **0034 is verified free against `origin/main`** (which tops out at
       0033); note that "next free number" is ambiguous here because **0026 is duplicated**
       (`…symbolic-ref…` and `…the-gate-does-no-json-parsing…`) and 0028 is unused.
@@ -803,3 +803,46 @@ failed on a clone that has no such file. `d935185` builds the tree's store from 
 sample instead, verified with the real file moved aside (96 passed, 1 skipped; restored
 byte-identical) and with the counterfactual (disabling the sample copy fails exactly the two
 nodes that read the tree's store).
+
+### Task 10 — ADR 0034
+
+`docs/decisions/0034-the-store-leaves-the-repo-and-the-guard-is-repointed.md`, 224 lines, one
+Mermaid flowchart (validated with `skills/diagramming-technical-docs/scripts/validate-diagrams.sh`:
+`1 block(s), 0 failed`).
+
+**Number re-verified at the moment of writing, not trusted from the card.** `0034` is free against
+`origin/main` (`e6a9bb6`, tops out at `0033`), against every local and remote ref
+(`git for-each-ref` + `git ls-tree` over `refs/heads` and `refs/remotes`, zero hits for
+`003[4-9]`), and against the working tree of all four checked-out worktrees. Local `main`
+(`e937006`) is a **stale ancestor** of `origin/main`, so a local `ls` or a `main`-relative check
+would have been reading the wrong ref.
+
+**Every citation resolved before it was written down.** All 29 `file:line` refs were extracted from
+the finished ADR and checked to resolve inside a real file at a real line; the nine bare `:N` refs
+were each opened by hand. Three errors of my own were caught by that sweep and fixed:
+
+| Claim as first drafted | Measured | Fix |
+|---|---|---|
+| the `file://` sample is "nine-month-stale" | sample `generatedAt` is `2026-08-09T02:41:07Z`, **13 days** before today | rewritten — and the point is *stronger*: a 13-day-old stamp is a weak signal, not an obvious one |
+| "the server already reads four environment variables" | `server.py` reads four `TREKO_*` vars (`:43`, `:47-49`) **plus** `CMUX_BIN` (`:54`) and `CMUX_SURFACE_ID` | narrowed to "four `TREKO_*` variables", with the `environ`-injection shape cited |
+| "four of the runs ... are dated `2026-08-20T03:07:28Z`" | that stamp is the **envelope's** `generatedAt`; the four run objects carry no such field | reworded, and the four run ids named |
+
+**A claim in this card's own §Risks does not hold, and the ADR records the measured version
+instead.** §Risks states that over `file://` the page "shows its `TRACKER_DATA_SOURCE = 'sample'`
+state with the amber source dot." Measured on this branch: `TRACKER_DATA_SOURCE` is written at
+`treko/tracker-data-fallback.js:18` and **read nowhere** — `git grep` over the whole repo returns
+that one assignment in code and no reader. The indicator is driven by a different variable,
+`srcDot: window.TRACKER_DATA ? 'var(--ok)' : 'var(--warn)'` (`Treko.dc.html:633`), and the shim sets
+`window.TRACKER_DATA` by loading the sample. So the dot is **green** and the tooltip reads
+**"tracker-data.js loaded"** over vendored sample data. There is no amber state to reach.
+
+Not a design error and not a criterion: no acceptance criterion, and no part of D1-D6, depends on
+it. The card is frozen, so §Risks is **left unedited** — the correction lives in the ADR, which is
+where §Risks itself says this must be stated. Flagged rather than fixed: the page is out of this
+card's scope, and how the UI reports its own data provenance belongs with the deferred
+Configuration drawer.
+
+Mitigation that does hold: over `http://` with `--open`, `server.py:773-774` runs the analyzer when
+the store has no runs, so a real store exists before the browser opens. The silent-sample case
+remains reachable over `file://`, and over `http://` when started without `--open` against an empty
+store.
