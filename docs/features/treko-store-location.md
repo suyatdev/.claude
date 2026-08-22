@@ -456,9 +456,9 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 - [x] 1. Record the pre-change suite: full node-ID set and per-module counts, and `wc -l` of
       `server.py`, from a run in this tree.
-- [ ] 2. Red tests (`test_store_location.py`) for D1: default when unset, env var wins, `~` expanded,
+- [x] 2. Red tests (`test_store_location.py`) for D1: default when unset, env var wins, `~` expanded,
       relative resolved, **and the canonical form for a symlinked path**.
-- [ ] 3. Red tests for D2: the four table rows, plus `0o700` on creation and mode untouched when the
+- [x] 3. Red tests for D2: the four table rows, plus `0o700` on creation and mode untouched when the
       directory already exists.
 - [ ] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
       `StartupAbort` somewhere both modules import; tasks 2-3 go green.
@@ -542,3 +542,26 @@ compares sets, not just totals. There is no `pytest.ini`, `pyproject.toml` or `s
 
 Line counts at `a0326ee`: `server.py` **790**, `analyze.py` **797**, `store.py` **212** — D5's
 premise holds, and criterion 13's budget is 10 lines.
+
+### Tasks 2-3 — red tests for D1 and D2
+
+`treko/test_store_location.py` added, 13 tests, importing `read_store_dir`, `ensure_store_dir`
+and `StartupAbort` from the not-yet-created `treko/store_location.py`.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q
+```
+
+Collection fails as expected: `ModuleNotFoundError: No module named 'store_location'`
+(`test_store_location.py:41`).
+
+A collection error cannot distinguish "13 tests red" from "one broken file", so a throwaway
+stub (`store_location.py`, both functions raising `NotImplementedError`, never committed) was
+added, the file re-run, and all 13 tests confirmed failing individually, each on
+`NotImplementedError` and none on a collection error — then the stub was deleted and
+`git status` confirmed only `test_store_location.py` remained untracked.
+
+Full suite with the new file's collection error allowed through
+(`python3 -m pytest -q --continue-on-collection-errors`): **192 passed, 1 error** — the 192
+matches task 1's baseline exactly (zero regressions in the existing modules), and the 1 error
+is `test_store_location.py`'s expected `ModuleNotFoundError`.
