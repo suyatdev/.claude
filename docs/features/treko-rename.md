@@ -421,9 +421,25 @@ No new dependency is added by this card. Adding one would need a separate ask
 - [x] 2. Record the pre-rename suite count from an actual run; paste the output into §Verification.
       **Done.** `161 passed in 112.09s`, exit 0, run 2026-08-21 — see §Verification.
 
-- [ ] 3. `git mv task-tracker treko` and `git mv skills/tracking-feature-state skills/treko`. Fix
+- [x] 3. `git mv task-tracker treko` and `git mv skills/tracking-feature-state skills/treko`. Fix
       `SERVE_ROOT`-relative paths, `conftest.py`, `server_harness.py` and the five test modules until
       the suite is green again at the same count as task 2.
+      **Done. `161 passed in 111.29s`, exit 0 — same count as the task-2 baseline.** Both
+      directories moved with `git mv`, so history follows. `__pycache__` was deleted repo-wide
+      before the move so no import could resolve to the old tree and pass for the wrong reason.
+      Ten files needed path fixes; the load-bearing one was `server_harness.py`'s
+      `REAL_TREE = REPO_ROOT / "task-tracker"`, which every server test resolves through.
+      - **`store.py`'s `TOOL` string stays `"task-tracker v0.4.1"`.** The card said to change it
+        only after confirming no consumer reads it. One does: the page renders it as
+        `toolLabel` (`grep -n 'data.tool' treko/`). So it stays, per the card's own "if in
+        doubt it stays".
+      - **`server.py`'s `server_version` HTTP header** changed to `"treko"`. Checked first that
+        no test asserts it — this is the server's own identity, not store payload.
+      - **`Task Tracker Directions.dc.html` left untouched, filename included.** It is the
+        historical four-direction design canvas, is not on `STATIC_MANIFEST`, and is never
+        served. Editing it would falsify a record the same way editing a merged ADR would.
+      - ⚠️ **GATE: criterion 1 and §Decision contradict each other — see the bullet below.**
+
 - [ ] 4. Rename the four environment variables in `server.py`. Assert the old names are **not** read
       (criterion 5) — a silent fallback is the failure mode here.
 - [ ] 5. `git mv "treko/Task Tracker.dc.html" treko/Treko.dc.html`; update `INDEX_FILE` and

@@ -331,7 +331,7 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
     """Two dynamic routes plus a closed static mount. Every other path is 404."""
 
     protocol_version = "HTTP/1.1"
-    server_version = "task-tracker"
+    server_version = "treko"
     sys_version = ""
 
     # The base class emits an Apache-style line per request to stderr. The audit line is

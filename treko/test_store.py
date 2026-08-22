@@ -9,7 +9,7 @@ docs/features/tracking-feature-state.spec.md (the spec half):
      leaves every other run byte-identical.
   5. An interrupted write leaves the previous tracker-data.js valid JS.
 
-Every test works on a tmp_path copy; the real task-tracker/tracker-data.js is
+Every test works on a tmp_path copy; the real treko/tracker-data.js is
 never touched.
 """
 

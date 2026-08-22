@@ -7,10 +7,10 @@ criterion it serves.
 
 Two rules govern this module:
 
-* **The real `task-tracker/` is never touched.** Every server runs against a per-test
-  copy under `tmp_path`, laid out as `<tmp>/task-tracker/` with `<tmp>/hooks/lib`
+* **The real `treko/` is never touched.** Every server runs against a per-test
+  copy under `tmp_path`, laid out as `<tmp>/treko/` with `<tmp>/hooks/lib`
   alongside it, because `analyze.py` resolves that path as `__file__/../../hooks/lib`
-  (`grep -n 'hooks.*lib' task-tracker/analyze.py`). Reproducing the layout is what lets
+  (`grep -n 'hooks.*lib' treko/analyze.py`). Reproducing the layout is what lets
   `reanalyze` run unmodified — a `PYTHONPATH` override would test a launch shape the
   feature does not use.
 * **`cmux` is faked, and the fake records what it was handed.** A fake proves the
@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-REAL_TREE = REPO_ROOT / "task-tracker"
+REAL_TREE = REPO_ROOT / "treko"
 
 # The surface the fake `cmux tree` reports present. Criterion 12 asserts the ref handed to
 # `send` is byte-identical to this, which is the whole identity claim a fake can carry.
@@ -83,12 +83,12 @@ time.sleep(float(os.environ["FAKE_HANG_SECS"]))
 
 
 def build_tree(tmp_path):
-    """A private copy of `task-tracker/` in the layout `analyze.py` expects.
+    """A private copy of `treko/` in the layout `analyze.py` expects.
 
     `test_*.py` is copied in deliberately: criterion 11 asserts `/test_server.py` is a
     `404`, and that only proves the manifest is what refuses if the file is really there.
     """
-    tree = tmp_path / "task-tracker"
+    tree = tmp_path / "treko"
     if tree.exists():
         return tree  # idempotent: a test launching a second server reuses the first's tree
     shutil.copytree(REAL_TREE, tree, ignore=shutil.ignore_patterns("__pycache__"))

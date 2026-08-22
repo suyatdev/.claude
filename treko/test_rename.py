@@ -53,7 +53,7 @@ def test_read_port_honours_treko_port():
     assert server.read_port({"TREKO_PORT": "9001"}) == 9001
 
 
-def test_read_port_ignores_the_retired_task_tracker_port():
+def test_read_port_ignores_the_retired_port_name():
     """The old name is dead, not aliased.
 
     A fallback that still reads `TASK_TRACKER_PORT` is the invisible half-rename: every

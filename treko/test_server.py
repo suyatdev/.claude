@@ -341,7 +341,7 @@ ESCAPING_PATHS = [
     "/./../../CLAUDE.md",
 ]
 
-# Real files inside task-tracker/ that are not manifest rows. The copy keeps them so the
+# Real files inside treko/ that are not manifest rows. The copy keeps them so the
 # manifest is what refuses, not the filesystem.
 OFF_MANIFEST_PATHS = [
     "/store.py",
