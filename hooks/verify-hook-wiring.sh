@@ -173,14 +173,39 @@ VALUE_LIMIT = 60
 # matching "auth" is a price worth paying.
 SENSITIVE = re.compile(r"key|token|secret|password|credential|auth|bearer", re.I)
 REDACTED = "<redacted>"
+WITHHELD = "<changed>"
+
+# The word list above only catches a LABELLED secret, and real credentials are
+# usually opaque strings under ordinary names. This is the shape test for those:
+# a long unbroken run of credential characters mixing letters and digits. Config
+# values that a human needs to read break on "/", ".", spaces, quotes and
+# brackets long before 20 characters; an API key or a JWT segment does not.
+OPAQUE_RUN = re.compile(r"[A-Za-z0-9_-]{20,}")
+
+
+def looks_opaque(text):
+    """True if any run in text has the shape of a credential rather than a setting."""
+    for run in OPAQUE_RUN.findall(text):
+        if any(c.isdigit() for c in run) and any(c.isalpha() for c in run):
+            return True
+    return False
 
 
 def render(value, name=""):
-    """A one-line rendering of a config value, short enough to sit in a line."""
+    """A one-line rendering of a config value, short enough to sit in a line.
+
+    Over-long values are WITHHELD, never truncated. Truncating and printing the
+    prefix leaks a credential just as thoroughly as printing all of it — 57
+    characters of a JWT is still a JWT — and the reader learns nothing from a
+    severed string anyway. The sub-key is still named either way, which is the
+    part that makes the finding actionable.
+    """
     text = json.dumps(value, sort_keys=True)
     if SENSITIVE.search(name) or SENSITIVE.search(text):
         return REDACTED
-    return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+    if len(text) > VALUE_LIMIT or looks_opaque(text):
+        return WITHHELD
+    return text
 
 
 def subkey_drift(key, live_value, head_value):

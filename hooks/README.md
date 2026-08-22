@@ -196,14 +196,31 @@ Two checks, both cheap:
    an object, or is absent from one side entirely, there is no sub-key to name and the key-level
    line remains.
 
-   **Values matching `key|token|secret|password|credential|auth|bearer` — in the sub-key name or
-   in the value itself — print as `<redacted>`, and the sub-key is still named.** `settings.json`
-   is not supposed to carry credentials (`env` is excluded from the compared keys for that reason),
-   but this check exists because conventions drift unobserved, so it does not stake anything on
-   one. The pattern is deliberately broad and fails safe: a false redaction costs one line of
-   detail, a false negative writes a credential into every session transcript. `author` matching
-   `auth` is a price worth paying. The added- and removed-sub-key lines never render a value at
-   all, so nothing can leak through those.
+   **Three filters stand between a config value and your session transcript**, and the sub-key is
+   named regardless of which one fires — knowing *that* a setting moved is the finding; printing it
+   is a convenience:
+
+   | Filter | Prints | Catches |
+   |---|---|---|
+   | `key\|token\|secret\|password\|credential\|auth\|bearer`, in the sub-key name **or** the value | `<redacted>` | a labelled secret |
+   | value longer than 60 characters | `<changed>` | a JWT, a long API key |
+   | a 20+ character unbroken run of `[A-Za-z0-9_-]` mixing letters and digits | `<changed>` | an opaque token under an ordinary name |
+
+   `settings.json` is not supposed to carry credentials — `env` is excluded from the compared keys
+   for that reason — but this check exists *because* conventions drift unobserved, so it stakes
+   nothing on one. All three fail safe: a false positive costs one line of detail, a false negative
+   writes a credential into every session transcript. `author` matching `auth` is a price worth
+   paying.
+
+   **Over-long values are withheld, never truncated.** Truncating and printing the prefix leaks a
+   credential just as thoroughly as printing all of it — 57 characters of a JWT is still a JWT —
+   and a severed string tells the reader nothing anyway. The added- and removed-sub-key lines never
+   render a value at all, so nothing can leak through those.
+
+   **What still gets through, stated plainly:** a *short* opaque secret with no letters-and-digits
+   run and no telltale word — say sixteen lowercase letters under an innocuous key. Narrow, but not
+   zero. This is a diagnostic line, not a secret scanner; `hooks/scan-secrets.sh` is the tool for
+   that job and is currently dormant (see the top of this file).
 
 **`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
 accepted that `/model` rewrites them in place, so comparing them would fire this check after every

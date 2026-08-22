@@ -354,6 +354,27 @@ Scenario: an unparseable command string is not reported as broken
         rather than left as an accident.
       - Full repo suite **25/25**; runtime **43/45 ms** (budget ≤150 ms); silent against the real
         live config. The regex costs nothing measurable.
+- [x] 10b. **Close the gap verdict 209 demonstrated.** That verdict passed the change
+      (`risk=low confidence=high`) but fed the *shipped* code a JWT-shaped value under an ordinary
+      sub-key name and watched it print in full. The word filter only catches a **labelled** secret,
+      and real credentials are opaque strings under innocuous names. A correct finding, and the
+      right one to act on rather than note.
+      - **The bug was truncation, not the pattern.** `render()` truncated an over-long value to 57
+        characters and printed the prefix — which leaks a JWT exactly as thoroughly as printing all
+        of it. Over-long values are now **withheld** (`<changed>`), never truncated.
+      - Added a shape test alongside the word test: a 20+ character unbroken run of `[A-Za-z0-9_-]`
+        mixing letters and digits. Config values a human needs to read break on `/`, `.`, spaces,
+        quotes and brackets long before 20 characters; tokens do not.
+      - Two cases red-first against the shipped hook — the first failure printed
+        `unwanted:<eyJhbGciOiJIUzI1>`, the leak itself — then green. **30/30**, repo **25/25**,
+        runtime **43/45 ms**.
+      - **Regression that mattered most:** the motivating case must not be hardened into
+        uselessness. `probe.sh` C3 still prints
+        `permissions.defaultMode: live "bypassPermissions", HEAD "default"` in full.
+      - **Residual gap, stated rather than implied away:** a *short* opaque secret with no
+        letter-plus-digit run and no telltale word — sixteen lowercase letters under an innocuous
+        key — still prints. Narrow, not zero. This is a diagnostic line, not a secret scanner;
+        `hooks/scan-secrets.sh` is that tool and is one of the four dormant hooks.
 
 ## Risks
 
@@ -415,7 +436,7 @@ was re-read, not from an expectation.
 
 | Area | Result |
 |---|---|
-| `hooks/verify-hook-wiring.test.sh` | **28/28 pass** (20 at first ship, 5 from task 10, 3 from task 10a). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
+| `hooks/verify-hook-wiring.test.sh` | **30/30 pass** (20 at first ship, 5 from task 10, 3 from 10a, 2 from 10b). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
 | Full repo suite | **25/25 suites pass** (20 `*.test.sh`, 5 `*.test.py`) |
 | Can it go red? | Yes — `verify-hook-wiring.probe.sh`, four break/restore cycles against the real config in a scratch `$HOME` |
 | False alarms on real data | None. The live `settings.json` — 27 command hooks: 16 distinct scripts, 10 orca conditionals, plus 1 `statusLine` — produces **0 findings**, and the probe's scratch `$HOME` has no `.orca/` at all, so all 10 conditionals pointed at a file that was not there |

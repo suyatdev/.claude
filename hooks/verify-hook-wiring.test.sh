@@ -296,6 +296,29 @@ check "a secret-shaped sub-key name redacts both values" "$H" 1 \
   "$PFX|permissions.apiKey|redacted" \
   "sk-live-must-not-appear|sk-head-must-not-appear|not executable|no such file|$ORCA|$SL"
 
+# Verdict 209 found the gap these two close: the word filter only catches a
+# LABELLED secret, and most real credentials are opaque strings under ordinary
+# names. Truncating such a value and printing the prefix leaks it just as
+# thoroughly as printing all of it — 57 characters of a JWT is still a JWT.
+JWT='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.dQw4w9WgXcQ1234567890abcdefghijklmnop'
+H="$(new_home longvalue)"
+edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$JWT'"
+git -C "$H/.claude" commit -qam withjwt
+edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '${JWT}CHANGED'"
+check "an over-long value is withheld, not truncated and leaked" "$H" 1 \
+  "$PFX|permissions.defaultMode|changed" \
+  "eyJhbGciOiJIUzI1|not executable|no such file|$ORCA|$SL"
+
+# An opaque token that fits inside the length cap: no sensitive word anywhere,
+# ordinary sub-key name. A long unbroken alphanumeric run mixing letters and
+# digits is what a credential looks like and what config values do not.
+OPAQUE='a1b2c3d4e5f6g7h8i9j0k1l2m3'
+H="$(new_home opaque)"
+edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$OPAQUE'"
+check "an opaque token under a plain name is withheld" "$H" 1 \
+  "$PFX|permissions.defaultMode" \
+  "$OPAQUE|not executable|no such file|$ORCA|$SL"
+
 # The added/removed branches never render a value, so a secret arriving under a
 # brand-new key cannot leak through them. Asserted rather than assumed, because
 # that is a property of the code today and nothing else pins it.
