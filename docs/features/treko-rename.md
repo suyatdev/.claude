@@ -725,7 +725,19 @@ No new dependency is added by this card. Adding one would need a separate ask
       pre-rename node IDs missing and the only two additions being `[treko-icon.png]`
       parametrizations of two existing checks. Record it as "no test regressed, +2 from
       parametrization" — **never as a matching count**. See §Verification, "Post-rename suite".
-- [ ] 14. Observability judge, then draft PR.
+- [x] 14. Observability judge, then draft PR.
+
+      **Done 2026-08-22.** Judge run at stage `implementation`, verdict pinned to `c46d92d`:
+      **`risk=low confidence=high`**, nine dimensions `pass`, `success_masking` `concern`. It
+      re-ran both test commands itself (163 / 29, matching) and re-derived the residue list, the
+      dead env-var names, the `git mv` history and the absence of a shell-injection surface in the
+      auto-launch path from source rather than from prose. Its five concerns are the four gaps this
+      card already discloses plus criterion 4's wording. Ledger line committed as `b284a18`; the
+      prose verdict is gitignored per ADR 0031.
+
+      **Draft PR #64** → `main`, opened while the verdict was still uncommitted so `judge-guard.sh`
+      saw `head_sha == HEAD`, then the verdict was pushed onto it. Draft per
+      `preparing-pull-requests`; `gh pr ready` is a human step, not this card's.
 - [ ] 15. Close the card: set `phase: review`, and record here which of §Deferred card 2 inherits.
 
 ## Risks
