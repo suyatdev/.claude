@@ -384,11 +384,36 @@ Open issues:
   `pane-dispatch-model-flag.md` — then block source writes on the branch, naming both. `docs/*`,
   `rules/*`, `skills/*`, `.claude/*` and `settings.json` stay writable, so documentation work is
   unaffected, and there is no bypass variable by design.
-  **So a code change requested in review cannot land on this branch as it stands.** Two fixes, both
-  the user's call: advance or delete the two stale planning cards (the actual fix, and already
-  outstanding), or flip this card back to `implementation` for the duration of the change. This is
-  not a defect introduced here — the guard is doing exactly what it was built to do — but it is a
-  trap for the next session, so it is written down rather than rediscovered.
+  **So a code change requested in review cannot land on this branch as it stands.** This is not a
+  defect introduced here — the guard is doing exactly what it was built to do — but it is a trap
+  for the next session, so it is written down rather than rediscovered.
+
+  **The two blocking cards are not stale, and calling them stale was wrong.** Checked 2026-08-22
+  rather than assumed, because this card had already repeated the earlier "outstanding user action"
+  framing without testing it:
+  - `falsify-harness-signatures.md` — **11 tasks, zero ticked.** `statusline-command.falsify.py`
+    exists (212 lines) but contains no match for `signature`, `case_id`, `vacuit`, `ratchet` or
+    `flip`, so none of this card's scope has landed. Revision 4, last substantive edit 2026-08-09.
+  - `pane-dispatch-model-flag.md` — `grep -n model panes/run-pane-agent.sh` returns **nothing**, so
+    the `--model` passthrough it specifies is still absent and the gap it describes is still real.
+
+  Both are fully-planned work parked before its gate, which is the state `planning` is *for*.
+  Deleting them to unblock a branch would destroy live design work to silence a correct warning.
+  **The targeted fix is this card, not those:** `phase-guard` blocks only when no `implementation`
+  card claims the *current branch*, so flipping this file's frontmatter back to `implementation`
+  for the duration of a review fix re-claims `chore/hook-wiring-health-check` and unblocks it
+  without touching anything else. `docs/*` is never blocked, so that edit can always be made.
+
+  **Both directions measured, not reasoned** — the same synthetic `Write` payload, run against
+  `phase-guard.sh` at each frontmatter value, then the card restored to `review`:
+
+  | card frontmatter | source write on this branch |
+  |---|---|
+  | `phase: review` | **BLOCKED**, exit 2, naming both planning cards |
+  | `phase: implementation` | **ALLOWED**, exit 0 |
+
+  A one-line frontmatter edit is the whole remedy, and it is reversible. Recording the *blocked*
+  half alone would have left the fix unproven, which is the same defect as an unfalsified check.
 - **Follow-up, out of scope here: `hooks/handoff/slim-session-start.test.sh` is not hermetic.** It
   inherits `CLAUDE_PANE_AGENT` from its environment, and the hook it tests no-ops under that
   variable, so the suite reports 13/29 inside any pane-dispatched agent and 29/29 outside one. It
