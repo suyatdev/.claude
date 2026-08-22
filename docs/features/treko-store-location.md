@@ -460,7 +460,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       relative resolved, **and the canonical form for a symlinked path**.
 - [x] 3. Red tests for D2: the four table rows, plus `0o700` on creation and mode untouched when the
       directory already exists.
-- [ ] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
+- [x] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
       `StartupAbort` somewhere both modules import; tasks 2-3 go green.
 - [ ] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
 - [ ] 6. Implement `adopt_legacy_store`; task 5's tests go green.
@@ -565,3 +565,21 @@ Full suite with the new file's collection error allowed through
 (`python3 -m pytest -q --continue-on-collection-errors`): **192 passed, 1 error** — the 192
 matches task 1's baseline exactly (zero regressions in the existing modules), and the 1 error
 is `test_store_location.py`'s expected `ModuleNotFoundError`.
+
+### Task 4 — `store_location.py` implemented, tasks 2-3 green
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 13 passed in 0.01s
+cd treko && python3 -m pytest -q                             # 205 passed in 118.60s
+wc -l treko/server.py                                        # 787
+python3 -c "import server; print('server import OK')"        # server import OK
+```
+
+205 = task 1's 192 baseline + these 13, with zero pre-existing test lost or changed.
+`server.py` moved from 790 to 787 lines: the `StartupAbort` class definition was removed and
+replaced with a one-line import from `store_location`. `ensure_store_dir`'s "existing
+directory not writable" branch reports `errno.EACCES` rather than a value read off a failed
+syscall, since `os.access` itself never raises — no test exercises that branch; the mkdir
+failure path (which a test does cover) reports the real `OSError.errno`.

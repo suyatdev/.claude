@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import store  # noqa: E402  (sibling module; the path insert above is what makes it importable)
+from store_location import StartupAbort  # noqa: E402  (moved out per D5, both modules import it)
 
 # ----------------------------------------------------------------- pinned constants
 
@@ -121,10 +122,6 @@ CSP = (
 FIRST_RUN_OPTIONAL = "tracker-data.js"
 
 SERVE_ROOT = Path(__file__).resolve().parent
-
-
-class StartupAbort(Exception):
-    """A misconfiguration that must surface before anything is served, never as a fallback."""
 
 
 # ----------------------------------------------------------------- audit log
