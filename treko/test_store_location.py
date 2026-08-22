@@ -30,6 +30,7 @@ own HOME and XDG_STATE_HOME are whatever the machine running the suite happens t
 
 import errno
 import os
+import re
 import stat
 import sys
 from pathlib import Path
@@ -176,6 +177,33 @@ def test_reports_the_path_and_errno_when_the_directory_cannot_be_created(tmp_pat
         assert str(errno.EACCES) in message
     finally:
         os.chmod(parent, 0o700)  # restore before tmp_path's own cleanup runs
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root ignores directory write permissions, so an existing directory is never actually locked",
+)
+def test_reports_the_path_and_an_errno_when_an_existing_directory_is_not_writable(tmp_path):
+    """D2 row 4's other half: not "cannot create" but "exists and is not writable".
+
+    Green today and pinned: it passes now because the current check is `os.access`, which
+    answers yes/no and never reports why -- the errno in the message is `errno.EACCES`
+    chosen by the code, not one a syscall returned. It exists to keep passing once that
+    source changes to a real `OSError.errno` from an actual write attempt: this test asserts
+    only the row's shape (an abort naming the path and *an* errno), never which errno, so it
+    needs no edit when the number's source does.
+    """
+    target = tmp_path / "readonly-store"
+    target.mkdir()
+    os.chmod(target, 0o500)
+    try:
+        with pytest.raises(StartupAbort) as excinfo:
+            ensure_store_dir(target)
+        message = str(excinfo.value)
+        assert str(target) in message
+        assert re.search(r"errno \d+", message)
+    finally:
+        os.chmod(target, 0o700)  # restore before tmp_path's own cleanup runs
 
 
 def test_a_newly_created_directory_is_mode_0o700(tmp_path):
