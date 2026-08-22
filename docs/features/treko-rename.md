@@ -540,9 +540,25 @@ No new dependency is added by this card. Adding one would need a separate ask
       URLs, a `test_server.py` comment, and `vendor/inter/inter.css`'s own comment) — nothing new
       in the page or `styles.css`. This is a smoke check only, not proof of criterion 10; task 7
       owns that proof.
-- [ ] 7. **Prove no network egress** (criterion 10). A grep for `http` in the page is not sufficient
+- [x] 7. **Prove no network egress** (criterion 10). A grep for `http` in the page is not sufficient
       evidence — load the served page with the network down, or assert on the request log. State
       which check was run and what it cannot see.
+
+      **Done 2026-08-21. Two static checks run; the decisive runtime check (real browser,
+      network log) is separate and outstanding — see §Verification.** Check A confirmed the
+      `window.__resources` fallback map in `vendor-resources.js` matches `support.js`'s three
+      CDN URL constants by exact set equality (not length, not "looks similar"), that each
+      mapped value is a real file under `treko/` and a `STATIC_MANIFEST` row, and that
+      `vendor-resources.js` loads before `support.js` (`Treko.dc.html:6-7`). Check B resolved
+      every `src=`/`href=`/`@import`/`url(...)` reference transitively from `Treko.dc.html`,
+      including into the two CSS files that themselves have nested `@import`/`url()`
+      (`_ds/nocturne-*/styles.css` → `vendor/inter/inter.css`, and both Phosphor
+      `style.css` files → their `.woff2`) — all 13 local assets resolve to files on disk and to
+      `STATIC_MANIFEST` rows; the only absolute scheme+host references found were the three
+      gated CDN URLs and the per-task `{{ t.prHref }}` GitHub links, which are user-clicked
+      hyperlinks rendered from `tracker-data.js`, not page-load fetches. Neither check proves
+      the browser actually honors the fallback map — see §Verification for what is and is not
+      established. Full baseline suite unaffected: no test added, removed, or edited.
 - [ ] 8. Implement auto-launch: `--open`, no-path repo resolution via `git rev-parse --show-toplevel`,
       first-run-only analysis, and the busy-port probe that reports and exits without opening.
       `webbrowser.open()` is called from inside the server process after bind, never as a forked
@@ -622,3 +638,99 @@ move preserved the layout the suite depends on. `analyze.py` resolves `hooks/lib
 move that breaks it would surface as a collection error, not a count mismatch. Task 3 must run
 from a clean checkout, or delete the old path first — an import that silently resolves to the old
 tree still on disk would pass for the wrong reason.
+
+### Criterion 10 — no network egress (task 7, 2026-08-21)
+
+Two static checks were run against a throwaway script (not committed, not part of the test
+suite). Neither is the decisive check; both are named as static-only below.
+
+**Check A — the CDN→vendor fallback map, byte for byte.**
+
+```
+CDN URL constants from support.js:
+  REACT_URL = 'https://unpkg.com/react@18.3.1/umd/react.production.min.js'
+  REACT_DOM_URL = 'https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js'
+  BABEL_URL = 'https://unpkg.com/@babel/standalone@7.29.0/babel.min.js'
+
+cdn_urls (set):      ['https://unpkg.com/@babel/standalone@7.29.0/babel.min.js', 'https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js', 'https://unpkg.com/react@18.3.1/umd/react.production.min.js']
+resource_keys (set): ['https://unpkg.com/@babel/standalone@7.29.0/babel.min.js', 'https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js', 'https://unpkg.com/react@18.3.1/umd/react.production.min.js']
+
+PASS: set equality holds between support.js CDN URLs and vendor-resources.js keys
+
+Checking mapped values resolve to real files and are STATIC_MANIFEST rows:
+  https://unpkg.com/react@18.3.1/umd/react.production.min.js             -> vendor/react.production.min.js           exists=True in_manifest=True
+  https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js     -> vendor/react-dom.production.min.js       exists=True in_manifest=True
+  https://unpkg.com/@babel/standalone@7.29.0/babel.min.js                -> vendor/babel.min.js                      exists=True in_manifest=True
+
+PASS: all three mapped values are real files and STATIC_MANIFEST rows
+```
+
+Load order confirmed by reading `Treko.dc.html:6-7`: `<script src="./vendor-resources.js">`
+precedes `<script src="./support.js">`, so the map exists in `window.__resources` before
+`support.js`'s `cdnScriptFor` reads it.
+
+**Check B — recursive local-asset resolution from `Treko.dc.html`.** Every `src=`, `href=`,
+`@import` and `url(...)` was followed transitively, including into the two CSS files that
+themselves nest further references:
+
+```
+src=/href= in Treko.dc.html:
+  6:  src="./vendor-resources.js"
+  7:  src="./support.js"
+  12: href="_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/styles.css"
+  13: src="_ds/nocturne-73641b21-c7ad-488a-8264-a28262dfe83e/_ds_bundle.js"
+  14: href="vendor/phosphor/regular/style.css"
+  15: href="vendor/phosphor/fill/style.css"
+  16: src="tracker-data.js"
+  17: src="tracker-data-fallback.js"
+  30/41/58: src="treko-icon.png"
+  139: href="{{ t.prHref }}"   <- template binding, not a static reference (see below)
+No @import / url() at the page level.
+
+_ds/nocturne-*/styles.css:2   @import url('../../vendor/inter/inter.css')
+vendor/phosphor/regular/style.css:3   url("./Phosphor.woff2")
+vendor/phosphor/fill/style.css:3      url("./Phosphor-Fill.woff2")
+vendor/inter/inter.css:16,26,36,46    url("./inter-latin.woff2")  (four @font-face blocks)
+
+_ds_bundle.js: 0 matches for src=/href=/url(/@import
+support.js: only the 3 CDN URLs already covered by Check A; no other absolute URL literal
+
+All 13 resolved local assets: in_manifest=True exists=True for every one
+  (vendor-resources.js, support.js, both _ds/nocturne-* files, both phosphor style.css,
+   tracker-data.js, tracker-data-fallback.js, treko-icon.png, vendor/inter/inter.css,
+   both .woff2 files)
+```
+
+The one non-local reference Check B found, `Treko.dc.html:139`'s `href="{{ t.prHref }}"`
+(rendered from `tracker-data.js`'s GitHub PR URLs, e.g.
+`https://github.com/suyatdev/.claude/pull/91`), is a user-clicked `<a href>` link to an
+external site — a navigation a person triggers, not a fetch the page issues on load. It is
+named here rather than silently excluded.
+
+**What each check cannot see.**
+
+- Neither check is the decisive one. A static check of source text cannot see a URL a script
+  builds at runtime by string concatenation — nothing here rules that out for `support.js`'s
+  other logic, only for the three named CDN constants.
+- Neither check proves the *browser* actually honors `window.__resources` at request time —
+  only that the map's keys equal the CDN constants and that the map is defined before
+  `support.js` runs. Proving the browser follows it requires a real network log, which is a
+  runtime check, not a static one.
+- Check A covers exactly the three dc-runtime CDN scripts (React, ReactDOM, Babel). It says
+  nothing about any other fetch the page's own code, `_ds_bundle.js`, or a future change might
+  make — those weren't shown to make any (0 matches in `_ds_bundle.js`, only the 3 known URLs
+  in `support.js`), but that absence is itself a static-text result, not a runtime guarantee.
+- Check B follows every static markup and CSS reference reachable from the page's own files.
+  It cannot see a reference injected by JavaScript at runtime (e.g. a `document.createElement`
+  with a computed `.src`), and it does not execute `_ds_bundle.js`, `support.js`, or any inline
+  script — it reads their source text for literals only.
+
+**Criterion 10 is not proven by this task.** What is established: the fallback map is
+byte-correct and ordered first, and every statically-discoverable local asset resolves to a
+real, manifest-listed file with no undeclared absolute reference beyond the three gated CDN
+URLs and the one user-facing external hyperlink. What remains open is whether a real browser,
+loaded against this served page with the network unavailable, issues zero requests off
+`127.0.0.1` — that is a runtime observation this task did not make.
+
+**Outstanding — runtime network-log check (not run by this task):**
+`[PLACEHOLDER: orchestrator-run Chrome network-log result pending]`
