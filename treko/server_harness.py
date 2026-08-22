@@ -91,7 +91,15 @@ def build_tree(tmp_path):
     tree = tmp_path / "treko"
     if tree.exists():
         return tree  # idempotent: a test launching a second server reuses the first's tree
-    shutil.copytree(REAL_TREE, tree, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(REAL_TREE, tree,
+                    ignore=shutil.ignore_patterns("__pycache__", "tracker-data.js"))
+    # The tree's store is the *tracked sample*, never the real `treko/tracker-data.js`.
+    # D6 untracks that file, so a fresh clone has none at all and every test that reads
+    # the tree's store would fail on a clone while passing here; and where a copy does
+    # survive in a working tree it holds the developer's own snapshots, which this card
+    # forbids a test from touching. The sample is a real envelope, so `store.read_store`
+    # parses it and its run count is the same on every machine.
+    shutil.copyfile(tree / "tracker-data.sample.js", tree / "tracker-data.js")
     hooks = tmp_path / "hooks"
     hooks.mkdir()
     (hooks / "lib").symlink_to(REPO_ROOT / "hooks" / "lib", target_is_directory=True)
