@@ -65,6 +65,46 @@ Each was a user decision, recorded here so the implementation does not relitigat
 - **Anything the numbered cards 2-5 own** — the Ledger, the dashboard upgrades, the agent panel,
   the analyzer's up/down traversal.
 
+## Deferred — the UI half, from the updated prototype
+
+Added 2026-08-22 at the user's direction: **record it here, build it later.** Source of truth is the
+prototype revision dated that day at
+`~/Other Docs/AI/AI_Projx/Prototypes/Treko/Treko/`. None of it is in this card's scope; it is written
+down so the later cards inherit a decision instead of rediscovering one.
+
+**On the Ledger page (card 2).** An `Artifacts path · where snapshots are written` field, placeholder
+`~/.treko/runs` — **placeholder text, not the default this card sets** (see D1) — beside the queue
+form's directory / repo / branch / worktree inputs (`Ledger.dc.html:41-54`).
+
+**On the board, as a Configuration drawer (card 3).** A gear button opens a right-hand drawer
+(`Task Tracker.dc.html:112`, `:406-460`) with three sections: **Artifacts** (the same directory path
+plus a Save button and a "Saved" confirmation), **Appearance** (Dark / Light cards driving
+`body[data-theme="light"]`, persisted, defaulting to dark), and **Layout** (sidebar width with a
+reset).
+
+### The one thing that must be settled before either ships
+
+**The prototype stores the path in `localStorage` (`taskTracker.artifactsPath`), and that cannot
+work here.** The prototype is a `file://` page with no server; in this repo the *server* decides
+where it writes. A path typed into the page changes a browser key and nothing on disk — the field
+would read as configuration while configuring nothing, which is precisely the failure
+`rules/core-conduct.md` names: a control that looks like a measurement and is not.
+
+Making it real means a **new `/command` verb** carrying the path to the server, and today that
+endpoint does exactly three things — `clear`, `handoff`, `reanalyze` — none of which take a
+filesystem path. Accepting one from the page means the server creates and writes a directory at an
+address the browser supplied. That is a trust-boundary extension of the same weight as D3, and it
+earns its own design and its own judge round. **Until it exists, the path field is display-only or
+absent — never an input that silently does nothing.**
+
+**Appearance is not in that trap.** A theme is genuinely browser-local state, so `localStorage` is
+the right home for it and no server change is needed. It can ship on its own, cheaply, ahead of the
+path field.
+
+**Port, never copy.** Our `Treko.dc.html` is a *sibling revision* of the prototype's
+`Task Tracker.dc.html`, not a stale copy of it — overwriting ours with theirs already cost a rework
+once during card 1. Whoever builds these takes the markup deliberately, diffing both.
+
 ## Background: the three facts the design turns on
 
 Read these before the design; each is load-bearing and each was verified in the tree at `bedb65f`.
@@ -121,8 +161,20 @@ store_file:
   file_mode: unchanged         # store.py's DEFAULT_FILE_MODE (0o644), preserved on replace
 ```
 
-`XDG_STATE_HOME` is the right variable of the XDG set: this is regenerable state that should
-survive a reboot, not cache and not config. `~/.local/state` is its documented fallback.
+**`XDG_STATE_HOME` is the right variable of the XDG set**: a survey is regenerable state — data
+you would be annoyed to lose but that can be rebuilt — which is neither cache nor configuration.
+`~/.local/state` is its documented fallback, and honoring the variable means the machine's
+convention wins without Treko needing to know what it is.
+
+**The prototype's `~/.treko/runs` is illustrative, not a decision.** It appears as placeholder text
+in the Configuration drawer and the Ledger; the user confirmed on 2026-08-22 that the real default
+is ours to set. A middle revision of this card read it as authoritative and adopted it — recorded
+here so the next reader does not re-derive that mistake from the prototype.
+
+The discoverability argument for a visible `~/.treko/` does not survive contact with D2: the startup
+banner names the resolved directory on **every** launch, and the deferred Configuration drawer will
+display it once card 3 ships. Nobody has to guess where the data went, which was the only thing the
+home-directory dotdir bought.
 
 **Canonicalization is not cosmetic — it is the whole correctness of D3.** The containment check
 compares against `target.resolve()`, which always returns a symlink-free path. If `store_dir` were
