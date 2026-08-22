@@ -15,8 +15,11 @@ resolves once, at startup, and everything downstream trusts the result.
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
+
+import store  # sibling module; every caller already puts treko/ on sys.path before import
 
 TREKO_STORE_DIR_ENV = "TREKO_STORE_DIR"
 XDG_STATE_HOME_ENV = "XDG_STATE_HOME"
@@ -27,6 +30,15 @@ DEFAULT_STATE_HOME = "~/.local/state"
 STORE_DIRNAME = "treko"
 
 STORE_DIR_MODE = 0o700  # owner-only; see the module-level rationale in the design doc (D2)
+
+# adopt_legacy_store's three outcomes (D4) -- the contract test_store_location.py pins.
+OUTCOME_COPIED = "copied"
+OUTCOME_ALREADY_PRESENT = "already_present"
+OUTCOME_NO_LEGACY = "no_legacy"
+
+MSG_COPIED = "copied %d runs from %s"
+MSG_ALREADY_PRESENT = "store already present, legacy file ignored"
+MSG_NO_LEGACY = "no legacy store to adopt"
 
 
 class StartupAbort(Exception):
@@ -86,3 +98,46 @@ def ensure_store_dir(path):
         raise StartupAbort(
             "cannot create %s (errno %d: %s)" % (path, exc.errno, exc.strerror))
     return path
+
+
+def adopt_legacy_store(store_path, legacy_path):
+    """Copy the legacy store into the configured location, exactly once.
+
+    The guard is a conjunction, checked in this order so it stays obvious to a reader:
+    copy only when `store_path` is absent *and* `legacy_path` exists. Either half failing
+    is its own reported outcome, not a fallthrough -- a present `store_path` must never be
+    overwritten (it may hold real data the legacy file does not), and an absent
+    `legacy_path` is the ordinary case on every launch after the first, not an error.
+
+    `Path.exists()` decides whether a legacy file is there, never `store.read_store` --
+    that call returns a fresh empty envelope for a missing file instead of raising, so
+    treating its result as "found" would report every ordinary launch as a successful
+    adoption of nothing.
+
+    Reads through `store.read_store` and writes through `store.write_store`, so the copy
+    is validated (must parse as an envelope) and atomic (`write_store` places its temp
+    file in `store_path`'s own directory, so `os.replace` stays on one filesystem -- see
+    the atomicity note in the design doc; do not "optimise" this into a byte copy). A
+    `StoreError` from the read becomes a `StartupAbort` naming the legacy file; since
+    `write_store` is only reached after a successful read, `store_path` is never created
+    on that path.
+    """
+    store_path = Path(store_path)
+    legacy_path = Path(legacy_path)
+
+    if store_path.exists():
+        print(MSG_ALREADY_PRESENT, file=sys.stderr)
+        return OUTCOME_ALREADY_PRESENT
+
+    if not legacy_path.exists():
+        print(MSG_NO_LEGACY, file=sys.stderr)
+        return OUTCOME_NO_LEGACY
+
+    try:
+        data = store.read_store(legacy_path)
+    except store.StoreError as exc:
+        raise StartupAbort("%s is not a valid legacy store: %s" % (legacy_path, exc))
+
+    store.write_store(store_path, data)
+    print(MSG_COPIED % (len(data["runs"]), legacy_path), file=sys.stderr)
+    return OUTCOME_COPIED

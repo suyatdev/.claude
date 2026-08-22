@@ -463,7 +463,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 - [x] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
       `StartupAbort` somewhere both modules import; tasks 2-3 go green.
 - [x] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
-- [ ] 6. Implement `adopt_legacy_store`; task 5's tests go green.
+- [x] 6. Implement `adopt_legacy_store`; task 5's tests go green.
 - [ ] 7. Red tests for D3: serves configured bytes, 404 absent, **403 on a symlink out of the store
       dir**, **200 through a symlinked store dir**, manifest still closed. **Plus the banner's new
       content**: the line names the resolved store directory, and it follows the copy's outcome
@@ -659,3 +659,41 @@ cd treko && python3 -m pytest -q --continue-on-collection-errors
 192 + 1 error is expected and correct for a tests-only commit: `adopt_legacy_store` is task 6's
 job. The 14 tests hidden behind that collection error are proven still-passing above, by the
 stub run, per this task's instructions.
+
+### Task 6 — `adopt_legacy_store` implemented, task 5's tests green
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 20 passed in 0.02s
+cd treko && python3 -m pytest -q                             # 212 passed in 117.37s
+wc -l treko/server.py treko/store_location.py                # 787, 143
+```
+
+212 = task 5's 206 baseline + these 6, zero pre-existing test lost or changed.
+`treko/server.py` is untouched at 787 lines (this task edits `store_location.py` only, per
+its scope); `store_location.py` moved from 88 to 143 lines.
+
+The guard is the conjunction from D4: `store_path.exists()` is checked first (a present
+destination is never overwritten, regardless of what the legacy file holds), then
+`legacy_path.exists()` (never `store.read_store`, which returns a fresh empty envelope for
+a missing file instead of raising — treating that as "found" would report every ordinary
+launch as a successful adoption of nothing). Only when both checks pass does the function
+read through `store.read_store` and write through `store.write_store`; a `StoreError` from
+the read becomes a `StartupAbort` naming the legacy file, and since `write_store` is never
+reached on that path, `store_path` is never created.
+
+**The fourth state D4 does not name — a configured store already present and no legacy
+file at all — was not asked for a new outcome.** It falls into the existing
+`store_path.exists()` branch: outcome `"already_present"`, stderr line
+`"store already present, legacy file ignored"`. This is the ordinary case on every launch
+after the first, and on a fresh clone forever once task 9 untracks
+`treko/tracker-data.js`. No test in `test_store_location.py` pins this specific
+combination directly — the closest is
+`test_an_existing_real_store_is_never_overwritten_by_the_legacy_file`, which covers
+"store present, legacy also present" (checked to end at the same `"already_present"`
+branch, but with a legacy file that exists), not "store present, legacy absent". The
+branch is exercised only incidentally, by `test_a_second_launch_does_not_rewrite_the_
+already_adopted_store`'s second call — at that point the fixture's legacy file still
+exists on disk, so even that call does not isolate the "no legacy at all" combination.
+Stated plainly: this exact combination is implemented but not directly tested.
