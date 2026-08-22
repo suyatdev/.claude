@@ -438,7 +438,29 @@ No new dependency is added by this card. Adding one would need a separate ask
       - **`Task Tracker Directions.dc.html` left untouched, filename included.** It is the
         historical four-direction design canvas, is not on `STATIC_MANIFEST`, and is never
         served. Editing it would falsify a record the same way editing a merged ADR would.
-      - ⚠️ **GATE: criterion 1 and §Decision contradict each other — see the bullet below.**
+      - **Criteria 2 and 3 verified here rather than deferred.** `skills/treko/` exists and
+        `skills/tracking-feature-state/` does not. `git log --follow treko/server.py` returns 3
+        commits, two of which (`8e16f74`, `b2e9bab`) predate this card.
+      - ⚠️ **GATE: criterion 1 is unsatisfiable alongside §Decision.** Criterion 1 requires
+        `git grep -iE 'task[-_ ]tracker'` to return **nothing** outside `docs/decisions/`,
+        `coding-memory/` and the two out-of-scope cards. But §Decision deliberately preserves the
+        data contract, and that contract *contains the string*. After every remaining task
+        finishes, this residue survives by design:
+
+        | file | why it must stay |
+        |---|---|
+        | `treko/store.py:28` | `TOOL = "task-tracker v0.4.1"` — written into the store, rendered by the page as `toolLabel` |
+        | `treko/store.py:6`, `treko/analyze.py:4` | prose naming the external export version |
+        | `treko/tracker-data.json:3` | the schema document's own `tool` value |
+        | `treko/tracker-data.sample.js:3` | the sample payload's `tool` value |
+        | `treko/test_store.py:145` | asserts that `TOOL` value |
+        | `treko/tracker-data.js` | generated store; contains `"tool": "task-tracker v0.4.1"` |
+        | `treko/Task Tracker Directions.dc.html` | historical design canvas — filename included |
+
+        Criterion 1's exclusion list omits exactly what the card's central decision protects.
+        **Not worked around and not silently narrowed** — the fix is a spec edit widening that
+        exclusion list, which `phase: implementation` forbids. Tasks 4 onward do not depend on
+        it, so work continues; criterion 1 cannot be evaluated at task 13 until this is resolved.
 
 - [ ] 4. Rename the four environment variables in `server.py`. Assert the old names are **not** read
       (criterion 5) — a silent fallback is the failure mode here.
