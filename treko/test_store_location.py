@@ -336,6 +336,25 @@ def test_no_legacy_store_to_adopt_when_neither_file_exists(tmp_path, capsys):
     assert captured.err.splitlines() == ["no legacy store to adopt"]
 
 
+def test_no_legacy_store_to_adopt_when_store_exists_but_legacy_does_not(tmp_path, capsys):
+    """The fourth D4 state: a configured store from a prior launch, no legacy file at all --
+    the ordinary case on every launch after the first, and permanently on every fresh clone.
+    `store_path` existing must not be read as "a legacy file was ignored"; there is no legacy
+    file here for anything to have ignored."""
+    legacy_path = tmp_path / "legacy" / "tracker-data.js"
+    store_path = tmp_path / "configured" / "tracker-data.js"
+    _write_legacy_envelope(store_path, ["run-a", "run-b"])
+    before_bytes = store_path.read_bytes()
+
+    outcome = adopt_legacy_store(store_path, legacy_path)
+
+    assert outcome == "no_legacy"
+    assert store_path.read_bytes() == before_bytes
+
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == ["no legacy store to adopt"]
+
+
 def test_the_copied_message_names_the_real_run_count_not_a_fixed_number(tmp_path, capsys):
     """A different N than the other tests' 4, so a hardcoded "copied 4 runs" cannot pass."""
     legacy_path = tmp_path / "legacy" / "tracker-data.js"
