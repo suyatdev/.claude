@@ -16,6 +16,7 @@ inert, which is why the launch shape is a contract and not a convenience.
 import argparse
 import errno
 import hmac
+import http.client
 import http.server
 import json
 import os
@@ -25,6 +26,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,6 +51,12 @@ ANALYZE_SECS = (60, 5, "TREKO_ANALYZE_SECS")
 CMUX_TIMEOUT_SECS = 5
 CMUX_BIN = os.environ.get("CMUX_BIN", "cmux")
 SURFACE_ENV = "CMUX_SURFACE_ID"
+
+# Repo resolution and the busy-port probe are both startup-time, unattended subprocess/network
+# calls on an attacker-controllable path (§"Auto-launch"); each gets its own bound rather than
+# running unbounded.
+GIT_TIMEOUT_SECS = 5
+PORT_PROBE_TIMEOUT_SECS = 2  # the spec pins this: "GET /, 2s timeout"
 
 MAX_BODY_BYTES = 1024  # 1 KiB; read at most this, never buffer an unbounded body
 TOKEN_HEADER = "X-Tracker-Token"
@@ -230,6 +238,54 @@ def bind_surface(environ=None, timeout=CMUX_TIMEOUT_SECS):
             "for this target (an agent-session surface is not a terminal)"
             % (CMUX_BIN, surface, probe.returncode))
     return surface
+
+
+def resolve_repo(explicit_repo, timeout=GIT_TIMEOUT_SECS):
+    """An explicit `--repo` is trusted as given. With none, resolve via git.
+
+    `git rev-parse --show-toplevel` runs in the process's actual working directory, not
+    `$PWD` -- a skill invoked from a subdirectory must survey the repo, not the
+    subdirectory. Outside a repository this is an abort naming that reason, never a survey
+    of an arbitrary directory (§"Design: auto-launch").
+    """
+    if explicit_repo is not None:
+        return Path(explicit_repo).resolve()
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise StartupAbort("`git rev-parse --show-toplevel` exceeded %ds" % timeout)
+    except OSError as exc:
+        raise StartupAbort("cannot run git: %s" % exc.strerror)
+    if result.returncode != 0:
+        # git's own fatal message already reads "not a git repository ...", which is the
+        # wording NO_REPO_RE pins; forwarded verbatim rather than paraphrased.
+        raise StartupAbort(result.stderr.strip() or "not inside a git repository")
+    return Path(result.stdout.strip()).resolve()
+
+
+def probe_listener(port, timeout=PORT_PROBE_TIMEOUT_SECS):
+    """`GET /` at a port this process could not bind. Distinguishes exactly two outcomes.
+
+    Never tries to identify *which* session holds the port -- nothing in an HTTP response
+    can answer that, and a confident-sounding guess there is worse than none (§"Design:
+    auto-launch"). "A Treko page answered" is read off this server's own `Server` header,
+    the one signature it emits about itself.
+    """
+    try:
+        conn = http.client.HTTPConnection(HOST, port, timeout=timeout)
+        try:
+            conn.request("GET", "/")
+            response = conn.getresponse()
+            response.read()
+            server_header = response.getheader("Server", "")
+        finally:
+            conn.close()
+    except (OSError, http.client.HTTPException):
+        return False
+    return "treko" in server_header.lower()
 
 
 # ----------------------------------------------------------------- send path
@@ -646,9 +702,14 @@ def build_config(surface, token, repo_root, port, analyze_secs):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Task Tracker control server.")
-    parser.add_argument("--repo", default=str(SERVE_ROOT.parent),
-                        help="repository the `reanalyze` command re-surveys")
+    parser = argparse.ArgumentParser(description="Treko control server.")
+    parser.add_argument("--repo", default=None,
+                        help="repository the `reanalyze` command re-surveys; resolved via "
+                             "`git rev-parse --show-toplevel` in the cwd when omitted")
+    parser.add_argument("--open", action="store_true", dest="open_browser",
+                        help="open a browser at the bound URL after a successful bind, "
+                             "never as a forked child (§'Auto-launch must start the server "
+                             "the way the docs tell a human to')")
     args = parser.parse_args(argv)
 
     try:
@@ -658,6 +719,7 @@ def main(argv=None):
         analyze_secs = read_timeout(ANALYZE_SECS)
         check_manifest_types()
         check_index_injectable()
+        repo_root = resolve_repo(args.repo)
         surface = bind_surface()
     except StartupAbort as exc:
         sys.stderr.write("server: %s\n" % exc)
@@ -666,7 +728,7 @@ def main(argv=None):
     # Generated at startup, held in memory only, never written to disk, never passed as a
     # command-line argument (which would expose it to ps). Dying process, dead token.
     token = secrets.token_urlsafe(32)
-    config = build_config(surface, token, Path(args.repo).resolve(), port, analyze_secs)
+    config = build_config(surface, token, repo_root, port, analyze_secs)
 
     try:
         httpd = ControlServer((HOST, port), ControlHandler, config)
@@ -676,13 +738,36 @@ def main(argv=None):
         # different token, so every button returns the deliberately collapsed 403 and the
         # operator reads a stale-token problem as a broken feature.
         if exc.errno == errno.EADDRINUSE:
-            sys.stderr.write(
-                "server: port %d is already in use -- a server from another session is "
-                "probably still holding it. Not probing for a free port.\n" % port)
+            if probe_listener(port):
+                sys.stderr.write(
+                    "server: port %d is already in use -- the probe answered as a Treko "
+                    "page already serving there. Not probing for a free port.\n" % port)
+            else:
+                sys.stderr.write(
+                    "server: port %d is already in use -- the probe did not answer as a "
+                    "Treko page (something else holds this port). Not probing for a free "
+                    "port.\n" % port)
         else:
             sys.stderr.write("server: cannot bind %s:%d: %s\n"
                              % (HOST, port, errno.errorcode.get(exc.errno, exc.strerror)))
         return 2
+
+    # Both steps below are auto-launch only (--open); a plain `server.py` start must not
+    # gain a side effect it never had -- other tests start the server against a deliberately
+    # emptied or symlinked tracker-data.js and expect it to stay exactly as they left it.
+    if args.open_browser:
+        # First-run only: a repo with no run would otherwise open to an empty page, which
+        # reads as "nothing is in flight" rather than "nothing has been measured". A repo
+        # that already has one is never re-analyzed here -- that is what the `reanalyze`
+        # button is for, and re-running on every launch would silently overwrite a survey
+        # the user is reading.
+        if not store.read_store(config["store_path"])["runs"]:
+            run_reanalyze(repo_root, config["store_path"], analyze_secs)
+
+        # Inside the already-running server process, after the bind above and before
+        # serve_forever below -- never a forked child, which would become the server's new
+        # parent and silently disable the watchdog's os.getppid() check.
+        webbrowser.open(config["origin"])
 
     stop = threading.Event()
     watcher = threading.Thread(

@@ -559,7 +559,7 @@ No new dependency is added by this card. Adding one would need a separate ask
       hyperlinks rendered from `tracker-data.js`, not page-load fetches. Neither check proves
       the browser actually honors the fallback map — see §Verification for what is and is not
       established. Full baseline suite unaffected: no test added, removed, or edited.
-- [ ] 8. Implement auto-launch: `--open`, no-path repo resolution via `git rev-parse --show-toplevel`,
+- [x] 8. Implement auto-launch: `--open`, no-path repo resolution via `git rev-parse --show-toplevel`,
       first-run-only analysis, and the busy-port probe that reports and exits without opening.
       `webbrowser.open()` is called from inside the server process after bind, never as a forked
       child — criterion 16 asserts the resulting process tree and stderr, not the intent.
@@ -568,6 +568,68 @@ No new dependency is added by this card. Adding one would need a separate ask
       `os.system`, no `shell=True`. A directory name is attacker-controllable in the general case,
       and the launcher now runs unattended, which is the pairing that turns a quoting bug into
       command execution. See `writing-secure-code`.
+
+      **Done 2026-08-21.** Step-1-only red run (`--open` added, nothing else) confirmed every one
+      of the 8 `test_autolaunch.py` failures now dies for its own reason, not the shared argparse
+      cause from task 1 — see the table below. `test_autolaunch.py`: **10 passed**. `test_rename.py`
+      stays **19 passed**. Full baseline: **163 passed in 112.63s**, same count as task 6.
+      `grep -n 'shell=True\|os.system' treko/server.py` returns nothing.
+
+      | test | own failure after `--open` alone |
+      |---|---|
+      | `test_outside_a_git_repository_the_server_aborts` | `wait()` returned `None` (timeout) — with no repo validation the old default (`--repo` = `SERVE_ROOT.parent`) accepted the bogus cwd and the server kept serving instead of aborting |
+      | `test_outside_a_git_repository_no_browser_opens` | stderr held the normal startup banner, not `NO_REPO_RE` — same missing-validation cause as above, asserted from the browser side |
+      | `test_no_path_launch_analyzes_the_repo_root_once` | store had 0 runs, not 1 — no first-run analysis existed yet |
+      | `test_no_path_launch_opens_the_browser_at_the_bound_url` | `browser_log.opens == []` — no `webbrowser.open()` call existed yet |
+      | `test_existing_run_is_not_reanalyzed_on_launch` | same — conjoined on the browser half, so it failed there too |
+      | `test_busy_port_aborts_and_reports_the_probe` | stderr held the old static EADDRINUSE message ("a server from another session is probably still holding it") — `PROBE_RE` needs "probe" + "answered"/"did not answer", and no probe was made |
+      | `test_busy_port_opens_no_browser` | same old static message — this test's own claim (no browser on a busy port) was actually already true, but it re-asserts the reason first per its own docstring, so it failed on the message |
+      | `test_opening_the_browser_does_not_reparent_the_server` | `browser_log.opens == []` — no browser call existed yet |
+
+      Two pairs share an upstream cause honestly: the two no-repo tests both trace to "no repo
+      validation existed," and `test_busy_port_opens_no_browser` shares its message assertion with
+      `test_busy_port_aborts_and_reports_the_probe`. Each still failed on its *own* specific
+      assertion (a different `assert` line, not a collection error), so none of the eight were
+      failing for the single upstream `--open`-missing reason anymore.
+
+      **Design decision not spelled out in the card, made and recorded here:** first-run analysis
+      and `webbrowser.open()` are gated on `args.open_browser` (`--open`), not unconditional
+      whenever the store has no runs. The first attempt ran them unconditionally and broke two
+      baseline tests that start the server without `--open` against a deliberately emptied or
+      symlinked `tracker-data.js` (`test_tracker_data_absent_is_404_not_500`,
+      `test_a_manifest_row_that_symlinks_out_of_the_tree_is_403`) — the server silently ran the
+      real analyzer against the real repo and overwrote their fixture. Repo resolution
+      (`resolve_repo`) is *not* gated the same way — it always applies when `--repo` is omitted,
+      matching the card's mermaid flow — but every baseline test passes `--repo` explicitly
+      (`server_harness.py`'s `launch()` always does), so this never engages outside
+      `test_autolaunch.py`.
+
+      **A pre-existing baseline test constrained the busy-port message wording.**
+      `test_server_lifetime.py::test_a_second_server_on_the_same_port_aborts_and_leaves_the_first_intact`
+      (not owned by this task, not editable) asserts the literal substring `"Not probing for a free
+      port"` is still present. The final message satisfies both that literal string and `PROBE_RE`
+      in the same sentence, e.g. `"...the probe answered as a Treko page already serving there. Not
+      probing for a free port.\n"`.
+
+      **The probe's signature check.** `probe_listener()` reads the responding server's own
+      `Server` header (`server_version = "treko"`, set at `treko/server.py:392`) and checks for
+      `"treko"` case-insensitively. This does not identify *which* session owns the port — it only
+      confirms the process holding it is a Treko server at all, which is the one fact the card
+      permits reporting.
+
+      **Criterion 16 (process tree + stderr).** Proven by
+      `test_opening_the_browser_does_not_reparent_the_server`, which spawns a real server with a
+      real `BROWSER` recorder script, waits for it to serve, and asserts
+      `ps -o ppid= -p <server pid>` equals the *test process's* own pid — i.e. the server's parent
+      is whoever launched it, not `1` and not the browser-open call. Stderr was captured throughout
+      by opening a file and handing it to `Popen(..., stderr=handle)` (the harness's own pattern);
+      `server.py` never reassigns or closes its own stderr, and no new code path in this task writes
+      to anything but `sys.stderr`.
+
+      **Not independently verified beyond the test suite:** that a *real* OS browser (not the
+      `BROWSER`-env recorder) opens correctly end-to-end — the recorder proves `webbrowser.open()`
+      was called with the right URL, which is what `webbrowser` itself execs, but this task did not
+      manually launch Chrome/Safari against a live server.
 - [ ] 9. Rewrite `skills/treko/SKILL.md`: `name: treko`, the description, the single launch command,
       and the trigger phrases. Keep the two "both fail silently" warnings about detaching and
       redirecting stderr — auto-launch does not retire either.
