@@ -583,3 +583,38 @@ replaced with a one-line import from `store_location`. `ensure_store_dir`'s "exi
 directory not writable" branch reports `errno.EACCES` rather than a value read off a failed
 syscall, since `os.access` itself never raises — no test exercises that branch; the mkdir
 failure path (which a test does cover) reports the real `OSError.errno`.
+
+### Closing D2's untested row — `EACCES` was assumed, never observed
+
+Not a bug fix: on this machine no case was found where the assumed `errno.EACCES` was wrong,
+because `os.access` also consults macOS ACLs and a real write there does fail with `EACCES`.
+It is a change from an assumed value to an observed one — the prior code named a specific
+errno with the authority of a measurement while it was a constant the code chose, since
+`os.access` only ever answers yes/no and never reports why.
+
+Step 1, 2026-08-22, this worktree: `test_reports_the_path_and_an_errno_when_an_existing_directory_is_not_writable`
+added to `treko/test_store_location.py`, pinned green against the current `os.access`
+implementation — it asserts the row's shape (an abort naming the path and *an* errno) and
+deliberately not `EACCES` specifically, so step 2 needs no test edit.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 14 passed in 0.02s
+```
+
+Commit `99dbf1a4b7108c52f547d6b1e96efb8abaf3f29d`, `treko/test_store_location.py` only.
+
+Step 2, 2026-08-22, this worktree: the `os.access` check replaced with a real write attempt —
+`tempfile.NamedTemporaryFile(dir=str(path))`, the same directory `store.py`'s `write_store`
+writes its temp file into before `os.replace`, so the probe fails exactly when the real write
+would. On `OSError` the message now carries `exc.errno` / `exc.strerror`, not `errno.EACCES`.
+The now-unused `import errno` was removed from `store_location.py`.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 14 passed in 0.01s
+cd treko && python3 -m pytest -q                             # 206 passed in 118.99s
+wc -l treko/server.py treko/store_location.py                # 787, 88
+```
+
+206 = task 4's 205 + the one test step 1 added, zero pre-existing test lost or changed. Neither
+test in `test_store_location.py` needed editing for step 2 to pass. `server.py` is unchanged at
+787 lines; `store_location.py` moved from 81 to 88 lines.

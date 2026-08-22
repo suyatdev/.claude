@@ -14,8 +14,8 @@ and every request would 403. Both sides of that comparison must be canonical, so
 resolves once, at startup, and everything downstream trusts the result.
 """
 
-import errno
 import os
+import tempfile
 from pathlib import Path
 
 TREKO_STORE_DIR_ENV = "TREKO_STORE_DIR"
@@ -64,10 +64,17 @@ def ensure_store_dir(path):
     if path.exists():
         if not path.is_dir():
             raise StartupAbort("%s exists and is not a directory" % path)
-        if not os.access(str(path), os.W_OK):
+        try:
+            # A real write, not os.access(): access() only answers yes/no and can't
+            # report why. This probe writes into the directory the same way
+            # store.py's write_store does before its os.replace, so it fails exactly
+            # when the real write would, with the errno that write would actually get.
+            with tempfile.NamedTemporaryFile(dir=str(path)):
+                pass
+        except OSError as exc:
             raise StartupAbort(
                 "%s is not writable (errno %d: %s)"
-                % (path, errno.EACCES, os.strerror(errno.EACCES)))
+                % (path, exc.errno, exc.strerror))
         return path
 
     try:
