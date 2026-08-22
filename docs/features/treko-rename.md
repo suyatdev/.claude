@@ -475,8 +475,23 @@ No new dependency is added by this card. Adding one would need a separate ask
       and the full 8-test `-k "read_port or timeout_spec"` selection pass; full suite holds at 161
       passed. `git grep -n 'TASK_TRACKER_' -- treko/` now returns only `test_rename.py`, the
       data-contract oracle that tests for the retired names' absence.
-- [ ] 5. `git mv "treko/Task Tracker.dc.html" treko/Treko.dc.html`; update `INDEX_FILE` and
+- [x] 5. `git mv "treko/Task Tracker.dc.html" treko/Treko.dc.html`; update `INDEX_FILE` and
       `check_index_injectable`'s message.
+
+      **Done 2026-08-21.** `git mv "treko/Task Tracker.dc.html" treko/Treko.dc.html`, then
+      `INDEX_FILE = "Treko.dc.html"` in `treko/server.py:55`. Lines 194, 198, 200, 432 and 436 all
+      interpolate the constant and needed no edit — confirmed by reading each, not by trusting the
+      grep. Collateral: `treko/test_ui_commands.py:36`'s hardcoded `HTML` path, a comment in
+      `treko/test_analyze.py:30`, and the table row in `treko/github.md:15`. `test_rename.py:147`
+      and `test_server_lifetime.py:102` reach the page through `server.INDEX_FILE` and needed no
+      edit — confirmed by grepping both files for `INDEX_FILE`. Full suite holds at 161 passed;
+      `test_rename.py` is 4 failed (all `treko-icon.png`, task 6's job), 15 passed. `git grep -n
+      'Task Tracker\.dc\.html' -- treko/ skills/` now returns only `skills/treko/SKILL.md:105`,
+      task 9's scope. Criterion 12 (no dedicated test) is verified only by the server starting and
+      `test_server_lifetime.py::test_an_index_with_no_head_aborts_before_serving` passing through
+      `server.INDEX_FILE` — this proves the abort path still resolves the renamed file, not that a
+      real `<head>` scan against `Treko.dc.html`'s actual bytes was separately exercised beyond
+      what that test already covers.
 - [ ] 6. Port **only the branding** from the prototype page: Treko icon, sidebar title, retinted
       accent palette. Swap the three CDN references back to vendored paths and re-add the two script
       tags (§Re-vendoring). Copy `treko-icon.png` in; add its manifest row and `.png` type entry.

@@ -52,7 +52,7 @@ SURFACE_ENV = "CMUX_SURFACE_ID"
 
 MAX_BODY_BYTES = 1024  # 1 KiB; read at most this, never buffer an unbounded body
 TOKEN_HEADER = "X-Tracker-Token"
-INDEX_FILE = "Task Tracker.dc.html"
+INDEX_FILE = "Treko.dc.html"
 
 # The three-row allowlist IS the authorization set (§Security). A fourth row is a spec
 # change plus a judge round, never an implementation call. `reanalyze` sends no keystroke.

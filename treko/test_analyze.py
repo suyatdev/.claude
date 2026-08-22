@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / "hooks" / "lib"))
 import analyze as analyzer  # noqa: E402
 import feature_tasks  # noqa: E402  — imported independently, to recompute counts ourselves
 
-# Pinned from the shipped UI (`Task Tracker.dc.html`), which does
+# Pinned from the shipped UI (`Treko.dc.html`), which does
 # `TONES[x] || TONES.neutral` — an unknown tone renders as grey, silently.
 UI_TONES = {"ok", "warn", "bad", "info", "accent", "neutral"}
 # Pinned from the same file's STATE_RANK; an unknown state sorts as undefined.
