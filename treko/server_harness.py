@@ -250,6 +250,16 @@ def server_env(tmp_path, tree, cmux_bin, cmux_log, *, surface=FAKE_SURFACE,
         "FAKE_CMUX_LOG": str(cmux_log),
         "FAKE_TREE_SURFACE": tree_surface if tree_surface is not None else surface,
         "FAKE_HANG_SECS": str(HANG_SECS),
+        # Pointed at the per-test tree, never left to the default or to the developer's
+        # own value. Two things depend on it. A launch that resolved the store to the
+        # real `$XDG_STATE_HOME/treko` would read -- and `reanalyze` would rewrite --
+        # the machine's live survey, which is the same class of harm as touching the
+        # real `treko/` and is why every server here already runs against a copy. And
+        # naming the tree keeps the store exactly where every test written before this
+        # feature expects it, `<tree>/tracker-data.js`, so those tests assert what they
+        # always did; the store-location tests override it explicitly to prove the
+        # configured directory is what is served.
+        "TREKO_STORE_DIR": str(tree),
     })
     # Inherited overrides would leak a developer's own tuning into every test.
     for key in ("TREKO_PORT", "TREKO_IDLE_SECS", "TREKO_POLL_SECS",

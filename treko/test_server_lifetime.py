@@ -27,6 +27,7 @@ make it quick deletes the control the test exists to prove.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -210,3 +211,60 @@ def test_an_idle_server_exits_and_its_audit_reaches_the_parents_stderr(launcher)
     assert code is not None, "still running %ds after going idle" % (floor + 30)
     assert "idle for %ds; exiting" % floor in srv.stderr
     assert harness.refuses_connection(srv.port)
+
+
+# --------------------------------------------------------------------------
+# criterion 12 — what startup says about where the store went
+# --------------------------------------------------------------------------
+
+# Transcribed from §Design D4, not imported from `store_location`: the spec owns these
+# three strings, and a constant read back out of the module under test asserts only that
+# the module equals itself.
+COPY_OUTCOMES = (
+    re.compile(r"^copied \d+ runs from \S.*$"),
+    re.compile(r"^store already present, legacy file ignored$"),
+    re.compile(r"^no legacy store to adopt$"),
+)
+
+BANNER_PREFIX = "server: http://"
+
+
+def test_the_banner_names_the_resolved_store_directory_after_the_copys_outcome(
+        launcher, tree, tmp_path):
+    """Criterion 12's banner half, and §Design D2's pinned stderr order.
+
+    Two lines now claim the same slot and neither is "the first line": the copy runs
+    inside `main()`'s validation block, the banner is written immediately before
+    `serve_forever`. Asserted as *indices in one stderr*, because each line on its own
+    passes while the pair is in the wrong order — and an operator reading a launch top to
+    bottom needs the outcome before the address, not after it.
+
+    The directory is configured through a symlink so "names the resolved directory" is
+    falsifiable: a banner echoing `TREKO_STORE_DIR` verbatim would pass a substring check
+    against the value it was handed while naming a path the store is not at.
+    """
+    real = tmp_path / "banner-store"
+    real.mkdir()
+    linked = tmp_path / "banner-store-link"
+    linked.symlink_to(real, target_is_directory=True)
+
+    # Empty store + the tree's legacy file present is the one state that prints `copied`,
+    # so the ordering claim is tested against the outcome that carries real information.
+    srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(linked)})
+    lines = srv.stderr.splitlines()
+
+    outcomes = [i for i, line in enumerate(lines)
+                if any(pattern.match(line) for pattern in COPY_OUTCOMES)]
+    assert len(outcomes) == 1, \
+        "criterion 12 wants exactly one of D4's three lines:\n%s" % srv.stderr
+
+    banners = [i for i, line in enumerate(lines) if line.startswith(BANNER_PREFIX)]
+    assert len(banners) == 1, "expected one banner line:\n%s" % srv.stderr
+    banner = lines[banners[0]]
+
+    assert str(real.resolve()) in banner, \
+        "the banner does not name the resolved store directory: %r" % banner
+    assert str(linked) not in banner, \
+        "the banner echoed TREKO_STORE_DIR rather than the path it resolved to: %r" % banner
+    assert outcomes[0] < banners[0], \
+        "the banner printed before the copy's outcome:\n%s" % srv.stderr
