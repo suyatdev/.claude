@@ -718,7 +718,13 @@ No new dependency is added by this card. Adding one would need a separate ask
       contract contains the string it forbids. Criteria 3 and 14 were re-derived while writing it,
       not copied: `git log --follow treko/server.py` reaches `b2e9bab`/`8e16f74` (pre-card), and
       ADRs 0022–0025 are byte-identical to `main` (`git diff --quiet`, all four clean).
-- [ ] 13. Full suite green; record the post-rename count run, not read. Fill §Verification.
+- [x] 13. Full suite green; record the post-rename count run, not read. Fill §Verification.
+
+      **Done 2026-08-22.** 5 modules **163 passed** in 112.84s; the two new modules **29 passed**.
+      Criterion 4 was checked at the level of test *names*, not counts — 161 → 163 with **zero**
+      pre-rename node IDs missing and the only two additions being `[treko-icon.png]`
+      parametrizations of two existing checks. Record it as "no test regressed, +2 from
+      parametrization" — **never as a matching count**. See §Verification, "Post-rename suite".
 - [ ] 14. Observability judge, then draft PR.
 - [ ] 15. Close the card: set `phase: review`, and record here which of §Deferred card 2 inherits.
 
@@ -983,3 +989,54 @@ yet" predicted; card 3 owns it, and its first task is the schema conversation, n
 A divergence that appears only with an empty `waves`, a multi-run store, or a repo with no
 worktrees is outside what a single fixture can prove. Nothing here was committed — the fixture
 and its control live in the session scratchpad.
+
+### Post-rename suite (task 13, 2026-08-22)
+
+Every figure below is the output of a run made for this entry, re-read before being written down.
+
+```
+$ cd treko && python3 -m pytest test_analyze.py test_store.py test_server.py \
+      test_server_lifetime.py test_ui_commands.py -q
+163 passed in 112.84s (0:01:52)          # exit 0
+
+$ python3 -m pytest test_rename.py test_autolaunch.py -q
+29 passed in 6.83s                       # exit 0  (19 rename + 10 autolaunch)
+```
+
+The ~112s is a **60s idle floor plus two 5s cmux waits — by design.** Do not "optimize" it.
+
+**Criterion 4 is satisfied, and not by a matching count.** The five pre-existing modules went
+**161 → 163**. Stating that as "the same count" would be false, so the criterion was checked the way
+it is actually worded — *every test that passed before the rename passes after it* — at the level of
+test names, by collecting both trees and diffing the node-ID sets:
+
+```sh
+git worktree add --detach $SP/pre-rename ab32436     # the baseline commit, task-tracker/ intact
+(cd $SP/pre-rename/task-tracker && pytest <5 modules> --collect-only -q) | grep :: | sort > pre.txt
+(cd treko                       && pytest <5 modules> --collect-only -q) | grep :: | sort > post.txt
+comm -23 pre.txt post.txt        # in pre, missing from post
+comm -13 pre.txt post.txt        # new in post
+```
+
+| | result |
+|---|---|
+| pre-rename node IDs | **161** |
+| post-rename node IDs | **163** |
+| **present before, gone after** | **0 — no test was lost or renamed away** |
+| new after | **2**, both `[treko-icon.png]` |
+
+The two new IDs are `test_server.py::test_every_manifest_row_carries_nosniff[treko-icon.png]` and
+`test_server.py::test_every_manifest_row_is_served_with_its_mapped_type[treko-icon.png]`. Cause
+confirmed at the source rather than inferred: `len(server.STATIC_MANIFEST)` is **17** (was 16 — task 6
+added the icon), and exactly two tests are parametrized over it, at `test_server.py:104` and `:118`.
+17 × 2 − 16 × 2 = **+2**, which accounts for the whole delta. Per module: `test_analyze` 26,
+`test_store` 30, `test_server` **83** (was 81), `test_server_lifetime` 9, `test_ui_commands` 15.
+
+So the honest statement is **no test regressed; the suite grew by two rows of an existing
+parametrized check.** It is not "the same count", and it should never be recorded as one.
+
+**What this does not establish.** The pre-rename set is a *subset* of the post-rename set and the
+post-rename run is fully green, so every previously-passing test still passes. It does not prove any
+test is still asserting what it used to — a test whose body was gutted keeps its node ID. Nothing
+here re-verifies criterion 12, which still has no test of its own beyond
+`test_server_lifetime.py::test_an_index_with_no_head_aborts_before_serving`.
