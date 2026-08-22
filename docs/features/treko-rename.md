@@ -377,7 +377,7 @@ No new dependency is added by this card. Adding one would need a separate ask
       carries this spec and its judge verdicts, so spec and implementation land in one PR.
       Reused the existing `treko-ui-update` worktree rather than cutting a new one — it is
       already an isolated checkout and nothing else is in flight in it.
-- [ ] 1. **Red first.** Add the failing tests for criteria 5, 6, 7, 8, 9, 11 and 16 against the
+- [x] 1. **Red first.** Add the failing tests for criteria 5, 6, 7, 8, 9, 11 and 16 against the
       *current* names, and confirm each fails for the stated reason. Do not touch implementation in
       this step.
 
@@ -391,6 +391,33 @@ No new dependency is added by this card. Adding one would need a separate ask
         `task-tracker/Task Tracker.dc.html` today. It exists to fail the moment task 6 ports more of
         the prototype's page than branding — which is precisely the mistake this card's own first
         draft made.
+      **Done.** Two new modules: `test_rename.py` (criteria 5, 11, 17) and
+      `test_autolaunch.py` (criteria 6, 7, 8, 9, 15, 16). Measured: **25 failed, 4 passed**.
+      The 4 passing are exactly the ones documented green-and-pinned — criterion 15, criterion
+      17, the producer-side premise 17 rests on, and `check_manifest_types` — none manufactured
+      red.
+      - **Spec slip, implemented against reality:** criterion 7 names the store key
+        `generated_at`; the real key is `generatedAt` (`store.py`, `new_store`). The tests use
+        the real key. Not treated as a spec gate — a field-name slip changes no design — but
+        recorded because a guessed name fails closed, and failing closed is indistinguishable
+        from the check being switched off.
+      - **Two criteria could not be red alone and are asserted as conjunctions.** Criterion 7
+        ("the analyzer does *not* run") and criterion 16's process-tree half are both vacuously
+        true while auto-launch does not exist. Each is paired with the browser-opened half, so
+        neither can pass on an empty feature. Two further tests that first passed vacuously —
+        the two "no browser opens" aborts — now re-assert the abort *reason*, because any abort
+        at all opens no browser, argparse usage errors included.
+      - **Criterion 5's negative half is a unit test, not a launch.** A server that ignores the
+        retired override binds `DEFAULT_PORT`, and asserting on 8422 in a test would collide
+        with any real Treko holding it. `read_port` takes an `environ` mapping, so the claim is
+        provable with no port at all.
+      - **What this red run did NOT establish:** 8 of the 9 `test_autolaunch.py` failures share
+        one upstream cause — no `--open`, so the process dies in argparse before reaching any
+        behaviour under test. Eight tests agreeing is one cause repeated. Task 8 must observe
+        each failing for its *own* reason before making it pass.
+      - **Wording the spec left open is now pinned by the tests**: `NO_REPO_RE` and `PROBE_RE`
+        in `test_autolaunch.py` are the contract for the two abort messages.
+
 - [ ] 2. Record the pre-rename suite count from an actual run; paste the output into §Verification.
 - [ ] 3. `git mv task-tracker treko` and `git mv skills/tracking-feature-state skills/treko`. Fix
       `SERVE_ROOT`-relative paths, `conftest.py`, `server_harness.py` and the five test modules until
