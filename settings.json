@@ -68,6 +68,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "$HOME/.claude/hooks/verify-hook-wiring.sh"
+          },
+          {
+            "type": "command",
             "command": "$HOME/.claude/hooks/doc-guard.sh"
           },
           {
