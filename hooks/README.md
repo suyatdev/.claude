@@ -238,6 +238,16 @@ Two checks, both cheap:
    legible one-line value and is a fine hiding place — but the loss is named here rather than
    discovered.
 
+   **None of these filters apply to check 1, and that is a decision, not an oversight.** Check 1
+   prints hook script paths in full — `no such file: $HOME/.claude/hooks/judge-guard.sh` — with no
+   length bound and no shape test, and it has done so since the first commit, predating every filter
+   above. Naming the path *is* check 1's function: "some hook cannot run" is not something anyone
+   can act on. Filtering it would defend against a hook script living in a directory named after a
+   credential, at the cost of destroying the check. A test pins the current behaviour so that anyone
+   who later routes paths through the renderer has to argue with this paragraph first. An earlier
+   version of this file called value-printing "the one leak surface"; that was wrong, and this
+   corrects it.
+
 **`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
 accepted that `/model` rewrites them in place, so comparing them would fire this check after every
 model switch — and a check that cries wolf is one you learn to skip, which is the exact failure this

@@ -109,7 +109,10 @@ sub-key to name and the key-level line stays. `hooks` keeps its existing per-scr
 is already more useful than a sub-key path would be.
 
 **Redaction, added in the same review round after the judge flagged it.** Printing values is new
-here, and it is the one leak surface this change introduced. A value whose sub-key name *or* whose
+here, and it is the leak surface this change introduced. ~~the one leak surface~~ — **corrected by
+task 10e: it is not the only one.** Check 1 has printed hook script paths in full since the first
+commit, deliberately and unfiltered, and calling value-printing "the one" surface made a whole class
+invisible for four rounds. A value whose sub-key name *or* whose
 own text matches `key|token|secret|password|credential|auth|bearer` prints as `<redacted>`, with the
 sub-key still named — knowing a secret-shaped setting moved is the finding; printing it is not.
 `settings.json` is not supposed to hold credentials, and `env` is excluded from the compared keys
@@ -443,6 +446,26 @@ Scenario: an unparseable command string is not reported as broken
         digit-free run of 20+ letters — `abcdefghijklmnopqrst` — prints. Real credentials
         essentially always carry a digit or mixed case. Not zero. `hooks/scan-secrets.sh` is the
         real tool for this and is one of the four dormant hooks.
+- [x] 10e. **Correct the claim, not the code.** Verdict 212 (`risk=high`) confirmed every number in
+      10d independently — 0/52000, 6755 against `6868451`, 36/36, 25/25 — and then found a fourth
+      leak by looking where nobody had: **check 1 prints hook script paths in full, unbounded and
+      unfiltered, and always has.** It predates every filter built in 10a–10d. The card and the
+      test suite both called value-printing "the one leak surface this change introduced", which was
+      false and is what kept a whole class invisible for four rounds.
+      - **Deliberately not patched, and this is the judgement call worth recording.** Naming the
+        path *is* check 1's function; `no such file: …/judge-guard.sh` is actionable and "some hook
+        cannot run" is not. Routing paths through the renderer would defend against a hook script
+        living in a directory named after a credential — while destroying the check for everyone
+        else. The defect here is the false claim, not the behaviour.
+      - **Pinned instead**: a test asserts the full path is printed and that no filter marker
+        appears, so the property is a decision anyone must argue with rather than an oversight
+        anyone can quietly "fix". **37/37.**
+      - Both false claims corrected in place, struck rather than deleted, in the card and in the
+        suite's own comment.
+      - **Open for the user, not decided here:** whether check 1 should filter paths at all. It is
+        a scope question about what the check is *for*, and four rounds of my own judgement on this
+        surface have now been overturned three times — so it belongs to the person who owns the
+        feature, with the trade-off stated above.
 
 ## Risks
 
@@ -504,7 +527,7 @@ was re-read, not from an expectation.
 
 | Area | Result |
 |---|---|
-| `hooks/verify-hook-wiring.test.sh` | **36/36 pass** (20 at first ship, 16 added across tasks 10–10d). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
+| `hooks/verify-hook-wiring.test.sh` | **37/37 pass** (20 at first ship, 17 added across tasks 10–10e). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
 | Value-leak rate (`verify-hook-wiring.leakcheck.py`) | **0 / 52000** — thirteen credential families including chunked ones, 2000 samples each, both surfaces (value and sub-key name), fixed seed, `render()` extracted from the live hook rather than reimplemented. The checker is proven able to fail: **6755** against `6868451`'s renderer |
 | Full repo suite | **25/25 suites pass** (20 `*.test.sh`, 5 `*.test.py`) |
 | Can it go red? | Yes — `verify-hook-wiring.probe.sh`, four break/restore cycles against the real config in a scratch `$HOME` |

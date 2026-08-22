@@ -280,8 +280,10 @@ check "a statusLine sub-key is named, its command withheld" "$H" 1 \
   "$PFX|statusLine.command|changed" \
   "other-line.sh|not executable|no such file|$ORCA|$SL"
 
-# Printing values is new, and it is the one thing this change added that could
-# leak. settings.json is not supposed to hold credentials — `env` is excluded
+# Printing values is new here and could leak. (It is not the file's ONLY such
+# surface — check 1 has printed script paths since the first commit, deliberately
+# and unfiltered; see the case above. An earlier version of this comment claimed
+# otherwise and verdict 212 caught it.) settings.json is not supposed to hold credentials — `env` is excluded
 # from WIRING_KEYS for that reason — but "supposed to" is a convention, and this
 # check exists precisely because conventions drift unobserved. These two cases
 # turn it into a mechanism. Both must still NAME the sub-key: knowing a secret-
@@ -333,6 +335,18 @@ edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$B64'"
 check "a standard-base64 secret is withheld" "$H" 1 \
   "$PFX|permissions.defaultMode" \
   "$B64|Xy9+aB|not executable|no such file|$ORCA|$SL"
+
+# Verdict 212: check 1 prints script paths in full, and always has — it predates
+# every filter above. That is deliberate and it is not a gap: naming the path IS
+# check 1's function, and "some hook cannot run" is not a finding anyone can act
+# on. This case pins it so the property stays a decision rather than an
+# oversight, and so that anyone who later routes paths through render() sees a
+# test fail and has to argue with this comment first.
+H="$(new_home pathshown)"
+rm -f "$H/.claude/hooks/judge-guard.sh"
+check "a missing hook's path is printed in full, unfiltered" "$H" 1 \
+  "$PFX|no such file|/.claude/hooks/judge-guard.sh" \
+  "changed|redacted|$ORCA|$SL"
 
 # Verdict 211, and the third leak of the same species: SAFE_VALUE permitted " "
 # and "." as separators while the run test treated them as BREAKS, so a secret
