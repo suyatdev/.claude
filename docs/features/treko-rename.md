@@ -492,11 +492,54 @@ No new dependency is added by this card. Adding one would need a separate ask
       `server.INDEX_FILE` — this proves the abort path still resolves the renamed file, not that a
       real `<head>` scan against `Treko.dc.html`'s actual bytes was separately exercised beyond
       what that test already covers.
-- [ ] 6. Port **only the branding** from the prototype page: Treko icon, sidebar title, retinted
+- [x] 6. Port **only the branding** from the prototype page: Treko icon, sidebar title, retinted
       accent palette. Swap the three CDN references back to vendored paths and re-add the two script
       tags (§Re-vendoring). Copy `treko-icon.png` in; add its manifest row and `.png` type entry.
       **Do not port the nested feature → story → task rows or the Rally links** — see
       §"The nested rows are not portable yet". Porting them is card 3, after the schema conversation.
+
+      **Done 2026-08-22. The repo page was a sibling revision, not an older one — re-verified
+      before editing, not assumed.** Four of the card's rows were already satisfied by prior
+      tasks: the `--color-accent*` values are byte-identical between the two `styles.css` files
+      (`diff` returns exactly one line, the font `@import`); the page already links vendored
+      `vendor/phosphor/{regular,fill}/style.css` with no `unpkg.com` reference; the Inter
+      `@import` lives in `styles.css:2`, not the page, and is already
+      `vendor/inter/inter.css`; and both `./vendor-resources.js` and `tracker-data-fallback.js`
+      script tags are already present. None of these were touched.
+
+      Actual work: copied `treko-icon.png` (91,124 bytes, prototype mtime 2026-08-21 15:46:37)
+      into `treko/`; replaced the three `<i class="ph ph-crosshair">` glyphs (empty state,
+      collapsed rail, expanded header) with the prototype's `<img src="treko-icon.png">` markup
+      at matching sizes (48px/30px/26px); changed the sidebar title `Task Tracker` → `Treko`;
+      changed two prose strings (`Treko.dc.html`, empty-state and agent-panel copy) from
+      "task-tracker skill" to "treko skill"; fixed the `reanalyze` copy-command from
+      `python3 task-tracker/analyze.py .` to `python3 treko/analyze.py .` — a real bug, not a
+      cosmetic rename, since `task-tracker/` stopped existing at task 3 and nothing in the test
+      suite asserted the string; added `treko-icon.png` to `STATIC_MANIFEST` and `.png:
+      image/png` to `EXTENSION_TYPES` in `server.py`. CSP already carried `img-src 'self'
+      data:` — confirmed, not changed.
+
+      `store.py`'s `TOOL` and the page's `toolLabel:data.tool||'task-tracker'` fallback
+      (`Treko.dc.html:634`) were deliberately left alone, per task 3's prior ruling — the UI
+      must not disagree with the store's producer identifier.
+
+      `test_rename.py -q`: **19 passed** (was 15 passed / 4 failed before this task; all four
+      icon tests, criterion 11, now green; criterion 17's
+      `test_page_contains_no_nested_row_identifiers` still passes — no nested rows ported).
+      Full baseline suite: **163 passed** in 112.13s, not 161 — the two extra are
+      `test_server.py`'s table-driven `@pytest.mark.parametrize("relative",
+      server.STATIC_MANIFEST)` tests (`test_every_manifest_row_is_served_with_its_mapped_type`,
+      `test_every_manifest_row_carries_nosniff`), whose own docstring says "a row added later is
+      covered unedited" — one new manifest row is exactly one new instance per parametrized
+      test, not a new test. No test was added or removed by hand.
+
+      `git grep -n -i 'task[-_ ]tracker' -- treko/Treko.dc.html` returns only
+      `Treko.dc.html:634`'s `toolLabel` fallback, as expected. `grep -rn
+      'fonts.googleapis\|unpkg.com' treko/` returns only the four pre-existing hits named in the
+      dispatch (the `vendor-resources.js` URL→local map, its comment, `support.js`'s fallback
+      URLs, a `test_server.py` comment, and `vendor/inter/inter.css`'s own comment) — nothing new
+      in the page or `styles.css`. This is a smoke check only, not proof of criterion 10; task 7
+      owns that proof.
 - [ ] 7. **Prove no network egress** (criterion 10). A grep for `http` in the page is not sufficient
       evidence — load the served page with the network down, or assert on the request log. State
       which check was run and what it cannot see.

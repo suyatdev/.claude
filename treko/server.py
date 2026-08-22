@@ -86,6 +86,7 @@ STATIC_MANIFEST = (
     "vendor/phosphor/fill/Phosphor-Fill.woff2",
     "vendor/inter/inter.css",
     "vendor/inter/inter-latin.woff2",
+    "treko-icon.png",
 )
 
 # Never mimetypes.guess_type: its answer depends on the host's /etc/mime.types, which would
@@ -97,6 +98,7 @@ EXTENSION_TYPES = {
     ".css": "text/css",
     ".html": "text/html",
     ".woff2": "font/woff2",
+    ".png": "image/png",
 }
 
 CSP = (
