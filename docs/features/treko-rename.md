@@ -630,9 +630,36 @@ No new dependency is added by this card. Adding one would need a separate ask
       `BROWSER`-env recorder) opens correctly end-to-end — the recorder proves `webbrowser.open()`
       was called with the right URL, which is what `webbrowser` itself execs, but this task did not
       manually launch Chrome/Safari against a live server.
-- [ ] 9. Rewrite `skills/treko/SKILL.md`: `name: treko`, the description, the single launch command,
+- [x] 9. Rewrite `skills/treko/SKILL.md`: `name: treko`, the description, the single launch command,
       and the trigger phrases. Keep the two "both fail silently" warnings about detaching and
       redirecting stderr — auto-launch does not retire either.
+
+      **Done 2026-08-22.** Frontmatter `name: treko`, description rewritten for the new name and
+      auto-launch behaviour. Title `# Tracking Feature State` → `# Treko`. `task-tracker/` →
+      `treko/` at the three anchor lines; env vars `TASK_TRACKER_PORT`/`TASK_TRACKER_IDLE_SECS` →
+      `TREKO_PORT`/`TREKO_IDLE_SECS`; the no-`<head>` message → `Treko.dc.html has no <head>`.
+      The launch section now documents one command, `python3 treko/server.py --open`, with
+      `--repo` noted as optional (resolved via `git rev-parse --show-toplevel` when omitted) —
+      replacing the old two-step "run this, then paste this URL" instructions. Kept both
+      "both fail silently" warnings verbatim, with their reasoning, and added a sentence stating
+      auto-launch makes them *stronger* rather than retiring them, per the card's own wording.
+      The busy-port table row was split into the two real messages read from `server.py:743-748`
+      (probe answered / probe did not answer) rather than paraphrased, and a new row was added for
+      the not-a-git-repo abort, since that path is new. Trigger phrases updated ("launch Treko for
+      this repo").
+
+      **The trap:** the launch command and the two redirect/detach prohibitions are still on
+      separate lines — `test_the_skill_documents_a_launch_command_that_does_not_detach` filters on
+      lines containing `server.py` and only one such line exists (`python3 treko/server.py --open`),
+      carrying no `nohup`/`setsid`/`2>`/trailing `&`.
+
+      Verified: `test_autolaunch.py` 10 passed, `test_rename.py` 19 passed, full baseline
+      (`test_analyze.py test_store.py test_server.py test_server_lifetime.py test_ui_commands.py`)
+      163 passed in 113.10s. `git grep -n -i 'task[-_ ]tracker' -- skills/` returns nothing.
+      Sanity-ran the documented command directly (`TREKO_IDLE_SECS=60 TREKO_PORT=8434 python3
+      treko/server.py --open`, no `nohup`/`&`): it printed the startup banner, served the page and
+      its assets (request log shows 17 accepted requests, one 404 for `favicon.ico`), bound with
+      `ppid` = the invoking shell (not 1), and left no process running after `kill`.
 - [ ] 10. `PORTS.md` row, `README.md:62` roadmap entry, `CLAUDE.md` skills-catalog line, `.gitignore`
       comment.
 - [ ] 11. Verify criterion 13: load the prototype's two unmodified pages against the store this tool
