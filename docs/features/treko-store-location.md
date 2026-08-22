@@ -464,12 +464,12 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `StartupAbort` somewhere both modules import; tasks 2-3 go green.
 - [x] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
 - [x] 6. Implement `adopt_legacy_store`; task 5's tests go green.
-- [ ] 7. Red tests for D3: serves configured bytes, 404 absent, **403 on a symlink out of the store
+- [x] 7. Red tests for D3: serves configured bytes, 404 absent, **403 on a symlink out of the store
       dir**, **200 through a symlinked store dir**, manifest still closed. **Plus the banner's new
       content**: the line names the resolved store directory, and it follows the copy's outcome
       line. Criterion 12 has two halves and both get a red test -- task 5 covers the copy's, this
       covers the banner's.
-- [ ] 8. Wire `server.py`: import, `main()` call, `build_config`'s `store_dir`, `_serve_static`'s
+- [x] 8. Wire `server.py`: import, `main()` call, `build_config`'s `store_dir`, `_serve_static`'s
       branch, and the banner line. Task 7's tests go green.
 - [ ] 9. Untrack `treko/tracker-data.js`, add the `.gitignore` entry, verify the sample and fallback
       are still tracked.
@@ -726,3 +726,60 @@ cd treko && python3 -m pytest -q                           # 213 passed in 118.3
 `test_store_location.py` are unaffected by the reorder: it is a straight conjunction with
 distinct early returns per branch, and the swap only changes behavior for the one combination
 (store present, legacy absent) that had no test pinning it before this commit.
+
+### Tasks 7-8 — D3's serving branch, and the banner
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+**Task 7 (`5ca769d`).** Seven new nodes, split along the seam `test_server.py` and
+`test_server_lifetime.py` already document: the five wire-shape ones and the two
+manifest-closed controls in the first, criterion 12's banner half in the second. Putting the
+banner test in `test_server.py` would have taken that file to ~800 itself; it is 770 as it
+stands, and the banner is a launch-shape property by the same rule that put criterion 14 there.
+
+```
+cd treko && python3 -m pytest -q     # 215 passed, 5 failed in 120.67s
+```
+
+Five drivers, each failing on its own assertion, none on collection:
+
+| Node | Failed on |
+|---|---|
+| `test_the_configured_store_directory_is_what_is_served` | served the tree's bytes, not the store's |
+| `test_a_configured_store_that_does_not_exist_yet_is_404_not_500` | store written where configured, still `404` |
+| `test_a_store_file_symlinking_out_of_the_store_directory_is_403` | `200`, not `403 path_escape` |
+| `test_a_symlinked_store_directory_serves_200_not_403` | served the tree's bytes |
+| `test_the_banner_names_the_resolved_store_directory_after_the_copys_outcome` | zero of D4's three lines printed |
+
+The two `test_a_file_planted_in_the_store_directory_stays_off_the_manifest` nodes passed before
+the change and after it — recorded as controls, not drivers, because a criterion-6 test that
+only starts passing once D3 lands would be asserting the wrong thing.
+
+`404`-when-absent is not falsifiable on its own: a server still reading the tree answers `404`
+for the same request, since that is the file the test unlinks. So the test writes the store
+where the configuration points and repeats the request; only a server reading the configured
+directory answers `200`.
+
+`server_harness.server_env` now points `TREKO_STORE_DIR` at the per-test `tree`. Left to the
+default, every launch in the suite would resolve to the machine's real
+`$XDG_STATE_HOME/treko` — the suite would read, and `reanalyze` would rewrite, the live
+survey. Naming the tree also leaves every pre-existing test's store at `<tree>/tracker-data.js`,
+which is why none of them changed.
+
+**Task 8.** `server.py`: `import store_location`; `ensure_store_dir(read_store_dir())` and
+`adopt_legacy_store` inside `main()`'s existing `try`; `store_dir` in `build_config` with
+`store_path` derived from it; D3's two-line branch in `_serve_static`; `store=%s` on the banner.
+The token and `config` lines moved inside the `try` so the copy takes its destination from
+`config` — `build_config` stays the only place the store path is constructed.
+
+```
+cd treko && python3 -m pytest -q     # 220 passed in 119.70s
+wc -l treko/server.py                # 799
+```
+
+**Criterion 13 measured, not assumed: `server.py` is 799 lines — one under the ceiling.** The
+first wiring landed at 801. Two comments of this change's own were cut to fit; no surrounding
+code was touched to make room. `store_location.py` is a file of its own at 146 lines. There is
+now one line of headroom, so any further work on `server.py` moves logic out rather than adding.
+
+220 = the 213 at `d5804fb` plus these 7. Criterion 8's node-ID set diff is task 12.

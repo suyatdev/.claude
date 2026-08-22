@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import store  # noqa: E402  (sibling module; the path insert above is what makes it importable)
+import store_location  # noqa: E402  (D1, D2 and D4 live there; see D5 for why)
 from store_location import StartupAbort  # noqa: E402  (moved out per D5, both modules import it)
 
 # ----------------------------------------------------------------- pinned constants
@@ -507,13 +508,18 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
             # manifest row is not servable, however it is spelled.
             return self._fail(404, "not_found", "not_found")
 
-        target = SERVE_ROOT / relative
+        if relative == FIRST_RUN_OPTIONAL:
+            # The one row that lives outside the serving root (D3). The check below is
+            # re-pointed at the store's directory, never removed -- a planted symlink 403s.
+            root, target = self.config["store_dir"], self.config["store_path"]
+        else:
+            root, target = SERVE_ROOT, SERVE_ROOT / relative
         try:
             resolved = target.resolve()
         except OSError as exc:
             return self._fail(500, "asset_unreadable", "asset_unreadable", path=relative,
                               errno_name=errno.errorcode.get(exc.errno, "-"), outcome="failed")
-        if SERVE_ROOT not in resolved.parents:
+        if root not in resolved.parents:
             # A manifest row that resolves outside the serving root -- a planted symlink.
             # §Design 3 mandates 403 here; the reason enum has no value for it (see the
             # note in the task-8 handoff), so it is logged distinctly rather than silently.
@@ -685,13 +691,15 @@ def watchdog(httpd, idle_secs, poll_secs, parent_pid, stop):
     threading.Thread(target=httpd.shutdown, daemon=True).start()
 
 
-def build_config(surface, token, repo_root, port, analyze_secs):
+def build_config(surface, token, repo_root, port, analyze_secs, store_dir):
     origin = "http://%s:%d" % (HOST, port)
     return {
         "surface": surface,
         "token": token,
         "repo_root": repo_root,
-        "store_path": SERVE_ROOT / "tracker-data.js",
+        "store_dir": store_dir,
+        # The only place the store path is constructed; a second one drifts (D3).
+        "store_path": store_dir / FIRST_RUN_OPTIONAL,
         "origin": origin,
         "origin_host": "%s:%d" % (HOST, port),
         "analyze_secs": analyze_secs,
@@ -718,14 +726,18 @@ def main(argv=None):
         check_index_injectable()
         repo_root = resolve_repo(args.repo)
         surface = bind_surface()
+        store_dir = store_location.ensure_store_dir(store_location.read_store_dir())
+        # Generated at startup, held in memory only, never written to disk, never passed
+        # as a command-line argument (which would expose it to ps). Dying process, dead
+        # token. Built here so the copy below can take the path from `config`.
+        token = secrets.token_urlsafe(32)
+        config = build_config(surface, token, repo_root, port, analyze_secs, store_dir)
+        # D4, on this same abort path: a corrupt legacy store stops the launch (decision 4).
+        store_location.adopt_legacy_store(config["store_path"],
+                                          SERVE_ROOT / FIRST_RUN_OPTIONAL)
     except StartupAbort as exc:
         sys.stderr.write("server: %s\n" % exc)
         return 2
-
-    # Generated at startup, held in memory only, never written to disk, never passed as a
-    # command-line argument (which would expose it to ps). Dying process, dead token.
-    token = secrets.token_urlsafe(32)
-    config = build_config(surface, token, repo_root, port, analyze_secs)
 
     try:
         httpd = ControlServer((HOST, port), ControlHandler, config)
@@ -771,8 +783,8 @@ def main(argv=None):
         target=watchdog, args=(httpd, idle_secs, poll_secs, os.getppid(), stop), daemon=True)
     watcher.start()
 
-    sys.stderr.write("server: http://%s:%d/ surface=%s idle=%ds poll=%ds\n"
-                     % (HOST, port, surface, idle_secs, poll_secs))
+    sys.stderr.write("server: http://%s:%d/ surface=%s idle=%ds poll=%ds store=%s\n"
+                     % (HOST, port, surface, idle_secs, poll_secs, config["store_dir"]))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
