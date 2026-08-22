@@ -704,10 +704,20 @@ No new dependency is added by this card. Adding one would need a separate ask
       Criterion 13(d) names only `features`, `branches` and `waves`, so this is not a (d) failure
       — it is the nested-rows schema gap this card deferred to card 3, now measured rather than
       predicted. A control run against the prototype's own store renders `Tasks 10`.
-- [ ] 12. ADR `docs/decisions/0033-…` — the rename, and why the data contract was exempted. Confirm
+- [x] 12. ADR `docs/decisions/0033-…` — the rename, and why the data contract was exempted. Confirm
       `0033` is still free against `origin/main` **and** every other ref at the moment of writing;
       `0032` is already taken on another branch, `0028` is a gap, and `0030` exists on `origin/main` but
       not in this worktree — so the next number is not derivable from a local `ls`.
+
+      **Done 2026-08-22** — `docs/decisions/0033-treko-renames-what-this-repo-owns.md`. `0033`
+      confirmed free against every local and remote ref *and* every checked-out worktree at the
+      moment of writing; the highest number anywhere was `0032` on `chore/settings-split`, which a
+      local `ls` (highest `0031`) would have missed. The ADR records the rename map, the ADR 0023
+      exemption with its three measured scopes, the 11-file residue table, and — as a consequence
+      rather than a spec edit — that **criterion 1 is unsatisfiable as written**, because the exempt
+      contract contains the string it forbids. Criteria 3 and 14 were re-derived while writing it,
+      not copied: `git log --follow treko/server.py` reaches `b2e9bab`/`8e16f74` (pre-card), and
+      ADRs 0022–0025 are byte-identical to `main` (`git diff --quiet`, all four clean).
 - [ ] 13. Full suite green; record the post-rename count run, not read. Fill §Verification.
 - [ ] 14. Observability judge, then draft PR.
 - [ ] 15. Close the card: set `phase: review`, and record here which of §Deferred card 2 inherits.
