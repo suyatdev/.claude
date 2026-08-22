@@ -208,17 +208,23 @@ whole session somewhere else — hence a smoke alarm, not a lock. It is **not** 
 guards described in the next section.
 
 **Measured, not assumed** (`verify-hook-wiring.measure.sh`, 20 runs per configuration, warm cache,
-this machine 2026-08-22): **46 ms/run** with check 2 short-circuiting and **45 ms/run** with it
-running in full, against a stated budget of ≤150 ms. About 20 ms of that is the bare `python3 -c
-pass` interpreter start, so the check itself is the smaller half of its own cost.
+this machine 2026-08-22): **43–46 ms/run**, against a stated budget of ≤150 ms. The spread covers
+both configurations — check 2 short-circuiting and check 2 running both git calls and the semantic
+comparison — and the difference between them is inside the run-to-run noise. About 18–20 ms is the
+bare `python3 -c pass` interpreter start, so the check itself is the smaller half of its own cost.
+Re-run the script rather than quoting these numbers; it labels each configuration from what it
+finds, not from what was true when it was written.
 
 **What it cannot do.** It cannot detect its own absence — if `settings.json` disappears, this hook's
 registration goes with it; that is ADR 0032's job, since the file is tracked and its disappearance
 is a `git status` event. It cannot tell a working guard from a broken one that returns 0; only that
-guard's own suite can. And check 2 is inert wherever `HEAD:settings.json` does not exist — which is
-the state of this machine's shared checkout at the time of writing, because PR #63 has not been
-pulled into it. `verify-hook-wiring.probe.sh` prints which of those preconditions hold and then
-breaks a real guard in a scratch copy to prove the check still goes red.
+guard's own suite can. And check 2 is inert wherever `HEAD:settings.json` does not exist, or where
+`~/.claude` is not on a branch — a detached HEAD and a mid-rebase both skip it silently. **Do not
+read a specific machine's state out of this paragraph:** this one's shared checkout had no
+`HEAD:settings.json` when the feature was written and does have one now, so any sentence naming the
+current state would already be wrong. `verify-hook-wiring.probe.sh` prints which of those
+preconditions actually hold, then breaks a real guard in a scratch copy to prove the check still
+goes red.
 
 *Why an instruction cannot do this job:* the model never sees the failure. An instruction can only
 be followed by an agent that has been told something is wrong, and a hook whose script is missing

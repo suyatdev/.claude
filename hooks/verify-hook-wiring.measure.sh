@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Task 5 — wall-clock measurement against the =<150 ms session-start budget.
-# Two configurations, because they cost different amounts: the machine as it is
-# today (HEAD:settings.json absent, so check 2 short-circuits) and a checkout
-# where check 2 actually runs both git calls and the semantic comparison.
+# Two configurations, because they cost different amounts: the real ~/.claude as
+# it stands right now, and a scratch checkout where check 2 is guaranteed to run
+# both git calls and the semantic comparison.
+#
+# Whether the real one short-circuits is DERIVED at run time, not asserted here.
+# It was absent when this was written (PR #63 unpulled) and present by 2026-08-22;
+# a hardcoded label would have quietly mislabelled every run after that — the exact
+# stale-claim failure this whole feature exists to catch.
 set -u
 HOOK="$1"
 N=20
@@ -50,9 +55,18 @@ for h in "$TRUE_HOME" "$S"; do
 done
 echo
 
+# Derive the real config's check-2 state rather than labelling it from memory.
+# Both preconditions must hold, and they are the same two the hook itself applies.
+if git -C "$HOME/.claude" symbolic-ref -q HEAD >/dev/null 2>&1 &&
+   git -C "$HOME/.claude" show HEAD:settings.json >/dev/null 2>&1; then
+  REAL_STATE="check 2 runs in full"
+else
+  REAL_STATE="check 2 short-circuits"
+fi
+
 echo "runs per configuration: $N"
-echo "check 2 short-circuits (this machine today): $(ms_per_run "$TRUE_HOME") ms/run"
-echo "check 2 runs in full (committed ~/.claude):  $(ms_per_run "$S") ms/run"
+printf 'real ~/.claude — %-22s %s ms/run\n' "$REAL_STATE:" "$(ms_per_run "$TRUE_HOME")"
+echo "scratch checkout — check 2 runs in full: $(ms_per_run "$S") ms/run"
 echo
 echo "for scale, the fixed cost of the interpreter alone:"
 start=$(python3 -c 'import time; print(int(time.time()*1000))')

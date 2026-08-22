@@ -251,6 +251,17 @@ Scenario: an unparseable command string is not reported as broken
         in that environment. Reproduced both ways before concluding. **Not fixed here — different
         file, different feature.** It will keep misleading every paned judge until it is; noted as
         follow-up work, not folded into this card.
+      - **Second verdict, at `df918d8`: `risk=low confidence=high`, row 206**, prose at
+        `2026-08-22-chore-hook-wiring-health-check-df918d8.md`. Re-judged because the response
+        commit moved HEAD and `judge-guard` requires `head_sha == HEAD`. This round the judge
+        re-ran all 25 suites itself, reproduced the `CLAUDE_PANE_AGENT` trap in its own environment,
+        and re-parsed both settings files — confirming each of the three refutations independently
+        rather than accepting them.
+      - It found one thing both the first judge and this session had missed, and it is the feature's
+        own failure mode one level out: **`hooks/README.md` and `verify-hook-wiring.measure.sh`
+        still carried the "check 2 is inert on this machine" claim** that the card had just been
+        careful to correct. Fixed — the README now refuses to name any machine's current state, and
+        `measure.sh` derives its configuration label instead of hardcoding it.
 
 ## Risks
 
@@ -330,6 +341,8 @@ challenged number is worth re-running rather than defending:
 | Live-file hook counts | **27 command hooks, 16 distinct non-orca scripts, 10 orca conditionals, `statusLine` present** — re-counted from `~/.claude/settings.json` by parsing it. The table above is right; the judge's 28/17 is the *tracked* file on this branch, which has one more hook because this branch adds it |
 | Check 2, live | **Runs, and is silent.** See the resolved open issue below — this is the first time check 2 has been observed working against the real file rather than a fixture |
 | `verify-hook-wiring.probe.sh`, re-run end to end | All four break/restore cycles still red-then-green. Section D was **strengthened**: it compared post-run `git status` against "empty", but the real `settings.json` is routinely already dirty from `/model` churn, so it reported a change that was not the probe's. It now snapshots status before and after and compares the two. The UNCHANGED branch was observed; the CHANGED branch is reasoned, not run |
+| Runtime, re-measured after check 2 went live | **43 ms real config / 44 ms scratch checkout** (20 runs each, warm), bare `python3 -c pass` 18 ms. Budget ≤150 ms. The earlier 46/45 ms was a true measurement of a machine where check 2 short-circuited; the difference between the two configurations is inside run-to-run noise |
+| `measure.sh`'s configuration label | Was **hardcoded** as "check 2 short-circuits (this machine today)" and had silently gone wrong. Now derived at run time from the same two preconditions the hook applies. Both branches confirmed reachable — real `HOME` → "runs in full", a non-repo `HOME` → "short-circuits" — because an unreachable else is not a check |
 
 Open issues:
 
