@@ -418,7 +418,9 @@ No new dependency is added by this card. Adding one would need a separate ask
       - **Wording the spec left open is now pinned by the tests**: `NO_REPO_RE` and `PROBE_RE`
         in `test_autolaunch.py` are the contract for the two abort messages.
 
-- [ ] 2. Record the pre-rename suite count from an actual run; paste the output into §Verification.
+- [x] 2. Record the pre-rename suite count from an actual run; paste the output into §Verification.
+      **Done.** `161 passed in 112.09s`, exit 0, run 2026-08-21 — see §Verification.
+
 - [ ] 3. `git mv task-tracker treko` and `git mv skills/tracking-feature-state skills/treko`. Fix
       `SERVE_ROOT`-relative paths, `conftest.py`, `server_harness.py` and the five test modules until
       the suite is green again at the same count as task 2.
@@ -476,5 +478,40 @@ No new dependency is added by this card. Adding one would need a separate ask
 
 ## Verification
 
-_Filled during implementation. Nothing here is written before the command that produces it has been
-run and its output re-read._
+_Nothing here is written before the command that produces it has been run and its output re-read._
+
+### Pre-rename baseline (task 2, 2026-08-21)
+
+Criterion 4 compares against this. It is the output of a run, not a count read from anywhere:
+
+```
+$ python3 -m pytest test_analyze.py test_store.py test_server.py \
+      test_server_lifetime.py test_ui_commands.py -q
+161 passed in 112.09s (0:01:52)          # exit 0
+```
+
+Per module, from `--collect-only` so a post-rename mismatch names a file rather than a total.
+26 + 30 + 81 + 9 + 15 = 161, and the total was re-derived from the collection rather than summed
+by hand:
+
+| module | tests |
+|---|---|
+| `test_analyze.py` | 26 |
+| `test_store.py` | 30 |
+| `test_server.py` | 81 |
+| `test_server_lifetime.py` | 9 |
+| `test_ui_commands.py` | 15 |
+| **total** | **161** |
+
+**What this baseline excludes, deliberately.** The two modules task 1 added
+(`test_rename.py`, `test_autolaunch.py`) are **not** in it — they are red by design, and folding
+them in would make the "same count" comparison meaningless. Criterion 4 is about the five modules
+that existed before this card. Their own expected end state is separate: 25 failed / 4 passed at
+task 1, all green by task 13.
+
+**What it does not prove.** A passing suite before a directory move says nothing about whether the
+move preserved the layout the suite depends on. `analyze.py` resolves `hooks/lib` as
+`__file__/../../hooks/lib`, and the harness reproduces that relative layout under `tmp_path`; a
+move that breaks it would surface as a collection error, not a count mismatch. Task 3 must run
+from a clean checkout, or delete the old path first — an import that silently resolves to the old
+tree still on disk would pass for the wrong reason.
