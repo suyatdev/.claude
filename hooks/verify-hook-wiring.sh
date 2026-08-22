@@ -157,9 +157,9 @@ def drift_line(detail):
     return "%s settings.json drift — %s" % (PREFIX, detail)
 
 
-# Long enough for a mode, a plugin id, or a short command; short enough that a
-# finding stays one readable line. A value longer than this is truncated rather
-# than dropped: knowing a long value moved is still worth more than silence.
+# Long enough for a mode or a plugin id; short enough that a finding stays one
+# readable line. A value longer than this is WITHHELD, never truncated: a prefix
+# leaks a credential as thoroughly as the whole string.
 VALUE_LIMIT = 60
 
 # Naming a drifted setting means printing its value into session-start stdout,
@@ -182,22 +182,73 @@ WITHHELD = "<changed>"
 # one in six random 40-byte keys, verdict 210). Enumerating what a credential
 # looks like is unbounded; enumerating what a readable setting looks like is not.
 #
-# A letter, then letters, digits, spaces, dots, underscores or hyphens. No
-# quotes, no "$", no "/", no "+", no "=" — so command strings, paths and every
-# base64 alphabet fall out, and "default"/"bypassPermissions"/"acceptEdits" stay.
-SAFE_VALUE = re.compile(r"^[A-Za-z][A-Za-z0-9 ._-]{0,%d}$" % (VALUE_LIMIT - 1))
+# The separators a readable setting may contain. This ONE definition is used
+# twice, and that is the whole point: SAFE_VALUE permits these characters, and
+# looks_opaque() strips exactly these before measuring. When the two disagreed —
+# SAFE_VALUE allowing " " and "." while the run test treated them as breaks — a
+# secret written in groups ("k033XTNGcymwgnK R5BLmFg8QysGFbu N3z5sbkm2u", which
+# is how licence keys and 2FA seeds are pasted) satisfied both at an ~85% rate
+# (verdict 211). Two regexes that must agree are two regexes that must share a
+# definition.
+SEPARATORS = " ._-"
+SEPARATOR_RE = re.compile("[%s]" % re.escape(SEPARATORS))
+
+# A letter, then letters, digits or separators. No quotes, no "$", no "/", no
+# "+", no "=" — so command strings, paths and every base64 alphabet fall out,
+# and "default"/"bypassPermissions"/"acceptEdits" stay.
+SAFE_VALUE = re.compile(
+    r"^[A-Za-z][A-Za-z0-9%s]{0,%d}$" % (re.escape(SEPARATORS), VALUE_LIMIT - 1)
+)
 
 # Even inside that shape, a long letters-and-digits run is token-like, not
 # setting-like: "a1b2c3d4e5f6g7h8i9j0" passes SAFE_VALUE but is nobody's config.
-OPAQUE_RUN = re.compile(r"[A-Za-z0-9_-]{20,}")
+OPAQUE_RUN = re.compile(r"[A-Za-z0-9]{20,}")
 
 
 def looks_opaque(text):
-    """True if any run in text has the shape of a credential rather than a setting."""
-    for run in OPAQUE_RUN.findall(text):
-        if any(c.isdigit() for c in run) and any(c.isalpha() for c in run):
+    """True if text has the shape of a credential rather than a setting.
+
+    Separators are stripped before measuring, so grouping a secret cannot hide
+    it. A legitimate setting is short once its separators are removed; a
+    credential is not.
+    """
+    for run in OPAQUE_RUN.findall(SEPARATOR_RE.sub("", text)):
+        has_digit = any(c.isdigit() for c in run)
+        has_alpha = any(c.isalpha() for c in run)
+        mixed_case = any(c.islower() for c in run) and any(c.isupper() for c in run)
+        # A digit mixed with letters, or both letter cases mixed together. The
+        # second signal exists because a digit-free random token is rare but not
+        # impossible — measured at ~1% of 25-character keys — while a long
+        # identifier that is legitimately mixed-case is rarer still. A single
+        # case with no digits, "claudepluginsofficial", stays printable.
+        if has_alpha and (has_digit or mixed_case):
             return True
     return False
+
+
+# A sub-key NAME is printed too, and a name can itself be the credential — an
+# API key used as a map key is an ordinary shape. Same test as a value, plus "@"
+# because real plugin ids look like "superpowers@claude-plugins-official" and
+# withholding those would make the enabledPlugins findings useless.
+SAFE_NAME = re.compile(
+    r"^[A-Za-z][A-Za-z0-9@%s]{0,%d}$" % (re.escape(SEPARATORS), VALUE_LIMIT - 1)
+)
+
+
+def render_name(name):
+    """The sub-key as printed. Withheld names still tell the reader which parent
+    key moved, which is less than ideal and far better than echoing a secret.
+
+    Note what is deliberately NOT checked here: SENSITIVE. A name like "apiKey"
+    is a label saying a secret lives at that key, not the secret itself —
+    hiding it protects nothing and costs the reader the one word that made the
+    finding worth reading. The value under it is already redacted by render(),
+    which does apply SENSITIVE to the name. Only a name that has the SHAPE of a
+    credential is withheld.
+    """
+    if not SAFE_NAME.match(name) or looks_opaque(name):
+        return WITHHELD
+    return name
 
 
 def render(value, name=""):
@@ -240,6 +291,7 @@ def subkey_drift(key, live_value, head_value):
     findings = []
     for name in sorted(set(live_value) | set(head_value)):
         in_live, in_head = name in live_value, name in head_value
+        shown = render_name(name)
         if in_live and in_head:
             if live_value[name] == head_value[name]:
                 continue
@@ -248,7 +300,7 @@ def subkey_drift(key, live_value, head_value):
                     "%s.%s: live %s, HEAD %s"
                     % (
                         key,
-                        name,
+                        shown,
                         render(live_value[name], name),
                         render(head_value[name], name),
                     )
@@ -257,13 +309,13 @@ def subkey_drift(key, live_value, head_value):
         elif in_live:
             findings.append(
                 drift_line(
-                    "%s.%s: present in the live file, absent from HEAD" % (key, name)
+                    "%s.%s: present in the live file, absent from HEAD" % (key, shown)
                 )
             )
         else:
             findings.append(
                 drift_line(
-                    "%s.%s: present in HEAD, absent from the live file" % (key, name)
+                    "%s.%s: present in HEAD, absent from the live file" % (key, shown)
                 )
             )
     return findings or None

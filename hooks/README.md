@@ -206,20 +206,37 @@ Two checks, both cheap:
    printing a prefix leaks a credential as thoroughly as printing all of it, and a severed string
    tells the reader nothing.
 
+   **Sub-key names get the same shape test**, plus `@` so real plugin ids
+   (`frontend-design@claude-plugins-official`) survive — a credential used as a map key is an
+   ordinary shape. Names are *not* keyword-filtered: `apiKey` is a label saying a secret lives
+   there, not the secret, and hiding the label costs the reader the one word that made the finding
+   worth reading. The value under it is redacted regardless.
+
    Default-deny is the second design, and the first one's failure is why. Enumerating what a
-   credential *looks like* leaked twice: first a truncated JWT prefix, then standard base64, whose
-   `+` and `/` split a deny-list run test into innocent-looking pieces. Enumerating what a
-   *readable setting* looks like is a bounded problem; enumerating credentials is not.
+   credential *looks like* leaked three times: a truncated JWT prefix; then standard base64, whose
+   `+` and `/` split a deny-list run test into innocent-looking pieces; then a secret written in
+   groups, because the safe-value shape permitted `" "` and `"."` as separators while the run test
+   treated them as breaks. **That last one is the lesson: two regexes that must agree now share one
+   `SEPARATORS` definition**, and `looks_opaque()` strips exactly what `SAFE_VALUE` permits.
+   Enumerating what a readable setting looks like is bounded; enumerating credentials is not.
 
-   `hooks/verify-hook-wiring.leakcheck.py` measures this — seven credential families, 2000 samples
-   each, fixed seed. **0 / 14000 today; 995 against the pre-fix renderer.** Re-run it rather than
-   trusting this paragraph.
+   `hooks/verify-hook-wiring.leakcheck.py` measures this — thirteen credential families including
+   chunked ones, 2000 samples each, both surfaces (value and sub-key name), fixed seed, `render()`
+   extracted from the live hook rather than reimplemented. **0 / 52000 today; 6755 against the
+   pre-fix renderer.** It runs against an older hook too, which is how it is falsified. Re-run it
+   rather than trusting this paragraph.
 
-   **What still gets through:** a short, lowercase-only secret with no digits and no telltale word —
-   `abcdefghijklmnopqrst` under an innocuous key — matches the safe-value shape and prints. That is
-   not what credentials look like, but it is not zero. This is a diagnostic line, not a secret
-   scanner; `hooks/scan-secrets.sh` is that tool, and is currently dormant (see the top of this
-   file).
+   **What still gets through:** a single-case, digit-free string of 20+ letters —
+   `abcdefghijklmnopqrst` — matches the safe shape and prints. Real credentials essentially always
+   carry a digit or mixed case, which is why that pair is the test. Not zero, though. This is a
+   diagnostic line, not a secret scanner; `hooks/scan-secrets.sh` is that tool, and is currently
+   dormant (see the top of this file).
+
+   **Undisclosed until now, and a real cost:** `permissions.allow` and `permissions.deny` are lists,
+   so they always print `<changed>`. Those sit right beside the motivating `defaultMode` case and a
+   reader may well want their contents. Withholding structures is deliberate — a list is not a
+   legible one-line value and is a fine hiding place — but the loss is named here rather than
+   discovered.
 
 **`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
 accepted that `/model` rewrites them in place, so comparing them would fire this check after every

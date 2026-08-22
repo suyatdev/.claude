@@ -400,10 +400,49 @@ Scenario: an unparseable command string is not reported as broken
         carries quotes, `$HOME` and a path, so it fails the safe shape — and of everything under the
         wiring keys it is the likeliest place for a credential to sit in an argument. The sub-key is
         still named, which is the actionable part.
-      - **Residual gap, re-derived rather than restated:** a lowercase-only string with no digits and
-        no telltale word — `abcdefghijklmnopqrst` — matches the safe shape and prints. Confirmed by
-        running `render()` on that exact value. Not what credentials look like, but not zero.
-        `hooks/scan-secrets.sh` is the real tool for that job and is one of the four dormant hooks.
+      - **Residual gap as understood at the time** — corrected by task 10d, which found it
+        understated the real one. Left visible rather than deleted.
+- [x] 10d. **Make the two regexes share one definition of "separator".** Verdict 211 returned
+      `risk=high`, `success_masking: fail` — the first non-passing dimension on this branch — and it
+      was right. `SAFE_VALUE` permitted `" "` and `"."` as separators while `looks_opaque()`'s run
+      test treated them as **breaks**, so a secret written in groups
+      (`k033XTNGcymwgnK R5BLmFg8QysGFbu N3z5sbkm2u` — how licence keys and 2FA seeds are pasted)
+      satisfied both filters. Proven end to end through the real shipped hook, not the isolated
+      function.
+      - **Third leak of one species, so the fix is the species, not the instance.** The bug was
+        never the character set; it was two regexes owning separate definitions of the same
+        concept. There is now one `SEPARATORS` constant: `SAFE_VALUE` permits it, `looks_opaque()`
+        strips exactly it before measuring. Grouping a secret can no longer hide it.
+      - **Reproduced before fixing, at the measurement layer.** `leakcheck.py` gained six chunked
+        families first and went red: **1649/2000 space-chunked, 1679 dot-chunked, 1698 mixed** —
+        ~85%, far worse than the base64 case, and invisible to the previous 7-family run. That is
+        the "0 / 14000" of task 10c exposed for what it was: a measurement of the families I had
+        thought of. The checker now covers 13 families across both surfaces, 52,000 samples.
+      - **A second signal, because a digit is not guaranteed.** After the separator fix, 62 leaks
+        remained — runs that happened to contain no digits (~1% of 25-character keys). A run is now
+        token-like if it mixes letters with digits **or** mixes both letter cases. A single-case,
+        digit-free identifier such as `claudepluginsofficial` stays printable, which is what keeps
+        real plugin ids legible.
+      - **Sub-key names are shape-checked too** — verdict 211 also caught that a credential used as
+        a *map key* was echoed unconditionally. `SAFE_NAME` adds `@` so
+        `frontend-design@claude-plugins-official` survives; a case pins that.
+      - **The suite caught a design error in the fix itself.** `render_name()` first applied the
+        keyword filter and printed `permissions.<redacted>`, hiding the label `apiKey`. That
+        protects nothing — the *value* was already redacted — and costs the reader the one word
+        that made the finding worth reading. Names are now shape-checked only. Two pre-existing
+        cases went red and were right; the code was wrong.
+      - **Measured:** leak rate **0 / 52000**, and the checker is falsified — **6755** against
+        `6868451`. Three new suite cases go red against `6868451` too. **36/36** own suite,
+        **25/25** repo, **44/44 ms** (budget ≤150 ms), silent against the real config, `probe.sh`
+        C3 still printing `permissions.defaultMode` in full.
+      - **Now disclosed, having gone unnamed for three commits:** `permissions.allow` and
+        `permissions.deny` are lists, so they always print `<changed>`. They sit beside the
+        motivating case and a reader may well want their contents. The withholding is deliberate;
+        the silence about it was not.
+      - **Residual gap, re-derived by running `render()` on the exact value:** a single-case,
+        digit-free run of 20+ letters — `abcdefghijklmnopqrst` — prints. Real credentials
+        essentially always carry a digit or mixed case. Not zero. `hooks/scan-secrets.sh` is the
+        real tool for this and is one of the four dormant hooks.
 
 ## Risks
 
@@ -465,8 +504,8 @@ was re-read, not from an expectation.
 
 | Area | Result |
 |---|---|
-| `hooks/verify-hook-wiring.test.sh` | **32/32 pass** (20 at first ship; 5 from task 10; 3, 2 and 3 from 10a–10c, one of 10c's replacing a case whose expectation the redesign deliberately changed). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
-| Value-leak rate (`verify-hook-wiring.leakcheck.py`) | **0 / 14000** — seven credential families, 2000 samples each, fixed seed, `render()` extracted from the live hook. The checker is proven able to fail: **995** against `2fad70f`'s renderer, including 871/2000 short base64 |
+| `hooks/verify-hook-wiring.test.sh` | **36/36 pass** (20 at first ship, 16 added across tasks 10–10d). Against the no-op stub it was 10/20 — the red run happened first, and every later batch was watched going red against the exact prior version of the hook |
+| Value-leak rate (`verify-hook-wiring.leakcheck.py`) | **0 / 52000** — thirteen credential families including chunked ones, 2000 samples each, both surfaces (value and sub-key name), fixed seed, `render()` extracted from the live hook rather than reimplemented. The checker is proven able to fail: **6755** against `6868451`'s renderer |
 | Full repo suite | **25/25 suites pass** (20 `*.test.sh`, 5 `*.test.py`) |
 | Can it go red? | Yes — `verify-hook-wiring.probe.sh`, four break/restore cycles against the real config in a scratch `$HOME` |
 | False alarms on real data | None. The live `settings.json` — 27 command hooks: 16 distinct scripts, 10 orca conditionals, plus 1 `statusLine` — produces **0 findings**, and the probe's scratch `$HOME` has no `.orca/` at all, so all 10 conditionals pointed at a file that was not there |

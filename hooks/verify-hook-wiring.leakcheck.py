@@ -38,6 +38,18 @@ def rand_bytes(n):
     return bytes(random.getrandbits(8) for _ in range(n))
 
 
+ALNUM = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+
+def token(n):
+    return "".join(random.choice(ALNUM) for _ in range(n))
+
+
+def chunked(sep, chunk, count):
+    """A secret pasted in groups -- how license keys and 2FA seeds are written."""
+    return sep.join(token(chunk) for _ in range(count))
+
+
 FAMILIES = [
     ("std base64 (40 bytes)", lambda: base64.b64encode(rand_bytes(40)).decode()),
     ("urlsafe base64 (40 bytes)", lambda: base64.urlsafe_b64encode(rand_bytes(40)).decode()),
@@ -47,19 +59,43 @@ FAMILIES = [
     ("JWT-ish", lambda: "eyJ" + base64.urlsafe_b64encode(rand_bytes(60)).decode()),
     ("short b64 (16 bytes)", lambda: base64.b64encode(rand_bytes(16)).decode()),
     ("short hex (12 bytes)", lambda: rand_bytes(12).hex()),
+    # Verdict 211: SAFE_VALUE permits space and dot as separators while the run
+    # test treated them as breaks, so a secret written in groups slipped through
+    # both. These families exist so that disagreement cannot come back unseen.
+    ("space-chunked 3x15", lambda: chunked(" ", 15, 3)),
+    ("space-chunked 5x8", lambda: chunked(" ", 8, 5)),
+    ("dot-chunked 4x10", lambda: chunked(".", 10, 4)),
+    ("hyphen-chunked 5x5 (licence key)", lambda: chunked("-", 5, 5)),
+    ("underscore-chunked 4x9", lambda: chunked("_", 9, 4)),
+    ("mixed separators", lambda: token(9) + " " + token(9) + "." + token(9) + "-" + token(9)),
 ]
 
+# Absent in revisions before sub-key names were shape-checked. Kept optional so
+# this file stays runnable against an older hook, which is how its own falsifier
+# works -- a checker that cannot be pointed at known-bad code proves nothing.
+render_name = ns.get("render_name")
+
+
+def leaked(secret, out):
+    """Any appearance of the secret, or of a usable prefix of it."""
+    return secret in out or (len(secret) >= 12 and secret[:12] in out)
+
+
 total = 0
+print("%-34s %10s %10s" % ("family", "as value", "as sub-key"))
 for label, gen in FAMILIES:
-    leaks = 0
+    as_value = as_name = 0
     for _ in range(2000):
         secret = gen()
-        out = render(secret, "defaultMode")
-        # Any appearance of the secret, or of a usable prefix of it.
-        if secret in out or (len(secret) >= 12 and secret[:12] in out):
-            leaks += 1
-    total += leaks
-    print("%-28s leaked %4d / 2000" % (label, leaks))
+        # A credential can arrive as the VALUE of an ordinary setting or as the
+        # NAME of a map entry -- an API key used as a dict key is ordinary. Both
+        # reach stdout, so both are measured.
+        if leaked(secret, render(secret, "defaultMode")):
+            as_value += 1
+        if render_name is not None and leaked(secret, render_name(secret)):
+            as_name += 1
+    total += as_value + as_name
+    print("%-34s %10d %10d" % (label, as_value, as_name))
 
 print("\n-- values that MUST still print --")
 for v in ["default", "bypassPermissions", "acceptEdits", "plan", "dark", True, 10, None]:

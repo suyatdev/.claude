@@ -334,6 +334,42 @@ check "a standard-base64 secret is withheld" "$H" 1 \
   "$PFX|permissions.defaultMode" \
   "$B64|Xy9+aB|not executable|no such file|$ORCA|$SL"
 
+# Verdict 211, and the third leak of the same species: SAFE_VALUE permitted " "
+# and "." as separators while the run test treated them as BREAKS, so a secret
+# written in groups satisfied both. Measured at ~85% before the fix. The two
+# regexes now share one SEPARATORS definition.
+CHUNKED='k033XTNGcymwgnK R5BLmFg8QysGFbu N3z5sbkm2u'
+H="$(new_home chunked)"
+edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$CHUNKED'"
+check "a space-chunked secret is withheld" "$H" 1 \
+  "$PFX|permissions.defaultMode|changed" \
+  "$CHUNKED|k033XTNGcymwgnK|not executable|no such file|$ORCA|$SL"
+
+DOTTED='aB3xK9mQ.p7ZrT2wL.vN8sJ4hC.yD6gF1bM'
+H="$(new_home dotted)"
+edit_json "$H/.claude/settings.json" "d['permissions']['defaultMode'] = '$DOTTED'"
+check "a dot-chunked secret is withheld" "$H" 1 \
+  "$PFX|permissions.defaultMode|changed" \
+  "$DOTTED|aB3xK9mQ|not executable|no such file|$ORCA|$SL"
+
+# A sub-key NAME is printed too, and an API key used as a map key is an ordinary
+# shape. Names were echoed unconditionally until verdict 211 said so.
+KEYNAME='AKIA4X9QmZ2vTpLr7Wc3'
+H="$(new_home secretname)"
+edit_json "$H/.claude/settings.json" "d['permissions']['$KEYNAME'] = True"
+check "a credential used as a sub-key name is withheld" "$H" 1 \
+  "$PFX|permissions.|absent from HEAD" \
+  "$KEYNAME|AKIA4X9QmZ2v|not executable|no such file|$ORCA|$SL"
+
+# ...and the legitimate long identifier it must NOT withhold. A real plugin id
+# is 35 characters of mixed separators and would be useless as `<changed>`.
+H="$(new_home pluginname)"
+edit_json "$H/.claude/settings.json" \
+  'd["enabledPlugins"]["frontend-design@claude-plugins-official"] = True'
+check "a real plugin id survives the name filter" "$H" 1 \
+  "$PFX|enabledPlugins.frontend-design@claude-plugins-official" \
+  "changed|redacted|not executable|no such file|$ORCA|$SL"
+
 # A structure is not a legible value: there is no one-line rendering of a list
 # that helps a reader, and plenty that could hide a credential inside.
 H="$(new_home structure)"
