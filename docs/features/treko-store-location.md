@@ -697,3 +697,32 @@ branch is exercised only incidentally, by `test_a_second_launch_does_not_rewrite
 already_adopted_store`'s second call — at that point the fixture's legacy file still
 exists on disk, so even that call does not isolate the "no legacy at all" combination.
 Stated plainly: this exact combination is implemented but not directly tested.
+
+### Task 6 follow-up — the fourth state's line was false
+
+The paragraph above was wrong to accept: routing "store present, legacy absent" into the
+`"already_present"` branch means `adopt_legacy_store` prints "store already present, legacy
+file ignored" when there is no legacy file to ignore. That is not a rare corner — it is what
+prints on every launch after the first, and permanently on every fresh clone once
+`treko/tracker-data.js` is untracked. `rules/core-conduct.md`: a message that reads as a
+measurement must be one.
+
+Fixed by reordering the guard: ask `legacy_path.exists()` first. All four states still land
+on D4's three lines (absent/absent and present/absent both report `"no_legacy"`), so
+acceptance criterion 12 still holds, and every line is true whenever it prints. Red test
+added first, in its own commit (`99c22dc`): store present, legacy absent → outcome
+`"no_legacy"`, stderr exactly `["no legacy store to adopt"]`, store left byte-identical —
+confirmed failing against the pre-fix order (`'already_present' == 'no_legacy'`) before the
+reorder landed.
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q   # 21 passed
+cd treko && python3 -m pytest -q                           # 213 passed in 118.37s
+```
+
+213 = task 6's 212 baseline + this one new test. The other 20 tests in
+`test_store_location.py` are unaffected by the reorder: it is a straight conjunction with
+distinct early returns per branch, and the swap only changes behavior for the one combination
+(store present, legacy absent) that had no test pinning it before this commit.

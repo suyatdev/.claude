@@ -103,11 +103,14 @@ def ensure_store_dir(path):
 def adopt_legacy_store(store_path, legacy_path):
     """Copy the legacy store into the configured location, exactly once.
 
-    The guard is a conjunction, checked in this order so it stays obvious to a reader:
-    copy only when `store_path` is absent *and* `legacy_path` exists. Either half failing
-    is its own reported outcome, not a fallthrough -- a present `store_path` must never be
-    overwritten (it may hold real data the legacy file does not), and an absent
-    `legacy_path` is the ordinary case on every launch after the first, not an error.
+    The guard is a conjunction, checked in this order so every outcome it reports stays
+    true: ask whether a legacy store exists *before* asking whether the configured one
+    does. An absent `legacy_path` is the ordinary case on every launch after the first --
+    and permanent on a fresh clone -- and must be reported as "no legacy store to adopt"
+    regardless of `store_path`, never as "legacy file ignored" when there was no legacy
+    file to ignore. Only once a legacy file is confirmed present does a present
+    `store_path` become "already present, legacy file ignored"; a present `store_path`
+    must never be overwritten (it may hold real data the legacy file does not).
 
     `Path.exists()` decides whether a legacy file is there, never `store.read_store` --
     that call returns a fresh empty envelope for a missing file instead of raising, so
@@ -125,13 +128,13 @@ def adopt_legacy_store(store_path, legacy_path):
     store_path = Path(store_path)
     legacy_path = Path(legacy_path)
 
-    if store_path.exists():
-        print(MSG_ALREADY_PRESENT, file=sys.stderr)
-        return OUTCOME_ALREADY_PRESENT
-
     if not legacy_path.exists():
         print(MSG_NO_LEGACY, file=sys.stderr)
         return OUTCOME_NO_LEGACY
+
+    if store_path.exists():
+        print(MSG_ALREADY_PRESENT, file=sys.stderr)
+        return OUTCOME_ALREADY_PRESENT
 
     try:
         data = store.read_store(legacy_path)
