@@ -1,7 +1,9 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/treko-store-location
+compliance_verdict: pass  # rounds 2-5, 2026-08-22; subject blob 348364d (content at 4fc3479)
+adr: 0034  # verified free against origin/main; 0026 is duplicated, 0028 unused
 ---
 
 # Treko: give the analysis store a home outside every repo
@@ -9,6 +11,13 @@ branch: none
 Planned 2026-08-22 on `docs/close-treko-rename` @ `bedb65f`, immediately after card 1 merged
 (PR #64). Model-switch checkpoint 1 (entering planning): **asked and answered** — stay on Opus 5,
 because the change touches the server's path-containment guard.
+
+> **Gate status: OPEN.** `gate confirmed` given 2026-08-22 after PR #65 merged (`e6a9bb6`), with
+> compliance PASS on rounds 2-5. Branch `feat/treko-store-location` cut from `origin/main` @
+> `e6a9bb6`. **Model-switch checkpoint 2 (planning -> implementation): asked and answered — stay
+> on Opus 5. Do not re-ask.** The spec is frozen from here: an edit during implementation is a
+> phase violation *and* invalidates the compliance verdict by blob. If it proves wrong, stop and
+> say "GATE: Spec change needed — switch back to the high-tier model."
 
 This is a **follow-on to card 1**, not one of the numbered cards 2-5. It ships no new tracker
 behaviour and no UI change: the browser asks for the same URL and renders the same page.
