@@ -660,8 +660,30 @@ No new dependency is added by this card. Adding one would need a separate ask
       treko/server.py --open`, no `nohup`/`&`): it printed the startup banner, served the page and
       its assets (request log shows 17 accepted requests, one 404 for `favicon.ico`), bound with
       `ppid` = the invoking shell (not 1), and left no process running after `kill`.
-- [ ] 10. `PORTS.md` row, `README.md:62` roadmap entry, `CLAUDE.md` skills-catalog line, `.gitignore`
+- [x] 10. `PORTS.md` row, `README.md:62` roadmap entry, `CLAUDE.md` skills-catalog line, `.gitignore`
       comment.
+
+      **Done 2026-08-21.** `PORTS.md:26` — tool name and path renamed to Treko/`treko/server.py`,
+      `TASK_TRACKER_PORT` → `TREKO_PORT`; the `docs/features/tracking-feature-state.spec.md`
+      §Security citation left untouched — it names a real file on another, in-flight card's
+      branch that this card's scope explicitly excludes. `README.md:62` — Roadmap entry renamed
+      to Treko, kept `(#51)` and `[x]`, added one clause for the new auto-launch behaviour;
+      cards 2-5 (Ledger, dashboard, agent panel, analyzer traversal) not mentioned, per scope.
+      `CLAUDE.md:31` — catalog line renamed `tracking-feature-state` → `treko`, description
+      rewritten to match the skill's new frontmatter (launches and opens the browser in one
+      step). Checked whether the surrounding list is alphabetically ordered: it is not (e.g.
+      `dispatching-pane-agents` precedes `designing-agentic-architecture`; `integrating-mcp`
+      precedes `securing-agentic-systems`) — it groups by theme, not alphabetically, so the line
+      was left in its existing position rather than moved. `.gitignore:77` — comment renamed
+      `(task-tracker)` → `(treko)`; the patterns below it (`__pycache__/`, `*.py[cod]`,
+      `.pytest_cache/`) are generic Python cache paths, none names the old directory, so none
+      needed to move.
+
+      Verified: `git grep -n -iE 'task[-_ ]tracker' -- PORTS.md README.md CLAUDE.md .gitignore`
+      → empty. `git grep -n 'tracking-feature-state' -- PORTS.md README.md CLAUDE.md .gitignore`
+      → only the `PORTS.md:26` `.spec.md` citation, correct and deliberate. Full baseline
+      (`test_analyze.py test_store.py test_server.py test_server_lifetime.py test_ui_commands.py`)
+      163 passed in 112.83s. `test_autolaunch.py test_rename.py` 29 passed in 6.88s.
 - [ ] 11. Verify criterion 13: load the prototype's two unmodified pages against the store this tool
       writes and run all four checks (a)-(d). Record which check caught what; "both rendered" is not
       an acceptable entry in §Verification.
