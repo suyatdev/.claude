@@ -231,7 +231,26 @@ Scenario: an unparseable command string is not reported as broken
         `handoff/` scripts. Both replacement lists are derived from `settings.json`, not recalled.
       - Left alone as out of scope: "Every script is self-contained (no shared library)" is also
         stale now that `hooks/lib/` exists, but nothing in this card touches it.
-- [ ] 9. Observability judge, then PR.
+- [x] 9. Observability judge, then PR.
+      - Verdict 2026-08-22, `risk=medium confidence=high`, row 205 of
+        `coding-memory/observability-judge/verdicts.jsonl` (204 → 205, confirmed in this worktree's
+        store, not the main checkout's). Prose:
+        `coding-memory/observability-judge/2026-08-22-chore-hook-wiring-health-check.md`.
+      - It raised five items. **Two were real and are fixed below; three did not survive
+        re-measurement** — recorded here because "the judge said so" is not evidence either.
+        | Judge finding | Held up? |
+        |---|---|
+        | "25/25 suites" is really 17, one failing | **No.** 17 is the count under `hooks/` only, which is the scope *the dispatch prompt gave it*. Repo-wide `git ls-files '*.test.sh' '*.test.py'` is 20 + 5 = 25, and all 25 pass — re-run in full |
+        | `handoff/slim-session-start.sh` missing from the README's SessionStart list | **Yes** — fixed |
+        | "27 hooks / 16 scripts" is really 28 / 17 | **No.** 28/17 is the *tracked* `settings.json`; the card says *live*, and live is exactly 27/16 + 10 orca + 1 `statusLine` |
+        | `probe.sh` header says "Throwaway: delete after reading" but it is committed | **Yes** — header rewritten to state why it is permanent |
+        | Check 2 may no longer be inert | **Yes** — re-measured, see Verification |
+      - **Root cause of the one failing suite it saw:** `slim-session-start.test.sh` reports 13/29
+        inside a judge pane and 29/29 outside it. `slim-session-start.sh` deliberately no-ops when
+        `CLAUDE_PANE_AGENT` is set, and the suite never unsets it, so 16 of its cases cannot pass
+        in that environment. Reproduced both ways before concluding. **Not fixed here — different
+        file, different feature.** It will keep misleading every paned judge until it is; noted as
+        follow-up work, not folded into this card.
 
 ## Risks
 
@@ -301,15 +320,39 @@ was re-read, not from an expectation.
 | Exit code | 0 in every one of the 20 cases, including every failure path |
 | stderr | Empty in every one of the 20 cases — asserted, not assumed |
 
+Re-verified 2026-08-22 during task 9, because the judge challenged three of the numbers above and a
+challenged number is worth re-running rather than defending:
+
+| Re-check | Result |
+|---|---|
+| Full repo suite, re-run per-suite | **25/25 pass**, every suite named and its tail line read. `git ls-files '*.test.sh' '*.test.py'` = 20 + 5. The judge's "17 suites" was the count under `hooks/` alone — the scope its dispatch prompt gave it |
+| `slim-session-start.test.sh`, the suite the judge saw fail | **29/29 outside a pane, 13/29 with `CLAUDE_PANE_AGENT=1`.** Both run. The hook no-ops under that variable by design and the suite never unsets it, so a paned judge always sees it red. Environmental, not a regression |
+| Live-file hook counts | **27 command hooks, 16 distinct non-orca scripts, 10 orca conditionals, `statusLine` present** — re-counted from `~/.claude/settings.json` by parsing it. The table above is right; the judge's 28/17 is the *tracked* file on this branch, which has one more hook because this branch adds it |
+| Check 2, live | **Runs, and is silent.** See the resolved open issue below — this is the first time check 2 has been observed working against the real file rather than a fixture |
+| `verify-hook-wiring.probe.sh`, re-run end to end | All four break/restore cycles still red-then-green. Section D was **strengthened**: it compared post-run `git status` against "empty", but the real `settings.json` is routinely already dirty from `/model` churn, so it reported a change that was not the probe's. It now snapshots status before and after and compares the two. The UNCHANGED branch was observed; the CHANGED branch is reasoned, not run |
+
 Open issues:
 
-- **Check 2 is inert on this machine right now.** `HEAD:settings.json` does not exist in the shared
-  `~/.claude` checkout, because PR #63 has not been pulled into it. Check 1 runs and is clean. The
-  fix is the pull already listed as an outstanding user action, not a change here.
-- **The hook is registered in the tracked `settings.json`, not yet in the live one.** The live file
-  is untracked in that checkout, so nothing runs at session start until it is synced —
-  `SETUP.md` § 3.
+- ~~**Check 2 is inert on this machine right now.**~~ **Resolved — re-measured 2026-08-22 during
+  task 9, after the judge flagged it as possibly stale.** The shared `~/.claude` checkout is now on
+  `main` with `settings.json` tracked, `git show HEAD:settings.json` succeeds, and **check 2 runs**.
+  It is silent because live and HEAD are identical on all four wiring keys. The single tracked
+  difference is `model` (live `sonnet`, HEAD `opus[1m]`) — the exact key check 2 excludes by design,
+  so this is the ADR 0032 exclusion demonstrated on the real file rather than only in a fixture.
+  The card's earlier "inert" note described a checkout state that no longer exists; it is struck
+  rather than deleted because the measurement above it was true when taken.
+- **The hook is registered in the tracked `settings.json` on this branch, not yet in the live one.**
+  Expected and correct — this branch has not merged. The live file is now in sync with the shared
+  checkout's `main`, so once this PR merges and is pulled, check 2 will name `verify-hook-wiring.sh`
+  as present in HEAD and absent from the live file until `SETUP.md` § 3 is re-run. That firing is
+  the hook working, not a defect.
 - **Not verified: that a missing hook script is silent.** This feature is built on that measurement
   (claude 2.1.238, 2026-08-21, recorded above) and the `hooks/README.md` correction now cites it,
   but this session did not re-run that probe — it would need a live session started against a
   deliberately broken config.
+- **Follow-up, out of scope here: `hooks/handoff/slim-session-start.test.sh` is not hermetic.** It
+  inherits `CLAUDE_PANE_AGENT` from its environment, and the hook it tests no-ops under that
+  variable, so the suite reports 13/29 inside any pane-dispatched agent and 29/29 outside one. It
+  made this card's judge report a failing suite that is not failing. The fix is one `unset` in that
+  suite, but it belongs to the handoff feature, not this one — a drive-by edit here would put a
+  change to another feature's test inside a PR about hook wiring.

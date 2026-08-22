@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 # Task 4 probe — read-only against the real ~/.claude, then a break/restore
 # proof inside a scratch $HOME built from the REAL hooks and settings.json.
-# Nothing here writes to the real config. Throwaway: delete after reading.
+# Nothing here writes to the real config.
+#
+# Deliberately committed, not throwaway: it is the standing re-run of "can this
+# check actually go red?" against the real configuration. A green check that has
+# never been watched going red proves nothing, and that evidence has to be
+# reproducible by the next reader, not just asserted in the feature card.
+# Run: bash hooks/verify-hook-wiring.probe.sh "$PWD/hooks/verify-hook-wiring.sh"
 set -u
 
 REAL="$HOME/.claude"
 HOOK="$1"          # absolute path to verify-hook-wiring.sh under test
 
 lines() { [ -n "$1" ] && printf '%s\n' "$1" | wc -l | tr -d ' ' || echo 0; }
+
+# Baseline taken BEFORE anything runs. Section D compares against this rather than
+# against "empty": the real settings.json is routinely already dirty from /model
+# rewriting its "model" key (ADR 0032), so a non-empty status says nothing on its
+# own. Only a CHANGE between these two snapshots means this probe touched something.
+BEFORE="$(git -C "$REAL" status --porcelain -- settings.json hooks 2>/dev/null)"
 
 echo "=== A. why is the real config silent? ==="
 [ -e "$REAL/.git" ] && echo "A1 .git present: yes" || echo "A1 .git present: NO"
@@ -100,5 +112,11 @@ printf '    rc=%s lines=%s\n' "$rc" "$(lines "$out")"
 
 echo
 echo "=== D. the real ~/.claude was not touched ==="
-git -C "$REAL" status --porcelain -- settings.json hooks
-echo "D (empty above = this probe changed nothing)"
+AFTER="$(git -C "$REAL" status --porcelain -- settings.json hooks 2>/dev/null)"
+echo "D1 status before: ${BEFORE:-(clean)}"
+echo "D2 status after:  ${AFTER:-(clean)}"
+if [ "$BEFORE" = "$AFTER" ]; then
+  echo "D3 UNCHANGED — this probe touched nothing in the real ~/.claude"
+else
+  echo "D3 CHANGED — this probe modified the real ~/.claude. Investigate before trusting B/C."
+fi
