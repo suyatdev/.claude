@@ -99,6 +99,15 @@ __pycache__/
 # that history per
 # worktree and leave the repo with no structured verdict record once the prose
 # verdicts stop being tracked.
+# Treko's analysis store, which the tool generates and rewrites on every
+# `reanalyze`. It moved to $TREKO_STORE_DIR (default ${XDG_STATE_HOME:-~/.local/state}/treko)
+# so surveying a repo stops dirtying one -- see docs/features/treko-store-location.md.
+# The path is kept ignored because a copy left over from before the move still sits in
+# working trees, and D4 reads it once to adopt it. `tracker-data.sample.js` and
+# `tracker-data-fallback.js` stay TRACKED: they are vendored assets the page loads, not
+# artifacts the tool writes.
+/treko/tracker-data.js
+
 /CODING_MEMORY.md
 /coding-memory/*
 !/coding-memory/observability-judge/

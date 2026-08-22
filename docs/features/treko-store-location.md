@@ -471,7 +471,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       covers the banner's.
 - [x] 8. Wire `server.py`: import, `main()` call, `build_config`'s `store_dir`, `_serve_static`'s
       branch, and the banner line. Task 7's tests go green.
-- [ ] 9. Untrack `treko/tracker-data.js`, add the `.gitignore` entry, verify the sample and fallback
+- [x] 9. Untrack `treko/tracker-data.js`, add the `.gitignore` entry, verify the sample and fallback
       are still tracked.
 - [ ] 10. **ADR 0034** — the trust-boundary change, where the tool's data lives, and the accepted
       `file://` degradation. **0034 is verified free against `origin/main`** (which tops out at
@@ -783,3 +783,23 @@ code was touched to make room. `store_location.py` is a file of its own at 146 l
 now one line of headroom, so any further work on `server.py` moves logic out rather than adding.
 
 220 = the 213 at `d5804fb` plus these 7. Criterion 8's node-ID set diff is task 12.
+
+### Task 9 — what leaves git
+
+```
+git rm --cached treko/tracker-data.js
+git check-ignore -v treko/tracker-data.js   # .gitignore:109
+git ls-files treko/ | grep tracker-data
+```
+
+Untracked and ignored; still 207,489 bytes on disk, which is what lets D4 adopt it. Still
+tracked, per D6: `tracker-data-fallback.js`, `tracker-data.sample.js` — and
+`tracker-data.json`, which D6 does not name and this card therefore does not touch. Whether
+that file is generated too is worth a look, but it is a separate question from this one.
+
+The suite could not have caught the fresh-clone consequence on its own: `build_tree` copied
+the real store into every test tree, so the tests that read it passed here and would have
+failed on a clone that has no such file. `d935185` builds the tree's store from the tracked
+sample instead, verified with the real file moved aside (96 passed, 1 skipped; restored
+byte-identical) and with the counterfactual (disabling the sample copy fails exactly the two
+nodes that read the tree's store).
