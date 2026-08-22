@@ -8,7 +8,7 @@ so a test asserting "N cards in, N features out" against it would be flaky by co
 rather than by accident. The git commands below only ever run with an explicit `-C` into
 that tmpdir.
 
-Run:  uvx pytest==8.3.4 task-tracker/test_analyze.py
+Run:  uvx pytest==8.3.4 treko/test_analyze.py
 """
 
 import json
@@ -27,7 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / "hooks" / "lib"))
 import analyze as analyzer  # noqa: E402
 import feature_tasks  # noqa: E402  — imported independently, to recompute counts ourselves
 
-# Pinned from the shipped UI (`Task Tracker.dc.html`), which does
+# Pinned from the shipped UI (`Treko.dc.html`), which does
 # `TONES[x] || TONES.neutral` — an unknown tone renders as grey, silently.
 UI_TONES = {"ok", "warn", "bad", "info", "accent", "neutral"}
 # Pinned from the same file's STATE_RANK; an unknown state sorts as undefined.
@@ -198,7 +198,7 @@ def test_criterion_1_a_card_without_a_phase_key_is_still_a_card(repo):
     assert "alpha" in {f["name"] for f in run["features"]}, "a card with no phase: key is still a card"
 
     # Name the branch. A missing key reads back as "" and lands on not-a-known-phase
-    # (`grep -n 'No closing\|not in PHASE_MAP' task-tracker/analyze.py`); a card missing its
+    # (`grep -n 'No closing\|not in PHASE_MAP' treko/analyze.py`); a card missing its
     # closing `---` lands on unread-frontmatter instead. Asserting "some question was
     # raised" would pass on either, and they are different bugs.
     asked = [q["q"] for q in _questions_mentioning(run, "alpha")]

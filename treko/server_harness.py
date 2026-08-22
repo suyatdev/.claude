@@ -7,10 +7,10 @@ criterion it serves.
 
 Two rules govern this module:
 
-* **The real `task-tracker/` is never touched.** Every server runs against a per-test
-  copy under `tmp_path`, laid out as `<tmp>/task-tracker/` with `<tmp>/hooks/lib`
+* **The real `treko/` is never touched.** Every server runs against a per-test
+  copy under `tmp_path`, laid out as `<tmp>/treko/` with `<tmp>/hooks/lib`
   alongside it, because `analyze.py` resolves that path as `__file__/../../hooks/lib`
-  (`grep -n 'hooks.*lib' task-tracker/analyze.py`). Reproducing the layout is what lets
+  (`grep -n 'hooks.*lib' treko/analyze.py`). Reproducing the layout is what lets
   `reanalyze` run unmodified — a `PYTHONPATH` override would test a launch shape the
   feature does not use.
 * **`cmux` is faked, and the fake records what it was handed.** A fake proves the
@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-REAL_TREE = REPO_ROOT / "task-tracker"
+REAL_TREE = REPO_ROOT / "treko"
 
 # The surface the fake `cmux tree` reports present. Criterion 12 asserts the ref handed to
 # `send` is byte-identical to this, which is the whole identity claim a fake can carry.
@@ -83,12 +83,12 @@ time.sleep(float(os.environ["FAKE_HANG_SECS"]))
 
 
 def build_tree(tmp_path):
-    """A private copy of `task-tracker/` in the layout `analyze.py` expects.
+    """A private copy of `treko/` in the layout `analyze.py` expects.
 
     `test_*.py` is copied in deliberately: criterion 11 asserts `/test_server.py` is a
     `404`, and that only proves the manifest is what refuses if the file is really there.
     """
-    tree = tmp_path / "task-tracker"
+    tree = tmp_path / "treko"
     if tree.exists():
         return tree  # idempotent: a test launching a second server reuses the first's tree
     shutil.copytree(REAL_TREE, tree, ignore=shutil.ignore_patterns("__pycache__"))
@@ -252,8 +252,8 @@ def server_env(tmp_path, tree, cmux_bin, cmux_log, *, surface=FAKE_SURFACE,
         "FAKE_HANG_SECS": str(HANG_SECS),
     })
     # Inherited overrides would leak a developer's own tuning into every test.
-    for key in ("TASK_TRACKER_PORT", "TASK_TRACKER_IDLE_SECS", "TASK_TRACKER_POLL_SECS",
-                "TASK_TRACKER_ANALYZE_SECS"):
+    for key in ("TREKO_PORT", "TREKO_IDLE_SECS", "TREKO_POLL_SECS",
+                "TREKO_ANALYZE_SECS"):
         env.pop(key, None)
     env.update(overrides or {})
     return env
@@ -270,7 +270,7 @@ def launch(tmp_path, *, tree=None, overrides=None, surface=FAKE_SURFACE,
 
     env = server_env(tmp_path, tree, cmux_bin, cmux_log, surface=surface,
                      tree_surface=tree_surface, overrides=overrides)
-    env["TASK_TRACKER_PORT"] = str(port)
+    env["TREKO_PORT"] = str(port)
 
     handle = open(stderr_path, "ab", buffering=0)
     try:

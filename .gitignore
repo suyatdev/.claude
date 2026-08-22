@@ -78,7 +78,7 @@ tasks/
 # vendored handoff hooks write their session files to a nested .claude/ here)
 /.claude/
 
-# Python bytecode / test caches (task-tracker)
+# Python bytecode / test caches (treko)
 __pycache__/
 *.py[cod]
 .pytest_cache/

@@ -12,4 +12,4 @@ date: 2026-08-09T02:52:21Z
 | Screen | Repo files |
 | --- | --- |
 | Task Tracker Directions.dc.html | hooks/lib/feature_tasks.py, CLAUDE.md (vocabulary only — no code copied) |
-| Task Tracker.dc.html | same vocabulary; loads tracker-data.js (schema in tracker-data.json) |
+| Treko.dc.html | same vocabulary; loads tracker-data.js (schema in tracker-data.json) |
