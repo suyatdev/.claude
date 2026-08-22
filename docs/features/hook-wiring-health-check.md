@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: xhigh
 branch: chore/hook-wiring-health-check
 ---
@@ -262,6 +262,19 @@ Scenario: an unparseable command string is not reported as broken
         still carried the "check 2 is inert on this machine" claim** that the card had just been
         careful to correct. Fixed — the README now refuses to name any machine's current state, and
         `measure.sh` derives its configuration label instead of hardcoding it.
+      - **Third verdict, at `5b6fa8d`: `risk=low confidence=high`, row 207**, prose at
+        `2026-08-22-chore-hook-wiring-health-check-5b6fa8d.md`. Three passes because each response
+        commit moved HEAD and the gate is strict — not because the change kept failing. It swept
+        the branch for a third instance of the stale-snapshot pattern and found none.
+      - **Accepted, not fixed — one open observation from round 3.** `measure.sh` now hand-copies
+        the hook's two preconditions rather than calling into it, so the pair can drift apart if
+        the hook's logic changes. Left as is: the alternative couples a dev-support script to hook
+        internals, and the blast radius is a mislabelled line in a script nothing depends on.
+        Recorded here so a future reader finds a decision rather than an oversight.
+      - **PR #66** opened at `5b6fa8d` while verdict 207 was still uncommitted — committing it
+        first would have moved HEAD and invalidated it, which `judge-guard` enforces strictly.
+        This branch subsumes `docs/post-merge-63`, whose single commit `8cdd1e4` is included here,
+        so that branch needs no PR of its own.
 
 ## Risks
 
@@ -363,6 +376,19 @@ Open issues:
   (claude 2.1.238, 2026-08-21, recorded above) and the `hooks/README.md` correction now cites it,
   but this session did not re-run that probe — it would need a live session started against a
   deliberately broken config.
+- **Live consequence of this card reaching `phase: review` — read before responding to PR feedback.**
+  Measured 2026-08-22 by feeding `hooks/phase-guard.sh` a synthetic `Write` payload for a source
+  path immediately after the frontmatter flip: **denied, exit 2.** Moving to `review` retires this
+  card's `implementation` claim on `chore/hook-wiring-health-check`, and the two inherited
+  `planning` cards on `origin/main` — `falsify-harness-signatures.md` and
+  `pane-dispatch-model-flag.md` — then block source writes on the branch, naming both. `docs/*`,
+  `rules/*`, `skills/*`, `.claude/*` and `settings.json` stay writable, so documentation work is
+  unaffected, and there is no bypass variable by design.
+  **So a code change requested in review cannot land on this branch as it stands.** Two fixes, both
+  the user's call: advance or delete the two stale planning cards (the actual fix, and already
+  outstanding), or flip this card back to `implementation` for the duration of the change. This is
+  not a defect introduced here — the guard is doing exactly what it was built to do — but it is a
+  trap for the next session, so it is written down rather than rediscovered.
 - **Follow-up, out of scope here: `hooks/handoff/slim-session-start.test.sh` is not hermetic.** It
   inherits `CLAUDE_PANE_AGENT` from its environment, and the hook it tests no-ops under that
   variable, so the suite reports 13/29 inside any pane-dispatched agent and 29/29 outside one. It
