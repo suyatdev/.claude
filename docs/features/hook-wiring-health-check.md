@@ -1,8 +1,12 @@
 ---
-phase: planning
+phase: implementation
 model_tier: xhigh
-branch: none
+branch: chore/hook-wiring-health-check
 ---
+
+Gate opened 2026-08-22 on the literal user phrase `gate confirmed`. Branch cut from
+`docs/post-merge-63` @ `8cdd1e4`, not from `main`, because that branch carries this card and has
+not merged yet — rebase or merge it in once it lands.
 
 # Hook-wiring health check: say so when a guard is registered but cannot run
 
@@ -165,7 +169,10 @@ Scenario: an unparseable command string is not reported as broken
 
 ## Tasks
 
-- [ ] 0. Branch `chore/hook-wiring-health-check` + worktree. **Only after `gate confirmed`.**
+- [x] 0. Branch `chore/hook-wiring-health-check` + worktree. **Only after `gate confirmed`.**
+      Worktree `.claude/worktrees/hook-wiring-health-check`, branch cut from `docs/post-merge-63`
+      @ `8cdd1e4`. Recording the branch here is what unblocks `phase-guard` for task 1 — source
+      writes were denied on `docs/post-merge-63` precisely because no card claimed it.
 - [ ] 1. **Red first.** Write `hooks/verify-hook-wiring.test.sh` covering every scenario above,
       against a stub that does nothing. Confirm the suite fails for the stated reasons before any
       implementation exists — and that the "healthy" cases pass against a no-op, so they are known
