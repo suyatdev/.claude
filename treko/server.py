@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Control server for the Task Tracker UI — the whole of this feature's trust boundary.
+"""Control server for the Treko UI — the whole of this feature's trust boundary.
 
 The wire contract (routes, status codes, audit-line format) is §Design 3 of
 `docs/features/tracking-feature-state.spec.md`; the posture (token, surface binding,

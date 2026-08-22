@@ -684,6 +684,15 @@ No new dependency is added by this card. Adding one would need a separate ask
       → only the `PORTS.md:26` `.spec.md` citation, correct and deliberate. Full baseline
       (`test_analyze.py test_store.py test_server.py test_server_lifetime.py test_ui_commands.py`)
       163 passed in 112.83s. `test_autolaunch.py test_rename.py` 29 passed in 6.88s.
+
+      **Gap-fill 2026-08-21.** Re-running criterion-1's grep after task 10 surfaced three more
+      hits, all in prose/CLI output the rename covers and none protected by §Decision's data-
+      contract exemption: `treko/server.py:2` (module docstring), `treko/analyze.py:2` (module
+      docstring), `treko/analyze.py:779` (argparse `description=`). Missed earlier because task 4
+      scoped env vars and task 8 scoped the CLI parser in `server.py` — neither task's grep read
+      `server.py:2` or ever touched `analyze.py`. All three renamed to Treko; `analyze.py:4` (the
+      Nocturne export's `task-tracker v0.4.1` version string) left untouched, confirmed byte-
+      identical before and after.
 - [ ] 11. Verify criterion 13: load the prototype's two unmodified pages against the store this tool
       writes and run all four checks (a)-(d). Record which check caught what; "both rendered" is not
       an acceptable entry in §Verification.
