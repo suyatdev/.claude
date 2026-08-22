@@ -1,7 +1,8 @@
 ---
 phase: review
 model_tier: low
-branch: feat/treko-rename
+branch: none  # merged via PR #64 (e161279) 2026-08-22; feat/treko-rename NOT auto-deleted,
+              # still on origin as of 2026-08-22 (checked ls-remote + PR timeline)
 ---
 
 # Treko: rename the tracker, and launch it without being asked
@@ -771,6 +772,14 @@ No new dependency is added by this card. Adding one would need a separate ask
 
       Card 2 does **not** inherit the nested feature → story → task rows, run renaming, the agent
       panel's token counter, or panel persistence — those are cards 3 and 4, named in §Deferred.
+
+      **Merged.** PR #64 merged 2026-08-22T05:48:27Z as `e161279`. Verified rather than assumed:
+      the branch tip `f2cd7d2` is an ancestor of `origin/main`, and `treko/`, ADR 0033 and the
+      208-row observability ledger are all present on `main` with `task-tracker/` gone. The head
+      branch was **not** auto-deleted — `feat/treko-rename` is still on origin, checked via
+      `ls-remote` and the absence of a `head_ref_deleted` timeline event, not inferred from the
+      merge time. The judge's `implementation` verdict at `c46d92d` (`risk=low`) is backfilled
+      `outcome: clean` in the same commit as this note: merged with no rework and no bug found.
 
 ## Risks
 
