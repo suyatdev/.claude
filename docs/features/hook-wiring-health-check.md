@@ -1,5 +1,5 @@
 ---
-phase: review
+phase: implementation
 model_tier: xhigh
 branch: chore/hook-wiring-health-check
 ---
@@ -89,6 +89,25 @@ signal they have learned to skip.
 Everything not listed in either column (`theme`, `tui`, notification preferences) is ignored: they
 are preferences, and a drift there is not a safety event.
 
+**Amended 2026-08-22 during PR #66 review, at the user's request — granularity of a drift finding.**
+As first built, only `hooks` was named per item; every other wiring key reported as
+`live "permissions" differs from HEAD:settings.json`. That is the one output this feature cannot
+afford. The drift that motivates the whole card is `permissions.defaultMode` moving unannounced, and
+a reader told only that *permissions* changed still has to diff the file by hand — the work the check
+was supposed to have already done. The motivating scenario was the one the output served worst.
+
+Every non-`hooks` wiring key is now descended **one level** and named by sub-key, with both values:
+
+```
+verify-hook-wiring: settings.json drift — permissions.defaultMode: live "bypassPermissions", HEAD "default"
+```
+
+Bounds, so this does not grow into a JSON differ: one level only (deeper nesting costs line length
+and buys little); values truncated at 60 characters (knowing a long value moved beats silence); and
+if either side is not an object — a key that changed type, or is absent entirely — there is no
+sub-key to name and the key-level line stays. `hooks` keeps its existing per-script phrasing, which
+is already more useful than a sub-key path would be.
+
 ### Non-goals, stated so the card cannot over-promise
 
 - **It cannot detect its own absence.** If `settings.json` vanishes, the `SessionStart` hook
@@ -159,6 +178,19 @@ Scenario: ~/.claude is mid-rebase
   When a session starts
   Then check 1 still runs
     And check 2 is skipped without comment
+
+Scenario: a drifted setting is named, not just its parent key
+  Given the live settings.json sets permissions.defaultMode to "bypassPermissions"
+    And HEAD:settings.json sets it to "default"
+  When a session starts
+  Then the output names permissions.defaultMode and both values
+    And does not merely say that "permissions" differs
+
+Scenario: a wiring key that stops being an object still reports
+  Given a wiring key is an object in HEAD and a string in the live file
+  When a session starts
+  Then the output names that key at key level
+    And exits 0
 
 Scenario: an unparseable command string is not reported as broken
   Given a hook command whose script path cannot be extracted with confidence
@@ -275,6 +307,25 @@ Scenario: an unparseable command string is not reported as broken
         first would have moved HEAD and invalidated it, which `judge-guard` enforces strictly.
         This branch subsumes `docs/post-merge-63`, whose single commit `8cdd1e4` is included here,
         so that branch needs no PR of its own.
+- [x] 10. **Review change, requested by the user on PR #66:** name the drifted sub-key instead of
+      only its parent key. Spec amendment recorded under *Check 2* above rather than folded in
+      silently — the card should show that this arrived in review, not that it was always planned.
+      - **Red first, and the red run was watched.** Five cases added to
+        `verify-hook-wiring.test.sh` against the unchanged hook: **20/25**, every failure reading
+        `missing:<permissions.defaultMode>` or `lines=1 want=2` against the old
+        `live "permissions" differs` output. Then the implementation: **25/25**.
+      - The sixth case — *a key that stops being an object still reports at key level* — **passed
+        before the change as well**, and is recorded as proving nothing on its own. It is the
+        regression guard for the fallback path, not evidence of the feature.
+      - Implementation is `subkey_drift()` plus a four-line branch in `check_live_matches_head`.
+        `hooks` is untouched: its per-script phrasing already beats a sub-key path.
+      - **Re-measured, because the change adds work to the compare path:** 46 ms real config /
+        40 ms scratch (20 runs each, warm), bare interpreter 19 ms, budget ≤150 ms. Full repo suite
+        **25/25**. Silent against the real live config, as before.
+      - **The motivating scenario, end to end.** `verify-hook-wiring.probe.sh` C3 previously printed
+        `live "permissions" differs from HEAD:settings.json`; it now prints
+        `permissions.defaultMode: live "bypassPermissions", HEAD "default"`. That is the difference
+        between a finding you can act on and one that only tells you to go looking.
 
 ## Risks
 
@@ -336,7 +387,7 @@ was re-read, not from an expectation.
 
 | Area | Result |
 |---|---|
-| `hooks/verify-hook-wiring.test.sh` | **20/20 pass**. Against the no-op stub it was 10/20 — the red run happened first |
+| `hooks/verify-hook-wiring.test.sh` | **25/25 pass** (20 at first ship, 5 added by task 10). Against the no-op stub it was 10/20 — the red run happened first, and task 10's five were watched going red too |
 | Full repo suite | **25/25 suites pass** (20 `*.test.sh`, 5 `*.test.py`) |
 | Can it go red? | Yes — `verify-hook-wiring.probe.sh`, four break/restore cycles against the real config in a scratch `$HOME` |
 | False alarms on real data | None. The live `settings.json` — 27 command hooks: 16 distinct scripts, 10 orca conditionals, plus 1 `statusLine` — produces **0 findings**, and the probe's scratch `$HOME` has no `.orca/` at all, so all 10 conditionals pointed at a file that was not there |
@@ -354,7 +405,7 @@ challenged number is worth re-running rather than defending:
 | Live-file hook counts | **27 command hooks, 16 distinct non-orca scripts, 10 orca conditionals, `statusLine` present** — re-counted from `~/.claude/settings.json` by parsing it. The table above is right; the judge's 28/17 is the *tracked* file on this branch, which has one more hook because this branch adds it |
 | Check 2, live | **Runs, and is silent.** See the resolved open issue below — this is the first time check 2 has been observed working against the real file rather than a fixture |
 | `verify-hook-wiring.probe.sh`, re-run end to end | All four break/restore cycles still red-then-green. Section D was **strengthened**: it compared post-run `git status` against "empty", but the real `settings.json` is routinely already dirty from `/model` churn, so it reported a change that was not the probe's. It now snapshots status before and after and compares the two. The UNCHANGED branch was observed; the CHANGED branch is reasoned, not run |
-| Runtime, re-measured after check 2 went live | **43 ms real config / 44 ms scratch checkout** (20 runs each, warm), bare `python3 -c pass` 18 ms. Budget ≤150 ms. The earlier 46/45 ms was a true measurement of a machine where check 2 short-circuited; the difference between the two configurations is inside run-to-run noise |
+| Runtime, re-measured after check 2 went live | **43 ms real config / 44 ms scratch checkout** (20 runs each, warm), bare `python3 -c pass` 18 ms. Budget ≤150 ms. The earlier 46/45 ms was a true measurement of a machine where check 2 short-circuited; the difference between the two configurations is inside run-to-run noise. **Superseded by task 10's re-measure** (46/40 ms) once sub-key naming landed — kept here because it was true when taken, and the range across all three runs, 40–46 ms, is the honest figure |
 | `measure.sh`'s configuration label | Was **hardcoded** as "check 2 short-circuits (this machine today)" and had silently gone wrong. Now derived at run time from the same two preconditions the hook applies. Both branches confirmed reachable — real `HOME` → "runs in full", a non-repo `HOME` → "short-circuits" — because an unreachable else is not a check |
 
 Open issues:

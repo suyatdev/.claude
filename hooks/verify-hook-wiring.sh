@@ -156,6 +156,57 @@ def drift_line(detail):
     return "%s settings.json drift — %s" % (PREFIX, detail)
 
 
+# Long enough for a mode, a plugin id, or a short command; short enough that a
+# finding stays one readable line. A value longer than this is truncated rather
+# than dropped: knowing a long value moved is still worth more than silence.
+VALUE_LIMIT = 60
+
+
+def render(value):
+    """A one-line rendering of a config value, short enough to sit in a line."""
+    text = json.dumps(value, sort_keys=True)
+    return text if len(text) <= VALUE_LIMIT else text[: VALUE_LIMIT - 3] + "..."
+
+
+def subkey_drift(key, live_value, head_value):
+    """One line per differing sub-key, or None if this key cannot be split.
+
+    "permissions differs" is the finding this feature cannot afford. The drift
+    that motivated the whole check was permissions.defaultMode moving unnoticed,
+    and a reader told only that "permissions" changed still has to go and diff
+    the file by hand — which is the work the check was supposed to have done.
+    Only one level deep: nested detail buys less than it costs in line length,
+    and the sub-key plus both values is enough to decide whether to care.
+    """
+    if not isinstance(live_value, dict) or not isinstance(head_value, dict):
+        return None
+    findings = []
+    for name in sorted(set(live_value) | set(head_value)):
+        in_live, in_head = name in live_value, name in head_value
+        if in_live and in_head:
+            if live_value[name] == head_value[name]:
+                continue
+            findings.append(
+                drift_line(
+                    "%s.%s: live %s, HEAD %s"
+                    % (key, name, render(live_value[name]), render(head_value[name]))
+                )
+            )
+        elif in_live:
+            findings.append(
+                drift_line(
+                    "%s.%s: present in the live file, absent from HEAD" % (key, name)
+                )
+            )
+        else:
+            findings.append(
+                drift_line(
+                    "%s.%s: present in HEAD, absent from the live file" % (key, name)
+                )
+            )
+    return findings or None
+
+
 def hook_drift(live, head, home):
     """Per-hook drift lines, plus whether an unnamed difference was left over."""
     live_set = set(command_hooks(live))
@@ -184,7 +235,13 @@ def check_live_matches_head(live, head, home):
         if live_value == head_value:
             continue
         if key != "hooks":
-            findings.append(drift_line('live "%s" differs from HEAD:settings.json' % key))
+            named = subkey_drift(key, live_value, head_value)
+            # No sub-keys to name — one side stopped being an object, or is
+            # absent entirely. The key-level line is still the honest answer.
+            findings.extend(
+                named
+                or [drift_line('live "%s" differs from HEAD:settings.json' % key)]
+            )
             continue
         named, unnamed = hook_drift(live, head, home)
         findings.extend(named)

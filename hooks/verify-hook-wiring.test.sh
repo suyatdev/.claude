@@ -234,10 +234,56 @@ check "a guard present locally but not in HEAD is named" "$H" 1 \
 
 # permissions.defaultMode is the value PR #63's judge caught drifting — a
 # security posture change nobody announced. It is a wiring key, so it reports.
+#
+# Naming the sub-key and both values is the whole point of these cases. This
+# feature exists BECAUSE that drift went unnoticed, so "permissions differs" is
+# the one output it cannot afford: it tells the reader something moved and then
+# makes them go diff the file by hand to learn what. The hooks key already gets
+# per-item detail; the other wiring keys were reporting at key level only.
 H="$(new_home perms)"
 edit_json "$H/.claude/settings.json" 'd["permissions"]["defaultMode"] = "bypassPermissions"'
-check "a permissions change is reported as drift" "$H" 1 \
-  "$PFX|permissions" "not executable|no such file|$ORCA|$SL"
+check "a changed sub-key is named, with both values" "$H" 1 \
+  "$PFX|permissions.defaultMode|bypassPermissions|default" \
+  "not executable|no such file|$ORCA|$SL"
+
+H="$(new_home permsadd)"
+edit_json "$H/.claude/settings.json" 'd["permissions"]["allow"] = ["Bash(ls:*)"]'
+check "a sub-key only in the live file is named as added" "$H" 1 \
+  "$PFX|permissions.allow|absent from HEAD" \
+  "not executable|no such file|$ORCA|$SL"
+
+H="$(new_home permsdel)"
+edit_json "$H/.claude/settings.json" 'del d["permissions"]["defaultMode"]'
+check "a sub-key only in HEAD is named as removed" "$H" 1 \
+  "$PFX|permissions.defaultMode|absent from the live file" \
+  "not executable|no such file|$ORCA|$SL"
+
+# Two independent movements must not collapse into one vague line.
+H="$(new_home permstwo)"
+edit_json "$H/.claude/settings.json" \
+  'd["permissions"]["defaultMode"] = "acceptEdits"
+d["permissions"]["deny"] = ["Read(./.env)"]'
+check "two changed sub-keys produce two lines" "$H" 2 \
+  "$PFX|permissions.defaultMode|permissions.deny" \
+  "not executable|no such file|$ORCA|$SL"
+
+# statusLine is an object too, so it gets the same treatment. $SL is NOT
+# forbidden here: HEAD's value legitimately contains that filename, and printing
+# the old value is the point.
+H="$(new_home slkey)"
+edit_json "$H/.claude/settings.json" \
+  'd["statusLine"]["command"] = "bash \"$HOME/.claude/other-line.sh\""'
+check "a statusLine sub-key is named like any other" "$H" 1 \
+  "$PFX|statusLine.command|other-line.sh" \
+  "not executable|no such file|$ORCA"
+
+# When a wiring key stops being an object there is no sub-key to name, so the
+# key-level line has to remain — recursion must not become the only path.
+H="$(new_home slscalar)"
+edit_json "$H/.claude/settings.json" 'd["statusLine"] = "no-longer-an-object"'
+check "a key that stops being an object still reports at key level" "$H" 1 \
+  "$PFX|statusLine" \
+  "not executable|no such file|$ORCA"
 
 # ===========================================================================
 # Scenario: the check cannot do its job and says nothing

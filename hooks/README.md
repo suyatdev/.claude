@@ -181,7 +181,20 @@ Two checks, both cheap:
 2. **The live `~/.claude/settings.json` has not drifted from `HEAD:settings.json`** — parsed and
    compared semantically, so reindenting or reordering keys is not drift. Only the **wiring keys**
    are compared: `hooks`, `permissions`, `statusLine`, `enabledPlugins`. A guard that is in HEAD but
-   not live (or the reverse) is named by script; any other differing key is named by key.
+   not live (or the reverse) is named by script. Every other wiring key is descended **one level**
+   and named by sub-key, with both values:
+
+   ```
+   verify-hook-wiring: settings.json drift — permissions.defaultMode: live "bypassPermissions", HEAD "default"
+   ```
+
+   That shape is the point of the check, not a nicety. The drift that motivated this whole feature
+   was `permissions.defaultMode` moving unannounced, and a reader told only that *"permissions"
+   differs* still has to go and diff the file by hand — which is the work the check exists to have
+   already done. Values are truncated at 60 characters, because knowing a long value moved beats
+   silence. One level only: deeper nesting costs line length and buys little. If a key stops being
+   an object, or is absent from one side entirely, there is no sub-key to name and the key-level
+   line remains.
 
 **`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
 accepted that `/model` rewrites them in place, so comparing them would fire this check after every
@@ -208,7 +221,7 @@ whole session somewhere else — hence a smoke alarm, not a lock. It is **not** 
 guards described in the next section.
 
 **Measured, not assumed** (`verify-hook-wiring.measure.sh`, 20 runs per configuration, warm cache,
-this machine 2026-08-22): **43–46 ms/run**, against a stated budget of ≤150 ms. The spread covers
+this machine 2026-08-22): **40–46 ms/run**, against a stated budget of ≤150 ms. The spread covers
 both configurations — check 2 short-circuiting and check 2 running both git calls and the semantic
 comparison — and the difference between them is inside the run-to-run noise. About 18–20 ms is the
 bare `python3 -c pass` interpreter start, so the check itself is the smaller half of its own cost.
