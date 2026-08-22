@@ -1,8 +1,11 @@
 ---
-phase: implementation
+phase: review
 model_tier: xhigh
 branch: chore/settings-split
 ---
+
+**Landed.** PR #63 merged 2026-08-22 as `ab65ab0`; branch tip `dd1a819` verified reachable from
+`origin/main`, `settings.json` tracked there, `command grep -c '/Users/'` on the merged blob → 0.
 
 # Split settings.json: track the wiring, keep the machine-specific parts local
 
