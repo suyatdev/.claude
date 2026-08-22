@@ -36,13 +36,13 @@ import store  # noqa: E402  (sibling module; the path insert above is what makes
 
 HOST = "127.0.0.1"  # never 0.0.0.0, never a resolvable hostname (§Security)
 DEFAULT_PORT = 8422  # PORTS.md owns this number; it is read here, not re-decided
-PORT_ENV = "TASK_TRACKER_PORT"
+PORT_ENV = "TREKO_PORT"
 
 # Every timeout below is (default, floor, env var). The floors exist because §Security
 # forbids a value meaning "never" -- an unspecified timeout is implemented as no timeout.
-IDLE_SECS = (1800, 60, "TASK_TRACKER_IDLE_SECS")
-POLL_SECS = (5, 1, "TASK_TRACKER_POLL_SECS")
-ANALYZE_SECS = (60, 5, "TASK_TRACKER_ANALYZE_SECS")
+IDLE_SECS = (1800, 60, "TREKO_IDLE_SECS")
+POLL_SECS = (5, 1, "TREKO_POLL_SECS")
+ANALYZE_SECS = (60, 5, "TREKO_ANALYZE_SECS")
 
 # The cmux probe and the send share one bound: 5s. An unbounded probe is a server that
 # neither starts nor reports why (§Security); an unbounded send is a request that hangs.

@@ -252,8 +252,8 @@ def server_env(tmp_path, tree, cmux_bin, cmux_log, *, surface=FAKE_SURFACE,
         "FAKE_HANG_SECS": str(HANG_SECS),
     })
     # Inherited overrides would leak a developer's own tuning into every test.
-    for key in ("TASK_TRACKER_PORT", "TASK_TRACKER_IDLE_SECS", "TASK_TRACKER_POLL_SECS",
-                "TASK_TRACKER_ANALYZE_SECS"):
+    for key in ("TREKO_PORT", "TREKO_IDLE_SECS", "TREKO_POLL_SECS",
+                "TREKO_ANALYZE_SECS"):
         env.pop(key, None)
     env.update(overrides or {})
     return env
@@ -270,7 +270,7 @@ def launch(tmp_path, *, tree=None, overrides=None, surface=FAKE_SURFACE,
 
     env = server_env(tmp_path, tree, cmux_bin, cmux_log, surface=surface,
                      tree_surface=tree_surface, overrides=overrides)
-    env["TASK_TRACKER_PORT"] = str(port)
+    env["TREKO_PORT"] = str(port)
 
     handle = open(stderr_path, "ab", buffering=0)
     try:

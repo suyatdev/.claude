@@ -462,8 +462,19 @@ No new dependency is added by this card. Adding one would need a separate ask
         exclusion list, which `phase: implementation` forbids. Tasks 4 onward do not depend on
         it, so work continues; criterion 1 cannot be evaluated at task 13 until this is resolved.
 
-- [ ] 4. Rename the four environment variables in `server.py`. Assert the old names are **not** read
+- [x] 4. Rename the four environment variables in `server.py`. Assert the old names are **not** read
       (criterion 5) — a silent fallback is the failure mode here.
+
+      **Done 2026-08-21.** Renamed `PORT_ENV` and the third element of the `IDLE_SECS` /
+      `POLL_SECS` / `ANALYZE_SECS` spec tuples in `treko/server.py`. Collateral updated in
+      `treko/server_harness.py` (env-pop list, `launch()`'s port override) and, as the narrow
+      test-collateral exception, `treko/test_server.py:600` and `treko/test_server_lifetime.py`
+      (docstring prose, two `overrides={}` dicts, and the floor-warning stderr assertion, which
+      reads the env var name straight from `server.py`'s own tuple — no assertion value, timeout,
+      or `pytest.mark` was changed). `test_rename.py::test_read_port_ignores_the_retired_port_name`
+      and the full 8-test `-k "read_port or timeout_spec"` selection pass; full suite holds at 161
+      passed. `git grep -n 'TASK_TRACKER_' -- treko/` now returns only `test_rename.py`, the
+      data-contract oracle that tests for the retired names' absence.
 - [ ] 5. `git mv "treko/Task Tracker.dc.html" treko/Treko.dc.html`; update `INDEX_FILE` and
       `check_index_injectable`'s message.
 - [ ] 6. Port **only the branding** from the prototype page: Treko icon, sidebar title, retinted
