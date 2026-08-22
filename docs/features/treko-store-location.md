@@ -454,7 +454,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 ## Tasks
 
-- [ ] 1. Record the pre-change suite: full node-ID set and per-module counts, and `wc -l` of
+- [x] 1. Record the pre-change suite: full node-ID set and per-module counts, and `wc -l` of
       `server.py`, from a run in this tree.
 - [ ] 2. Red tests (`test_store_location.py`) for D1: default when unset, env var wins, `~` expanded,
       relative resolved, **and the canonical form for a symlinked path**.
@@ -506,3 +506,39 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
   no `treko/tracker-data.js` at all, so the copy is a no-op — correct, but it means the migration
   path is exercised on exactly one machine. Task 4's tests must synthesise the legacy file rather
   than relying on the real one.
+
+## Verification
+
+### Task 1 — pre-change baseline
+
+Measured 2026-08-22 in this worktree at `a0326ee`, tree clean, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest -q                    # 192 passed in 118.62s
+cd treko && python3 -m pytest --collect-only -q | grep '::' | sort   # the node-ID set
+```
+
+**The full suite is 192 tests across 7 modules, not the 163 carried in earlier notes.** That
+figure came from a five-file invocation that omitted `test_autolaunch.py` (10) and
+`test_rename.py` (19) — 29 tests, both real card-1 modules that collect and pass. Criterion 8
+diffs against the 192-node set below; a subset would have hidden 29 nodes from the "no test lost"
+check.
+
+| Module | Collected = passed |
+|---|---|
+| `test_analyze.py` | 26 |
+| `test_autolaunch.py` | 10 |
+| `test_rename.py` | 19 |
+| `test_server.py` | 83 |
+| `test_server_lifetime.py` | 9 |
+| `test_store.py` | 30 |
+| `test_ui_commands.py` | 15 |
+| **total** | **192** |
+
+Sorted node-ID set, `sha256`: `16d7aca052e5f9fd2cf107931d82f2eeafea76f164b2408e1db073b82ba50e24`.
+The set itself is regenerable from this commit — collect at `a0326ee` and re-sort — so task 12
+compares sets, not just totals. There is no `pytest.ini`, `pyproject.toml` or `setup.cfg` in
+`treko/` or the repo root, so no `addopts` deselects anything.
+
+Line counts at `a0326ee`: `server.py` **790**, `analyze.py` **797**, `store.py` **212** — D5's
+premise holds, and criterion 13's budget is 10 lines.
