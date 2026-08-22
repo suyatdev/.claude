@@ -732,5 +732,44 @@ URLs and the one user-facing external hyperlink. What remains open is whether a 
 loaded against this served page with the network unavailable, issues zero requests off
 `127.0.0.1` — that is a runtime observation this task did not make.
 
-**Outstanding — runtime network-log check (not run by this task):**
-`[PLACEHOLDER: orchestrator-run Chrome network-log result pending]`
+**Runtime network-log check — run 2026-08-22, orchestrator session, real Chrome.**
+
+Method: started the server on a non-default port (`TREKO_PORT=8433`) against this worktree,
+loaded `http://127.0.0.1:8433/` in Chrome, enabled request tracking, then forced an **uncached**
+reload (`cmd+shift+r`) and read the full request log. This is the card's *"assert on the request
+log"* branch, **not** the *"network down"* branch — the machine's network was deliberately left
+up rather than disabled.
+
+Result: **42 requests across two full page loads, 21 each. Every request either targets
+`http://127.0.0.1:8433/` or is a `chrome-extension://` content script belonging to the
+operator's own browser. Zero requests to `unpkg.com`, `fonts.googleapis.com`, or any other
+host.**
+
+The load fetched, all from `127.0.0.1`: the page, `vendor-resources.js`, `support.js`,
+`_ds/nocturne-*/styles.css`, `_ds/nocturne-*/_ds_bundle.js`, both Phosphor stylesheets,
+`tracker-data.js`, `tracker-data-fallback.js`, `treko-icon.png`, `vendor/react.production.min.js`,
+`vendor/react-dom.production.min.js`, `vendor/inter/inter.css`, `vendor/inter/inter-latin.woff2`,
+`vendor/phosphor/regular/Phosphor.woff2`, `vendor/phosphor/fill/Phosphor-Fill.woff2`, and
+`favicon.ico` (404 — the browser's automatic request, refused locally, so still no egress).
+
+**This closes the gap task 7's static checks could not:** React and React-DOM were fetched from
+`vendor/`, not from unpkg. That is the fail-open path in `support.js:1149-1153` observed *not*
+firing at runtime, which no static check could establish.
+
+A screenshot confirms the criterion's rendering half: the Treko icon, the "Treko" sidebar title,
+Phosphor glyphs and Inter typography all render correctly with no network available to them.
+
+**What this check cannot see:**
+- **`vendor/babel.min.js` was never requested.** The page rendered without it, so the third
+  `window.__resources` entry was **not exercised at runtime** — its key correctness rests on
+  check A's static comparison alone. If a later change makes the page compile `text/x-dc` blocks
+  in the browser, that entry becomes live and untested.
+- It observed the two page loads inside the capture window only. A request fired later, or one
+  fired only by a user interaction not performed here, would not appear.
+- `Treko.dc.html:139`'s `href="{{ t.prHref }}"` GitHub PR link is deliberate, user-initiated
+  egress and was not clicked. Criterion 10 concerns page load, not user navigation.
+- The network was up. This proves nothing about *graceful degradation* if a fetch were attempted
+  and failed — only that no such fetch is attempted.
+
+**Criterion 10 is met on the request-log branch**, with the babel caveat above stated rather
+than rounded away.
