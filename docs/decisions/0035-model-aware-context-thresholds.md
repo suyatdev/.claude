@@ -14,7 +14,7 @@
   (`0034-the-store-leaves-the-repo-and-the-guard-is-repointed.md`, committed three hours earlier).
   Because the filenames differ, git would have merged both without a murmur — `origin/main` already
   carries two files numbered `0026` from exactly that failure. Renumbered to **0035** after a real
-  `git fetch` and one `ls-tree` **per ref**: taken numbers are 0022-0027, 0029-0034, with `0028` a
+  `git fetch` and one `ls-tree` **per ref**: taken numbers are 0001-0027 and 0029-0034, with `0028` a
   pre-existing gap left alone rather than backfilled out of order. Caught by the observability
   judge, not by the author.
 

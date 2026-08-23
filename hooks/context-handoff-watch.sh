@@ -31,9 +31,12 @@ flag="$STATE_DIR/handoff-fired-$sid"
 transcript=$(printf '%s' "$payload" | "$JQ_BIN" -er '.transcript_path // empty' 2>/dev/null) || exit 0
 [ -f "$transcript" ] && [ -r "$transcript" ] || exit 0
 
-# Last assistant usage entry, and the model id on that same turn — one tail, one
-# jq. tail keeps the parse O(1) in transcript size. Emitted as "<fill> <model>";
-# a model id never contains a space, and an absent one leaves the field empty.
+# Last assistant usage entry, and the last model id in the same window — one
+# tail, one jq. The two are picked INDEPENDENTLY (last non-null usage, last
+# non-null model), not read off a single turn: they coincide in every real
+# transcript, but nothing here enforces that they must. tail keeps the parse
+# O(1) in transcript size. Emitted as "<fill> <model>"; a model id never
+# contains a space, and an absent one leaves the field empty.
 # shellcheck disable=SC2016  # single-quoted jq program: \(...) is jq interpolation
 meta=$(tail -n "$TAIL_LINES" "$transcript" 2>/dev/null | "$JQ_BIN" -rs '
   [.[] | select(.type? == "assistant") | .message? | select(. != null)] as $m

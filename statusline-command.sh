@@ -291,7 +291,8 @@ esac
 # this case at 200k -- red would sit at or beyond the wall, so the bar could
 # never redden and the checkpoint would never be signalled: the warning silently
 # off precisely when it matters. Where the payload reports the window, cap the
-# anchor so red (4/3 x orange) still lands inside it. The cap binds only when the
+# anchor so red (4/3 x orange) lands AT the wall rather than past it -- with a
+# binding cap red equals the window exactly, never inside it. The cap binds only when the
 # window is genuinely too small, so every threshold above survives untouched on
 # any window with room for it.
 context_window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
