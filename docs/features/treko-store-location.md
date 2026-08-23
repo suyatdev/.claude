@@ -478,7 +478,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       0033); note that "next free number" is ambiguous here because **0026 is duplicated**
       (`…symbolic-ref…` and `…the-gate-does-no-json-parsing…`) and 0028 is unused.
 - [x] 11. `skills/treko/SKILL.md`: the `TREKO_STORE_DIR` row, the default path, and the `0o700` note.
-- [ ] 12. Post-change suite: node-ID set diff vs task 1, per-module counts, zero lost nodes, and
+- [x] 12. Post-change suite: node-ID set diff vs task 1, per-module counts, zero lost nodes, and
       `wc -l treko/server.py` under 800.
 - [ ] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
       repo was touched — the criterion-2 check nothing automated can make.
@@ -885,3 +885,65 @@ reader would have gone to confirm the behaviour the page does not signal.
 `adopt_legacy_store` (`server.py:720-736`) is silent-or-abort, and `run_reanalyze`'s subprocess uses
 `capture_output=True` (`server.py:353-356`), so the analyzer never interleaves. The migration line is
 first and the banner is last before the audit stream — both halves of the sample block hold.
+
+### Task 12 — post-change suite, node-ID set diffed against task 1
+
+Measured 2026-08-23 in this worktree at `0358d4a`, tree clean (`git status --porcelain` empty
+before *and* after the run), Python 3.9.6 / pytest 8.4.2 — the same versions task 1 used.
+
+```
+cd treko && python3 -m pytest -q                                        # 220 passed in 119.77s
+cd treko && python3 -m pytest --collect-only -q | command grep '::' | sort   # the node-ID set
+wc -l treko/server.py                                                   # 799
+```
+
+Collected 220, passed 220 — the run reports **no** deselected, skipped, xfailed or errored tests,
+so the passing set and the collected set are the same 220 nodes. As at task 1, no `pytest.ini`,
+`pyproject.toml`, `setup.cfg` or `tox.ini` exists at the repo root or in `treko/` (only
+`treko/conftest.py`), so no `addopts` deselects anything.
+
+| Module | Task 1 | Task 12 | Δ |
+|---|---|---|---|
+| `test_analyze.py` | 26 | 26 | — |
+| `test_autolaunch.py` | 10 | 10 | — |
+| `test_rename.py` | 19 | 19 | — |
+| `test_server.py` | 83 | 89 | +6 |
+| `test_server_lifetime.py` | 9 | 10 | +1 |
+| `test_store.py` | 30 | 30 | — |
+| `test_store_location.py` | — | 21 | +21 |
+| `test_ui_commands.py` | 15 | 15 | — |
+| **total** | **192** | **220** | **+28** |
+
+Sorted node-ID set, `sha256`: `5efbee59826eefba260b62c5c1edbd1f959292396d5ecf38edd94de668099b47`.
+
+**Zero nodes lost.** The totals are not the evidence — a changed total cannot distinguish "28
+added" from "31 added and 3 lost". The sets were diffed:
+
+```
+comm -23 <(sort -u baseline-nodes.txt) <(sort -u current-nodes.txt)   # lost:  0 lines
+comm -13 <(sort -u baseline-nodes.txt) <(sort -u current-nodes.txt)   # added: 28 lines
+```
+
+`comm` needs sorted-unique input, and de-duplicating can itself hide a lost node, so the two files
+were checked for duplicates first: `sort | wc -l` equals `sort -u | wc -l` on both, **0 duplicates
+either side**, so the `-u` is a no-op and the diff is over the true sets. The 28 additions are
+exactly the 21 `test_store_location.py` tests plus 6 in `test_server.py` and 1 in
+`test_server_lifetime.py` — the D3 and banner tests from tasks 7-8.
+
+**The baseline was regenerated, not trusted from the note.** The `treko/` tree at `a0326ee` was
+extracted to a scratchpad copy and re-collected there; the repo was never checked out or otherwise
+mutated (read-only `git archive`). The regenerated set is 192 nodes with `sha256`
+`16d7aca052e5f9fd2cf107931d82f2eeafea76f164b2408e1db073b82ba50e24` — **byte-identical to the digest
+task 1 recorded**, so the comparison rests on a reproduced artifact rather than on a copied hash.
+
+⚠️ **Regenerating this baseline needs the whole repo tree, not `treko/`.** The first extraction used
+`git archive a0326ee treko` and collected only **166** nodes with a different digest: `analyze.py:32`
+inserts `../hooks/lib` onto `sys.path` to import `feature_tasks`, which lives at
+`hooks/lib/feature_tasks.py` — a sibling of `treko/`, not inside it. A `treko/`-only archive
+therefore cannot import `test_analyze.py`, and pytest drops all 26 of its nodes as a collection
+error. The mismatch was a fault in the extraction recipe, not in the recorded baseline. Anyone
+re-deriving this must use `git archive <sha>` with no pathspec.
+
+`server.py` is **799** lines — one under the 800 hard maximum, and criterion 13's budget is now
+1 line, not task 1's 10. Companion counts: `analyze.py` 797, `store.py` 212,
+`store_location.py` 146.
