@@ -295,6 +295,26 @@ run_case "docs/** on main, CHAINED -> allow (widened)"       0 'git add -- docs/
 stage docs/features/x.md src/app.sh
 run_case "docs/** mixed with source on main -> block"        2 'git commit -m mixed'
 
+# The two judge ledgers, allowlisted alongside docs/*.md as EXACT literals.
+# ADR 0031 deliberately kept exactly these two files tracked under the otherwise
+# retired coding-memory/ tree -- they are the accumulated cross-repo judge record,
+# and untracking them would fragment it per worktree. The SAME change narrowed
+# this allowlist to docs/*.md alone, which left them tracked but un-committable on
+# main: a pair of decisions that cannot both hold, because such a file can only
+# accumulate uncommitted drift (docs/features/judge-ledger-commitability.md).
+#
+# Two exact paths, NOT `coding-memory/*/verdicts.jsonl`: a third judge is
+# hypothetical, and the guard should be exactly as wide as the rule it enforces.
+# The `coding-memory/* on main -> block` row above and the `coding-memory/other.md`
+# row below are what hold that width in place -- each one fails if the arms are
+# ever loosened to a prefix or a wildcard.
+stage coding-memory/observability-judge/verdicts.jsonl
+run_case "observability ledger on main -> allow"             0 'git commit -m verdict'
+stage coding-memory/compliance-judge/verdicts.jsonl
+run_case "compliance ledger on main -> allow"                0 'git commit -m verdict'
+stage coding-memory/other.md
+run_case "coding-memory/other.md is NOT a ledger -> block"   2 'git commit -m notes'
+
 # Off the default branch the guard has no opinion at all.
 on_branch feature
 stage src/app.sh
@@ -492,12 +512,17 @@ run_case "BOTH commits name only docs -> allow"             0 'git commit -m a -
 # This hazard used to be demonstrated against `coding-memory/*` as well
 # (`coding-memory/../src/x` satisfied it). With that pattern retired
 # (docs/features/rule-surface-trim.md) the escape now applies only to the
-# surviving `docs/*.md`, so the equivalent case is pointed there. The
-# coding-memory row is kept as a regression anchor, but note it no longer
-# exercises the `..` arm at all -- the prefix is simply not allowlisted anymore.
+# surviving `docs/*.md`. The coding-memory rows below are kept as regression
+# anchors, but note that none of them exercises the `..` arm: the two ledger
+# arms are EXACT literals, so no traversing string can satisfy one in the first
+# place, and the bare prefix is not allowlisted at all. They pin the `*)` arm --
+# and they are the rows that break first if either ledger arm is ever rewritten
+# as a prefix or a wildcard, which is when the `..` escape would come back.
 # ---------------------------------------------------------------------------
 run_case "a .. component escapes docs/ into source -> block" 2 'git commit -m msg -- docs/../src/tracked.md'
 run_case "coding-memory/ prefix is no longer allowlisted"   2 'git commit -m msg -- coding-memory/../src/tracked.sh'
+run_case "a traversing coding-memory/../src path -> block"  2 'git commit -m msg -- coding-memory/../src/x.sh'
+run_case ".. escaping the ledger directory -> block"        2 'git commit -m msg -- coding-memory/observability-judge/../../src/x.sh'
 run_case "a .. component escapes docs/ -> block"            2 'git commit -m msg -- docs/../notes.md'
 run_case "a leading ../ -> block"                           2 'git commit -m msg -- ../docs/tracked.md'
 run_case ".. inside a FILENAME is not traversal -> allow"   0 'git commit -m msg -- docs/v1..v2.md'
