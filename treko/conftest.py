@@ -20,7 +20,7 @@ import server_harness as harness  # noqa: E402
 
 @pytest.fixture
 def tree(tmp_path):
-    """A private copy of `task-tracker/`; the real tree is never touched."""
+    """A private copy of `treko/`; the real tree is never touched."""
     return harness.build_tree(tmp_path)
 
 

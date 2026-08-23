@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive one `run` object for the Task Tracker UI from a repo, read-only.
+"""Derive one `run` object for the Treko UI from a repo, read-only.
 
 Output conforms to the shipped Nocturne export's schema (`task-tracker v0.4.1`,
 `version: 1`). The schema is not ours to change: a missing field is a `questions[]`
@@ -776,7 +776,7 @@ def _build_kanban(cards, repo_name, blocked):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Derive one Task Tracker run object.")
+    parser = argparse.ArgumentParser(description="Derive one Treko run object.")
     parser.add_argument("repo_root", nargs="?", default=".")
     parser.add_argument("--id", dest="run_id", default=None)
     parser.add_argument("--name", default=None)

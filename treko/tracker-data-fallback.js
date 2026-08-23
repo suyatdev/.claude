@@ -1,6 +1,6 @@
 // Loader shim — NOT part of the Nocturne export. Added when the UI was vendored.
 //
-// The page hard-codes <script src="tracker-data.js">, which task-tracker/store.py
+// The page hard-codes <script src="tracker-data.js">, which treko/store.py
 // generates. Before the first analysis that file does not exist, and a missing
 // file:// script fails silently, so the page would sit on its "No analysis data
 // found" empty state with a complete sample sitting right beside it.

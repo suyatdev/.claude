@@ -27,9 +27,9 @@ body{margin:0;background:var(--color-bg)}
 <sc-if value="{{ missing }}" hint-placeholder-val="{{ false }}">
   <div style="min-height:100vh;display:grid;place-items:center">
     <div style="max-width:420px;text-align:center;padding:40px">
-      <i class="ph ph-crosshair" style="font-size:40px;color:var(--color-accent)"></i>
+      <img src="treko-icon.png" alt="Treko" style="width:48px;height:48px;border-radius:12px;display:inline-block">
       <h2 style="font-size:20px;margin:16px 0 8px">No analysis data found</h2>
-      <p style="font-size:13px;color:var(--color-neutral-500);line-height:1.6">Expected <span style="font-family:var(--mono);color:var(--color-neutral-300)">tracker-data.js</span> next to this file. Run the task-tracker skill in your project directory to generate it, then reload.</p>
+      <p style="font-size:13px;color:var(--color-neutral-500);line-height:1.6">Expected <span style="font-family:var(--mono);color:var(--color-neutral-300)">tracker-data.js</span> next to this file. Run the treko skill in your project directory to generate it, then reload.</p>
     </div>
   </div>
 </sc-if>
@@ -38,7 +38,7 @@ body{margin:0;background:var(--color-bg)}
   <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;left:0;top:0;bottom:0;width:56px;z-index:30;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;background:#12131e;border-right:1px solid rgba(255,255,255,.06)">
       <div onClick="{{ toggleSidebar }}" title="Expand sidebar" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer;marginBottom:4px" style-hover="color:var(--color-accent-300);background:rgba(255,255,255,.05)"><i class="ph ph-sidebar-simple" style="font-size:17px"></i></div>
-      <div style="width:30px;height:30px;border-radius:8px;border:1px solid var(--color-accent);color:var(--color-accent);display:grid;place-items:center;margin-bottom:8px"><i class="ph ph-crosshair" style="font-size:16px"></i></div>
+      <img src="treko-icon.png" alt="Treko" title="Treko" style="width:30px;height:30px;border-radius:8px;margin-bottom:8px;display:block">
       <sc-for list="{{ runsList }}" as="r" hint-placeholder-count="3">
         <div onClick="{{ r.pick }}" title="{{ r.name }}" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:10.5px;font-weight:600;font-family:var(--mono);cursor:pointer;color:{{ r.railC }};background:{{ r.railBg }};box-shadow:{{ r.railGlow }}">{{ r.init }}</div>
       </sc-for>
@@ -55,8 +55,8 @@ body{margin:0;background:var(--color-bg)}
   <sc-if value="{{ expandedBar }}" hint-placeholder-val="{{ false }}">
     <div style="position:fixed;left:0;top:0;bottom:0;width:236px;z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:#12131e;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto">
       <div style="display:flex;align-items:center;gap:9px;padding:0 16px 14px">
-        <div style="width:26px;height:26px;border-radius:7px;border:1px solid var(--color-accent);color:var(--color-accent);display:grid;place-items:center;flex:none"><i class="ph ph-crosshair" style="font-size:14px"></i></div>
-        <span style="font-size:14px;font-weight:500;color:var(--color-neutral-100)">Task Tracker</span>
+        <img src="treko-icon.png" alt="" style="width:26px;height:26px;border-radius:7px;flex:none;display:block">
+        <span style="font-size:14px;font-weight:500;color:var(--color-neutral-100)">Treko</span>
         <div onClick="{{ toggleSidebar }}" title="Collapse sidebar" style="margin-left:auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--color-neutral-600);cursor:pointer" style-hover="color:var(--color-accent-300);background:rgba(255,255,255,.05)"><i class="ph ph-caret-double-left" style="font-size:14px"></i></div>
       </div>
       <div style="padding:0 16px 6px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600)">Open runs</div>
@@ -336,7 +336,7 @@ var TRACKER_COPY_TEXT={
   handoff:'/handoff',
   // No keystroke equivalent exists — reanalyze is server-side. This is the manual command
   // that reproduces the analysis half; the store write is the server's own.
-  reanalyze:'python3 task-tracker/analyze.py .'};
+  reanalyze:'python3 treko/analyze.py .'};
 var TRACKER_MESSAGES={
   success:'Sent.',
   stale_token:"This page's token is stale — reload to reconnect.",
@@ -508,7 +508,7 @@ class Component extends DCLogic {
       });
   };
   sendAgent=()=>{const q=this.state.agentQ.trim();if(!q)return;const base=this.state.agentMsgs||this._sample||[];
-    this.setState({agentMsgs:[...base,{r:'you',t:q},{r:'agent',t:'Static snapshot — re-run the task-tracker skill for live answers. Ordering rationale is under Merge order; blockers under the Blocked filter and the hard constraints.'}],agentQ:''});};
+    this.setState({agentMsgs:[...base,{r:'you',t:q},{r:'agent',t:'Static snapshot — re-run the treko skill for live answers. Ordering rationale is under Merge order; blockers under the Blocked filter and the hard constraints.'}],agentQ:''});};
   renderVals(){
     const S=this.state,data=S.data;
     if(!data)return {ready:false,loading:!S.missing,missing:S.missing,mainML:'0px'};

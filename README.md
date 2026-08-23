@@ -59,7 +59,7 @@
 - [x] Status line with model and token-usage segments (#18, #20)
 - [x] Documentation-enforcement backstop — hooks that block undocumented business-logic changes (#10)
 - [x] Phase-frontmatter permission system: a feature file's `phase` survives a session clear and gates what work is allowed on restore
-- [x] Feature-state tracker: surveys which cards, branches, and PRs are in flight and proposes a merge order, backed by a versioned state store and a localhost control server (#51)
+- [x] Treko (formerly the feature-state tracker): surveys which cards, branches, and PRs are in flight and proposes a merge order, backed by a versioned state store and a localhost control server; the skill now launches the server and opens the browser itself instead of printing instructions (#51)
 - [x] Per-session pane-split policy with three-lane agent routing (#28)
 - [x] `phase-guard.sh` hook computationally enforcing the phase-frontmatter gate (ADR 0010's deferral overridden by ADR 0011 at the user's gate; #30)
 - [x] Fixed a blind spot where a global option ahead of the subcommand (`git -C .`, `gh -R o/r pr merge`) hid the command entirely from `git-guard`/`doc-guard`/`merge-guard`; now it either passes through, asks for confirmation, or is refused with an honest reason, never silently allowed (ADR 0029; #54)

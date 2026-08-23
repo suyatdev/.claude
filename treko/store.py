@@ -1,4 +1,4 @@
-"""Persist task-tracker analysis runs to the UI's data file.
+"""Persist Treko analysis runs to the UI's data file.
 
 The browser UI loads `tracker-data.js` with a plain `<script src>` tag, so the
 store is a JS assignment (`window.TRACKER_DATA = {...};`) rather than JSON.

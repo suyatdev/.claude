@@ -20,7 +20,7 @@ Every abort is asserted the same three ways: exit non-zero, name its cause, and 
 **nothing** — the last proven by a connection the port refuses. A control that aborts
 but serves anyway, or serves nothing but exits 0, is the failure shape these exist for.
 
-Runtime is dominated by the idle clause: §Security floors `TASK_TRACKER_IDLE_SECS` at 60s
+Runtime is dominated by the idle clause: §Security floors `TREKO_IDLE_SECS` at 60s
 and forbids disabling it, so this file costs at least a minute. Lowering the floor to
 make it quick deletes the control the test exists to prove.
 """
@@ -107,7 +107,7 @@ def test_an_index_with_no_head_aborts_before_serving(launcher, tree):
 
 def test_a_disabled_timeout_is_refused_at_startup(launcher):
     """§Security forbids a value meaning "never"; an unspecified timeout is no timeout."""
-    srv = launcher(overrides={"TASK_TRACKER_IDLE_SECS": "0"}, wait=False)
+    srv = launcher(overrides={"TREKO_IDLE_SECS": "0"}, wait=False)
     assert_aborted(srv, expect="may not be disabled")
 
 
@@ -164,8 +164,8 @@ def test_the_server_exits_when_its_parent_does(tmp_path, tree):
     pidfile = tmp_path / "server.pid"
     cmux_bin = harness.install_fake_cmux(tmp_path)
     env = harness.server_env(tmp_path, tree, cmux_bin, tmp_path / "cmux-calls.jsonl",
-                             overrides={"TASK_TRACKER_PORT": str(port),
-                                        "TASK_TRACKER_POLL_SECS": str(poll_secs)})
+                             overrides={"TREKO_PORT": str(port),
+                                        "TREKO_POLL_SECS": str(poll_secs)})
     config = {
         "argv": [sys.executable, str(tree / "server.py"), "--repo", str(harness.REPO_ROOT)],
         "env": env, "cwd": str(tmp_path), "stderr": str(stderr_path),
@@ -198,9 +198,9 @@ def test_an_idle_server_exits_and_its_audit_reaches_the_parents_stderr(launcher)
     overrides" buys nothing here — it is the parent-death clause above that gets fast.
     """
     floor = server.IDLE_SECS[1]
-    srv = launcher(overrides={"TASK_TRACKER_IDLE_SECS": "1", "TASK_TRACKER_POLL_SECS": "1"})
+    srv = launcher(overrides={"TREKO_IDLE_SECS": "1", "TREKO_POLL_SECS": "1"})
 
-    assert "TASK_TRACKER_IDLE_SECS=1 raised to the %ds minimum" % floor in srv.stderr
+    assert "TREKO_IDLE_SECS=1 raised to the %ds minimum" % floor in srv.stderr
 
     # The third clause: a line written to the audit log reaches the stderr the parent
     # captured. `await_ready` has already served one GET /, so one line must be there.

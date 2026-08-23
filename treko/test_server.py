@@ -341,7 +341,7 @@ ESCAPING_PATHS = [
     "/./../../CLAUDE.md",
 ]
 
-# Real files inside task-tracker/ that are not manifest rows. The copy keeps them so the
+# Real files inside treko/ that are not manifest rows. The copy keeps them so the
 # manifest is what refuses, not the filesystem.
 OFF_MANIFEST_PATHS = [
     "/store.py",
@@ -597,7 +597,7 @@ def test_a_hanging_analyzer_times_out_and_leaves_the_store_intact(launcher, tree
     store_path = tree / "tracker-data.js"
     before = store_path.read_bytes()
 
-    srv = launcher(tree=tree, overrides={"TASK_TRACKER_ANALYZE_SECS": "5"})
+    srv = launcher(tree=tree, overrides={"TREKO_ANALYZE_SECS": "5"})
     started = time.monotonic()
     response = srv.command("reanalyze", timeout=60)
     elapsed = time.monotonic() - started

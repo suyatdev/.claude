@@ -28,7 +28,7 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `running-the-compliance-judge` — judging a finished spec against writing-specs + core-conduct/security rules before the user reviews it: parallel dispatch with the observability judge, capped auto-revise loop, escalation, waivers.
 - `setting-up-a-new-project` — the blocking opt-in register for a new repo.
 - `managing-session-memory` — the feature-file `phase` gate and its hard-stop transition, the three model-switch checkpoints, restore/handoff discipline, and the freshness/token-limit checkpoints.
-- `tracking-feature-state` — surveying which cards and branches are in flight: running the analyzer, reading the merge order it proposes, launching and stopping the browser tracker UI.
+- `treko` — surveying which cards and branches are in flight: launching Treko to analyze and open the browser tracker UI in one step, reading the merge order it proposes.
 - `preparing-pull-requests` — branch naming, commits, PR descriptions, PR memory tracking.
 - `writing-secure-code` — injection/XSS/secrets/IDOR guardrails, prompt sanitization.
 - `writing-project-readmes` — a repo missing its README, creating one from the house template, or updating the Roadmap when a feature lands.
