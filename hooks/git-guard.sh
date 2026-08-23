@@ -384,11 +384,28 @@ if has_fact COMMIT && on_main; then
       # `*` spans `/` in a case pattern, so `docs/*.md` covers any depth while
       # still rejecting `docs/tool.sh` — and `docs/notes.md.sh`.
       docs/*.md) ;;
+      # The two judge verdict ledgers, spelled as EXACT literals rather than
+      # `coding-memory/*/verdicts.jsonl`. ADR 0031 kept precisely these two files
+      # tracked under the otherwise-retired coding-memory/ tree -- they are the
+      # accumulated cross-repo judge record, and untracking them would fragment it
+      # per worktree -- while the same change narrowed this allowlist to docs/*.md
+      # alone. That left them tracked but un-committable here, a combination whose
+      # only possible outcome is accumulated uncommitted drift
+      # (docs/features/judge-ledger-commitability.md).
+      #
+      # Literals, not a pattern, for two reasons: a third judge is hypothetical, so
+      # the guard should be exactly as wide as the rule it enforces; and `*` spans
+      # `/` here (see above), so `coding-memory/*/verdicts.jsonl` would admit any
+      # depth. An exact literal also cannot be satisfied by a traversing string at
+      # all, which is the hazard the `..` arm above exists for.
+      coding-memory/observability-judge/verdicts.jsonl) ;;
+      coding-memory/compliance-judge/verdicts.jsonl) ;;
       *) allowed=0 ;;
     esac
   done <<< "$files"
   if [ "$allowed" -ne 1 ]; then
-    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (docs/*.md).\n' "$(checkout_desc "$checkout_branch")" >&2
+    printf 'git-guard: refusing this commit -- the checkout is %s, where commits are restricted to documentation (docs/*.md) and the two judge verdict ledgers.\n' "$(checkout_desc "$checkout_branch")" >&2
+    printf 'The ledgers are these two paths and nothing else under coding-memory/:\n  coding-memory/observability-judge/verdicts.jsonl\n  coding-memory/compliance-judge/verdicts.jsonl\n' >&2
     printf '%s:\n%s\n' "$label" "$files" | sed 's/^/  /' >&2
     printf '%s\n' "$(remedy_line commit "$checkout_branch")" >&2
     exit 2
