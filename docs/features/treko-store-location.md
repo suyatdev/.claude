@@ -1,7 +1,9 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/treko-store-location
+compliance_verdict: pass  # rounds 2-5, 2026-08-22; subject blob 348364d (content at 4fc3479)
+adr: 0034  # verified free against origin/main; 0026 is duplicated, 0028 unused
 ---
 
 # Treko: give the analysis store a home outside every repo
@@ -9,6 +11,13 @@ branch: none
 Planned 2026-08-22 on `docs/close-treko-rename` @ `bedb65f`, immediately after card 1 merged
 (PR #64). Model-switch checkpoint 1 (entering planning): **asked and answered** — stay on Opus 5,
 because the change touches the server's path-containment guard.
+
+> **Gate status: OPEN.** `gate confirmed` given 2026-08-22 after PR #65 merged (`e6a9bb6`), with
+> compliance PASS on rounds 2-5. Branch `feat/treko-store-location` cut from `origin/main` @
+> `e6a9bb6`. **Model-switch checkpoint 2 (planning -> implementation): asked and answered — stay
+> on Opus 5. Do not re-ask.** The spec is frozen from here: an edit during implementation is a
+> phase violation *and* invalidates the compliance verdict by blob. If it proves wrong, stop and
+> say "GATE: Spec change needed — switch back to the high-tier model."
 
 This is a **follow-on to card 1**, not one of the numbered cards 2-5. It ships no new tracker
 behaviour and no UI change: the browser asks for the same URL and renders the same page.
@@ -445,35 +454,35 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 ## Tasks
 
-- [ ] 1. Record the pre-change suite: full node-ID set and per-module counts, and `wc -l` of
+- [x] 1. Record the pre-change suite: full node-ID set and per-module counts, and `wc -l` of
       `server.py`, from a run in this tree.
-- [ ] 2. Red tests (`test_store_location.py`) for D1: default when unset, env var wins, `~` expanded,
+- [x] 2. Red tests (`test_store_location.py`) for D1: default when unset, env var wins, `~` expanded,
       relative resolved, **and the canonical form for a symlinked path**.
-- [ ] 3. Red tests for D2: the four table rows, plus `0o700` on creation and mode untouched when the
+- [x] 3. Red tests for D2: the four table rows, plus `0o700` on creation and mode untouched when the
       directory already exists.
-- [ ] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
+- [x] 4. Create `treko/store_location.py` with `read_store_dir` + `ensure_store_dir`; move
       `StartupAbort` somewhere both modules import; tasks 2-3 go green.
-- [ ] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
-- [ ] 6. Implement `adopt_legacy_store`; task 5's tests go green.
-- [ ] 7. Red tests for D3: serves configured bytes, 404 absent, **403 on a symlink out of the store
+- [x] 5. Red tests for D4: copy once, never overwrite, abort on corrupt, and one line per outcome.
+- [x] 6. Implement `adopt_legacy_store`; task 5's tests go green.
+- [x] 7. Red tests for D3: serves configured bytes, 404 absent, **403 on a symlink out of the store
       dir**, **200 through a symlinked store dir**, manifest still closed. **Plus the banner's new
       content**: the line names the resolved store directory, and it follows the copy's outcome
       line. Criterion 12 has two halves and both get a red test -- task 5 covers the copy's, this
       covers the banner's.
-- [ ] 8. Wire `server.py`: import, `main()` call, `build_config`'s `store_dir`, `_serve_static`'s
+- [x] 8. Wire `server.py`: import, `main()` call, `build_config`'s `store_dir`, `_serve_static`'s
       branch, and the banner line. Task 7's tests go green.
-- [ ] 9. Untrack `treko/tracker-data.js`, add the `.gitignore` entry, verify the sample and fallback
+- [x] 9. Untrack `treko/tracker-data.js`, add the `.gitignore` entry, verify the sample and fallback
       are still tracked.
-- [ ] 10. **ADR 0034** — the trust-boundary change, where the tool's data lives, and the accepted
+- [x] 10. **ADR 0034** — the trust-boundary change, where the tool's data lives, and the accepted
       `file://` degradation. **0034 is verified free against `origin/main`** (which tops out at
       0033); note that "next free number" is ambiguous here because **0026 is duplicated**
       (`…symbolic-ref…` and `…the-gate-does-no-json-parsing…`) and 0028 is unused.
-- [ ] 11. `skills/treko/SKILL.md`: the `TREKO_STORE_DIR` row, the default path, and the `0o700` note.
-- [ ] 12. Post-change suite: node-ID set diff vs task 1, per-module counts, zero lost nodes, and
+- [x] 11. `skills/treko/SKILL.md`: the `TREKO_STORE_DIR` row, the default path, and the `0o700` note.
+- [x] 12. Post-change suite: node-ID set diff vs task 1, per-module counts, zero lost nodes, and
       `wc -l treko/server.py` under 800.
-- [ ] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
+- [x] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
       repo was touched — the criterion-2 check nothing automated can make.
-- [ ] 14. Observability judge, then the PR.
+- [x] 14. Observability judge, then the PR.
 
 ## Risks
 
@@ -497,3 +506,592 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
   no `treko/tracker-data.js` at all, so the copy is a no-op — correct, but it means the migration
   path is exercised on exactly one machine. Task 4's tests must synthesise the legacy file rather
   than relying on the real one.
+
+## Verification
+
+### Task 1 — pre-change baseline
+
+Measured 2026-08-22 in this worktree at `a0326ee`, tree clean, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest -q                    # 192 passed in 118.62s
+cd treko && python3 -m pytest --collect-only -q | grep '::' | sort   # the node-ID set
+```
+
+**The full suite is 192 tests across 7 modules, not the 163 carried in earlier notes.** That
+figure came from a five-file invocation that omitted `test_autolaunch.py` (10) and
+`test_rename.py` (19) — 29 tests, both real card-1 modules that collect and pass. Criterion 8
+diffs against the 192-node set below; a subset would have hidden 29 nodes from the "no test lost"
+check.
+
+| Module | Collected = passed |
+|---|---|
+| `test_analyze.py` | 26 |
+| `test_autolaunch.py` | 10 |
+| `test_rename.py` | 19 |
+| `test_server.py` | 83 |
+| `test_server_lifetime.py` | 9 |
+| `test_store.py` | 30 |
+| `test_ui_commands.py` | 15 |
+| **total** | **192** |
+
+Sorted node-ID set, `sha256`: `16d7aca052e5f9fd2cf107931d82f2eeafea76f164b2408e1db073b82ba50e24`.
+The set itself is regenerable from this commit — collect at `a0326ee` and re-sort — so task 12
+compares sets, not just totals. There is no `pytest.ini`, `pyproject.toml` or `setup.cfg` in
+`treko/` or the repo root, so no `addopts` deselects anything.
+
+Line counts at `a0326ee`: `server.py` **790**, `analyze.py` **797**, `store.py` **212** — D5's
+premise holds, and criterion 13's budget is 10 lines.
+
+### Tasks 2-3 — red tests for D1 and D2
+
+`treko/test_store_location.py` added, 13 tests, importing `read_store_dir`, `ensure_store_dir`
+and `StartupAbort` from the not-yet-created `treko/store_location.py`.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q
+```
+
+Collection fails as expected: `ModuleNotFoundError: No module named 'store_location'`
+(`test_store_location.py:41`).
+
+A collection error cannot distinguish "13 tests red" from "one broken file", so a throwaway
+stub (`store_location.py`, both functions raising `NotImplementedError`, never committed) was
+added, the file re-run, and all 13 tests confirmed failing individually, each on
+`NotImplementedError` and none on a collection error — then the stub was deleted and
+`git status` confirmed only `test_store_location.py` remained untracked.
+
+Full suite with the new file's collection error allowed through
+(`python3 -m pytest -q --continue-on-collection-errors`): **192 passed, 1 error** — the 192
+matches task 1's baseline exactly (zero regressions in the existing modules), and the 1 error
+is `test_store_location.py`'s expected `ModuleNotFoundError`.
+
+### Task 4 — `store_location.py` implemented, tasks 2-3 green
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 13 passed in 0.01s
+cd treko && python3 -m pytest -q                             # 205 passed in 118.60s
+wc -l treko/server.py                                        # 787
+python3 -c "import server; print('server import OK')"        # server import OK
+```
+
+205 = task 1's 192 baseline + these 13, with zero pre-existing test lost or changed.
+`server.py` moved from 790 to 787 lines: the `StartupAbort` class definition was removed and
+replaced with a one-line import from `store_location`. `ensure_store_dir`'s "existing
+directory not writable" branch reports `errno.EACCES` rather than a value read off a failed
+syscall, since `os.access` itself never raises — no test exercises that branch; the mkdir
+failure path (which a test does cover) reports the real `OSError.errno`.
+
+### Closing D2's untested row — `EACCES` was assumed, never observed
+
+Not a bug fix: on this machine no case was found where the assumed `errno.EACCES` was wrong,
+because `os.access` also consults macOS ACLs and a real write there does fail with `EACCES`.
+It is a change from an assumed value to an observed one — the prior code named a specific
+errno with the authority of a measurement while it was a constant the code chose, since
+`os.access` only ever answers yes/no and never reports why.
+
+Step 1, 2026-08-22, this worktree: `test_reports_the_path_and_an_errno_when_an_existing_directory_is_not_writable`
+added to `treko/test_store_location.py`, pinned green against the current `os.access`
+implementation — it asserts the row's shape (an abort naming the path and *an* errno) and
+deliberately not `EACCES` specifically, so step 2 needs no test edit.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 14 passed in 0.02s
+```
+
+Commit `99dbf1a4b7108c52f547d6b1e96efb8abaf3f29d`, `treko/test_store_location.py` only.
+
+Step 2, 2026-08-22, this worktree: the `os.access` check replaced with a real write attempt —
+`tempfile.NamedTemporaryFile(dir=str(path))`, the same directory `store.py`'s `write_store`
+writes its temp file into before `os.replace`, so the probe fails exactly when the real write
+would. On `OSError` the message now carries `exc.errno` / `exc.strerror`, not `errno.EACCES`.
+The now-unused `import errno` was removed from `store_location.py`.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 14 passed in 0.01s
+cd treko && python3 -m pytest -q                             # 206 passed in 118.99s
+wc -l treko/server.py treko/store_location.py                # 787, 88
+```
+
+206 = task 4's 205 + the one test step 1 added, zero pre-existing test lost or changed. Neither
+test in `test_store_location.py` needed editing for step 2 to pass. `server.py` is unchanged at
+787 lines; `store_location.py` moved from 81 to 88 lines.
+
+### Task 5 — red tests for D4
+
+`treko/test_store_location.py` gained 6 tests covering `adopt_legacy_store(store_path,
+legacy_path)`: adopts once (compared by run id, not count), a second launch does not rewrite
+(bytes and `st_mtime_ns` both unchanged), an existing real store is never overwritten by a
+different legacy file (the destructive-overwrite guard, tested directly rather than as a
+corollary), a corrupt legacy file raises `StartupAbort` naming the file and never creates the
+destination, no legacy file yields `"no_legacy"` with no file created, and the `copied N runs`
+line is checked against a 2-run fixture (distinct from the other tests' 4) so a hardcoded
+`"copied 4 runs"` cannot pass. Every stderr assertion checks `capsys`'s captured lines equal a
+one-element list, not merely that the expected text appears. D4 does not spell out the return
+value's exact form, so this file pins one: three plain strings, `"copied"`, `"already_present"`
+and `"no_legacy"` — the contract task 6 is being given.
+
+**Red for the right reason**, 2026-08-22, this worktree: a throwaway stub
+(`adopt_legacy_store` raising `NotImplementedError`, never committed) was added to
+`treko/store_location.py` so the 6 new tests' failures could be told apart from the existing
+14's, then removed.
+
+```
+cd treko && python3 -m pytest test_store_location.py -v
+# 6 failed, 14 passed in 0.05s — each new test fails on its own assertion or on
+# NotImplementedError; none on a collection error; all 14 D1/D2 tests still pass
+git diff HEAD -- treko/store_location.py   # empty after the stub was reverted
+```
+
+Without the stub, `adopt_legacy_store` does not exist at all, so the module-level import at
+the top of `test_store_location.py` fails and the *whole file* — including the 14 tests tasks
+2-3 already turned green — errors at collection, the same shape task 1's baseline had before
+task 4 landed:
+
+```
+cd treko && python3 -m pytest -q --continue-on-collection-errors
+# 192 passed, 1 error in 119.27s — the 192 matches task 1's baseline exactly; the 1 error is
+# test_store_location.py's ImportError: cannot import name 'adopt_legacy_store'
+```
+
+192 + 1 error is expected and correct for a tests-only commit: `adopt_legacy_store` is task 6's
+job. The 14 tests hidden behind that collection error are proven still-passing above, by the
+stub run, per this task's instructions.
+
+### Task 6 — `adopt_legacy_store` implemented, task 5's tests green
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q     # 20 passed in 0.02s
+cd treko && python3 -m pytest -q                             # 212 passed in 117.37s
+wc -l treko/server.py treko/store_location.py                # 787, 143
+```
+
+212 = task 5's 206 baseline + these 6, zero pre-existing test lost or changed.
+`treko/server.py` is untouched at 787 lines (this task edits `store_location.py` only, per
+its scope); `store_location.py` moved from 88 to 143 lines.
+
+The guard is the conjunction from D4: `store_path.exists()` is checked first (a present
+destination is never overwritten, regardless of what the legacy file holds), then
+`legacy_path.exists()` (never `store.read_store`, which returns a fresh empty envelope for
+a missing file instead of raising — treating that as "found" would report every ordinary
+launch as a successful adoption of nothing). Only when both checks pass does the function
+read through `store.read_store` and write through `store.write_store`; a `StoreError` from
+the read becomes a `StartupAbort` naming the legacy file, and since `write_store` is never
+reached on that path, `store_path` is never created.
+
+**The fourth state D4 does not name — a configured store already present and no legacy
+file at all — was not asked for a new outcome.** It falls into the existing
+`store_path.exists()` branch: outcome `"already_present"`, stderr line
+`"store already present, legacy file ignored"`. This is the ordinary case on every launch
+after the first, and on a fresh clone forever once task 9 untracks
+`treko/tracker-data.js`. No test in `test_store_location.py` pins this specific
+combination directly — the closest is
+`test_an_existing_real_store_is_never_overwritten_by_the_legacy_file`, which covers
+"store present, legacy also present" (checked to end at the same `"already_present"`
+branch, but with a legacy file that exists), not "store present, legacy absent". The
+branch is exercised only incidentally, by `test_a_second_launch_does_not_rewrite_the_
+already_adopted_store`'s second call — at that point the fixture's legacy file still
+exists on disk, so even that call does not isolate the "no legacy at all" combination.
+Stated plainly: this exact combination is implemented but not directly tested.
+
+### Task 6 follow-up — the fourth state's line was false
+
+The paragraph above was wrong to accept: routing "store present, legacy absent" into the
+`"already_present"` branch means `adopt_legacy_store` prints "store already present, legacy
+file ignored" when there is no legacy file to ignore. That is not a rare corner — it is what
+prints on every launch after the first, and permanently on every fresh clone once
+`treko/tracker-data.js` is untracked. `rules/core-conduct.md`: a message that reads as a
+measurement must be one.
+
+Fixed by reordering the guard: ask `legacy_path.exists()` first. All four states still land
+on D4's three lines (absent/absent and present/absent both report `"no_legacy"`), so
+acceptance criterion 12 still holds, and every line is true whenever it prints. Red test
+added first, in its own commit (`99c22dc`): store present, legacy absent → outcome
+`"no_legacy"`, stderr exactly `["no legacy store to adopt"]`, store left byte-identical —
+confirmed failing against the pre-fix order (`'already_present' == 'no_legacy'`) before the
+reorder landed.
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+```
+cd treko && python3 -m pytest test_store_location.py -q   # 21 passed
+cd treko && python3 -m pytest -q                           # 213 passed in 118.37s
+```
+
+213 = task 6's 212 baseline + this one new test. The other 20 tests in
+`test_store_location.py` are unaffected by the reorder: it is a straight conjunction with
+distinct early returns per branch, and the swap only changes behavior for the one combination
+(store present, legacy absent) that had no test pinning it before this commit.
+
+### Tasks 7-8 — D3's serving branch, and the banner
+
+Measured 2026-08-22 in this worktree, Python 3.9.6 / pytest 8.4.2.
+
+**Task 7 (`5ca769d`).** Seven new nodes, split along the seam `test_server.py` and
+`test_server_lifetime.py` already document: the five wire-shape ones and the two
+manifest-closed controls in the first, criterion 12's banner half in the second. Putting the
+banner test in `test_server.py` would have taken that file to ~800 itself; it is 770 as it
+stands, and the banner is a launch-shape property by the same rule that put criterion 14 there.
+
+```
+cd treko && python3 -m pytest -q     # 215 passed, 5 failed in 120.67s
+```
+
+Five drivers, each failing on its own assertion, none on collection:
+
+| Node | Failed on |
+|---|---|
+| `test_the_configured_store_directory_is_what_is_served` | served the tree's bytes, not the store's |
+| `test_a_configured_store_that_does_not_exist_yet_is_404_not_500` | store written where configured, still `404` |
+| `test_a_store_file_symlinking_out_of_the_store_directory_is_403` | `200`, not `403 path_escape` |
+| `test_a_symlinked_store_directory_serves_200_not_403` | served the tree's bytes |
+| `test_the_banner_names_the_resolved_store_directory_after_the_copys_outcome` | zero of D4's three lines printed |
+
+The two `test_a_file_planted_in_the_store_directory_stays_off_the_manifest` nodes passed before
+the change and after it — recorded as controls, not drivers, because a criterion-6 test that
+only starts passing once D3 lands would be asserting the wrong thing.
+
+`404`-when-absent is not falsifiable on its own: a server still reading the tree answers `404`
+for the same request, since that is the file the test unlinks. So the test writes the store
+where the configuration points and repeats the request; only a server reading the configured
+directory answers `200`.
+
+`server_harness.server_env` now points `TREKO_STORE_DIR` at the per-test `tree`. Left to the
+default, every launch in the suite would resolve to the machine's real
+`$XDG_STATE_HOME/treko` — the suite would read, and `reanalyze` would rewrite, the live
+survey. Naming the tree also leaves every pre-existing test's store at `<tree>/tracker-data.js`,
+which is why none of them changed.
+
+**Task 8.** `server.py`: `import store_location`; `ensure_store_dir(read_store_dir())` and
+`adopt_legacy_store` inside `main()`'s existing `try`; `store_dir` in `build_config` with
+`store_path` derived from it; D3's two-line branch in `_serve_static`; `store=%s` on the banner.
+The token and `config` lines moved inside the `try` so the copy takes its destination from
+`config` — `build_config` stays the only place the store path is constructed.
+
+```
+cd treko && python3 -m pytest -q     # 220 passed in 119.70s
+wc -l treko/server.py                # 799
+```
+
+**Criterion 13 measured, not assumed: `server.py` is 799 lines — one under the ceiling.** The
+first wiring landed at 801. Two comments of this change's own were cut to fit; no surrounding
+code was touched to make room. `store_location.py` is a file of its own at 146 lines. There is
+now one line of headroom, so any further work on `server.py` moves logic out rather than adding.
+
+220 = the 213 at `d5804fb` plus these 7. Criterion 8's node-ID set diff is task 12.
+
+### Task 9 — what leaves git
+
+```
+git rm --cached treko/tracker-data.js
+git check-ignore -v treko/tracker-data.js   # .gitignore:109
+git ls-files treko/ | grep tracker-data
+```
+
+Untracked and ignored; still 207,489 bytes on disk, which is what lets D4 adopt it. Still
+tracked, per D6: `tracker-data-fallback.js`, `tracker-data.sample.js` — and
+`tracker-data.json`, which D6 does not name and this card therefore does not touch. Whether
+that file is generated too is worth a look, but it is a separate question from this one.
+
+The suite could not have caught the fresh-clone consequence on its own: `build_tree` copied
+the real store into every test tree, so the tests that read it passed here and would have
+failed on a clone that has no such file. `d935185` builds the tree's store from the tracked
+sample instead, verified with the real file moved aside (96 passed, 1 skipped; restored
+byte-identical) and with the counterfactual (disabling the sample copy fails exactly the two
+nodes that read the tree's store).
+
+### Task 10 — ADR 0034
+
+`docs/decisions/0034-the-store-leaves-the-repo-and-the-guard-is-repointed.md`, 224 lines, one
+Mermaid flowchart (validated with `skills/diagramming-technical-docs/scripts/validate-diagrams.sh`:
+`1 block(s), 0 failed`).
+
+**Number re-verified at the moment of writing, not trusted from the card.** `0034` is free against
+`origin/main` (`e6a9bb6`, tops out at `0033`), against every local and remote ref
+(`git for-each-ref` + `git ls-tree` over `refs/heads` and `refs/remotes`, zero hits for
+`003[4-9]`), and against the working tree of all four checked-out worktrees. Local `main`
+(`e937006`) is a **stale ancestor** of `origin/main`, so a local `ls` or a `main`-relative check
+would have been reading the wrong ref.
+
+**Every citation resolved before it was written down.** All 29 `file:line` refs were extracted from
+the finished ADR and checked to resolve inside a real file at a real line; the nine bare `:N` refs
+were each opened by hand. Three errors of my own were caught by that sweep and fixed:
+
+| Claim as first drafted | Measured | Fix |
+|---|---|---|
+| the `file://` sample is "nine-month-stale" | sample `generatedAt` is `2026-08-09T02:41:07Z`, **13 days** before today | rewritten — and the point is *stronger*: a 13-day-old stamp is a weak signal, not an obvious one |
+| "the server already reads four environment variables" | `server.py` reads four `TREKO_*` vars (`:43`, `:47-49`) **plus** `CMUX_BIN` (`:54`) and `CMUX_SURFACE_ID` | narrowed to "four `TREKO_*` variables", with the `environ`-injection shape cited |
+| "four of the runs ... are dated `2026-08-20T03:07:28Z`" | that stamp is the **envelope's** `generatedAt`; the four run objects carry no such field | reworded, and the four run ids named |
+
+**A claim in this card's own §Risks does not hold, and the ADR records the measured version
+instead.** §Risks states that over `file://` the page "shows its `TRACKER_DATA_SOURCE = 'sample'`
+state with the amber source dot." Measured on this branch: `TRACKER_DATA_SOURCE` is written at
+`treko/tracker-data-fallback.js:18` and **read nowhere** — `git grep` over the whole repo returns
+that one assignment in code and no reader. The indicator is driven by a different variable,
+`srcDot: window.TRACKER_DATA ? 'var(--ok)' : 'var(--warn)'` (`Treko.dc.html:633`), and the shim sets
+`window.TRACKER_DATA` by loading the sample. So the dot is **green** and the tooltip reads
+**"tracker-data.js loaded"** over vendored sample data. There is no amber state to reach.
+
+Not a design error and not a criterion: no acceptance criterion, and no part of D1-D6, depends on
+it. The card is frozen, so §Risks is **left unedited** — the correction lives in the ADR, which is
+where §Risks itself says this must be stated. Flagged rather than fixed: the page is out of this
+card's scope, and how the UI reports its own data provenance belongs with the deferred
+Configuration drawer.
+
+Mitigation that does hold: over `http://` with `--open`, `server.py:773-774` runs the analyzer when
+the store has no runs, so a real store exists before the browser opens. The silent-sample case
+remains reachable over `file://`, and over `http://` when started without `--open` against an empty
+store.
+
+### Task 11 — SKILL.md
+
+`skills/treko/SKILL.md`, 194 lines (was 134). Criterion 9's live test passes:
+
+```
+cd treko && python3 -m pytest test_autolaunch.py::test_the_skill_documents_a_launch_command_that_does_not_detach -q
+# 1 passed
+cd treko && python3 -m pytest -q      # 220 passed in 120.28s -- unchanged from 0aaf78c
+```
+
+**The test was confirmed to actually read this file**, not a same-named one elsewhere:
+`server_harness.REPO_ROOT` resolves to this worktree, and the assertion scans the 3 lines
+containing `server.py` (unchanged — the new section names no launch command, so it adds no line to
+the set the test guards).
+
+New `## Where the survey is stored` section: the variable, the default, expansion and
+canonicalization rules, the `0o700`-on-creation-only rule with its reason, the four new startup
+aborts as table rows, and the three migration outcome lines with what each means.
+
+**Three pre-existing statements in the skill were falsified by this change and are corrected, not
+appended to:**
+
+Line numbers below are **post-edit**, re-read from the file after the change:
+
+| Line now | Was | Now |
+|---|---|---|
+| `:18` (`store.py` bullet) | "writes `tracker-data.js`, the file the page loads" | names the configured directory, "never into the repo" |
+| `:61-66` (stderr sample) | banner without `store=`; "its two timers" | the real format string from `server.py:786-787`, plus the migration line above it |
+| `:92` | "Opening the vendored file over `file://` **still renders the survey**" | it renders the **sample**, silently — see ADR 0034 |
+
+That third one is the load-bearing correction. It was true before the move (`tracker-data.js` was
+tracked, so it sat beside the page in any clone) and is false after it, and the skill is where a
+reader would have gone to confirm the behaviour the page does not signal.
+
+**Stderr ordering re-verified rather than carried from D2.** Everything in `main()` before
+`adopt_legacy_store` (`server.py:720-736`) is silent-or-abort, and `run_reanalyze`'s subprocess uses
+`capture_output=True` (`server.py:353-356`), so the analyzer never interleaves. The migration line is
+first and the banner is last before the audit stream — both halves of the sample block hold.
+
+### Task 12 — post-change suite, node-ID set diffed against task 1
+
+Measured 2026-08-23 in this worktree at `0358d4a`, tree clean (`git status --porcelain` empty
+before *and* after the run), Python 3.9.6 / pytest 8.4.2 — the same versions task 1 used.
+
+```
+cd treko && python3 -m pytest -q                                        # 220 passed in 119.77s
+cd treko && python3 -m pytest --collect-only -q | command grep '::' | sort   # the node-ID set
+wc -l treko/server.py                                                   # 799
+```
+
+Collected 220, passed 220 — the run reports **no** deselected, skipped, xfailed or errored tests,
+so the passing set and the collected set are the same 220 nodes. As at task 1, no `pytest.ini`,
+`pyproject.toml`, `setup.cfg` or `tox.ini` exists at the repo root or in `treko/` (only
+`treko/conftest.py`), so no `addopts` deselects anything.
+
+| Module | Task 1 | Task 12 | Δ |
+|---|---|---|---|
+| `test_analyze.py` | 26 | 26 | — |
+| `test_autolaunch.py` | 10 | 10 | — |
+| `test_rename.py` | 19 | 19 | — |
+| `test_server.py` | 83 | 89 | +6 |
+| `test_server_lifetime.py` | 9 | 10 | +1 |
+| `test_store.py` | 30 | 30 | — |
+| `test_store_location.py` | — | 21 | +21 |
+| `test_ui_commands.py` | 15 | 15 | — |
+| **total** | **192** | **220** | **+28** |
+
+Sorted node-ID set, `sha256`: `5efbee59826eefba260b62c5c1edbd1f959292396d5ecf38edd94de668099b47`.
+
+**Zero nodes lost.** The totals are not the evidence — a changed total cannot distinguish "28
+added" from "31 added and 3 lost". The sets were diffed:
+
+```
+comm -23 <(sort -u baseline-nodes.txt) <(sort -u current-nodes.txt)   # lost:  0 lines
+comm -13 <(sort -u baseline-nodes.txt) <(sort -u current-nodes.txt)   # added: 28 lines
+```
+
+`comm` needs sorted-unique input, and de-duplicating can itself hide a lost node, so the two files
+were checked for duplicates first: `sort | wc -l` equals `sort -u | wc -l` on both, **0 duplicates
+either side**, so the `-u` is a no-op and the diff is over the true sets. The 28 additions are
+exactly the 21 `test_store_location.py` tests plus 6 in `test_server.py` and 1 in
+`test_server_lifetime.py` — the D3 and banner tests from tasks 7-8.
+
+**The baseline was regenerated, not trusted from the note.** The `treko/` tree at `a0326ee` was
+extracted to a scratchpad copy and re-collected there; the repo was never checked out or otherwise
+mutated (read-only `git archive`). The regenerated set is 192 nodes with `sha256`
+`16d7aca052e5f9fd2cf107931d82f2eeafea76f164b2408e1db073b82ba50e24` — **byte-identical to the digest
+task 1 recorded**, so the comparison rests on a reproduced artifact rather than on a copied hash.
+
+⚠️ **Regenerating this baseline needs the whole repo tree, not `treko/`.** The first extraction used
+`git archive a0326ee treko` and collected only **166** nodes with a different digest: `analyze.py:32`
+inserts `../hooks/lib` onto `sys.path` to import `feature_tasks`, which lives at
+`hooks/lib/feature_tasks.py` — a sibling of `treko/`, not inside it. A `treko/`-only archive
+therefore cannot import `test_analyze.py`, and pytest drops all 26 of its nodes as a collection
+error. The mismatch was a fault in the extraction recipe, not in the recorded baseline. Anyone
+re-deriving this must use `git archive <sha>` with no pathspec.
+
+`server.py` is **799** lines — one under the 800 hard maximum, and criterion 13's budget is now
+1 line, not task 1's 10. Companion counts: `analyze.py` 797, `store.py` 212,
+`store_location.py` 146.
+
+### Task 13 — the real launch, and criterion 2's check
+
+Run 2026-08-23 in this worktree at `1c01055`, the **first real migration**: `~/.local/state/treko`
+did not exist beforehand and `XDG_STATE_HOME` / `TREKO_STORE_DIR` were both unset, so the default
+branch of D1 is what was exercised. The legacy `treko/tracker-data.js` (207,489 bytes, 4 runs,
+envelope `2026-08-20T03:07:28Z`) was backed up to the scratchpad and verified byte-identical by
+`sha256` before anything was launched.
+
+**Surveyed a genuinely unrelated repo**, not this one — criterion 2 says "a surveyed repo is never
+written to", and pointing the analyzer at its own checkout cannot distinguish "wrote nowhere" from
+"wrote where it already lives". The target was `/Users/marksuyat/Other Docs/mtg-wizard`, a separate
+repository whose path also contains a space.
+
+```
+python3 treko/server.py --open --repo "/Users/marksuyat/Other Docs/mtg-wizard"
+```
+
+Launched in the harness's background-run mode — a direct child of the session, stderr captured, no
+`nohup`, no `setsid`, no `&`, no redirect. Startup stderr, verbatim and complete:
+
+```
+copied 4 runs from /Users/marksuyat/.claude/.claude/worktrees/treko-ui-update/treko/tracker-data.js
+server: http://127.0.0.1:8422/ surface=F3E41D3E-…-C7126FE004D8 idle=1800s poll=5s store=/Users/marksuyat/.local/state/treko
+```
+
+**Exactly one** outcome line, first; the banner last before the audit stream, naming the resolved
+store directory — criterion 12, both halves, observed rather than asserted. The legacy path adopted
+is `SERVE_ROOT / FIRST_RUN_OPTIONAL` (`server.py:737`), so it is Treko's own source directory and
+not the `--repo` target — surveying B still adopts A's legacy file, which is the intended reading.
+
+Post-migration state: `~/.local/state/treko` created at mode **`0o700`** (criterion 11), holding
+all **4** run ids — `guard-memsearch`, `pane-orchestration-v2`, `statusline-wrap`,
+`statusline-followups` (criterion 4). The legacy file was copied, not moved: its `sha256` still
+matches the backup.
+
+`reanalyze` was then pressed in the served page at `http://127.0.0.1:8422/`. Audit line:
+
+```
+2026-08-23T05:38:50Z accepted id=reanalyze surface=- sent=no status=200 reason=- path=- errno=-
+```
+
+`sent=no` — no keystroke, as the skill says. The store went 207,489 → **227,237 bytes**, `sha256`
+`7df1846e…` → `b1bfd3e9…`, and gained a 5th run `mtg-wizard` while all 4 prior ids survived. The
+page reloaded and rendered it. **So a real, substantial write did happen** — the criterion-2 check
+below is being made against a run that demonstrably wrote something, not a no-op.
+
+| Checkout | Pre-launch | After launch + `reanalyze` |
+|---|---|---|
+| this worktree | 0 status lines, `1c01055` | **identical**, HEAD unmoved |
+| main checkout `~/.claude` | 4 status lines, `63d928b` | **identical**, HEAD unmoved |
+| surveyed `mtg-wizard` | 2 status lines, `4192e42` | **identical**, HEAD unmoved |
+
+Compared by `diff` of the saved `git status --porcelain` output, not by eyeballing — and the main
+checkout's baseline is *dirty* (it still tracks `treko/tracker-data.js`, since D6's untracking lives
+on this branch), so the test there is "unchanged", never "clean".
+
+**`git status` alone is not sufficient evidence here, and was not relied on.** `treko/tracker-data.js`
+is now gitignored, so a write to exactly the file this card moved would be invisible to it — the one
+blind spot that matters. An mtime check against a marker file dropped before the launch was run as
+well:
+
+```
+find "/Users/marksuyat/Other Docs/mtg-wizard" -path '*/.git' -prune -o -newer <marker> -type f -print   # 0
+find <worktree>/treko -newer <marker> -type f -print                                                    # 0
+find ~/.claude/treko  -newer <marker> -type f -print                                                    # 0
+find ~/.local/state/treko -newer <marker> -type f -print   # tracker-data.js  <- the falsifier fires
+```
+
+The store line is the control: it proves the check can detect a write at all, so the three zeros are
+evidence of absence rather than a check that was blind by construction.
+
+**Criterion 4's "exactly once" was confirmed against the live store, not only in unit tests.** The
+server was stopped (`SIGINT`, port released) and relaunched with the now-stale 4-run legacy file
+still on disk beside a 5-run store:
+
+```
+store already present, legacy file ignored
+```
+
+The store stayed byte-identical — same `sha256` `b1bfd3e9…`, same mtime. A stale legacy file cannot
+overwrite a real store. Both servers were stopped afterwards and port 8422 is free.
+
+### Task 14 — the writer test the judge asked for
+
+Added 2026-08-23 after the observability judge's one non-blocking finding: **no test proved the
+*writer* honours `TREKO_STORE_DIR`.** Confirmed independently before writing anything —
+`server_harness.py:270` sets `TREKO_STORE_DIR` to the per-test tree, and the tree *is* the serving
+root, so for 214 of 220 tests the store directory and the serve root are the same directory; the six
+that override it (`test_server.py:605,623,651,671,691`, `test_server_lifetime.py:232`) are all
+read-path. A writer still resolving `SERVE_ROOT / "tracker-data.js"` would have left the whole suite
+green.
+
+`treko/test_store_writer.py` (new file, 1 test) launches with the store in a directory outside the
+tree, stubs the analyzer so the run carries a sentinel id, POSTs `reanalyze`, and asserts both
+halves: the sentinel run is in the configured store, and the tree's `tracker-data.js` is byte-identical
+to what it was before. It is a new file rather than one more test in `test_server.py` because that
+file is at 774 of the repo's 800-line ceiling; `test_server.py`'s D3 section now carries a pointer to it.
+
+```
+cd treko && python3 -m pytest -q          # 221 passed in 120.32s  (220 before)
+```
+
+**Both assertions were proven able to fail**, since a green test against already-passing code proves
+nothing on its own. `_run_local` was temporarily mutated to pass `SERVE_ROOT / FIRST_RUN_OPTIONAL`
+instead of `config["store_path"]`:
+
+```
+AssertionError: the configured store holds []; the analyzer emitted 'SENTINEL-WRITER-RUN'
+```
+
+The tree-untouched clause is never reached once the first fails, so a throwaway copy with the two
+assertions swapped was run under the same mutation and failed on the byte comparison
+(`At index 99 diff: b'2' != b'0'`). The copy was deleted and `server.py` restored with
+`git checkout`, then confirmed byte-identical to a pre-mutation copy by `cmp`.
+
+**Uncovered, deliberately:** `main()`'s first-run analyze — the other `run_reanalyze` caller — fires
+only under `--open`, which opens a real browser. It is not a second place the path could be wrong
+(it passes the same `config["store_path"]`, and D3 makes `build_config` the only construction of
+it), so what stays unasserted is that one call site's arguments, not the path itself.
+
+### Task 14 — the judge's second round, and the PR
+
+Re-run 2026-08-23 at `3937c23` because the writer test above moved HEAD and `judge-guard` compares
+`head_sha` strictly. **Pass, `risk=low confidence=high`, no dimension `fail`.** Verdict at
+`coding-memory/observability-judge/2026-08-23-feat-treko-store-location-round2.md`; round 1's file
+was kept rather than overwritten, since it is the record of the finding this round re-checks. Only
+`verdicts.jsonl` is tracked — the markdown verdicts are gitignored (`.gitignore:114`).
+
+The judge did not take the falsifier evidence on trust: it copied the worktree to `/tmp`, mutated
+`_run_local` to write to the tree, reran, and reproduced `At index 99 diff: b'2' != b'0'` byte for
+byte. It also ran the suite itself (**221 passed in 120.67s**) and diffed test names
+`origin/main`→HEAD: **129 → 157, zero removed**.
+
+**It corrected the brief, and was right.** The dispatch asked it to confirm
+`git diff origin/main..HEAD -- treko/server.py` was empty. That is the wrong ref — this branch
+legitimately edits `server.py` (+24/-15). The check that tests the "no production code changed in
+this commit" claim is `216fae4..HEAD`, which is empty. Both were run.
+
+Three residual concerns were left open deliberately, because acting on any of them moves HEAD and
+invalidates the verdict again: the harness still collapses store-dir and serve-root for 214 of 221
+tests (a *future* writer would be invisible); the new test's tree-untouched assertion checks one
+filename rather than the whole tree; and the green-dot-over-sample-data defect, unchanged from
+round 1. All three are carried in the PR body under "Known gaps, deliberately not closed here".
+
+**PR #68** opened as a draft (`gh pr create --draft`), per `preparing-pull-requests` — the verdict
+must be fresh at `gh pr create` time, so the audit trail and the README Roadmap line are pushed
+onto the branch afterwards and the PR marked ready. https://github.com/suyatdev/.claude/pull/68
