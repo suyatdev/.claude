@@ -649,17 +649,30 @@ Merged in rather than rebased, matching how `feat/treko-rename` handled the same
   `coding-memory/observability-judge/verdicts.jsonl`.
 - **`c8114b8`** — absorbs Treko's analysis-store move (#68). Two conflicts, the same ledger and
   `README.md`'s Roadmap list, where both sides had appended a bullet at the same point.
+- **`72a8421`** — absorbs the model-aware session-context thresholds (#67), which also rewrites
+  this repo's own `rules/gates.md` context-handoff-watch stub. Same two conflicts.
 
-Both ledger resolutions were checked as **unions against both parents, not by line arithmetic** —
-a balanced total is not a verified union. Final state 220 rows: chronologically ordered, no
+Every ledger resolution was checked as a **union against both parents, not by line arithmetic** —
+a balanced total is not a verified union. Final state 224 rows: chronologically ordered, no
 duplicates, nothing invented, nothing lost from either side except the superseded `outcome: null`
 duplicate of `head_sha c974c6c1` that this branch had already updated to `rework`. `judge-guard`
 resolves a verdict by `(repo, branch, head_sha)`, so row order is not load-bearing.
 
+**The third merge could not just append, and that is worth not rediscovering.** #67's four verdict
+rows are timestamped `2026-08-23T02:12`–`03:09`, which lands *between* this branch's last
+hook-wiring row (`08-22T23:28`) and the Treko rows unioned in at the second merge (`08-23T06:07`).
+Appending would have left the file out of chronological order for the first time. Resolved by a
+stable sort on `ts` — equal-timestamp rows keep their existing relative order — with an assertion
+that this branch's own row order still reads as a subsequence of the result.
+
 Re-measured after each merge rather than assumed: repo suite 25/25, own suite 37/37, leak rate
-0 / 52,000, falsifier still red at 6,755 against `6868451`, runtime 43 ms real / 45 ms scratch
-against a 15 ms bare-interpreter floor, probe silent-break-silent through all four cycles, and the
-hook silent against the real live config from `~/.claude`.
+0 / 52,000, falsifier still red at 6,755 against `6868451`, probe silent-break-silent through all
+four cycles, and the hook silent against the real live config from `~/.claude`.
+
+Runtime read **43 ms** real / 45 ms scratch against a **15 ms** bare-interpreter floor in the first
+round, and **48 / 45 ms** against a **19 ms** floor in the third. Nothing in this hook changed
+between them, so the spread is this machine's noise and both readings are stated in the PR body
+rather than the flattering one being kept. Still far inside the ≤150 ms budget.
 
 PR #66's description was rewritten to cover the review round it had outgrown — sub-key naming, the
 default-deny renderer, the leak measurement and its falsification, the eight-verdict trail, and the
