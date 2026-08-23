@@ -125,8 +125,44 @@ Catalog line for `managing-session-memory`), `skills/managing-session-memory/SKI
 - Both **judges**. Only their prose output stops being tracked.
 - `docs/features/`, `docs/decisions/`, `.claude/session-state.md`.
 - **Deleting any file from disk.** Every removal in this card is `git rm --cached` plus a
-  `.gitignore` entry. Nothing is lost locally, and git history retains what was already pushed —
-  untracking is not redaction, and this card does not attempt to rewrite history.
+  `.gitignore` entry. ~~Nothing is lost locally~~ (**false — see the correction below**), and git
+  history retains what was already pushed — untracking is not redaction, and this card does not
+  attempt to rewrite history.
+
+  > **Correction, 2026-08-23 — "nothing is lost locally" is false.** It holds only in the worktree
+  > where `git rm --cached` ran. In every *other* checkout, pulling this card's merge fast-forwards
+  > and **deletes 213 files from disk**: `CODING_MEMORY.md` plus 212 under `coding-memory/`. Being
+  > gitignored does not protect a file that was tracked at the old commit — git removes it as part
+  > of the checkout, and the ignore rule only stops it coming back afterwards.
+  >
+  > Measured, not inferred. 215 files were tracked under those two paths at `7fcfd95` (1 +
+  > 214); exactly two of them — the judge ledgers ADR 0031 deliberately kept — are still tracked
+  > downstream, leaving 213 removed. The set difference gives 213 against both `a2a6022` (this
+  > card's merge) and `origin/main` at `e6a9bb6`:
+  >
+  > ```
+  > comm -23 <(git ls-tree -r 7fcfd95 --name-only -- CODING_MEMORY.md coding-memory | sort) \
+  >          <(git ls-tree -r origin/main --name-only | sort) | wc -l
+  > ```
+  >
+  > **Recovery, verified 2026-08-23** — run from a checkout that still has the `7fcfd95` objects:
+  >
+  > ```
+  > git archive 7fcfd95 CODING_MEMORY.md coding-memory | tar -x -C <repo> --exclude='*/verdicts.jsonl'
+  > ```
+  >
+  > The `--exclude` is load-bearing, and that was confirmed by running it both ways against a
+  > seeded sentinel rather than reasoned about: **with** it, the two live ledgers survive untouched
+  > and 213 files are restored alongside them; **without** it, the `7fcfd95` copies overwrite the
+  > live ones and the observability ledger collapses to its 178-row snapshot (compliance to 123).
+  > Both ledgers are still tracked and still being appended to, so that overwrite would silently
+  > discard every row written since.
+  >
+  > The correction is recorded here, in place, because this card *is* the record of PR #59 — a
+  > correction filed elsewhere would leave two documents disagreeing about the same change. It
+  > ships in the `chore/judge-ledger-commitability` PR: **bundled there by the user's decision**,
+  > rather than as the separate pre-PR that `docs/features/judge-ledger-commitability.md`
+  > suggested. That advice was considered and overridden, not missed.
 
 ## Deferred, pending a separate decision
 
