@@ -480,7 +480,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 - [x] 11. `skills/treko/SKILL.md`: the `TREKO_STORE_DIR` row, the default path, and the `0o700` note.
 - [x] 12. Post-change suite: node-ID set diff vs task 1, per-module counts, zero lost nodes, and
       `wc -l treko/server.py` under 800.
-- [ ] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
+- [x] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
       repo was touched — the criterion-2 check nothing automated can make.
 - [ ] 14. Observability judge, then the PR.
 
@@ -947,3 +947,85 @@ re-deriving this must use `git archive <sha>` with no pathspec.
 `server.py` is **799** lines — one under the 800 hard maximum, and criterion 13's budget is now
 1 line, not task 1's 10. Companion counts: `analyze.py` 797, `store.py` 212,
 `store_location.py` 146.
+
+### Task 13 — the real launch, and criterion 2's check
+
+Run 2026-08-23 in this worktree at `1c01055`, the **first real migration**: `~/.local/state/treko`
+did not exist beforehand and `XDG_STATE_HOME` / `TREKO_STORE_DIR` were both unset, so the default
+branch of D1 is what was exercised. The legacy `treko/tracker-data.js` (207,489 bytes, 4 runs,
+envelope `2026-08-20T03:07:28Z`) was backed up to the scratchpad and verified byte-identical by
+`sha256` before anything was launched.
+
+**Surveyed a genuinely unrelated repo**, not this one — criterion 2 says "a surveyed repo is never
+written to", and pointing the analyzer at its own checkout cannot distinguish "wrote nowhere" from
+"wrote where it already lives". The target was `/Users/marksuyat/Other Docs/mtg-wizard`, a separate
+repository whose path also contains a space.
+
+```
+python3 treko/server.py --open --repo "/Users/marksuyat/Other Docs/mtg-wizard"
+```
+
+Launched in the harness's background-run mode — a direct child of the session, stderr captured, no
+`nohup`, no `setsid`, no `&`, no redirect. Startup stderr, verbatim and complete:
+
+```
+copied 4 runs from /Users/marksuyat/.claude/.claude/worktrees/treko-ui-update/treko/tracker-data.js
+server: http://127.0.0.1:8422/ surface=F3E41D3E-…-C7126FE004D8 idle=1800s poll=5s store=/Users/marksuyat/.local/state/treko
+```
+
+**Exactly one** outcome line, first; the banner last before the audit stream, naming the resolved
+store directory — criterion 12, both halves, observed rather than asserted. The legacy path adopted
+is `SERVE_ROOT / FIRST_RUN_OPTIONAL` (`server.py:737`), so it is Treko's own source directory and
+not the `--repo` target — surveying B still adopts A's legacy file, which is the intended reading.
+
+Post-migration state: `~/.local/state/treko` created at mode **`0o700`** (criterion 11), holding
+all **4** run ids — `guard-memsearch`, `pane-orchestration-v2`, `statusline-wrap`,
+`statusline-followups` (criterion 4). The legacy file was copied, not moved: its `sha256` still
+matches the backup.
+
+`reanalyze` was then pressed in the served page at `http://127.0.0.1:8422/`. Audit line:
+
+```
+2026-08-23T05:38:50Z accepted id=reanalyze surface=- sent=no status=200 reason=- path=- errno=-
+```
+
+`sent=no` — no keystroke, as the skill says. The store went 207,489 → **227,237 bytes**, `sha256`
+`7df1846e…` → `b1bfd3e9…`, and gained a 5th run `mtg-wizard` while all 4 prior ids survived. The
+page reloaded and rendered it. **So a real, substantial write did happen** — the criterion-2 check
+below is being made against a run that demonstrably wrote something, not a no-op.
+
+| Checkout | Pre-launch | After launch + `reanalyze` |
+|---|---|---|
+| this worktree | 0 status lines, `1c01055` | **identical**, HEAD unmoved |
+| main checkout `~/.claude` | 4 status lines, `63d928b` | **identical**, HEAD unmoved |
+| surveyed `mtg-wizard` | 2 status lines, `4192e42` | **identical**, HEAD unmoved |
+
+Compared by `diff` of the saved `git status --porcelain` output, not by eyeballing — and the main
+checkout's baseline is *dirty* (it still tracks `treko/tracker-data.js`, since D6's untracking lives
+on this branch), so the test there is "unchanged", never "clean".
+
+**`git status` alone is not sufficient evidence here, and was not relied on.** `treko/tracker-data.js`
+is now gitignored, so a write to exactly the file this card moved would be invisible to it — the one
+blind spot that matters. An mtime check against a marker file dropped before the launch was run as
+well:
+
+```
+find "/Users/marksuyat/Other Docs/mtg-wizard" -path '*/.git' -prune -o -newer <marker> -type f -print   # 0
+find <worktree>/treko -newer <marker> -type f -print                                                    # 0
+find ~/.claude/treko  -newer <marker> -type f -print                                                    # 0
+find ~/.local/state/treko -newer <marker> -type f -print   # tracker-data.js  <- the falsifier fires
+```
+
+The store line is the control: it proves the check can detect a write at all, so the three zeros are
+evidence of absence rather than a check that was blind by construction.
+
+**Criterion 4's "exactly once" was confirmed against the live store, not only in unit tests.** The
+server was stopped (`SIGINT`, port released) and relaunched with the now-stale 4-run legacy file
+still on disk beside a 5-run store:
+
+```
+store already present, legacy file ignored
+```
+
+The store stayed byte-identical — same `sha256` `b1bfd3e9…`, same mtime. A stale legacy file cannot
+overwrite a real store. Both servers were stopped afterwards and port 8422 is free.
