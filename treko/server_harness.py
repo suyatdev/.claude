@@ -91,7 +91,15 @@ def build_tree(tmp_path):
     tree = tmp_path / "treko"
     if tree.exists():
         return tree  # idempotent: a test launching a second server reuses the first's tree
-    shutil.copytree(REAL_TREE, tree, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(REAL_TREE, tree,
+                    ignore=shutil.ignore_patterns("__pycache__", "tracker-data.js"))
+    # The tree's store is the *tracked sample*, never the real `treko/tracker-data.js`.
+    # D6 untracks that file, so a fresh clone has none at all and every test that reads
+    # the tree's store would fail on a clone while passing here; and where a copy does
+    # survive in a working tree it holds the developer's own snapshots, which this card
+    # forbids a test from touching. The sample is a real envelope, so `store.read_store`
+    # parses it and its run count is the same on every machine.
+    shutil.copyfile(tree / "tracker-data.sample.js", tree / "tracker-data.js")
     hooks = tmp_path / "hooks"
     hooks.mkdir()
     (hooks / "lib").symlink_to(REPO_ROOT / "hooks" / "lib", target_is_directory=True)
@@ -250,6 +258,16 @@ def server_env(tmp_path, tree, cmux_bin, cmux_log, *, surface=FAKE_SURFACE,
         "FAKE_CMUX_LOG": str(cmux_log),
         "FAKE_TREE_SURFACE": tree_surface if tree_surface is not None else surface,
         "FAKE_HANG_SECS": str(HANG_SECS),
+        # Pointed at the per-test tree, never left to the default or to the developer's
+        # own value. Two things depend on it. A launch that resolved the store to the
+        # real `$XDG_STATE_HOME/treko` would read -- and `reanalyze` would rewrite --
+        # the machine's live survey, which is the same class of harm as touching the
+        # real `treko/` and is why every server here already runs against a copy. And
+        # naming the tree keeps the store exactly where every test written before this
+        # feature expects it, `<tree>/tracker-data.js`, so those tests assert what they
+        # always did; the store-location tests override it explicitly to prove the
+        # configured directory is what is served.
+        "TREKO_STORE_DIR": str(tree),
     })
     # Inherited overrides would leak a developer's own tuning into every test.
     for key in ("TREKO_PORT", "TREKO_IDLE_SECS", "TREKO_POLL_SECS",

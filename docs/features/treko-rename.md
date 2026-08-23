@@ -1,7 +1,8 @@
 ---
 phase: review
 model_tier: low
-branch: feat/treko-rename
+branch: none  # merged via PR #64 (e161279) 2026-08-22; feat/treko-rename NOT auto-deleted,
+              # still on origin as of 2026-08-22 (checked ls-remote + PR timeline)
 ---
 
 # Treko: rename the tracker, and launch it without being asked
@@ -772,6 +773,14 @@ No new dependency is added by this card. Adding one would need a separate ask
       Card 2 does **not** inherit the nested feature → story → task rows, run renaming, the agent
       panel's token counter, or panel persistence — those are cards 3 and 4, named in §Deferred.
 
+      **Merged.** PR #64 merged 2026-08-22T05:48:27Z as `e161279`. Verified rather than assumed:
+      the branch tip `f2cd7d2` is an ancestor of `origin/main`, and `treko/`, ADR 0033 and the
+      208-row observability ledger are all present on `main` with `task-tracker/` gone. The head
+      branch was **not** auto-deleted — `feat/treko-rename` is still on origin, checked via
+      `ls-remote` and the absence of a `head_ref_deleted` timeline event, not inferred from the
+      merge time. The judge's `implementation` verdict at `c46d92d` (`risk=low`) is backfilled
+      `outcome: clean` in the same commit as this note: merged with no rework and no bug found.
+
 ## Risks
 
 - **A silent env-var fallback.** Renaming a variable while leaving `os.environ.get` reading the old
@@ -1084,3 +1093,41 @@ post-rename run is fully green, so every previously-passing test still passes. I
 test is still asserting what it used to — a test whose body was gutted keeps its node ID. Nothing
 here re-verifies criterion 12, which still has no test of its own beyond
 `test_server_lifetime.py::test_an_index_with_no_head_aborts_before_serving`.
+
+### A real browser window, watched by a human (2026-08-22, post-merge)
+
+The one claim this card made that nothing in the suite could reach. Every automated check of
+`--open` runs through the `BROWSER`-recorder path, which proves the command is *issued* and says
+nothing about whether a window appears. Recorded here because it was observed, not inferred.
+
+**Launch.** `python3 treko/server.py --open` from the worktree root, via the harness's
+background-run mode — no `nohup`, no `setsid`, no `&`, stderr not redirected, per §Design. Bound
+`http://127.0.0.1:8422/`, surface inherited from `CMUX_SURFACE_ID`, `idle=1800s poll=5s`.
+
+**The watchdog is armed, checked rather than assumed.** `ps` reports pid **90841**, ppid **90836** —
+the session's own shell. The process was not reparented to `init`, so the `os.getppid()` check that
+kills the server with the session can still fire. This is the failure the skill calls silent: a
+detached server passes every test and outlives its session.
+
+**A real engine fetched the page.** 16 requests in the same second, all `status=200`:
+`vendor-resources.js`, `support.js`, both `_ds/nocturne-…` files, `tracker-data.js` and its
+fallback, `react` + `react-dom`, both Phosphor stylesheets and both `.woff2` faces,
+`vendor/inter/inter.css` + `inter-latin.woff2`, and `treko-icon.png`. A recorder stub fetches
+nothing; nothing but a rendering engine pulls font binaries.
+
+**Confirmed by eye.** The user watched a browser window open with the full page rendered. Criterion
+9's visible half is now met by observation. Nothing automated covers it, and this note is not a test.
+
+**`vendor/babel.min.js` was never requested.** It is row 10 of the 17 in `STATIC_MANIFEST`, and it
+is the one row absent from the request log above while React and React-DOM both loaded. The handoff
+carried this as a suspicion; this is the first runtime measurement of it. The served page does not
+use Babel. Removing it is a code change and belongs to a later card, not to this one in review.
+
+**One trailing `refused … status=404 reason=not_found path=-`.** The audit line collapses the path
+by design, so the requested path is not recoverable from the record. A favicon probe is plausible
+and is **not** what the evidence says. Left unattributed.
+
+**Landing on the board, not the Ledger, is correct.** `git ls-files` matches no `Ledger*` in this
+repo — the only hit is the unrelated `docs/features/judge-ledger-commitability.md` — and
+`STATIC_MANIFEST` has no row for one. There is no Ledger to navigate to and no link to it. §Scope
+already says so at line 63: the prototype's `Ledger.dc.html` has no counterpart here, and is card 2.
