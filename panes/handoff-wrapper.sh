@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# handoff-wrapper.sh — what the 75k handoff pane runs. Prints the prompt, blocks
+# handoff-wrapper.sh — what the context-handoff pane runs. Prints the prompt, blocks
 # until the user presses Enter, then execs a fresh interactive claude session
 # seeded to restore context. Identical behavior in all four terminals — no
 # pre-typed keystroke tricks (spec). Closing the pane instead is harmless.
@@ -14,7 +14,11 @@ target_cwd="${1:-$PWD}"
 cd "$target_cwd" 2>/dev/null || printf 'handoff: warning — could not cd to %s, starting here\n' "$target_cwd"
 
 printf '=== Context handoff ===\n'
-printf 'The main session crossed 75k tokens. A fresh session will continue the work in:\n  %s\n\n' "$target_cwd"
+# No token count here on purpose: the threshold is model-dependent (see
+# hooks/context-handoff-watch.sh) and this wrapper is handed only the target
+# directory, so any number printed here would be a guess. The hook's own nudge
+# carries the real figure.
+printf 'The main session crossed its context checkpoint threshold. A fresh session will continue the work in:\n  %s\n\n' "$target_cwd"
 printf 'Press Enter to start handoff session\n'
 IFS= read -r _
 

@@ -120,7 +120,8 @@ security boundary.
 ### `context-handoff-watch.sh`
 
 PostToolUse, matcher `*`. Once per session, when the transcript's last assistant
-usage entry sums to ≥75k tokens, it writes a fired-flag, prepares a press-Enter
+usage entry reaches the threshold for the model on that turn — 100k Sonnet, 130k
+Opus/Fable, 75k for anything unrecognised — it writes a fired-flag, prepares a press-Enter
 handoff pane (`dispatch-pane-agent.sh handoff`), and nudges the freshness
 checkpoint via `additionalContext`. The fired-flag check precedes any transcript
 parsing, so after firing the per-call cost is one stat. Never blocks.
