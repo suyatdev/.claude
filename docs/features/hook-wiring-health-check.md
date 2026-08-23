@@ -639,3 +639,34 @@ every ordinary finding its actionability. Not filtering keeps `no such file: …
 useful and leaves an unbounded unfiltered string in session-start stdout. This session's judgement
 on this exact surface has been overturned three times, which is itself the reason to stop deciding
 it alone.
+
+## Kept current against `main` (2026-08-23)
+
+`main` moved twice while this card sat in review, and PR #66 went to `CONFLICTING` both times.
+Merged in rather than rebased, matching how `feat/treko-rename` handled the same situation.
+
+- **`88f1735`** — absorbs the Treko rename (#64, #65). One conflict,
+  `coding-memory/observability-judge/verdicts.jsonl`.
+- **`c8114b8`** — absorbs Treko's analysis-store move (#68). Two conflicts, the same ledger and
+  `README.md`'s Roadmap list, where both sides had appended a bullet at the same point.
+
+Both ledger resolutions were checked as **unions against both parents, not by line arithmetic** —
+a balanced total is not a verified union. Final state 220 rows: chronologically ordered, no
+duplicates, nothing invented, nothing lost from either side except the superseded `outcome: null`
+duplicate of `head_sha c974c6c1` that this branch had already updated to `rework`. `judge-guard`
+resolves a verdict by `(repo, branch, head_sha)`, so row order is not load-bearing.
+
+Re-measured after each merge rather than assumed: repo suite 25/25, own suite 37/37, leak rate
+0 / 52,000, falsifier still red at 6,755 against `6868451`, runtime 43 ms real / 45 ms scratch
+against a 15 ms bare-interpreter floor, probe silent-break-silent through all four cycles, and the
+hook silent against the real live config from `~/.claude`.
+
+PR #66's description was rewritten to cover the review round it had outgrown — sub-key naming, the
+default-deny renderer, the leak measurement and its falsification, the eight-verdict trail, and the
+open scope decision, now its own §7 with a stated recommendation (**don't filter**).
+
+**One finding surfaced while re-verifying, deliberately left unfixed:**
+`hooks/verify-hook-wiring.leakcheck.py`'s module docstring still says "Seven credential families"
+and "0/14000". The file now runs 13 families and 52,000 samples — stale since `671fdf7`. Not
+patched here because the card is at `phase: review` and that is a source edit; it is disclosed in
+the PR body instead, for whoever acts on the §7 decision.
