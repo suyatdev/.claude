@@ -477,7 +477,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `file://` degradation. **0034 is verified free against `origin/main`** (which tops out at
       0033); note that "next free number" is ambiguous here because **0026 is duplicated**
       (`…symbolic-ref…` and `…the-gate-does-no-json-parsing…`) and 0028 is unused.
-- [ ] 11. `skills/treko/SKILL.md`: the `TREKO_STORE_DIR` row, the default path, and the `0o700` note.
+- [x] 11. `skills/treko/SKILL.md`: the `TREKO_STORE_DIR` row, the default path, and the `0o700` note.
 - [ ] 12. Post-change suite: node-ID set diff vs task 1, per-module counts, zero lost nodes, and
       `wc -l treko/server.py` under 800.
 - [ ] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
@@ -846,3 +846,42 @@ Mitigation that does hold: over `http://` with `--open`, `server.py:773-774` run
 the store has no runs, so a real store exists before the browser opens. The silent-sample case
 remains reachable over `file://`, and over `http://` when started without `--open` against an empty
 store.
+
+### Task 11 — SKILL.md
+
+`skills/treko/SKILL.md`, 194 lines (was 134). Criterion 9's live test passes:
+
+```
+cd treko && python3 -m pytest test_autolaunch.py::test_the_skill_documents_a_launch_command_that_does_not_detach -q
+# 1 passed
+cd treko && python3 -m pytest -q      # 220 passed in 120.28s -- unchanged from 0aaf78c
+```
+
+**The test was confirmed to actually read this file**, not a same-named one elsewhere:
+`server_harness.REPO_ROOT` resolves to this worktree, and the assertion scans the 3 lines
+containing `server.py` (unchanged — the new section names no launch command, so it adds no line to
+the set the test guards).
+
+New `## Where the survey is stored` section: the variable, the default, expansion and
+canonicalization rules, the `0o700`-on-creation-only rule with its reason, the four new startup
+aborts as table rows, and the three migration outcome lines with what each means.
+
+**Three pre-existing statements in the skill were falsified by this change and are corrected, not
+appended to:**
+
+Line numbers below are **post-edit**, re-read from the file after the change:
+
+| Line now | Was | Now |
+|---|---|---|
+| `:18` (`store.py` bullet) | "writes `tracker-data.js`, the file the page loads" | names the configured directory, "never into the repo" |
+| `:61-66` (stderr sample) | banner without `store=`; "its two timers" | the real format string from `server.py:786-787`, plus the migration line above it |
+| `:92` | "Opening the vendored file over `file://` **still renders the survey**" | it renders the **sample**, silently — see ADR 0034 |
+
+That third one is the load-bearing correction. It was true before the move (`tracker-data.js` was
+tracked, so it sat beside the page in any clone) and is false after it, and the skill is where a
+reader would have gone to confirm the behaviour the page does not signal.
+
+**Stderr ordering re-verified rather than carried from D2.** Everything in `main()` before
+`adopt_legacy_store` (`server.py:720-736`) is silent-or-abort, and `run_reanalyze`'s subprocess uses
+`capture_output=True` (`server.py:353-356`), so the analyzer never interleaves. The migration line is
+first and the banner is last before the audit stream — both halves of the sample block hold.

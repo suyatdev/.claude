@@ -15,8 +15,8 @@ as a browser page. The page can also drive the Claude session that launched it �
 Three pieces, in dependency order:
 
 - **`analyze.py`** — pure read. Prints one `run` object as JSON on stdout and writes nothing.
-- **`store.py`** — writes `tracker-data.js`, the file the page loads. Atomic, so a crashed run
-  cannot truncate the store.
+- **`store.py`** — writes `tracker-data.js` into the configured store directory (below), never
+  into the repo. Atomic, so a crashed run cannot truncate the store.
 - **`server.py`** — serves the page on `127.0.0.1` and owns `POST /command`. This is the whole
   trust boundary, and the launch procedure below is part of it.
 
@@ -58,12 +58,17 @@ python3 treko/server.py --open
 `--repo <path>` is optional and overrides the resolved repo when the cwd isn't inside the one you
 want surveyed. There is no longer a second step: no URL to copy, no browser tab to open by hand.
 
-It prints its own address, the surface it bound, and its two timers, then one audit line per request:
+It prints its own address, the surface it bound, its two timers and its resolved store directory,
+then one audit line per request:
 
 ```
-server: http://127.0.0.1:8422/ surface=<uuid> idle=1800s poll=5s
+no legacy store to adopt
+server: http://127.0.0.1:8422/ surface=<uuid> idle=1800s poll=5s store=/Users/you/.local/state/treko
 <ISO-8601 UTC> accepted id=- surface=- sent=no status=200 reason=- path=- errno=-
 ```
+
+The first line is the store migration reporting itself; the banner is always the last line before
+the audit stream. See "Where the survey is stored".
 
 Two things about that command are load-bearing, and **both fail silently** — they leave the control
 present in the code and inert, where neither a code read nor the test suite notices. Auto-launch
@@ -84,11 +89,62 @@ rather than typed by a human, so there is no reader left to catch a violation be
 The port is `8422`, owned by `PORTS.md` (`TREKO_PORT` overrides). The auto-opened tab is
 `http://127.0.0.1:8422/` — not the `.dc.html` file. Serving it is what lets the per-launch token be
 injected into the page at request time and never written to disk, and what makes the page same-origin
-with `/command`. Opening the vendored file over `file://` still renders the survey; it has no control
-channel, so the command buttons become copy-to-clipboard chips instead.
+with `/command`. **Opening the vendored file over `file://` no longer shows your survey.** The store
+now lives outside the repo, so nothing answers the page's `tracker-data.js` request and the bundled
+`tracker-data-fallback.js` loads `tracker-data.sample.js` instead — and the page does not say so: its
+source dot stays green and reads "tracker-data.js loaded" over sample data. The only tell is the
+timestamp beside it. That mode also has no control channel, so the command buttons become
+copy-to-clipboard chips. Use the served URL, not the file.
 
 `reanalyze` re-runs the analyzer server-side and rewrites the store; it sends no keystroke. It is the
-only thing that writes `tracker-data.js`.
+only thing that writes `tracker-data.js`, and it writes it in the store directory below — never in
+the repo being surveyed.
+
+## Where the survey is stored
+
+**`${XDG_STATE_HOME:-~/.local/state}/treko/tracker-data.js`**, outside every repository.
+`TREKO_STORE_DIR` names the **directory** and overrides that default; the filename is fixed by the
+page's `<script src>` and is not configurable.
+
+This is the point of the location: surveying a repo must never write to one. `--repo` can point the
+analyzer at any repo, and the store holds runs from several side by side, so a store inside any one
+checkout would dirty it — and `tracker-data.js` is regenerated whole on every `reanalyze`, which is
+a guaranteed merge conflict on any branch that runs one.
+
+| Rule | Behaviour |
+|---|---|
+| Variable | `TREKO_STORE_DIR` — a directory, never a file path |
+| Default | `$XDG_STATE_HOME/treko`, or `~/.local/state/treko` when that is unset |
+| Expansion | a leading `~` only. A literal `$VAR` inside the value is **not** expanded |
+| Relative values | resolved against the process cwd, then canonicalized (symlinks followed) |
+| Created | if absent, with parents, at mode **`0o700`** |
+| Existing directory | used as-is; its mode is **never** changed |
+
+**`0o700` on creation, and only on creation.** One directory aggregates surveys of every repo you
+analyse — branch names, card titles, filesystem paths, and what is in flight — so a directory this
+tool creates is owner-only. A directory you already made is left at whatever mode you gave it;
+silently tightening it is not the tool's call.
+
+**The store is validated before anything is served.** A path that exists and is not a directory, or
+one that cannot be created or written, aborts the launch with the reason on stderr — never a silent
+fallback to somewhere else. The writability check is a real write into the directory, so the errno
+it reports is the one the real write would get.
+
+**One line on every launch says what happened to the old in-repo store**, because a migration that
+silently did not run looks exactly like one that did:
+
+| Line | Meaning |
+|---|---|
+| `copied N runs from <path>` | A pre-move `treko/tracker-data.js` was found and adopted. Runs through the store module, so it is parse-checked and atomic. Happens once. |
+| `store already present, legacy file ignored` | The configured store exists, so the legacy file was left alone. A real store is never overwritten by a stale one. |
+| `no legacy store to adopt` | The normal line on a clean checkout. |
+
+A legacy file that does not parse **aborts the launch** rather than starting empty — that store may
+hold snapshots the analyzer cannot regenerate, since it reports the present.
+
+`treko/tracker-data.js` is untracked and gitignored. `tracker-data.sample.js` and
+`tracker-data-fallback.js` stay tracked: they are vendored assets the page loads, not artifacts the
+tool writes.
 
 ## Stopping it
 
@@ -112,6 +168,10 @@ one, which holds a different token, and every button then returns the deliberate
 | `port … is already in use -- the probe did not answer as a Treko page (something else holds this port)` | Something other than Treko holds the port. Same non-fallback rule: pick a different `TREKO_PORT` or free it. |
 | `manifest uses extensions absent from EXTENSION_TYPES` | A servable file was added without its content type. The servable set is a closed list in `server.py`. |
 | `Treko.dc.html has no <head>` | The token has nowhere to be injected, so the page would load unauthenticated. |
+| `<path> exists and is not a directory` | `TREKO_STORE_DIR` points at a file. It names a directory; the filename is fixed. |
+| `<path> is not writable (errno N: …)` | The store directory exists but cannot be written. The errno comes from a real write, not a guess. |
+| `cannot create <path> (errno N: …)` | The store directory is absent and could not be created — a missing parent you lack permission on, or a read-only filesystem. |
+| `<path> is not a valid legacy store: …` | A pre-move `treko/tracker-data.js` exists but does not parse. Deliberately fatal: it may hold runs the analyzer cannot regenerate. Move it aside to launch without it. |
 
 ## Phase rules are not here
 
