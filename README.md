@@ -66,6 +66,7 @@
 - [x] Verification-marker gate: blocks a `git commit` on a file whose paired test has never actually passed against that exact version, using a hash receipt each test suite leaves behind when it goes green — a computational form of "reproduce before fixing, verify before claiming" (ADR 0027)
 - [x] Reconcile the remaining files still describing the retired `coding-memory/branches/<branch>.md` workflow (ADR 0031; #59) — the surface was enumerated rather than patched instance-by-instance, and this line is now the only live mention left
 - [x] Judge verdicts ranked as their own retrieval tier, and `memsearch` chunk weights resolved from config at query time instead of frozen into each row — retuning a weight is a config edit plus an `index --reclassify` pass, not a full re-embed (ADR 0030; #60)
+- [x] Treko's analysis store moved out of every repository into `$XDG_STATE_HOME/treko` — surveying a repo no longer dirties one (a single `reanalyze` used to leave a 6,170-line diff on a tracked file); `TREKO_STORE_DIR` overrides the location, and the existing snapshots are copied across once (ADR 0034; #68)
 - [x] Hook-wiring health check: a session-start guard that says so when a registered guard cannot actually run, or when the live `settings.json` has drifted from the reviewed one — measured, a missing hook script fails silently and open, so silence had been indistinguishable from approval (#66)
 
 ## New machine?

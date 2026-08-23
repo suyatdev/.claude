@@ -587,6 +587,129 @@ def test_tracker_data_absent_is_404_not_500(launcher, tree):
 
 
 # --------------------------------------------------------------------------
+# the configured store directory — §Design D3, criteria 5, 6 and 10
+# --------------------------------------------------------------------------
+
+# **Every test below is a GET — D3's writer half is in `test_store_writer.py`.** Noted
+# here rather than left to be discovered: this section reads as the whole of D3, and the
+# one thing it cannot see is a `reanalyze` that still writes into the tree.
+
+# Two distinguishable payloads. Asserting the served bytes equal the *store's* is the only
+# thing that separates "read the configured directory" from "read the tree and ignore the
+# configuration" — a status code alone is 200 either way.
+STORE_SENTINEL = b"// SENTINEL-CONFIGURED-STORE\nwindow.TRACKER_DATA = {};\n"
+LEGACY_SENTINEL = b"// SENTINEL-LEGACY-IN-TREE\nwindow.TRACKER_DATA = {};\n"
+
+# Real files planted in the configured store directory that no manifest row names. D3
+# widens *where* `tracker-data.js` is read from; criterion 6 says it must not widen *what*
+# is readable, so the directory must not become a second serving root.
+STORE_DIR_PROBES = ["/secret-in-the-store.txt", "/tracker-data.json"]
+
+
+def test_the_configured_store_directory_is_what_is_served(launcher, tree, tmp_path):
+    """Criterion 5's first clause. The tree keeps a file of its own at the old path, so a
+    server that ignored `TREKO_STORE_DIR` would still answer 200 — with the wrong bytes."""
+    store_dir = tmp_path / "configured-store"
+    store_dir.mkdir()
+    (store_dir / "tracker-data.js").write_bytes(STORE_SENTINEL)
+    (tree / "tracker-data.js").write_bytes(LEGACY_SENTINEL)
+
+    srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(store_dir)})
+    response = srv.get("/tracker-data.js")
+
+    assert response.status == 200
+    assert response.body == STORE_SENTINEL, \
+        "served %r; the configured store holds STORE_SENTINEL" % response.body[:60]
+    assert response.header("Content-Type") == "text/javascript"
+    assert response.header("X-Content-Type-Options") == "nosniff"
+
+
+def test_a_configured_store_that_does_not_exist_yet_is_404_not_500(launcher, tree, tmp_path):
+    """Criterion 5's second clause, and the ordinary first launch: the directory is there
+    and empty. The tree's legacy file is removed because D4 would otherwise copy it in and
+    the store would exist after all — the 404 has to be a real absence.
+
+    The absent half alone is not falsifiable: a server still reading the tree answers 404
+    for the same request, because that is the file just unlinked. So the store is written
+    where the configuration points and the same request asked again — only a server
+    reading the configured directory can turn that 404 into a 200.
+    """
+    store_dir = tmp_path / "empty-store"
+    store_dir.mkdir()
+    (tree / "tracker-data.js").unlink()
+
+    srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(store_dir)})
+    absent = srv.get("/tracker-data.js")
+
+    assert absent.status == 404
+    assert absent.json() == {"ok": False, "error": "not_found"}
+
+    (store_dir / "tracker-data.js").write_bytes(STORE_SENTINEL)
+    present = srv.get("/tracker-data.js")
+
+    assert present.status == 200, \
+        "the configured store was written and the request still answered %d" % present.status
+    assert present.body == STORE_SENTINEL
+
+
+def test_a_store_file_symlinking_out_of_the_store_directory_is_403(launcher, tree, tmp_path):
+    """Criterion 5's third clause. §Design D3 re-points the containment check rather than
+    removing it: `tracker-data.js` is a manifest row, so the manifest check passes and the
+    resolved-path check is the only thing between a planted symlink and its target."""
+    secret = tmp_path / "outside-the-store.txt"
+    secret.write_text("SENTINEL-OUTSIDE-STORE-DIR")
+    store_dir = tmp_path / "planted-store"
+    store_dir.mkdir()
+    (store_dir / "tracker-data.js").symlink_to(secret)
+
+    srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(store_dir)})
+    response = srv.get("/tracker-data.js")
+
+    assert response.status == 403
+    assert response.body == FORBIDDEN_BODY
+    assert b"SENTINEL" not in response.body
+    line = assert_reason(srv, "path_escape", status="403")
+    assert line["path"] == "tracker-data.js"
+
+
+def test_a_symlinked_store_directory_serves_200_not_403(launcher, tree, tmp_path):
+    """Criterion 10, and the reason §Design D1 stores the canonical path. `resolve()` on
+    the target always returns a symlink-free path; if the configured directory were kept
+    as given it would never appear in `resolved.parents` and every request for the store
+    would 403. `TREKO_STORE_DIR=/tmp/treko` on macOS is exactly this shape."""
+    real = tmp_path / "real-store"
+    real.mkdir()
+    (real / "tracker-data.js").write_bytes(STORE_SENTINEL)
+    linked = tmp_path / "linked-store"
+    linked.symlink_to(real, target_is_directory=True)
+
+    srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(linked)})
+    response = srv.get("/tracker-data.js")
+
+    assert response.status == 200, \
+        "a store reached through a symlinked directory was refused %d" % response.status
+    assert response.body == STORE_SENTINEL
+
+
+@pytest.mark.parametrize("probe", STORE_DIR_PROBES)
+def test_a_file_planted_in_the_store_directory_stays_off_the_manifest(launcher, tree,
+                                                                     tmp_path, probe):
+    """Criterion 6. This holds before D3 as well as after — it is the control that says
+    the new branch re-pointed one row's root and did not open a second serving root."""
+    store_dir = tmp_path / "probed-store"
+    store_dir.mkdir()
+    (store_dir / "tracker-data.js").write_bytes(STORE_SENTINEL)
+    (store_dir / probe.lstrip("/")).write_text("SENTINEL-OFF-MANIFEST")
+
+    srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(store_dir)})
+    response = srv.get(probe)
+
+    assert response.status == 404
+    assert response.json() == {"ok": False, "error": "not_found"}
+    assert b"SENTINEL" not in response.body
+
+
+# --------------------------------------------------------------------------
 # the reanalyze timeout — a timeout never made to fire is not a timeout
 # --------------------------------------------------------------------------
 
