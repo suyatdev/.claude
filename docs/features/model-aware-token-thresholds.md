@@ -71,8 +71,13 @@ fixed ladder had the same rounding artefact; not introduced here, not fixed here
   - `statusline-command.test.sh` — 113 passed, 0 failed (70 pre-existing + 43 new, the last 16
     covering the window cap). The 70
     pre-existing assertions, including the control-byte injection group, pass unchanged against
-    the modified script. Falsifier confirmed: pinning red back to 100k turns 8 of the new
-    assertions red, including both ladder-ordering checks.
+    the modified script. Falsifier confirmed: pinning red back to 100k reddens 17 of 113,
+    including both ladder-ordering checks. (Measured after the clamp group landed; it was 8
+    before those 16 assertions existed, and the card said 8 for one round too long.)
+  - `statusline-command.falsify.py` — "falsification intact". The current suite still fails the
+    right named control-byte-injection cases against all four historical script versions.
+  - Verified live: the modified hook fired at **201,677 tokens** against the 200k Opus threshold
+    while this branch was being prepared.
 - [x] Commit and verify hooks still work — `bb42a87`, exactly 5 files. Both suites green after
   the commit; the modified hook ran on every tool call of this session without error.
 

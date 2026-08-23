@@ -67,6 +67,8 @@
 - [x] Reconcile the remaining files still describing the retired `coding-memory/branches/<branch>.md` workflow (ADR 0031; #59) — the surface was enumerated rather than patched instance-by-instance, and this line is now the only live mention left
 - [x] Judge verdicts ranked as their own retrieval tier, and `memsearch` chunk weights resolved from config at query time instead of frozen into each row — retuning a weight is a config edit plus an `index --reclassify` pass, not a full re-embed (ADR 0030; #60)
 
+- [x] Model-aware session-context thresholds: the checkpoint nudge and the status-line bar scale to the running model (150k Sonnet, 200k Opus/Fable, 75k otherwise) instead of a fixed 75k, with the bar's anchor capped by the model's real context window so the warning can never sit past the wall (ADR 0035; #67)
+
 ## New machine?
 
 See [SETUP.md](SETUP.md) for the full install checklist.
