@@ -5,7 +5,8 @@
 # fired-flag, prepare a press-Enter handoff pane, and nudge the freshness
 # checkpoint via additionalContext.
 #
-# Threshold is model-dependent: 150k for Sonnet, 200k for Opus/Fable, 75k fallback.
+# Threshold is model-dependent: 100k for Sonnet, 130k for Opus/Fable, 75k fallback.
+# These are context-rot budgets, not window fractions -- see ADR 0035.
 #
 # ORDERING IS LOAD-BEARING (obs r2 advisory 1): this hook runs on every tool
 # call in every repo, so the per-session fired-flag check comes BEFORE any
@@ -48,17 +49,20 @@ fill=${meta%% *}
 model_id=${meta#* }
 case "$fill" in ''|*[!0-9]*) exit 0 ;; esac
 
-# Threshold scales with the model actually generating the tokens: 150k Sonnet,
-# 200k Opus/Fable, 75k for anything unrecognised. The PostToolUse payload carries
-# NO .model key (verified against a captured live payload), so the transcript is
-# the only live source; settings.json .model is the fallback for a transcript
-# whose assistant turns carry no model id.
+# Threshold scales with the model actually generating the tokens: 100k Sonnet,
+# 130k Opus/Fable, 75k for anything unrecognised. The numbers are budgets for
+# where answer quality decays, NOT fractions of the window -- rot does not scale
+# with window size, so a 1M-context model gets no proportional allowance.
+#
+# The PostToolUse payload carries NO .model key (verified against a captured
+# live payload), so the transcript is the only live source; settings.json .model
+# is the fallback for a transcript whose assistant turns carry no model id.
 if [ -z "$model_id" ] && [ -f "$HOME/.claude/settings.json" ]; then
   model_id=$("$JQ_BIN" -r '.model // empty' "$HOME/.claude/settings.json" 2>/dev/null) || true
 fi
 case "$model_id" in
-  *[Ss]onnet*) THRESHOLD=150000 ;;
-  *[Oo]pus*|*[Ff]able*) THRESHOLD=200000 ;;
+  *[Ss]onnet*) THRESHOLD=100000 ;;
+  *[Oo]pus*|*[Ff]able*) THRESHOLD=130000 ;;
   *) THRESHOLD=75000 ;;
 esac
 

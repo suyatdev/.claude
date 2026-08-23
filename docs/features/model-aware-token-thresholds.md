@@ -9,9 +9,39 @@ branch: feat/model-aware-token-thresholds
 The 75k checkpoint threshold is too conservative for larger-context models. Both the
 context-handoff-watch hook and the statusline context bar now scale with the model tier:
 
-- Sonnet: 150k tokens
-- Opus/Fable: 200k tokens
+- Sonnet: 100k tokens
+- Opus/Fable: 130k tokens
 - Other/unknown: 75k tokens (unchanged default)
+
+## The anchors are rot budgets, not window fractions
+
+> **Revised in review (2026-08-23), user decision.** The first cut set Sonnet to 150k and
+> Opus/Fable to 200k. Both numbers were read off the *window* — 200k is exactly a non-1M Opus's
+> window, 150k is three quarters of Sonnet's — and window size is the wrong quantity to price a
+> checkpoint against. A larger window holds more tokens; it does not buy more attention. Published
+> long-context work is consistent on this: Chroma's *Context Rot* study (18 models) finds
+> degradation setting in well below the advertised limit and non-uniformly, and NoLiMa finds most
+> models below half their short-context baseline by ~32k on non-literal retrieval.
+
+Two things in this repo already said so and were contradicted by the numbers:
+
+- `rules/gates.md` asks for a freshness checkpoint every ~35k tokens of new conversation, and the
+  memory `feedback_offer_session_clear_after_tasks` records a ~100k per-session ceiling with the
+  reason attached: *"a 1M-token window can already degrade badly around ~50K tokens of active
+  content, so window capacity is the wrong thing to optimize against."* The old Opus anchor fired
+  at 200k — twice that ceiling. Measured on this branch: 201,677 tokens.
+- `statusline-command.sh` carries the same argument in its own bar comment — *"a 1M-context model
+  gets unwieldy long before it is technically full"* — directly above constants that scaled with
+  the window anyway.
+
+The nudge is one-shot and non-blocking, so the costs are asymmetric: firing early costs one
+ignorable line, firing late means the session was already degraded for the whole overshoot. The
+anchors are set accordingly.
+
+**The 30k Sonnet/Opus spread is a judgement call, not a measurement.** No per-model rot data for
+Opus 5 vs Sonnet 5 was gathered; stronger models are generally observed to degrade more gracefully,
+and that is the whole basis. Recorded here so a later reader does not mistake it for a measured
+figure.
 
 ## Changes
 
@@ -36,7 +66,7 @@ fallback when the transcript names no model.
 render the model name.
 
 Matching is case-insensitive on `sonnet` / `opus` / `fable`, so `claude-opus-5[1m]` and
-`Claude Opus 5 (1M context)` both resolve to 200k.
+`Claude Opus 5 (1M context)` both resolve to 130k.
 
 ## Statusline: the thresholds move as a set
 
@@ -53,8 +83,11 @@ original ratios (`2/3`, `4/3`, reference `==` red). The 75k fallback reproduces 
 | Model | yellow | orange | red / bar-full |
 |---|---|---|---|
 | fallback | 50,000 | 75,000 | 100,000 |
-| Sonnet | 100,000 | 150,000 | 200,000 |
-| Opus / Fable | 133,333 | 200,000 | 266,666 |
+| Sonnet | 66,666 | 100,000 | 133,333 |
+| Opus / Fable | 86,666 | 130,000 | 173,333 |
+
+Verified by running the shell's own integer arithmetic, not by hand: `a*2/3` and `a*4/3` truncate,
+so the yellow values are 66,666 and 86,666 rather than the rounded thirds.
 
 Known, pre-existing: at ~0.25% below red the bar rounds to full while still orange. The old
 fixed ladder had the same rounding artefact; not introduced here, not fixed here.
@@ -106,15 +139,45 @@ Verdict: no dimension failed, `risk=medium confidence=high`. It independently re
 Historical records that still say 75k — ADR 0007 and the pane-orchestration plan — are deliberately
 left alone.
 
+## Revision round (2026-08-23) — anchors lowered to rot budgets
+
+User decision after review: `150k/200k` → **`100k/130k`**, fallback 75k unchanged. Reasoning in
+*The anchors are rot budgets, not window fractions* above. Tests were rewritten to the new spec
+**first** and both suites confirmed red before either source file was touched — 28 failures in
+`statusline-command.test.sh`, 9 in `hooks/context-handoff-watch.test.sh`, every one of them a tier
+boundary that moves and nothing else.
+
+- `hooks/context-handoff-watch.sh` — `100000` / `130000`; comment now states the rot-budget framing.
+- `statusline-command.sh` — same anchors; the cap comment records its demotion to defence-in-depth.
+- New assertions: the Sonnet/Opus **spread** itself (at 110,000 fill Sonnet is orange, Opus still
+  yellow), and `opus at 130k fires below any 200k wall`. The window-cap group moved from a
+  200k window (no longer binding) to a **128k** window, where `128000 * 3/4 = 96000` does bind and
+  red lands at exactly 128,000 — so the cap is still exercised rather than merely present.
+
+Verified after the change:
+
+- `bash statusline-command.test.sh` → **122/122 passed**
+- `bash hooks/context-handoff-watch.test.sh` → **34 passed, 0 failed**
+- `python3 statusline-command.falsify.py` → **falsification intact** (all four historical script
+  versions still fail the right named cases)
+
+- **Live fire observed.** During this same revision session the modified hook fired against the new
+  threshold: `context-handoff-watch: session context is at 130495 tokens (>= 130000)`, on
+  `claude-opus-5[1m]`, with the handoff pane prepared. Not a replay of the earlier 201,677-token
+  observation — that one was against the 200k threshold on the pre-revision code.
+
 ## Known limitations
 
-- Red lands exactly **at** the window under a binding cap, not inside it, and the strict `<` in the
-  cap means Sonnet on a 200k window is not capped at all. Orange — the tier that signals the
-  checkpoint — still fires with headroom in both cases. Reasoned in ADR 0035.
-
-- The window cap applies to the statusline only. On a 200k-window Opus the bar now warns correctly
-  but the hook's nudge still never fires; reading the window in the hook would cost its tail-only
-  parse. Deliberate asymmetry, reasoned in ADR 0035.
+- Red lands exactly **at** the window under a binding cap, not inside it. Orange — the tier that
+  signals the checkpoint — still fires with headroom. Reasoned in ADR 0035.
+- The window cap applies to the statusline only, and it is now **defence-in-depth rather than
+  load-bearing**: at 100k/130k anchors it binds only below a ~133k (Sonnet) / ~173k (Opus) window,
+  which no current model has. Under the previous 200k Opus anchor it was doing real work on any
+  non-1M Opus. Kept, not removed — the anchors are a judgement call and could rise again.
+- ~~On a 200k-window Opus the hook's nudge never fires.~~ **Closed by the 2026-08-23 revision.**
+  It never fired because 200k of fill is the whole window and auto-compact intervenes first; 130k
+  is reachable on any Opus window, and the hook needs no cap to get there. Asserted by
+  `opus at 130k fires below any 200k wall` in `hooks/context-handoff-watch.test.sh`.
 - No test asserts the hook and the statusline resolve the same model to the same threshold.
 - At ~0.25% below red the bar rounds to full while still orange. Pre-existing; unchanged.
 

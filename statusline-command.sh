@@ -280,22 +280,28 @@ model_name=$(echo "$input" | jq -r '.model.display_name // empty')
 model_name="${model_name//[[:cntrl:]]/}"
 
 # Orange -- the checkpoint mark, matching hooks/context-handoff-watch.sh -- is
-# model-dependent: 150k Sonnet, 200k Opus/Fable, 75k for anything unrecognised.
+# model-dependent: 100k Sonnet, 130k Opus/Fable, 75k for anything unrecognised.
+#
+# These are budgets for where answer quality decays, NOT fractions of the window.
+# Context rot does not scale with window size -- a 1M-context model holds more
+# tokens, not more attention -- so the anchors deliberately do not grow with it.
 case "$model_name" in
-  *[Ss]onnet*) THRESHOLD_TOKENS_ORANGE=150000 ;;
-  *[Oo]pus*|*[Ff]able*) THRESHOLD_TOKENS_ORANGE=200000 ;;
+  *[Ss]onnet*) THRESHOLD_TOKENS_ORANGE=100000 ;;
+  *[Oo]pus*|*[Ff]able*) THRESHOLD_TOKENS_ORANGE=130000 ;;
   *) THRESHOLD_TOKENS_ORANGE=75000 ;;
 esac
 # The family anchor above is a fixed number; the model's real window is not. On a
-# model whose window is no larger than its anchor -- a non-1M Opus is exactly
-# this case at 200k -- red would sit at or beyond the wall, so the bar could
-# never redden and the checkpoint would never be signalled: the warning silently
-# off precisely when it matters. Where the payload reports the window, cap the
-# anchor so red (4/3 x orange) lands AT or inside the wall rather than past it.
-# With a binding cap red is the window exactly, give or take the 1-2 tokens the
-# two integer divisions truncate. The cap binds only when the
-# window is genuinely too small, so every threshold above survives untouched on
-# any window with room for it.
+# model whose window is no larger than its anchor, red would sit at or beyond the
+# wall, so the bar could never redden and the checkpoint would never be
+# signalled: the warning silently off precisely when it matters. Where the
+# payload reports the window, cap the anchor so red (4/3 x orange) lands AT or
+# inside the wall rather than past it. With a binding cap red is the window
+# exactly, give or take the 1-2 tokens the two integer divisions truncate.
+#
+# At these anchors the cap binds only below a ~133k (Sonnet) / ~173k (Opus)
+# window, which no current model has -- it is defence-in-depth, not load-bearing.
+# It WAS load-bearing under the previous 200k Opus anchor, which sat exactly at a
+# non-1M Opus's wall; lowering the anchor removed that case rather than the cap.
 context_window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
 context_window_size="${context_window_size//[[:cntrl:]]/}"
 case "$context_window_size" in ''|*[!0-9]*) context_window_size=0 ;; esac

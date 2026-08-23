@@ -957,30 +957,37 @@ want_tier "bar fallback  99999 orange"   orange "$(tier_at "$TB_FALLBACK" 99999)
 want_tier "bar fallback 100000 red"      red    "$(tier_at "$TB_FALLBACK" 100000)"
 want_tier "bar fallback 100000 bar full" 10     "$(fill_at "$TB_FALLBACK" 100000)"
 
-# Sonnet -> 150k anchor -> yellow 100k, orange 150k, red 200k.
+# Sonnet -> 100k anchor -> yellow 66666, orange 100000, red 133333.
 TB_SONNET="Claude Sonnet 5"
-want_tier "bar sonnet    99999 green"    green  "$(tier_at "$TB_SONNET" 99999)"
-want_tier "bar sonnet   100000 yellow"   yellow "$(tier_at "$TB_SONNET" 100000)"
-want_tier "bar sonnet   149999 yellow"   yellow "$(tier_at "$TB_SONNET" 149999)"
-want_tier "bar sonnet   150000 orange"   orange "$(tier_at "$TB_SONNET" 150000)"
-want_tier "bar sonnet   199999 orange"   orange "$(tier_at "$TB_SONNET" 199999)"
-want_tier "bar sonnet   200000 red"      red    "$(tier_at "$TB_SONNET" 200000)"
-want_tier "bar sonnet   200000 bar full" 10     "$(fill_at "$TB_SONNET" 200000)"
-# The specific regression: 110k on Sonnet must not already be red.
-want_tier "bar sonnet   110000 not red"  yellow "$(tier_at "$TB_SONNET" 110000)"
+want_tier "bar sonnet    66665 green"    green  "$(tier_at "$TB_SONNET" 66665)"
+want_tier "bar sonnet    66666 yellow"   yellow "$(tier_at "$TB_SONNET" 66666)"
+want_tier "bar sonnet    99999 yellow"   yellow "$(tier_at "$TB_SONNET" 99999)"
+want_tier "bar sonnet   100000 orange"   orange "$(tier_at "$TB_SONNET" 100000)"
+want_tier "bar sonnet   133332 orange"   orange "$(tier_at "$TB_SONNET" 133332)"
+want_tier "bar sonnet   133333 red"      red    "$(tier_at "$TB_SONNET" 133333)"
+want_tier "bar sonnet   133333 bar full" 10     "$(fill_at "$TB_SONNET" 133333)"
+# The specific regression: 110k on Sonnet must not already be red. It is now
+# orange rather than yellow -- the tier moved when the anchor dropped to 100k,
+# but the assertion the test exists for is "not red", and that still holds.
+want_tier "bar sonnet   110000 not red"  orange "$(tier_at "$TB_SONNET" 110000)"
 
-# Opus / Fable -> 200k anchor -> yellow 133k, orange 200k, red 266k.
+# Opus / Fable -> 130k anchor -> yellow 86666, orange 130000, red 173333.
 TB_OPUS="Claude Opus 5"
-want_tier "bar opus     133332 green"    green  "$(tier_at "$TB_OPUS" 133332)"
-want_tier "bar opus     133334 yellow"   yellow "$(tier_at "$TB_OPUS" 133334)"
-want_tier "bar opus     199999 yellow"   yellow "$(tier_at "$TB_OPUS" 199999)"
-want_tier "bar opus     200000 orange"   orange "$(tier_at "$TB_OPUS" 200000)"
-want_tier "bar opus     266665 orange"   orange "$(tier_at "$TB_OPUS" 266665)"
-want_tier "bar opus     266667 red"      red    "$(tier_at "$TB_OPUS" 266667)"
-want_tier "bar opus     266667 bar full" 10     "$(fill_at "$TB_OPUS" 266667)"
-want_tier "bar fable    200000 orange"   orange "$(tier_at "Claude Fable 5" 200000)"
+want_tier "bar opus      86665 green"    green  "$(tier_at "$TB_OPUS" 86665)"
+want_tier "bar opus      86666 yellow"   yellow "$(tier_at "$TB_OPUS" 86666)"
+want_tier "bar opus     129999 yellow"   yellow "$(tier_at "$TB_OPUS" 129999)"
+want_tier "bar opus     130000 orange"   orange "$(tier_at "$TB_OPUS" 130000)"
+want_tier "bar opus     173332 orange"   orange "$(tier_at "$TB_OPUS" 173332)"
+want_tier "bar opus     173333 red"      red    "$(tier_at "$TB_OPUS" 173333)"
+want_tier "bar opus     173333 bar full" 10     "$(fill_at "$TB_OPUS" 173333)"
+want_tier "bar fable    130000 orange"   orange "$(tier_at "Claude Fable 5" 130000)"
 # A 1M-context suffix on the display name must not defeat the model match.
-want_tier "bar opus 1M  200000 orange"   orange "$(tier_at "Claude Opus 5 (1M context)" 200000)"
+want_tier "bar opus 1M  130000 orange"   orange "$(tier_at "Claude Opus 5 (1M context)" 130000)"
+
+# The spread itself is the point of the model-aware ladder: at one identical
+# fill, Sonnet is already asking for a checkpoint while Opus still has room.
+want_tier "spread 110000 sonnet orange" orange "$(tier_at "$TB_SONNET" 110000)"
+want_tier "spread 110000 opus   yellow" yellow "$(tier_at "$TB_OPUS" 110000)"
 
 # Ordering is the invariant; the numbers above are one instance of it.
 for tb_model in "$TB_FALLBACK" "$TB_SONNET" "$TB_OPUS"; do
@@ -1000,38 +1007,53 @@ for tb_model in "$TB_FALLBACK" "$TB_SONNET" "$TB_OPUS"; do
 done
 
 # --- Clamp to the real context window ----------------------------------------
-# The family anchor is a fixed number; a model's actual window is not. On a
-# 200k-window Opus the 200k anchor sits exactly AT the wall, so the bar would
-# never redden and the checkpoint would never be signalled -- the safety net
-# silently off. When the payload reports context_window_size, the anchor is
-# capped so that red (4/3 x orange) still lands inside the window. Every
-# specified number survives on every window that is large enough to hold it.
-want_tier "clamp opus 1M window   200000 orange" orange "$(tier_at "$TB_OPUS" 200000 1000000)"
-want_tier "clamp opus 1M window   266665 orange" orange "$(tier_at "$TB_OPUS" 266665 1000000)"
-want_tier "clamp opus 1M window   266667 red"    red    "$(tier_at "$TB_OPUS" 266667 1000000)"
+# The family anchor is a fixed number; a model's actual window is not. When the
+# payload reports context_window_size, the anchor is capped at window * 3/4 so
+# that red (4/3 x orange) cannot land past the wall.
+#
+# At the 100k/130k anchors the cap binds only below a ~133k (Sonnet) / ~173k
+# (Opus) window, so no model in the current lineup reaches it -- it is kept as
+# defence-in-depth, and the 128k case below is what actually exercises it. That
+# is a deliberate change of role: under the old 200k Opus anchor the cap was
+# load-bearing on any 200k-window Opus.
+want_tier "clamp opus 1M window   130000 orange" orange "$(tier_at "$TB_OPUS" 130000 1000000)"
+want_tier "clamp opus 1M window   173332 orange" orange "$(tier_at "$TB_OPUS" 173332 1000000)"
+want_tier "clamp opus 1M window   173333 red"    red    "$(tier_at "$TB_OPUS" 173333 1000000)"
 
-# 200k-window Opus: anchor capped 200000 -> 150000, so red lands at 200000.
-want_tier "clamp opus 200k window 149999 yellow" yellow "$(tier_at "$TB_OPUS" 149999 200000)"
-want_tier "clamp opus 200k window 150000 orange" orange "$(tier_at "$TB_OPUS" 150000 200000)"
-want_tier "clamp opus 200k window 199999 orange" orange "$(tier_at "$TB_OPUS" 199999 200000)"
-want_tier "clamp opus 200k window 200000 red"    red    "$(tier_at "$TB_OPUS" 200000 200000)"
-want_tier "clamp opus 200k window 200000 bar full" 10   "$(fill_at "$TB_OPUS" 200000 200000)"
+# 200k-window Opus: cap is 150000, ABOVE the 130k anchor, so nothing is capped
+# and red lands at 173333 -- inside the window with headroom to spare. This is
+# the case the old 200k anchor could not express: red sat exactly at the wall.
+want_tier "clamp opus 200k window 129999 yellow" yellow "$(tier_at "$TB_OPUS" 129999 200000)"
+want_tier "clamp opus 200k window 130000 orange" orange "$(tier_at "$TB_OPUS" 130000 200000)"
+want_tier "clamp opus 200k window 173332 orange" orange "$(tier_at "$TB_OPUS" 173332 200000)"
+want_tier "clamp opus 200k window 173333 red"    red    "$(tier_at "$TB_OPUS" 173333 200000)"
+want_tier "clamp opus 200k window 173333 bar full" 10   "$(fill_at "$TB_OPUS" 173333 200000)"
+
+# A window small enough to bind: 128000 * 3/4 = 96000 anchor, red at exactly
+# 128000. This is the only remaining case where the cap changes an outcome.
+want_tier "clamp opus 128k window  63999 green"  green  "$(tier_at "$TB_OPUS" 63999 128000)"
+want_tier "clamp opus 128k window  64000 yellow" yellow "$(tier_at "$TB_OPUS" 64000 128000)"
+want_tier "clamp opus 128k window  95999 yellow" yellow "$(tier_at "$TB_OPUS" 95999 128000)"
+want_tier "clamp opus 128k window  96000 orange" orange "$(tier_at "$TB_OPUS" 96000 128000)"
+want_tier "clamp opus 128k window 127999 orange" orange "$(tier_at "$TB_OPUS" 127999 128000)"
+want_tier "clamp opus 128k window 128000 red"    red    "$(tier_at "$TB_OPUS" 128000 128000)"
+want_tier "clamp sonnet 128k window 96000 orange" orange "$(tier_at "$TB_SONNET" 96000 128000)"
 
 # Sonnet and the fallback are unchanged on a 200k window -- the cap is not binding.
-want_tier "clamp sonnet 200k window 150000 orange" orange "$(tier_at "$TB_SONNET" 150000 200000)"
-want_tier "clamp sonnet 200k window 199999 orange" orange "$(tier_at "$TB_SONNET" 199999 200000)"
-want_tier "clamp sonnet 200k window 200000 red"    red    "$(tier_at "$TB_SONNET" 200000 200000)"
+want_tier "clamp sonnet 200k window 100000 orange" orange "$(tier_at "$TB_SONNET" 100000 200000)"
+want_tier "clamp sonnet 200k window 133332 orange" orange "$(tier_at "$TB_SONNET" 133332 200000)"
+want_tier "clamp sonnet 200k window 133333 red"    red    "$(tier_at "$TB_SONNET" 133333 200000)"
 want_tier "clamp fallback 200k window  75000 orange" orange "$(tier_at "$TB_FALLBACK" 75000 200000)"
 want_tier "clamp fallback 200k window 100000 red"    red    "$(tier_at "$TB_FALLBACK" 100000 200000)"
 
 # A missing or junk window size must leave the family anchor untouched.
-want_tier "clamp absent window   200000 orange" orange "$(tier_at "$TB_OPUS" 200000)"
-want_tier "clamp zero window     200000 orange" orange "$(tier_at "$TB_OPUS" 200000 0)"
+want_tier "clamp absent window   130000 orange" orange "$(tier_at "$TB_OPUS" 130000)"
+want_tier "clamp zero window     130000 orange" orange "$(tier_at "$TB_OPUS" 130000 0)"
 
 # The ladder must stay ordered under a binding clamp too.
 tb_seen=""
-for tb_fill in 10000 50000 100000 150000 190000 200000 400000; do
-  tb_tier=$(tier_at "$TB_OPUS" "$tb_fill" 200000)
+for tb_fill in 10000 50000 64000 96000 127999 128000 400000; do
+  tb_tier=$(tier_at "$TB_OPUS" "$tb_fill" 128000)
   case " $tb_seen " in
     *" $tb_tier "*) : ;;
     *) tb_seen="${tb_seen:+$tb_seen }$tb_tier" ;;

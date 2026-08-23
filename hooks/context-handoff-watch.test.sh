@@ -103,37 +103,45 @@ chk "F5 failure: still mentions checkpoint"       'printf "%s" "$out" | /usr/bin
 # permission_mode, prompt_id, session_id, tool_input, tool_name, tool_response,
 # tool_use_id, transcript_path. settings.json .model is the fallback.
 
-# Sonnet threshold is 150k: 76k clears the old 75k fallback but must NOT fire.
+# Sonnet threshold is 100k: 76k clears the old 75k fallback but must NOT fire.
 transcript "$TMP/t-sonnet-low.jsonl" 76000 0 0 "claude-sonnet-5"
 out=$(printf '%s' "$(payload s-sonnet-low "$TMP/t-sonnet-low.jsonl")" | bash "$HOOK")
-chk "sonnet 76k (< 150k): silent"  '[ -z "$out" ]'
-chk "sonnet 76k (< 150k): no flag" '[ ! -f "$PANE_STATE_DIR/handoff-fired-s-sonnet-low" ]'
+chk "sonnet 76k (< 100k): silent"  '[ -z "$out" ]'
+chk "sonnet 76k (< 100k): no flag" '[ ! -f "$PANE_STATE_DIR/handoff-fired-s-sonnet-low" ]'
 
-transcript "$TMP/t-sonnet-at.jsonl" 50000 50000 50000 "claude-sonnet-5"  # = 150000
+transcript "$TMP/t-sonnet-at.jsonl" 40000 30000 30000 "claude-sonnet-5"  # = 100000
 out=$(printf '%s' "$(payload s-sonnet-at "$TMP/t-sonnet-at.jsonl")" | bash "$HOOK")
-chk "sonnet at 150k: flag written"      '[ -f "$PANE_STATE_DIR/handoff-fired-s-sonnet-at" ]'
-chk "sonnet at 150k: threshold in text" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"150000\")" >/dev/null'
+chk "sonnet at 100k: flag written"      '[ -f "$PANE_STATE_DIR/handoff-fired-s-sonnet-at" ]'
+chk "sonnet at 100k: threshold in text" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"100000\")" >/dev/null'
 
-# Opus threshold is 200k: 151k clears the Sonnet mark but must NOT fire.
-transcript "$TMP/t-opus-low.jsonl" 151000 0 0 "claude-opus-5"
+# Opus threshold is 130k: 101k clears the Sonnet mark but must NOT fire.
+transcript "$TMP/t-opus-low.jsonl" 101000 0 0 "claude-opus-5"
 out=$(printf '%s' "$(payload s-opus-low "$TMP/t-opus-low.jsonl")" | bash "$HOOK")
-chk "opus 151k (< 200k): silent"  '[ -z "$out" ]'
-chk "opus 151k (< 200k): no flag" '[ ! -f "$PANE_STATE_DIR/handoff-fired-s-opus-low" ]'
+chk "opus 101k (< 130k): silent"  '[ -z "$out" ]'
+chk "opus 101k (< 130k): no flag" '[ ! -f "$PANE_STATE_DIR/handoff-fired-s-opus-low" ]'
 
-transcript "$TMP/t-opus-at.jsonl" 70000 65000 65000 "claude-opus-5"  # = 200000
+transcript "$TMP/t-opus-at.jsonl" 50000 40000 40000 "claude-opus-5"  # = 130000
 out=$(printf '%s' "$(payload s-opus-at "$TMP/t-opus-at.jsonl")" | bash "$HOOK")
-chk "opus at 200k: flag written"      '[ -f "$PANE_STATE_DIR/handoff-fired-s-opus-at" ]'
-chk "opus at 200k: threshold in text" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"200000\")" >/dev/null'
+chk "opus at 130k: flag written"      '[ -f "$PANE_STATE_DIR/handoff-fired-s-opus-at" ]'
+chk "opus at 130k: threshold in text" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"130000\")" >/dev/null'
 
 # The 1M-context suffix must not defeat the match.
-transcript "$TMP/t-opus1m.jsonl" 70000 65000 65000 "claude-opus-5[1m]"
+transcript "$TMP/t-opus1m.jsonl" 50000 40000 40000 "claude-opus-5[1m]"
 out=$(printf '%s' "$(payload s-opus1m "$TMP/t-opus1m.jsonl")" | bash "$HOOK")
-chk "opus[1m] at 200k: flag written" '[ -f "$PANE_STATE_DIR/handoff-fired-s-opus1m" ]'
+chk "opus[1m] at 130k: flag written" '[ -f "$PANE_STATE_DIR/handoff-fired-s-opus1m" ]'
 
-# Fable also gets 200k.
-transcript "$TMP/t-fable-at.jsonl" 70000 65000 65000 "claude-fable-5"
+# Fable also gets 130k.
+transcript "$TMP/t-fable-at.jsonl" 50000 40000 40000 "claude-fable-5"
 out=$(printf '%s' "$(payload s-fable-at "$TMP/t-fable-at.jsonl")" | bash "$HOOK")
-chk "fable at 200k: flag written" '[ -f "$PANE_STATE_DIR/handoff-fired-s-fable-at" ]'
+chk "fable at 130k: flag written" '[ -f "$PANE_STATE_DIR/handoff-fired-s-fable-at" ]'
+
+# A 200k-window Opus now gets a nudge that can actually fire. Under the old 200k
+# threshold the fill had to reach the whole window, which auto-compact prevents,
+# so the hook was silent exactly where it was needed. 130k is reachable, and the
+# hook carries no window cap, so this one number covers every Opus window.
+transcript "$TMP/t-opus-reachable.jsonl" 130000 0 0 "claude-opus-5"
+out=$(printf '%s' "$(payload s-opus-reach "$TMP/t-opus-reachable.jsonl")" | bash "$HOOK")
+chk "opus at 130k fires below any 200k wall" '[ -f "$PANE_STATE_DIR/handoff-fired-s-opus-reach" ]'
 
 # An unrecognised model keeps the 75k fallback.
 transcript "$TMP/t-haiku.jsonl" 75000 0 0 "claude-haiku-4-5-20251001"
@@ -145,19 +153,19 @@ SETTINGS_HOME="$TMP/settings-home"
 mkdir -p "$SETTINGS_HOME/.claude"
 printf '{"model":"opus[1m]"}\n' > "$SETTINGS_HOME/.claude/settings.json"
 
-transcript "$TMP/t-nomodel-low.jsonl" 151000 0 0
+transcript "$TMP/t-nomodel-low.jsonl" 101000 0 0
 out=$(printf '%s' "$(payload s-set-low "$TMP/t-nomodel-low.jsonl")" | HOME="$SETTINGS_HOME" bash "$HOOK")
-chk "settings opus, 151k (< 200k): no flag" '[ ! -f "$PANE_STATE_DIR/handoff-fired-s-set-low" ]'
+chk "settings opus, 101k (< 130k): no flag" '[ ! -f "$PANE_STATE_DIR/handoff-fired-s-set-low" ]'
 
-transcript "$TMP/t-nomodel-at.jsonl" 70000 65000 65000
+transcript "$TMP/t-nomodel-at.jsonl" 50000 40000 40000
 out=$(printf '%s' "$(payload s-set-at "$TMP/t-nomodel-at.jsonl")" | HOME="$SETTINGS_HOME" bash "$HOOK")
-chk "settings opus, at 200k: flag written" '[ -f "$PANE_STATE_DIR/handoff-fired-s-set-at" ]'
+chk "settings opus, at 130k: flag written" '[ -f "$PANE_STATE_DIR/handoff-fired-s-set-at" ]'
 
-# Transcript model outranks settings.json: sonnet (150k) fires at 151k where
-# the settings-derived opus threshold (200k) would have stayed silent.
-transcript "$TMP/t-override.jsonl" 151000 0 0 "claude-sonnet-5"
+# Transcript model outranks settings.json: sonnet (100k) fires at 101k where
+# the settings-derived opus threshold (130k) would have stayed silent.
+transcript "$TMP/t-override.jsonl" 101000 0 0 "claude-sonnet-5"
 out=$(printf '%s' "$(payload s-override "$TMP/t-override.jsonl")" | HOME="$SETTINGS_HOME" bash "$HOOK")
-chk "transcript sonnet outranks settings opus: fires at 151k" '[ -f "$PANE_STATE_DIR/handoff-fired-s-override" ]'
+chk "transcript sonnet outranks settings opus: fires at 101k" '[ -f "$PANE_STATE_DIR/handoff-fired-s-override" ]'
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
