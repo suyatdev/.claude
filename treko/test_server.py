@@ -590,6 +590,10 @@ def test_tracker_data_absent_is_404_not_500(launcher, tree):
 # the configured store directory — §Design D3, criteria 5, 6 and 10
 # --------------------------------------------------------------------------
 
+# **Every test below is a GET — D3's writer half is in `test_store_writer.py`.** Noted
+# here rather than left to be discovered: this section reads as the whole of D3, and the
+# one thing it cannot see is a `reanalyze` that still writes into the tree.
+
 # Two distinguishable payloads. Asserting the served bytes equal the *store's* is the only
 # thing that separates "read the configured directory" from "read the tree and ignore the
 # configuration" — a status code alone is 200 either way.

@@ -1029,3 +1029,41 @@ store already present, legacy file ignored
 
 The store stayed byte-identical — same `sha256` `b1bfd3e9…`, same mtime. A stale legacy file cannot
 overwrite a real store. Both servers were stopped afterwards and port 8422 is free.
+
+### Task 14 — the writer test the judge asked for
+
+Added 2026-08-23 after the observability judge's one non-blocking finding: **no test proved the
+*writer* honours `TREKO_STORE_DIR`.** Confirmed independently before writing anything —
+`server_harness.py:270` sets `TREKO_STORE_DIR` to the per-test tree, and the tree *is* the serving
+root, so for 214 of 220 tests the store directory and the serve root are the same directory; the six
+that override it (`test_server.py:605,623,651,671,691`, `test_server_lifetime.py:232`) are all
+read-path. A writer still resolving `SERVE_ROOT / "tracker-data.js"` would have left the whole suite
+green.
+
+`treko/test_store_writer.py` (new file, 1 test) launches with the store in a directory outside the
+tree, stubs the analyzer so the run carries a sentinel id, POSTs `reanalyze`, and asserts both
+halves: the sentinel run is in the configured store, and the tree's `tracker-data.js` is byte-identical
+to what it was before. It is a new file rather than one more test in `test_server.py` because that
+file is at 774 of the repo's 800-line ceiling; `test_server.py`'s D3 section now carries a pointer to it.
+
+```
+cd treko && python3 -m pytest -q          # 221 passed in 120.32s  (220 before)
+```
+
+**Both assertions were proven able to fail**, since a green test against already-passing code proves
+nothing on its own. `_run_local` was temporarily mutated to pass `SERVE_ROOT / FIRST_RUN_OPTIONAL`
+instead of `config["store_path"]`:
+
+```
+AssertionError: the configured store holds []; the analyzer emitted 'SENTINEL-WRITER-RUN'
+```
+
+The tree-untouched clause is never reached once the first fails, so a throwaway copy with the two
+assertions swapped was run under the same mutation and failed on the byte comparison
+(`At index 99 diff: b'2' != b'0'`). The copy was deleted and `server.py` restored with
+`git checkout`, then confirmed byte-identical to a pre-mutation copy by `cmp`.
+
+**Uncovered, deliberately:** `main()`'s first-run analyze — the other `run_reanalyze` caller — fires
+only under `--open`, which opens a real browser. It is not a second place the path could be wrong
+(it passes the same `config["store_path"]`, and D3 makes `build_config` the only construction of
+it), so what stays unasserted is that one call site's arguments, not the path itself.
