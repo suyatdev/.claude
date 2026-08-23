@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: feat/treko-store-location
 compliance_verdict: pass  # rounds 2-5, 2026-08-22; subject blob 348364d (content at 4fc3479)
@@ -1095,3 +1095,34 @@ round 1. All three are carried in the PR body under "Known gaps, deliberately no
 **PR #68** opened as a draft (`gh pr create --draft`), per `preparing-pull-requests` — the verdict
 must be fresh at `gh pr create` time, so the audit trail and the README Roadmap line are pushed
 onto the branch afterwards and the PR marked ready. https://github.com/suyatdev/.claude/pull/68
+
+### Post-merge — PR #68 merged 2026-08-23
+
+Merge commit `d499d60`, first parent `e6a9bb6`, second `2f1a3ef`. Audited rather than assumed:
+
+- `git merge-base --is-ancestor 2f1a3ef origin/main` — the branch tip is captured.
+- Zero conflict markers anywhere in the merge tree.
+- `verdicts.jsonl` resolved as a genuine union: **+2 rows, 0 deletions** against the base parent, and
+  identical to the branch tip. Main's tip at merge time *was* `e6a9bb6`, so there were no rows on the
+  other side to lose.
+- The only file with mass deletions is `treko/tracker-data.js` (0/5785) — D6's intended untracking.
+  Confirmed absent from `origin/main`'s tree; `treko/test_store_writer.py` confirmed present.
+
+**Rollout hazard found after the merge, verified by probe, not reasoned about.** Because D6 deletes
+`treko/tracker-data.js` from the index, checking out or pulling this merge deletes the working copy —
+which is the exact file D4's adoption reads. Both cases were run in a throwaway clone:
+
+| Working copy at `e6a9bb6` | `git checkout d499d60` | Legacy file |
+|---|---|---|
+| unmodified (matches the commit) | succeeds silently | **deleted** |
+| modified since the last commit | refuses, "local changes would be overwritten" | kept |
+
+So the loss window is a checkout that has *not* re-run Treko since that file was last committed — the
+same person least likely to have launched the new build, meaning adoption may never get its chance
+and `no legacy store to adopt` becomes permanent. Not a defect in the merged code; a one-way door in
+the rollout, worth a line in the skill or a follow-up card.
+
+**Nothing was lost on this machine, and that was checked rather than assumed.** The legacy file was
+deleted here by exactly the Case-A path above, but `~/.local/state/treko/tracker-data.js` is a
+verified superset: all four legacy run ids present and structurally equal to the backup's, plus
+`mtg-wizard`. The card's §Risks worry — four unreproducible 2026-08-20 snapshots — is closed.
