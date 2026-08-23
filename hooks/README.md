@@ -1,6 +1,8 @@
 # Hooks
 
-**Most of these hooks are NOT installed.** Nothing in this directory runs until you deliberately wire it up by pasting one of the JSON blocks below into a repo's `.claude/settings.json`. They were designed, tested, and left inert on purpose. The exceptions are `git-guard.sh`, `doc-guard.sh`, and `judge-guard.sh` — all three are appended to this repo's own `settings.json` today; see the `git-guard.sh` and `judge-guard.sh` sections below for why.
+**Four of these hooks are NOT installed.** `checkpoint-before-modify.sh`, `require-project-standards.sh`, `scan-invisible-unicode.sh` and `scan-secrets.sh` exist and pass their suites, and are registered nowhere — they never run. The two scanners in particular are advertised protection that is not currently protecting anything. Nothing inert here starts running until you deliberately wire it up by pasting one of the JSON blocks below into a `settings.json`.
+
+**Everything else here is registered in this repo's own `settings.json` today** — the list below is derived from that file, not recalled: `git-guard.sh`, `doc-guard.sh`, `judge-guard.sh`, `merge-guard.sh`, `feature-sync-guard.sh`, `test-marker-guard.sh`, `phase-guard.sh` and `pane-dispatch-guard.sh` on `PreToolUse`; `verify-hook-wiring.sh`, `doc-guard.sh`, `memsearch-nudge.sh` and `handoff/slim-session-start.sh` on `SessionStart`; `context-handoff-watch.sh` on `PostToolUse`; and the remaining `handoff/` scripts on `PreCompact`, `UserPromptSubmit` and `PostToolUse`. See the `git-guard.sh` and `judge-guard.sh` sections below for why those two are global. `verify-hook-wiring.sh` is the one that speaks up when that list stops matching reality.
 
 ---
 
@@ -165,6 +167,138 @@ slow, the session is long. The failure is not ignorance of the rule but the abse
 whether it happened, and a memory of having run the tests is not evidence about the bytes now
 staged. Only a mechanical check can compare the two.
 
+### `verify-hook-wiring.sh`
+
+SessionStart, registered first in the group. Answers one question and prints nothing when the
+answer is fine: **can the guards this machine registers actually run, and does the live wiring
+still match the version that was reviewed?**
+
+Two checks, both cheap:
+
+1. **Every registered hook command resolves to an executable file.** For each
+   `hooks.<event>[].hooks[].command`, extract the script it invokes, expand `$HOME`/`~`, and require
+   `os.path.exists` plus `os.access(X_OK)`. One line per failure, naming the event, the path, and
+   which of the two it is — a missing file and a mode-644 file are different repairs.
+2. **The live `~/.claude/settings.json` has not drifted from `HEAD:settings.json`** — parsed and
+   compared semantically, so reindenting or reordering keys is not drift. Only the **wiring keys**
+   are compared: `hooks`, `permissions`, `statusLine`, `enabledPlugins`. A guard that is in HEAD but
+   not live (or the reverse) is named by script. Every other wiring key is descended **one level**
+   and named by sub-key, with both values:
+
+   ```
+   verify-hook-wiring: settings.json drift — permissions.defaultMode: live "bypassPermissions", HEAD "default"
+   ```
+
+   That shape is the point of the check, not a nicety. The drift that motivated this whole feature
+   was `permissions.defaultMode` moving unannounced, and a reader told only that *"permissions"
+   differs* still has to go and diff the file by hand — which is the work the check exists to have
+   already done. Values are truncated at 60 characters, because knowing a long value moved beats
+   silence. One level only: deeper nesting costs line length and buys little. If a key stops being
+   an object, or is absent from one side entirely, there is no sub-key to name and the key-level
+   line remains.
+
+   **A value is printed only if it is provably safe to print — default-deny.** The sub-key is named
+   either way; knowing *that* a setting moved is the finding, and the value is a convenience that
+   gets dropped whenever it cannot be shown safely. Printed: `null`, booleans, numbers, and a string
+   matching `^[A-Za-z][A-Za-z0-9 ._-]{0,59}$` that contains no 20+ character letters-and-digits run.
+   Everything else prints `<changed>`, and anything whose sub-key name or text matches
+   `key|token|secret|password|credential|auth|bearer` prints `<redacted>`. Lists and objects are
+   structures, not legible one-line values, and are never rendered. **Nothing is ever truncated** —
+   printing a prefix leaks a credential as thoroughly as printing all of it, and a severed string
+   tells the reader nothing.
+
+   **Sub-key names get the same shape test**, plus `@` so real plugin ids
+   (`frontend-design@claude-plugins-official`) survive — a credential used as a map key is an
+   ordinary shape. Names are *not* keyword-filtered: `apiKey` is a label saying a secret lives
+   there, not the secret, and hiding the label costs the reader the one word that made the finding
+   worth reading. The value under it is redacted regardless.
+
+   Default-deny is the second design, and the first one's failure is why. Enumerating what a
+   credential *looks like* leaked three times: a truncated JWT prefix; then standard base64, whose
+   `+` and `/` split a deny-list run test into innocent-looking pieces; then a secret written in
+   groups, because the safe-value shape permitted `" "` and `"."` as separators while the run test
+   treated them as breaks. **That last one is the lesson: two regexes that must agree now share one
+   `SEPARATORS` definition**, and `looks_opaque()` strips exactly what `SAFE_VALUE` permits.
+   Enumerating what a readable setting looks like is bounded; enumerating credentials is not.
+
+   `hooks/verify-hook-wiring.leakcheck.py` measures this — thirteen credential families including
+   chunked ones, 2000 samples each, both surfaces (value and sub-key name), fixed seed, `render()`
+   extracted from the live hook rather than reimplemented. **0 / 52000 today; 6755 against the
+   pre-fix renderer.** It runs against an older hook too, which is how it is falsified. Re-run it
+   rather than trusting this paragraph.
+
+   **What still gets through:** a single-case, digit-free string of 20+ letters —
+   `abcdefghijklmnopqrst` — matches the safe shape and prints. Real credentials essentially always
+   carry a digit or mixed case, which is why that pair is the test. Not zero, though. This is a
+   diagnostic line, not a secret scanner; `hooks/scan-secrets.sh` is that tool, and is currently
+   dormant (see the top of this file).
+
+   **Undisclosed until now, and a real cost:** `permissions.allow` and `permissions.deny` are lists,
+   so they always print `<changed>`. Those sit right beside the motivating `defaultMode` case and a
+   reader may well want their contents. Withholding structures is deliberate — a list is not a
+   legible one-line value and is a fine hiding place — but the loss is named here rather than
+   discovered.
+
+   **None of these filters apply to check 1, and that is a decision, not an oversight.** Check 1
+   prints hook script paths in full — `no such file: $HOME/.claude/hooks/judge-guard.sh` — with no
+   length bound and no shape test, and it has done so since the first commit, predating every filter
+   above. Naming the path *is* check 1's function: "some hook cannot run" is not something anyone
+   can act on. Filtering it would defend against a hook script living in a directory named after a
+   credential, at the cost of destroying the check. A test pins the current behaviour so that anyone
+   who later routes paths through the renderer has to argue with this paragraph first. An earlier
+   version of this file called value-printing "the one leak surface"; that was wrong, and this
+   corrects it.
+
+**`model` and `effortLevel` are excluded by design, and that exclusion is load-bearing.** ADR 0032
+accepted that `/model` rewrites them in place, so comparing them would fire this check after every
+model switch — and a check that cries wolf is one you learn to skip, which is the exact failure this
+hook exists to prevent. `theme`, `tui` and the notification keys are ignored for the milder reason
+that a preference is not a safety event.
+
+**Extraction is deliberately conservative: what it cannot identify, it says nothing about.** A hook
+`command` is a shell string, not a path. The orca entries are one
+`if [ -f … ] && [ -r … ] && [ -x … ]; then /bin/sh …; fi` carrying four references to the same file.
+Anything carrying a shell metacharacter (`;` `&` `|` `<` `>` `(` `)`, a backtick, or a newline), any
+unresolvable `$VAR`, any bare name resolved through `PATH`, and any leading `VAR=value` is skipped in
+silence. A false alarm here trains the
+reader to ignore the output, which is strictly worse than the gap it was meant to close.
+
+**Contract: it always exits 0, and it never writes to stderr.** Unreadable file, malformed JSON, no
+`python3`, `~/.claude` not a git checkout, detached HEAD, mid-rebase — every one is a silent no-op.
+`symbolic-ref HEAD` failing is the single condition covering both detached HEAD and a rebase in
+progress: neither has a branch whose HEAD means "what was reviewed", so check 2 skips while check 1
+still runs. Findings go to **stdout**, one line each, prefixed `verify-hook-wiring:`; SessionStart
+stdout is surfaced to the session as context, which is the delivery path `memsearch-nudge.sh`
+already uses. This runs at the start of every session in every repo, so a false block would cost a
+whole session somewhere else — hence a smoke alarm, not a lock. It is **not** one of the fail-loud
+guards described in the next section.
+
+**Measured, not assumed** (`verify-hook-wiring.measure.sh`, 20 runs per configuration, warm cache,
+this machine 2026-08-22): **40–46 ms/run**, against a stated budget of ≤150 ms. The spread covers
+both configurations — check 2 short-circuiting and check 2 running both git calls and the semantic
+comparison — and the difference between them is inside the run-to-run noise. About 18–20 ms is the
+bare `python3 -c pass` interpreter start, so the check itself is the smaller half of its own cost.
+Re-run the script rather than quoting these numbers; it labels each configuration from what it
+finds, not from what was true when it was written.
+
+**What it cannot do.** It cannot detect its own absence — if `settings.json` disappears, this hook's
+registration goes with it; that is ADR 0032's job, since the file is tracked and its disappearance
+is a `git status` event. It cannot tell a working guard from a broken one that returns 0; only that
+guard's own suite can. And check 2 is inert wherever `HEAD:settings.json` does not exist, or where
+`~/.claude` is not on a branch — a detached HEAD and a mid-rebase both skip it silently. **Do not
+read a specific machine's state out of this paragraph:** this one's shared checkout had no
+`HEAD:settings.json` when the feature was written and does have one now, so any sentence naming the
+current state would already be wrong. `verify-hook-wiring.probe.sh` prints which of those
+preconditions actually hold, then breaks a real guard in a scratch copy to prove the check still
+goes red.
+
+*Why an instruction cannot do this job:* the model never sees the failure. An instruction can only
+be followed by an agent that has been told something is wrong, and a hook whose script is missing
+tells nobody anything — the tool call proceeds, the runner emits no output, and the transcript is
+byte-identical to one where the guard ran and approved. There is no symptom to notice, no error to
+react to, and nothing to remember to check. Only something that reads the config and stats the files
+can see it, and it has to run on its own schedule rather than when someone thinks to ask.
+
 ---
 
 ## They fail loud, not silent
@@ -183,7 +317,7 @@ The same principle is why every script is tested against both a positive and a n
 
 ## Installing them
 
-**Step 1 — put the scripts where the config points.** This is the step that is easy to skip and guarantees a broken install if you do: a `command` pointing at a script that is not there fails with **exit 127** on every matching tool call. Pick one:
+**Step 1 — put the scripts where the config points.** This is the step that is easy to skip, and skipping it is worse than a broken install — it is an *invisible* one. A `command` pointing at a script that is not there produces **nothing**: no stdout, no stderr, nothing under `--debug`, and the session continues exactly as if the guard had run and approved. Measured on claude 2.1.238, 2026-08-21; the probe and its control table are in `docs/features/hook-wiring-health-check.md`. Only exit `2` is loud, and a runner that never started the script has no exit code to report. `verify-hook-wiring.sh` exists to close precisely this gap — but it can only report on the config it is itself registered in. Pick one:
 
 **Option A — user-level (no copying).** The scripts already live in `~/.claude/hooks/`. Reference them from `~/.claude/settings.json` and they apply to every repo:
 
