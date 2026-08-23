@@ -280,6 +280,24 @@ case "$model_name" in
   *[Oo]pus*|*[Ff]able*) THRESHOLD_TOKENS_ORANGE=200000 ;;
   *) THRESHOLD_TOKENS_ORANGE=75000 ;;
 esac
+# The family anchor above is a fixed number; the model's real window is not. On a
+# model whose window is no larger than its anchor -- a non-1M Opus is exactly
+# this case at 200k -- red would sit at or beyond the wall, so the bar could
+# never redden and the checkpoint would never be signalled: the warning silently
+# off precisely when it matters. Where the payload reports the window, cap the
+# anchor so red (4/3 x orange) still lands inside it. The cap binds only when the
+# window is genuinely too small, so every threshold above survives untouched on
+# any window with room for it.
+context_window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
+context_window_size="${context_window_size//[[:cntrl:]]/}"
+case "$context_window_size" in ''|*[!0-9]*) context_window_size=0 ;; esac
+if [ "$context_window_size" -gt 0 ]; then
+  window_cap=$(( context_window_size * 3 / 4 ))
+  if [ "$window_cap" -gt 0 ] && [ "$window_cap" -lt "$THRESHOLD_TOKENS_ORANGE" ]; then
+    THRESHOLD_TOKENS_ORANGE=$window_cap
+  fi
+fi
+
 # Yellow, red and the bar reference hold their original ratios to orange (2/3,
 # 4/3, and reference == red), so the 75k fallback reproduces the previous
 # 50k/75k/100k ladder exactly and every other tier stays ordered.

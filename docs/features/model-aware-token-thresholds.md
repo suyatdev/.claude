@@ -67,12 +67,46 @@ fixed ladder had the same rounding artefact; not introduced here, not fixed here
   - `hooks/context-handoff-watch.test.sh` — 33 passed, 0 failed (was 14; model group drives the
     model through the transcript, not the payload). Written red-first: the 5 discriminating
     assertions failed against the payload-based implementation.
-  - `statusline-command.test.sh` — 97 passed, 0 failed (70 pre-existing + 27 new). The 70
+  - `statusline-command.test.sh` — 113 passed, 0 failed (70 pre-existing + 43 new, the last 16
+    covering the window cap). The 70
     pre-existing assertions, including the control-byte injection group, pass unchanged against
     the modified script. Falsifier confirmed: pinning red back to 100k turns 8 of the new
     assertions red, including both ladder-ordering checks.
 - [x] Commit and verify hooks still work — `bb42a87`, exactly 5 files. Both suites green after
   the commit; the modified hook ran on every tool call of this session without error.
+
+## Review round (observability judge, `b2e5f3c`)
+
+Verdict: no dimension failed, `risk=medium confidence=high`. It independently re-ran both suites
+(33/0, 97/97) and confirmed the clobbered statusline suite was fully recovered — `main` scores
+70/70 and that file's diff shows zero deleted lines. Four findings were acted on:
+
+1. **Four places still quoted the old fixed 75k.** All verified against the cited `file:line` and
+   corrected: `panes/handoff-wrapper.sh` (runtime, user-facing — it told the user "crossed 75k
+   tokens" while firing at 200k), `rules/gates.md` (always-on), `hooks/README.md`, and
+   `skills/dispatching-pane-agents/SKILL.md`. The wrapper is handed only a target directory, so it
+   now names no figure rather than guessing one.
+2. **Latent bug: `*opus*` → 200k is exactly a non-1M Opus's window**, so neither the bar nor the
+   nudge would ever fire there. Confirmed real. Probing the live statusline payload showed it
+   reports `context_window.context_window_size` (1,000,000 here), so the anchor is now capped at
+   `window * 3/4`. Every specified threshold is unchanged wherever the window has room for it; only
+   the 200k-window Opus case moves (200k → 150k). User decision, 2026-08-22: clamp the statusline
+   only. ADR 0034.
+3. **The mapping is duplicated and the two copies read different fields** (hook: model id from the
+   transcript; statusline: display name from its payload). Recorded as a known risk in ADR 0034
+   rather than fixed — they agree today because both strings carry the family word.
+4. **No ADR for the payload→transcript pivot.** Written: `docs/decisions/0034-model-aware-context-thresholds.md`.
+
+Historical records that still say 75k — ADR 0007 and the pane-orchestration plan — are deliberately
+left alone.
+
+## Known limitations
+
+- The window cap applies to the statusline only. On a 200k-window Opus the bar now warns correctly
+  but the hook's nudge still never fires; reading the window in the hook would cost its tail-only
+  parse. Deliberate asymmetry, reasoned in ADR 0034.
+- No test asserts the hook and the statusline resolve the same model to the same threshold.
+- At ~0.25% below red the bar rounds to full while still orange. Pre-existing; unchanged.
 
 ## Out of scope on this branch
 

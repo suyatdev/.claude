@@ -925,9 +925,11 @@ esac
 # 50k/75k/100k ladder byte for byte.
 
 # Prints "<tier> <filled-cell-count>" for one model/fill pair, or "NOMATCH".
-bar_at() { # $1 model display_name, $2 total_input_tokens
-  render "$(/usr/bin/jq -nc --arg m "$1" --argjson t "$2" \
-    '{model:{display_name:$m},context_window:{total_input_tokens:$t},workspace:{current_dir:"/tmp"}}')" \
+bar_at() { # $1 model display_name, $2 total_input_tokens, [$3 context_window_size]
+  render "$(/usr/bin/jq -nc --arg m "$1" --argjson t "$2" --arg w "${3:-}" \
+    '{model:{display_name:$m},
+      context_window:({total_input_tokens:$t} + (if $w == "" then {} else {context_window_size:($w|tonumber)} end)),
+      workspace:{current_dir:"/tmp"}}')" \
   | python3 -c '
 import sys, re
 d = sys.stdin.buffer.read().decode("utf-8", "replace")
@@ -938,8 +940,8 @@ print({"0;32": "green", "0;33": "yellow", "38;5;208": "orange", "0;31": "red"}.g
       m.group(2).count("█"))
 '
 }
-tier_at() { bar_at "$1" "$2" | cut -d' ' -f1; }
-fill_at() { bar_at "$1" "$2" | cut -d' ' -f2; }
+tier_at() { bar_at "$1" "$2" "${3:-}" | cut -d' ' -f1; }
+fill_at() { bar_at "$1" "$2" "${3:-}" | cut -d' ' -f2; }
 
 want_tier() { # $1 label, $2 expected, $3 actual
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (want $2, got $3)"; fi
@@ -996,6 +998,50 @@ for tb_model in "$TB_FALLBACK" "$TB_SONNET" "$TB_OPUS"; do
     bad "bar ladder out of order for $tb_model (saw: $tb_seen)"
   fi
 done
+
+# --- Clamp to the real context window ----------------------------------------
+# The family anchor is a fixed number; a model's actual window is not. On a
+# 200k-window Opus the 200k anchor sits exactly AT the wall, so the bar would
+# never redden and the checkpoint would never be signalled -- the safety net
+# silently off. When the payload reports context_window_size, the anchor is
+# capped so that red (4/3 x orange) still lands inside the window. Every
+# specified number survives on every window that is large enough to hold it.
+want_tier "clamp opus 1M window   200000 orange" orange "$(tier_at "$TB_OPUS" 200000 1000000)"
+want_tier "clamp opus 1M window   266665 orange" orange "$(tier_at "$TB_OPUS" 266665 1000000)"
+want_tier "clamp opus 1M window   266667 red"    red    "$(tier_at "$TB_OPUS" 266667 1000000)"
+
+# 200k-window Opus: anchor capped 200000 -> 150000, so red lands at 200000.
+want_tier "clamp opus 200k window 149999 yellow" yellow "$(tier_at "$TB_OPUS" 149999 200000)"
+want_tier "clamp opus 200k window 150000 orange" orange "$(tier_at "$TB_OPUS" 150000 200000)"
+want_tier "clamp opus 200k window 199999 orange" orange "$(tier_at "$TB_OPUS" 199999 200000)"
+want_tier "clamp opus 200k window 200000 red"    red    "$(tier_at "$TB_OPUS" 200000 200000)"
+want_tier "clamp opus 200k window 200000 bar full" 10   "$(fill_at "$TB_OPUS" 200000 200000)"
+
+# Sonnet and the fallback are unchanged on a 200k window -- the cap is not binding.
+want_tier "clamp sonnet 200k window 150000 orange" orange "$(tier_at "$TB_SONNET" 150000 200000)"
+want_tier "clamp sonnet 200k window 199999 orange" orange "$(tier_at "$TB_SONNET" 199999 200000)"
+want_tier "clamp sonnet 200k window 200000 red"    red    "$(tier_at "$TB_SONNET" 200000 200000)"
+want_tier "clamp fallback 200k window  75000 orange" orange "$(tier_at "$TB_FALLBACK" 75000 200000)"
+want_tier "clamp fallback 200k window 100000 red"    red    "$(tier_at "$TB_FALLBACK" 100000 200000)"
+
+# A missing or junk window size must leave the family anchor untouched.
+want_tier "clamp absent window   200000 orange" orange "$(tier_at "$TB_OPUS" 200000)"
+want_tier "clamp zero window     200000 orange" orange "$(tier_at "$TB_OPUS" 200000 0)"
+
+# The ladder must stay ordered under a binding clamp too.
+tb_seen=""
+for tb_fill in 10000 50000 100000 150000 190000 200000 400000; do
+  tb_tier=$(tier_at "$TB_OPUS" "$tb_fill" 200000)
+  case " $tb_seen " in
+    *" $tb_tier "*) : ;;
+    *) tb_seen="${tb_seen:+$tb_seen }$tb_tier" ;;
+  esac
+done
+if [ "$tb_seen" = "green yellow orange red" ]; then
+  ok "bar ladder stays ordered under a binding window clamp"
+else
+  bad "bar ladder out of order under clamp (saw: $tb_seen)"
+fi
 
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
