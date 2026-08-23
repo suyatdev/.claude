@@ -915,6 +915,88 @@ case "$(plain "$OUT")" in
   *) ok "a control-character path resolves to no repo, so no git or wt segment" ;;
 esac
 
+# --- Model-aware context-bar thresholds --------------------------------------
+# The bar's colour tier and its fill fraction are both derived from ONE anchor:
+# the model-dependent orange (checkpoint) threshold. These cases pin the property
+# that broke when orange alone was made model-dependent -- with red left pinned at
+# 100k, orange sat ABOVE red, so the orange tier became unreachable and the bar
+# read full-but-yellow across 100k of headroom. The ladder must stay ordered for
+# every model, and the unrecognised-model fallback must reproduce the original
+# 50k/75k/100k ladder byte for byte.
+
+# Prints "<tier> <filled-cell-count>" for one model/fill pair, or "NOMATCH".
+bar_at() { # $1 model display_name, $2 total_input_tokens
+  render "$(/usr/bin/jq -nc --arg m "$1" --argjson t "$2" \
+    '{model:{display_name:$m},context_window:{total_input_tokens:$t},workspace:{current_dir:"/tmp"}}')" \
+  | python3 -c '
+import sys, re
+d = sys.stdin.buffer.read().decode("utf-8", "replace")
+m = re.search("\x1b\\[([0-9;]+)m([█░]{10}) ", d)
+if not m:
+    print("NOMATCH"); raise SystemExit
+print({"0;32": "green", "0;33": "yellow", "38;5;208": "orange", "0;31": "red"}.get(m.group(1), m.group(1)),
+      m.group(2).count("█"))
+'
+}
+tier_at() { bar_at "$1" "$2" | cut -d' ' -f1; }
+fill_at() { bar_at "$1" "$2" | cut -d' ' -f2; }
+
+want_tier() { # $1 label, $2 expected, $3 actual
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (want $2, got $3)"; fi
+}
+
+# Unrecognised model -> 75k anchor -> the pre-existing ladder, unchanged.
+TB_FALLBACK="Claude Haiku 4.5"
+want_tier "bar fallback  49999 green"    green  "$(tier_at "$TB_FALLBACK" 49999)"
+want_tier "bar fallback  50000 yellow"   yellow "$(tier_at "$TB_FALLBACK" 50000)"
+want_tier "bar fallback  74999 yellow"   yellow "$(tier_at "$TB_FALLBACK" 74999)"
+want_tier "bar fallback  75000 orange"   orange "$(tier_at "$TB_FALLBACK" 75000)"
+want_tier "bar fallback  99999 orange"   orange "$(tier_at "$TB_FALLBACK" 99999)"
+want_tier "bar fallback 100000 red"      red    "$(tier_at "$TB_FALLBACK" 100000)"
+want_tier "bar fallback 100000 bar full" 10     "$(fill_at "$TB_FALLBACK" 100000)"
+
+# Sonnet -> 150k anchor -> yellow 100k, orange 150k, red 200k.
+TB_SONNET="Claude Sonnet 5"
+want_tier "bar sonnet    99999 green"    green  "$(tier_at "$TB_SONNET" 99999)"
+want_tier "bar sonnet   100000 yellow"   yellow "$(tier_at "$TB_SONNET" 100000)"
+want_tier "bar sonnet   149999 yellow"   yellow "$(tier_at "$TB_SONNET" 149999)"
+want_tier "bar sonnet   150000 orange"   orange "$(tier_at "$TB_SONNET" 150000)"
+want_tier "bar sonnet   199999 orange"   orange "$(tier_at "$TB_SONNET" 199999)"
+want_tier "bar sonnet   200000 red"      red    "$(tier_at "$TB_SONNET" 200000)"
+want_tier "bar sonnet   200000 bar full" 10     "$(fill_at "$TB_SONNET" 200000)"
+# The specific regression: 110k on Sonnet must not already be red.
+want_tier "bar sonnet   110000 not red"  yellow "$(tier_at "$TB_SONNET" 110000)"
+
+# Opus / Fable -> 200k anchor -> yellow 133k, orange 200k, red 266k.
+TB_OPUS="Claude Opus 5"
+want_tier "bar opus     133332 green"    green  "$(tier_at "$TB_OPUS" 133332)"
+want_tier "bar opus     133334 yellow"   yellow "$(tier_at "$TB_OPUS" 133334)"
+want_tier "bar opus     199999 yellow"   yellow "$(tier_at "$TB_OPUS" 199999)"
+want_tier "bar opus     200000 orange"   orange "$(tier_at "$TB_OPUS" 200000)"
+want_tier "bar opus     266665 orange"   orange "$(tier_at "$TB_OPUS" 266665)"
+want_tier "bar opus     266667 red"      red    "$(tier_at "$TB_OPUS" 266667)"
+want_tier "bar opus     266667 bar full" 10     "$(fill_at "$TB_OPUS" 266667)"
+want_tier "bar fable    200000 orange"   orange "$(tier_at "Claude Fable 5" 200000)"
+# A 1M-context suffix on the display name must not defeat the model match.
+want_tier "bar opus 1M  200000 orange"   orange "$(tier_at "Claude Opus 5 (1M context)" 200000)"
+
+# Ordering is the invariant; the numbers above are one instance of it.
+for tb_model in "$TB_FALLBACK" "$TB_SONNET" "$TB_OPUS"; do
+  tb_seen=""
+  for tb_fill in 10000 50000 75000 100000 133334 150000 200000 266667 400000; do
+    tb_tier=$(tier_at "$tb_model" "$tb_fill")
+    case " $tb_seen " in
+      *" $tb_tier "*) : ;;
+      *) tb_seen="${tb_seen:+$tb_seen }$tb_tier" ;;
+    esac
+  done
+  if [ "$tb_seen" = "green yellow orange red" ]; then
+    ok "bar ladder stays ordered for $tb_model"
+  else
+    bad "bar ladder out of order for $tb_model (saw: $tb_seen)"
+  fi
+done
+
 printf '%d/%d passed\n' "$pass" "$((pass+fail))"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }

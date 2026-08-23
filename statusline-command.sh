@@ -105,10 +105,11 @@ BAR_EMPTY=$'\xe2\x96\x91'
 # deliberate -- past the clear threshold, how far past stops mattering, and the
 # exact count is still shown numerically beside the bar.
 BAR_WIDTH=10
-BAR_REFERENCE_TOKENS=100000
-THRESHOLD_TOKENS_YELLOW=50000
-THRESHOLD_TOKENS_ORANGE=75000
-THRESHOLD_TOKENS_RED=100000
+# BAR_REFERENCE_TOKENS and the three colour thresholds are derived together from
+# the model's orange threshold, once the model name is known -- see the
+# derivation below the model parse. They must move as a set: raising orange on
+# its own leaves red at 100k, which puts orange above red and makes the orange
+# tier unreachable while the bar sits full-but-yellow for 100k of headroom.
 
 # Formats a raw token count as "1234" (<1000) or "12.3k" (>=1000).
 format_k() {
@@ -271,6 +272,20 @@ push_claude_segment() { # $1 text  $2 visible width
 # breaks the line -- it just renders fewer segments.
 model_name=$(echo "$input" | jq -r '.model.display_name // empty')
 model_name="${model_name//[[:cntrl:]]/}"
+
+# Orange -- the checkpoint mark, matching hooks/context-handoff-watch.sh -- is
+# model-dependent: 150k Sonnet, 200k Opus/Fable, 75k for anything unrecognised.
+case "$model_name" in
+  *[Ss]onnet*) THRESHOLD_TOKENS_ORANGE=150000 ;;
+  *[Oo]pus*|*[Ff]able*) THRESHOLD_TOKENS_ORANGE=200000 ;;
+  *) THRESHOLD_TOKENS_ORANGE=75000 ;;
+esac
+# Yellow, red and the bar reference hold their original ratios to orange (2/3,
+# 4/3, and reference == red), so the 75k fallback reproduces the previous
+# 50k/75k/100k ladder exactly and every other tier stays ordered.
+THRESHOLD_TOKENS_YELLOW=$(( THRESHOLD_TOKENS_ORANGE * 2 / 3 ))
+THRESHOLD_TOKENS_RED=$(( THRESHOLD_TOKENS_ORANGE * 4 / 3 ))
+BAR_REFERENCE_TOKENS=$THRESHOLD_TOKENS_RED
 
 # Reasoning effort ("low"/"medium"/"high"/"xhigh"/"max") is only present on
 # models that support it, so it renders next to the model name only when the
