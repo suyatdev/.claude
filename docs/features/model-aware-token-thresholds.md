@@ -64,7 +64,8 @@ fixed ladder had the same rounding artefact; not introduced here, not fixed here
 - [x] Update `hooks/context-handoff-watch.sh` with model detection — transcript-sourced
 - [x] Update `statusline-command.sh` — all four constants scale off the orange anchor
 - [x] Test with different model settings
-  - `hooks/context-handoff-watch.test.sh` — 33 passed, 0 failed (was 14; model group drives the
+  - `hooks/context-handoff-watch.test.sh` — 33 passed, 0 failed (measured: `origin/main` scores 19, so
+    14 assertions are new; the model group drives the
     model through the transcript, not the payload). Written red-first: the 5 discriminating
     assertions failed against the payload-based implementation.
   - `statusline-command.test.sh` — 113 passed, 0 failed (70 pre-existing + 43 new, the last 16
@@ -91,20 +92,24 @@ Verdict: no dimension failed, `risk=medium confidence=high`. It independently re
    reports `context_window.context_window_size` (1,000,000 here), so the anchor is now capped at
    `window * 3/4`. Every specified threshold is unchanged wherever the window has room for it; only
    the 200k-window Opus case moves (200k → 150k). User decision, 2026-08-22: clamp the statusline
-   only. ADR 0034.
+   only. ADR 0035.
 3. **The mapping is duplicated and the two copies read different fields** (hook: model id from the
-   transcript; statusline: display name from its payload). Recorded as a known risk in ADR 0034
+   transcript; statusline: display name from its payload). Recorded as a known risk in ADR 0035
    rather than fixed — they agree today because both strings carry the family word.
-4. **No ADR for the payload→transcript pivot.** Written: `docs/decisions/0034-model-aware-context-thresholds.md`.
+4. **No ADR for the payload→transcript pivot.** Written: `docs/decisions/0035-model-aware-context-thresholds.md`.
 
 Historical records that still say 75k — ADR 0007 and the pane-orchestration plan — are deliberately
 left alone.
 
 ## Known limitations
 
+- Red lands exactly **at** the window under a binding cap, not inside it, and the strict `<` in the
+  cap means Sonnet on a 200k window is not capped at all. Orange — the tier that signals the
+  checkpoint — still fires with headroom in both cases. Reasoned in ADR 0035.
+
 - The window cap applies to the statusline only. On a 200k-window Opus the bar now warns correctly
   but the hook's nudge still never fires; reading the window in the hook would cost its tail-only
-  parse. Deliberate asymmetry, reasoned in ADR 0034.
+  parse. Deliberate asymmetry, reasoned in ADR 0035.
 - No test asserts the hook and the statusline resolve the same model to the same threshold.
 - At ~0.25% below red the bar rounds to full while still orange. Pre-existing; unchanged.
 

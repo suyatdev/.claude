@@ -1,4 +1,4 @@
-# 0034 — The context checkpoint threshold reads the live model, and the bar's four constants move as one
+# 0035 — The context checkpoint threshold reads the live model, and the bar's four constants move as one
 
 - **Status:** Accepted (2026-08-22)
 - **Context:** `hooks/context-handoff-watch.sh`, `statusline-command.sh`, and their two suites;
@@ -6,8 +6,17 @@
   `skills/dispatching-pane-agents/SKILL.md` for the text that described the old fixed number.
   Card, tables and measurements: `docs/features/model-aware-token-thresholds.md`. Touches the
   watcher introduced by **ADR 0007** (pane orchestration) without reopening it.
-- **Note:** ADR number **0034** was confirmed free at the moment of writing against `origin/main`
-  and every remote ref, not against a local `ls`.
+- **Note:** this ADR was first written as **0034**, and the note here claimed that number had been
+  confirmed free against every remote ref. **It had not been.** The check passed several refs to a
+  single `git ls-tree`, which accepts one tree-ish and treats the rest as *pathspecs* — so only the
+  first ref was ever examined, and the command reported clean while looking at almost nothing.
+  `0034` was already taken by `origin/feat/treko-store-location`
+  (`0034-the-store-leaves-the-repo-and-the-guard-is-repointed.md`, committed three hours earlier).
+  Because the filenames differ, git would have merged both without a murmur — `origin/main` already
+  carries two files numbered `0026` from exactly that failure. Renumbered to **0035** after a real
+  `git fetch` and one `ls-tree` **per ref**: taken numbers are 0022-0027, 0029-0034, with `0028` a
+  pre-existing gap left alone rather than backfilled out of order. Caught by the observability
+  judge, not by the author.
 
 ## Context
 
@@ -62,8 +71,8 @@ redden and the checkpoint would never be signalled — the warning silently off 
 matters.
 
 The status line payload reports `context_window.context_window_size` (verified live: `1000000` on
-`claude-opus-5[1m]`). Where it is present, the anchor is capped so red (`4/3 × orange`) still lands
-inside the window:
+`claude-opus-5[1m]`). Where it is present, the anchor is capped so red (`4/3 × orange`) lands **at
+or inside** the window rather than past it:
 
 ```
 orange = min(family_anchor, context_window_size * 3/4)
@@ -81,6 +90,14 @@ untouched wherever there is room for it:
 
 ## Consequences
 
+- **Red lands exactly *at* the wall, not inside it.** With `orange = window × 3/4`, red is
+  `orange × 4/3 = window`, and the tier test is `n < red → orange, else red` — so red begins on the
+  first token at the window. That is the intended reading of red ("you have reached the window"),
+  but it is not the same claim as "inside", and the earlier wording overstated it. The consequence
+  worth naming: the strict `<` in the cap means Sonnet on a 200k window is not capped at all
+  (`150,000 < 150,000` is false), so its red tier is likewise reachable only at the literal wall.
+  Low impact — orange, the tier that actually signals the checkpoint, still fires at 150k with 50k
+  to spare — but the cap's guarantee is about orange, not about red having headroom.
 - The two halves each carry their own copy of the model→threshold mapping, and they read **different
   fields**: the hook matches on the model **id** from the transcript, the status line on the
   **display name** from its payload. They agree today only because both strings contain the family
@@ -96,7 +113,8 @@ untouched wherever there is room for it:
   `panes/handoff-wrapper.sh`, which printed "The main session crossed 75k tokens" to the user at the
   moment they decide whether to hand off. That wrapper is handed only a target directory, so rather
   than guess a number it now names no figure at all; the hook's own nudge carries the real one.
-- Historical records — ADR 0007 and the pane-orchestration plan under `docs/superpowers/plans/` —
+- Historical records — ADR 0007, the pane-orchestration plan under `docs/superpowers/plans/`, and
+  the design spec `docs/superpowers/specs/2026-07-20-pane-orchestration-design.md` (ten mentions) —
   still say 75k and are deliberately **not** rewritten. They record what was true when written.
 - At roughly 0.25% below red the bar rounds to full while the tier is still orange. The previous
   fixed ladder had the identical artefact; not introduced here, not fixed here.

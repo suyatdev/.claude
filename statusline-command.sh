@@ -94,16 +94,22 @@ BAR_FILL=$'\xe2\x96\x88'
 BAR_EMPTY=$'\xe2\x96\x91'
 
 # --- Context-window progress bar ----------------------------------------
-# The bar measures context against a fixed 100k reference, NOT the model's
-# actual context window size. 100k is the point at which the session is worth
-# clearing, so that -- not the model's headroom -- is the number that matters:
-# a 1M-context model still gets unwieldy long before it is technically full.
-# Scaling fill and colour to the same 100k reference is what keeps the two
-# halves of the widget consistent; against the real window size a 143k session
-# rendered as a nearly-empty bar coloured red, which read as a bug.
-# Consequence: at >=100k the bar is full and red and stays there. That is
-# deliberate -- past the clear threshold, how far past stops mattering, and the
-# exact count is still shown numerically beside the bar.
+# The bar measures context against the model's CLEAR-THRESHOLD reference, not
+# against its raw window. The point at which a session is worth clearing is the
+# number that matters -- a 1M-context model gets unwieldy long before it is
+# technically full -- and scaling fill and colour to that one reference is what
+# keeps the two halves of the widget consistent. Measured against raw window
+# size instead, a 143k session rendered as a nearly-empty bar coloured red,
+# which read as a bug.
+#
+# That reference used to be a fixed 100k. It is now derived per model, and the
+# real window size is consulted for exactly one purpose: capping the anchor so
+# the red tier cannot sit past the wall. See the derivation below the model
+# parse.
+#
+# Consequence: at or past the red threshold the bar is full and red and stays
+# there. That is deliberate -- past the clear threshold, how far past stops
+# mattering, and the exact count is still shown numerically beside the bar.
 BAR_WIDTH=10
 # BAR_REFERENCE_TOKENS and the three colour thresholds are derived together from
 # the model's orange threshold, once the model name is known -- see the
@@ -675,7 +681,7 @@ if [ -n "$model_name" ]; then
 fi
 
 if [ -n "$tokens_used" ]; then
-  # Colour tier and fill fraction share the same 100k reference (see the
+  # Colour tier and fill fraction share the same derived reference (see the
   # bar constants above), so a full bar and a red bar mean the same thing.
   bar_tier=$(awk -v n="$tokens_used" -v y="$THRESHOLD_TOKENS_YELLOW" -v o="$THRESHOLD_TOKENS_ORANGE" -v r="$THRESHOLD_TOKENS_RED" \
     'BEGIN { n += 0; if (n < y) print "green"; else if (n < o) print "yellow"; else if (n < r) print "orange"; else print "red" }')
