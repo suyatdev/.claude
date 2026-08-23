@@ -71,7 +71,8 @@ fixed ladder had the same rounding artefact; not introduced here, not fixed here
     pre-existing assertions, including the control-byte injection group, pass unchanged against
     the modified script. Falsifier confirmed: pinning red back to 100k turns 8 of the new
     assertions red, including both ladder-ordering checks.
-- [ ] Commit and verify hooks still work
+- [x] Commit and verify hooks still work — `bb42a87`, exactly 5 files. Both suites green after
+  the commit; the modified hook ran on every tool call of this session without error.
 
 ## Out of scope on this branch
 
