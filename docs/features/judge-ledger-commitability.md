@@ -191,3 +191,37 @@ machine. It is a docs-only fix and could ship as its own small PR ahead of this 
   written against these two literals.
 - **2026-08-23, user — bundle the PR #59 correction into this PR** rather than shipping it ahead
   as its own docs-only PR. See the note directly above.
+
+## ⚠️ OPEN — awaiting user ratification, blocks ADR 0036
+
+**`hooks/git-guard.replay.sh` gained an `EXPECTED_RELAXED` list, changing that file's headline
+contract** from *"never weaker than main"* to *"never weaker than main **except where declared**"*.
+
+Task 4's premise was false and this is the fallout. The two ledger commands were **never in
+`CMDS`**, so nothing could "move from `stricter` to `identical`". Measured at `b0250b4`, before
+the replay file was touched: vs `main`, 378 pairs, **378 identical, 0 relaxed** — the allowlist
+change was *invisible to every replay run*, which is the one failure that harness exists to
+prevent. The two rows that genuinely report `stricter` are `CODING_MEMORY.md` and
+`coding-memory/x.jsonl`; under the exact-literal decision both correctly stay stricter.
+
+Adding the ledger commands to `CMDS` (63 → 65; set-compared: **0 dropped, 2 added, 0 duplicates**)
+then made the run fail by design — `REPLAY FAILED: 8 relaxed` — because the harness had no way to
+declare an *intended* relaxation. `EXPECTED_RELAXED` mirrors the `EXPECTED_STRICTER` list already
+in the file for the identical stated reason. The alternative was deleting the relaxation gate
+outright, retiring that protection for all 63 other commands to accommodate two.
+
+The new gate was proved able to fire, not merely observed passing: dropping one entry from
+`EXPECTED_RELAXED` in a scratch copy gives exit 1, `REPLAY FAILED: 4 undeclared relaxed (of 8
+total)`.
+
+**This is a contract change and must be a named decision in ADR 0036. Do not write the ADR until
+the user has ratified it.**
+
+## Carried forward — deliberately not fixed in this round
+
+- `hooks/git-guard.sh:234` — the remedy line still reads "or stage only documentation". Changing
+  it would break the exact-string assertion at `hooks/git-guard.test.sh:264`, and the refusal line
+  directly above it now prints both ledger paths in full.
+- `docs/features/git-guard-detached-head.md:341` and `:732` quote the refusal message as
+  `(CODING_MEMORY.md, coding-memory/*, docs/*.md)` — stale since PR #59, now stale twice over.
+  Outside every worker's assigned file set this round.
