@@ -482,7 +482,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `wc -l treko/server.py` under 800.
 - [x] 13. Launch for real (`--open`), press `reanalyze`, and confirm by `git status` that neither
       repo was touched — the criterion-2 check nothing automated can make.
-- [ ] 14. Observability judge, then the PR.
+- [x] 14. Observability judge, then the PR.
 
 ## Risks
 
@@ -1067,3 +1067,31 @@ assertions swapped was run under the same mutation and failed on the byte compar
 only under `--open`, which opens a real browser. It is not a second place the path could be wrong
 (it passes the same `config["store_path"]`, and D3 makes `build_config` the only construction of
 it), so what stays unasserted is that one call site's arguments, not the path itself.
+
+### Task 14 — the judge's second round, and the PR
+
+Re-run 2026-08-23 at `3937c23` because the writer test above moved HEAD and `judge-guard` compares
+`head_sha` strictly. **Pass, `risk=low confidence=high`, no dimension `fail`.** Verdict at
+`coding-memory/observability-judge/2026-08-23-feat-treko-store-location-round2.md`; round 1's file
+was kept rather than overwritten, since it is the record of the finding this round re-checks. Only
+`verdicts.jsonl` is tracked — the markdown verdicts are gitignored (`.gitignore:114`).
+
+The judge did not take the falsifier evidence on trust: it copied the worktree to `/tmp`, mutated
+`_run_local` to write to the tree, reran, and reproduced `At index 99 diff: b'2' != b'0'` byte for
+byte. It also ran the suite itself (**221 passed in 120.67s**) and diffed test names
+`origin/main`→HEAD: **129 → 157, zero removed**.
+
+**It corrected the brief, and was right.** The dispatch asked it to confirm
+`git diff origin/main..HEAD -- treko/server.py` was empty. That is the wrong ref — this branch
+legitimately edits `server.py` (+24/-15). The check that tests the "no production code changed in
+this commit" claim is `216fae4..HEAD`, which is empty. Both were run.
+
+Three residual concerns were left open deliberately, because acting on any of them moves HEAD and
+invalidates the verdict again: the harness still collapses store-dir and serve-root for 214 of 221
+tests (a *future* writer would be invisible); the new test's tree-untouched assertion checks one
+filename rather than the whole tree; and the green-dot-over-sample-data defect, unchanged from
+round 1. All three are carried in the PR body under "Known gaps, deliberately not closed here".
+
+**PR #68** opened as a draft (`gh pr create --draft`), per `preparing-pull-requests` — the verdict
+must be fresh at `gh pr create` time, so the audit trail and the README Roadmap line are pushed
+onto the branch afterwards and the PR marked ready. https://github.com/suyatdev/.claude/pull/68
