@@ -792,6 +792,20 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       fails for the stated reason. Then add `body[data-theme="light"]` with all 51 declarations,
       `THEME_DEFAULT`, the validated seed, `applyTheme` / `setTheme`, and the mount call. Do not touch
       implementation and tests in the same step.
+      Red half PARTIALLY done (`treko/test_theme.py`, `treko/cdp_harness.py`): criteria 4, 5 and 6
+      fail for the stated reason. **Criterion 7's red test is NOT yet written** — the dispatch brief
+      said "4, 5 and 6", taken from this task's pre-revision text; round 3 added criterion 7 here.
+      Outstanding before the light block goes in.
+      **GATE — spec change needed, not worked around:** criterion 4 requires every `var()`-reachable
+      custom property be declared under `body[data-theme="light"]`, with an exception list of only
+      `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with evidence). `--mono` IS
+      reachable — 33 `var(--mono)` uses in `Treko.dc.html`, measured — matches no exception pattern,
+      yet §D3's 51-property plan never declares it and the string `--mono` appears nowhere else in
+      this card. It is a monospace font stack with no light/dark meaning (the spirit of `--font-*`,
+      not the letter of the list). Criterion 4 and §D3 disagree, so the criterion-4 test will still
+      fail after the light block lands. Deliberately NOT patched: this card is
+      `phase: implementation`, and inventing an extra exemption to turn a red test green is the
+      silent workaround the phase gate exists to prevent.
 - [ ] 4. **Palette re-tint.** Replace `:root` with the prototype's block (cyan accent, `#1c1e2b`
       surface, lifted neutrals, `--ok:#82dfa9`, `--info:#89b4f2`, `--hair-3` to `.12`). One commit,
       `:root` and the light block only. **Pixels move here, by design.**
