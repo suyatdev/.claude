@@ -564,7 +564,7 @@ uncited in round 3 of this card's compliance review) was reasonable when it was 
 function this card had added to the fence was `trackerLiveIds()`, for the button axis, and moving
 a second table in to chase a second automated check looked like scope growth for its own sake. The
 cost was stated plainly there, not discovered later: the "unrecognised token falls to the page's
-fixed string, and its bytes appear nowhere in the rendered view" half of criterion 7 would be
+fixed string, and its bytes are absent from the returned string" half of criterion 7 would be
 "verified by task 13's real browser launch." Round 4 priced that cost precisely, and it turned out
 to be unpayable: a real server can only ever emit one of the five legal tokens (D1's closed enum),
 so no launch task 13 runs can ever *produce* an unrecognised one — the browser receipt the earlier
@@ -817,11 +817,18 @@ Scenario: the page shows the cause and the right controls
   And   copy chips are offered for /clear and /handoff
   And   the standing message names the condition that fired, from the page's own strings
 
-Scenario: the page never renders the meta's bytes
-  Given a tracker-channel meta whose content is not one of the five tokens
+Scenario: an unrecognised token never reaches the reason string
+  Given trackerChannelReason is called with a token outside the five-member set
+  When  it returns
+  Then  the returned string is the fixed "No control channel." string
+  And   the input token's own text is absent from the returned string
+
+Scenario: the served page leaks the channel token nowhere but its own meta tag
+  Given a page served by a degraded server, carrying one of the five legal tokens
   When  the page renders
-  Then  it shows its own fixed "No control channel." string
-  And   no part of the rendered view contains the attribute's text
+  Then  it shows the reason string trackerChannelReason maps from that token
+  And   the raw token's text appears nowhere in the markup other than the injected
+        <meta name="tracker-channel"> tag the server wrote
 
 Scenario: a file:// launch shows no reason text
   Given the page is opened as a local file, not served by server.py
@@ -873,8 +880,9 @@ Scenario: the handler slice is still extractable
 7. On a degraded server — `hasToken && !channelOk`, D5's render condition, stated once there —
    the page offers a live Re-analyze button plus `/clear` and `/handoff` copy chips, and displays
    the reason `trackerChannelReason(S.cmdChannel)` maps from the meta token; an unrecognised token
-   falls to the page's own fixed generic string and the attribute's bytes appear nowhere in the
-   output — checked directly by task 8's node test against `trackerChannelReason`, not inferred
+   falls to the page's own fixed generic string and the attribute's bytes are absent from that
+   returned string — checked directly by task 8's node test against `trackerChannelReason`, not
+   inferred
    from a real launch, because a real server can only ever emit one of the five legal tokens (D1)
    and no launch can produce the sixth. In the other two copy-chip-rendering modes — `file://`
    (`hasToken` is `false`, verified by task 13's third launch) and served/channel-ok/
@@ -1003,7 +1011,11 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       table, Re-analyze works, the two copy chips copy, and — the half no node test can reach,
       because it is a question about React's actual render output, not about `trackerChannelReason`
       itself (task 8) — that the raw `tracker-channel` attribute value appears nowhere in the
-      rendered page (view source, not just the visible text). Once with a live surface: confirm the banner
+      rendered page (view source, not just the visible text) **other than inside the injected
+      `<meta name="tracker-channel">` tag the server itself wrote**. That tag is D4's own design
+      (`:355`), built exactly as the `tracker-token` sibling at `server.py:494` is, so a correct
+      implementation always has the raw value in view-source once; the leak this checks for is a
+      *second* occurrence, anywhere React put it. Once with a live surface: confirm the banner
       carries no `reason=`, all three buttons render live, no copy chip renders, and `cmdChannel`
       reads `'ok'` — this is the only place the full meta → `componentDidMount` → state →
       `commandProps` wire is observable end to end, so a passing degraded run alone does not clear
