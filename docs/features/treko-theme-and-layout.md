@@ -1986,3 +1986,50 @@ The third is why substitution runs **longest-token-name-first**: `--hair` would 
 
 Suite at this commit: **221 passed, 0 deselected/skipped/xfailed/error**, and the sorted node-ID
 set is **identical** to task 1's — 0 lost, 0 gained, checked as a set diff rather than a total.
+
+---
+
+## Review-phase addendum (2026-08-24) — the citation drift, measured
+
+Three findings from the review pass, each re-measured against the working tree before being
+written here.
+
+**1. The line-number citations in this document have drifted broadly, not only in §D8.**
+The recorded debt named §D8 alone. An audit widened to every `Treko.dc.html:N` citation in the
+file and found roughly twenty distinct stale anchors. Four were re-measured independently:
+
+| Cited | Claimed content | Actually at that line now | Correct line |
+|---|---|---|---|
+| `:319-320` (§D8) | `ls()` / `lsSet()` definitions | agent-panel Send button | **393-394** |
+| `:432` (§D8, ×5, and Risk hazard 5) | the `state={…}` constructor's `ls()` reads | a `TRACKER_ERROR_OUTCOMES` entry | **506** |
+| `:288` | `stopEvt` definition | `</div>` | **709** |
+| `:333` | `TRACKER_COMMAND_IDS` declaration | unrelated markup | **407** |
+| `:81` | sticky-header `color-mix` background | `</div>` | **102** |
+
+Citations paired with the base commit `984e7ac` are **not** stale — they are deliberately
+historical and were checked against `git show 984e7ac:treko/Treko.dc.html`, where they hold.
+
+This is the *audit the surface* pattern rather than another patch round: tasks 5 and 6 each already
+recorded corrected numbers once, and those corrections have themselves since drifted. The durable
+fix is to cite a searchable literal instead of a line number. Left as a debt deliberately — churning
+this document while it is under review costs more than the stale anchors do.
+
+**2. One inherited debt entry was false.** A prior handoff recorded §D8 as citing three locations,
+`:319-320` / `:432` / `:517`, with `:517` to be corrected to `:551`. Verified: neither `517` nor
+`551` occurs anywhere in this file (falsifier: `432` occurs 8 times, so the search was not blind).
+§D8 cites **two** locations, not three. The proposed `:517 → :551` fix corrected a citation that
+does not exist.
+
+**3. Three factual errors in the PR #79 body were corrected in place.** (a) The no-squash banner
+pointed at an ADR 0036 section, §"the tokenize/re-tint split", that does not exist — the real header
+is `## The two-commit split, and the one literal that had to lie for a commit`. (b) "27 hardcoded
+colour values became 8 named variables" describes the tokenize commit, not the shipped file, which
+declares **52 distinct custom properties** across 92 declarations after the re-tint added the accent
+and neutral ramps. (c) The body quoted a docstring marker, "Expected RED", that appears **zero**
+times; the real markers are "Was RED when written" (13) and "Still RED" (1), which is where the
+correct count of 14 comes from.
+
+**Still open, and deliberately not decided here:** the observability verdict was recorded against
+`60cfcf6`, and HEAD is now `73d8be3` (phase-to-review, then the `origin/main` merge). `treko/` is
+byte-identical across those two commits, so the judged code has not changed — but the gate's own
+wording is a strict `head_sha` match, and waiving a gate is the user's call, not this document's.
