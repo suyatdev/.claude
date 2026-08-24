@@ -1,7 +1,8 @@
 ---
 phase: review
 model_tier: xhigh
-branch: chore/hook-wiring-health-check
+branch: none  # merged via PR #66 (caf3666) 2026-08-23; chore/hook-wiring-health-check NOT
+              # auto-deleted, still on origin at 14eace6 as of 2026-08-23 (checked ls-remote)
 ---
 
 Gate opened 2026-08-22 on the literal user phrase `gate confirmed`. Branch cut from
@@ -683,3 +684,52 @@ open scope decision, now its own §7 with a stated recommendation (**don't filte
 and "0/14000". The file now runs 13 families and 52,000 samples — stale since `671fdf7`. Not
 patched here because the card is at `phase: review` and that is a source edit; it is disclosed in
 the PR body instead, for whoever acts on the §7 decision.
+
+### Post-merge — PR #66 merged 2026-08-23
+
+Merge commit `caf3666`, first parent `3ca9b8c`, second `14eace6`. Audited rather than assumed:
+
+- Branch tip reachable from `origin/main`, and all five `hooks/verify-hook-wiring.*` files plus the
+  four-line `settings.json` registration are present in main's tree — checked by path, not inferred
+  from the merge succeeding.
+- Zero conflict markers anywhere in the merged tree.
+- `verdicts.jsonl` a genuine union, checked against **both** parents: 224 rows, byte-identical to
+  the branch tip, chronologically ordered, no duplicates, 0 rows invented, 0 rows lost from the
+  branch side. Exactly one row from the main side is absent — the superseded `outcome: null` copy
+  of `head_sha c974c6c1`, which this branch had already updated to `rework`. Intended, not a loss.
+- Only three files carry any deletion at all (`verdicts.jsonl` 1, this card's sibling
+  `settings-split-tracked-and-local.md` 1, `hooks/README.md` 2), all ours.
+- The merged tree differs from the tested tip `14eace6` only by three new Treko **planning** cards
+  (docs). So the code on main is byte-identical to what passed 25/25 repo, 37/37 own, 0 / 52,000.
+
+**The feature shipped and is inert on this machine, which is the failure mode it exists to detect.**
+Measured at close-out, not reasoned about: `~/.claude` is checked out on
+`feat/model-aware-token-thresholds` @ `5aea5d3`, **23 commits behind `origin/main`**, and neither
+its working-tree `settings.json` nor its `HEAD:settings.json` contains a single match for
+`verify-hook-wiring`. Until that checkout moves to main the hook is registered nowhere and runs
+never. Not fixed here: `main` is checked out in the `treko-ui-update` worktree, and switching a
+branch under a shared checkout another session may be using is not a safe autonomous action.
+
+Note the consequence for the drift check's own prediction. The PR body said to expect one finding
+right after the merge — tracked file registers the hook, live file does not. That is **not** what
+this machine will show, because `~/.claude`'s `HEAD` is behind and does not register it either, so
+both sides agree and check 2 stays silent. The finding appears only after that checkout pulls main
+with a locally modified `settings.json`. Verified: the hook run from `~/.claude` today exits 0 and
+prints nothing.
+
+Five `planning` cards now sit on main — the two parked ones plus `treko-branch-graph-traversal`,
+`treko-degraded-no-cmux` and `treko-theme-and-layout`, which arrived with this merge. `phase-guard`
+therefore blocks source writes on any branch no `implementation` card claims, which is worth knowing
+before picking up either follow-up below.
+
+**Open, in the order they should be picked up:**
+
+1. `hooks/verify-hook-wiring.leakcheck.py`'s module docstring still says "Seven credential families"
+   and "0/14000"; the file runs 13 families and 52,000 samples, stale since `671fdf7`. A source
+   edit, so it needs a branch and an `implementation` card to clear `phase-guard`.
+2. `hooks/handoff/slim-session-start.test.sh` needs one `unset CLAUDE_PANE_AGENT` line — without it
+   the suite reports 13/29 inside any pane-dispatched agent and 29/29 outside. Owned by the handoff
+   feature, not this one.
+3. The §7 scope question — should check 1 filter the hook script paths it prints — merged
+   **unfiltered**, with a test pinning that behaviour and the trade-off recorded in
+   `hooks/README.md`. Changing it now means arguing with that test, which is the intent.
