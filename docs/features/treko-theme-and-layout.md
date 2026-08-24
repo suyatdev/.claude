@@ -1559,6 +1559,69 @@ was never edited by it, and the falsifier that ships is the one in the test modu
 written and wrong three commits later, because it derived its "before" state from the artefact
 under test. A falsifier must be anchored to something the implementation cannot move.
 
+### Task 7 red half — the sections' tests, and a Chrome the machine moved (2026-08-24)
+
+**A new file, `treko/test_drawer_sections.py`, not an addition to `test_drawer.py`.** That file is
+594 lines at `3474a91`; task 7's tests are ~350 more, which would put it past
+`rules/core-conduct.md`'s 800-line ceiling. The shell and its sections are separable subjects, and
+the only thing the new file borrows is `_open_drawer` / `_probe`, imported rather than copied.
+
+**The Chrome pin broke first, and it hid the red half.** The first run of the new tests reported
+12 failures that had nothing to do with the page: Chrome had auto-updated at 15:04 local, and
+`cdp_harness.Chrome.__init__` asserts the pin before it launches. Measured on the whole suite at
+that moment: **36 failed, 257 passed** — 24 of the 36 were tests that were green at `3474a91`.
+None of them reached a page, so *"red for its own stated reason" was unproven, not proven*, and it
+would have been easy to read the version assert as evidence the sections were missing. The re-pin
+and its safety argument are in §"Pinned versions"; the commit is `54c84e1`.
+
+**After the re-pin, the red half is red for its own reasons.** Full suite: **12 failed, 281
+passed, 167.27s**, with **0 deselected / skipped / xfailed / errors** and **0 failures outside the
+new file** — 293 collected against the 279 at `3474a91`, so the 2 new passes are the two tests that
+pass by design and every previously-green test survived the Chrome move, including all 24
+browser-driven ones. The 12 failures read:
+
+| Node | Fails on |
+|---|---|
+| `…criterion7_appearance_selection_follows_the_validated_theme` (6 params) | `expected exactly one \`i.ph-moon\` glyph in the open drawer … found 0` |
+| `…appearance_cards_switch_the_theme_both_ways` | the same missing glyph |
+| `…criterion13_layout_readout_reads_the_stored_width` (2 params) | `expected exactly one \`<n>px\` readout inside the drawer panel … found 0` |
+| `…criterion13_readout_follows_state_without_reopening` | the same missing readout |
+| `…criterion11_reset_returns_the_default_in_the_dom_and_in_storage` | `expected exactly one Reset button inside the drawer panel … found 0` |
+| `…criterion2_dark_literals_live_only_in_root_and_the_preview_cards` | the exemption marker comments do not exist |
+
+The two that pass by design are `…criterion2_checker_is_falsifiable_and_satisfiable` and
+`…d9_no_artifacts_section_was_ported`.
+
+**Preconditions that passed, and are worth naming.** Criterion 7's six cases each asserted
+`data-theme` *before* reaching the selection assertions, and all six were already correct — the
+seed §D3 landed in task 3 holds under Chrome 152 too. Criterion 11's 300px precondition also
+passed, so its later reading of 236px will mean Reset acted rather than that the page never moved.
+
+**Criterion 2 gained its first test here, beyond the three criteria this task was scoped to.**
+It had **zero** tests anywhere in the suite (measured: no test file mentions either literal), and
+task 7 is the commit that can make it false, because §D2 keeps the preview cards' literals
+deliberately. The checker requires `criterion-2-exempt:start` / `criterion-2-exempt:end` HTML
+comments bracketing the two cards, which is what turns §D2's "say so in a comment" into something
+enforceable. It also rejects a region widened to swallow the scrim, and a region that does not
+contain both `ph-moon` and `ph-sun` — a marker pair with no cards in it is not an exemption.
+
+**Measured while writing it, and load-bearing:** the page carries **two** `:root{` rules — `:21`
+(the eight status hues plus `--mono`) and `:27` (§D2's eight tokens) — so "the `:root`
+declarations" is a plural span, not one line. An earlier draft asserted exactly one and failed on
+the page for that reason rather than for the missing exemption. All 8 literal occurrences are on
+`:27` today; `:21` has none.
+
+**Also checked before writing the green half, so it is not discovered mid-implementation:** every
+custom property the new markup will read — `--color-divider`, `--color-neutral-400/600/700`,
+`--color-accent`, `--color-accent-300`, `--color-accent-900` — is already declared in the light
+block, and `--mono` is criterion 4's named exception. The sections cannot break criterion 4.
+
+**What this red half does not prove.** That the sections look right in either theme, and that the
+drawer's own contents pass criterion 5 — criterion 5 measures the page at mount, where the drawer
+is closed, so nothing here or there scores the open drawer. Task 9 eyeballs it and records it as
+eyeballed. §D9's absence check asserts the prototype's five `art*` names are gone; it cannot prove
+nobody adds an unrelated third section later.
+
 ### Task 8 — the regression guards (2026-08-24)
 
 `treko/test_guards.py`, 25 tests, all green. These guard things that must **not** change, so a green
