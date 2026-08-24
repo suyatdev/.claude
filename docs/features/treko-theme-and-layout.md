@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feat/treko-theme-and-layout
 ---
 
 # Treko: a Configuration drawer, a light theme, and a sidebar you can drag
@@ -772,11 +772,13 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 ## Tasks
 
-- [ ] 0. Branch `feat/treko-theme-and-layout` + worktree. **Only after `gate confirmed`**, and after
+- [x] 0. Branch `feat/treko-theme-and-layout` + worktree. **Only after `gate confirmed`**, and after
       model-switch checkpoint 2.
-- [ ] 1. **Baseline.** Record the full node-ID set and per-module counts from `pytest treko/`, the
+      Done: branch cut from `main` @ `a5a66a7`; this worktree carries it. Both checkpoints on record.
+- [x] 1. **Baseline.** Record the full node-ID set and per-module counts from `pytest treko/`, the
       base commit SHA, `wc -l treko/Treko.dc.html`, and the extracted bytes of `:325-418`. Nothing
       else in this card can be checked without them.
+      Done: recorded under §Verification "Task 1 baseline". 221/221 green, no deselections.
 - [ ] 2. **Tokenize.** Add the eight `:root` declarations; replace all 27 literals — including the
       three JS string literals. **No light block, no palette change, no DOM change.** Commit alone.
       Proof A must pass on this commit and is asserted against it forever after. Record this commit's
@@ -1000,3 +1002,28 @@ region they were told not to, and the reviewer needs to see what they changed.
 `python3 -m pytest treko/` at HEAD, node-ID set diffed against task 1's 221. Report per-module counts
 and the diff of the two sets, not the totals: a total can stay level while a node is lost and another
 gained.
+
+### Task 1 baseline — recorded, measured on this branch
+
+Everything else in this card is asserted against these. Captured at the base commit, before any
+edit to `treko/`.
+
+| quantity | value |
+|---|---|
+| base commit | `a5a66a75204f334fff09462e931981431b39081a` |
+| `wc -l treko/Treko.dc.html` | **639** |
+| fence `:325-418` | **4851 bytes**, sha256 `f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136` |
+| collected node IDs | **221** |
+| sorted node-ID set | sha256 `5f03a015bd6d7b4e86d5214acf8d3e8c6d83c722b9396ba8af721d276dbbb311` |
+| suite result | **221 passed in 120.36s** |
+
+Per-module counts, so task 10 can diff composition and not merely the total: `test_server.py` 89,
+`test_store.py` 30, `test_analyze.py` 26, `test_store_location.py` 21, `test_rename.py` 19,
+`test_ui_commands.py` 15, `test_server_lifetime.py` 10, `test_autolaunch.py` 10,
+`test_store_writer.py` 1.
+
+**Checked for a hidden deselection, not assumed:** `pytest.ini`, `pyproject.toml`, `setup.cfg`,
+`tox.ini` and both `conftest.py` files carry no `addopts`, and the run reported zero
+`deselected`/`skipped`/`xfailed`/`error`. Collected (221) equals passed (221), so the baseline is
+the whole suite rather than a filtered subset — which matters because every later claim in this
+card is a comparison against that number.
