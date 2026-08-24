@@ -3,8 +3,8 @@
 `docs/features/treko-theme-and-layout.md` §D5 ("Appearance" `:428-444`, "Layout" `:448-452`),
 §D2 (the preview cards keep their literals) and §D9 (there is no Artifacts section) govern,
 together with acceptance criteria 7, 11, 13 and 2. Task 6 landed the drawer *shell* — gear,
-scrim, panel, header — and nothing inside it. Every runtime test here is expected to fail
-until task 7 lands the two sections.
+scrim, panel, header — and nothing inside it. Every runtime test here was expected to fail,
+at the commit this file was written against, until task 7 landed the two sections.
 
 **A separate file from `test_drawer.py`, deliberately.** `test_drawer.py` is 594 lines at this
 commit; task 7's tests are ~350 more, which would put it past `rules/core-conduct.md`'s 800-line
@@ -243,12 +243,12 @@ def _click_reset(chrome):
 def _assert_cards_found(probe):
     """Both glyph anchors resolved to exactly one card each -- the precondition every
     appearance assertion depends on, reported as a missing section rather than as a colour
-    mismatch when task 7 has not landed."""
+    mismatch when the card-count assertion below fails."""
     for name, glyph in (("dark", "ph-moon"), ("light", "ph-sun")):
         card = probe[name]
         assert card["count"] == 1, (
             "expected exactly one `i.%s` glyph in the open drawer (§D5's %s preview card), "
-            "found %d -- the Appearance section does not exist yet (task 7): %r"
+            "found %d -- the Appearance section's markup does not match §D5: %r"
             % (glyph, name, card["count"], probe))
         assert card.get("card") is not None, (
             "the %s glyph has no bordered ancestor, so §D5's `border:1px solid {{ %sEdge }}` "
@@ -293,7 +293,7 @@ def _readout_value(probe, where):
         "the drawer was not open when the Layout section was read (%s): %r" % (where, probe))
     assert probe.get("readoutCount") == 1, (
         "expected exactly one `<n>px` readout inside the drawer panel (§D5's Layout section, "
-        "%s), found %r -- the Layout section does not exist yet (task 7): %r"
+        "%s), found %r -- the Layout section's markup does not match §D5: %r"
         % (where, probe.get("readoutCount"), probe))
     return probe["readouts"][0]["value"]
 
@@ -485,7 +485,7 @@ def test_criterion13_readout_follows_state_without_reopening(srv, tmp_path):
         clicked = _click_reset(chrome)
         assert clicked["count"] == 1, (
             "expected exactly one Reset button inside the drawer panel (§D5's Layout section), "
-            "found %d -- the Layout section does not exist yet (task 7)" % clicked["count"])
+            "found %d -- the Layout section's markup does not match §D5" % clicked["count"])
 
         deadline = time.time() + 5
         value = _readout_value(_layout(chrome), "after Reset")
@@ -534,7 +534,7 @@ def test_criterion11_reset_returns_the_default_in_the_dom_and_in_storage(srv, tm
         clicked = _click_reset(chrome)
         assert clicked["count"] == 1, (
             "expected exactly one Reset button inside the drawer panel (§D5's Layout section), "
-            "found %d -- the Layout section does not exist yet (task 7)" % clicked["count"])
+            "found %d -- the Layout section's markup does not match §D5" % clicked["count"])
 
         after = _measure_settled(chrome)
         assert after["sidebarWidth"] == SIDE_W_DEFAULT, (

@@ -2,11 +2,11 @@
 
 `docs/features/treko-theme-and-layout.md` §D5 (the drawer), §D6 (Esc goes first) and §D7 (the
 gear grafts beside `cmdButtons`, never into it) govern, together with §Acceptance criteria 12
-and 14. Written against the page as it exists at this commit, where the drawer does not exist
+and 14. Written against the page as it stood at the commit this file was written against, where the drawer does not exist
 at all: `settingsOpen`, `openSettings` and `closeSettings` each have **0 occurrences** in
 `Treko.dc.html`, there is no gear button, and the `Escape` handler has exactly **three** arms
-(`:477-481`). Every runtime test below is expected to fail until task 6 lands the gear, the
-scrim, the panel and the prepended Esc arm.
+(`:477-481`). Every runtime test below was expected to fail, at the commit this file was
+written against, until task 6 landed the gear, the scrim, the panel and the prepended Esc arm.
 
 **What each test binds to, and why.**
 
@@ -559,9 +559,10 @@ def test_d7_the_gear_is_static_and_not_inside_any_sc_for():
 # ===========================================================================================
 # Criterion 14 — the drawer adds no DOM id
 #
-# This one PASSES at this commit by design: it is a regression guard, not a red test. The
-# drawer does not exist yet, so the count is already 7. It is written now, with task 6's
-# other tests, because the moment it can fail is the moment task 6's markup lands.
+# This one PASSES by design: it is a regression guard, not a red test. At the commit this
+# was written, the drawer did not exist yet, so the count was already 7. It was written then,
+# with task 6's other tests, because the moment it could fail was the moment task 6's markup
+# landed.
 # ===========================================================================================
 
 _ID_ATTR_RE = re.compile(r'\bid="([^"]*)"')

@@ -2038,13 +2038,50 @@ for `treko/`) and generalised without re-running it against `60cfcf6`.
 
 What actually changed is docstrings only, and it closes a debt rather than opening one: `336983c`
 swept the 16 docstrings the judge flagged as claiming "Expected RED" on tests that now pass.
-`command grep` finds **zero** occurrences of "Expected RED" today. The 13 "Was RED when written.
-At that commit: …" and 1 "Still RED" markers that remain are the corrected past-tense form, which
-is accurate scoping rather than a debt. Exactly **one** present-tense claim survives, at
-`treko/test_sidebar.py:413`.
+`command grep` finds **zero** occurrences of "Expected RED" today.
 
-**Still open, and deliberately not decided here:** the observability verdict is against `60cfcf6`
-and HEAD has moved past it. No executable code changed — the delta is docstrings — but the delta
+**Correction, from the round-2 observability verdict at `303e4ef`.** The sentence that stood here —
+"exactly one present-tense claim survives" — was **wrong**, and it is the third count on this branch
+to come out too narrow, after the "byte-identical" claim above and the `:517 → :551` debt entry. The
+sweep in `336983c` fixed the *per-test* docstrings and missed the rest of the class. Enumerated
+rather than pattern-matched this time, because patching the matched string is what produced three
+short counts:
+
+| Group | Sites | Where |
+|---|---|---|
+| Module-level docstrings still claiming "expected to fail" | **4** | `test_drawer_sections.py:6`, `test_drawer.py:8`, `test_sidebar.py:9`, `test_theme.py:8` |
+| `"Still RED"` on a test that now passes | **1** | `test_theme.py:351` |
+| Assertion **failure messages** claiming the feature was never built | **13** | `command grep -rn "not landed\|not built\|does not exist yet\|never built" treko/*.py` |
+| Surviving present-tense phrase | **1** | `test_sidebar.py:413` |
+| Module docstring scoping clause, "as it exists at this commit" | **3** | `test_drawer.py:5`, `test_sidebar.py:4`, `test_theme.py:5` |
+| **Total** | **22** | — |
+
+`test_server.py:593` ("Every test below is a GET") matches the first pattern and is **not** part of
+the class — it is correct as written. The third group is the damaging one: those strings print only
+on failure, which is exactly when a future regression will be told the feature was never built.
+
+The fifth row was found only after the first four were fixed: each module docstring opened with
+"Written against the page as it exists at this commit", a scoping clause that a reader at HEAD
+reads as a claim about HEAD. It now reads "as it stood at the commit this file was written
+against". **All 22 are fixed.** Verified after the sweep: zero occurrences of "Expected RED",
+"Still RED", "right now", the not-built assertion class, or the old scoping clause; the 13
+"Was RED when written" markers are intact (falsifier — a sweep that deleted content would drop
+this count); and an AST check of all 217 `%`-format expressions in `treko/test_*.py` found zero
+specifier/argument arity mismatches. That last check matters because a broken assertion message
+raises only when the assertion fires, so a green suite cannot prove it.
+
+**The squash hazard is already closed at the repo level — the banner is belt-and-braces, not the
+control.** Measured after the round-2 verdict raised it: `gh repo view suyatdev/.claude --json
+squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed` returns
+`{"mergeCommitAllowed":true,"rebaseMergeAllowed":true,"squashMergeAllowed":false}`. GitHub will not
+render a squash button for this repository, so the silent-loss scenario this card ranked as its
+top risk cannot occur through the UI. Residual risk is an admin flipping the setting or a local
+`git merge --squash`; neither turns anything red, but neither justifies holding the PR. The PR
+banner stays — it costs nothing and it explains *why* to a reader who only sees the branch.
+
+**Still open, and deliberately not decided here:** the round-1 verdict was against `60cfcf6` and a
+round-2 verdict now exists at `303e4ef` (`risk=medium`, `confidence=high`, prose at
+`coding-memory/observability-judge/2026-08-24-feat-treko-theme-and-layout-round2.md`). No executable code changed — the delta is docstrings — but the delta
 exists, and one of the judge's own findings is what it addresses, so a fresh verdict would be
 measuring something the recorded one did not see. The gate's wording is a strict `head_sha` match.
 Waiving it is the user's call, not this document's.

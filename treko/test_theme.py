@@ -2,12 +2,12 @@
 
 `docs/features/treko-theme-and-layout.md` §Acceptance criteria and §Verification ("Criterion 4 —
 the light block's coverage", "Proof C — contrast, via headless Chrome computed style") govern.
-Written against the page as it exists at this commit — tokenized (task 2 landed: `--rail`,
+Written against the page as it stood at the commit this file was written against — tokenized (task 2 landed: `--rail`,
 `--hair*`, `--hover*`, the eight status tokens, all present via `var()`), but still **dark-only**:
 `data-theme` has 0 occurrences in `Treko.dc.html` and there is no `body[data-theme="light"]`
-block. All three tests below are expected to fail, for the reasons documented on each one, until
-task 3's second half adds the light block, `THEME_DEFAULT`, the validated seed, and
-`applyTheme`/`setTheme`.
+block. All three tests below were expected to fail, for the reasons documented on each one, at the
+commit this file was written against, until task 3's second half added the light block,
+`THEME_DEFAULT`, the validated seed, and `applyTheme`/`setTheme`.
 
 Criterion 7 (reload persistence, unavailable `localStorage`, corrupt stored theme) was added to
 this file on 2026-08-24. The original task-3 dispatch brief said "criteria 4, 5 and 6", copied
@@ -348,13 +348,14 @@ def test_criterion5_light_mode_contrast_meets_wcag(srv, tmp_path):
     Only elements that paint a mark in their own `color` are scored -- see `paintsText` in
     CONTRAST_CHECK_JS for why, and criterion 5 for the rule it implements.
 
-    Still RED after `af5321a`, but for a different reason than before, and deliberately so. The
-    precondition now holds: the light block, the validated seed and `applyTheme` all exist, so
-    `data-theme` does become "light". What fails is the contrast assertion itself -- 127
-    violations across four light-palette text tokens, worst 1.64:1. Those are real defects and
-    **task 4 owns them**, not task 3: criterion 5 is a card-level criterion and the fix is a
-    palette redesign rather than wiring (§Verification, "Task 3 second half"). Do not chase this
-    green by editing the assertion, the floors, or paintsText.
+    Was still RED after `af5321a`, at the time this docstring was written -- for a different
+    reason than before, and deliberately so. The precondition held: the light block, the
+    validated seed and `applyTheme` all existed, so `data-theme` did become "light". What failed
+    was the contrast assertion itself -- 127 violations across four light-palette text tokens,
+    worst 1.64:1. Those were real defects and **task 4 owned them**, not task 3: criterion 5 is a
+    card-level criterion and the fix is a palette redesign rather than wiring (§Verification,
+    "Task 3 second half"). Do not chase this green by editing the assertion, the floors, or
+    paintsText.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
     try:
@@ -452,9 +453,8 @@ def test_criterion7_corrupt_stored_theme_yields_dark(srv, tmp_path, stored):
         applied = chrome.evaluate("document.body.getAttribute('data-theme')")
         assert applied == "dark", (
             "taskTracker.theme=%r is outside the closed set {'dark','light'} and must yield "
-            "data-theme=\"dark\" -- got %r. The validated seed does not exist yet (task 3, "
-            "second half): no THEME_DEFAULT, no applyTheme, nothing reads taskTracker.theme."
-            % (stored, applied)
+            "data-theme=\"dark\" -- got %r instead: the validated seed did not fall back to "
+            "THEME_DEFAULT for an invalid stored value." % (stored, applied)
         )
     finally:
         chrome.close()

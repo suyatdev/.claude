@@ -1,13 +1,14 @@
 """RED tests for card A task 5 — D4 "Sidebar drag-resize", criteria 9, 10 and 11.
 
 `docs/features/treko-theme-and-layout.md` §D4 and §Acceptance criteria (9, 10, 11) govern.
-Written against the page as it exists at this commit: the sidebar's expanded width is a
+Written against the page as it stood at the commit this file was written against: the sidebar's expanded width is a
 hardcoded inline-style literal (`Treko.dc.html:76`, `width:236px`), `mainML` is
 `S.collapsed?'56px':'236px'` (`:650`, two fixed strings, never a stored or dragged number),
 and there is no drag handle at all — `col-resize` has 0 occurrences in `Treko.dc.html`. None
 of `sideHandleDown`, `SIDE_W_MIN`, `SIDE_W_MAX`, `SIDE_W_DEFAULT` or `resetSideW` exist yet.
-Every test below is expected to fail until task 5 lands the handle, the validated seed and
-the three (four, with `resetSideW`) computed substitutions §D4 specifies.
+Every test below was expected to fail, at the commit this file was written against, until
+task 5 landed the handle, the validated seed and the three (four, with `resetSideW`) computed
+substitutions §D4 specifies.
 
 **One item criterion 11 asks for is deliberately NOT tested here — an owed item, not a
 silently dropped one:**
@@ -226,10 +227,9 @@ def _measure_settled(chrome, timeout=MARGIN_SETTLE_TIMEOUT_SECS):
 
 def _assert_handle_found(found, where):
     assert found, (
-        "no element with cursor:col-resize exists in the DOM (%s) -- the drag handle "
-        "(docs/features/treko-theme-and-layout.md §D4, 'Handle markup') does not exist yet: "
-        "sideHandleDown, the handle's 7px position:fixed strip, and its onMouseDown wiring "
-        "are all task 5 deliverables that have not landed" % where
+        "no element with cursor:col-resize exists in the DOM (%s) -- expected the drag "
+        "handle (docs/features/treko-theme-and-layout.md §D4, 'Handle markup'): "
+        "sideHandleDown, the handle's 7px position:fixed strip, and its onMouseDown wiring" % where
     )
 
 
@@ -387,7 +387,7 @@ def test_width_survives_a_reload(srv, tmp_path):
         layout = _measure(chrome)
         assert layout["sidebarWidth"] == 300, (
             "with taskTracker.sideW='300' stored before a reload, the sidebar renders at "
-            "%r, expected 300px -- nothing reads taskTracker.sideW yet (task 5 not landed)"
+            "%r, expected 300px -- the mount-time seed did not read taskTracker.sideW"
             % layout["sidebarWidth"]
         )
     finally:
@@ -410,7 +410,8 @@ def test_corrupt_stored_width_yields_default_not_a_hardcoded_coincidence(srv, tm
 
     This test therefore also seeds a *valid, distinguishable* value ('300') in the same run:
     a hardcoded-236 implementation passes the corrupt case but fails this second half, which
-    is the part actually expected RED right now (same reason as test_width_survives_a_reload).
+    was the part actually expected RED when this was written (same reason as
+    test_width_survives_a_reload).
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
     try:
@@ -433,8 +434,8 @@ def test_corrupt_stored_width_yields_default_not_a_hardcoded_coincidence(srv, tm
         assert valid_layout["sidebarWidth"] == 300, (
             "taskTracker.sideW='300' rendered sidebar width %r, expected 300px -- if this "
             "assertion is the one that failed, the 236px result above was the page's "
-            "existing hardcoded literal (Treko.dc.html:76), not a validated seed; nothing "
-            "reads taskTracker.sideW yet (task 5 not landed)" % valid_layout["sidebarWidth"]
+            "existing hardcoded literal (Treko.dc.html:76), not a validated seed; the "
+            "mount-time seed did not read taskTracker.sideW" % valid_layout["sidebarWidth"]
         )
     finally:
         chrome.close()
@@ -465,8 +466,8 @@ def test_out_of_range_stored_width_clamped_at_mount(srv, tmp_path, stored, expec
         layout = _measure(chrome)
         assert layout["sidebarWidth"] == expected, (
             "taskTracker.sideW=%r rendered sidebar width %r, expected the mount-time clamp "
-            "to %dpx -- the seed does not clamp yet (task 5 not landed): got today's "
-            "hardcoded literal instead" % (stored, layout["sidebarWidth"], expected)
+            "to %dpx -- the seed was not clamped to that range"
+            % (stored, layout["sidebarWidth"], expected)
         )
     finally:
         chrome.close()
@@ -501,7 +502,7 @@ def test_no_handle_while_collapsed(srv, tmp_path):
         expanded_handles = _handle_count(chrome)
         assert expanded_handles == 1, (
             "expected exactly 1 cursor:col-resize element while the sidebar is expanded, "
-            "found %d -- the drag handle (§D4 'Handle markup') does not exist yet"
+            "found %d -- the drag handle (§D4 'Handle markup') does not match that count"
             % expanded_handles
         )
 
