@@ -1488,6 +1488,41 @@ the live page, so the falsifier keeps testing the parser instead of drifting wit
 currently is. It lands as its own test-only commit — the same separation `f2fdf6b` used for task 5's
 two measurement bugs.
 
+### Task 6 repair — the falsifier that drifted with the page (2026-08-24)
+
+Test-only. Suite after: **279 passed in 160.31s** — 270 baseline plus this task's 9, zero
+failures, zero regressions in `test_theme`, `test_guards`, `test_sidebar` or `test_ui_commands`.
+
+`test_esc_arm_parser_is_falsifiable` now builds every case from `BASE_ESC_ARMS` through a new
+`_chain_from_arms` builder rather than by editing the live page text, and a round-trip assertion
+(`_esc_arms(_chain_from_arms(BASE_ESC_ARMS)) == BASE_ESC_ARMS`) ties the builder and the parser
+together so a bug in either is reported instead of cancelling out. It also gained a
+**satisfiability** case — a correctly prepended chain must *pass* the checks — because a check
+proven able to fail is not thereby proven able to pass.
+
+**The round-trip guard was doing too much of the work, and that was measured rather than assumed.**
+The first probe ran three broken parsers; all three were caught, but two of them tripped the
+round-trip assertion, so the mutation cases themselves had still never been shown to catch
+anything. Three more parsers were written specifically to **survive** the round trip — each
+correct on the three base arms, each blind to exactly one thing the mutations test. All six are
+caught, each of the last three by its intended case, with the real parser passing as the control:
+
+| Broken parser | Survives round trip | Caught by |
+|---|---|---|
+| always returns the base arms | no | the satisfiability case (3 arms, not 4) |
+| drops every arm after the first | no | round trip |
+| ignores bodies (condition only) | no | round trip |
+| hoists any `settingsOpen` arm to the front | **yes** | falsifiable 1 — appended read as prepended |
+| re-sorts a permutation of the base arms back to canonical order | **yes** | falsifiable 2 — reorder undetected |
+| substitutes the base body for any condition it recognises | **yes** | falsifiable 3 — changed body undetected |
+
+0 of 6 missed. The probe is a throwaway that monkeypatches `_esc_arms` in memory; the file on disk
+was never edited by it, and the falsifier that ships is the one in the test module.
+
+**The lesson, stated once so task 7 does not repeat it.** The original mutation was correct when
+written and wrong three commits later, because it derived its "before" state from the artefact
+under test. A falsifier must be anchored to something the implementation cannot move.
+
 ### Task 8 — the regression guards (2026-08-24)
 
 `treko/test_guards.py`, 25 tests, all green. These guard things that must **not** change, so a green

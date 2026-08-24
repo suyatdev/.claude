@@ -28,6 +28,14 @@ would pass against a page where *no* click ever closes the drawer, so the same t
 the scrim and requires the close to be observed inside a window of the same length. The
 falsifier is in the test, not in a comment.
 
+**Amended at task 6's green half.** `test_esc_arm_parser_is_falsifiable` originally built its
+mutations by editing the live page text. That worked only while the page had three Escape arms;
+the moment task 6 prepended a fourth, duplicating the drawer arm produced five arms with
+`settingsOpen` legitimately first, and the mutation stopped constructing the case it was written
+to detect. It now builds every case from `BASE_ESC_ARMS` through `_chain_from_arms`, so it tests
+the parser rather than drifting with the page under test — and it gained a satisfiability case,
+because a check proven able to fail is not thereby proven able to pass.
+
 *The Esc arms are compared as parsed (condition, body) pairs, not as raw text.* Criterion 12
 says the three existing arms "keep their bodies and their relative order" while the new arm is
 prepended. Prepending necessarily rewrites the second arm's leading keyword from `if` to
@@ -448,36 +456,79 @@ def test_criterion12_the_esc_arm_is_prepended_and_the_others_are_undisturbed():
         "Found:\n%s" % (json.dumps(BASE_ESC_ARMS, indent=2), json.dumps(arms[1:], indent=2)))
 
 
+def _chain_from_arms(arms):
+    """Build an `Escape` chain from (condition, body) pairs -- the inverse of `_esc_arms`.
+
+    The falsifier below needs a three-arm page to mutate, and this page no longer is one. It
+    could hardcode the base commit's chain as a string, but a retyped copy is a second source
+    of truth that drifts silently; building it from `BASE_ESC_ARMS` keeps exactly one. The
+    round-trip assertion in `test_esc_arm_parser_is_falsifiable` is what ties the builder and
+    the parser together, so a bug in either is reported rather than cancelling out.
+    """
+    lines = ["      else if(e.key==='Escape'){"]
+    for index, (condition, body) in enumerate(arms):
+        lines.append("        %s(%s){%s}"
+                     % ("if" if index == 0 else "else if", condition, body))
+    lines.append("      }")
+    return "\n".join(lines) + "\n"
+
+
+# The arm task 6 prepends, as `_esc_arms` reads it off the real page.
+DRAWER_ESC_ARM = ("this.state.settingsOpen", "this.setState({settingsOpen:false});")
+
+
 def test_esc_arm_parser_is_falsifiable():
-    """The parser above is the oracle for the test before it, so it must be shown able to
-    fail. Each mutation is applied to an in-memory copy and never written to disk."""
-    appended = PAGE.replace(
-        "else if(this.state.agentOpen){this.setState({agentOpen:false});}",
-        "else if(this.state.agentOpen){this.setState({agentOpen:false});}"
-        "else if(this.state.settingsOpen){this.setState({settingsOpen:false});}")
-    assert appended != PAGE, "the append mutation matched nothing -- the fixture is stale"
-    appended_arms = _esc_arms(appended)
-    assert len(appended_arms) == 4
-    assert "settingsOpen" not in appended_arms[0][0], (
-        "an APPENDED drawer arm was read as prepended -- the parser cannot tell the two apart")
+    """The parser is the oracle for the test above, so it must be shown able to fail -- and,
+    separately, able to pass. Both halves matter: a red suite proven able to fail is not
+    proven able to pass.
 
-    reordered = PAGE.replace(
-        "if(tag==='INPUT'&&document.activeElement===this._search)"
-        "{this.setState({q:''});document.activeElement.blur();}\n"
-        "        else if(tag==='INPUT'){document.activeElement.blur();}",
-        "if(tag==='INPUT'){document.activeElement.blur();}\n"
-        "        else if(tag==='INPUT'&&document.activeElement===this._search)"
-        "{this.setState({q:''});document.activeElement.blur();}")
-    assert reordered != PAGE, "the reorder mutation matched nothing -- the fixture is stale"
-    assert _esc_arms(reordered)[:2] != BASE_ESC_ARMS[:2], (
-        "swapping the first two arms was not detected")
+    Every case is built from `BASE_ESC_ARMS` via `_chain_from_arms` rather than by mutating
+    the live page. The first version of this test did mutate the live page, and it broke the
+    moment task 6 landed: duplicating the drawer arm onto a page that already had one yielded
+    five arms with `settingsOpen` legitimately first, so the mutation stopped constructing the
+    case it was written to detect. A falsifier that drifts with the page under test is not a
+    falsifier.
+    """
+    # Round trip first: if the builder and the parser disagree, nothing below means anything.
+    assert _esc_arms(_chain_from_arms(BASE_ESC_ARMS)) == BASE_ESC_ARMS, (
+        "builder/parser round trip failed on the three base arms")
 
-    rebodied = PAGE.replace("{this.setState({agentOpen:false});}",
-                            "{this.setState({agentOpen:true});}")
-    assert rebodied != PAGE, "the body mutation matched nothing -- the fixture is stale"
-    assert _esc_arms(rebodied)[-1] != BASE_ESC_ARMS[-1], (
-        "changing an arm's body was not detected")
+    # SATISFIABLE: the shape criterion 12 asks for must actually pass the checks.
+    good = _esc_arms(_chain_from_arms([DRAWER_ESC_ARM] + BASE_ESC_ARMS))
+    assert len(good) == 4, "a correctly prepended chain parsed to %d arms, not 4" % len(good)
+    assert "settingsOpen" in good[0][0], (
+        "a correctly prepended chain did not read as prepended: first arm is %r" % good[0][0])
+    assert good[1:] == BASE_ESC_ARMS, (
+        "a correctly prepended chain was rejected -- the check is unsatisfiable, which would "
+        "make the test above pass for no reason a correct page could satisfy")
 
+    # FALSIFIABLE 1: appended, not prepended.
+    appended = _esc_arms(_chain_from_arms(BASE_ESC_ARMS + [DRAWER_ESC_ARM]))
+    assert len(appended) == 4, "the appended chain should still have four arms"
+    assert "settingsOpen" not in appended[0][0], (
+        "an APPENDED drawer arm was read as prepended -- the parser cannot tell them apart")
+    assert appended[1:] != BASE_ESC_ARMS, (
+        "an appended arm left the trailing three looking like the untouched base arms")
+
+    # FALSIFIABLE 2: the first two existing arms swapped, below a correct prepend.
+    swapped_order = [DRAWER_ESC_ARM, BASE_ESC_ARMS[1], BASE_ESC_ARMS[0], BASE_ESC_ARMS[2]]
+    swapped = _esc_arms(_chain_from_arms(swapped_order))
+    assert "settingsOpen" in swapped[0][0], "the prepend itself should still be intact here"
+    assert swapped[1:] != BASE_ESC_ARMS, "swapping the first two existing arms was not detected"
+
+    # FALSIFIABLE 3: an existing arm's body changed, order untouched.
+    rebodied_arms = list(BASE_ESC_ARMS)
+    rebodied_arms[-1] = (rebodied_arms[-1][0], "this.setState({agentOpen:true});")
+    rebodied = _esc_arms(_chain_from_arms([DRAWER_ESC_ARM] + rebodied_arms))
+    assert [c for c, _ in rebodied[1:]] == [c for c, _ in BASE_ESC_ARMS], (
+        "this case is meant to change only a body, but a condition changed too")
+    assert rebodied[1:] != BASE_ESC_ARMS, "changing an arm's body was not detected"
+
+    # FALSIFIABLE 4: the drawer arm present but closing nothing.
+    inert = _esc_arms(_chain_from_arms(
+        [("this.state.settingsOpen", "this.setState({agentOpen:false});")] + BASE_ESC_ARMS))
+    assert "settingsOpen" not in inert[0][1], (
+        "an arm that tests settingsOpen but does not close the drawer was not detected")
 
 # ===========================================================================================
 # §D7 — the gear is a static button, never a `cmdButtons` row
