@@ -186,7 +186,7 @@ case.
   -wide for a collision risk that does not apply to them.
 
 Both probes must run **before** the primary-vs-linked compare, and both are untested claims about
-git behavior rather than measurements — task 2 tests them in a throwaway repo before the guard
+git behavior rather than measurements — **task 2a** tests them in a throwaway repo before the guard
 depends on them.
 
 ## Scope of rule 2 — where worktrees may live
@@ -443,8 +443,17 @@ defined nowhere.
    already do, so `foo && git worktree add ...` is caught and a flag binds to its own segment.
 2. Classify via an extended `hooks/lib/classify-git-command.py` rather than a fourth inline
    classifier (ADR 0029 moved `merge-guard` off exactly that pattern).
-3. Require the resolved absolute path to be under `~/.worktrees/<repo-name>/`, with a matching
-   `.repo-root` marker. Anything else → **deny**, naming the correct path in the message.
+3. For each `SEG_WORKTREE_ADD<tab><i><tab><path>`, compute **the effective repo for segment `i`**
+   using the shared resolution rule in the classifier contract below. Round 4 found this arm had no
+   cwd-resolution step at all while Arm D had one, so `cd /repos/other && git worktree add
+   ~/.worktrees/.claude/x` was judged against the session repo and allowed — the exact case the
+   discriminating scenario exists to deny. **Neither arm derives this for itself any more.**
+4. `<path>` is `UNRESOLVABLE`, or the effective repo does not resolve → **deny**, naming the
+   segment. Fail closed: a `git worktree add` whose target the guard cannot identify is precisely
+   the case it exists to catch.
+5. Require the resolved absolute path to be under `~/.worktrees/<repo-name>/` **for that effective
+   repo**, with a matching `.repo-root` marker. Anything else → **deny**, naming the correct path in
+   the message.
 
 **Arm D — moving a primary checkout's HEAD** (`PreToolUse` on `Bash`) — added in the round-1
 revision, widened in round 2. Arms A/B/B2 block *editing files* and *misplacing worktrees*, but the
@@ -469,16 +478,15 @@ the shared working tree being overwritten wholesale.
   `git merge --ff-only`, which the round-1 design and the first version of this arm both missed.
 
 **Which repository Arm D judges.** Unlike Arm A — which resolves from the *write target* — Arm D
-has no target path, so it resolves the repo from the command's **effective** working directory:
+has no target path, so for each `SEG_BRANCH_MOVE<tab><i><tab><subcommand>` it computes **the
+effective repo for segment `i`** using the shared resolution rule in the classifier contract below.
+It does not carry its own recipe.
 
-1. Start from the session `cwd` on the hook payload.
-2. Apply any `cd <path>` in an earlier segment of the same command line, using the same
-   `shell_segments.py` lexing the other arms use. `cd ~/.claude && git switch main` therefore
-   resolves to `~/.claude`, not to the worktree the session started in — a route round 2 found open.
-3. Apply `-C <path>` from `GIT_DIR_OPT` if the git segment carries one; it wins over `cd`.
-4. A `cd` whose operand is a variable, a subshell, or otherwise unresolvable → **deny**, naming the
-   unresolvable operand. Fail closed: an unresolvable cwd means the guard cannot tell which repo it
-   is protecting.
+Round 4's advisory read found the old private recipe reading `-C` out of a fact
+(`GIT_DIR_OPT<tab><path>`) that carried no segment identity, so `git -C /other log && git switch
+main` from the primary checkout would have applied segment 0's redirect to segment 1's `switch` and
+**allowed** it — the exact incident this feature exists to stop. Under the shared rule, `-C` binds
+only to the segment that carries it, and that line denies.
 
 **Bypass:** `WORKTREE_EXEMPT=<reason> git switch main` allows the command and records the reason in
 the log. Same shape as `MERGE_EXEMPT`/`TEST_EXEMPT`/`JUDGE_EXEMPT`.
@@ -500,43 +508,96 @@ always exiting 0. Verified baseline, probed 2026-08-24 on the current file:
 | `git checkout -- docs/a.md` | *(none)* |
 | `git -C /tmp/other worktree add /tmp/x` | `SCOPE_UNKNOWN\t-C` |
 
-Four facts to add, following the file's documented token style:
+#### The root cause, named — and fixed rather than routed around
 
-- `WORKTREE_ADD` — some segment runs `git worktree add`. **Denying** fact.
-- `WORKTREE_ADD_TARGET<tab><repo-dir-or-empty><tab><path>` — one per `git worktree add` segment,
-  pairing that segment's effective repo directory (from its own `-C`, empty when it has none) with
-  its `<path>` operand, option values skipped (`-b <branch>` and `--reason <string>` both take
-  values). **Granting** fact, so per `classify-git-command.py:37-41` it is emitted only when
-  **every** `git worktree add` on the line yields a target this file can vouch for; otherwise
-  `WORKTREE_ADD` stands alone and the guard denies for want of a vouched target.
+Rounds 1 through 4 each cited a defect in this territory, each fix was genuinely correct, and each
+one exposed a new successor defect: round 3 fixed `-C` for Arm B2; round 4 found the same hole
+reachable through `cd` for Arm B2, and through `-C` for Arm D. Four rounds of the same shape is a
+structural signal, so this section stops patching and states the cause.
 
-  **Why a paired token rather than two facts.** The round-3 draft emitted a bare
-  `WORKTREE_ADD_PATH` and suppressed it under `SCOPE_UNKNOWN`, which cancelled itself out: the
-  guard was told to judge the `-C` repo *using a path that had just been thrown away*, and two
-  acceptance scenarios ended up emitting an identical fact set while demanding opposite verdicts.
-  The real defect underneath is that the caller receives a **flat set with no segment identity**, so
-  a repo and a path cannot be associated after the fact. Carrying both in one token is the only fix
-  that does not require inventing segment identity the interface does not have.
-- `BRANCH_MOVE` — some segment runs a git form that moves a checkout's HEAD or overwrites its
-  working tree, per the in/out lists above. **Denying** fact.
-- `GIT_DIR_OPT<tab><path>` — some segment carries `-C <path>`. **Informational**, emitted per
-  segment; see below.
+**`classify-git-command.py:37-41` says it outright: "The caller gets a flat SET with no segment
+identity."** Every workaround above it exists because of that one property — the granting/denying
+rule, the `SCOPE_UNKNOWN` suppression, the round-3 paired token. The round-3 draft called inventing
+segment identity impossible ("the interface does not have it"). That was wrong: `segments()` already
+returns an **ordered list**, and `classify()` already iterates it left to right
+(`classify-git-command.py:224`). The index exists; it is simply discarded before the facts are
+emitted. **This design carries it through.**
 
-**`SCOPE_UNKNOWN` and `-C`.** For `COMMIT*`/`PUSH*`, `SCOPE_UNKNOWN` suppresses that segment's
-facts, because a global option may redirect which repo is inspected — and `-C` is today one of the
-options that triggers it (probed above). Two rules:
+**Existing facts are not touched.** `COMMIT*`, `PUSH*`, and `SCOPE_UNKNOWN` keep their exact current
+shape, so `git-guard` and `doc-guard` see a strict superset with no changed token — the property the
+next section measures.
 
-1. **Both denying facts are emitted alongside `SCOPE_UNKNOWN`**, and the guard denies. Suppressing
-   them would be a fail-open: `git -C <other> worktree add /wherever` would emit nothing and sail
-   through.
-2. **`WORKTREE_ADD_TARGET` is emitted for a `-C` segment only when the `-C` operand resolves to a
-   directory.** It then carries that directory, so the guard judges the path against the repo the
-   command actually targets. An unresolvable `-C` yields no target, `WORKTREE_ADD` stands alone, and
-   the guard denies.
+#### Four indexed facts
+
+`<i>` is the zero-based position of the segment in the list `segments()` returns. Following the
+file's documented token style, tab-separated:
+
+- `SEG_CD<tab><i><tab><operand>` — segment `i` is a `cd`. `<operand>` is its literal operand, or the
+  sentinel `UNRESOLVABLE` when it is a variable, a subshell, or absent.
+
+  **This requires the classifier to stop skipping non-git segments.** `classify-git-command.py:225`
+  (`if len(argv) < 2 or argv[0] != "git": continue`) means a `cd` segment is never seen today —
+  measured: `cd /tmp/other && git worktree add /tmp/x` currently emits **nothing at all**. The
+  indexed facts are collected for every segment; the existing `COMMIT*`/`PUSH*` logic stays behind
+  its git-only guard, unchanged.
+- `SEG_GIT_C<tab><i><tab><operand>` — segment `i`'s git command carries `-C <operand>`.
+
+  **This must be collected before the `SCOPE_UNKNOWN` `continue`** at `classify-git-command.py:229-232`,
+  which today abandons a `-C` segment before it can emit anything. An indexed fact carries its own
+  scope, so it does not need the suppression that unindexed facts do.
+- `SEG_WORKTREE_ADD<tab><i><tab><path-operand>` — segment `i` runs `git worktree add`.
+  `<path-operand>` is its path operand with option values skipped (`-b <branch>` and
+  `--reason <string>` both take values), or `UNRESOLVABLE` when no path operand can be identified.
+- `SEG_BRANCH_MOVE<tab><i><tab><subcommand>` — segment `i` runs a git form that moves a checkout's
+  HEAD or overwrites its working tree, per the in/out lists above.
+
+**The granting/denying distinction does not apply to these four.** That rule exists *because* a flat
+fact cannot say which segment it came from, so a permission granted by one segment could excuse
+another (`classify-git-command.py:37-45`). An indexed fact names its own segment, so each is judged
+on its own and no fact can vouch for a segment it did not come from.
+
+#### The shared resolution rule — stated once, used by every arm
+
+Round 4's finding was that Arm B2 and Arm D each derived "which repo is this?" separately, and only
+one of them was complete. There is now **one rule**, and no arm may carry its own:
+
+> **Effective repo for segment `i`.** Start from the payload's session `cwd`. Apply every `SEG_CD`
+> whose index is **< `i`**, in index order, each resolved relative to the result of the one before —
+> a `cd` affects the segments after it, never itself. Then apply segment `i`'s own `SEG_GIT_C`
+> operand if it has one, resolved relative to that result: **`-C` wins over `cd`**, because the
+> shell has already chosen the directory by the time git applies `-C`. Resolve the final result to
+> an absolute real path, then take its repo root.
+>
+> **If any step carries `UNRESOLVABLE`, or the final path does not resolve, deny** — naming both the
+> operand and its segment index. An unresolvable working directory means the guard cannot tell which
+> repository it is protecting, which is boundary 12's case.
+
+Worked examples, each previously a hole:
+
+| Command line | Segment judged | Effective repo | Verdict |
+|---|---|---|---|
+| `cd /repos/other && git worktree add ~/.worktrees/.claude/x` | 1 | `/repos/other` | **deny** — path is under another repo's namespace |
+| `git -C /repos/other log && git switch main` | 1 | session `cwd` — segment 0's `-C` does **not** carry | **deny** if `cwd` is a primary checkout |
+| `cd ~/.claude && git switch main` | 1 | `~/.claude` | **deny** if primary |
+| `cd /a && cd b && git switch main` | 2 | `/a/b` | per that repo |
+| `cd "$d" && git switch main` | 1 | `UNRESOLVABLE` | **deny**, naming `$d` and segment 0 |
 
 **`-C` must not become a blanket refusal.** `git -C <other-repo> …` appears **215 times** in this
-repo's own scripts (measured, round 2), so denying every one of them would be unusable. `GIT_DIR_OPT`
-is emitted **in addition to** the existing `SCOPE_UNKNOWN\t-C`, never in place of it.
+repo's own scripts (measured round 2; re-verified round 4 at HEAD and at the merge-base), so denying
+every one would be unusable. `SEG_GIT_C` resolves the redirect rather than refusing it, and is
+emitted **in addition to** the existing `SCOPE_UNKNOWN<tab>-C`, never in place of it.
+
+**The lexer's fail-open must not become the guard's.** `shell_segments.py`'s `segments()` returns
+`[]` for input `shlex` cannot parse — a documented, deliberate fail-**open** in its own docstring,
+justified there by "the callers' repo/branch checks still fail closed for the cases that matter."
+That justification does not extend to this guard: an empty segment list emits no `SEG_*` fact, an
+absent fact reads as "no worktree add here", and the command is allowed. Boundary 7 does not catch
+it either, because this path exits **zero** — measured 2026-08-24: `git worktree add "unclosed`
+produces no output and exit 0, while the parseable control `git commit -m x -- docs/a.md` produces
+three facts. So the classifier must emit `SEG_UNPARSED` when
+`segments()` returns `[]` for a non-empty command string, and **the guard denies on it** — the one
+place this design overrides a called module's stated policy, because the module's rationale is
+written for callers that are not the last line of defence.
 
 **What that does to `git-guard` and `doc-guard` — measured, not assumed.** The fact set becomes a
 strict **superset**; it is not "byte-identical", and they do **not** simply ignore what they do not
@@ -581,11 +642,36 @@ arm-it decision is computed from that log.
 | 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. Interpreter pinned at the system `/usr/bin/python3` **3.9.6** (measured 2026-08-24); both lexers already run under it via `#!/usr/bin/env python3`, so **no floor above 3.9 is introduced** and none may be relied on. Resolution follows `git-guard.sh:54` (`command -v python3 \|\| command -v python`), which already fails closed when neither exists. |
 | 8 | `WORKTREE_GUARD_MODE` is unset | **`log`.** This is the documented ship state — the guard arrives unarmed on purpose. |
 | 9 | `WORKTREE_GUARD_MODE` is set to anything other than `log` or `deny` | **`deny`**, and the message names the bad value. A *present but wrong* value means someone tried to arm the guard and mistyped; reading a failed configuration attempt as "off" is the silent disarm the git-floor section argues against. Absence and a typo are deliberately not the same case. |
-| 10 | Appending to the log fails (disk full, permissions, path missing) | **Deny**, message says the guard could not record its decision. Round 3 caught the earlier answer ("decision stands, write to stderr") as unsound: task 10 computes the arm-it decision *from this log*, so a lossy log reads cleanest exactly when it is dropping entries, and `git-guard.sh:409` records that stderr from an exit-0 hook may reach nobody. Denying is affordable **only because the log records refusals, not evaluations** — this path can fire only on a refusal that was already going to be reported, so it is not "a full disk blocks every write". |
+| 10 | Appending to the log fails (disk full, permissions, path missing) | **Depends on mode and on what was being recorded — three rules, stated in full below the table.** Not one verdict: round 3's blanket deny rested on "this can fire only on a refusal", and round 4 found that false. |
 | 11 | Arm B2 / Arm D operand is relative, unresolvable, or symlinked | Resolve to an absolute real path first. Cannot resolve → **deny**, naming the operand. |
-| 12 | `GIT_DIR_OPT` / `cd` operand cannot be resolved to a directory | **Deny**, naming the operand. The guard cannot tell which repository it is protecting. |
+| 12 | A `SEG_CD` or `SEG_GIT_C` operand cannot be resolved to a directory | **Deny**, naming the operand **and its segment index**. The guard cannot tell which repository it is protecting. |
 | 13 | `$HOME` is unset or empty | **Deny.** `~/.worktrees` is undefined, so no path test can be performed. |
 | 14 | Reading `~/.worktrees/<repo-name>/.repo-root` fails, or it disagrees with the current repo root | **Deny**, naming both roots (collision detection). |
+
+**Boundary 10, in full.** Round 3 replaced the original "decision stands, write to stderr" with a
+blanket deny, because task 10 computes the arm-it decision *from this log*, so a lossy log reads
+cleanest exactly when it is dropping entries, and `git-guard.sh:409` records that stderr from an
+exit-0 hook may reach nobody. Round 4 then found that deny's stated justification false — "this
+path can fire only on a refusal that was already going to be reported" ignores that the log also
+records `decision=bypass`, and a bypass is an *allow*. A failed append is three different
+situations, and one verdict cannot serve all three:
+
+1. **In `log` mode, any failed append → warn on stderr and allow.** `log` mode does not enforce
+   anything; a guard that is not blocking must not start blocking because a disk filled up. The
+   cost is a gap in the evidence window, and rule 3 makes that gap visible rather than silent.
+2. **In `deny` mode, a failed append while recording a *refusal* → deny.** The command was already
+   being refused; the append failure changes nothing about the outcome, and the deny message says
+   the decision could not be recorded. This is where round 3's reasoning holds.
+3. **In `deny` mode, a failed append while recording a *bypass* → allow, and warn on stderr.**
+   `WORKTREE_EXEMPT=<reason>` is the documented escape hatch. Switching the escape hatch off
+   because the disk is full is the worst possible moment to switch it off — the user reaching for
+   it is, by construction, already blocked on something. Losing one bypass record is the cheaper
+   failure, and it is not silent: a session that could not write a bypass line **must** append a
+   `log-append-failed` line on its next successful write, and task 10's criterion 3 treats any such
+   line as disqualifying until reviewed.
+
+This is the design's **only** deliberate fail-open on an enforcement path, and it is bounded to a
+command the user has already explicitly exempted.
 
 **`create-worktree.sh` (`WorktreeCreate` / `WorktreeRemove`):**
 
@@ -672,7 +758,9 @@ One tab-separated line per **refusal or bypass** — never per evaluation:
 <iso8601>  <session_id>  <arm>  <mode>  <decision>  <repo-root>  <path-or-command>  [<exempt-reason>]
 ```
 
-`decision` is one of `deny`, `would-deny` (the same event in `log` mode), or `bypass`.
+`decision` is one of `deny`, `would-deny` (the same event in `log` mode), `bypass`, or
+`log-append-failed` — the last written on the next successful append after a failed one, so a gap
+in the evidence window is recorded in the same place the arm-it criteria read (boundary 10, rule 3).
 
 Three round-2 measurements shaped this:
 
@@ -788,34 +876,75 @@ Feature: Arm B2 — hand-rolled git worktree add
   Scenario: -C names a resolvable repository, and the path is correct for it
     Given /repos/other is a git repository
     When Bash runs "git -C /repos/other worktree add ~/.worktrees/other/feat-a"
-    Then the classifier emits WORKTREE_ADD_TARGET\t/repos/other\t~/.worktrees/other/feat-a
-    And the hook evaluates /repos/other, not the session's repo
+    Then the classifier emits SEG_GIT_C\t0\t/repos/other
+    And the classifier emits SEG_WORKTREE_ADD\t0\t~/.worktrees/other/feat-a
+    And the effective repo for segment 0 is /repos/other, not the session's repo
     And the hook allows
     # 215 uses of git -C exist in this repo's scripts; a blanket deny is unusable.
 
   Scenario: -C names an unresolvable directory
     When Bash runs "git -C /no/such/dir worktree add ~/.worktrees/.claude/feat-a"
-    Then no WORKTREE_ADD_TARGET is emitted for that segment
-    And WORKTREE_ADD stands alone
+    Then the effective repo for segment 0 does not resolve
     And the hook denies
     And the message names /no/such/dir
+    And the message names segment 0
 
   Scenario: -C redirects to another repo but the path looks right for this one
     Given the session's repo is ~/.claude
     And /repos/other is a git repository
     When Bash runs "git -C /repos/other worktree add ~/.worktrees/.claude/feat-a"
-    Then the classifier emits WORKTREE_ADD_TARGET\t/repos/other\t~/.worktrees/.claude/feat-a
+    Then the effective repo for segment 0 is /repos/other
     And the hook denies
     And the message names ~/.worktrees/other/ as the correct parent
     # The discriminating case. The path would PASS if judged against the session's
-    # repo, so only pairing the -C directory WITH the path in one token gives an
-    # implementation enough to reach the right verdict.
+    # repo, so only binding the -C directory to the SAME segment index as the path
+    # gives an implementation enough to reach the right verdict.
 
-  Scenario: Two adds on one line, one of them unvouchable
-    When Bash runs "git worktree add ~/.worktrees/.claude/a && git -C /no/such/dir worktree add ~/.worktrees/.claude/b"
-    Then WORKTREE_ADD_TARGET is emitted for neither
+  Scenario: cd redirects to another repo but the path looks right for this one
+    Given the session's repo is ~/.claude
+    And /repos/other is a git repository
+    When Bash runs "cd /repos/other && git worktree add ~/.worktrees/.claude/feat-a"
+    Then the classifier emits SEG_CD\t0\t/repos/other
+    And the classifier emits SEG_WORKTREE_ADD\t1\t~/.worktrees/.claude/feat-a
+    And the effective repo for segment 1 is /repos/other
     And the hook denies
-    # Granting facts must hold for the whole LINE (classify-git-command.py:37-41).
+    And the message names ~/.worktrees/other/ as the correct parent
+    # Round 4's blocking finding. Identical in kind to the -C case above, reached
+    # through cd instead. Arm B2 had no cwd-resolution step and allowed this.
+
+  Scenario: -C in an earlier segment does not carry to a later one
+    Given the session cwd is a primary checkout of ~/.claude
+    And /repos/other is a git repository
+    When Bash runs "git -C /repos/other log && git switch main"
+    Then the classifier emits SEG_GIT_C\t0\t/repos/other
+    And no SEG_GIT_C is emitted for segment 1
+    And the effective repo for segment 1 is the session cwd
+    And the hook denies
+    # Round 4's advisory finding. A flat GIT_DIR_OPT fact let segment 0's redirect
+    # excuse segment 1's switch -- the incident this whole feature exists to stop.
+
+  Scenario: Two adds on one line, only one of them wrong
+    Given the session's repo is ~/.claude
+    When Bash runs "git worktree add ~/.worktrees/.claude/a && git -C /no/such/dir worktree add ~/.worktrees/.claude/b"
+    Then the hook denies
+    And the message names segment 1, not segment 0
+    # Indexed facts are judged per segment, so the deny names the segment that
+    # earned it. No granting-fact suppression is involved (see the contract).
+
+  Scenario: A cd whose operand cannot be resolved
+    When Bash runs "cd \"$d\" && git worktree add ~/.worktrees/.claude/feat-a"
+    Then the classifier emits SEG_CD\t0\tUNRESOLVABLE
+    And the hook denies
+    And the message names $d and segment 0
+
+  Scenario: The command line cannot be lexed at all
+    When Bash runs a command shell_segments.py cannot parse
+    Then segments() returns an empty list and the classifier exits 0
+    And the classifier emits SEG_UNPARSED
+    And the hook denies
+    # Without SEG_UNPARSED the empty fact set reads as "no worktree add here".
+    # shell_segments.py's fail-open is deliberate for its other callers; this
+    # guard overrides it because an absent fact is indistinguishable from safety.
 
   Scenario: The path operand follows an option value
     When Bash runs "git worktree add -b feat/z ~/.worktrees/.claude/feat-z"
@@ -1019,8 +1148,9 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 2. **`<repo-name>` collisions?** → Detect and refuse, via a `.repo-root` marker.
 3. **One hook or two?** → Two files: `worktree-guard.sh` (PreToolUse) and `create-worktree.sh`
    (lifecycle).
-4. **Bare repos and submodules?** → Both allowed (out of scope), with the reasoning above; task 2
-   tests the two `rev-parse` probes before the guard relies on them.
+4. **Bare repos and submodules?** → Both allowed (out of scope), with the reasoning above; **task 2a**
+   tests the two `rev-parse` probes before the guard relies on them. Task 2 is ticked done and did
+   **not** cover them — round 4 found both of these sections pointing at the finished task.
 5. **Does `~/.worktrees` need creating, and by whom?** → `create-worktree.sh`, `mkdir -p -m 700`,
    refusing a pre-existing directory with wider permissions.
 6. **Interaction with `phase-guard`?** → Messages are prefixed `worktree-guard:`. Whether both
@@ -1070,13 +1200,18 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 - [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
       before emitting any new tab-bearing fact. Then extend `classify-git-command.py` with
-      `WORKTREE_ADD`, `WORKTREE_ADD_TARGET`, `BRANCH_MOVE`, `GIT_DIR_OPT` + its own tests. Must
-      include the discriminating `-C` case (a redirect whose path *would* otherwise pass) and the
+      the four **segment-indexed** facts — `SEG_CD`, `SEG_GIT_C`, `SEG_WORKTREE_ADD`,
+      `SEG_BRANCH_MOVE` — plus `SEG_UNPARSED`, and its own tests. This means the segment loop must
+      stop skipping non-git segments (`classify-git-command.py:225`) and must collect the indexed
+      facts *before* the `SCOPE_UNKNOWN` `continue` (`:229-232`). Must include the discriminating
+      `-C` case, the matching `cd` case, the `-C`-does-not-carry-forward case, and the
       two-adds-one-line case. The regression test asserts `doc-guard`'s **behavior** is unchanged —
       not the fact set, which necessarily grows.
-- [ ] 6. Implement Arms B2 and D against the extended classifier, including effective-cwd
-      resolution through `cd` segments. Measure whether two `PreToolUse` denies both reach the
-      session, and record the answer here.
+- [ ] 6. Implement Arms B2 and D against the extended classifier. **The shared "effective repo for
+      segment `i`" rule is implemented once, in one function, and both arms call it** — the round-4
+      finding was two arms deriving it separately with only one of them complete, so a review that
+      finds a second copy of this logic should reject the change. Measure whether two `PreToolUse`
+      denies both reach the session, and record the answer here.
 - [ ] 7. Implement `create-worktree.sh` (Arm B) including the 0700 store, the `.repo-root` marker,
       the branch/base contract, and failure boundaries 15–27. Three requirements the probes
       produced: create and report **atomically** (a create-then-misreport leaves an orphan in
