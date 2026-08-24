@@ -1454,6 +1454,40 @@ criterion 11's Reset clause both need the Layout *section*, and criterion 7's "D
 clause needs Appearance — all three are **task 7**, and all three are already recorded as owed in
 `test_sidebar.py`'s docstring and in this card. Task 6 is the shell only.
 
+### Task 6 green half — the drawer shell lands, and a stale falsifier it exposed (2026-08-24)
+
+Five edits to `Treko.dc.html`, all **outside** the fenced slice, and `wc -l` **682 → 699** (under
+criterion 19's 800). Suite after: **278 passed, 1 failed in 173.36s** — 270 baseline plus this
+task's 9. The one failure is named below and is a defect in the test file, not in the page.
+
+| # | Edit | Where | Why there |
+|---|---|---|---|
+| 1 | the gear `<button>` | after the `cmdCopies` `sc-for`, rightmost in the header | §D7 — static, like the Agent button; `cmdButtons`' ids live inside the fence |
+| 2 | scrim + panel + header row | sibling of the agent panel, inside `<sc-if ready>` | the only state whose props carry `settingsOpen` |
+| 3 | the prepended Esc arm | `this._key`'s `Escape` branch | §D6 — a modal overlay is dismissed before field-level Esc |
+| 4 | `settingsOpen:false` | the state seed | no stored key: the drawer never reopens itself across a reload |
+| 5 | `settingsOpen`/`openSettings`/`closeSettings` | the ready return | `openSettings` carries no `artPathDraft`/`artSaved` — §D9 omits Artifacts, so there is no draft to seed |
+
+**The four runtime tests are now satisfiable, which the red half explicitly could not show.** All
+four had failed at the same early assertion, so nothing proved the geometry checks after it could
+ever pass. They pass now against the real render: the panel is flush with the right edge, its width
+is `min(400px, 92vw)`, its height is the full viewport, and its `overflow-y` is scrollable. The
+scrollbar hazard that could have made `panel.right == window.innerWidth` unsatisfiable did not
+materialise on this build — measured, not assumed.
+
+**The one failure: `test_esc_arm_parser_is_falsifiable`, a stale fixture.** It builds its "appended
+instead of prepended" mutation by duplicating the drawer arm onto the *live* page text. That
+constructed the intended scenario while the page had three arms; now that the page has four, the
+mutation yields five and the first arm is legitimately `settingsOpen`, so the mutation no longer
+builds the case it was written to detect. The parser is not wrong — the same file's
+`test_criterion12_the_esc_arm_is_prepended_and_the_others_are_undisturbed` passes against the real
+page, confirming exactly four arms, the drawer's first, and the three base arms byte-intact.
+
+The repair is to derive all three mutations from a **fixed three-arm base string** rather than from
+the live page, so the falsifier keeps testing the parser instead of drifting with whatever the page
+currently is. It lands as its own test-only commit — the same separation `f2fdf6b` used for task 5's
+two measurement bugs.
+
 ### Task 8 — the regression guards (2026-08-24)
 
 `treko/test_guards.py`, 25 tests, all green. These guard things that must **not** change, so a green

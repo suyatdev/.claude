@@ -116,6 +116,7 @@ color-scheme:light}
       <sc-for list="{{ cmdCopies }}" as="c">
         <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid var(--hair-2)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
       </sc-for>
+      <button class="btn btn-ghost btn-icon" onClick="{{ openSettings }}" title="Settings" style="color:var(--color-neutral-500)" style-hover="color:var(--color-accent-300);background:var(--hover)"><i class="ph ph-gear-six" style="font-size:16px"></i></button>
     </div>
     <div style="padding:24px 32px {{ mainPB }};max-width:1560px">
       <div id="sec-overview" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:10px">
@@ -319,6 +320,17 @@ color-scheme:light}
       </div>
     </div>
   </sc-if>
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSettings }}" style="position:fixed;inset:0;z-index:75;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);display:flex;justify-content:flex-end">
+      <div onClick="{{ stopEvt }}" style="width:min(400px,92vw);height:100%;overflow-y:auto;background:var(--color-surface);border-left:1px solid var(--hair-2);box-shadow:var(--shadow-lg);padding:20px 24px 32px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+          <i class="ph ph-gear-six" style="font-size:17px;color:var(--color-accent)"></i>
+          <div style="font-size:15px;color:var(--color-neutral-100);flex:1">Configuration</div>
+          <div onClick="{{ closeSettings }}" title="Close" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-100);background:var(--hover)"><i class="ph ph-x" style="font-size:13px"></i></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
 </div>
 </sc-if>
 </x-dc>
@@ -457,7 +469,7 @@ const CMD_TONES={idle:'transparent',success:'var(--ok)',stale_token:'var(--warn)
                  unexpected:'var(--bad)',server_gone:'var(--bad)'};
 
 class Component extends DCLogic {
-  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',sideW:(w=>isNaN(w)?SIDE_W_DEFAULT:Math.max(SIDE_W_MIN,Math.min(SIDE_W_MAX,w)))(parseInt(ls('taskTracker.sideW'))),theme:(t=>t==='light'?'light':THEME_DEFAULT)(ls('taskTracker.theme')),q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
+  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',sideW:(w=>isNaN(w)?SIDE_W_DEFAULT:Math.max(SIDE_W_MIN,Math.min(SIDE_W_MAX,w)))(parseInt(ls('taskTracker.sideW'))),theme:(t=>t==='light'?'light':THEME_DEFAULT)(ls('taskTracker.theme')),q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',settingsOpen:false,agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
   componentDidMount(){
     this.applyTheme(this.state.theme);
     // The token exists only when server.py served this page. Over file://, or on a host
@@ -474,8 +486,12 @@ class Component extends DCLogic {
       const tag=(document.activeElement||{}).tagName;
       if(e.key==='/'&&tag!=='INPUT'&&tag!=='TEXTAREA'){e.preventDefault();if(this._search)this._search.focus();}
       else if(e.key==='a'&&tag!=='INPUT'&&tag!=='TEXTAREA'){this.toggleAgent();}
+      // §D6. The drawer arm goes FIRST: a modal overlay is dismissed before
+      // field-level Esc. The three arms below are unchanged apart from the second's
+      // leading keyword, which the prepend necessarily rewrites.
       else if(e.key==='Escape'){
-        if(tag==='INPUT'&&document.activeElement===this._search){this.setState({q:''});document.activeElement.blur();}
+        if(this.state.settingsOpen){this.setState({settingsOpen:false});}
+        else if(tag==='INPUT'&&document.activeElement===this._search){this.setState({q:''});document.activeElement.blur();}
         else if(tag==='INPUT'){document.activeElement.blur();}
         else if(this.state.agentOpen){this.setState({agentOpen:false});}
       }
@@ -659,6 +675,7 @@ class Component extends DCLogic {
       agentScrollRef:el=>{this._agentScroll=el},agentInputRef:el=>{this._agentIn=el},stopEvt:e=>e.stopPropagation(),
       agentC:S.agentOpen?'var(--color-accent)':'var(--color-neutral-600)',agentBg:S.agentOpen?'var(--color-accent-900)':'transparent',
       agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'var(--hover-soft)':'transparent',
+      settingsOpen:S.settingsOpen,openSettings:()=>this.setState({settingsOpen:true}),closeSettings:()=>this.setState({settingsOpen:false}),
       collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:(S.collapsed?56:S.sideW)+'px',
       sideW:S.sideW+'px',sideHandleL:(S.sideW-3)+'px',sideHandleDown:this.sideHandleDown,
       resetSideW:()=>{lsSet('taskTracker.sideW',String(SIDE_W_DEFAULT));this.setState({sideW:SIDE_W_DEFAULT})},
