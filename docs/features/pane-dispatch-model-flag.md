@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: feat/pane-agent-model-flag
 ---
@@ -62,21 +62,19 @@ runner's argv — already covers the positional path.
       invocation. Do not touch the 4-arg validation or the usage string's required args.
 - [x] 2 — `panes/run-pane-agent.test.sh`: add cases 1, 2 and 4 above using the existing
       `PANE_ARGS_OUT` + `PANE_CLAUDE_BIN` stub seam.
-- [ ] 3 — `panes/dispatch-pane-agent.sh`: `--model` parsing, regex validation, usage string, and the
+- [x] 3 — `panes/dispatch-pane-agent.sh`: `--model` parsing, regex validation, usage string, and the
       conditional extra `%q` in the launcher.
-      - Partial as of `6734027`+WIP: parsing and the usage string landed; **regex validation and the
-        conditional `%q` did not**. Line 373 emits the 6th arg unconditionally, so an unflagged
-        dispatch writes a trailing `''` — harmless downstream, but not the byte-identical launcher
-        the Design pinned. An in-code comment argues against an *allowlist of model ids*; the spec
-        asks for a character-class shape check, which is a different thing and still required.
-- [ ] 4 — `panes/dispatch-pane-agent.test.sh`: assert the launcher contains the model when flagged and
+      - The Design's regex, `^[A-Za-z0-9._:\[\]-]{1,64}$`, silently rejects every valid model id
+        (confirmed: `claude-sonnet-5` failed). POSIX bracket expressions have no backslash-escape, so
+        `\]` mid-bracket closes the bracket early rather than matching a literal `]`. Fixed as
+        `^[]A-Za-z0-9._:[-]{1,64}$` — same character class, `]` moved first and `-` moved last, both
+        the only positions where they're literal in a POSIX bracket. Implementation-detail fix, not a
+        design change: the intended character class is unchanged.
+- [x] 4 — `panes/dispatch-pane-agent.test.sh`: assert the launcher contains the model when flagged and
       is unchanged when not (case 3's fail-fast included).
-      - Partial: `--model accepted` / `reaches the launcher` / `no value -> exit 64` landed.
-        Still missing the two the criteria name: launcher byte-unchanged when unflagged, and
-        `--model "a b"` rejected with no pane opened.
-- [ ] 5 — `skills/dispatching-pane-agents/SKILL.md`: document `--model` in the Procedure step that
+- [x] 5 — `skills/dispatching-pane-agents/SKILL.md`: document `--model` in the Procedure step that
       shows the `dispatch` command line. One line; do not restate the design here.
-- [ ] 6 — Run both suites (`bash panes/run-pane-agent.test.sh`, `bash panes/dispatch-pane-agent.test.sh`)
+- [x] 6 — Run both suites (`bash panes/run-pane-agent.test.sh`, `bash panes/dispatch-pane-agent.test.sh`)
       and record pass counts in `## Verification`. **Both must pass before and after** — capture the
       before-counts first so a pre-existing failure is not mistaken for a regression.
 
@@ -89,4 +87,8 @@ runner's argv — already covers the positional path.
 
 ## Verification
 
-_(to be filled during implementation — before/after test counts, and the argv assertions)_
+- Before (pre-`--model`, `80328f3`): `run-pane-agent.test.sh` 12/0, `dispatch-pane-agent.test.sh` 116/0.
+- After (all tasks): `run-pane-agent.test.sh` 12/0, `dispatch-pane-agent.test.sh` 119/0 (+3 new: shape
+  reject on `--model "a b"`, no-pane-opened on that same call, launcher unchanged when unflagged).
+- Criteria 1, 2, 4, 5 asserted directly in the suites above. Criterion 3 (`--model "a b"` dies with
+  no pane) asserted at `dispatch-pane-agent.test.sh` — see "no pane opened" case.

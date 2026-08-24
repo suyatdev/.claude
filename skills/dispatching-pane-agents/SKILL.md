@@ -92,6 +92,11 @@ Rationale: `docs/decisions/0009-pane-split-policy-three-lane-governance.md`.
    handoff, and every other agent take the default (`aux`, the far-right
    column); the flag exists so the cmux layout can tell the two apart and
    is ignored by every other terminal.
+
+   Add `--model <m>` to honor a model-switch checkpoint for that one worker
+   without touching the session default — panes otherwise inherit whatever
+   `/model` was current at launch. Omitting it is unchanged: the pane runs
+   the configured default, as before this flag existed.
 3. Capture the `RESULT_FILE:` line from its output.
 4. Wait:
    - Judges: `... wait --result-file <f> --timeout 540` in a foreground Bash

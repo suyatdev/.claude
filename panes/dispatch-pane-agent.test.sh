@@ -744,6 +744,27 @@ grep -rql 'claude-sonnet-5' "$PANE_STATE_DIR/runs" --include=launch.sh >/dev/nul
 bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file "$TMP/model2.md" --cwd "$TMP" --model >/dev/null 2>&1
 [ $? -eq 64 ] && ok "--model with no value -> usage exit 64" || bad "--model with no value -> usage exit 64"
 
+# Criterion 3: a shape-invalid --model dies before any pane opens. "a b" fails
+# MODEL_RE (embedded space); no run dir may be created for this call.
+before_count=$(find "$PANE_STATE_DIR/runs" -name launch.sh | wc -l | tr -d ' ')
+out=$(bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file "$TMP/model3.md" --cwd "$TMP" --model "a b" 2>&1)
+rc=$?
+after_count=$(find "$PANE_STATE_DIR/runs" -name launch.sh | wc -l | tr -d ' ')
+[ "$rc" -ne 0 ] && ok "--model \"a b\" (shape-invalid) -> non-zero exit" \
+  || bad "--model \"a b\" (shape-invalid) -> non-zero exit" "rc=$rc: $out"
+[ "$before_count" = "$after_count" ] && ok "--model \"a b\" -> no pane opened" \
+  || bad "--model \"a b\" -> no pane opened" "before=$before_count after=$after_count"
+
+# Criterion: unflagged dispatch produces a launcher byte-identical in shape to
+# pre-flag -- exactly 5 %q-quoted args after run-pane-agent.sh, no trailing ''.
+out=$(bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file "$TMP/model4.md" --cwd "$TMP" 2>&1)
+nomodel_launcher=$(find "$PANE_STATE_DIR/runs" -name launch.sh -newer "$PROMPT" | xargs grep -l 'model4.md' 2>/dev/null | head -n 1)
+if [ -n "$nomodel_launcher" ] && ! grep -q "run-pane-agent.sh.*''" "$nomodel_launcher"; then
+  ok "unflagged dispatch: launcher has no trailing empty --model arg"
+else
+  bad "unflagged dispatch: launcher has no trailing empty --model arg" "$nomodel_launcher"
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
