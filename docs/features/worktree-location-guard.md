@@ -77,8 +77,32 @@ is the same fail-open class that cost `phase-guard.sh` six judge rounds, arrivin
 
 **Fix:** `git rev-parse --path-format=absolute --git-dir` and `--git-common-dir`, which normalize
 both sides. Verified above — primary-in-subdirectory collapses to two identical absolute paths, and
-the linked worktree still differs. `--path-format` requires git ≥ 2.31; the version floor needs an
-explicit check and a fail-open below it (task 2).
+the linked worktree still differs.
+
+### Task 2 — re-run independently, 2026-08-24
+
+Re-probed from scratch in a throwaway repo (`scratchpad/probe-pathformat.sh`) rather than copied
+forward, since these are the numbers the guard is built on. Every case above reproduced:
+
+| Case | naive verdict | `--path-format=absolute` verdict |
+|---|---|---|
+| Primary, at root | PRIMARY ✓ | PRIMARY ✓ |
+| **Primary, in subdirectory** | **LINKED ✗ (the fail-open)** | **PRIMARY ✓** |
+| Linked worktree, at root | LINKED ✓ | LINKED ✓ |
+| Linked worktree, in subdirectory | LINKED ✓ | LINKED ✓ |
+| Primary, **detached HEAD** | PRIMARY ✓ | PRIMARY ✓ |
+| Not a git repository | `rc=128 fatal: not a git repository` | same |
+
+**New finding — the support probe is ambiguous, and a naive one takes the wrong branch.**
+`git rev-parse --path-format=absolute --git-dir` exits **128 in both** failure modes: git < 2.31
+(`fatal: unknown argument to --path-format: …`) and no-repo (`fatal: not a git repository`). A
+guard that detects support by exit code alone reads *every non-repo directory* as "old git" and
+takes the fail-open branch. **Detect by numeric version compare, or by matching the error text** —
+not by exit status.
+
+**Version floor — honest gap.** Both gits on this machine are ≥ 2.31 (`/usr/bin/git` 2.50.1
+Apple Git-155; `/opt/homebrew/bin/git` 2.54.0), so **the fail-open path below the floor was not
+executed and remains untested.** Task 3's suite must cover it by stubbing `git`, not by hoping.
 
 ## Scope of rule 2 — where worktrees may live
 
@@ -138,8 +162,14 @@ Two consequences:
 - No mid-session switching between centralized worktrees. Route through a fresh session launched
   with `cwd` at the worktree instead.
 - `Agent(isolation: "worktree")` cannot reach one. **Note this is not the same as pane dispatch** —
-  `dispatch-pane-agent.sh` passes `--cwd`, launching a fresh session, which is unaffected. Worth
-  confirming before relying on it (task 1a).
+  `dispatch-pane-agent.sh` passes `--cwd`, launching a fresh session, which is unaffected.
+  **CONFIRMED — task 1a, both by code and live** (2026-08-24):
+  - `run-pane-agent.sh:47` does a plain `cd "$run_cwd"`, then invokes `"$CLAUDE_BIN" -p … --agent …`
+    as a fresh OS process. `EnterWorktree` is never called anywhere on this path, so
+    `requireManagedLocation` is never consulted — (b)/(c) cannot apply.
+  - Live check: a `general-purpose` pane dispatched with `--cwd` at a worktree *outside* its repo
+    returned `VERDICT: FULLY_FUNCTIONAL` — `show-toplevel`, `HEAD`, both `--path-format` reads,
+    `status`, `log`, and a file write all succeeded, with no guard block and no permission prompt.
 
 **The cost of taking the hook path:** our hook owns the entire lifecycle — creating the git
 worktree, choosing the branch, and cleanup on `WorktreeRemove`. `worktree.baseRef` and
@@ -168,17 +198,33 @@ Registered with no `matcher`:
 "WorktreeCreate": [ { "hooks": [ { "type": "command", "command": "<abs path>/create-worktree.sh" } ] } ]
 ```
 
-Contract (probe-reported; re-verify each before relying on it — task 1b):
-- **Input** on stdin: base hook fields (`session_id`, `transcript_path`, `cwd`, `prompt_id?`,
-  `permission_mode?`, `agent_id?`, `agent_type?`, `effort?`) plus
-  `hook_event_name: "WorktreeCreate"` and `name: string`.
-- **Output:** echo the absolute worktree path to stdout; the **last non-empty trimmed line** is
-  taken. Must be normalized and absolute — no dot segments. A symlink-ancestry screen runs against
-  the repo root, and its error text explicitly offers *"(or emit a path outside the repository)"*,
-  so `~/.worktrees/…` is a first-class intended case.
-- **The hook must create the worktree itself.** Claude does not. `hookBased: true` means no branch
-  is created and none is reported — branch selection becomes ours.
-- **`WorktreeRemove`** receives `worktree_path: string`; success is exit 0, no structured output.
+Contract — **task 1b DONE, executed first-hand** against Claude Code **2.1.241**, 2026-08-24.
+Harness and raw captures: `scratchpad/probe-worktreecreate.sh`. The falsifier was "the hook never
+fires, and the session lands in `<repo>/.claude/worktrees/` instead" — it did fire, and it did not.
+
+- **Input** on stdin — **CORRECTED**. The observed key set is exactly **five**:
+
+  ```json
+  { "session_id": "…", "transcript_path": "…",
+    "cwd": "<repo root the session launched from>",
+    "hook_event_name": "WorktreeCreate", "name": "probewt" }
+  ```
+
+  ⚠️ The optional base fields this card previously listed — `prompt_id`, `permission_mode`,
+  `agent_id`, `agent_type`, `effort` — were **absent**. That was subagent output and it was wrong
+  for this surface. **Do not build on them.** `cwd` and `name` are the only two inputs the hook
+  actually has to work with, which is enough for the target-path computation below.
+- **Output — confirmed.** The **last non-empty trimmed line** of stdout is taken. Verified
+  adversarially: the probe hook printed `this line should be ignored`, then a blank line, then the
+  target path; the session landed on the target path. A path outside the repository is accepted —
+  `<repo>/.claude/worktrees` was never created.
+- **The hook must create the worktree itself — confirmed.** The probe hook ran `git worktree add`;
+  the new worktree appears in `git worktree list` and the session's own `pwd` was the target path.
+- **Surfaces actually tested: `--worktree` only.** `EnterWorktree name:` and
+  `Agent(isolation: "worktree")` are claimed to route through the same hook but were **NOT
+  verified** — treat as open until they are.
+- **`WorktreeRemove` is still unverified.** It did **not** fire when the headless `-p` session
+  exited, so its payload (`worktree_path`) and exit-code contract remain probe-reported only.
 
 Behavior: resolve repo root from `cwd`, compute
 `$HOME/.worktrees/<basename-of-repo-root>/<name>`, `git worktree add` it, echo the path.
@@ -233,22 +279,40 @@ name that instead of implying there is no way out.
 6. **Interaction with `phase-guard`.** Both are `PreToolUse` on the same matchers and both deny.
    A write can fail one, then the other — two sequential blocks for one write. Acceptable, but the
    messages should not be confusable.
+7. **NEW — do `EnterWorktree name:` and `Agent(isolation: "worktree")` really route through the
+   `WorktreeCreate` hook?** Task 1b verified `--worktree` only. If either bypasses the hook it
+   creates worktrees in the managed path regardless of Arm B, and Arm B2's Bash deny won't catch it
+   either — a silent third route. Verify before task 6.
+8. **NEW — what does the harness do when the hook fails?** Untested: hook exits non-zero, emits a
+   relative path, emits nothing, or emits a path it did not actually create. Arm B's error handling
+   cannot be designed without this; probe alongside question 7.
+9. **NEW — the `WorktreeRemove` half.** It did not fire on headless session exit, so cleanup on the
+   hook path is entirely unverified. If it only fires on interactive exit, centralized worktrees may
+   simply accumulate — which is tolerable, but should be a stated behavior, not a surprise.
 
 ## Tasks
 
 - [x] 1. Read the probe result; settle open question 1. **DONE** — `WorktreeCreate` hook is the
       mechanism; `worktree.location` is Desktop-SSH-only. Two claims re-verified against the binary.
-- [ ] 1a. Confirm `dispatch-pane-agent.sh --cwd` is unaffected by the (b)/(c) re-entry block — it
-      launches a fresh session rather than calling `EnterWorktree`, so it should be, but the whole
-      pane workflow depends on it.
-- [ ] 1b. Re-verify the `WorktreeCreate` payload and stdout contract first-hand in a throwaway repo
-      before writing the hook against it. The probe's claims are detailed and internally consistent,
-      but they are subagent output, and the contract is load-bearing.
-- [ ] 2. Establish the git version floor for `--path-format` (≥ 2.31) and the fail-open below it.
+- [x] 1a. Confirm `dispatch-pane-agent.sh --cwd` is unaffected by the (b)/(c) re-entry block.
+      **DONE** — `run-pane-agent.sh:47` plain-`cd`s and launches a fresh `claude` process; no
+      `EnterWorktree` call exists on that path. Live pane dispatch into an out-of-repo worktree
+      returned `VERDICT: FULLY_FUNCTIONAL`. Detail in "Two consequences" above.
+- [x] 1b. Re-verify the `WorktreeCreate` payload and stdout contract first-hand.
+      **DONE, and it corrected the card** — the payload has five keys, not the wider optional set
+      previously recorded; last-non-empty-line parsing and out-of-repo paths both confirmed
+      adversarially. `--worktree` is the only surface tested; `WorktreeRemove` never fired.
+      Detail and residual gaps in the Contract block above.
+- [x] 2. Establish the git version floor for `--path-format` (≥ 2.31) and the fail-open below it.
+      **DONE with one gap** — all six detection cases re-derived from scratch; found that exit-code
+      support detection is ambiguous against a non-repo. The sub-2.31 branch is **untested** (no
+      such git on this machine) and must be covered by stubbing `git` in task 3.
 - [ ] 3. Write the failing test suite first — `hooks/worktree-guard.test.sh`, house style per
       `hooks/lib/guard_test_helpers.sh`. Must include: primary-at-root, **primary-in-subdirectory**
       (the fail-open above), linked worktree, each exempt path, non-git directory, detached HEAD,
-      missing git, missing `--path-format` support.
+      missing git, missing `--path-format` support. The last two require a **stubbed `git` on
+      PATH** — no real git on this machine reproduces them (task 2). Add a case asserting a non-repo
+      is *not* misread as unsupported-git, which is the ambiguity task 2 surfaced.
 - [ ] 4. Implement Arm A.
 - [ ] 5. Extend `classify-git-command.py` for `git worktree add` + its own tests.
 - [ ] 6. Implement Arm B against the extended classifier.
