@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-pane-agent.sh — entry point for pane orchestration.
 #
-#   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]
+#   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux] [--model <m>]
 #   wait --result-file <f> [--timeout <secs>]
 #   handoff [--cwd <dir>]
 #   set-policy {inline | panes --max <N>}      (this session's pane-split policy)
@@ -35,6 +35,17 @@ POLICY_RE='^panes max=([0-9]{1,2})$'
 CMUX_WAIT_SECS=15
 AGENT_TYPE_RE='^[A-Za-z0-9_-]{1,64}$'
 TIMEOUT_RE='^[0-9]+$'
+# Shape check, not an allowlist: valid model ids look like "sonnet", "claude-opus-5",
+# "claude-sonnet-5[1m]". The CLI is the authority on which ids actually exist.
+# It does NOT exclude a leading "-": a flag-shaped value like
+# "--dangerously-skip-permissions" passes and reaches the real claude CLI as
+# --model's own argument (verified). Not shell injection -- the launcher's %q
+# quoting holds regardless. Barring a leading "-" would be a spec change; the
+# card's stated character class permits it.
+# Bracket order is deliberate, not stylistic: POSIX bracket expressions have no
+# backslash-escape, so a bare \] mid-bracket closes it early (confirmed: silently
+# rejected every valid id). "]" must sit first (literal), "-" must sit last (literal).
+MODEL_RE='^[]A-Za-z0-9._:[-]{1,64}$'
 # Consecutive open_tab failures that mean "this adapter cannot tab" rather than
 # "that one pane is stale" (obs judge RUN 2). 3, not 2: the cost is asymmetric.
 # Over-triggering silently discards the user's explicit `panes max=N` for the
@@ -308,14 +319,17 @@ case "$cmd" in
   dispatch)
     agent_type="${1:-}"
     # shellcheck disable=SC2015 # non-empty agent_type guarantees $1 exists, so shift never fails into die
-    [ -n "$agent_type" ] && shift || die "usage: dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]"
-    prompt_file=""; result_file=""; run_cwd="$PWD"; role="aux"
+    [ -n "$agent_type" ] && shift || die "usage: dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux] [--model <m>]"
+    prompt_file=""; result_file=""; run_cwd="$PWD"; role="aux"; model=""
     while [ $# -gt 0 ]; do
       case "$1" in
         --prompt-file) [ $# -ge 2 ] || die "--prompt-file needs a value"; prompt_file="$2"; shift 2 ;;
         --result-file) [ $# -ge 2 ] || die "--result-file needs a value"; result_file="$2"; shift 2 ;;
         --cwd)         [ $# -ge 2 ] || die "--cwd needs a value";         run_cwd="$2";     shift 2 ;;
         --role)        [ $# -ge 2 ] || die "--role needs a value";        role="$2";        shift 2 ;;
+        # Optional. Forwarded as the runner's 5th positional; empty means "no --model",
+        # so the configured default still wins.
+        --model)       [ $# -ge 2 ] || die "--model needs a value";       model="$2";       shift 2 ;;
         *) die "unknown option: $1" ;;
       esac
     done
@@ -323,6 +337,9 @@ case "$cmd" in
     # Allowlist, fail fast: a garbage role is a caller bug and must die before
     # any adapter call (spec error table).
     case "$role" in implementer|aux) ;; *) die "--role must be implementer or aux (got: $role)" ;; esac
+    # Shape check, fail fast: same rule as --role/--agent-type -- die before any
+    # pane opens, not after.
+    [ -z "$model" ] || [[ "$model" =~ $MODEL_RE ]] || die "--model must match [A-Za-z0-9._:\[\]-]{1,64} (got: $model)"
     { [ -f "$prompt_file" ] && [ -r "$prompt_file" ]; } || die "--prompt-file missing or unreadable: $prompt_file"
     [ -d "$run_cwd" ] || die "--cwd is not an existing directory: $run_cwd"
     run_cwd="$(cd "$run_cwd" && pwd)" || die "cannot resolve --cwd"
@@ -365,7 +382,14 @@ case "$cmd" in
     launcher="$run_dir/launch.sh"
     {
       printf '#!/usr/bin/env bash\n'
-      printf 'bash %q %q %q %q %q\n' "$PANES_DIR/run-pane-agent.sh" "$agent_type" "$run_dir/prompt.md" "$result_file" "$run_cwd"
+      if [ -n "$model" ]; then
+        printf 'bash %q %q %q %q %q %q\n' "$PANES_DIR/run-pane-agent.sh" "$agent_type" "$run_dir/prompt.md" "$result_file" "$run_cwd" "$model"
+      else
+        # No --model: byte-identical to the pre-flag launcher. A trailing empty
+        # %q arg here would still parse correctly downstream, but the design
+        # pins the unflagged shape as unchanged.
+        printf 'bash %q %q %q %q %q\n' "$PANES_DIR/run-pane-agent.sh" "$agent_type" "$run_dir/prompt.md" "$result_file" "$run_cwd"
+      fi
       printf 'echo; echo "[pane kept open for inspection -- agent exit $?]"\n'
       printf 'exec /bin/zsh -i\n'
     } > "$launcher"

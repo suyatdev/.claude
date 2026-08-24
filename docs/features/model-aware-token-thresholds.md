@@ -1,7 +1,8 @@
 ---
 phase: review
 model_tier: low
-branch: feat/model-aware-token-thresholds
+branch: none  # merged via PR #67 (984e7ac) 2026-08-23; feat/model-aware-token-thresholds
+              # deleted local + remote 2026-08-23 (verified ancestor of origin/main first)
 ---
 
 # Model-aware token thresholds

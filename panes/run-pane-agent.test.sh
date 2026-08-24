@@ -89,6 +89,23 @@ if [ ! -e "$TMP/agent-exit" ]; then
   printf 'ok   — shape guard: no marker outside runs dirs\n'; pass=$((pass+1))
 else printf 'FAIL — shape guard: no marker outside runs dirs\n'; fail=$((fail+1)); fi
 
+# 11-12. --model passthrough (optional 5th positional). Present -> the flag reaches
+# the CLI so a dispatch can honor a model-switch gate; absent -> no --model at all,
+# so the configured default still wins and every existing 4-arg caller is unchanged.
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs, not here
+make_stub 'printf "%s\n" "$*" > "$PANE_ARGS_OUT"; printf "{\"result\":\"x\"}\n"'
+PANE_ARGS_OUT="$TMP/args-model" PANE_CLAUDE_BIN="$TMP/claude-stub" \
+  bash "$RUNNER" pane-echo "$PROMPT" "$TMP/r11.md" "$TMP" sonnet >/dev/null 2>&1
+if grep -q -- '--model sonnet' "$TMP/args-model"; then
+  printf 'ok   — 5th positional passes --model to the CLI\n'; pass=$((pass+1))
+else printf 'FAIL — 5th positional passes --model to the CLI (%s)\n' "$(cat "$TMP/args-model" 2>/dev/null)"; fail=$((fail+1)); fi
+
+PANE_ARGS_OUT="$TMP/args-nomodel" PANE_CLAUDE_BIN="$TMP/claude-stub" \
+  bash "$RUNNER" pane-echo "$PROMPT" "$TMP/r12.md" "$TMP" >/dev/null 2>&1
+if ! grep -q -- '--model' "$TMP/args-nomodel"; then
+  printf 'ok   — no 5th positional emits no --model flag\n'; pass=$((pass+1))
+else printf 'FAIL — no 5th positional emits no --model flag (%s)\n' "$(cat "$TMP/args-nomodel" 2>/dev/null)"; fail=$((fail+1)); fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
