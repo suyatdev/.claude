@@ -2029,7 +2029,22 @@ and neutral ramps. (c) The body quoted a docstring marker, "Expected RED", that 
 times; the real markers are "Was RED when written" (13) and "Still RED" (1), which is where the
 correct count of 14 comes from.
 
-**Still open, and deliberately not decided here:** the observability verdict was recorded against
-`60cfcf6`, and HEAD is now `73d8be3` (phase-to-review, then the `origin/main` merge). `treko/` is
-byte-identical across those two commits, so the judged code has not changed — but the gate's own
-wording is a strict `head_sha` match, and waiving a gate is the user's call, not this document's.
+**Correction to the paragraph above, and to commit `a7124fc`'s message.** That commit asserted
+`treko/` is byte-identical between the verdict commit `60cfcf6` and HEAD. **It is not.** Measured:
+`git diff --stat 60cfcf6 HEAD -- treko/` reports three files changed, 14 insertions and 14
+deletions — `test_drawer_sections.py`, `test_sidebar.py`, `test_theme.py`, all in commit `336983c`.
+The claim was written from a check of the wrong commit pair (`336983c → 73d8be3`, which *is* empty
+for `treko/`) and generalised without re-running it against `60cfcf6`.
+
+What actually changed is docstrings only, and it closes a debt rather than opening one: `336983c`
+swept the 16 docstrings the judge flagged as claiming "Expected RED" on tests that now pass.
+`command grep` finds **zero** occurrences of "Expected RED" today. The 13 "Was RED when written.
+At that commit: …" and 1 "Still RED" markers that remain are the corrected past-tense form, which
+is accurate scoping rather than a debt. Exactly **one** present-tense claim survives, at
+`treko/test_sidebar.py:413`.
+
+**Still open, and deliberately not decided here:** the observability verdict is against `60cfcf6`
+and HEAD has moved past it. No executable code changed — the delta is docstrings — but the delta
+exists, and one of the judge's own findings is what it addresses, so a fresh verdict would be
+measuring something the recorded one did not see. The gate's wording is a strict `head_sha` match.
+Waiving it is the user's call, not this document's.
