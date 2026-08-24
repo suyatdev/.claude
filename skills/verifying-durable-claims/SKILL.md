@@ -94,7 +94,7 @@ If a sentence survives all four, write it. If it cannot, either run the command 
 the gap. Do not write the confident version and plan to check later — later is after it is
 durable.
 
-<!-- Triggers (verified before shipping):
+<!-- Triggers (recorded; routing accuracy NOT measured — no eval harness in this repo):
 positive: "record this decision in an ADR", "write the commit message for this fix",
           "update the memory file with what we learned"
 negative: "do the tests pass?" (superpowers:verification-before-completion),
