@@ -158,10 +158,21 @@ Critically, the `requireManagedLocation` branch computes its allowed root as
 `<repo>/.claude/worktrees` **with no `WorktreeCreate` hook consultation at all** — so even a
 worktree our own hook legitimately created at `~/.worktrees/…` is unreachable in (b) and (c).
 
-Two consequences:
+Two consequences — **but read the correction first**:
+
+> ⚠️ **CORRECTED 2026-08-24 (open question 7, now resolved).** The bullet below originally read
+> "`Agent(isolation: "worktree")` cannot reach one." **That is wrong, and the distinction matters:**
+> the (b)/(c) block governs *switching into an existing* worktree via `EnterWorktree path:`. It does
+> **not** govern *creation*. An agent dispatched with `isolation: "worktree"` triggers the
+> `WorktreeCreate` hook like any other surface and lands in the centralized worktree the hook
+> creates — verified live (it created `agent-a55a3192caab741ed` under the central path, and
+> `<repo>/.claude/worktrees` was never created). So isolation-based subagents work under this
+> design; only re-entry into an *already existing* centralized worktree stays blocked.
+
 - No mid-session switching between centralized worktrees. Route through a fresh session launched
   with `cwd` at the worktree instead.
-- `Agent(isolation: "worktree")` cannot reach one. **Note this is not the same as pane dispatch** —
+- `Agent(isolation: "worktree")` cannot *switch into an existing* one. **Note this is not the same
+  as pane dispatch** —
   `dispatch-pane-agent.sh` passes `--cwd`, launching a fresh session, which is unaffected.
   **CONFIRMED — task 1a, both by code and live** (2026-08-24):
   - `run-pane-agent.sh:47` does a plain `cd "$run_cwd"`, then invokes `"$CLAUDE_BIN" -p … --agent …`
@@ -198,11 +209,15 @@ Registered with no `matcher`:
 "WorktreeCreate": [ { "hooks": [ { "type": "command", "command": "<abs path>/create-worktree.sh" } ] } ]
 ```
 
-Contract — **task 1b DONE, executed first-hand** against Claude Code **2.1.241**, 2026-08-24.
-Harness and raw captures: `scratchpad/probe-worktreecreate.sh`. The falsifier was "the hook never
-fires, and the session lands in `<repo>/.claude/worktrees/` instead" — it did fire, and it did not.
+Contract — **task 1b DONE, executed first-hand** against Claude Code **2.1.241**, 2026-08-24,
+and extended by the question 7–9 probes the same day. The falsifier was "the hook never fires, and
+the session lands in `<repo>/.claude/worktrees/` instead" — it did fire, and it did not.
 
-- **Input** on stdin — **CORRECTED**. The observed key set is exactly **five**:
+> **The harnesses were session-scratchpad scripts and are not durable** — do not go looking for
+> them. Everything they established is written out below; task 3 rebuilds the parts worth keeping
+> as `hooks/worktree-guard.test.sh` in the repo, which is where they should have lived.
+
+- **Input** on stdin — **the key set varies by surface.** Five keys are always present:
 
   ```json
   { "session_id": "…", "transcript_path": "…",
@@ -210,21 +225,74 @@ fires, and the session lands in `<repo>/.claude/worktrees/` instead" — it did 
     "hook_event_name": "WorktreeCreate", "name": "probewt" }
   ```
 
-  ⚠️ The optional base fields this card previously listed — `prompt_id`, `permission_mode`,
-  `agent_id`, `agent_type`, `effort` — were **absent**. That was subagent output and it was wrong
-  for this surface. **Do not build on them.** `cwd` and `name` are the only two inputs the hook
-  actually has to work with, which is enough for the target-path computation below.
+  `prompt_id` is present **only when creation is triggered mid-session** (`EnterWorktree name:`,
+  `Agent(isolation: "worktree")`) and absent at launch time (`--worktree`). Observed across seven
+  runs; `permission_mode`, `agent_id`, `agent_type` and `effort` never appeared on **any** surface —
+  including the agent-isolation one, where `agent_*` would have been the natural place for them.
+
+  > ⚠️ **This supersedes an over-stated correction made earlier the same day.** That revision said
+  > the key set "is exactly five" and to "not build on" the wider set. Five is the *guaranteed*
+  > floor, not the whole story — `prompt_id` does appear. The safe rule is narrower than either
+  > version: **build only on `cwd` and `name`**, which is all the target-path computation needs,
+  > and treat everything else as may-or-may-not-be-there.
 - **Output — confirmed.** The **last non-empty trimmed line** of stdout is taken. Verified
   adversarially: the probe hook printed `this line should be ignored`, then a blank line, then the
   target path; the session landed on the target path. A path outside the repository is accepted —
   `<repo>/.claude/worktrees` was never created.
 - **The hook must create the worktree itself — confirmed.** The probe hook ran `git worktree add`;
   the new worktree appears in `git worktree list` and the session's own `pwd` was the target path.
-- **Surfaces actually tested: `--worktree` only.** `EnterWorktree name:` and
-  `Agent(isolation: "worktree")` are claimed to route through the same hook but were **NOT
-  verified** — treat as open until they are.
-- **`WorktreeRemove` is still unverified.** It did **not** fire when the headless `-p` session
-  exited, so its payload (`worktree_path`) and exit-code contract remain probe-reported only.
+- **All three creation surfaces confirmed** (open question 7, resolved 2026-08-24). Each fired the
+  hook and each landed in the hook's centralized path, with `<repo>/.claude/worktrees` never created:
+
+  | Surface | Hook fired | `name` it passed |
+  |---|---|---|
+  | `--worktree <name>` (launch time) | ✅ | the name given |
+  | `EnterWorktree name:` (mid-session) | ✅ | the name given |
+  | `Agent(isolation: "worktree")` | ✅ | auto-generated `agent-<hex>` |
+
+  ⚠️ **Probe-design note.** The agent-isolation case first came back "blocked" — but by
+  `hooks/pane-dispatch-guard.sh`, which denies an Agent dispatch when no pane-split policy is
+  recorded for the session. That is *our own guard*, not a worktree limit, and it fired before the
+  hook could be reached. Re-run with `CLAUDE_PANE_AGENT=1` (the guard's recursion bypass,
+  `pane-dispatch-guard.sh:76`) and it routed through the hook normally. **A probe that measures our
+  own guard instead of the harness reads as a harness limitation** — worth remembering for tasks
+  3–7.
+
+- **Failure modes — all fail closed but one** (open question 8, resolved 2026-08-24):
+
+  | Hook behavior | Result | Session error |
+  |---|---|---|
+  | exits non-zero | rc=1, no worktree entered | `WorktreeCreate hook failed: <script>: <its stderr>` |
+  | prints nothing | rc=1 | `hook succeeded but returned no worktree path` |
+  | prints a **relative** path | rc=1 | resolved against the repo root, then `does not exist or is not a directory` |
+  | prints a path it never created | rc=1 | same `does not exist` error |
+  | prints a path **inside the repo** | **rc=0 — ACCEPTED** | none |
+
+  Three things follow. **(1)** Arm B can rely on fail-closed behavior for every malformed output —
+  a broken hook stops the session rather than silently falling back to the managed path. **(2)** The
+  in-repo case is *not* rejected, so the hook is the only thing keeping worktrees out of the tree;
+  there is no harness-side backstop. **(3) A hook that creates the worktree and then reports a bad
+  path leaves an orphan registered in `git worktree list`** — observed twice. Our hook must create
+  and report atomically, and clean up after itself on its own failure paths.
+
+  The empty-output error also revealed a second hook transport: *"command: echo the path to stdout;
+  **http/callback: return `hookSpecificOutput.worktreePath`**"*. Not needed here, but it means the
+  stdout contract is one of two, not the only one.
+
+- **`WorktreeRemove` fires — and removes nothing** (open question 9, resolved 2026-08-24). It did
+  fire on an explicit `ExitWorktree action: "remove"`, carrying
+  `session_id`, `transcript_path`, `cwd`, `prompt_id`, `hook_event_name`, `worktree_path` —
+  confirming `worktree_path` as recorded. **But with a hook registered, Claude performs no cleanup
+  of its own.** Our probe hook only logged, and afterwards: the directory still existed with all its
+  contents, `git worktree list` still registered it, the branch still existed, and
+  `git worktree prune --dry-run` found nothing to prune —
+
+  > while the session reported: *"Exited and removed worktree at …"*.
+
+  **That success message is false on the hook path.** Cleanup is entirely the hook's job. If our
+  `WorktreeRemove` hook does not run `git worktree remove` and delete the branch, centralized
+  worktrees accumulate silently while the UI says they were removed. This is the single most
+  load-bearing finding for task 6.
 
 Behavior: resolve repo root from `cwd`, compute
 `$HOME/.worktrees/<basename-of-repo-root>/<name>`, `git worktree add` it, echo the path.
@@ -279,16 +347,25 @@ name that instead of implying there is no way out.
 6. **Interaction with `phase-guard`.** Both are `PreToolUse` on the same matchers and both deny.
    A write can fail one, then the other — two sequential blocks for one write. Acceptable, but the
    messages should not be confusable.
-7. **NEW — do `EnterWorktree name:` and `Agent(isolation: "worktree")` really route through the
-   `WorktreeCreate` hook?** Task 1b verified `--worktree` only. If either bypasses the hook it
-   creates worktrees in the managed path regardless of Arm B, and Arm B2's Bash deny won't catch it
-   either — a silent third route. Verify before task 6.
-8. **NEW — what does the harness do when the hook fails?** Untested: hook exits non-zero, emits a
-   relative path, emits nothing, or emits a path it did not actually create. Arm B's error handling
-   cannot be designed without this; probe alongside question 7.
-9. **NEW — the `WorktreeRemove` half.** It did not fire on headless session exit, so cleanup on the
-   hook path is entirely unverified. If it only fires on interactive exit, centralized worktrees may
-   simply accumulate — which is tolerable, but should be a stated behavior, not a surprise.
+7. ~~**Do `EnterWorktree name:` and `Agent(isolation: "worktree")` really route through the
+   `WorktreeCreate` hook?**~~ **RESOLVED 2026-08-24 — yes, both.** No silent third route exists.
+   Also corrected the "(c) blocked" reading: isolation-based agents *create* fine, they just cannot
+   *re-enter* an existing centralized worktree. See the surface table above.
+8. ~~**What does the harness do when the hook fails?**~~ **RESOLVED 2026-08-24.** Every malformed
+   output fails closed; a path **inside the repo** is accepted, so nothing but our own hook keeps
+   worktrees out of the tree. Full table above. Residual work for task 6: the hook must create and
+   report atomically, since a create-then-misreport leaves an orphan in `git worktree list`.
+9. ~~**The `WorktreeRemove` half.**~~ **RESOLVED 2026-08-24 — worse than "may accumulate".** It
+   fires, but Claude does no cleanup of its own on the hook path and reports *"removed"* regardless.
+   Worktrees accumulate **while the UI says they were removed**. Task 6 must implement real removal.
+10. **NEW — what should `WorktreeRemove` do about uncommitted work?** `git worktree remove` refuses
+    a dirty worktree without `--force`. Our hook has to choose: refuse (and the session has already
+    been told it was removed), or force (and silently discard). Neither is obviously right, and the
+    false success message makes refusing worse. Decide before task 6.
+11. **NEW — `~/.worktrees` is now machine-wide shared state.** With all three creation surfaces
+    routing through one hook, every repo's worktrees land under one root created by whichever
+    session got there first. Permissions, and what happens when two repos share a basename
+    (question 2), stop being hypothetical at that point.
 
 ## Tasks
 
@@ -315,7 +392,10 @@ name that instead of implying there is no way out.
       is *not* misread as unsupported-git, which is the ambiguity task 2 surfaced.
 - [ ] 4. Implement Arm A.
 - [ ] 5. Extend `classify-git-command.py` for `git worktree add` + its own tests.
-- [ ] 6. Implement Arm B against the extended classifier.
+- [ ] 6. Implement Arm B against the extended classifier. Now carries three requirements the probes
+      produced: create-and-report **atomically** (a create-then-misreport leaves an orphan in
+      `git worktree list`); implement **real removal** in `WorktreeRemove`, since Claude does none
+      and reports success anyway; and settle open question 10 (dirty-worktree removal) first.
 - [ ] 7. Implement Arm C, with the best-effort limitation stated in the message.
 - [ ] 8. Register in `settings.json`. **Do this last** — an armed guard blocks edits to its own
       source from the primary checkout, since `hooks/*` is not on the exemption list.
