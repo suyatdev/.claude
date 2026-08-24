@@ -264,6 +264,24 @@ CONTRAST_CHECK_JS = """
     const lighter = Math.max(L1, L2), darker = Math.min(L1, L2);
     return (lighter + 0.05) / (darker + 0.05);
   }
+  function paintsText(el) {
+    // Criterion 5's population: elements that paint a mark in their OWN color. `color` inherits,
+    // so "has rendered area" is not the same thing -- a 7x7px decorative dot (Treko.dc.html:251)
+    // reports an inherited foreground it never renders, and scoring it made the criterion
+    // unsatisfiable by any palette. A direct, non-whitespace text node of its own...
+    for (let i = 0; i < el.childNodes.length; i++) {
+      const n = el.childNodes[i];
+      if (n.nodeType === 3 && n.nodeValue && n.nodeValue.trim() !== '') return true;
+    }
+    // ...or a generated glyph: a Phosphor <i> has no text node but an icon font paints its
+    // content in the element's color, so dropping these would under-measure, not over-narrow.
+    const pseudos = ['::before', '::after'];
+    for (let i = 0; i < pseudos.length; i++) {
+      const content = getComputedStyle(el, pseudos[i]).content;
+      if (content && content !== 'none' && content !== 'normal' && content !== '\\"\\"') return true;
+    }
+    return false;
+  }
   const dataTheme = document.body.getAttribute('data-theme');
   const all = document.querySelectorAll('body *');
   let checked = 0, totalViolations = 0;
@@ -271,6 +289,7 @@ CONTRAST_CHECK_JS = """
   all.forEach(el => {
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
+    if (!paintsText(el)) return;
     checked++;
     const bg = effectiveBackground(el);
     const fg = effectiveColor(el, bg);
@@ -326,12 +345,16 @@ def test_criterion5_light_mode_contrast_meets_wcag(srv, tmp_path):
     >= 4.5:1 (>= 3:1 at/above an 18px resolved font-size) against the effective, alpha-composited
     background.
 
-    Expected RED, right now: `body[data-theme="light"]` and the `applyTheme`/`componentDidMount`
-    wiring that would set `data-theme` from `taskTracker.theme` do not exist yet (task 3, second
-    half) -- `data-theme` has 0 occurrences in `Treko.dc.html`. So this fails on the missing
-    precondition (data-theme never becomes "light"), not on a contrast reading and not on finding
-    zero elements -- the sanity assert below runs and passes first, against the untouched dark
-    page, proving the walk itself works.
+    Only elements that paint a mark in their own `color` are scored -- see `paintsText` in
+    CONTRAST_CHECK_JS for why, and criterion 5 for the rule it implements.
+
+    Still RED after `af5321a`, but for a different reason than before, and deliberately so. The
+    precondition now holds: the light block, the validated seed and `applyTheme` all exist, so
+    `data-theme` does become "light". What fails is the contrast assertion itself -- 127
+    violations across four light-palette text tokens, worst 1.64:1. Those are real defects and
+    **task 4 owns them**, not task 3: criterion 5 is a card-level criterion and the fix is a
+    palette redesign rather than wiring (§Verification, "Task 3 second half"). Do not chase this
+    green by editing the assertion, the floors, or paintsText.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
     try:
@@ -350,8 +373,11 @@ def test_criterion5_light_mode_contrast_meets_wcag(srv, tmp_path):
         result = chrome.evaluate(CONTRAST_CHECK_JS)
 
         # Sanity floor first, regardless of theme state: a check that silently found nothing
-        # would vacuously pass. 848 visible elements were measured on this exact page; 200 is a
-        # wide margin under that and a tight one over "the walk found basically nothing."
+        # would vacuously pass. Of the 848 elements with rendered area on this exact page, 367
+        # paint a mark in their own color and are therefore scored (criterion 5's population);
+        # 200 is a wide margin under that and a tight one over "the walk found basically
+        # nothing." It also guards the narrowing itself: a paintsText() that wrongly returned
+        # false everywhere would collapse this count rather than vacuously pass.
         assert result["elementCount"] >= 200, (
             "contrast check only found %d elements with non-zero rendered area (mount poll saw "
             "%d body descendants) -- too few to be the real board; the element walk itself is "
