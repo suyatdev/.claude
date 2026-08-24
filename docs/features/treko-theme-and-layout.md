@@ -874,6 +874,12 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       Recording it so the next reader does not mistake it for a regression this card caused.
 - [ ] 5. **Sidebar.** Red tests for criteria 9, 10 and 11 first. Then the handle markup, the
       handler, the seed, and the three computed substitutions replacing `:621`.
+      **Red half done** in `treko/test_sidebar.py`: 8 red, each on its own assertion, plus 2 source
+      guards that pass by design. Evidence, the two Gherkin scenarios that are not runtime-testable,
+      and the Reset clause task 7 now owes are recorded once, in §Verification "Task 5 red half" —
+      do not restate them here.
+      **`:621` is `:650` today**, and every other line number this card cites has moved with it
+      (`:514`→`:543`, `:432`→`:455`). Re-derive them; do not copy.
 - [ ] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
       `closeSettings`; the prepended Esc arm. Red tests for criterion 12 first, including the
       "existing arms undisturbed" diff.
@@ -1294,6 +1300,49 @@ entry required: the re-spaced ramp over minimum churn; a 4.8 target over 4.5; an
 unavoidable visual consequence — the em-dash no-PR placeholder (18 spans, `Treko.dc.html:322` and
 `:573`) stops being invisible at 1.64:1 and becomes a legible mid-grey at 4.80:1. Re-routing those
 elements to a different token would have edited markup, which criterion 8 forbids in this commit.
+
+### Task 5 red half — the sidebar's tests (2026-08-24)
+
+`treko/test_sidebar.py`, 10 tests: **8 failed, 2 passed in 12.04s**, and every one of the 8 fails on
+its own assertion with a diagnostic message — none errored in setup, timed out, or died in the
+harness. The 3 drag tests fail on "no element with `cursor:col-resize` exists in the DOM"; the 4
+mount-seed tests fail on the sidebar rendering 236 where a stored width should have been honoured or
+clamped; `test_no_handle_while_collapsed` fails on finding 0 handles while *expanded*, which is the
+paired precondition that stops it passing vacuously.
+
+The 2 that pass are the source guard for criterion 11's last clause and its own falsification test —
+see below. They guard something unchanged, so passing is the correct state.
+
+**Seven of the nine Gherkin scenarios are covered at runtime. The other two are not, and neither is
+quietly dropped.**
+
+**"The pre-data state is untouched" is a source assertion, because the value is unobservable.**
+`mainML` is consumed at exactly two sites, `Treko.dc.html:100` and `:301`, and both sit inside
+`<sc-if value="{{ ready }}">` (opens `:56`); `renderVals()` returns `ready:false` whenever `!data`.
+So in the precise state the scenario describes, no element carrying `mainML` renders at all — there
+is no node to read the value from, before this task or after it. This is not a fallback: criterion
+11's wording is itself a claim about the source (*"`Treko.dc.html:514`'s `mainML:'0px'` is
+unchanged"*), so a source check is the faithful test. It anchors on the `if(!data)return
+{ready:false,` early-return text rather than on a line number — `:514` is a base-commit number, it
+is `:543` today, and tasks 6-7 will move it again. **Falsified before its pass was believed**, all
+four cases run against mutated text with the real file never touched: the unmodified control returns
+true; `mainML:'236px'` is rejected; `mainML:S.sideW+'px'` is rejected; deleting the clause entirely
+is rejected. **What it does not prove:** that the pre-data branch *renders* correctly — nothing in
+this file covers that.
+
+**"Reset returns 236" is owed at task 7, and is stated as owed in the test file itself.** `resetSideW`
+ships in task 5 because §D4 places it there, but its only caller is the drawer's Layout Reset button
+(§D5), which does not exist until task 7 — and no global handle to the mounted component exists to
+invoke it through (checked: no `window.__DC*`, nothing exposed in `support.js`). So **criterion 11's
+Reset clause is not proven by task 5**, and task 7 owes both the button and its test. The deferral is
+written into `test_sidebar.py`'s module docstring so the reader who arrives at task 7 knows they are
+the one who owes it, rather than it living only in a report read once.
+
+**Size.** 578 lines, against the 400-line preference and the 800-line maximum — in family with
+`test_theme.py`'s 549. It has a real seam (the 5 drag-interaction tests against the 5 mount-time and
+source tests), but `_MEASURE_LAYOUT_JS`, `SIDE_W_MIN`/`MAX`/`DEFAULT` and `SIDEW_KEY` are used by
+both halves, so splitting it would mean a third shared module for a file already under the maximum.
+Left whole, deliberately.
 
 ### Task 8 — the regression guards (2026-08-24)
 
