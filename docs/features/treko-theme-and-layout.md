@@ -553,7 +553,7 @@ Scenario: no token is left dark on a white ground
   Given data-theme="light"
   When  every custom property the page reads via var() is collected
   Then  each one is declared in the light block, or on the named exception list
-  And   the exception list contains only --font-*, --space-*, --radius-*
+  And   the exception list contains only --font-*, --space-*, --radius-* and --mono
 
 Scenario: light-mode text stays readable
   Given data-theme="light", set in localStorage and mounted for real in headless Chrome
@@ -698,8 +698,19 @@ Scenario: no CDN URL reaches a fetching position
 4. **The light block covers everything the page reads.** Every custom property reachable through
    `var()` from `Treko.dc.html` or from a `nocturne.css` rule the page's classes hit is declared
    under `body[data-theme="light"]`, or appears on an exception list whose only members are
-   `--font-*`, `--space-*` and `--radius-*`. `--color-section*` may join the list only with the
-   measured "0 readers" evidence attached.
+   `--font-*`, `--space-*`, `--radius-*` and `--mono`. `--color-section*` may join the list only
+   with the measured "0 readers" evidence attached.
+
+   **`--mono` joins the list by measurement, 2026-08-24 — the resolution of the gate task 3
+   raised.** It is declared in `Treko.dc.html:21` beside the eight status hues, which is the only
+   reason a colour-shaped rule catches it; its value is `ui-monospace,Menlo,Consolas,monospace`, a
+   font stack with no light or dark form. It is genuinely reachable (33 `var(--mono)` uses,
+   measured on this branch) and §D3's 51-property block does not declare it, so **without this
+   entry criterion 4 could never pass against a correct implementation** — the same defect class
+   the compliance judge flagged on card B's task 13. The exception is scoped to this one literal
+   name, **not** to a `--mono-*` pattern: nothing else matches it today, and a pattern would
+   pre-approve tokens nobody has weighed. Full accounting of all 40 reachable names, and the split
+   between what this criterion measures and what it does not: §Verification, "Criterion 4".
 5. **No invisible-on-white surface.** Render the page in headless Chrome with `data-theme="light"`
    applied exactly as the app applies it — `taskTracker.theme` set in `localStorage` before mount,
    never simulated by setting the attribute directly. For every element under `<body>` with non-zero
@@ -796,16 +807,23 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       fail for the stated reason. **Criterion 7's red test is NOT yet written** — the dispatch brief
       said "4, 5 and 6", taken from this task's pre-revision text; round 3 added criterion 7 here.
       Outstanding before the light block goes in.
-      **GATE — spec change needed, not worked around:** criterion 4 requires every `var()`-reachable
-      custom property be declared under `body[data-theme="light"]`, with an exception list of only
-      `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with evidence). `--mono` IS
-      reachable — 33 `var(--mono)` uses in `Treko.dc.html`, measured — matches no exception pattern,
-      yet §D3's 51-property plan never declares it and the string `--mono` appears nowhere else in
-      this card. It is a monospace font stack with no light/dark meaning (the spirit of `--font-*`,
-      not the letter of the list). Criterion 4 and §D3 disagree, so the criterion-4 test will still
-      fail after the light block lands. Deliberately NOT patched: this card is
-      `phase: implementation`, and inventing an extra exemption to turn a red test green is the
-      silent workaround the phase gate exists to prevent.
+      **GATE — RESOLVED 2026-08-24 by a spec change, not a workaround.** The conflict: criterion 4
+      required every `var()`-reachable custom property be declared under `body[data-theme="light"]`,
+      with an exception list of only `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with
+      evidence). `--mono` IS reachable — 33 `var(--mono)` uses in `Treko.dc.html` — matched no
+      exception pattern, yet §D3's 51-property plan never declares it, so the criterion-4 test could
+      never have passed against a correct implementation.
+      **Resolution:** the card was returned to `phase: planning` at `model_tier: high`, the user was
+      asked the entering-planning model-switch question and chose the high tier, and `--mono` was
+      added to criterion 4's exception list by literal name with its evidence attached. Three sites
+      were updated together — criterion 4, the Gherkin step in §Scenarios, and §Verification's
+      "Criterion 4". A fourth mention (§Background's "12 non-colour") was deliberately left alone:
+      it measures `nocturne.css`'s own inventory, and `--mono` is declared in `Treko.dc.html:21`,
+      not in `nocturne.css` — changing it would have corrupted a recorded measurement.
+      **Measured while resolving, and worth keeping:** of the 40 distinct `var()`-reachable names in
+      `Treko.dc.html`, 38 are declared by §D3's light block and 2 are excepted (`--font-heading`,
+      `--mono`) — `--mono` was the only uncovered name. The eight status hues on the same `:root`
+      line ARE covered, by §D3's "8 status"; that was checked, not assumed. Table in §Verification.
 - [ ] 4. **Palette re-tint.** Replace `:root` with the prototype's block (cyan accent, `#1c1e2b`
       surface, lifted neutrals, `--ok:#82dfa9`, `--info:#89b4f2`, `--hair-3` to `.12`). One commit,
       `:root` and the light block only. **Pixels move here, by design.**
@@ -969,7 +987,30 @@ verdict.
 A static analysis over token values, not a render: collect every `--name` appearing inside a
 `var(--name)` in `Treko.dc.html`, plus every `--name` read by a `nocturne.css` rule whose selector
 matches a class the page uses. Assert each is declared under `body[data-theme="light"]` or is on the
-`--font-*` / `--space-*` / `--radius-*` exception list.
+`--font-*` / `--space-*` / `--radius-*` / `--mono` exception list.
+
+**The `Treko.dc.html` half of that set, measured on this branch at `16faaa4`** — distinct names
+inside a `var(--…)` in `Treko.dc.html`:
+
+| Group | Count | Covered by |
+|---|---|---|
+| Status hues, `Treko.dc.html:21` | 8 | light block — §D3's "8 status" |
+| Chrome tokens, `Treko.dc.html:22` | 8 | light block — §D3's "8 chrome" (§D2) |
+| Nocturne colour tokens | 21 | light block — within §D3's "33 nocturne" |
+| `--shadow-sm` | 1 | light block — one of §D3's 2 shadows |
+| `--font-heading` | 1 | exception list, via `--font-*` |
+| `--mono` | 1 | exception list, by literal name |
+| **Total** | **40** | 38 declared + 2 excepted, 0 uncovered |
+
+`--mono` was the only uncovered name, which is what the task 3 gate recorded and what this
+revision fixes.
+
+**What this table does not establish.** It measures only the `var()` calls written in
+`Treko.dc.html`. The criterion's *other* source — properties read by a `nocturne.css` rule whose
+selector matches a class the page uses — was **not** enumerated here, so the 12 properties in
+§D3's 33 that no local `var()` reaches are unverified by this table. Enumerating that second
+source is the coverage test's job, not this table's; a green run of the test, not this row count,
+is what discharges criterion 4.
 
 Needs the falsification step before its first green run: break one override, see the coverage test
 fire. A "0 failures" from a check that has never been shown able to fail is not evidence.
