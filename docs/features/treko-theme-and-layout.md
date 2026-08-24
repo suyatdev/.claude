@@ -885,9 +885,20 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       defects in the page — a mid-transition `getComputedStyle` read, and a "main column" selector
       that matched 13 elements and used the wrong one. Both are recorded once, in §Verification
       "Task 5 green half"; **task 7 still owes criterion 11's Reset clause.**
-- [ ] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
+- [x] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
       `closeSettings`; the prepended Esc arm. Red tests for criterion 12 first, including the
       "existing arms undisturbed" diff.
+      **`:97` is `:118` today** — the header cluster the card maps as `:90-97` is `:111-118`, and
+      the gear went after the `cmdCopies` `sc-for`, before the header div closes. Re-derive; do
+      not copy.
+      **Red half** `e989956`: 9 tests, 6 red, 3 green by design. **Green half** `6ded764`: five
+      edits, all outside the fence, `wc -l` 682 → 699. **Repair** `50e9a32`: the falsifier had
+      anchored itself to the live page and drifted the moment the implementation landed.
+      **279 passed, 0 failed.** Evidence — the probe's own `count == 0` control, the six broken
+      parsers and which assertion caught each, and what is *not* proven — is recorded once, in
+      §Verification "Task 6". Do not restate it here.
+      **Task 7 still owes three things**, all needing the drawer's *sections*: criterion 11's
+      Reset clause, criterion 13's Layout readout, and criterion 7's "Dark card selected" clause.
 - [ ] 7. **Drawer sections.** Appearance (two preview cards, six selection values, literals kept and
       commented) and Layout (readout + Reset). **No Artifacts section** — §D9.
 - [x] 8. **Regression guards.** Criteria 15, 16 and 17 as tests. Criterion 15 compares against the
