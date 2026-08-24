@@ -244,6 +244,11 @@
     "typescript-lsp@claude-plugins-official": true
   },
   "effortLevel": "xhigh",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "xhigh"
+    }
+  },
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",

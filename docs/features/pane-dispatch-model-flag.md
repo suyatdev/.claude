@@ -1,7 +1,8 @@
 ---
-phase: planning
+phase: review
 model_tier: low
-branch: none
+branch: feat/pane-agent-model-flag
+pr: 71
 ---
 
 # `--model` passthrough for pane dispatch
@@ -58,17 +59,23 @@ runner's argv — already covers the positional path.
 
 ## Tasks
 
-- [ ] 1 — `panes/run-pane-agent.sh`: optional 5th positional, conditional `--model` on the `claude`
+- [x] 1 — `panes/run-pane-agent.sh`: optional 5th positional, conditional `--model` on the `claude`
       invocation. Do not touch the 4-arg validation or the usage string's required args.
-- [ ] 2 — `panes/run-pane-agent.test.sh`: add cases 1, 2 and 4 above using the existing
+- [x] 2 — `panes/run-pane-agent.test.sh`: add cases 1, 2 and 4 above using the existing
       `PANE_ARGS_OUT` + `PANE_CLAUDE_BIN` stub seam.
-- [ ] 3 — `panes/dispatch-pane-agent.sh`: `--model` parsing, regex validation, usage string, and the
+- [x] 3 — `panes/dispatch-pane-agent.sh`: `--model` parsing, regex validation, usage string, and the
       conditional extra `%q` in the launcher.
-- [ ] 4 — `panes/dispatch-pane-agent.test.sh`: assert the launcher contains the model when flagged and
+      - The Design's regex, `^[A-Za-z0-9._:\[\]-]{1,64}$`, silently rejects every valid model id
+        (confirmed: `claude-sonnet-5` failed). POSIX bracket expressions have no backslash-escape, so
+        `\]` mid-bracket closes the bracket early rather than matching a literal `]`. Fixed as
+        `^[]A-Za-z0-9._:[-]{1,64}$` — same character class, `]` moved first and `-` moved last, both
+        the only positions where they're literal in a POSIX bracket. Implementation-detail fix, not a
+        design change: the intended character class is unchanged.
+- [x] 4 — `panes/dispatch-pane-agent.test.sh`: assert the launcher contains the model when flagged and
       is unchanged when not (case 3's fail-fast included).
-- [ ] 5 — `skills/dispatching-pane-agents/SKILL.md`: document `--model` in the Procedure step that
+- [x] 5 — `skills/dispatching-pane-agents/SKILL.md`: document `--model` in the Procedure step that
       shows the `dispatch` command line. One line; do not restate the design here.
-- [ ] 6 — Run both suites (`bash panes/run-pane-agent.test.sh`, `bash panes/dispatch-pane-agent.test.sh`)
+- [x] 6 — Run both suites (`bash panes/run-pane-agent.test.sh`, `bash panes/dispatch-pane-agent.test.sh`)
       and record pass counts in `## Verification`. **Both must pass before and after** — capture the
       before-counts first so a pre-existing failure is not mistaken for a regression.
 
@@ -81,4 +88,21 @@ runner's argv — already covers the positional path.
 
 ## Verification
 
-_(to be filled during implementation — before/after test counts, and the argv assertions)_
+- Before (true merge-base `6734027`, verified in a throwaway worktree — the branch's own first
+  commit already carried tasks 1-2, so `80328f3` was not actually a "before"): `run-pane-agent.test.sh`
+  **10/0**, `dispatch-pane-agent.test.sh` **113/0**.
+- After (all tasks): `run-pane-agent.test.sh` **12/0** (+2), `dispatch-pane-agent.test.sh` **119/0**
+  (+6: 2 from tasks 1-2, plus shape reject on `--model "a b"`, no-pane-opened on that same call,
+  launcher unchanged when unflagged, and the 5th-positional passthrough case).
+- Criteria 1, 2, 4, 5 asserted directly in the suites above. Criterion 3 (`--model "a b"` dies with
+  no pane) asserted at `dispatch-pane-agent.test.sh` — see "no pane opened" case.
+- Observability-judge (implementation stage): no dimension failed, risk=low confidence=high.
+  Confirmed findings, fixed here: (a) SC2038 on the `find | xargs grep -l` in the new unflagged-launcher
+  test — switched to `find -exec … +`; (b) this Verification section's before-counts were captured
+  mid-implementation (`80328f3`), not at the true branch point — corrected above. Open, deliberately
+  not fixed: `MODEL_RE` has no anchor against a leading `-`, so a value shaped like another CLI flag
+  (e.g. `--dangerously-skip-permissions`) passes the shape check — confirmed via direct dispatch (rc=0,
+  pane opened). Not shell injection (the `%q`/array boundary holds); the exposure is that the value
+  becomes `--model`'s *own* argument to the real `claude` CLI, which is the actual authority on
+  whether it's a valid model id. Excluding leading `-` isn't in the card's stated regex or acceptance
+  criteria — flagged to the user rather than silently expanding scope during review.
