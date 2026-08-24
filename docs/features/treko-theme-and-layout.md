@@ -806,10 +806,11 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       Red half PARTIALLY done (`treko/test_theme.py`, `treko/cdp_harness.py`). **Criterion 7's tests
       were written and run** in `5cc3bc2` — the dispatch brief that omitted them said "4, 5 and 6",
       taken from this task's pre-revision text, and round 3 added criterion 7 here. All 14 collected
-      tests fail, but only 3 are confirmed red for their own stated reason; the other 11 died on a
-      headless-Chrome blocker. **The per-test split is recorded once, in §Verification "Task 3 red
-      half" — do not restate it here.** Outstanding before the light block goes in: re-run those 11
-      and confirm each is red for its own stated reason.
+      tests fail, and as of `9ad983c` all 14 are red for their own stated reason — the
+      headless-Chrome blocker that had killed 11 of them was diagnosed and worked around.
+      **The evidence, the diagnosis and the falsifiable-not-satisfiable caveat are recorded once,
+      in §Verification "Task 3 red half" — do not restate them here.** Outstanding before this
+      task closes: the light block itself.
       **GATE — RESOLVED 2026-08-24 by a spec change, not a workaround.** The conflict: criterion 4
       required every `var()`-reachable custom property be declared under `body[data-theme="light"]`,
       with an exception list of only `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with
@@ -1057,7 +1058,7 @@ pass. A "0 failures" from a check that has never been shown able to fail is not 
 bytes captured in task 1. Report the diff, not just a boolean — a failure here is someone editing a
 region they were told not to, and the reviewer needs to see what they changed.
 
-### Task 3 red half — criterion 7 added, and a Chrome blocker (2026-08-24)
+### Task 3 red half — criterion 7 added, a Chrome blocker, and its cause (2026-08-24)
 
 Criterion 7's tests were added to `treko/test_theme.py` (the original task-3 brief said "4, 5 and
 6", copied from this task's pre-revision text). The file went from 3 collected tests to **14**:
@@ -1065,40 +1066,77 @@ Criterion 7's tests were added to `treko/test_theme.py` (the original task-3 bri
 unavailable-`localStorage` case installed via a new `Chrome.add_startup_script` (CDP
 `Page.addScriptToEvaluateOnNewDocument`) so the poison is in place before the page's seed runs.
 
-`python3 -m pytest treko/test_theme.py` → **14 failed in 230.56s**. Red is not the whole claim
-though, and the honest split is:
+**First run: `python3 -m pytest treko/test_theme.py` → 14 failed in 230.56s.** Red was not the
+whole claim, because only 3 of the 14 were red for the reason they state: criterion 4 (static,
+39 non-exempt reachable tokens, no light block), criterion 6 (static, no light block so no
+`--shadow-sm`/`--shadow-lg` override), and criterion 7 `[Dark]`. The other 11 died on the
+harness — Chrome never started — so their failure proved nothing about the page.
 
-| Test | Red for its stated reason? |
-|---|---|
-| criterion 4 (static) | **Yes, verified** — reports 39 non-exempt reachable tokens, no light block |
-| criterion 6 (static) | **Yes, verified** — no light block, so no `--shadow-sm`/`--shadow-lg` override |
-| criterion 7 `[Dark]` | **Yes, verified** — `data-theme` is `None`, "the validated seed does not exist yet" |
-| criterion 5 + the other 10 criterion-7 cases | **NOT verified** — died on the harness, see below |
+**The blocker, and its cause.** Every CDP test failed at "chrome never reported a page target on
+the devtools endpoint": the process stayed alive, never bound its `--remote-debugging-port`,
+never wrote a `DevToolsActivePort`, and printed nothing. Identical under `--headless=new`,
+`--headless=old`, bare `--headless`, and with `--no-sandbox`. Ruled out first: the tool sandbox
+(same failure with it disabled), orphaned Chrome processes (none), the version pin (`Google
+Chrome 151.0.7922.172`, exactly the pinned build, and its assert never fires), and the Claude
+Chrome extension (the harness launches its own process with its own `--user-data-dir`).
 
-**Blocker: headless Chrome will not start on this machine.** Every CDP test now fails at
-`cdp_harness.py:194`, "chrome never reported a page target on the devtools endpoint". Measured
-directly: the process stays alive 30s, never binds its `--remote-debugging-port`, never writes a
-`DevToolsActivePort` file, and prints nothing. Reproduced with `--headless=new`, `--headless=old`,
-bare `--headless`, and `+--no-sandbox` — all four identical. Ruled out: the tool sandbox (same
-failure with it disabled), orphaned Chrome processes (none — the 44 live processes are the user's
-interactive browser and VS Code's Electron helpers), and the version pin (`Google Chrome
-151.0.7922.172`, exactly the pinned build, and its assert never fires). It is not the Claude Chrome
-extension either — the harness launches its own process with its own `--user-data-dir`.
+None of those was the cause. `sample` on the hung process parked **2612 of 2612 main-thread
+frames** in this stack:
 
-Chrome worked earlier the same day — 848 visible elements were measured on this page while writing
-`16faaa4`, and that figure is recorded at `treko/test_theme.py:305` and `:353`, not in this document
-— and it attached for one test in this very run, so this is a machine-state regression, not a
-harness defect. (There is no §"Criterion 5" here to cite: Proof C is criterion 5's *plan* and
-records no run.) **The
-criterion 4 exemption count also changed here**, and the two figures in this document count
+```
+-[NSFileManager ubiquityIdentityToken] → LBCopyUbiquityAccountToken (CloudDocs)
+  → +[BRAccount _refreshCurrentLoggedInAccountForcingRefresh:personaID:error:]
+  → __NSXPCCONNECTION_IS_WAITING_FOR_A_SYNCHRONOUS_REPLY__ → mach_msg2_trap
+```
+
+Chrome's browser process asks macOS which iCloud Drive account is signed in, **synchronously**,
+over XPC to the launchd agent `com.apple.bird` — and on this machine bird is crash-looping.
+`launchctl print gui/$UID/com.apple.bird` reported `runs = 48`, `successive crashes = 48`,
+`state = spawn scheduled`, `minimum runtime = 1200`; the crash reports show `EXC_BREAKPOINT`
+inside CloudKit's `-[NSXPCEncoder _encodeObject:]`, recurring all day. launchd therefore queues
+Chrome's message for a service that never comes up, and Chrome blocks *before* the DevTools HTTP
+handler binds. `launchctl kickstart -k` does not clear it — the call itself blocks, and `runs`
+stayed at 48 with no new crash report.
+
+**This is not a Chrome fault and not a harness defect.** A standalone stdlib-only Python program
+calling `-[NSFileManager ubiquityIdentityToken]` and nothing else hangs identically (no reply in
+10s), which is what rules Chrome out. Measured on macOS 26.5.2 (25F84).
+
+**The escape hatch.** `TREKO_CHROME_DENY_BIRD=1` relaunches Chrome under `sandbox-exec` with
+`^com\.apple\.bird` denied (`treko/cdp_harness.py`, `BIRD_DENY_PROFILE`); the lookup then fails
+and the call returns nil in 0s instead of hanging. It is opt-in rather than an automatic retry
+on purpose — a silent relaunch under a weakened sandbox would let a genuine Chrome fault look
+like a pass. macOS forbids nesting seatbelt profiles, so Chrome cannot initialise its own child
+sandbox inside ours; `--no-sandbox` is therefore required and is added **only** on that path,
+which is acceptable here and nowhere else because the harness renders a local `file://` page out
+of this repo, headless, in a throwaway profile, killed at teardown. The machine-side fix (stop
+bird crash-looping) is owed separately and is not this branch's to make.
+
+**Second run, with the hatch: `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/test_theme.py`
+→ 14 failed in 17.51s, and all 14 are now red for their own stated reason** — the 2 static tests
+plus all 12 CDP tests, every CDP failure reporting `got None` against the missing `data-theme`
+(the 11 that had died on the harness, and criterion 7 `[Dark]`, which had attached once), with no
+harness error anywhere in the run. What this proves is that the suite is **falsifiable**: it can
+execute and fail for the documented reason. It does not prove the suite is **satisfiable** —
+that these tests go green against a correct light theme — and that half stays unproven until
+task 3's second half lands.
+
+**The criterion 4 exemption count also changed here**, and the two figures in this document count
 different source sets rather than disagreeing. Measured by running `test_theme._reachable_tokens()`
 at this HEAD, not reasoned about: the **union** of both of criterion 4's sources reaches 46 names,
 of which 7 are exempt, leaving **39** non-exempt — the number the test reports. `Treko.dc.html`
 **alone** reaches **40**, of which 2 are exempt (`--font-heading`, `--mono`), leaving **38** — the
 non-exempt subset of the 40-name table above. So 39 is one larger than **38**, not one larger than
 40, because the second source contributes exactly one further non-exempt name: `--color-text`.
-Do not "correct" either number to match the other. Task 3's red half is **not** signed off until the 11 CDP tests are re-run and
-each is confirmed red for its own stated reason.
+Do not "correct" either number to match the other.
+
+The 848-visible-elements figure measured while writing `16faaa4` is recorded at
+`treko/test_theme.py:305` and `:353`, not in this document. (There is no §"Criterion 5" here to
+cite: Proof C is criterion 5's *plan* and records no run.)
+
+Task 3's red half is **verified red** as of the second run above. It is still **not signed off**
+as complete: the second half — the light block, `THEME_DEFAULT`, the validated seed,
+`applyTheme`/`setTheme` and the mount call — is unwritten.
 
 ### Task 10 — the suite
 
