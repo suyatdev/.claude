@@ -895,8 +895,8 @@ recorded here before it has been run and its output re-read (`rules/core-conduct
 
 The oracle. A Python check, run at the task-2 commit and pinned as a test:
 
-1. Read the base file: `git show <base>:treko/Treko.dc.html`.
-2. Read the tokenized file: `git show <task-2-sha>:treko/Treko.dc.html` — the tokenize commit
+1. Read the base file: `git show 2b96d60:treko/Treko.dc.html`.
+2. Read the tokenized file: `git show 76c3772:treko/Treko.dc.html` — the tokenize commit
    specifically, never the working tree, so the comparison stays pinned to the same two commits once
    task 4 changes `:root` again.
 3. From the tokenized file's `:root`, build `{token: value}` for the eight new names.
@@ -925,7 +925,7 @@ instance. Task 2's "no DOM change" constraint is what closes that, and the byte 
 enforces it directly: any DOM edit changes the base-file comparison too.
 
 **After task 4, Proof A is an archived receipt, not a live guard.** Once the re-tint changes `:root`
-again, step 2's `<task-2-sha>` and step 1's `<base>` are both fixed history — Proof A is comparing two
+again, step 2's `76c3772` and step 1's `2b96d60` are both fixed history — Proof A is comparing two
 frozen snapshots and will pass forever, regardless of what happens to the live page. That is fine as a
 record of what the tokenize commit did, but it is not evidence about anything after it. Name both SHAs
 in the test's own docstring or header comment once they exist, and mark it **ARCHIVED RECEIPT**
