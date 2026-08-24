@@ -2,6 +2,7 @@
 phase: review
 model_tier: low
 branch: feat/pane-agent-model-flag
+pr: 71
 ---
 
 # `--model` passthrough for pane dispatch
