@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: fix/model-re-comment-accuracy
 ---
@@ -43,3 +43,5 @@ change, out of scope here.
 - Comment-only diff; no test asserts on comment text, so an unchanged count confirms no
   behavioral regression, not that the comment itself is now accurate — that's a human read of
   the diff.
+- PR #73 opened via `JUDGE_EXEMPT="comment-only diff, no behavior change; suites unchanged
+  12/0 119/0, shellcheck clean"` — comment-only change, no source-behavior diff to judge.
