@@ -1,7 +1,8 @@
 ---
 phase: review
 model_tier: low
-branch: fix/model-re-comment-accuracy
+branch: none  # merged via PR #73 (ab39635) 2026-08-24; fix/model-re-comment-accuracy
+              # branch auto-deleted on merge; tip 92564dd verified ancestor of origin/main
 ---
 
 # Fix misleading `MODEL_RE` comment in `dispatch-pane-agent.sh`
