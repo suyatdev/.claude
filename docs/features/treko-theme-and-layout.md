@@ -789,7 +789,32 @@ Carried forward from `docs/features/treko-rename.md` §"Pinned versions", unchan
 | Phosphor Icons | 2.1.1 | already vendored under `vendor/phosphor/` — do not re-fetch |
 | Inter | vendored `inter-latin.woff2` | `vendor/inter/` — no version upstream; the file is the pin |
 | Nocturne export | `73641b21-c7ad-488a-8264-a28262dfe83e`, schema `version: 1` | `_ds/` directory name; ADR 0023 |
-| Chrome | `151.0.7922.172` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. |
+| Chrome | `152.0.7977.54` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. **Re-pinned from `151.0.7922.172` on 2026-08-24, mid-task-7** (see below). |
+
+**The Chrome re-pin, 2026-08-24.** Chrome auto-updated on this machine at 15:04 local, from
+`151.0.7922.172` to `152.0.7977.54`. `cdp_harness.Chrome.__init__` asserts the pin before it
+launches anything, so every browser-driven test in the suite failed at construction — none of them
+reached the page. The old framework is still on disk under
+`Google Chrome Framework.framework/Versions/151.0.7922.172/`, but only the `Versions/Current`
+symlink selects a version, and repointing it would mutate the user's Chrome install and be undone
+by the next auto-update.
+
+**Why re-pinning is a re-measurement and not a mixed-build comparison** — checked, not assumed,
+before the pin moved:
+
+- `test_guards.py`'s three sha256 figures hash **file bytes**, not renders. No Chrome involved.
+- **Proof A** is a byte-for-byte source comparison. No Chrome involved.
+- **Proof B**'s before/after screenshot hashes were both taken on `151.0.7922.172` and are an
+  **archived receipt** at the tokenize commit, already closed. They are not re-derived, so no pair
+  spanning two builds is ever formed.
+- **Proof C / criterion 5** asserts WCAG ratios against the thresholds `4.5` and `3.0` at runtime.
+  It stores no recorded number to compare against, so running it on `152` measures `152` — which
+  is exactly what the criterion claims about the page a user renders today.
+
+The contrast counts recorded in §Verification's task 3 and task 4 entries were measured on `151`
+and stay labelled as `151` measurements; they are history, not live assertions. The user approved
+this re-pin on 2026-08-24, and it is the reason this card's frontmatter was briefly returned to
+`planning` mid-implementation (the flip-edit-flip precedent is `28933a1`).
 
 **No new dependency.** All four glyphs the drawer needs (`gear-six`, `moon`, `sun`, `x`) resolve in
 the vendored Phosphor set (1,530 classes, regular and fill). Adding a dependency would need a

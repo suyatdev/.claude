@@ -49,7 +49,15 @@ CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # docs/features/treko-theme-and-layout.md §"Pinned versions": both Proof B and Proof C must run
 # this exact build -- "two hashes, or two contrast reads, from different Chrome builds are not
 # comparable."
-PINNED_VERSION = "151.0.7922.172"
+#
+# Re-pinned 2026-08-24 from `151.0.7922.172`, which Chrome auto-updated away from at 15:04 local.
+# The assert below fires before launch, so the whole browser-driven half of the suite (24 tests at
+# that commit) failed at construction without reaching a page. Safe to move because nothing stores
+# a Chrome-derived constant: `test_guards.py`'s sha256s hash file bytes, Proof A is a source
+# comparison, Proof B's hashes are an archived 151 receipt that is never re-derived, and Proof C
+# asserts WCAG thresholds live rather than against a recorded number. Full reasoning and the
+# user's approval: the card's §"Pinned versions", "The Chrome re-pin, 2026-08-24".
+PINNED_VERSION = "152.0.7977.54"
 
 DEVTOOLS_TIMEOUT_SECS = 10
 NAV_TIMEOUT_SECS = 20
