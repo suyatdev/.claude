@@ -1398,6 +1398,62 @@ no test in this file reads that element's `left`.
 **Still owed by criterion 11: the Reset clause.** `resetSideW` ships in task 5 per §D4, but its only
 caller is the drawer's Layout Reset button. **Task 7 owes the button and its test.**
 
+### Task 6 red half — the drawer shell's tests (2026-08-24)
+
+`treko/test_drawer.py`, **9 tests: 6 red, 3 green by design.** Measured, not assumed:
+`6 failed, 3 passed in 15.68s`. Suite baseline immediately before, re-run on this checkout at
+`f2fdf6b`: **270 passed in 191.31s** — the figure the green half is diffed against.
+
+All six failures land on their own assertion with a diagnostic message. None errored in setup,
+timed out, or died in the harness — the difference between a red test and a broken one. The four
+runtime tests fail identically and honestly at the first thing that is missing, `expected exactly
+one element with title='Settings' (the gear, §D7), found 0`; the two source tests fail on what
+they measure (`found 3` Escape arms, not 4; `found 0` gear markers).
+
+**The probe's own control is already measured, and it is the reason these are worth trusting.**
+Criterion 14 forbids a DOM `id` in the drawer, so the scrim cannot be found by selector. It is
+located instead by the one property §D5 gives it that nothing else on this page has —
+`position:fixed` covering the full viewport. That could silently match some pre-existing element
+and pass for the wrong reason, which is exactly the failure task 5's "main column" selector hit.
+So `_open_drawer` asserts `count == 0` **before** clicking the gear, and on the live render that
+assertion **passed** (the failure came one line later, at the gear). The selector matches nothing
+on today's page: confirmed against the browser, not reasoned about.
+
+**Falsifiable and confirmed falsifiable.** The two source oracles are the things most able to be
+quietly wrong, so each ships with a mutation test that passes today:
+
+| Oracle | Mutations run against an in-memory copy | Result |
+|---|---|---|
+| `_esc_arms` (the chain parser) | drawer arm **appended** instead of prepended; first two arms **swapped**; an arm's **body** changed | all three detected |
+| the `id="…"` counter | an eighth, non-`sec-` id inserted | detected (8 ids, `settings-panel` reported) |
+
+The parser is a parser rather than a regex over raw text on purpose. Prepending an arm necessarily
+rewrites the old first arm's leading keyword from `if` to `else if`; a raw-text comparison would
+fail on that keyword and would be testing the chain's punctuation instead of its arms. Criterion 12
+names conditions, bodies and order, so those are what is compared. The three base arms are pinned
+from `git show a5a66a75…:treko/Treko.dc.html`, not retyped from this card, and were confirmed
+byte-identical at `f2fdf6b`.
+
+**The negative clause carries its own falsifier inside the test.** "Does not close on a click
+inside the panel" cannot be proven by polling until something happens, so it watches for 1.0s and
+requires the drawer open in every reading. That alone would also pass against a page where nothing
+ever closes the drawer — so the same test then clicks the scrim and requires the close to be
+observed within a window of the same length. The click is dispatched with `bubbles: true`
+deliberately: a non-bubbling click would satisfy the clause for the wrong reason, never reaching
+the scrim listener that §D5's `stopEvt` exists to stop.
+
+**What the red half does not prove — falsifiable is not satisfiable.** All four runtime tests fail
+at the same early assertion, so none of them has yet been observed getting past it. Nothing here
+shows the geometry assertions that follow (right-flush panel, `min(400px,92vw)`, full height,
+scrollable overflow) can *pass* against a correct implementation; only the green half can show
+that, and a geometry assertion that turns out to be unsatisfiable is a defect in this file, not in
+the page. Recorded now so a green run is read as evidence rather than as confirmation.
+
+**Deliberately not covered here, and owed by name:** criterion 13 (the Layout readout) and
+criterion 11's Reset clause both need the Layout *section*, and criterion 7's "Dark card selected"
+clause needs Appearance — all three are **task 7**, and all three are already recorded as owed in
+`test_sidebar.py`'s docstring and in this card. Task 6 is the shell only.
+
 ### Task 8 — the regression guards (2026-08-24)
 
 `treko/test_guards.py`, 25 tests, all green. These guard things that must **not** change, so a green
