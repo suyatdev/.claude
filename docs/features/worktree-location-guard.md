@@ -564,8 +564,9 @@ this table, it is not in the design.
 **The governing policy, so a new boundary has a default:** once the guard has established that a
 git repository is involved, any failure it cannot interpret **denies**. "Allow silently" is
 reserved for the four cases that are genuinely none of the guard's business (no path in the
-payload, not a git repo, bare repo, submodule). Observability failures are the one deliberate
-exception — see boundary 9.
+payload, not a git repo, bare repo, submodule). **There is no observability exception.** Round 3
+removed the one that existed: a failed log append now denies (boundary 10), because task 10's
+arm-it decision is computed from that log.
 
 **`worktree-guard.sh` (`PreToolUse`):**
 
@@ -577,7 +578,7 @@ exception — see boundary 9.
 | 4 | `git --version` < 2.31, or unparseable | **Deny**, message names the 2.31 floor. |
 | 5 | `git rev-parse --show-toplevel` exits non-zero with the "not a git repository" diagnostic | **Allow, silently.** |
 | 6 | Any *other* non-zero exit or empty output from any `rev-parse` probe (`--is-bare-repository`, `--show-superproject-working-tree`, `--path-format=absolute --git-dir`, `--git-common-dir`) | **Deny.** Boundary 5 has already ruled out "not a repo", so this is a validation failure. |
-| 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. |
+| 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. Interpreter pinned at the system `/usr/bin/python3` **3.9.6** (measured 2026-08-24); both lexers already run under it via `#!/usr/bin/env python3`, so **no floor above 3.9 is introduced** and none may be relied on. Resolution follows `git-guard.sh:54` (`command -v python3 \|\| command -v python`), which already fails closed when neither exists. |
 | 8 | `WORKTREE_GUARD_MODE` is unset | **`log`.** This is the documented ship state — the guard arrives unarmed on purpose. |
 | 9 | `WORKTREE_GUARD_MODE` is set to anything other than `log` or `deny` | **`deny`**, and the message names the bad value. A *present but wrong* value means someone tried to arm the guard and mistyped; reading a failed configuration attempt as "off" is the silent disarm the git-floor section argues against. Absence and a typo are deliberately not the same case. |
 | 10 | Appending to the log fails (disk full, permissions, path missing) | **Deny**, message says the guard could not record its decision. Round 3 caught the earlier answer ("decision stands, write to stderr") as unsound: task 10 computes the arm-it decision *from this log*, so a lossy log reads cleanest exactly when it is dropping entries, and `git-guard.sh:409` records that stderr from an exit-0 hook may reach nobody. Denying is affordable **only because the log records refusals, not evaluations** — this path can fire only on a refusal that was already going to be reported, so it is not "a full disk blocks every write". |
@@ -764,7 +765,7 @@ Feature: Arm A — writes are refused from a primary checkout
     And the message names the 2.31 floor
 
   Scenario: git rev-parse errors after the repo is established
-    Given step 3 has confirmed a non-bare, non-submodule git repo
+    Given steps 4-5 have confirmed a non-bare, non-submodule git repo
     And git rev-parse --git-dir then exits non-zero
     Then the hook denies
 
