@@ -1054,6 +1054,42 @@ pass. A "0 failures" from a check that has never been shown able to fail is not 
 bytes captured in task 1. Report the diff, not just a boolean — a failure here is someone editing a
 region they were told not to, and the reviewer needs to see what they changed.
 
+### Task 3 red half — criterion 7 added, and a Chrome blocker (2026-08-24)
+
+Criterion 7's tests were added to `treko/test_theme.py` (the original task-3 brief said "4, 5 and
+6", copied from this task's pre-revision text). The file went from 3 collected tests to **14**:
+9 parametrised corrupt-stored-theme cases, a reload-persistence case, and an
+unavailable-`localStorage` case installed via a new `Chrome.add_startup_script` (CDP
+`Page.addScriptToEvaluateOnNewDocument`) so the poison is in place before the page's seed runs.
+
+`python3 -m pytest treko/test_theme.py` → **14 failed in 230.56s**. Red is not the whole claim
+though, and the honest split is:
+
+| Test | Red for its stated reason? |
+|---|---|
+| criterion 4 (static) | **Yes, verified** — reports 39 non-exempt reachable tokens, no light block |
+| criterion 6 (static) | **Yes, verified** — no light block, so no `--shadow-sm`/`--shadow-lg` override |
+| criterion 7 `[Dark]` | **Yes, verified** — `data-theme` is `None`, "the validated seed does not exist yet" |
+| criterion 5 + the other 10 criterion-7 cases | **NOT verified** — died on the harness, see below |
+
+**Blocker: headless Chrome will not start on this machine.** Every CDP test now fails at
+`cdp_harness.py:194`, "chrome never reported a page target on the devtools endpoint". Measured
+directly: the process stays alive 30s, never binds its `--remote-debugging-port`, never writes a
+`DevToolsActivePort` file, and prints nothing. Reproduced with `--headless=new`, `--headless=old`,
+bare `--headless`, and `+--no-sandbox` — all four identical. Ruled out: the tool sandbox (same
+failure with it disabled), orphaned Chrome processes (none — the 44 live processes are the user's
+interactive browser and VS Code's Electron helpers), and the version pin (`Google Chrome
+151.0.7922.172`, exactly the pinned build, and its assert never fires). It is not the Claude Chrome
+extension either — the harness launches its own process with its own `--user-data-dir`.
+
+Chrome worked earlier the same day (§"Criterion 5" records 848 visible elements) and attached for
+one test in this very run, so this is a machine-state regression, not a harness defect. **The
+criterion 4 exemption count also changed here**: with `--mono` exempt the non-exempt reachable set
+is 39, which is the union of both of criterion 4's sources and so is legitimately one larger than
+the 40-name `Treko.dc.html`-only table above (that table's excluded second source contributes
+`--color-text`). Task 3's red half is **not** signed off until the 11 CDP tests are re-run and
+each is confirmed red for its own stated reason.
+
 ### Task 10 — the suite
 
 `python3 -m pytest treko/` at HEAD, node-ID set diffed against task 1's 221. Report per-module counts

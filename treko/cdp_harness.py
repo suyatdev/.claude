@@ -225,6 +225,21 @@ class Chrome:
         self._wait_for(mid)
         self._wait_ready()
 
+    def add_startup_script(self, source):
+        """Run `source` in every new document BEFORE any page script executes.
+
+        The only way to test a precondition the page reads *at mount* -- an unavailable or
+        poisoned `localStorage`, say. Setting it up with `evaluate()` after load is too late:
+        the seed has already run. Persists across `reload()`, which is what makes the
+        seed-then-reload pattern the other tests use work here too.
+        """
+        mid = self._send("Page.addScriptToEvaluateOnNewDocument", {"source": source})
+        resp = self._wait_for(mid)
+        if "error" in resp:
+            raise AssertionError(
+                "Page.addScriptToEvaluateOnNewDocument failed: %r" % resp["error"])
+        return resp["result"]["identifier"]
+
     def _wait_ready(self, timeout=NAV_TIMEOUT_SECS):
         deadline = time.time() + timeout
         while time.time() < deadline:

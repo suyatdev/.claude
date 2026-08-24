@@ -1,4 +1,4 @@
-"""RED tests for card A task 3, first half — criteria 4, 5 and 6 only.
+"""RED tests for card A task 3, first half — criteria 4, 5, 6 and 7.
 
 `docs/features/treko-theme-and-layout.md` §Acceptance criteria and §Verification ("Criterion 4 —
 the light block's coverage", "Proof C — contrast, via headless Chrome computed style") govern.
@@ -7,8 +7,20 @@ Written against the page as it exists at this commit — tokenized (task 2 lande
 `data-theme` has 0 occurrences in `Treko.dc.html` and there is no `body[data-theme="light"]`
 block. All three tests below are expected to fail, for the reasons documented on each one, until
 task 3's second half adds the light block, `THEME_DEFAULT`, the validated seed, and
-`applyTheme`/`setTheme`. Criterion 7 (reload persistence / corrupt-stored-theme) is out of scope
-for this file — a separate dispatch owns it.
+`applyTheme`/`setTheme`.
+
+Criterion 7 (reload persistence, unavailable `localStorage`, corrupt stored theme) was added to
+this file on 2026-08-24. The original task-3 dispatch brief said "criteria 4, 5 and 6", copied
+from this task's pre-revision text; round 3 had already moved criterion 7 here.
+
+**One clause of criterion 7 is deliberately NOT tested here.** The criterion requires a corrupt
+stored value to leave the drawer's Appearance section showing the Dark card *selected* rather
+than neither card. The drawer does not exist until task 7, and its markup is not pinned by the
+spec, so any selector written now would be a guess — and a guessed selector fails closed, which
+is indistinguishable from the check being switched off. What IS tested here is the state that
+clause depends on: `S.theme` validating to exactly `'dark'`, observable as `data-theme="dark"`.
+Per §D5 the six selection values are ternaries on `S.theme`, so once that holds the Dark card
+follows. The DOM half belongs with task 7 and must be written there.
 
 Do not add implementation code here. Do not touch `Treko.dc.html`.
 """
@@ -18,6 +30,8 @@ import re
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cdp_harness  # noqa: E402
@@ -29,11 +43,18 @@ PAGE = PAGE_PATH.read_text()
 NOCTURNE = NOCTURNE_PATH.read_text()
 
 # Criterion 4's exception list, verbatim (docs/features/treko-theme-and-layout.md:700-702):
-# "--font-*, --space-* and --radius-*. --color-section* may join the list only with the measured
-# '0 readers' evidence attached." No --color-section* token appears in the reachable set computed
-# below (matching §D3's own claim of 0 readers), so it is not added here — adding it without a
-# token that actually needs it would be an unverified exception, not evidence.
+# "--font-*, --space-*, --radius-* and --mono. --color-section* may join the list only with the
+# measured '0 readers' evidence attached." No --color-section* token appears in the reachable set
+# computed below (matching §D3's own claim of 0 readers), so it is not added here — adding it
+# without a token that actually needs it would be an unverified exception, not evidence.
+#
+# --mono joined that list on 2026-08-24 (commit 28933a1), resolving the gate task 3 raised: it is
+# var()-reachable (33 uses) but is a monospace font stack with no light or dark form, and §D3's
+# 51-property light block never declared it, so criterion 4 could not have passed against a
+# correct implementation. It is exempt BY EXACT NAME, never as a "--mono-" prefix — the spec is
+# explicit that a pattern would pre-approve tokens nobody has weighed.
 EXEMPT_PREFIXES = ("--font-", "--space-", "--radius-")
+EXEMPT_NAMES = ("--mono",)
 
 LIGHT_BLOCK_RE = re.compile(r'body\[data-theme=(["\'])light\1\]\s*\{([^}]*)\}', re.DOTALL)
 VAR_CALL_RE = re.compile(r'var\((--[A-Za-z0-9_-]+)\)')
@@ -85,7 +106,7 @@ def _reachable_tokens():
 
 
 def _is_exempt(token):
-    return any(token.startswith(prefix) for prefix in EXEMPT_PREFIXES)
+    return token in EXEMPT_NAMES or any(token.startswith(prefix) for prefix in EXEMPT_PREFIXES)
 
 
 def _declared_props(block_text):
@@ -348,6 +369,155 @@ def test_criterion5_light_mode_contrast_meets_wcag(srv, tmp_path):
         assert result["violationCount"] == 0, (
             "%d element(s) fail WCAG contrast under data-theme=light:\n%s"
             % (result["violationCount"], json.dumps(result["violations"], indent=2))
+        )
+    finally:
+        chrome.close()
+
+
+# --------------------------------------------------------------------- criterion 7
+
+
+# Values a user, a browser extension, or an older build could leave in `taskTracker.theme`.
+# Every one of them is outside the closed set {'dark','light'} and must therefore yield dark.
+# 'Dark' and 'LIGHT' are here on purpose: the spec's seed compares with `===` against the exact
+# lowercase literal, so a case variant is corrupt input, not a near-miss to be helpfully coerced.
+CORRUPT_STORED_THEMES = ["banana", "Dark", "LIGHT", "true", "", "null", "{}", "0", "light "]
+
+
+def _seed_theme_and_reload(chrome, url, value):
+    """Put `value` in `taskTracker.theme` the way a real user's browser would, then reload so the
+    page's own mount-time seed reads it. Never sets `data-theme` directly -- that would test the
+    assertion instead of the code under it."""
+    chrome.navigate(url)
+    _wait_for_mount(chrome)
+    chrome.evaluate("localStorage.setItem('taskTracker.theme', %s)" % json.dumps(value))
+    assert chrome.evaluate("localStorage.getItem('taskTracker.theme')") == value
+    chrome.reload()
+    return _wait_for_mount(chrome)
+
+
+@pytest.mark.parametrize("stored", CORRUPT_STORED_THEMES)
+def test_criterion7_corrupt_stored_theme_yields_dark(srv, tmp_path, stored):
+    """docs/features/treko-theme-and-layout.md criterion 7, the corrupt-stored-theme clause, and
+    §D3 "The seed, validated at mount".
+
+    §D3's seed is `(t => t === 'light' ? 'light' : THEME_DEFAULT)(ls('taskTracker.theme'))`, so
+    anything that is not the exact string 'light' must fall to 'dark'. This is the boundary
+    validation `rules/core-conduct.md` requires: `localStorage` is user-editable input crossing a
+    system boundary, and the prototype's `||` seed only substitutes for null/'' -- every other
+    string passes straight through into `setAttribute('data-theme', ...)`.
+
+    Expected RED, right now: nothing reads `taskTracker.theme` and nothing calls
+    `setAttribute('data-theme', ...)` -- `data-theme` has 0 occurrences in `Treko.dc.html`. So
+    `data-theme` is absent (None), not 'dark'. It fails on the missing seed, not on a wrong
+    validation result. The mount assertion below runs first and passes against the untouched dark
+    page, proving the harness reached a real board rather than a blank document.
+    """
+    chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
+    try:
+        url = "http://127.0.0.1:%d/" % srv.port
+        mount_count = _seed_theme_and_reload(chrome, url, stored)
+
+        assert mount_count > 50, (
+            "board never mounted with taskTracker.theme=%r (%d body descendants) -- a corrupt "
+            "stored value must not be able to stop the page rendering" % (stored, mount_count)
+        )
+
+        applied = chrome.evaluate("document.body.getAttribute('data-theme')")
+        assert applied == "dark", (
+            "taskTracker.theme=%r is outside the closed set {'dark','light'} and must yield "
+            "data-theme=\"dark\" -- got %r. The validated seed does not exist yet (task 3, "
+            "second half): no THEME_DEFAULT, no applyTheme, nothing reads taskTracker.theme."
+            % (stored, applied)
+        )
+    finally:
+        chrome.close()
+
+
+def test_criterion7_theme_survives_a_reload(srv, tmp_path):
+    """docs/features/treko-theme-and-layout.md criterion 7, the persistence clause.
+
+    A legitimately stored 'light' must still be light after a reload -- the paired positive case
+    that stops the corrupt-value tests above from passing vacuously. A seed hardwired to 'dark'
+    would satisfy every parametrised case in this file and fail only here.
+
+    Expected RED, right now: no light block and no seed, so `data-theme` is absent.
+    """
+    chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
+    try:
+        url = "http://127.0.0.1:%d/" % srv.port
+        _seed_theme_and_reload(chrome, url, "light")
+
+        applied = chrome.evaluate("document.body.getAttribute('data-theme')")
+        assert applied == "light", (
+            "a stored taskTracker.theme='light' must survive a reload as data-theme=\"light\" -- "
+            "got %r. Without this case the corrupt-value tests would all pass against a seed "
+            "hardwired to 'dark'." % applied
+        )
+
+        # Reload once more: persistence must be a property of the stored value, not of the
+        # single transition that wrote it.
+        chrome.reload()
+        _wait_for_mount(chrome)
+        again = chrome.evaluate("document.body.getAttribute('data-theme')")
+        assert again == "light", (
+            "data-theme was %r after a second reload -- the theme is not persisting, it is "
+            "surviving exactly one round trip" % again
+        )
+    finally:
+        chrome.close()
+
+
+# Poisons `localStorage` before any page script runs: every access throws, which is what a
+# browser does with storage disabled or a cross-origin/private-mode restriction in force.
+# `configurable: true` keeps the override itself from being the thing that breaks teardown.
+POISON_LOCALSTORAGE_JS = """
+Object.defineProperty(window, 'localStorage', {
+  configurable: true,
+  get() { throw new DOMException('localStorage is unavailable', 'SecurityError'); }
+});
+"""
+
+
+def test_criterion7_unavailable_localstorage_yields_dark_without_throwing(srv, tmp_path):
+    """docs/features/treko-theme-and-layout.md criterion 7: "an unavailable `localStorage` yields
+    dark mode without throwing", and §D3's "The `try/catch` is kept".
+
+    Installed via `Page.addScriptToEvaluateOnNewDocument` so the poison is in place *before* the
+    page's seed runs -- setting it after load would be too late to test a mount-time read.
+
+    Expected RED, right now: `data-theme` is never set at all, so the attribute is absent rather
+    than 'dark'. The board-still-mounts assertion runs first and is expected to PASS even today,
+    which is the point of ordering it first: it separates "the page survived" from "the page
+    chose dark", and only the second half is waiting on task 3's implementation.
+    """
+    chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
+    try:
+        chrome.add_startup_script(POISON_LOCALSTORAGE_JS)
+        chrome.navigate("http://127.0.0.1:%d/" % srv.port)
+        mount_count = _wait_for_mount(chrome)
+
+        # Confirm the poison is actually armed -- a check that silently failed to install would
+        # make this whole test a second copy of the plain-mount case.
+        threw = chrome.evaluate(
+            "(() => { try { window.localStorage; return false; } catch (e) { return true; } })()"
+        )
+        assert threw is True, (
+            "localStorage did not throw on access -- the startup poison never installed, so "
+            "this test is not exercising the unavailable-storage path at all"
+        )
+
+        assert mount_count > 50, (
+            "board rendered only %d body descendants with localStorage throwing -- the seed's "
+            "try/catch is missing and the unavailable-storage case takes the page down"
+            % mount_count
+        )
+
+        applied = chrome.evaluate("document.body.getAttribute('data-theme')")
+        assert applied == "dark", (
+            "with localStorage unavailable the page must still apply data-theme=\"dark\" -- got "
+            "%r. Nothing calls setAttribute('data-theme', ...) yet (task 3, second half)."
+            % applied
         )
     finally:
         chrome.close()
