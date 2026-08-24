@@ -879,8 +879,18 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       "existing arms undisturbed" diff.
 - [ ] 7. **Drawer sections.** Appearance (two preview cards, six selection values, literals kept and
       commented) and Layout (readout + Reset). **No Artifacts section** — §D9.
-- [ ] 8. **Regression guards.** Criteria 15, 16 and 17 as tests. Criterion 15 compares against the
+- [x] 8. **Regression guards.** Criteria 15, 16 and 17 as tests. Criterion 15 compares against the
       bytes captured in task 1.
+      **Pulled forward, ahead of tasks 5-7.** It is test-only and independent of every remaining
+      implementation task, and criterion 15 exists to catch exactly the failure tasks 6-7 could
+      cause — a drawer port reaching into the fenced slice — so it is worth more standing before
+      that port than after it.
+      Done in `treko/test_guards.py`: **25 tests, all green**, every check falsified before its
+      pass was believed. Two findings are recorded in §Verification "Task 8" and are the reason
+      this task took a second pass: the card's 4851-byte fence figure is **confirmed correct** (it
+      names the marker-inclusive span, and base lines 325/418 *are* the marker lines), and the
+      criterion-17 scanner had a real case-sensitivity hole — `<LINK HREF="https://…">` was
+      invisible to it — found by falsification and closed. **Do not restate either here.**
 - [ ] 9. **Launch for real** (`--open`): drag the sidebar, flip to light, reload, press Esc from
       three states, and look at the light board. Record what was eyeballed as eyeballed.
 - [ ] 10. **Post-change suite**: node-ID set diff vs task 1, zero lost nodes, `wc -l` under 800.
@@ -1284,6 +1294,68 @@ entry required: the re-spaced ramp over minimum churn; a 4.8 target over 4.5; an
 unavoidable visual consequence — the em-dash no-PR placeholder (18 spans, `Treko.dc.html:322` and
 `:573`) stops being invisible at 1.64:1 and becomes a legible mid-grey at 4.80:1. Re-routing those
 elements to a different token would have edited markup, which criterion 8 forbids in this commit.
+
+### Task 8 — the regression guards (2026-08-24)
+
+`treko/test_guards.py`, 25 tests, all green. These guard things that must **not** change, so a green
+run proves nothing on its own — every check was falsified before its pass was believed, and the case
+list is recorded here beside the count.
+
+**Criterion 15 — the fence span is three numbers, and the card's is the right one.** At the base
+commit `a5a66a7`, lines **325 and 418 are themselves the START and END marker comments**, so
+criterion 15's `:325-418` names the **marker-inclusive** span. That span is **4851 bytes**, sha256
+`f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136` — re-derived here against both
+the base commit and HEAD, identical at each, so the recorded baseline is confirmed rather than
+copied. Two other spans exist and neither is the criterion's:
+
+| span | bytes | sha256 | what it is |
+|---|---|---|---|
+| marker-inclusive | **4851** | `f0a37389…` | the criterion's span; what the guard pins |
+| marker-exclusive, byte offset | 4728 | `1aa22b5f…` | what `test_ui_commands.py`'s `NODE_BRIDGE.loadHandler` actually `require()`s — it keeps the `\n` after the START marker |
+| marker-exclusive, line-based | 4727 | `5409d62e…` | a line-based cut; drops that same `\n`. Recorded for provenance; asserted by nothing |
+
+The guard pins the inclusive span because it is what the criterion says **and** because it is
+strictly stronger: it also guards the two fence comments, which the node loader needs in order to
+locate the slice at all. The 4728-byte span is kept as an explicitly subsumed secondary assertion.
+The markers sit at `:348-441` on this branch — the test locates them by marker text, never by line
+number, because they have already moved once and tasks 6-7 will move them again.
+
+**Falsifiers, all executed:** a one-byte edit inside the fence — caught; a line added inside the
+fence — caught; `'settings'` appended to `TRACKER_COMMAND_IDS` (Hazard 1's exact scenario) — caught.
+One case came back **differently from the prediction, and is recorded as it happened**: mutating a
+marker comment's own text (`begins` → `starts`) was expected to be caught by the inclusive check and
+missed by the exclusive one. In fact **both** fail, identically and loudly — each locates the fence
+by searching for the literal marker bytes, so a corrupted marker yields `found 0 start / 1 end`
+rather than a digest mismatch. There is no asymmetry between the two spans here. Asserted directly
+via `pytest.raises` rather than left as prose.
+
+**Criterion 16.** `TRACKER_COMMAND_IDS` pinned to exactly `['clear','handoff','reanalyze']`, and
+both `cmdButtons` and `cmdCopies` verified to `.map()` over that one array rather than a second
+list. Falsified with a fourth id and with a renamed id; both caught. **What this does not prove:**
+that the three rows *render* correctly — that is `test_ui_commands.py`'s 11 tests, unchanged here.
+
+**Criterion 17.** No CDN URL in a fetching position in `Treko.dc.html`, `nocturne.css`, or any
+vendored `.css`; `server.CSP` still opens `default-src 'self'`; `STATIC_MANIFEST` measured at **17**
+rows against the live constant, matching the recorded figure.
+
+The scanner was falsified against a 26-case list, not a spot check, and **one real gap was found and
+closed by it**: attribute matching was case-sensitive, so `<LINK HREF="https://…">` and
+`<script SRC="…">` were invisible, as were CSS `URL(` and `@IMPORT`. HTML attribute names and CSS
+function names are both case-insensitive, so this was a genuine hole in a criterion that claims to
+check `src=` and `href=`. Fixed with `re.IGNORECASE`; all four uppercase forms are now permanent
+cases. Re-scanning the real tree after the widening still yields zero hits on every file.
+
+Cases that must fire, and do: protocol-relative `//cdn…` in both `src=` and `url()`; `@import "…";`
+with no `url()` wrapper; `url()` with single quotes and with internal whitespace; `@font-face`
+`src:url(…)`. Cases that must stay silent, and do: `data:` URIs, `#fragment` hrefs, relative paths,
+and bare URLs in CSS or HTML comment prose.
+
+**One behaviour is deliberate, not accidental:** a *commented-out* fetching construct — 
+`/* @import url(https://…); */` — **does** fire. That is correct for a supply-chain guard, which is
+not a renderer; stripping comments would create somewhere to hide one. It is also why the
+`vendor/inter/inter.css:3` false-positive test is meaningful: that line passes because it states its
+upstream URL as **bare prose with no fetching construct around it**, not because comments are
+exempt. A future edit that wraps it in `url()` should, and will, fail.
 
 ### Task 10 — the suite
 
