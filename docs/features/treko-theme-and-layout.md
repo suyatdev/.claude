@@ -812,7 +812,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       SHA; once task 4 lands, Proof A becomes a frozen comparison between it and the base-commit SHA
       from task 1 — label it **ARCHIVED RECEIPT** in the test itself (§Verification, Proof A), not a
       live regression guard.
-- [ ] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5, 6 and 7
+- [x] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5, 6 and 7
       (including the corrupt-stored-theme case) against the *current* dark-only page and confirm each
       fails for the stated reason. Then add `body[data-theme="light"]` with all 51 declarations,
       `THEME_DEFAULT`, the validated seed, `applyTheme` / `setTheme`, and the mount call. Do not touch
@@ -846,7 +846,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `Treko.dc.html`, 38 are declared by §D3's light block and 2 are excepted (`--font-heading`,
       `--mono`) — `--mono` was the only uncovered name. The eight status hues on the same `:root`
       line ARE covered, by §D3's "8 status"; that was checked, not assumed. Table in §Verification.
-- [ ] 4. **Palette re-tint, and the contrast pass criterion 5 needs.** Replace `:root` with the
+- [x] 4. **Palette re-tint, and the contrast pass criterion 5 needs.** Replace `:root` with the
       prototype's block (cyan accent, `#1c1e2b` surface, lifted neutrals, `--ok:#82dfa9`,
       `--info:#89b4f2`, `--hair-3` to `.12`). One commit, `:root` and the light block only.
       **Pixels move here, by design.**
@@ -862,6 +862,13 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `--color-accent` is also a background under `--color-text` (28 new violations at 3.33), and
       three tokens solved to exactly 4.50 with no margin. Re-derive the values against the real
       render; do not reuse those trial numbers.
+      **Done in `4adfda4`. Both halves of that warning were re-checked against the narrowed
+      render before acting on them, and they did not survive intact** — the accent-as-background
+      clause turned out to be an artefact of the unnarrowed population and does not apply here
+      (§Verification, "Task 4"). The margin clause did hold and drove the 4.8 target. The reason
+      it is still a redesign is a different one, found by measurement: fixing
+      `--color-neutral-600` alone lands it *darker* than `--color-neutral-500` and inverts the
+      ramp, so the ink ramp had to be re-spaced rather than four values patched.
       **Dark mode fails the same check 104 times and is out of scope here** — measured on the
       untouched page, so it predates this card. Criterion 5 is light-only by its own wording.
       Recording it so the next reader does not mistake it for a regression this card caused.
@@ -1208,6 +1215,75 @@ because its *failure* is the useful part: it took the unnarrowed count 205 → *
 `--color-accent` turns out to be a background under `--color-text` as well as a foreground, so
 darkening it created 28 new violations at 3.33, and three tokens solved to exactly 4.50 with no
 margin. Task 4 must re-derive against the render; the trial values are not a starting point.
+
+### Task 4 — the re-tint and the contrast pass (2026-08-24)
+
+`4adfda4`. One commit, `:root` and the light block only; 4 lines out, 9 in, **zero inline `style`
+attributes changed** — criterion 8 holds, and criterion 3 stops holding here exactly as it was
+designed to. `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/test_theme.py` → **14 passed in
+17.64s**, criterion 5 green for the first time with no edit to the assertion, the floors or
+`paintsText`. Full suite → **235 passed in 138.13s**, against the 234-passed/1-failed baseline.
+
+**Criterion 5, re-derived against the live render rather than reasoned from task 3's numbers.**
+The walk is `test_theme.CONTRAST_CHECK_JS`'s own helpers, re-used verbatim by the diagnostic so
+the two agree by construction rather than by copy.
+
+| | before (`dd0c0d7`) | after (`4adfda4`) |
+|---|---|---|
+| painted elements scored | 367 | 367 |
+| distinct (fg, bg, floor) pairs | 47 | 47 |
+| **violations** | **127** | **0** |
+| worst pair in the whole render | 1.64 | 4.66 — `--ok` on `--ok-bg`, untouched by this commit |
+
+**The values, and why the ramp moved and not just four tokens.** Fixing `--color-neutral-600`
+alone lands it darker than `--color-neutral-500`, inverting the light ramp (100 darkest → 900
+lightest). So the ink ramp was re-spaced in OKLab, holding `--color-neutral-300` as the anchor and
+`--color-neutral-700` at its contrast ceiling; darkening was done in OKLCH so hue and chroma
+survived the move. White contrast now falls monotonically **18.04 · 14.28 · 10.26 · 8.54 · 7.17 ·
+5.95 · 4.80** across 100→700.
+
+| token | before | after | worst real ground, after |
+|---|---|---|---|
+| `--color-neutral-400` | `#4e5468` | `#464c5f` | 7.37 on `--rail` |
+| `--color-neutral-500` | `#646a80` | `#51576c` | 6.18 on `--rail` |
+| `--color-neutral-600` | `#7d8398` | `#5e6377` | **4.84** on hover-over-rail (was 3.06) |
+| `--color-neutral-700` | `#c6cad8` | `#6e727e` | **4.80** on white (was 1.64) |
+| `--color-accent` / `-500` | `#0e93b2` | `#007492` | **4.81** on `--color-accent-900` (was 3.23) |
+| `--color-accent-300` | `#0d7d99` | `#006d88` | **4.82** on hover-over-rail (was 3.87) |
+
+Six light tokens moved; the **four that were failing** now clear at **4.80–4.84**, not at a
+bare 4.50 — the no-margin outcome task 3's trial is recorded to warn about. The other two
+(`--color-neutral-400`, `--color-neutral-500`) were already passing and moved only to keep the
+re-spaced ramp monotonic.
+
+**The inherited accent-as-background warning did not survive re-checking, and that is the finding
+worth keeping.** Task 3 recorded that darkening `--color-accent` created 28 new violations at 3.33
+because it is also a background under `--color-text`. Checked before acting on it: the render's
+full 47-pair table contains **no accent background and no light foreground at all**, so those 28
+came from elements that paint no mark and left the population when criterion 5 was narrowed. The
+only accent-as-ground pair that exists is `--color-accent` *text* on `--color-accent-900`
+(`Treko.dc.html:199`), which the darkening improves. The warning was true of the population it was
+measured on and false of this one; it was neither obeyed nor deleted.
+
+**Known limits, stated rather than left to be discovered.**
+- The new `--color-neutral-700` clears 4.5 on white, the only ground it lands on today, but reads
+  **3.89** on the hover-over-rail ground. Making it robust there would collapse it onto
+  `--color-neutral-600`. Criterion 5 is a rendered check, so this is compliant — but a later
+  layout that puts the `—` placeholder on the rail re-opens it.
+- `--color-accent-400` `#1298b8` remains *lighter* than `--color-accent-500`, a pre-existing
+  inversion in the light accent ramp. Nothing paints it, so no measurement backs changing it; left
+  alone rather than swept into this diff.
+
+**Dark mode, same narrowed check: 104 → 18 violations**, measured on the same 367 elements. A side
+effect of the lifted greys in the re-tint, not a goal of this task. Recorded so the number does not
+drift unrecorded — it is **not** a claim that dark passes, and criterion 5 remains light-only by
+its own wording.
+
+**The three value decisions were the user's, asked before any value was picked**, as this task's
+entry required: the re-spaced ramp over minimum churn; a 4.8 target over 4.5; and yes to the one
+unavoidable visual consequence — the em-dash no-PR placeholder (18 spans, `Treko.dc.html:322` and
+`:573`) stops being invisible at 1.64:1 and becomes a legible mid-grey at 4.80:1. Re-routing those
+elements to a different token would have edited markup, which criterion 8 forbids in this commit.
 
 ### Task 10 — the suite
 
