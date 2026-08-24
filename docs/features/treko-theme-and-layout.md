@@ -713,15 +713,29 @@ Scenario: no CDN URL reaches a fetching position
    between what this criterion measures and what it does not: §Verification, "Criterion 4".
 5. **No invisible-on-white surface.** Render the page in headless Chrome with `data-theme="light"`
    applied exactly as the app applies it — `taskTracker.theme` set in `localStorage` before mount,
-   never simulated by setting the attribute directly. For every element under `<body>` with non-zero
-   rendered area, its resolved `getComputedStyle().color` and its effective background — the first
+   never simulated by setting the attribute directly. For every element under `<body>` that has
+   non-zero rendered area **and paints a mark in its own `color`** — defined as: it has at least one
+   direct child text node whose content is not entirely whitespace, **or** its `::before`/`::after`
+   resolves a `content` other than `none`/`normal`/`""` (which is how an icon font paints a glyph) —
+   its resolved `getComputedStyle().color` and its effective background — the first
    non-transparent `getComputedStyle().backgroundColor` found walking up from the element through its
    ancestors, alpha-compositing any translucent layer crossed on the way — meet WCAG contrast ≥ 4.5:1
    below an 18px resolved `font-size`, ≥ 3:1 at or above it, ≥ 4.5:1 when `font-size` cannot be
    resolved. This is a rendered check over the whole page, inline-styled and class-styled colour
    alike, reading the foreground/background pair from the browser's own paint rather than inferring
    it from markup proximity — there is no "one inline style" scope left to disagree about
-   (§Verification, Proof C). **What this does not prove:** that the page looks good. A human opens it
+   (§Verification, Proof C).
+   **Why the population is elements that paint, not elements that exist** (narrowed 2026-08-24,
+   after implementation measured the original wording as unsatisfiable). `color` inherits, so an
+   element that paints no mark still reports one. Nine 7×7px decorative dots
+   (`Treko.dc.html:251`) inherit `--color-neutral-200` from their parent and render only a
+   background-colour disc; scoring that inherited colour against the disc's own fill demanded a
+   foreground of 249..255 from a token whose 59 other uses need it near-black, so no palette
+   assignment could satisfy the criterion — it was failing on colours nobody can see. The
+   `::before`/`::after` arm is what keeps this from over-narrowing: a Phosphor `<i>` has no text
+   node but does paint a glyph in its `color`, and 25 such elements stay in scope. Measured on
+   this page: 848 elements have area, **367** paint a mark.
+   **What this does not prove:** that the page looks good. A human opens it
    once (task 9) and that is recorded as eyeballed, not measured.
 6. **The two shadow tokens with a reader, `--shadow-sm` and `--shadow-lg`, are overridden in light
    mode**, and neither light value contains `#3f424d` or `#9397ab`. `--shadow-md` is not overridden —
@@ -809,8 +823,12 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       tests fail, and as of `9ad983c` all 14 are red for their own stated reason — the
       headless-Chrome blocker that had killed 11 of them was diagnosed and worked around.
       **The evidence, the diagnosis and the falsifiable-not-satisfiable caveat are recorded once,
-      in §Verification "Task 3 red half" — do not restate them here.** Outstanding before this
-      task closes: the light block itself.
+      in §Verification "Task 3 red half" — do not restate them here.**
+      **Second half done in `af5321a`: 13 of 14 green.** The light block (51 properties),
+      `THEME_DEFAULT`, the validated seed, `applyTheme`/`setTheme` and the mount call are all in,
+      at §D3's values. Criterion 5 is the one still red and **is not this task's to close** — it
+      needs a light-palette redesign, which task 4 now owns; the numbers are in §Verification
+      "Task 3 second half".
       **GATE — RESOLVED 2026-08-24 by a spec change, not a workaround.** The conflict: criterion 4
       required every `var()`-reachable custom property be declared under `body[data-theme="light"]`,
       with an exception list of only `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with
@@ -828,9 +846,25 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `Treko.dc.html`, 38 are declared by §D3's light block and 2 are excepted (`--font-heading`,
       `--mono`) — `--mono` was the only uncovered name. The eight status hues on the same `:root`
       line ARE covered, by §D3's "8 status"; that was checked, not assumed. Table in §Verification.
-- [ ] 4. **Palette re-tint.** Replace `:root` with the prototype's block (cyan accent, `#1c1e2b`
-      surface, lifted neutrals, `--ok:#82dfa9`, `--info:#89b4f2`, `--hair-3` to `.12`). One commit,
-      `:root` and the light block only. **Pixels move here, by design.**
+- [ ] 4. **Palette re-tint, and the contrast pass criterion 5 needs.** Replace `:root` with the
+      prototype's block (cyan accent, `#1c1e2b` surface, lifted neutrals, `--ok:#82dfa9`,
+      `--info:#89b4f2`, `--hair-3` to `.12`). One commit, `:root` and the light block only.
+      **Pixels move here, by design.**
+      **This task also owns criterion 5.** Task 3 landed the light block at §D3's prototype values
+      and measured **127** contrast violations under the narrowed criterion — four text tokens,
+      every one of them a real defect: `--color-neutral-700` at **1.64:1** on white (18 elements,
+      the "invisible on white" this criterion is named for), `--color-neutral-600` at 3.06 (82),
+      `--color-accent` at 3.23 (16), `--color-accent-300` at 3.87 (11). It is this task and not
+      task 3 because criterion 5 is a card-level criterion, because the fix is a design pass on
+      the palette rather than wiring, and because this task already owns the light block.
+      **It is a redesign, not a scaling.** A trial darkening of exactly those four tokens was
+      measured, not assumed: it took the *unnarrowed* count 205 → 40 rather than → 9, because
+      `--color-accent` is also a background under `--color-text` (28 new violations at 3.33), and
+      three tokens solved to exactly 4.50 with no margin. Re-derive the values against the real
+      render; do not reuse those trial numbers.
+      **Dark mode fails the same check 104 times and is out of scope here** — measured on the
+      untouched page, so it predates this card. Criterion 5 is light-only by its own wording.
+      Recording it so the next reader does not mistake it for a regression this card caused.
 - [ ] 5. **Sidebar.** Red tests for criteria 9, 10 and 11 first. Then the handle markup, the
       handler, the seed, and the three computed substitutions replacing `:621`.
 - [ ] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
@@ -1035,7 +1069,9 @@ rendering the page for real and reading resolved styles, never inferring them fr
 3. In-page: `localStorage.setItem('taskTracker.theme','light')`, then reload, so `data-theme` is
    applied exactly the way `applyTheme` / `componentDidMount` apply it — never simulated by setting
    the attribute directly.
-4. After mount, walk every element under `<body>` with non-zero rendered area. For each, read
+4. After mount, walk every element under `<body>` with non-zero rendered area **that paints a mark
+   in its own `color`** (criterion 5's definition: a non-whitespace direct child text node, or a
+   `::before`/`::after` `content` other than `none`/`normal`/`""`). For each, read
    `getComputedStyle(el).color`, then resolve its effective background by walking from `el` up
    through its ancestors for the first non-transparent `getComputedStyle(ancestor).backgroundColor`,
    alpha-compositing any translucent layer crossed on the way. `body{background:var(--color-bg)}`
@@ -1137,6 +1173,41 @@ cite: Proof C is criterion 5's *plan* and records no run.)
 Task 3's red half is **verified red** as of the second run above. It is still **not signed off**
 as complete: the second half — the light block, `THEME_DEFAULT`, the validated seed,
 `applyTheme`/`setTheme` and the mount call — is unwritten.
+
+### Task 3 second half — the light block lands, criterion 5 escalates (2026-08-24)
+
+`af5321a`. `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/test_theme.py` → **13 passed,
+1 failed in 17.38s**. Criterion 4 passes with **51** properties declared under
+`body[data-theme="light"]` and all **39** non-exempt `var()`-reachable tokens covered (re-derived
+by running `test_theme._reachable_tokens()` at this HEAD, not copied); criterion 6 passes with
+`--shadow-sm` and `--shadow-lg` overridden, no dark ring hex in either, and `--shadow-md` absent;
+all 11 criterion-7 cases pass. No test file was touched in that commit.
+
+**Criterion 5 was unsatisfiable as originally worded, and the criterion was narrowed rather than
+the palette bent to it.** What the measurement showed, in the order it was taken:
+
+| Measurement | Result |
+|---|---|
+| Light, original wording | 205 violations of 848 elements |
+| **Dark, untouched page, same check** | **196** of 848 — pre-existing, not caused by this card |
+| Light, narrowed to elements that paint | **127** of 367 |
+| Dark, narrowed | 104 of 367 |
+
+Nine of the original 205 were 7×7px decorative dots (`Treko.dc.html:251`) that inherit
+`--color-neutral-200` and render only a background disc. Solved numerically: clearing 4.5:1
+against their four status-colour grounds needs a foreground of **249..255**, while the token's 59
+other uses need it near-black — so **no palette assignment satisfied the criterion**. That is a
+defect in the criterion's population, not in the palette, which is why criterion 5 and Proof C
+now score only elements that paint a mark in their own `color`. The `::before`/`::after` arm
+keeps icon fonts in scope: **25** Phosphor `<i>` elements have no text node but do paint a glyph,
+and they are still measured.
+
+**The remaining 127 are real and belong to task 4.** A trial darkening of the four offending
+tokens was run against the live render rather than reasoned about, and it is recorded here
+because its *failure* is the useful part: it took the unnarrowed count 205 → **40**, not → 9.
+`--color-accent` turns out to be a background under `--color-text` as well as a foreground, so
+darkening it created 28 new violations at 3.33, and three tokens solved to exactly 4.50 with no
+margin. Task 4 must re-derive against the render; the trial values are not a starting point.
 
 ### Task 10 — the suite
 
