@@ -122,8 +122,14 @@ _APPEARANCE_PROBE_JS = """
     while (card && parseFloat(getComputedStyle(card).borderTopWidth) === 0) card = card.parentElement;
     if (!card) return {count: 1, card: null};
     const cs = getComputedStyle(card);
+    // `card: 'ok'` must be on BOTH returns. The first version omitted it here and set it only
+    // on the `!card` path, so `_assert_cards_found`'s `card is not None` check read a missing
+    // key as a missing border and reported "no bordered ancestor" against a card that had one --
+    // a measurement bug in the probe, diagnosed by dumping the real ancestor chain (the card
+    // was at depth 2 with borderTopWidth 1px). Same class as task 5's "main column" bug.
     return {
       count: 1,
+      card: 'ok',
       border: cs.borderTopColor,
       background: cs.backgroundColor,
       labelColor: label ? getComputedStyle(label).color : null,
@@ -385,6 +391,51 @@ def test_appearance_cards_switch_the_theme_both_ways(srv, tmp_path):
             "close handler instead of being stopped by the panel's `stopEvt` (§D5)")
     finally:
         chrome.close()
+
+
+def test_appearance_assertions_are_falsifiable():
+    """The two helpers above are pure functions over a probe payload, so their failure arms can
+    be shown to fire without a browser -- and they must be, because the first version of
+    `_APPEARANCE_PROBE_JS` omitted `card` from its success return and `_assert_cards_found`
+    reported "no bordered ancestor" against a card that plainly had one. The assertion was
+    right and the payload was wrong; nothing in the runtime tests could tell those apart.
+
+    Fixtures are built here, never captured from a live render, so they cannot drift with the
+    page (the lesson of `50e9a32`).
+    """
+    tokens = {"accent": "rgb(1, 1, 1)", "accent900": "rgb(2, 2, 2)", "accent300": "rgb(3, 3, 3)",
+              "neutral700": "rgb(4, 4, 4)", "neutral400": "rgb(5, 5, 5)",
+              "transparent": "rgba(0, 0, 0, 0)"}
+
+    def card(selected):
+        if selected:
+            return {"count": 1, "card": "ok", "border": tokens["accent"],
+                    "background": tokens["accent900"], "labelColor": tokens["accent300"]}
+        return {"count": 1, "card": "ok", "border": tokens["neutral700"],
+                "background": tokens["transparent"], "labelColor": tokens["neutral400"]}
+
+    good = {"tokens": tokens, "dark": card(True), "light": card(False)}
+    # Satisfiability first: a correct payload must pass, or every failure below means nothing.
+    _assert_cards_found(good)
+    _assert_selection(good, "dark")
+
+    missing_key = {"tokens": tokens, "dark": {"count": 1, "border": tokens["accent"]},
+                   "light": card(False)}
+    with pytest.raises(AssertionError, match="no bordered ancestor"):
+        _assert_cards_found(missing_key)
+
+    with pytest.raises(AssertionError, match="expected exactly one `i.ph-sun` glyph"):
+        _assert_cards_found({"tokens": tokens, "dark": card(True), "light": {"count": 0}})
+
+    # The failure criterion 7 is named for: BOTH cards left unselected.
+    neither = {"tokens": tokens, "dark": card(False), "light": card(False)}
+    with pytest.raises(AssertionError, match="the dark card is not marked selected"):
+        _assert_selection(neither, "dark")
+
+    # And its mirror: both marked selected at once.
+    both = {"tokens": tokens, "dark": card(True), "light": card(True)}
+    with pytest.raises(AssertionError, match="the light card is ALSO marked selected"):
+        _assert_selection(both, "dark")
 
 
 # ===========================================================================================
