@@ -582,9 +582,12 @@ Worked examples, each previously a hole:
 | `cd /a && cd b && git switch main` | 2 | `/a/b` | per that repo |
 | `cd "$d" && git switch main` | 1 | `UNRESOLVABLE` | **deny**, naming `$d` and segment 0 |
 
-**`-C` must not become a blanket refusal.** `git -C <other-repo> …` appears **215 times** in this
-repo's own scripts (measured round 2; re-verified round 4 at HEAD and at the merge-base), so denying
-every one would be unusable. `SEG_GIT_C` resolves the redirect rather than refusing it, and is
+**`-C` must not become a blanket refusal.** `git -C <other-repo> …` appears **215 times across 17
+files** in this repo's own scripts, so denying every one would be unusable. Derivation, so the
+number can be re-run rather than trusted — `git grep -o -- 'git -C' -- '*.sh' '*.py' | wc -l`;
+measured round 2, re-verified round 4, and re-run independently 2026-08-24 at both HEAD and the
+merge-base with `main` (`7a467c3`), identical each time. Note the instrument: `git grep -c` sums
+matching *lines* and returns 196, because several lines carry more than one occurrence. `SEG_GIT_C` resolves the redirect rather than refusing it, and is
 emitted **in addition to** the existing `SCOPE_UNKNOWN<tab>-C`, never in place of it.
 
 **The lexer's fail-open must not become the guard's.** `shell_segments.py`'s `segments()` returns
