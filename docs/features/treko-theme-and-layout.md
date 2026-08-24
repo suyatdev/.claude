@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
 branch: feat/treko-theme-and-layout
 ---
@@ -837,6 +837,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       SHA; once task 4 lands, Proof A becomes a frozen comparison between it and the base-commit SHA
       from task 1 — label it **ARCHIVED RECEIPT** in the test itself (§Verification, Proof A), not a
       live regression guard.
+      ⚠️ **This last instruction was NOT carried out, and the tick above overstates the task.**
+      `git grep "ARCHIVED RECEIPT" -- treko/` returns nothing and `test_guards.py`'s 16 tests cover
+      criteria 15, 16 and 17 only. Proof A was *run* and passed — twice at the time, and a third
+      time by the observability judge at `60cfcf6` with an independently written oracle — but it is
+      **a receipt, never a pinned test**, so nothing goes red if history is rewritten under those
+      SHAs. Found by the judge on 2026-08-24 and confirmed independently; recorded here rather than
+      in the ADR alone, because the checkbox is what a later reader trusts. ADR 0036 states the same
+      gap. Closing it is follow-up work, not this card's.
 - [x] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5, 6 and 7
       (including the corrupt-stored-theme case) against the *current* dark-only page and confirm each
       fails for the stated reason. Then add `body[data-theme="light"]` with all 51 declarations,
@@ -975,7 +983,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       Done — both keys documented under §"Where the survey is stored", verified against the page
       itself (`SIDE_W_MIN=190, SIDE_W_MAX=440, SIDE_W_DEFAULT=236`, `THEME_DEFAULT='dark'`).
       Confirmed no `.py` under `treko/` reads or writes either key.
-- [ ] 13. Compliance judge on this spec (before task 0), observability judge on the change (before
+- [x] 13. Compliance judge on this spec (before task 0), observability judge on the change (before
       the PR), then the PR. **Do not squash-merge.** The tokenize and re-tint commits are the design's
       whole rollback point (§D1), and criterion 8 pins an assertion to the tokenize commit
       specifically — a squash deletes both. Use a merge or rebase-merge, and state in the PR body
@@ -1762,6 +1770,47 @@ not a renderer; stripping comments would create somewhere to hide one. It is als
 upstream URL as **bare prose with no fetching construct around it**, not because comments are
 exempt. A future edit that wraps it in `url()` should, and will, fail.
 
+### Task 13 — the observability judge, and PR #79 (2026-08-24)
+
+**Verdict: `risk=medium`, `confidence=high`**, recorded at HEAD `60cfcf6` in
+`coding-memory/observability-judge/`. Draft PR: **#79**, opened while the verdict was still
+uncommitted so `judge-guard`'s `head_sha == HEAD` check could see it.
+
+**The judge did not take this card's word for anything, and that is the point of the entry.** It
+re-ran the suite itself (294 passed, exit 0), wrote its **own** oracle for Proof A and got the base
+file byte-for-byte, and reproduced the node-ID diff by a *different* route — `git archive` into a
+temp directory rather than a worktree — landing on the same 0 lost / 73 added. It also re-hashed the
+header block and confirmed base `:82-83` and HEAD `:103-104` are identical, so §Task 9's
+"pre-existing, merely made reachable" reading of the 440px title clip is independently correct.
+
+**What it found that this card had not.**
+
+1. **Task 2's tick overstates.** Proof A is a receipt, not a pinned test — see the ⚠️ now attached
+   to task 2 itself. Confirmed here independently: `git grep "ARCHIVED RECEIPT" -- treko/` is empty
+   and `test_guards.py`'s 16 tests cover criteria 15–17 only.
+2. **Stale `Expected RED` docstrings on passing tests.** The judge reported 16; the measured count
+   is **14**, across three files (`test_drawer_sections.py` 3, `test_sidebar.py` 6,
+   `test_theme.py` 5). The number is recorded as measured rather than as relayed. All 14 were
+   genuinely false — one asserts "the Appearance section does not exist" on a test that passes
+   because it does. Swept in the follow-up commit: `Expected RED …` → `Was RED when written. At
+   that commit: …`, prose only, 14 insertions against 14 deletions, no assertion touched.
+3. **Non-text contrast is checked nowhere.** Criterion 5's population is the 367 of 848 elements
+   that paint a mark in their own colour. The judge agrees the narrowing is correct — it read
+   `paintsText()` — but notes the consequence: decorative dots, borders and accent chrome have zero
+   contrast coverage, and a green suite does not disclose that. Not a defect in this card; a
+   scope boundary this card should have named out loud. Named now.
+4. **The stale task-1 digest needs an in-place marker.** The correction lives ~200 lines away in
+   §Task 10; a reader landing on task 1's table sees a digest that looks authoritative.
+
+**On the two things this card asked it to attack:** it judged the eyeballed/measured split honest
+and clearly drawn — with one fair snag, that §Task 9's state table mixes eye-reads and `rgb()`
+measurements in a single column — and judged the two recorded screenshot-read corrections
+*actionable* rather than self-flagellating, each ending in a stated verdict.
+
+**Still owed after this card closes:** a human opening the page (criterion 5's own words), the
+Proof A pin, the 440px title clip, non-text contrast coverage, §D8's stale line numbers, and an
+in-place marker on task 1's digest.
+
 ### Task 9 — launched for real, and what was EYEBALLED (2026-08-24)
 
 Criterion 5 ends "**A human opens it once (task 9) and that is recorded as eyeballed, not
@@ -1895,13 +1944,18 @@ edit to `treko/`.
 | `wc -l treko/Treko.dc.html` | **639** |
 | fence `:325-418` | **4851 bytes**, sha256 `f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136` |
 | collected node IDs | **221** |
-| sorted node-ID set | sha256 `5f03a015bd6d7b4e86d5214acf8d3e8c6d83c722b9396ba8af721d276dbbb311` |
+| sorted node-ID set | sha256 `5f03a015bd6d7b4e86d5214acf8d3e8c6d83c722b9396ba8af721d276dbbb311` ⚠️ **does not reproduce — see §Task 10** |
 | suite result | **221 passed in 120.36s** |
 
 Per-module counts, so task 10 can diff composition and not merely the total: `test_server.py` 89,
 `test_store.py` 30, `test_analyze.py` 26, `test_store_location.py` 21, `test_rename.py` 19,
 `test_ui_commands.py` 15, `test_server_lifetime.py` 10, `test_autolaunch.py` 10,
 `test_store_writer.py` 1.
+
+⚠️ **The digest in that last row is not a usable receipt.** Task 1 recorded the number but never
+the recipe, and nine serializations of the same 221 IDs fail to reproduce it (§Task 10). The
+canonical byte-sorted form is `8a5ed311…`. The row is left as the historical record it is; what
+carries criterion 18 is the `comm` set difference in §Task 10, not this hash.
 
 **Checked for a hidden deselection, not assumed:** `pytest.ini`, `pyproject.toml`, `setup.cfg`,
 `tox.ini` and both `conftest.py` files carry no `addopts`, and the run reported zero

@@ -136,7 +136,7 @@ def test_criterion4_light_block_covers_every_reachable_custom_property():
     """docs/features/treko-theme-and-layout.md criterion 4 + §Verification "Criterion 4 — the
     light block's coverage".
 
-    Expected RED, right now: `body[data-theme="light"]` does not exist in `Treko.dc.html` at all,
+    Was RED when written. At that commit: `body[data-theme="light"]` does not exist in `Treko.dc.html` at all,
     so every non-exempt reachable token is "missing" — this fails because the light block is
     absent, not because the reachable-token computation itself is broken (see the sanity assert
     below, which pins that the computation finds a plausible, non-trivial set today).
@@ -179,7 +179,7 @@ def test_criterion6_shadow_sm_and_shadow_lg_overridden_but_not_shadow_md():
     dark-mode ring hexes (#3f424d, #9397ab); `--shadow-md` must NOT be overridden (zero readers
     in this page — §D3, same reasoning that excluded `--panel`).
 
-    Expected RED, right now: no light block exists, so neither shadow token is overridden yet.
+    Was RED when written. At that commit: no light block exists, so neither shadow token is overridden yet.
     """
     root_rule = next((decl for sel, decl in _nocturne_rules() if sel.strip() == ":root"), None)
     assert root_rule is not None, "nocturne.css has no :root rule to read dark shadow values from"
@@ -433,7 +433,7 @@ def test_criterion7_corrupt_stored_theme_yields_dark(srv, tmp_path, stored):
     system boundary, and the prototype's `||` seed only substitutes for null/'' -- every other
     string passes straight through into `setAttribute('data-theme', ...)`.
 
-    Expected RED, right now: nothing reads `taskTracker.theme` and nothing calls
+    Was RED when written. At that commit: nothing reads `taskTracker.theme` and nothing calls
     `setAttribute('data-theme', ...)` -- `data-theme` has 0 occurrences in `Treko.dc.html`. So
     `data-theme` is absent (None), not 'dark'. It fails on the missing seed, not on a wrong
     validation result. The mount assertion below runs first and passes against the untouched dark
@@ -467,7 +467,7 @@ def test_criterion7_theme_survives_a_reload(srv, tmp_path):
     that stops the corrupt-value tests above from passing vacuously. A seed hardwired to 'dark'
     would satisfy every parametrised case in this file and fail only here.
 
-    Expected RED, right now: no light block and no seed, so `data-theme` is absent.
+    Was RED when written. At that commit: no light block and no seed, so `data-theme` is absent.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
     try:
@@ -512,7 +512,7 @@ def test_criterion7_unavailable_localstorage_yields_dark_without_throwing(srv, t
     Installed via `Page.addScriptToEvaluateOnNewDocument` so the poison is in place *before* the
     page's seed runs -- setting it after load would be too late to test a mount-time read.
 
-    Expected RED, right now: `data-theme` is never set at all, so the attribute is absent rather
+    Was RED when written. At that commit: `data-theme` is never set at all, so the attribute is absent rather
     than 'dark'. The board-still-mounts assertion runs first and is expected to PASS even today,
     which is the point of ordering it first: it separates "the page survived" from "the page
     chose dark", and only the second half is waiting on task 3's implementation.

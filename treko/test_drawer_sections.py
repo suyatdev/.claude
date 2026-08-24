@@ -323,7 +323,7 @@ def test_criterion7_appearance_selection_follows_the_validated_theme(srv, tmp_pa
     against the closed set, so `S.theme` is always exactly one of two strings and exactly one
     ternary arm can fire. This test is what makes that an asserted fact rather than a claim.
 
-    Expected RED right now: the Appearance section does not exist, so neither glyph is found.
+    Was RED when written. At that commit: the Appearance section does not exist, so neither glyph is found.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
     try:
@@ -448,7 +448,7 @@ def test_criterion13_layout_readout_reads_the_stored_width(srv, tmp_path, stored
     widths, neither of them 236: a readout hardcoded to the default fails both, which is the
     failure this criterion names ("not a second stored copy").
 
-    Expected RED right now: the Layout section does not exist, so no `<n>px` readout is
+    Was RED when written. At that commit: the Layout section does not exist, so no `<n>px` readout is
     inside the panel at all.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
@@ -638,7 +638,7 @@ def test_criterion2_dark_literals_live_only_in_root_and_the_preview_cards():
     """Criterion 2: the two dark literals "appear only in the eight `:root` declarations and in
     the drawer's two preview cards, which are exempt **by explicit name and comment**".
 
-    Expected RED right now: the preview cards and their marker comments do not exist yet, so
+    Was RED when written. At that commit: the preview cards and their marker comments do not exist yet, so
     the exemption markers are missing. It goes green when task 7 lands the cards *with* the
     comment §D2 requires -- and it stays red if a later change tokenizes the cards away or
     scatters a literal somewhere new.

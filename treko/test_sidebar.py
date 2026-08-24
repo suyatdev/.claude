@@ -253,7 +253,7 @@ def test_dragging_resizes_sidebar_and_main_column(srv, tmp_path):
     """Gherkin "dragging resizes the sidebar" + criterion 9 (sidebar and mainML update
     together).
 
-    Expected RED, right now: no cursor:col-resize handle exists anywhere in the DOM (0
+    Was RED when written. At that commit: no cursor:col-resize handle exists anywhere in the DOM (0
     occurrences of 'col-resize' in Treko.dc.html), so the drag can never start. Fails on the
     handle-found precondition, not on a wrong width.
     """
@@ -293,7 +293,7 @@ def test_drag_clamps_at_both_ends(srv, tmp_path):
     §D4's move handler: `Math.max(SIDE_W_MIN, Math.min(SIDE_W_MAX, ev.clientX))`. Dragging past
     either bound must clamp, not pass the raw clientX through.
 
-    Expected RED, right now: same reason as the plain-drag test -- no col-resize handle
+    Was RED when written. At that commit: same reason as the plain-drag test -- no col-resize handle
     exists, so the drag never starts.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
@@ -334,7 +334,7 @@ def test_width_persisted_once_on_mouseup_not_per_mousemove(srv, tmp_path):
     exactly `taskTracker.sideW` (not the sidebar-collapse or other keys the page also writes)
     across 60 simulated mousemove events, asserting zero until mouseup and exactly one after.
 
-    Expected RED, right now: no col-resize handle exists, so the drag never starts and the
+    Was RED when written. At that commit: no col-resize handle exists, so the drag never starts and the
     write-count precondition never gets exercised.
     """
     chrome = cdp_harness.Chrome(str(tmp_path / "chrome-profile"))
@@ -372,7 +372,7 @@ def test_width_persisted_once_on_mouseup_not_per_mousemove(srv, tmp_path):
 def test_width_survives_a_reload(srv, tmp_path):
     """Gherkin "the width survives a reload" + criterion 9 ("survives a reload").
 
-    Expected RED, right now: mainML is `S.collapsed?'56px':'236px'` (Treko.dc.html:650), two
+    Was RED when written. At that commit: mainML is `S.collapsed?'56px':'236px'` (Treko.dc.html:650), two
     fixed literals -- nothing reads or writes `taskTracker.sideW`, so a drag to 300px cannot
     outlive the drag itself even if it could happen. Fails after the reload, not before: the
     drag+release sequence itself is the same missing-handle failure the other tests hit, so
@@ -427,7 +427,7 @@ def test_corrupt_stored_width_yields_default_not_a_hardcoded_coincidence(srv, tm
         )
 
         # The proof this isn't the hardcoded-236 literal in disguise: a valid, non-default
-        # stored value must be honoured. Expected RED here, right now.
+        # stored value must be honoured. Was RED here when written.
         _seed_sidew_and_reload(chrome, url, "300")
         valid_layout = _measure(chrome)
         assert valid_layout["sidebarWidth"] == 300, (
@@ -449,7 +449,7 @@ def test_out_of_range_stored_width_clamped_at_mount(srv, tmp_path, stored, expec
     ("a numeric stored value outside SIDE_W_MIN-SIDE_W_MAX is clamped to the nearer bound at
     mount, not only during a drag").
 
-    Expected RED, right now: the sidebar's width is the hardcoded literal 236px regardless of
+    Was RED when written. At that commit: the sidebar's width is the hardcoded literal 236px regardless of
     localStorage, so a stored '0' or '99999' renders 236px, not the clamped bound (190 or
     440) -- both parametrised cases differ from today's rendered value, so unlike the
     corrupt-value scenario above this needs no extra proof against a hardcoded coincidence.
