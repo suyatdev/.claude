@@ -73,7 +73,7 @@ color-scheme:light}
     </div>
   </sc-if>
   <sc-if value="{{ expandedBar }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:0;top:0;bottom:0;width:236px;z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:var(--rail);border-right:1px solid var(--hair);overflow-y:auto">
+    <div style="position:fixed;left:0;top:0;bottom:0;width:{{ sideW }};z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:var(--rail);border-right:1px solid var(--hair);overflow-y:auto">
       <div style="display:flex;align-items:center;gap:9px;padding:0 16px 14px">
         <img src="treko-icon.png" alt="" style="width:26px;height:26px;border-radius:7px;flex:none;display:block">
         <span style="font-size:14px;font-weight:500;color:var(--color-neutral-100)">Treko</span>
@@ -96,6 +96,7 @@ color-scheme:light}
       <div style="flex:1"></div>
       <div style="padding:12px 16px;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);line-height:1.7;border-top:1px solid var(--hover)">{{ srcLabel }}<br>{{ toolLabel }}</div>
     </div>
+    <div onMouseDown="{{ sideHandleDown }}" title="Drag to resize the sidebar" style="position:fixed;left:{{ sideHandleL }};top:0;bottom:0;width:7px;z-index:31;cursor:col-resize;background:transparent" style-hover="background:var(--color-accent)"></div>
   </sc-if>
   <div style="margin-left:{{ mainML }};transition:margin-left .18s ease;min-width:0">
     <div style="position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--color-bg) 90%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair);padding:14px 32px;display:flex;align-items:center;gap:14px">
@@ -336,6 +337,10 @@ const NAVDEF=[
  {icon:'ph ph-kanban',label:"What's left",sec:'sec-left'},
  {icon:'ph ph-chat-circle-dots',label:'Open questions',sec:'sec-questions'}];
 const OPEN_PR=['Draft','Open','Approved','Changes req.'];
+// §D4. The sidebar's drag bounds and its default. Named because each is read in three
+// places -- the mount-time seed, the drag handler's clamp, and Reset -- and a bound that
+// disagrees between them is exactly the defect criterion 11 exists to catch.
+const SIDE_W_MIN=190, SIDE_W_MAX=440, SIDE_W_DEFAULT=236;
 // §D3. The only value the seed accepts besides the literal 'light'; every other stored
 // string falls back to this, so S.theme is always exactly one of {'dark','light'}.
 const THEME_DEFAULT='dark';
@@ -452,7 +457,7 @@ const CMD_TONES={idle:'transparent',success:'var(--ok)',stale_token:'var(--warn)
                  unexpected:'var(--bad)',server_gone:'var(--bad)'};
 
 class Component extends DCLogic {
-  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',theme:(t=>t==='light'?'light':THEME_DEFAULT)(ls('taskTracker.theme')),q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
+  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',sideW:(w=>isNaN(w)?SIDE_W_DEFAULT:Math.max(SIDE_W_MIN,Math.min(SIDE_W_MAX,w)))(parseInt(ls('taskTracker.sideW'))),theme:(t=>t==='light'?'light':THEME_DEFAULT)(ls('taskTracker.theme')),q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
   componentDidMount(){
     this.applyTheme(this.state.theme);
     // The token exists only when server.py served this page. Over file://, or on a host
@@ -500,6 +505,13 @@ class Component extends DCLogic {
   agentHandleDown=e=>{e.preventDefault();const startY=e.clientY,startH=this.state.agentH;
     const mv=ev=>{const h=Math.min(Math.max(startH+(startY-ev.clientY),160),Math.max(220,window.innerHeight-120));this.setState({agentH:h});};
     const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);lsSet('taskTracker.agentH',String(this.state.agentH));};
+    window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);};
+  // §D4. Persist on mouseup, never per frame: mousemove fires at frame rate and a
+  // synchronous localStorage write per frame is the cost agentHandleDown above already
+  // declined to pay.
+  sideHandleDown=e=>{e.preventDefault();
+    const mv=ev=>{const w=Math.max(SIDE_W_MIN,Math.min(SIDE_W_MAX,ev.clientX));this.setState({sideW:w});};
+    const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);lsSet('taskTracker.sideW',String(this.state.sideW));};
     window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);};
   commandProps(S,run){
     // `runAnalyzed` above stays bound to the store, never to this view: a failed
@@ -647,7 +659,9 @@ class Component extends DCLogic {
       agentScrollRef:el=>{this._agentScroll=el},agentInputRef:el=>{this._agentIn=el},stopEvt:e=>e.stopPropagation(),
       agentC:S.agentOpen?'var(--color-accent)':'var(--color-neutral-600)',agentBg:S.agentOpen?'var(--color-accent-900)':'transparent',
       agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'var(--hover-soft)':'transparent',
-      collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:S.collapsed?'56px':'236px',
+      collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:(S.collapsed?56:S.sideW)+'px',
+      sideW:S.sideW+'px',sideHandleL:(S.sideW-3)+'px',sideHandleDown:this.sideHandleDown,
+      resetSideW:()=>{lsSet('taskTracker.sideW',String(SIDE_W_DEFAULT));this.setState({sideW:SIDE_W_DEFAULT})},
       toggleSidebar:()=>{const v=!S.collapsed;lsSet('taskTracker.sidebar',v?'1':'0');this.setState({collapsed:v})},
       ...this.commandProps(S,run),
       runName:run.name,runDir:run.dir,runAnalyzed:run.analyzedAt,repoCount:String(repoCount),wtCount:String(wtCount),
