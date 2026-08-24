@@ -818,17 +818,19 @@ Scenario: the page shows the cause and the right controls
   And   the standing message names the condition that fired, from the page's own strings
 
 Scenario: an unrecognised token never reaches the reason string
-  Given trackerChannelReason is called with a token outside the five-member set
+  Given trackerChannelReason is called with the probe token "zz_not_a_channel_token",
+        which is outside the five-member set
   When  it returns
   Then  the returned string is the fixed "No control channel." string
-  And   the input token's own text is absent from the returned string
+  And   the probe token's own text is absent from the returned string
 
-Scenario: the served page leaks the channel token nowhere but its own meta tag
-  Given a page served by a degraded server, carrying one of the five legal tokens
-  When  the page renders
+Scenario: the rendered board shows the reason text but never the raw token
+  Given a page served by a degraded server, carrying one of the four degraded tokens
+  When  the page has mounted
   Then  it shows the reason string trackerChannelReason maps from that token
-  And   the raw token's text appears nowhere in the markup other than the injected
-        <meta name="tracker-channel"> tag the server wrote
+  And   the raw token's text appears nowhere inside #dc-root, the mounted subtree
+        (read as document.getElementById('dc-root').innerHTML, never whole-document
+        view source — see task 13 for why the page's own bytes carry it twice)
 
 Scenario: a file:// launch shows no reason text
   Given the page is opened as a local file, not served by server.py
@@ -983,6 +985,10 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `trackerChannelReason(token)` returns each of the four mapped strings for its own token, and
       — criterion 7's security clause — returns the fixed fallback string for a token outside the
       five-member set, with the input token's own text asserted absent from the returned string.
+      **Use the probe token `zz_not_a_channel_token`, and pin it — do not let the test invent one.**
+      The assertion is a substring test against `No control channel.`, so a probe of `control` or
+      `No` is itself a substring of the fallback and would fail a *correct* implementation; the
+      pinned probe shares no substring with it (verified, not assumed).
       This last case is what closes criterion 7's "unrecognised token" clause: a real server can
       only ever emit one of the five legal tokens (D1), so this is the only way that clause is
       exercised at all. What this task does **not** cover — the mapped or fallback text actually
@@ -1010,12 +1016,22 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       python3 treko/server.py --open`): confirm the board renders, the reason line matches the
       table, Re-analyze works, the two copy chips copy, and — the half no node test can reach,
       because it is a question about React's actual render output, not about `trackerChannelReason`
-      itself (task 8) — that the raw `tracker-channel` attribute value appears nowhere in the
-      rendered page (view source, not just the visible text) **other than inside the injected
-      `<meta name="tracker-channel">` tag the server itself wrote**. That tag is D4's own design
-      (`:355`), built exactly as the `tracker-token` sibling at `server.py:494` is, so a correct
-      implementation always has the raw value in view-source once; the leak this checks for is a
-      *second* occurrence, anywhere React put it. Once with a live surface: confirm the banner
+      itself (task 8) — that the raw `tracker-channel` attribute value appears nowhere inside
+      **`#dc-root`, the mounted subtree**, read as `document.getElementById('dc-root').innerHTML`
+      after mount. **Scope the check to that subtree; never to whole-document view source.**
+      A correct degraded launch carries the raw token in the served bytes **twice**, and neither
+      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4 `:355`, built
+      exactly as the `tracker-token` sibling at `server.py:494` is), and the
+      `TRACKER_CHANNEL_REASONS` **keys** (D5, above) — which *are* the token literals — riding
+      inside the marker-fenced inline script that `_serve_index` serves verbatim
+      (`server.py:489`). A whole-page check therefore fails against correct code; three rounds of
+      carving out exceptions each missed one of these, which is why the scope moves instead.
+      `#dc-root` excludes both **structurally, not by exception**: the DC runtime creates that div
+      and *replaces* `<x-dc>` with it (`treko/support.js:165-168`), then mounts React into it
+      (`:197`), so the `<head>` meta and the `<script type="text/x-dc">` sibling at
+      `Treko.dc.html:304` are outside it by construction. Note `dc-root` appears **zero** times in
+      `Treko.dc.html` — it exists only at runtime, so read it from the live DOM, never from the
+      served text. Once with a live surface: confirm the banner
       carries no `reason=`, all three buttons render live, no copy chip renders, and `cmdChannel`
       reads `'ok'` — this is the only place the full meta → `componentDidMount` → state →
       `commandProps` wire is observable end to end, so a passing degraded run alone does not clear
