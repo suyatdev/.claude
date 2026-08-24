@@ -19,6 +19,7 @@
 body{margin:0;background:var(--color-bg)}
 /* semantic status hues — OKLCH-matched to the Nocturne ramps' lightness family */
 :root{--ok:#8fcaa8;--ok-bg:#17352a;--warn:#d8b06c;--warn-bg:#3a2d15;--bad:#e8968e;--bad-bg:#42201d;--info:#9ec2ec;--info-bg:#1d2c44;--mono:ui-monospace,Menlo,Consolas,monospace}
+:root{--rail:#12131e;--hair:rgba(255,255,255,.06);--hair-2:rgba(255,255,255,.08);--hair-3:rgba(255,255,255,.1);--hover:rgba(255,255,255,.05);--hover-soft:rgba(255,255,255,.03);--hover-faint:rgba(255,255,255,.025);--hover-ghost:rgba(255,255,255,.02)}
 </style>
 </helmet>
 <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
@@ -36,8 +37,8 @@ body{margin:0;background:var(--color-bg)}
 <sc-if value="{{ ready }}" hint-placeholder-val="{{ true }}">
 <div style="min-height:100vh">
   <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:0;top:0;bottom:0;width:56px;z-index:30;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;background:#12131e;border-right:1px solid rgba(255,255,255,.06)">
-      <div onClick="{{ toggleSidebar }}" title="Expand sidebar" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer;marginBottom:4px" style-hover="color:var(--color-accent-300);background:rgba(255,255,255,.05)"><i class="ph ph-sidebar-simple" style="font-size:17px"></i></div>
+    <div style="position:fixed;left:0;top:0;bottom:0;width:56px;z-index:30;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;background:var(--rail);border-right:1px solid var(--hair)">
+      <div onClick="{{ toggleSidebar }}" title="Expand sidebar" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer;marginBottom:4px" style-hover="color:var(--color-accent-300);background:var(--hover)"><i class="ph ph-sidebar-simple" style="font-size:17px"></i></div>
       <img src="treko-icon.png" alt="Treko" title="Treko" style="width:30px;height:30px;border-radius:8px;margin-bottom:8px;display:block">
       <sc-for list="{{ runsList }}" as="r" hint-placeholder-count="3">
         <div onClick="{{ r.pick }}" title="{{ r.name }}" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:10.5px;font-weight:600;font-family:var(--mono);cursor:pointer;color:{{ r.railC }};background:{{ r.railBg }};box-shadow:{{ r.railGlow }}">{{ r.init }}</div>
@@ -53,15 +54,15 @@ body{margin:0;background:var(--color-bg)}
     </div>
   </sc-if>
   <sc-if value="{{ expandedBar }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:0;top:0;bottom:0;width:236px;z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:#12131e;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto">
+    <div style="position:fixed;left:0;top:0;bottom:0;width:236px;z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:var(--rail);border-right:1px solid var(--hair);overflow-y:auto">
       <div style="display:flex;align-items:center;gap:9px;padding:0 16px 14px">
         <img src="treko-icon.png" alt="" style="width:26px;height:26px;border-radius:7px;flex:none;display:block">
         <span style="font-size:14px;font-weight:500;color:var(--color-neutral-100)">Treko</span>
-        <div onClick="{{ toggleSidebar }}" title="Collapse sidebar" style="margin-left:auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--color-neutral-600);cursor:pointer" style-hover="color:var(--color-accent-300);background:rgba(255,255,255,.05)"><i class="ph ph-caret-double-left" style="font-size:14px"></i></div>
+        <div onClick="{{ toggleSidebar }}" title="Collapse sidebar" style="margin-left:auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--color-neutral-600);cursor:pointer" style-hover="color:var(--color-accent-300);background:var(--hover)"><i class="ph ph-caret-double-left" style="font-size:14px"></i></div>
       </div>
       <div style="padding:0 16px 6px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600)">Open runs</div>
       <sc-for list="{{ runsList }}" as="r" hint-placeholder-count="3">
-        <div onClick="{{ r.pick }}" style="padding:7px 16px;cursor:pointer;border-left:2px solid {{ r.edge }};background:{{ r.bg }}" style-hover="background:rgba(255,255,255,.03)">
+        <div onClick="{{ r.pick }}" style="padding:7px 16px;cursor:pointer;border-left:2px solid {{ r.edge }};background:{{ r.bg }}" style-hover="background:var(--hover-soft)">
           <div style="font-size:12.5px;color:{{ r.nameC }}">{{ r.name }}</div>
           <div style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);margin-top:1px">{{ r.dir }} · {{ r.analyzedAt }}</div>
         </div>
@@ -74,11 +75,11 @@ body{margin:0;background:var(--color-bg)}
       <div style="height:1px;margin:14px 16px;background:var(--color-divider)"></div>
       <div onClick="{{ toggleAgent }}" style="display:flex;align-items:center;gap:9px;padding:6.5px 16px;font-size:12.5px;cursor:pointer;color:{{ agentC }};border-left:2px solid {{ agentEdge }};background:{{ agentRowBg }}" style-hover="color:var(--color-accent-300)"><i class="ph ph-robot" style="font-size:14px"></i>Agent panel<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600)">a</span></div>
       <div style="flex:1"></div>
-      <div style="padding:12px 16px;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);line-height:1.7;border-top:1px solid rgba(255,255,255,.05)">{{ srcLabel }}<br>{{ toolLabel }}</div>
+      <div style="padding:12px 16px;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);line-height:1.7;border-top:1px solid var(--hover)">{{ srcLabel }}<br>{{ toolLabel }}</div>
     </div>
   </sc-if>
   <div style="margin-left:{{ mainML }};transition:margin-left .18s ease;min-width:0">
-    <div style="position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--color-bg) 90%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.06);padding:14px 32px;display:flex;align-items:center;gap:14px">
+    <div style="position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--color-bg) 90%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair);padding:14px 32px;display:flex;align-items:center;gap:14px">
       <div style="min-width:0;flex:1 1 auto;overflow:hidden">
         <div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h1 style="font-size:19px;margin:0;white-space:nowrap">{{ runName }}</h1><span style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ runDir }}</span></div>
         <div style="font-size:11px;color:var(--color-neutral-500);margin-top:1px">analyzed {{ runAnalyzed }} · {{ repoCount }} repos · {{ wtCount }} worktrees scanned</div>
@@ -93,7 +94,7 @@ body{margin:0;background:var(--color-bg)}
         <button class="{{ c.cls }}" onClick="{{ c.go }}" title="{{ c.title }}" style="font-size:13px"><i class="{{ c.icon }}"></i>{{ c.label }}</button>
       </sc-for>
       <sc-for list="{{ cmdCopies }}" as="c">
-        <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid rgba(255,255,255,.08)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
+        <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid var(--hair-2)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
       </sc-for>
     </div>
     <div style="padding:24px 32px {{ mainPB }};max-width:1560px">
@@ -131,7 +132,7 @@ body{margin:0;background:var(--color-bg)}
         <sc-for list="{{ feats }}" as="f" hint-placeholder-count="2">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 0 5px;font-family:var(--mono);font-size:11px;color:var(--color-accent-300)"><i class="ph ph-folder-simple"></i>{{ f.name }}<span style="color:var(--color-neutral-600)">{{ f.meta }}</span><span style="flex:1;height:1px;background:linear-gradient(to right,var(--color-divider),transparent)"></span></div>
           <sc-for list="{{ f.tasks }}" as="t" hint-placeholder-count="3">
-            <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:minmax(250px,1.6fr) 148px 106px 200px 62px 106px 26px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer" style-hover="background:rgba(255,255,255,.025)">
+            <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:minmax(250px,1.6fr) 148px 106px 200px 62px 106px 26px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hover);cursor:pointer" style-hover="background:var(--hover-faint)">
               <span style="min-width:0"><span style="display:block;font-size:13.5px;color:var(--color-neutral-100)">{{ t.name }}</span><sc-if value="{{ showDesc }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:11.5px;color:var(--color-neutral-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.desc }}</span></sc-if></span>
               <span style="display:flex;align-items:center;gap:6px"><span style="display:flex;gap:3px"><sc-for list="{{ t.dots }}" as="d" hint-placeholder-count="5"><span style="width:5px;height:5px;border-radius:50%;background:{{ d.bg }}"></span></sc-for></span><span style="font-size:11.5px;color:var(--color-neutral-400)">{{ t.phase }}</span></span>
               <span style="justify-self:start;font-size:11px;padding:2px 9px;border-radius:6px;color:{{ t.sc.c }};background:{{ t.sc.bg }}">{{ t.state }}</span>
@@ -141,7 +142,7 @@ body{margin:0;background:var(--color-bg)}
               <i class="{{ t.chev }}" style="font-size:13px;color:var(--color-neutral-600)"></i>
             </div>
             <sc-if value="{{ t.open }}" hint-placeholder-val="{{ false }}">
-              <div style="margin:0 0 8px 12px;padding:14px 18px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.06);border-radius:10px;display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:22px">
+              <div style="margin:0 0 8px 12px;padding:14px 18px;background:rgba(0,0,0,.28);border:1px solid var(--hair);border-radius:10px;display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:22px">
                 <div style="font-size:12px">
                   <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:7px">Worktree</div>
                   <div style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-300)">{{ t.d.worktree }}</div>
@@ -180,7 +181,7 @@ body{margin:0;background:var(--color-bg)}
         <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px;min-width:0">
           <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:14px">Execution &amp; merge order</div>
           <sc-for list="{{ waves }}" as="w" hint-placeholder-count="4">
-            <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)">
+            <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--hover)">
               <div style="width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--color-accent);border:1px solid var(--color-accent-700);background:var(--color-accent-900)">{{ w.n }}</div>
               <div style="min-width:0"><div style="display:flex;flex-wrap:wrap;gap:6px">
                 <sc-for list="{{ w.items }}" as="i" hint-placeholder-count="2"><span style="font-size:11.5px;padding:3px 9px;border-radius:6px;background:var(--color-neutral-900);color:var(--color-neutral-200);display:inline-flex;gap:6px;align-items:center">{{ i.t }}<span style="font-family:var(--mono);color:{{ i.prC }}">{{ i.pr }}</span></span></sc-for>
@@ -212,8 +213,8 @@ body{margin:0;background:var(--color-bg)}
           <div style="font-size:12.5px;color:var(--color-neutral-500);padding:6px 0">No hard ordering constraints in this run.</div>
         </sc-if>
         <sc-for list="{{ cons }}" as="c" hint-placeholder-count="3">
-          <div style="border-top:1px solid rgba(255,255,255,.05)">
-            <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:10px;padding:11px 0;cursor:pointer" style-hover="background:rgba(255,255,255,.02)">
+          <div style="border-top:1px solid var(--hover)">
+            <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:10px;padding:11px 0;cursor:pointer" style-hover="background:var(--hover-ghost)">
               <i class="{{ c.chev }}" style="color:var(--color-neutral-500)"></i>
               <span style="font-family:var(--mono);font-size:11px;color:var(--bad);background:var(--bad-bg);padding:2px 7px;border-radius:5px">{{ c.id }}</span>
               <span style="font-size:13.5px;color:var(--color-neutral-100)">{{ c.title }}</span>
@@ -232,7 +233,7 @@ body{margin:0;background:var(--color-bg)}
             <div style="min-width:0">
               <div style="font-family:var(--mono);font-size:11px;color:var(--color-accent-300);padding:8px 0 4px;display:flex;align-items:center;gap:6px"><i class="ph ph-git-branch"></i>{{ g.repo }}</div>
               <sc-for list="{{ g.rows }}" as="b" hint-placeholder-count="2">
-                <div style="display:grid;grid-template-columns:1.35fr 1.15fr 84px 100px 40px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,.05);font-size:11.5px">
+                <div style="display:grid;grid-template-columns:1.35fr 1.15fr 84px 100px 40px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--hover);font-size:11.5px">
                   <span style="font-family:var(--mono);color:var(--color-neutral-200);display:flex;align-items:center;gap:6px;min-width:0"><span style="width:7px;height:7px;flex:none;border-radius:50%;background:{{ b.dotBg }};box-shadow:{{ b.dotGlow }}"></span><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.branch }}</span></span>
                   <span style="font-family:var(--mono);color:var(--color-neutral-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.wt }}</span>
                   <span style="font-family:var(--mono)"><span style="color:var(--ok)">↑{{ b.ahead }}</span> <span style="color:{{ b.behindC }}">↓{{ b.behind }}</span></span>
@@ -254,7 +255,7 @@ body{margin:0;background:var(--color-bg)}
             <div style="min-width:0">
               <div style="display:flex;align-items:center;gap:7px;padding-bottom:8px;border-bottom:2px solid {{ k.c }};margin-bottom:10px"><span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:{{ k.c }}">{{ k.title }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-500)">{{ k.n }}</span></div>
               <sc-for list="{{ k.items }}" as="i" hint-placeholder-count="3">
-                <div style="padding:9px 11px;border-radius:9px;background:var(--color-bg);border:1px solid rgba(255,255,255,.06);margin-bottom:7px">
+                <div style="padding:9px 11px;border-radius:9px;background:var(--color-bg);border:1px solid var(--hair);margin-bottom:7px">
                   <div style="font-size:12px;color:var(--color-neutral-200);line-height:1.35">{{ i.t }}</div>
                   <div style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-500);margin-top:4px">{{ i.m }}</div>
                 </div>
@@ -267,7 +268,7 @@ body{margin:0;background:var(--color-bg)}
       <div id="sec-questions" style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
         <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:12px">Open questions</div>
         <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
-          <div style="padding:10px 0;border-top:1px solid rgba(255,255,255,.05);opacity:{{ q.op }}">
+          <div style="padding:10px 0;border-top:1px solid var(--hover);opacity:{{ q.op }}">
             <div style="display:flex;gap:9px;align-items:flex-start"><i class="{{ q.icon }}" style="color:{{ q.ic }};font-size:15px;margin-top:1px"></i>
             <div style="min-width:0;flex:1"><div style="font-size:13px;color:var(--color-neutral-100)">{{ q.q }}</div>
             <div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:3px;line-height:1.5">{{ q.ctx }}</div></div>
@@ -278,21 +279,21 @@ body{margin:0;background:var(--color-bg)}
     </div>
   </div>
   <sc-if value="{{ agentOpen }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:{{ mainML }};right:0;bottom:0;height:{{ agentHpx }};z-index:40;display:flex;flex-direction:column;background:#12131e;border-top:1px solid rgba(255,255,255,.1);box-shadow:0 -14px 40px rgba(0,0,0,.5);transition:left .18s ease">
-      <div onMouseDown="{{ agentHandleDown }}" style="position:relative;cursor:ns-resize;padding:9px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.06);user-select:none">
+    <div style="position:fixed;left:{{ mainML }};right:0;bottom:0;height:{{ agentHpx }};z-index:40;display:flex;flex-direction:column;background:var(--rail);border-top:1px solid var(--hair-3);box-shadow:0 -14px 40px rgba(0,0,0,.5);transition:left .18s ease">
+      <div onMouseDown="{{ agentHandleDown }}" style="position:relative;cursor:ns-resize;padding:9px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--hair);user-select:none">
         <span style="position:absolute;left:50%;top:4px;transform:translateX(-50%);width:44px;height:4px;border-radius:2px;background:var(--color-neutral-800)"></span>
         <i class="ph ph-robot" style="color:var(--color-accent);font-size:15px"></i>
         <span style="font-size:12.5px;color:var(--color-neutral-200)">Agent — {{ runName }}</span>
         <span style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-600)">drag to resize</span>
         <span style="flex:1"></span>
-        <div onClick="{{ toggleAgent }}" onMouseDown="{{ stopEvt }}" title="Close (esc)" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-200);background:rgba(255,255,255,.06)"><i class="ph ph-x" style="font-size:13px"></i></div>
+        <div onClick="{{ toggleAgent }}" onMouseDown="{{ stopEvt }}" title="Close (esc)" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-200);background:var(--hair)"><i class="ph ph-x" style="font-size:13px"></i></div>
       </div>
       <div ref="{{ agentScrollRef }}" style="flex:1;overflow-y:auto;padding:12px 18px;font-family:var(--mono);font-size:11.5px;line-height:1.7">
         <sc-for list="{{ agentMsgs }}" as="m" hint-placeholder-count="4">
           <div style="display:flex;gap:10px;padding:2px 0"><span style="flex:none;width:46px;text-align:right;color:{{ m.lc }}">{{ m.label }}</span><span style="color:{{ m.tc }};white-space:pre-wrap;min-width:0">{{ m.t }}</span></div>
         </sc-for>
       </div>
-      <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
+      <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--hair)">
         <input class="input" value="{{ agentQ }}" onChange="{{ setAgentQ }}" onKeyDown="{{ agentKey }}" ref="{{ agentInputRef }}" placeholder="Ask about this run — ordering, blockers, a task…" style="flex:1;min-height:32px;font-size:12.5px;font-family:var(--mono)">
         <button class="btn btn-primary" onClick="{{ sendAgent }}" style="font-size:12px"><i class="ph ph-paper-plane-right"></i>Send</button>
       </div>
@@ -593,14 +594,14 @@ class Component extends DCLogic {
       const active=r.id===run.id;
       const init=r.name.split(/\s+/).filter(w=>/^[a-z0-9]/i.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
       return {...r,init,active,railC:active?'var(--color-accent-100)':'var(--color-neutral-500)',railBg:active?'var(--color-accent-800)':'var(--color-neutral-900)',railGlow:active?'0 0 12px var(--color-accent-800)':'none',
-        edge:active?'var(--color-accent)':'transparent',bg:active?'rgba(255,255,255,.03)':'transparent',nameC:active?'var(--color-neutral-100)':'var(--color-neutral-500)',
+        edge:active?'var(--color-accent)':'transparent',bg:active?'var(--hover-soft)':'transparent',nameC:active?'var(--color-neutral-100)':'var(--color-neutral-500)',
         pick:()=>{lsSet('taskTracker.run',r.id);this.setState({runId:r.id,q:'',filter:'All',ox:{},oc:{},active:'sec-overview',agentMsgs:null});window.scrollTo({top:0});}};});
     const counts={['sec-overview']:'',['sec-tasks']:String(total),['sec-merge']:String(waves.length),['sec-constraints']:String((run.constraints||[]).length),['sec-branches']:String(branches.length),['sec-left']:String(kanbanTotal),['sec-questions']:String(openQ)};
     const navItems=NAVDEF.map(n=>{
       const on=S.active===n.sec;
       return {...n,count:counts[n.sec],go:()=>this.goTo(n.sec),
         railC:on?'var(--color-accent)':'var(--color-neutral-600)',railBg:on?'var(--color-accent-900)':'transparent',
-        sideC:on?'var(--color-accent-300)':'var(--color-neutral-400)',sideEdge:on?'var(--color-accent)':'transparent',sideBg:on?'rgba(255,255,255,.03)':'transparent'};});
+        sideC:on?'var(--color-accent-300)':'var(--color-neutral-400)',sideEdge:on?'var(--color-accent)':'transparent',sideBg:on?'var(--hover-soft)':'transparent'};});
     const AL={sys:{label:'·',lc:'var(--color-neutral-700)',tc:'var(--color-neutral-400)'},you:{label:'you ❯',lc:'var(--color-accent-300)',tc:'var(--color-neutral-100)'},agent:{label:'agent',lc:'var(--ok)',tc:'var(--color-neutral-300)'}};
     const blockedNames=tasksAll.filter(t=>t.state==='Blocked').map(t=>t.name).join(', ');
     this._sample=[
@@ -617,7 +618,7 @@ class Component extends DCLogic {
       agentKey:e=>{if(e.key==='Enter')this.sendAgent()},
       agentScrollRef:el=>{this._agentScroll=el},agentInputRef:el=>{this._agentIn=el},stopEvt:e=>e.stopPropagation(),
       agentC:S.agentOpen?'var(--color-accent)':'var(--color-neutral-600)',agentBg:S.agentOpen?'var(--color-accent-900)':'transparent',
-      agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'rgba(255,255,255,.03)':'transparent',
+      agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'var(--hover-soft)':'transparent',
       collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:S.collapsed?'56px':'236px',
       toggleSidebar:()=>{const v=!S.collapsed;lsSet('taskTracker.sidebar',v?'1':'0');this.setState({collapsed:v})},
       ...this.commandProps(S,run),

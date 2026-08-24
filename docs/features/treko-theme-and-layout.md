@@ -779,9 +779,11 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       base commit SHA, `wc -l treko/Treko.dc.html`, and the extracted bytes of `:325-418`. Nothing
       else in this card can be checked without them.
       Done: recorded under §Verification "Task 1 baseline". 221/221 green, no deselections.
-- [ ] 2. **Tokenize.** Add the eight `:root` declarations; replace all 27 literals — including the
+- [x] 2. **Tokenize.** Add the eight `:root` declarations; replace all 27 literals — including the
       three JS string literals. **No light block, no palette change, no DOM change.** Commit alone.
-      Proof A must pass on this commit and is asserted against it forever after. Record this commit's
+      Proof A must pass on this commit and is asserted against it forever after.
+      Done: one `:root` line (8 tokens at today's dark values), 27 literals replaced, 639->640
+      lines. Proof A byte-identical; see §Verification "Proof A — result". Record this commit's
       SHA; once task 4 lands, Proof A becomes a frozen comparison between it and the base-commit SHA
       from task 1 — label it **ARCHIVED RECEIPT** in the test itself (§Verification, Proof A), not a
       live regression guard.
@@ -1027,3 +1029,27 @@ Per-module counts, so task 10 can diff composition and not merely the total: `te
 `deselected`/`skipped`/`xfailed`/`error`. Collected (221) equals passed (221), so the baseline is
 the whole suite rather than a filtered subset — which matters because every later claim in this
 card is a comparison against that number.
+
+### Proof A — result at the tokenize commit
+
+**PASS — byte-identical.** Verified twice by independent implementations: the implementing agent's
+oracle, and a separate one written by the coordinator that parses the eight declarations out of the
+`:root` rule rather than assuming them, substitutes exact full literal keys longest-name-first, and
+diffs against `git show HEAD:treko/Treko.dc.html`. Per-token replacement counts matched §D2's table
+exactly and summed to 27.
+
+**The oracle was falsified before its pass was believed**, against four known-bad mutations — all
+four fired:
+
+| mutation | why it is in the list |
+|---|---|
+| a declared alpha `.06` → `.07` | the ordinary case: a value that moved |
+| `--hair-3` `.1` → `.12` | the task-4 re-tint leaking in early — the specific mistake §D1 warns about |
+| one `var(--hair-3)` → `var(--hair)` | the prefix-collision case step 4 exists to prevent |
+| a stray DOM edit | task 2's "no DOM change" constraint |
+
+The third is why substitution runs **longest-token-name-first**: `--hair` would otherwise shadow
+`--hair-2` and `--hair-3`. A pass observed without that case in the list would not have meant much.
+
+Suite at this commit: **221 passed, 0 deselected/skipped/xfailed/error**, and the sorted node-ID
+set is **identical** to task 1's — 0 lost, 0 gained, checked as a set diff rather than a total.
