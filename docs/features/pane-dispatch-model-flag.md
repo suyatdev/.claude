@@ -1,8 +1,8 @@
 ---
 phase: review
 model_tier: low
-branch: feat/pane-agent-model-flag
-pr: 71
+branch: none  # merged via PR #71 (330030f) 2026-08-24; feat/pane-agent-model-flag
+              # verified ancestor of origin/main first
 ---
 
 # `--model` passthrough for pane dispatch
