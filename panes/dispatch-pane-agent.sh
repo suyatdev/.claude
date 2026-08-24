@@ -36,8 +36,12 @@ CMUX_WAIT_SECS=15
 AGENT_TYPE_RE='^[A-Za-z0-9_-]{1,64}$'
 TIMEOUT_RE='^[0-9]+$'
 # Shape check, not an allowlist: valid model ids look like "sonnet", "claude-opus-5",
-# "claude-sonnet-5[1m]". The CLI is the authority on which ids actually exist; this
-# only rejects shell-hostile input before it reaches the launcher.
+# "claude-sonnet-5[1m]". The CLI is the authority on which ids actually exist.
+# It does NOT exclude a leading "-": a flag-shaped value like
+# "--dangerously-skip-permissions" passes and reaches the real claude CLI as
+# --model's own argument (verified). Not shell injection -- the launcher's %q
+# quoting holds regardless. Barring a leading "-" would be a spec change; the
+# card's stated character class permits it.
 # Bracket order is deliberate, not stylistic: POSIX bracket expressions have no
 # backslash-escape, so a bare \] mid-bracket closes it early (confirmed: silently
 # rejected every valid id). "]" must sit first (literal), "-" must sit last (literal).
