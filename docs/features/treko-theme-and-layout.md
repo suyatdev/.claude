@@ -872,7 +872,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       **Dark mode fails the same check 104 times and is out of scope here** — measured on the
       untouched page, so it predates this card. Criterion 5 is light-only by its own wording.
       Recording it so the next reader does not mistake it for a regression this card caused.
-- [ ] 5. **Sidebar.** Red tests for criteria 9, 10 and 11 first. Then the handle markup, the
+- [x] 5. **Sidebar.** Red tests for criteria 9, 10 and 11 first. Then the handle markup, the
       handler, the seed, and the three computed substitutions replacing `:621`.
       **Red half done** in `treko/test_sidebar.py`: 8 red, each on its own assertion, plus 2 source
       guards that pass by design. Evidence, the two Gherkin scenarios that are not runtime-testable,
@@ -880,6 +880,11 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       do not restate them here.
       **`:621` is `:650` today**, and every other line number this card cites has moved with it
       (`:514`→`:543`, `:432`→`:455`). Re-derive them; do not copy.
+      **Green half done** in `227e355` + the test-harness repair after it: **10/10**, `wc -l` 682.
+      The first run was 8/10, and both failures were measurement bugs in the test rather than
+      defects in the page — a mid-transition `getComputedStyle` read, and a "main column" selector
+      that matched 13 elements and used the wrong one. Both are recorded once, in §Verification
+      "Task 5 green half"; **task 7 still owes criterion 11's Reset clause.**
 - [ ] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
       `closeSettings`; the prepended Esc arm. Red tests for criterion 12 first, including the
       "existing arms undisturbed" diff.
@@ -1343,6 +1348,55 @@ the one who owes it, rather than it living only in a report read once.
 source tests), but `_MEASURE_LAYOUT_JS`, `SIDE_W_MIN`/`MAX`/`DEFAULT` and `SIDEW_KEY` are used by
 both halves, so splitting it would mean a third shared module for a file already under the maximum.
 Left whole, deliberately.
+
+### Task 5 green half — the sidebar lands, and two measurement bugs it exposed (2026-08-24)
+
+Implementation in `227e355`, all six §D4 substitutions; the test-harness repair in the commit after
+it. `treko/test_sidebar.py`: **10 passed in 12.73s.** `wc -l treko/Treko.dc.html` is **682**, under
+criterion 19's 800.
+
+**The first run against the implementation was 8 passed / 2 failed, and neither failure was a
+defect in the page.** Both were defects in how the test measured it, and they were two independent
+bugs that produced one symptom — `margin-left` reading a number that was neither the old value nor
+the new one. Recording both, because each is a trap the next task will walk into.
+
+**Bug 1 — `getComputedStyle` returns the in-flight value during a transition.** `Treko.dc.html:101`
+carries `transition:margin-left .18s ease`. Sampled against a real build immediately after clicking
+collapse:
+
+| t | `sidebarWidth` | `mainMarginLeft` |
+|---|---|---|
+| 0 ms | 56 | `236px` |
+| 60 ms | 56 | `150.886px` |
+| 120 ms | 56 | `76.863px` |
+| 200 ms | 56 | **`56px`** — settled |
+
+The page animates `0px → 236px` on mount too, so even the first read after `_wait_for_mount` is
+mid-flight. The fix polls until two consecutive reads agree rather than sleeping a fixed interval —
+a fixed sleep is flaky under load and would encode `.18s` in a second place. It waits for the value
+to stop moving and then asserts the same number as before, so a wrong width still fails; that was
+confirmed, not assumed, by temporarily asserting `'99px'` against a settled `'300px'` and against a
+settled `'56px'` and watching both fail.
+
+**Bug 2 — the "main column" selector matched 13 elements, and used the wrong one.** It identified
+the main column as the first element whose `style` attribute *starts with* `margin-left:`. On the
+mounted board that predicate is true of **13** elements: the collapse toggle at `:80`
+(`margin-left:auto`), eleven `margin-left:auto` count/label spans, and the real main column. The
+`if (!mainCol)` guard locked onto the first — the collapse toggle — whose flex `auto` margin
+genuinely shifts when the sidebar widens, which is exactly why the reading looked like a stuck
+transition rather than an obviously wrong element. Narrowed by additionally requiring
+`transition-property` to contain `margin-left`, which only the real main column carries; re-measured
+on the live render, that predicate matches **exactly 1** element.
+
+The two bugs masked each other: bug 2 governs the expanded/drag cases, bug 1 the collapsed case, and
+the first diagnosis found only bug 1 because the collapsed tree has no `margin-left:auto` toggle in
+it to collide with.
+
+`Treko.dc.html:302`'s `transition:left .18s ease` on the agent panel needs no equivalent treatment —
+no test in this file reads that element's `left`.
+
+**Still owed by criterion 11: the Reset clause.** `resetSideW` ships in task 5 per §D4, but its only
+caller is the drawer's Layout Reset button. **Task 7 owes the button and its test.**
 
 ### Task 8 — the regression guards (2026-08-24)
 

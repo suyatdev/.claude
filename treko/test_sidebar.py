@@ -106,10 +106,22 @@ _MOUSEUP_JS = (
 )
 
 # The sidebar/rail: `position:fixed;left:0;top:0;bottom:0` (Treko.dc.html:59 collapsed,
-# :76 expanded -- only one renders at a time, sc-if on `expandedBar`). The main column: the
-# one element whose live `style` attribute starts with `margin-left:` (Treko.dc.html:100;
-# every other `margin-left` in this page is `margin-left:auto`, mid-attribute). Both are read
-# from the live DOM tree, never from the file's source text.
+# :76 expanded -- only one renders at a time, sc-if on `expandedBar`).
+#
+# The main column: originally matched on "the one element whose live style attribute starts
+# with margin-left:" -- but the sidebar's own collapse-toggle button
+# (Treko.dc.html:80, `style="margin-left:auto;width:26px;..."`) ALSO starts with that exact
+# substring and sits earlier in document order while the sidebar is expanded, so that probe
+# silently matched the button instead and read its flex-auto margin (a real, but irrelevant,
+# number that happens to shift when the sidebar's width changes the row's available space --
+# this is what produced the impossible-looking readings during investigation: a value with no
+# CSS transition at all that still moved between drags, and one that never moved at all
+# post-mount because collapsing removes the button from the DOM entirely, leaving the real
+# main column as the only remaining match). Fixed by requiring the second, distinguishing
+# fact from the same anchor: only Treko.dc.html:100's div also declares
+# `transition:margin-left .18s ease` -- the toggle button has no transition at all. Both
+# checks read the live DOM (`getComputedStyle`, the live `style` attribute), never the file's
+# source text.
 _MEASURE_LAYOUT_JS = """
 (() => {
   let sidebar = null, mainCol = null;
@@ -119,7 +131,9 @@ _MEASURE_LAYOUT_JS = """
         && parseFloat(cs.top) === 0 && parseFloat(cs.bottom) === 0) sidebar = el;
     if (!mainCol) {
       const raw = el.getAttribute('style') || '';
-      if (raw.indexOf('margin-left:') === 0) mainCol = el;
+      if (raw.indexOf('margin-left:') === 0 && cs.transitionProperty.indexOf('margin-left') !== -1) {
+        mainCol = el;
+      }
     }
   });
   return {
@@ -174,6 +188,42 @@ def _measure(chrome):
     return chrome.evaluate(_MEASURE_LAYOUT_JS)
 
 
+# `Treko.dc.html:101`'s main column carries `transition:margin-left .18s ease`. A single
+# post-action read of `mainMarginLeft` can land mid-animation: measured in a real build,
+# clicking collapse produced '236px' at t=0ms (the pre-click value, read before the browser's
+# next paint), '150.886px' at t=60ms, '76.863px' at t=120ms, and the settled '56px' from
+# t=200ms onward; the same lag applies to the 0->236px transition on mount. The sidebar's own
+# width has no transition and is unaffected -- only mainMarginLeft needs this wait.
+MARGIN_SETTLE_TIMEOUT_SECS = 5
+MARGIN_SETTLE_POLL_SECS = 0.05
+
+
+def _measure_settled(chrome, timeout=MARGIN_SETTLE_TIMEOUT_SECS):
+    """`_measure`, but polled until `mainMarginLeft` stops changing between two consecutive
+    reads, so the caller asserts against the transition's settled target rather than a
+    mid-animation sample.
+
+    This only waits -- it does not loosen what gets asserted afterwards. The returned reading
+    is whatever `mainMarginLeft` settles to; if the implementation drove that value to a wrong
+    target, the settled reading is that wrong value, and a caller's exact-equality assertion
+    against it still fails. This is a timing fix for a CSS transition (measured settle time
+    ~200ms against the real page), never a tolerance on the expected number.
+    """
+    previous = None
+    current = _measure(chrome)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if current["mainMarginLeft"] == previous:
+            return current
+        previous = current["mainMarginLeft"]
+        time.sleep(MARGIN_SETTLE_POLL_SECS)
+        current = _measure(chrome)
+    raise AssertionError(
+        "mainMarginLeft never settled within %ss -- last two reads were %r then %r"
+        % (timeout, previous, current["mainMarginLeft"])
+    )
+
+
 def _assert_handle_found(found, where):
     assert found, (
         "no element with cursor:col-resize exists in the DOM (%s) -- the drag handle "
@@ -218,7 +268,7 @@ def test_dragging_resizes_sidebar_and_main_column(srv, tmp_path):
         _assert_handle_found(found, "before dragging to clientX 300")
 
         _mousemove(chrome, 300)
-        layout = _measure(chrome)
+        layout = _measure_settled(chrome)
         _mouseup(chrome)
 
         assert layout["sidebarWidth"] == 300, (
@@ -463,6 +513,10 @@ def test_no_handle_while_collapsed(srv, tmp_path):
         while collapsed_layout["sidebarWidth"] != 56 and time.time() < deadline:
             time.sleep(0.05)
             collapsed_layout = _measure(chrome)
+
+        # sidebarWidth has no CSS transition and is already settled above; mainMarginLeft
+        # does (Treko.dc.html:101, transition:margin-left .18s ease) and needs its own wait.
+        collapsed_layout = _measure_settled(chrome)
 
         assert collapsed_layout["sidebarWidth"] == 56, (
             "after collapsing, the rail's width is %r, expected 56px"
