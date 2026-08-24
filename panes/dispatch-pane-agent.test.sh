@@ -758,7 +758,7 @@ after_count=$(find "$PANE_STATE_DIR/runs" -name launch.sh | wc -l | tr -d ' ')
 # Criterion: unflagged dispatch produces a launcher byte-identical in shape to
 # pre-flag -- exactly 5 %q-quoted args after run-pane-agent.sh, no trailing ''.
 out=$(bash "$DISPATCH" dispatch pane-echo --prompt-file "$PROMPT" --result-file "$TMP/model4.md" --cwd "$TMP" 2>&1)
-nomodel_launcher=$(find "$PANE_STATE_DIR/runs" -name launch.sh -newer "$PROMPT" | xargs grep -l 'model4.md' 2>/dev/null | head -n 1)
+nomodel_launcher=$(find "$PANE_STATE_DIR/runs" -name launch.sh -newer "$PROMPT" -exec grep -l 'model4.md' {} + 2>/dev/null | head -n 1)
 if [ -n "$nomodel_launcher" ] && ! grep -q "run-pane-agent.sh.*''" "$nomodel_launcher"; then
   ok "unflagged dispatch: launcher has no trailing empty --model arg"
 else

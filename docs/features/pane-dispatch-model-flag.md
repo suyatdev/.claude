@@ -87,8 +87,21 @@ runner's argv — already covers the positional path.
 
 ## Verification
 
-- Before (pre-`--model`, `80328f3`): `run-pane-agent.test.sh` 12/0, `dispatch-pane-agent.test.sh` 116/0.
-- After (all tasks): `run-pane-agent.test.sh` 12/0, `dispatch-pane-agent.test.sh` 119/0 (+3 new: shape
-  reject on `--model "a b"`, no-pane-opened on that same call, launcher unchanged when unflagged).
+- Before (true merge-base `6734027`, verified in a throwaway worktree — the branch's own first
+  commit already carried tasks 1-2, so `80328f3` was not actually a "before"): `run-pane-agent.test.sh`
+  **10/0**, `dispatch-pane-agent.test.sh` **113/0**.
+- After (all tasks): `run-pane-agent.test.sh` **12/0** (+2), `dispatch-pane-agent.test.sh` **119/0**
+  (+6: 2 from tasks 1-2, plus shape reject on `--model "a b"`, no-pane-opened on that same call,
+  launcher unchanged when unflagged, and the 5th-positional passthrough case).
 - Criteria 1, 2, 4, 5 asserted directly in the suites above. Criterion 3 (`--model "a b"` dies with
   no pane) asserted at `dispatch-pane-agent.test.sh` — see "no pane opened" case.
+- Observability-judge (implementation stage): no dimension failed, risk=low confidence=high.
+  Confirmed findings, fixed here: (a) SC2038 on the `find | xargs grep -l` in the new unflagged-launcher
+  test — switched to `find -exec … +`; (b) this Verification section's before-counts were captured
+  mid-implementation (`80328f3`), not at the true branch point — corrected above. Open, deliberately
+  not fixed: `MODEL_RE` has no anchor against a leading `-`, so a value shaped like another CLI flag
+  (e.g. `--dangerously-skip-permissions`) passes the shape check — confirmed via direct dispatch (rc=0,
+  pane opened). Not shell injection (the `%q`/array boundary holds); the exposure is that the value
+  becomes `--model`'s *own* argument to the real `claude` CLI, which is the actual authority on
+  whether it's a valid model id. Excluding leading `-` isn't in the card's stated regex or acceptance
+  criteria — flagged to the user rather than silently expanding scope during review.
