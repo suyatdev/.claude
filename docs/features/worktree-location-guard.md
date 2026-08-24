@@ -633,7 +633,7 @@ arm-it decision is computed from that log.
 
 | # | Boundary | Behavior |
 |---|---|---|
-| 1 | stdin payload is absent, empty, or not valid JSON | **Deny.** The guard cannot identify what it is being asked to permit. |
+| 1 | stdin payload is absent, empty, or not valid JSON | **Deny — in both modes.** The guard cannot identify what it is being asked to permit. **Boundary 1 outranks the mode:** `log` mode would normally downgrade this to a `would-deny` log line, but the line format requires a `session_id` that an unparseable payload cannot supply. An unidentifiable request is refused either way, and no line is ever written with a fabricated or empty `session_id`. |
 | 2 | Payload parses but carries no `file_path`/`notebook_path` (Arm A) | **Allow, silently.** Not a write to a path — nothing to judge. |
 | 3 | `git` absent from `PATH` | **Deny**, message says the guard could not verify the checkout. Precedent: `test-marker-guard`'s `MSG_NO_PYTHON` blocks everywhere. |
 | 4 | `git --version` < 2.31, or unparseable | **Deny**, message names the 2.31 floor. |
@@ -785,6 +785,70 @@ Written against Arm A unless stated. `deny` means exit 2 with a `worktree-guard:
 `log` mode every `deny` below becomes "allow, and append a `would-deny` line".
 
 ```gherkin
+Feature: worktree-guard.sh — preconditions shared by every arm
+
+  Background:
+    Given settings.json sets env.WORKTREE_GUARD_MODE to "deny"
+    And git version 2.50.1 is installed
+
+  Scenario Outline: The stdin payload cannot be parsed
+    When the hook is invoked with <payload> on stdin
+    Then the hook denies
+    Examples:
+      | payload                    |
+      | nothing at all             |
+      | the empty string           |
+      | the text {"tool_name":     |
+      | the text not json at all   |
+    # Boundary 1. The guard cannot identify what it is being asked to permit, so it
+    # cannot permit it. This deny precedes arm selection: there is no payload to
+    # read a file_path, a command, or a session_id out of.
+
+  Scenario: A would-deny in log mode with no parseable session_id
+    Given WORKTREE_GUARD_MODE is "log"
+    And the stdin payload cannot be parsed
+    Then the hook denies rather than logging
+    # Boundary 1, second half. In log mode a deny normally becomes a would-deny log
+    # line, but the line format requires a session_id the unparseable payload cannot
+    # supply. Boundary 1 outranks the mode: an unidentifiable request is refused in
+    # both modes, and no line is written with a fabricated or empty session_id.
+
+  Scenario: python3 is absent
+    Given neither python3 nor python is on PATH
+    And the session cwd is a primary checkout
+    When Bash runs "git status"
+    Then the hook denies
+    # Boundary 7. The command could not be lexed, so its contents are unknown.
+    # "git status" is a read-only command Arm D allows, so an implementation that
+    # skips the lexer it cannot run allows this — that is the falsifier. Resolution
+    # follows git-guard.sh:54 (command -v python3 || command -v python).
+
+  Scenario Outline: A lexer exits non-zero
+    Given the session cwd is a primary checkout
+    And <script> exits non-zero for the command
+    When Bash runs "git status"
+    Then the hook denies
+    Examples:
+      | script                            |
+      | hooks/lib/shell_segments.py       |
+      | hooks/lib/classify-git-command.py |
+    # Boundary 7. Same reasoning as an absent interpreter: an unlexable command
+    # line is an unknown one, and both Bash arms judge only what the lexer returns.
+
+  Scenario Outline: HOME carries no usable value
+    Given HOME is <state> in the hook's environment
+    When Bash runs "git worktree add ~/.worktrees/.claude/feat-y -b feat/y"
+    Then the hook denies
+    Examples:
+      | state            |
+      | unset            |
+      | the empty string |
+    # Boundary 13. ~/.worktrees is undefined, so no path test can be performed.
+    # The command is the CORRECT one (it is Arm B2's allow case), so an
+    # implementation that lets an empty $HOME expand to "" and compares against
+    # "/.worktrees/", or that skips a test it cannot perform, allows it. Denying is
+    # the only answer that does not turn an undefined ~ into a grant.
+
 Feature: Arm A — writes are refused from a primary checkout
 
   Background:
@@ -856,6 +920,67 @@ Feature: Arm A — writes are refused from a primary checkout
     Given steps 4-5 have confirmed a non-bare, non-submodule git repo
     And git rev-parse --git-dir then exits non-zero
     Then the hook denies
+
+
+  Scenario Outline: The payload carries no write target
+    Given the session cwd is ~/.claude, a primary checkout
+    When <tool> fires with a payload carrying no file_path and no notebook_path
+    Then the hook allows silently
+    And nothing is appended to worktree-guard.log
+    Examples:
+      | tool         |
+      | Edit         |
+      | Write        |
+      | NotebookEdit |
+    # Boundary 2. Not a write to a path — nothing to judge. The cwd is a primary
+    # checkout on purpose: an implementation that falls back to the session cwd
+    # when the payload carries no path denies here, and that fallback is the one
+    # bug class phase-guard.sh records in its own Step 4 comment ("Resolved from
+    # the WRITE TARGET, never from the session's cwd").
+
+  Scenario: git --version output cannot be parsed
+    Given git --version prints "git version (unknown)"
+    When Write targets ~/.claude/panes/run-pane-agent.sh
+    Then the hook denies
+    And the message names the 2.31 floor
+    # Boundary 4, the "or unparseable" half. A version string the guard cannot read
+    # is a precondition it cannot verify, and gets the same verdict as one it can
+    # read and finds too old. The message assertion is what discriminates: this
+    # target denies under Arm A anyway, so only naming the floor proves the version
+    # check ran and reached the right conclusion.
+
+  Scenario: rev-parse fails without the "not a git repository" diagnostic
+    Given git rev-parse --show-toplevel exits 128 printing "fatal: detected dubious ownership"
+    When Write targets ~/.claude/panes/run-pane-agent.sh
+    Then the hook denies
+    # Boundary 5 is scoped to the recognizable diagnostic; anything else is a
+    # validation failure (Arm A step 4). Reading "not a repo" off the exit code
+    # alone classifies this as none-of-the-guard's-business and allows — the same
+    # exit-code ambiguity the Detection section found in the --path-format probe.
+
+  Scenario: A rev-parse probe exits 0 but prints nothing
+    Given a linked worktree at ~/.worktrees/.claude/feat-x
+    And git rev-parse --path-format=absolute --git-common-dir prints nothing
+    When Write targets ~/.worktrees/.claude/feat-x/hooks/git-guard.sh
+    Then the hook denies
+    # Boundary 6, the "or empty output" half. An empty value makes the two sides
+    # differ, which the compare reads as "linked worktree" and allows. The target is
+    # a linked worktree precisely so that a swallowed empty read produces an ALLOW
+    # and a correct implementation produces a DENY — against a primary-checkout
+    # target both answers are "deny" and the scenario proves nothing.
+
+  Scenario Outline: A repo-shape probe exits non-zero
+    Given a linked worktree at ~/.worktrees/.claude/feat-x
+    And <probe> exits non-zero for the target
+    When Write targets ~/.worktrees/.claude/feat-x/hooks/git-guard.sh
+    Then the hook denies
+    Examples:
+      | probe                                          |
+      | git rev-parse --is-bare-repository             |
+      | git rev-parse --show-superproject-working-tree |
+    # Boundary 6, the two probes the existing scenario never reaches. Both run
+    # BEFORE the primary-vs-linked compare, so a swallowed failure here lands on
+    # the linked-worktree allow rather than on any error path.
 
 Feature: Arm B2 — hand-rolled git worktree add
 
@@ -957,6 +1082,44 @@ Feature: Arm B2 — hand-rolled git worktree add
     When Bash runs "git worktree add ~/.worktrees/api/feat-q"
     Then the hook denies
     And the message names both repo roots
+
+
+  Scenario: A relative path operand that resolves under the centralized root
+    Given the session cwd is ~/.worktrees/.claude/feat-x
+    When Bash runs "git worktree add ../feat-y -b feat/y"
+    Then the operand is resolved to ~/.worktrees/.claude/feat-y first
+    And the hook allows
+    # Boundary 11. "Resolve to an absolute real path first" is the whole rule; an
+    # implementation that string-matches the raw operand against ~/.worktrees/
+    # denies a correctly-placed worktree. This is the only scenario in the feature
+    # whose expected verdict is ALLOW for a relative operand.
+
+  Scenario: A symlinked path operand
+    Given ~/.worktrees/.claude/feat-link is a symlink to /private/tmp/elsewhere
+    When Bash runs "git worktree add ~/.worktrees/.claude/feat-link/feat-y"
+    Then the operand is resolved to /private/tmp/elsewhere/feat-y first
+    And the hook denies
+    And the message names ~/.worktrees/.claude/ as the correct parent
+    # Boundary 11. The raw operand sits under the centralized root and passes any
+    # string test; only the resolved REAL path shows the worktree landing outside
+    # it. Without symlink resolution this is a silent hole straight through Arm B2.
+
+  Scenario: A path operand that cannot be resolved
+    When Bash runs "git worktree add $SOME_VAR/feat-y"
+    Then the hook denies
+    And the message names the unresolvable operand
+    # Boundary 11, and distinct from boundary 12's unresolvable cd operand under
+    # Arm D: the path operand has its own resolution step, so an implementation
+    # that resolves the cwd correctly can still take an unvouchable path operand.
+
+  Scenario: The .repo-root marker cannot be read
+    Given ~/.worktrees/.claude/.repo-root exists but is not readable
+    When Bash runs "git worktree add ~/.worktrees/.claude/feat-q"
+    Then the hook denies
+    # Boundary 14, the "cannot be read" half. An unreadable marker is an
+    # UNDETERMINED collision, not an absent one. Treating a failed read as "no
+    # marker yet" is how two repos come to share one directory silently, which is
+    # the exact outcome the marker exists to prevent.
 
 Feature: Arm D — moving a primary checkout's HEAD
 
@@ -1106,6 +1269,145 @@ Feature: create-worktree.sh
     Given git worktree remove exits non-zero
     Then the hook writes the error to stderr and exits 1
     And the worktree directory is left in place
+
+  Scenario Outline: HOME carries no usable value
+    Given HOME is <state> in the hook's environment
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook writes an error to stderr
+    And exits 1
+    And prints nothing to stdout
+    And no directory is created at /.worktrees
+    Examples:
+      | state            |
+      | unset            |
+      | the empty string |
+    # Boundary 15. An empty $HOME expands the target to "/.worktrees/<repo>/feat-x",
+    # so the falsifier is a hook that cheerfully reports a path at the filesystem
+    # root rather than one that fails.
+
+  Scenario: The payload's cwd is not inside a git repository
+    Given the payload's cwd is /private/tmp/scratch
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook writes an error to stderr
+    And exits 1
+    And prints nothing to stdout
+    # Boundary 16. The hook builds only on cwd and name (task 1b), and with no repo
+    # under cwd there is no <repo-name> segment and no repository to add a worktree
+    # to. An implementation that falls back to the basename of cwd prints a path
+    # here and sends the session into a directory git never registered.
+
+  Scenario: mkdir of the store fails
+    Given ~/.worktrees cannot be created because that path exists as a regular file
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook writes the OS error to stderr
+    And exits 1
+    And prints nothing to stdout
+    # Boundary 17. Quoting the OS error is the whole value of the message — "could
+    # not create the store" without the underlying errno leaves the user guessing
+    # between permissions, a full disk, and a name collision.
+
+  Scenario: The per-repo directory has been widened
+    Given ~/.worktrees has mode 700
+    And ~/.worktrees/.claude exists with mode 750
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook writes an error to stderr naming "chmod 700 ~/.worktrees/.claude"
+    And exits 1
+    And prints nothing to stdout
+    # Boundary 18 names BOTH directories; the "store has been widened" scenario
+    # above exercises only the parent, at 755. Mode 750 is the discriminating
+    # value: the rule is "any group or other permission bit", not "world-readable"
+    # and not "world-writable", so a group-read bit alone must refuse.
+
+  Scenario Outline: The .repo-root marker cannot be read or written
+    Given ~/.worktrees/.claude exists with mode 700
+    And <fault>
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook writes an error to stderr
+    And exits 1
+    And prints nothing to stdout
+    And git worktree add is never run
+    Examples:
+      | fault                                                           |
+      | .repo-root cannot be written because the directory is read-only |
+      | .repo-root exists but cannot be read                            |
+    # Boundary 19. The marker IS the collision check, so a hook that proceeds when
+    # it can neither read nor write it has no collision check at all. The ordering
+    # assertion comes from the Arm B sequence diagram, where the marker branch
+    # returns before git is called — and it keeps this failure clear of boundary
+    # 25's orphan case.
+
+  Scenario: The marker names a different repo root
+    Given ~/.worktrees/api/.repo-root contains ~/repos/org-a/api
+    And the payload's cwd is inside ~/repos/org-b/api
+    When Claude Code fires WorktreeCreate with name "feat-q"
+    Then the hook writes an error to stderr naming both repo roots
+    And exits 1
+    And prints nothing to stdout
+    And no worktree is added under ~/.worktrees/api
+    # Boundary 20. The Arm B2 collision scenario covers the Bash route only.
+    # WorktreeCreate reaches the same directory in a different script without
+    # passing any PreToolUse hook, so the check has to exist twice and be asserted
+    # twice.
+
+  Scenario: The requested branch already exists
+    Given the branch feat-x already exists in ~/.claude
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook runs "git worktree add ~/.worktrees/.claude/feat-x feat-x"
+    And -b is not passed
+    And --force is not passed
+    And stdout's last non-empty line is ~/.worktrees/.claude/feat-x
+    # Boundary 22 — the one row in this table that is NOT a failure: reuse it. -b
+    # over an existing branch fails outright, and forcing it moves a branch another
+    # session may be sitting on, which is the class of harm in Problem.
+
+  Scenario: The base ref cannot be resolved
+    Given git symbolic-ref refs/remotes/origin/HEAD exits non-zero
+    When Claude Code fires WorktreeCreate with name "feat-x"
+    Then the hook writes an error to stderr naming refs/remotes/origin/HEAD
+    And exits 1
+    And prints nothing to stdout
+    And no branch is created from local HEAD
+    # Boundary 23. The falsifier is the tempting fallback: basing the worktree on
+    # local HEAD bases it on whatever branch the primary checkout happened to be
+    # parked on, which is the exact bug this feature exists to stop.
+
+  Scenario: The hook fails after git worktree add has succeeded
+    Given git worktree add ~/.worktrees/.claude/feat-x succeeds
+    And the hook then fails before it can report the path
+    Then the hook runs git worktree remove for ~/.worktrees/.claude/feat-x
+    And exits 1
+    And prints nothing to stdout
+    And git worktree list registers no entry for ~/.worktrees/.claude/feat-x
+    # Boundary 25 — create and report ATOMICALLY. A create-then-misreport leaves an
+    # orphan registered in git worktree list, observed twice during the task 1b
+    # probe. Exiting 1 without cleaning up passes every other scenario here and
+    # still leaves the repo dirtier than before the hook ran.
+
+  Scenario: WorktreeRemove on a dirty worktree
+    Given ~/.worktrees/.claude/feat-x has uncommitted changes to hooks/git-guard.sh
+    When Claude Code fires WorktreeRemove for ~/.worktrees/.claude/feat-x
+    Then the hook writes an error to stderr naming hooks/git-guard.sh
+    And exits 1
+    And --force is not passed to git worktree remove
+    And the worktree directory is left in place
+    # Boundary 26. git worktree remove declines a dirty worktree on its own, so the
+    # falsifier is a hook that reaches for --force to make the error go away. The
+    # session reports "Exited and removed worktree at ..." either way (measured,
+    # Non-goals) — between a stale directory and silently destroyed work, the stale
+    # directory is recoverable.
+
+  Scenario: WorktreeRemove succeeds
+    Given ~/.worktrees/.claude/feat-x is clean
+    And the hook created the branch feat-x
+    When Claude Code fires WorktreeRemove for ~/.worktrees/.claude/feat-x
+    Then the hook runs git worktree remove for that path
+    And the branch feat-x is deleted
+    And the hook exits 0
+    And git worktree list registers no entry for ~/.worktrees/.claude/feat-x
+    # Boundary 27. Claude does NO cleanup of its own on the hook path (measured,
+    # resolved question 9), so anything the hook skips is left behind while the
+    # session is told it was removed. The branch assertion is the half most likely
+    # to be dropped: removing the worktree and leaving the branch still accumulates.
 ```
 
 ## Non-goals
