@@ -951,14 +951,30 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       names the marker-inclusive span, and base lines 325/418 *are* the marker lines), and the
       criterion-17 scanner had a real case-sensitivity hole — `<LINK HREF="https://…">` was
       invisible to it — found by falsification and closed. **Do not restate either here.**
-- [ ] 9. **Launch for real** (`--open`): drag the sidebar, flip to light, reload, press Esc from
+- [x] 9. **Launch for real** (`--open`): drag the sidebar, flip to light, reload, press Esc from
       three states, and look at the light board. Record what was eyeballed as eyeballed.
-- [ ] 10. **Post-change suite**: node-ID set diff vs task 1, zero lost nodes, `wc -l` under 800.
-- [ ] 11. **ADR** — the token layer, the tokenize/re-tint split, the shadow divergence from the
+      Done — §"Task 9". All four Esc arms driven (not three; the fourth is reachable), a real
+      click-then-reload theme flip, and the open drawer looked at in **both** themes, which
+      criterion 5 never covers. **A human sign-off is still owed**: the looking was done by the
+      agent from screenshots. One finding, not fixed here: the run title hard-clips mid-glyph at
+      `sideW` 440 — pre-existing markup this card makes reachable.
+- [x] 10. **Post-change suite**: node-ID set diff vs task 1, zero lost nodes, `wc -l` under 800.
+      Done — §"Task 10". 294 passed, **0 nodes lost**, 221 → 294 (+73), `wc -l` 740. Task 1's
+      recorded set-hash does **not** reproduce under nine serializations; the `comm` set diff
+      carries the criterion instead.
+- [x] 11. **ADR** — the token layer, the tokenize/re-tint split, the shadow divergence from the
       prototype, and the Artifacts omission. **Check the next free number against `origin/main`, not
       a stale local ref**; 0026 is duplicated and 0028 is unused, so "highest + 1" is not the
       answer on its own.
-- [ ] 12. `skills/treko/SKILL.md`: the two new `localStorage` keys and the theme default.
+      Done — `docs/decisions/0036-the-token-layer-is-the-feature-and-the-repaint-ships-alone.md`.
+      0036 confirmed free across every ref, with `origin/main` checked current against
+      `git ls-remote` (`07c4e6e`). Its figures were spot-re-verified independently at HEAD: one
+      source file changed (155 lines), `nocturne.css` zero diff, shadow readers 8 / 0 / 1,
+      surviving literals `#12131e` ×1 and `rgba(255,255,255,` ×9.
+- [x] 12. `skills/treko/SKILL.md`: the two new `localStorage` keys and the theme default.
+      Done — both keys documented under §"Where the survey is stored", verified against the page
+      itself (`SIDE_W_MIN=190, SIDE_W_MAX=440, SIDE_W_DEFAULT=236`, `THEME_DEFAULT='dark'`).
+      Confirmed no `.py` under `treko/` reads or writes either key.
 - [ ] 13. Compliance judge on this spec (before task 0), observability judge on the change (before
       the PR), then the PR. **Do not squash-merge.** The tokenize and re-tint commits are the design's
       whole rollback point (§D1), and criterion 8 pins an assertion to the tokenize commit
@@ -1746,11 +1762,127 @@ not a renderer; stripping comments would create somewhere to hide one. It is als
 upstream URL as **bare prose with no fetching construct around it**, not because comments are
 exempt. A future edit that wraps it in `url()` should, and will, fail.
 
-### Task 10 — the suite
+### Task 9 — launched for real, and what was EYEBALLED (2026-08-24)
 
-`python3 -m pytest treko/` at HEAD, node-ID set diffed against task 1's 221. Report per-module counts
-and the diff of the two sets, not the totals: a total can stay level while a node is lost and another
-gained.
+Criterion 5 ends "**A human opens it once (task 9) and that is recorded as eyeballed, not
+measured.**" This entry keeps that split honest, and it is the one entry in this card where the
+weaker word is the accurate one.
+
+**How it was driven, and the caveat that comes with it.** `python3 treko/server.py --open` bound
+`127.0.0.1:8422` and opened the board in the machine's own Chrome. The states below were then
+driven over CDP against **that same live server** — real `Input.dispatchMouseEvent` /
+`dispatchKeyEvent`, on the pinned `152.0.7977.54`, never `file://` and never a simulated
+`data-theme`. **The looking was done by the agent from full-resolution screenshots, not by a
+person.** A human sign-off on "does it look good" is therefore still owed and is the user's to
+give; everything below is what the agent saw, plus, where a screenshot was ambiguous, a computed
+-style measurement that settled it.
+
+| # | state | what was seen |
+|---|---|---|
+| 1 | dark at mount, nothing stored | `data-theme="dark"`, body `rgb(22,24,38)`. Board legible. |
+| 2 | drawer open, **dark** | panel `rgb(28,30,43)` (`--color-surface`), text `rgb(233,233,237)`. |
+| 3 | drawer open, **light** | panel `rgb(255,255,255)`, text `rgb(27,29,41)`. |
+| 4 | the two preview cards, both themes | each renders the **other** theme's bar — the `criterion-2-exempt` literals doing exactly their job. Selection ring follows the live theme. |
+| 5 | light board at mount | body `rgb(245,246,250)`; nothing washed out, no invisible text found by eye. |
+| 6 | sidebar dragged to 410, then past the max | rail `410px` → clamps at `440px`; long run names that ellipsized at 236 now show in full. |
+| 7 | reload after the drag | `440px` survives, from `taskTracker.sideW` alone. |
+
+**Two screenshot reads were wrong and the measurement corrected them.** Recorded because the
+correction is the useful part, not the conclusion:
+
+1. The dark drawer *looked* white in the downscaled full-page shot. It is not:
+   `getComputedStyle(panel).backgroundColor` is `rgb(28,30,43)` in dark and `rgb(255,255,255)` in
+   light, and a 2× crop of the same PNG agrees with the measurement. **No defect.**
+2. The dark drawer's left edge carries a light 1px ring, which is `--shadow-lg`'s
+   `0 0 0 1px #9397ab` — the divergence ADR 0036 records, seen rather than inferred. Subtle in
+   place; not a defect.
+
+**The Esc chain, all four arms, on the live page — in precedence order.** The card's brief said
+"three states"; the handler has four arms and the fourth is reachable, so all four were driven:
+
+| arm | driven from | result |
+|---|---|---|
+| 1 `settingsOpen` | drawer open | drawer closes |
+| 2 search focused | search holding `treko` | value cleared **and** blurred; `activeElement` → `BODY` |
+| 3 any other `INPUT` | the agent panel's own `Ask about this run…` input | **blurs only — the panel stays open** |
+| 4 `agentOpen` | panel open, nothing focused | panel closes |
+
+Arm 3's only reachable surface on this page is the agent-panel input; the board otherwise has
+exactly **one** `INPUT` (the search box). A first attempt reported arms 3 and 4 as passing when the
+agent panel had in fact never opened — the click missed and the two reads were the closed state
+repeated. They were re-driven through the header's real `Agent` button before being recorded.
+
+**A real theme flip, then a real reload, with nothing seeded.** Earlier states set
+`taskTracker.theme` in a startup script, which proves the seed path and *not* persistence. So:
+first visit with an empty store → `dark`; a genuine click on the drawer's Light card →
+`data-theme="light"` and `taskTracker.theme='light'`; `Page.reload` with **no** startup script →
+still `light`. That is criterion 7's reload claim, seen end to end.
+
+#### Finding — the run title hard-clips mid-glyph at the new maximum width
+
+At `sideW` **440** on a 1440px viewport the header title renders `guard + memsearch pus` — the
+final `h` cut through, with **no ellipsis** — and the run's directory (`~/dev/.claude`) disappears
+entirely while the subtitle wraps to two lines. Confirmed at 2× on the captured PNG, and measured:
+the painted title text ends at x`697.8` while the search input begins at x`697.1`.
+
+**The markup is not this card's.** The header block is byte-identical between the base commit and
+HEAD — base `:82-83` equals HEAD `:103-104` — and the `<h1 style="…white-space:nowrap">` carries no
+`text-overflow:ellipsis`, while the `runDir` span beside it does. Its `overflow:hidden` parent is
+likewise unchanged.
+
+**What this card changed is reachability.** At a fixed 236px sidebar the header never ran out of
+room, so the missing property could not be seen. Drag-to-440 makes the state reachable.
+
+**Not fixed here, deliberately.** It is a one-property change to pre-existing markup, it needs its
+own red test first, and it is outside every criterion this card asserts — a drive-by fix at task 9
+of 13 would widen the branch's scope and put an untested inline-style edit into a page whose
+byte-level guards are the point. Carried as a debt beside the unguarded `taskTracker.resolved`
+`JSON.parse`.
+
+### Task 10 — the suite, and the node-ID set diff
+
+**Suite at HEAD `3c44ee2`: `294 passed in 227.39s`.** Zero `deselected`, `skipped`, `xfailed` or
+`error` in the summary line. Run as `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/`.
+
+**The set diff, which is the actual criterion (18).** Task 1's baseline was re-collected from a
+detached worktree at the base commit rather than trusted from this file, and both sides were
+collected with `--color=no -p no:cacheprovider` and sorted under `LC_ALL=C`:
+
+| | value |
+|---|---|
+| base `a5a66a7` collected | **221** |
+| HEAD `3c44ee2` collected | **294** |
+| **nodes lost** | **0** |
+| nodes added | **73** |
+
+73 = `test_guards.py` 25 + `test_drawer_sections.py` 15 + `test_theme.py` 14 + `test_sidebar.py` 10
++ `test_drawer.py` 9. Every one of the nine baseline modules keeps its exact count:
+`test_server.py` 89, `test_store.py` 30, `test_analyze.py` 26, `test_store_location.py` 21,
+`test_rename.py` 19, `test_ui_commands.py` 15, `test_server_lifetime.py` 10, `test_autolaunch.py`
+10, `test_store_writer.py` 1 — summing to 221. **A changed total is not a regression; a lost node
+is, and there are none.**
+
+**`wc -l treko/Treko.dc.html` = 740**, under the 800 ceiling of criterion 19. Measured, not carried.
+
+##### The recorded baseline hash does not reproduce — and the set diff is why that is survivable
+
+Task 1 records the sorted node-ID set as sha256 `5f03a015…`. **Nine serializations of the same 221
+IDs were tried and none of them produced it**: sorted and collection-order, with and without a
+trailing newline, newline- space- and empty-joined, with and without the `treko/` path prefix, and
+under both a locale sort and a byte sort. The canonical form — byte-sorted, newline-joined, one
+trailing newline — is `8a5ed311d8e2294a81ace9337a61892a1514a9fe54d3d553c3e8ff13f5078a6b`, and
+HEAD's is `b4534b01b3a3950605015802368a4139275675c2e3f3950c11e22b970752cac5`.
+
+Task 1 recorded the digest but never the recipe, so the figure cannot be checked by anyone who did
+not run it. **It is therefore not a usable receipt and this entry does not treat it as one.** The
+guarantee criterion 18 actually asks for is carried by the `comm -23` set difference above, which
+compares the IDs themselves and does not depend on any serialization choice — a stronger check than
+the hash it failed to reproduce. The stale digest is left in task 1 as the historical record it is.
+
+**One methodology error worth keeping.** The first attempt at this diff ran both collections from
+the same directory — a `cd` that did not persist between commands — so both sides collected the
+*base* tree and the diff came back `0 lost, 0 added` from 221 vs 221. It looked like a clean pass.
+It was two measurements of the same thing. The rerun used explicit `--rootdir` and absolute paths.
 
 ### Task 1 baseline — recorded, measured on this branch
 
