@@ -803,10 +803,13 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       fails for the stated reason. Then add `body[data-theme="light"]` with all 51 declarations,
       `THEME_DEFAULT`, the validated seed, `applyTheme` / `setTheme`, and the mount call. Do not touch
       implementation and tests in the same step.
-      Red half PARTIALLY done (`treko/test_theme.py`, `treko/cdp_harness.py`): criteria 4, 5 and 6
-      fail for the stated reason. **Criterion 7's red test is NOT yet written** — the dispatch brief
-      said "4, 5 and 6", taken from this task's pre-revision text; round 3 added criterion 7 here.
-      Outstanding before the light block goes in.
+      Red half PARTIALLY done (`treko/test_theme.py`, `treko/cdp_harness.py`). **Criterion 7's tests
+      were written and run** in `5cc3bc2` — the dispatch brief that omitted them said "4, 5 and 6",
+      taken from this task's pre-revision text, and round 3 added criterion 7 here. All 14 collected
+      tests fail, but only 3 are confirmed red for their own stated reason; the other 11 died on a
+      headless-Chrome blocker. **The per-test split is recorded once, in §Verification "Task 3 red
+      half" — do not restate it here.** Outstanding before the light block goes in: re-run those 11
+      and confirm each is red for its own stated reason.
       **GATE — RESOLVED 2026-08-24 by a spec change, not a workaround.** The conflict: criterion 4
       required every `var()`-reachable custom property be declared under `body[data-theme="light"]`,
       with an exception list of only `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with
@@ -1082,12 +1085,19 @@ interactive browser and VS Code's Electron helpers), and the version pin (`Googl
 151.0.7922.172`, exactly the pinned build, and its assert never fires). It is not the Claude Chrome
 extension either — the harness launches its own process with its own `--user-data-dir`.
 
-Chrome worked earlier the same day (§"Criterion 5" records 848 visible elements) and attached for
-one test in this very run, so this is a machine-state regression, not a harness defect. **The
-criterion 4 exemption count also changed here**: with `--mono` exempt the non-exempt reachable set
-is 39, which is the union of both of criterion 4's sources and so is legitimately one larger than
-the 40-name `Treko.dc.html`-only table above (that table's excluded second source contributes
-`--color-text`). Task 3's red half is **not** signed off until the 11 CDP tests are re-run and
+Chrome worked earlier the same day — 848 visible elements were measured on this page while writing
+`16faaa4`, and that figure is recorded at `treko/test_theme.py:305` and `:353`, not in this document
+— and it attached for one test in this very run, so this is a machine-state regression, not a
+harness defect. (There is no §"Criterion 5" here to cite: Proof C is criterion 5's *plan* and
+records no run.) **The
+criterion 4 exemption count also changed here**, and the two figures in this document count
+different source sets rather than disagreeing. Measured by running `test_theme._reachable_tokens()`
+at this HEAD, not reasoned about: the **union** of both of criterion 4's sources reaches 46 names,
+of which 7 are exempt, leaving **39** non-exempt — the number the test reports. `Treko.dc.html`
+**alone** reaches **40**, of which 2 are exempt (`--font-heading`, `--mono`), leaving **38** — the
+non-exempt subset of the 40-name table above. So 39 is one larger than **38**, not one larger than
+40, because the second source contributes exactly one further non-exempt name: `--color-text`.
+Do not "correct" either number to match the other. Task 3's red half is **not** signed off until the 11 CDP tests are re-run and
 each is confirmed red for its own stated reason.
 
 ### Task 10 — the suite
