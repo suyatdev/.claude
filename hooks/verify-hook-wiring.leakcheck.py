@@ -3,20 +3,28 @@
 Run: python3 hooks/verify-hook-wiring.leakcheck.py     (exit 0 = no leaks)
 
 Check 2 prints config values into session-start stdout, so "can a credential get
-through?" is a property that has to be measured, not argued. Seven credential
-families, 2000 samples each, fixed seed so a result is reproducible.
+through?" is a property that has to be measured, not argued. Thirteen credential
+families, 2000 samples each, fixed seed so a result is reproducible. Every
+secret is tried on both surfaces that reach stdout -- as a value and as a
+sub-key name -- so the check count is len(FAMILIES) * 2000 * 2, today 52,000.
+Read that off the table this prints rather than trusting this paragraph: the
+totals below went stale once already, silently, when the family list grew from
+seven to thirteen.
 
 Extracts render() from the live hook rather than reimplementing it: a
 reimplementation would measure this file's copy of the logic, not the thing that
 actually ships.
 
 Committed deliberately, and it has already earned its place twice. Against
-2fad70f's renderer it reports 995 leaks -- 123/2000 standard base64 and
-871/2000 short base64 -- which is how the deny-list approach was shown to be
-unfixable rather than merely incomplete. Against the current default-deny
-renderer it reports 0/14000. A number that has never been watched moving is not
-evidence, so keep the falsifier: point it at an older renderer with
-`git show <rev>:hooks/verify-hook-wiring.sh` and confirm it still goes red.
+2fad70f's renderer it reports 9013 leaks -- among them 123/2000 standard base64
+and 871/2000 short base64, the two that showed the deny-list approach to be
+unfixable rather than merely incomplete. Mind the denominator there: that run
+measures 26,000 checks, not 52,000, because 2fad70f predates render_name and the
+sub-key surface is skipped against a renderer that has none. Against the current
+default-deny renderer it reports 0 of 52,000. A number that has never been
+watched moving is not evidence, so keep the falsifier: point it at an older
+renderer with `git show <rev>:hooks/verify-hook-wiring.sh` and confirm it still
+goes red.
 """
 import base64
 import random
