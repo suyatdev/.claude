@@ -18,8 +18,13 @@
 <style>
 body{margin:0;background:var(--color-bg)}
 /* semantic status hues — OKLCH-matched to the Nocturne ramps' lightness family */
-:root{--ok:#8fcaa8;--ok-bg:#17352a;--warn:#d8b06c;--warn-bg:#3a2d15;--bad:#e8968e;--bad-bg:#42201d;--info:#9ec2ec;--info-bg:#1d2c44;--mono:ui-monospace,Menlo,Consolas,monospace}
-:root{--rail:#12131e;--hair:rgba(255,255,255,.06);--hair-2:rgba(255,255,255,.08);--hair-3:rgba(255,255,255,.1);--hover:rgba(255,255,255,.05);--hover-soft:rgba(255,255,255,.03);--hover-faint:rgba(255,255,255,.025);--hover-ghost:rgba(255,255,255,.02)}
+:root{--ok:#82dfa9;--ok-bg:#123526;--warn:#d8b06c;--warn-bg:#3a2d15;--bad:#e8968e;--bad-bg:#42201d;--info:#89b4f2;--info-bg:#16294a;--mono:ui-monospace,Menlo,Consolas,monospace;
+/* darker panels + lifted grey text */
+--color-surface:#1c1e2b;--color-neutral-400:#c0c4d6;--color-neutral-500:#a6aabe;--color-neutral-600:#8b8fa4;
+/* Treko brand: accent re-tinted from the logo — cyan as UI accent, green = ok, blue = info */
+--color-accent:#38c4e3;--color-accent-100:#d9f4fb;--color-accent-200:#b0e8f7;--color-accent-300:#82d8f0;--color-accent-400:#5aceeb;--color-accent-500:#38c4e3;--color-accent-600:#2c9ebd;--color-accent-700:#227a93;--color-accent-800:#18586b;--color-accent-900:#103845;
+--color-accent-2:#2ed47e;--color-accent-2-100:#d6f8e6;--color-accent-2-200:#aef0cc;--color-accent-2-300:#7fe6ae;--color-accent-2-400:#55dd94;--color-accent-2-500:#2ed47e;--color-accent-2-600:#26ab66;--color-accent-2-700:#1e844f;--color-accent-2-800:#165e39;--color-accent-2-900:#0e3b24}
+:root{--rail:#12131e;--hair:rgba(255,255,255,.06);--hair-2:rgba(255,255,255,.08);--hair-3:rgba(255,255,255,.12);--hover:rgba(255,255,255,.05);--hover-soft:rgba(255,255,255,.03);--hover-faint:rgba(255,255,255,.025);--hover-ghost:rgba(255,255,255,.02)}
 /* Light theme (§D3). 51 custom properties: 33 overriding nocturne.css's :root, the 8 status
    hues and the 8 chrome tokens declared above, and 2 shadows. Three things are deliberately
    NOT here, all for the same reason — a declared value nothing reads is not a state:
@@ -27,8 +32,8 @@ body{margin:0;background:var(--color-bg)}
    fills, zero readers), and --panel (not ported at all, §Background 5). */
 body[data-theme="light"]{
 --color-bg:#f5f6fa;--color-surface:#ffffff;--color-text:#1b1d29;--color-divider:rgba(15,18,35,.12);
---color-neutral-100:#14161f;--color-neutral-200:#262a38;--color-neutral-300:#3b4054;--color-neutral-400:#4e5468;--color-neutral-500:#646a80;--color-neutral-600:#7d8398;--color-neutral-700:#c6cad8;--color-neutral-800:#e3e6ef;--color-neutral-900:#f0f2f8;
---color-accent:#0e93b2;--color-accent-100:#0a4a5b;--color-accent-200:#0c5e73;--color-accent-300:#0d7d99;--color-accent-400:#1298b8;--color-accent-500:#0e93b2;--color-accent-600:#4ec2dd;--color-accent-700:#a4e2f3;--color-accent-800:#cdeffa;--color-accent-900:#e2f6fc;
+--color-neutral-100:#14161f;--color-neutral-200:#262a38;--color-neutral-300:#3b4054;--color-neutral-400:#464c5f;--color-neutral-500:#51576c;--color-neutral-600:#5e6377;--color-neutral-700:#6e727e;--color-neutral-800:#e3e6ef;--color-neutral-900:#f0f2f8;
+--color-accent:#007492;--color-accent-100:#0a4a5b;--color-accent-200:#0c5e73;--color-accent-300:#006d88;--color-accent-400:#1298b8;--color-accent-500:#007492;--color-accent-600:#4ec2dd;--color-accent-700:#a4e2f3;--color-accent-800:#cdeffa;--color-accent-900:#e2f6fc;
 --color-accent-2:#14904f;--color-accent-2-100:#0b4b2c;--color-accent-2-200:#0e5c36;--color-accent-2-300:#127a46;--color-accent-2-400:#14904f;--color-accent-2-500:#14904f;--color-accent-2-600:#4bbd85;--color-accent-2-700:#9fe7c2;--color-accent-2-800:#cdf4e0;--color-accent-2-900:#e4faee;
 --ok:#12794a;--ok-bg:#dbf3e6;--warn:#8a6113;--warn-bg:#faeed2;--bad:#b03a30;--bad-bg:#fbe2df;--info:#28569f;--info-bg:#dfe9fb;
 --rail:#eceef5;--hair:rgba(15,18,35,.09);--hair-2:rgba(15,18,35,.13);--hair-3:rgba(15,18,35,.16);--hover:rgba(15,18,35,.05);--hover-soft:rgba(15,18,35,.03);--hover-faint:rgba(15,18,35,.025);--hover-ghost:rgba(15,18,35,.02);
