@@ -527,7 +527,7 @@ emitted. **This design carries it through.**
 shape, so `git-guard` and `doc-guard` see a strict superset with no changed token — the property the
 next section measures.
 
-#### Four indexed facts
+#### Seven indexed facts
 
 `<i>` is the zero-based position of the segment in the list `segments()` returns. Following the
 file's documented token style, tab-separated:
@@ -550,8 +550,17 @@ file's documented token style, tab-separated:
   `--reason <string>` both take values), or `UNRESOLVABLE` when no path operand can be identified.
 - `SEG_BRANCH_MOVE<tab><i><tab><subcommand>` — segment `i` runs a git form that moves a checkout's
   HEAD or overwrites its working tree, per the in/out lists above.
+- `SEG_SCOPE_OPT<tab><i><tab><option>` — segment `i`'s git command carries a global option that
+  `resolve_subcommand` refused to walk past, **other than `-C`**. Emitted from the existing
+  `blocking_option` return value (`classify-git-command.py:226-231`) by the two-clause test
+  `blocking_option is not None and blocking_option != "-C"` — never from a list of option names.
+- `SEG_ENV<tab><i><tab><name>` — one per entry in segment `i`'s `assignments` dict whose name begins
+  `GIT_`. A **prefix** test over the namespace git owns, so a variable added upstream is covered the
+  day it ships.
+- `SEG_OPAQUE<tab><i><tab><token>` — segment `i` has `git` or `cd` somewhere in `argv` but **not** at
+  `argv[0]`. Derived as `argv[0] not in ("git", "cd") and ("git" in argv[1:] or "cd" in argv[1:])`.
 
-**The granting/denying distinction does not apply to these four.** That rule exists *because* a flat
+**The granting/denying distinction does not apply to these seven.** That rule exists *because* a flat
 fact cannot say which segment it came from, so a permission granted by one segment could excuse
 another (`classify-git-command.py:37-45`). An indexed fact names its own segment, so each is judged
 on its own and no fact can vouch for a segment it did not come from.
@@ -571,6 +580,10 @@ one of them was complete. There is now **one rule**, and no arm may carry its ow
 > **If any step carries `UNRESOLVABLE`, or the final path does not resolve, deny** — naming both the
 > operand and its segment index. An unresolvable working directory means the guard cannot tell which
 > repository it is protecting, which is boundary 12's case.
+>
+> **`cd` and `-C` are the only two redirects this rule resolves.** Every other way a segment can
+> address a different repository — or hide that it runs git at all — **denies**, by the four
+> derivations in the next section. This rule never carries its own list of them.
 
 Worked examples, each previously a hole:
 
@@ -581,6 +594,97 @@ Worked examples, each previously a hole:
 | `cd ~/.claude && git switch main` | 1 | `~/.claude` | **deny** if primary |
 | `cd /a && cd b && git switch main` | 2 | `/a/b` | per that repo |
 | `cd "$d" && git switch main` | 1 | `UNRESOLVABLE` | **deny**, naming `$d` and segment 0 |
+
+#### Everything else that can redirect a segment — four derivations, no fifth list
+
+Rounds 1–5 each closed one redirect and each left the next one open: `-C` (round 3), `cd`
+(round 4), then `--git-dir` / `GIT_DIR=` / subshell `cd` (round 5). **Five hand-maintained lists have
+now been written and five have been found short.** So this section does not write a sixth. Each rule
+below is a *test against a structure one of the two modules already exposes*, so a shape the modules
+learn about tomorrow is covered without editing this card.
+
+All five measurements below were re-run first-hand on 2026-08-24 against `/usr/bin/python3` 3.9.6,
+the interpreter the hooks actually use.
+
+**1 — Global options: read `blocking_option`, not a list of names.**
+`resolve_subcommand` returns its third element non-`None` for *both* bucket 2 (`GLOBAL_REDIRECT`,
+`classify-git-command.py:145-149`, 11 members) and bucket 3 (any unrecognised option) —
+`classify-git-command.py:171-173` returns the identical shape for each. That asymmetry is the
+existing design's own safeguard: an option git adds in future lands in "cannot tell", never in
+"allow". **So the guard tests the return value, not the tuple.** `-C` is the single member it
+resolves (via `SEG_GIT_C`); every other non-`None` `blocking_option` emits `SEG_SCOPE_OPT` and
+**denies**, naming the option and the segment index.
+
+Why the *fact stream* cannot resolve these instead: measured, `SCOPE_UNKNOWN` and `SEG_SCOPE_OPT`
+carry the option **name only, never its value** — `git --git-dir=/tmp/o/.git switch main` and
+`git --git-dir /tmp/o/.git switch main` produce byte-identical output. The value survives only in
+`argv`. A redirect whose target the guard cannot read is one it cannot resolve, which is why this
+class denies rather than joining the `cd`/`-C` resolution path.
+
+**2 — Environment prefixes: a prefix test over the `assignments` dict.**
+`segments()` already returns each segment's leading `VAR=value` prefixes, bound to the right
+segment (`shell_segments.py:150-153`). `classify-git-command.py:224` unpacks that dict as
+`_assigns` and discards it. Measured: `GIT_DIR=/tmp/o/.git git commit -m x` emits exactly
+`COMMIT` — **byte-identical to a purely local commit**, with the redirect nowhere in the output.
+The rule is a prefix test, not an enumeration: **any assignment on segment `i` whose name begins
+`GIT_` emits `SEG_ENV` and denies.** `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`,
+`GIT_CEILING_DIRECTORIES` and `GIT_NAMESPACE` were each confirmed present in the dict with their
+values; they are named here as evidence the dict works, **not** as the set being matched.
+
+**3 — `argv[0]` is only trustworthy when it is accounted for.**
+`WRAPPERS` (`shell_segments.py:64`) is explicitly a **denylist**, and its own comment says so at
+`shell_segments.py:62-63`: *"This is a denylist: `env`, `timeout` and loop keywords are not in it,
+so those shapes stay open. Recorded in ADR 0012 as accepted, not fixed."* Accepted for the existing
+guards; **not** acceptable here, for the same reason `SEG_UNPARSED` overrides the lexer's fail-open
+below — this guard is the last line of defence, and ADR 0012's trade-off was struck for callers
+that are not.
+
+Measured, each emitting **no fact at all** because `argv[0] != "git"`:
+
+| Command line | Classifier output | Why it matters |
+|---|---|---|
+| `env -C /tmp/other git switch main` | *(none)* | `env -C` **works on this host** — `/usr/bin/env -C /tmp pwd` prints `/tmp`, exit 0 (measured, not assumed). A live HEAD move against another repo, wholly invisible. |
+| `env GIT_DIR=/tmp/o/.git git commit -m x` | *(none)* | Defeats derivation 2 as well: the assignment sits behind `env`, so it is an ordinary `argv` token, not an `assignments` entry. |
+| `if cd /tmp/other; then git commit -m x; fi` | *(none)* | `if`/`then` hold the command position; `git` sits at `argv[1]`. |
+| `timeout 5 git commit -m x` | *(none)* | Named in the denylist comment as knowingly open. |
+
+**Rule: if `argv[0]` is neither `git` nor `cd`, yet `git` or `cd` appears anywhere later in `argv`,
+the segment is unaccountable — emit `SEG_OPAQUE` and deny**, naming the token and the index. This is
+derived from the module's stated limitation rather than from a list of wrapper words, so `env`,
+`timeout`, `if`, `for`/`do` and anything else in that family are covered by one rule.
+
+**Accepted cost, stated rather than discovered:** this denies `echo git switch main` and
+`grep -r 'git switch' .` — commands that merely *mention* git. That is a false denial on a rare
+shape, against a fail-open on a live HEAD move; the deny message names the token so the cause is
+obvious, and `WORKTREE_EXEMPT` clears it. The alternative is enumerating shell keywords, which is
+the fifth-list bet this section exists to stop making.
+
+**4 — Grouping: `segments()` is flat, so a grouped `cd` is unresolvable by construction.**
+`shell_segments.py:139-140` appends a fresh segment for every control operator and **throws the
+operator away**, so `(`, `)`, `{` and `}` are indistinguishable in the return value. The distinction
+is load-bearing and unrecoverable: bash discards a `cd` at `)` but keeps it past `}`. Measured,
+`( cd /tmp/other && git log ) && git switch main` lexes to indices 0..4, so an index-ordered rule
+carries the subshell's `cd` to index 4, where bash would not.
+
+**Rule: if the line contains any grouping operator and any `SEG_CD` exists, deny** — `SEG_GROUPED`,
+line-scoped like `SEG_UNPARSED`. **This over-denies the `( … )` case**, where bash has already
+discarded the `cd`: the guard refuses a command that was in fact safe. That direction is the correct
+one and is stated here so it is not later read as a defect.
+
+Exposing it needs one change in `shell_segments.py`, and the change must **not** add a second
+lexer — the file's own design note rejects that ("no second parser to disagree with this one").
+Extract the token-producing head of `segments()` into a module-level `_lex(src)`, have `segments()`
+call it unchanged, and add `has_grouping(src)` calling the same `_lex`. One lexer, two views.
+
+**The anti-regression test is the actual fix, not the prose above.** Task 3's suite must
+`import GLOBAL_REDIRECT` **at runtime** and assert every member except `-C` denies, so adding a
+member without revisiting this rule fails the suite; and must pin each shape in the table above.
+A rule that is only asserted in prose is the fifth list wearing different clothes.
+
+**Prior art for the two-clause shape**, both verified in this repo on 2026-08-24:
+`classify-commit-command.py:207-213` and `decide-commit-gate.py:69-78` already pair
+`argv[0] == "cd"` with `blocking_option is not None` rather than enumerating options. This design
+extends that shape; it does not invent it.
 
 **`-C` must not become a blanket refusal.** `git -C <other-repo> …` appears **215 times across 17
 files** in this repo's own scripts, so denying every one would be unusable. Derivation, so the
@@ -669,9 +773,23 @@ situations, and one verdict cannot serve all three:
    `WORKTREE_EXEMPT=<reason>` is the documented escape hatch. Switching the escape hatch off
    because the disk is full is the worst possible moment to switch it off — the user reaching for
    it is, by construction, already blocked on something. Losing one bypass record is the cheaper
-   failure, and it is not silent: a session that could not write a bypass line **must** append a
-   `log-append-failed` line on its next successful write, and task 10's criterion 3 treats any such
-   line as disqualifying until reviewed.
+   failure.
+
+   **This loss is silent in the log, and the design states that rather than papering over it.** An
+   earlier revision claimed the guard would append a `log-append-failed` line on its next successful
+   write. That mechanism cannot exist: every `PreToolUse` invocation is a separate process, and the
+   failed append is precisely the event that left no trace for a later process to read. Nor is there
+   a substitute that does not share the failure mode it is meant to detect — a marker file on the
+   same full disk fails the same way, and a per-session sequence number counted from the log is
+   silently *reused* rather than skipped when a write is lost, so the gap stays invisible. No
+   sourceable in-log gap signal exists, so none is specified. The only trace is the stderr warning,
+   and `git-guard.sh:409` records that whether stderr from an exit-0 hook reaches anyone is itself
+   unverified.
+
+   **What bounds the cost instead:** a bypass exists only in `deny` mode, while the arming window
+   task 10's criteria are computed from runs entirely in `log` mode — task 10 flips to `deny` only
+   *after* it. So rule 3 cannot fire during that window at all. Task 10 states what its criteria do
+   and do not establish, and does not rely on any gap signal.
 
 This is the design's **only** deliberate fail-open on an enforcement path, and it is bounded to a
 command the user has already explicitly exempted.
@@ -761,9 +879,10 @@ One tab-separated line per **refusal or bypass** — never per evaluation:
 <iso8601>  <session_id>  <arm>  <mode>  <decision>  <repo-root>  <path-or-command>  [<exempt-reason>]
 ```
 
-`decision` is one of `deny`, `would-deny` (the same event in `log` mode), `bypass`, or
-`log-append-failed` — the last written on the next successful append after a failed one, so a gap
-in the evidence window is recorded in the same place the arm-it criteria read (boundary 10, rule 3).
+`decision` is one of `deny`, `would-deny` (the same event in `log` mode), or `bypass`. There is
+deliberately **no** `log-append-failed` value: a failed append leaves no state a later process could
+source one from (boundary 10, rule 3), and a decision value the guard cannot actually emit would be
+a field the payload cannot source — the failure mode `core-conduct` names by that word.
 
 Three round-2 measurements shaped this:
 
@@ -1191,6 +1310,93 @@ Feature: Arm D — moving a primary checkout's HEAD
     Then the hook denies
     And the message names the unresolvable operand
 
+  # Derivation 1 — global options other than -C. Tested against the runtime value
+  # of GLOBAL_REDIRECT, never against a copy of it in this file.
+
+  Scenario: A repo-redirecting global option other than -C
+    Given the session cwd is a primary checkout
+    When Bash runs "git --git-dir=/tmp/o/.git --work-tree=/tmp/o switch main"
+    Then the hook denies
+    And the message names "--git-dir" and segment 0
+    # SEG_SCOPE_OPT. The option's VALUE never reaches the fact stream — measured,
+    # the attached and separate spellings emit byte-identical output — so this
+    # class denies rather than joining the cd/-C resolution path.
+
+  Scenario: Every other member of GLOBAL_REDIRECT behaves the same way
+    Given the session cwd is a primary checkout
+    When Bash runs "git <option> switch main" for each member of GLOBAL_REDIRECT except -C
+    Then the hook denies in every case
+    # Enumerated by importing the tuple at test time. A member added upstream
+    # without revisiting the rule fails this test rather than failing open.
+
+  Scenario: An unrecognized global option
+    Given the session cwd is a primary checkout
+    When Bash runs "git --super-prefix=x switch main"
+    Then the hook denies
+    And the message names "--super-prefix"
+    # Bucket 3. resolve_subcommand returns the identical shape for an unknown
+    # option as for a known redirector, so no new rule is needed to cover it.
+
+  # Derivation 2 — GIT_* environment prefixes.
+
+  Scenario: A GIT_ environment assignment redirects the repository
+    Given the session cwd is a primary checkout
+    When Bash runs "GIT_DIR=/tmp/o/.git git commit -m x"
+    Then the hook denies
+    And the message names "GIT_DIR" and segment 0
+    # Measured: today this emits exactly COMMIT, byte-identical to a purely local
+    # commit. The assignment is in the assignments dict and simply discarded.
+
+  Scenario: A non-git environment assignment is not a redirect
+    Given the session cwd is a linked worktree
+    When Bash runs "FOO=bar git switch main"
+    Then the hook allows
+    # The rule is a GIT_ prefix test, so an unrelated assignment is untouched.
+
+  # Derivation 3 — argv[0] must be accounted for.
+
+  Scenario: A wrapper hides git behind the command position
+    Given the session cwd is a primary checkout
+    When Bash runs "env -C /tmp/other git switch main"
+    Then the hook denies
+    And the message names "git" and segment 0
+    # SEG_OPAQUE. Measured: this emits NO fact at all today, and env -C works on
+    # this host, so it is a live HEAD move against another repo that is wholly
+    # invisible. WRAPPERS is a documented denylist (shell_segments.py:62-63).
+
+  Scenario: A shell keyword holds the command position
+    Given the session cwd is a primary checkout
+    When Bash runs "if cd /tmp/other; then git commit -m x; fi"
+    Then the hook denies
+    # Same rule, no new clause: `if` and `then` take argv[0] and git sits later.
+
+  Scenario: A command that only mentions git — the accepted false denial
+    Given the session cwd is a primary checkout
+    When Bash runs "echo git switch main"
+    Then the hook denies
+    And the message names the token "git"
+    # Stated, not discovered. Denying a command that merely mentions git is the
+    # price of not enumerating shell keywords; WORKTREE_EXEMPT clears it.
+
+  # Derivation 4 — grouping constructs.
+
+  Scenario: A cd inside a subshell — the accepted over-denial
+    Given the session cwd is a primary checkout
+    When Bash runs "( cd /tmp/other && git log ) && git switch main"
+    Then the hook denies
+    And the message names the grouping operator
+    # SEG_GROUPED. Bash discards this cd at the ')', so the switch really does
+    # act on the session repo and refusing it is over-strict. segments() cannot
+    # tell '(' from '{' — the operator is thrown away at shell_segments.py:139-140
+    # — so the guard cannot distinguish the safe case from the unsafe one.
+
+  Scenario: A cd inside a brace group
+    Given the session cwd is a primary checkout
+    When Bash runs "{ cd /tmp/other; git log; } && git switch main"
+    Then the hook denies
+    # The same fact set as the subshell above, and here the cd genuinely does
+    # persist. One rule covers both because nothing can separate them.
+
   Scenario: The documented bypass
     Given the session cwd is a primary checkout
     When Bash runs "WORKTREE_EXEMPT=hotfix git switch main"
@@ -1230,21 +1436,46 @@ Feature: Arming and the log
     Then the logged path-or-command field escapes it as \n
     # 21.4% of real commands contain a newline; tabs appear in 0.0%.
 
-  Scenario: The log cannot be written
-    Given hooks/state/worktree-guard.log cannot be appended to
+  Scenario: The log cannot be written, in log mode
+    Given settings.json has no env.WORKTREE_GUARD_MODE, so the guard is in log mode
+    And hooks/state/worktree-guard.log cannot be appended to
+    When any arm would deny
+    Then the hook allows
+    And a warning naming the log path is written to stderr
+    # Boundary 10 rule 1. A guard that is not enforcing must not start enforcing
+    # because a disk filled up. The cost is a gap in the evidence window that
+    # nothing in the log records — bounded, and stated, in task 10.
+
+  Scenario: The log cannot be written while recording a refusal
+    Given env.WORKTREE_GUARD_MODE is "deny"
+    And hooks/state/worktree-guard.log cannot be appended to
     When any arm reaches a refusal
     Then the hook denies
     And the message says the decision could not be recorded
-    # Affordable only because allows are never logged, so this fires only on a
-    # refusal that was already going to be reported. Task 10 computes the arming
-    # decision from this log, so a lossy log would read cleanest when dropping
-    # entries.
+    # Boundary 10 rule 2 — the one case round 3's blanket-deny reasoning does
+    # cover: the command was already being refused, so the append failure
+    # changes nothing about the outcome.
 
-  Scenario: The log cannot be written, but nothing is being refused
+  Scenario: The log cannot be written while recording a bypass
+    Given env.WORKTREE_GUARD_MODE is "deny"
+    And the session cwd is a primary checkout
+    And hooks/state/worktree-guard.log cannot be appended to
+    When Bash runs "WORKTREE_EXEMPT=hotfix git switch main"
+    Then the hook allows
+    And a warning naming the log path is written to stderr
+    And no line is appended to worktree-guard.log
+    # Boundary 10 rule 3, the design's only deliberate fail-open on an
+    # enforcement path. Round 4 disproved the claim that this path fires only on
+    # a refusal — a bypass is an allow. The bypass record is lost with no in-log
+    # trace, which boundary 10 states outright rather than signalling, because
+    # no later process could source such a signal.
+
+  Scenario: The log cannot be written, but no line was due
     Given hooks/state/worktree-guard.log cannot be appended to
     When Write targets an exempt path
     Then the hook allows silently
-    # No log line was due, so no failure occurs.
+    And nothing is written to stderr
+    # Allows are never logged, so no append is attempted and no failure occurs.
 
 Feature: create-worktree.sh
 
@@ -1501,12 +1732,27 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       git-absent and sub-2.31 cases require a **stubbed `git` on `PATH`** — no real git on this
       machine reproduces them. Add a case asserting a non-repo is *not* misread as unsupported-git,
       which is the ambiguity task 2 surfaced.
+
+      **Two cases in this suite are load-bearing against the failure this card has repeated five
+      times** — see "Everything else that can redirect a segment". (a) A case that
+      `import`s `GLOBAL_REDIRECT` from `classify-git-command.py` **at run time** and asserts every
+      member except `-C` denies, so a member added upstream fails the suite instead of failing open.
+      (b) A case per shape in that section's measured table (`env -C …`, `env GIT_DIR=… …`,
+      `if cd …; then git …; fi`, `timeout 5 git …`), each of which emits **no fact at all** today.
+      Neither may be written by copying a list into the test — (a) reads the tuple, (b) pins
+      behavior. A rule asserted only in prose is the sixth hand-list wearing different clothes.
 - [ ] 4. Implement Arm A.
 - [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
       before emitting any new tab-bearing fact. Then extend `classify-git-command.py` with
-      the four **segment-indexed** facts — `SEG_CD`, `SEG_GIT_C`, `SEG_WORKTREE_ADD`,
-      `SEG_BRANCH_MOVE` — plus `SEG_UNPARSED`, and its own tests. This means the segment loop must
+      the seven **segment-indexed** facts — `SEG_CD`, `SEG_GIT_C`, `SEG_WORKTREE_ADD`,
+      `SEG_BRANCH_MOVE`, `SEG_SCOPE_OPT`, `SEG_ENV`, `SEG_OPAQUE` — plus the two line-scoped
+      `SEG_UNPARSED` and `SEG_GROUPED`, and its own tests. `SEG_GROUPED` additionally needs the
+      `shell_segments.py` change described in derivation 4: extract the token-producing head of
+      `segments()` into `_lex(src)` and add `has_grouping(src)` calling the same `_lex` — **one
+      lexer, two views**, never a second parser. `segments()`'s own return value and every existing
+      caller stay unchanged; assert that with the existing sibling suites before touching anything
+      else, since `classify-pr-command.py` and `decide-commit-gate.py` both depend on it. This means the segment loop must
       stop skipping non-git segments (`classify-git-command.py:225`) and must collect the indexed
       facts *before* the `SCOPE_UNKNOWN` `continue` (`:229-232`). Must include the discriminating
       `-C` case, the matching `cd` case, the `-C`-does-not-carry-forward case, and the
@@ -1533,8 +1779,21 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       1. At least 7 days of ordinary use have elapsed.
       2. **Every arm has recorded at least one `would-deny`.** An arm that never fired is an arm
          never shown capable of firing, and arming it is arming something unproven.
-      3. Zero recorded `would-deny` entries that you judge to be wrong refusals.
+      3. **Every `would-deny` line in the window has been read individually and judged a correct
+         refusal** — a positive review of what was recorded, deliberately not phrased as a count of
+         zero wrong ones.
       Record the counts and the date here when flipping.
+
+      **What these criteria establish, and what they do not.** The window runs in `log` mode, so
+      boundary 10 rule 1 applies: a failed append loses a `would-deny` line and allows, and nothing
+      in the log records that it happened. The log is therefore **best-effort, and its completeness
+      is not guaranteed.** That cuts differently for each criterion, which is why criterion 3 is
+      phrased positively: criterion 2 **fails safe** — a lost line can only delay arming — while
+      criterion 3 **does not**, because a lost line is precisely a refusal that will never be
+      reviewed. So criterion 3 is a judgement over observed evidence and **is not a proof that no
+      wrong refusal occurred.** Do not restate it elsewhere as "zero wrong refusals". Boundary 10
+      rule 3 — the bypass fail-open, the other place a line can be lost — cannot fire during this
+      window at all, because a bypass exists only in `deny` mode.
 - [ ] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
