@@ -28,6 +28,11 @@ treko-theme-and-layout.md` §Verification, Proof B and Proof C both say so expli
 discipline `server_harness.launch` uses for `server.py` — never `nohup`/`setsid`/backgrounded —
 with a private, throwaway `--user-data-dir` so it never touches a developer's real profile, and
 `close()` terminates it the same way `Server.stop()` does.
+
+**`TREKO_CHROME_DENY_BIRD` — an opt-in escape hatch for a wedged macOS.** See
+`BIRD_DENY_PROFILE` below. Off by default; a healthy machine never needs it, and it is
+opt-in rather than an automatic retry on purpose — a silent relaunch under a
+weakened sandbox would let a genuine Chrome fault look like a pass.
 """
 
 import base64
@@ -48,6 +53,34 @@ PINNED_VERSION = "151.0.7922.172"
 
 DEVTOOLS_TIMEOUT_SECS = 10
 NAV_TIMEOUT_SECS = 20
+
+# Set TREKO_CHROME_DENY_BIRD=1 to launch Chrome under `sandbox-exec` with the profile below.
+#
+# WHY. Chrome's browser process calls `-[NSFileManager ubiquityIdentityToken]` during
+# startup — a *synchronous* XPC round-trip to the launchd agent `com.apple.bird`
+# (iCloud Drive). When bird is crash-looping, launchd throttles it to "spawn scheduled" and
+# queues that message for a service that never comes up, so the call never returns. Chrome
+# hangs BEFORE it binds `--remote-debugging-port`: the process stays alive and silent,
+# writes no `DevToolsActivePort`, and behaves identically under `--headless=new`/`old` and
+# with or without `--no-sandbox`. Observed 2026-08-24 on macOS 26.5.2: `sample` parked
+# 2612/2612 main-thread frames in `__NSXPCCONNECTION_IS_WAITING_FOR_A_SYNCHRONOUS_REPLY__`,
+# and `launchctl print gui/$UID/com.apple.bird` reported `successive crashes = 48`
+# (EXC_BREAKPOINT inside CloudKit's `NSXPCEncoder`). A 20-line Python program calling the
+# same API hung too, which is what rules Chrome out as the cause.
+#
+# Denying the lookup makes the call return nil in 0s instead of hanging. macOS forbids
+# nesting seatbelt profiles, so Chrome cannot initialise its own child sandbox inside ours
+# — hence `--no-sandbox`, which is added ONLY on this path. Acceptable here and
+# nowhere else: the harness renders a local `file://` page out of this repo, headless, in a
+# throwaway profile, and kills it at teardown; no untrusted content is ever loaded.
+#
+# This is a workaround for a broken machine, not a fix. The fix is to stop bird
+# crash-looping.
+BIRD_DENY_PROFILE = (
+    '(version 1)(allow default)'
+    '(deny mach-lookup (global-name-regex #"^com\\.apple\\.bird"))'
+)
+DENY_BIRD_ENV = "TREKO_CHROME_DENY_BIRD"
 
 
 def installed_version():
@@ -159,19 +192,35 @@ class Chrome:
                 % (PINNED_VERSION, version)
             )
         self.devtools_port = _free_port()
+        self.denied_bird = os.environ.get(DENY_BIRD_ENV) == "1"
+        flags = ["--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
+                 "--remote-debugging-port=%d" % self.devtools_port,
+                 "--user-data-dir=%s" % user_data_dir, "about:blank"]
+        if self.denied_bird:
+            # `sandbox-exec` execs Chrome in place, so `self.proc.pid` is still Chrome's own pid
+            # and `close()` reaps it unchanged.
+            argv = ["sandbox-exec", "-p", BIRD_DENY_PROFILE, CHROME_BINARY,
+                    "--no-sandbox"] + flags
+        else:
+            argv = [CHROME_BINARY] + flags
         self.proc = subprocess.Popen(
-            [CHROME_BINARY, "--headless=new", "--disable-gpu", "--no-first-run",
-             "--disable-extensions", "--remote-debugging-port=%d" % self.devtools_port,
-             "--user-data-dir=%s" % user_data_dir, "about:blank"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         self._msg_id = 0
         self.ws = None
         try:
             self._attach_to_page()
-        except Exception:
+        except Exception as failure:
             self.close()
-            raise
+            if self.denied_bird:
+                raise
+            raise AssertionError(
+                "%s\n\nIf Chrome stayed alive but silent and never bound the devtools port, "
+                "this is probably the macOS iCloud (`com.apple.bird`) hang: check "
+                "`launchctl print gui/$UID/com.apple.bird` for a non-zero `successive crashes`, "
+                "then re-run with %s=1. See BIRD_DENY_PROFILE in this file."
+                % (failure, DENY_BIRD_ENV)
+            ) from failure
 
     def _attach_to_page(self):
         deadline = time.time() + DEVTOOLS_TIMEOUT_SECS
