@@ -457,12 +457,12 @@ new branch:
 | `file://` — no token | `[]` | none | all three (today's behaviour) | none — `hasToken` is `false` |
 | served, channel ok, idle | all three | all three | none (today's behaviour) | none — no chips to show it beside |
 | served, channel ok, terminal outcome | all three | none (`offersButton` false) | all three (today's behaviour) | none — `channelOk` is `true` |
-| **served, degraded** | `['reanalyze']` | Re-analyze | `/clear`, `/handoff` | **`TRACKER_CHANNEL_REASONS[S.cmdChannel]`** |
+| **served, degraded** | `['reanalyze']` | Re-analyze | `/clear`, `/handoff` | **`trackerChannelReason(S.cmdChannel)`** |
 
 The last column is stated precisely, once, in D5 — this table only summarises it. Three of the
 four chip-rendering rows above render no reason text at all; only the fourth does.
 
-**`module.exports` (`:413-415`) grows to expose the new function and the two constants above:**
+**`module.exports` (`:413-415`) grows to expose the new functions and the two constants above:**
 
 ```js
 if(typeof module!=='undefined'&&module.exports){
@@ -470,7 +470,8 @@ if(typeof module!=='undefined'&&module.exports){
                   MESSAGES:TRACKER_MESSAGES,idleView:trackerIdleView,
                   applyCommand:trackerApplyCommand,
                   LOCAL_IDS:TRACKER_LOCAL_IDS,SEND_IDS:TRACKER_SEND_IDS,
-                  liveIds:trackerLiveIds};
+                  liveIds:trackerLiveIds,
+                  channelReason:trackerChannelReason};
 }
 ```
 
@@ -481,8 +482,9 @@ a third, hand-written copy of the partition living in the test file itself.
 
 **The fence grows by a few lines, and that is a deliberate cost of this design, not an
 oversight.** `Treko.dc.html` was 639 lines and the fence ran `:325-418` at this card's baseline
-(`984e7ac`, criterion 14's measurement). Both numbers move once the two constants and
-`trackerLiveIds` land inside the marker pair. `wc -l` under 800 still has to hold (criterion 14;
+(`984e7ac`, criterion 14's measurement). Both numbers move once the two constants, `trackerLiveIds`,
+`TRACKER_CHANNEL_REASONS` and `trackerChannelReason` land inside the marker pair (D5). `wc -l`
+under 800 still has to hold (criterion 14;
 task 12 re-measures it), and this document's own citations to `:325-418` must be re-derived after
 implementation rather than assumed unchanged — the same discipline §Corrections already applies to
 every other line number in this document. Nothing about the *test* needs updating for this:
@@ -504,8 +506,24 @@ TRACKER_ERROR_OUTCOMES.no_channel = 'no_channel'      // keyed by the server's e
 CMD_TONES.no_channel = 'var(--warn)'                  // presentation, outside the slice
 ```
 
-plus `TRACKER_CHANNEL_REASONS`, the four-row map from the meta's enum token to the standing
-explanation shown beside the copy chips:
+plus, **inside the marker-fenced region** (`:325-418`, beside `trackerLiveIds` — D4), the four-row
+map from the meta's enum token to the standing explanation shown beside the copy chips, and the
+pure function that selects from it:
+
+```js
+// inside the fence, beside trackerLiveIds -- pure, no S, no document, no window
+var TRACKER_CHANNEL_REASONS = {
+  surface_unset:   'Launched outside cmux, so there is no session to type into.',
+  probe_timeout:   'cmux did not answer within 5s — the control channel may be wedged.',
+  probe_failed:    'This surface is not a terminal; an agent-session surface has no control channel.',
+  cmux_unrunnable: 'cmux could not be run on this host.'
+};
+var TRACKER_CHANNEL_REASON_FALLBACK = 'No control channel.';
+function trackerChannelReason(token) {
+  return TRACKER_CHANNEL_REASONS.hasOwnProperty(token) ? TRACKER_CHANNEL_REASONS[token]
+                                                        : TRACKER_CHANNEL_REASON_FALLBACK;
+}
+```
 
 | token | shown |
 |---|---|
@@ -513,7 +531,7 @@ explanation shown beside the copy chips:
 | `probe_timeout` | cmux did not answer within 5s — the control channel may be wedged. |
 | `probe_failed` | This surface is not a terminal; an agent-session surface has no control channel. |
 | `cmux_unrunnable` | cmux could not be run on this host. |
-| *(unrecognised)* | No control channel. |
+| *(unrecognised)* | `trackerChannelReason` falls to the fixed string above — `No control channel.` |
 
 **The render condition, stated once, so the table above is read exactly one way.** The lookup —
 and the whole reason-text block — is gated on `hasToken && !channelOk`, the same two booleans D4
@@ -534,19 +552,30 @@ table lists three chip-rendering modes, and the gate is `true` in exactly one of
   the four reason tokens), so the gate is `true`. This is the only mode the table above is ever
   read for.
 
-`TRACKER_CHANNEL_REASONS[S.cmdChannel]` — or its unrecognised-token fallback row — is read only
-when the gate is `true`. When it is `false`, nothing beside the copy chips is rendered at all: not
-the fallback row, not an empty string standing in for it, nothing.
+`trackerChannelReason(S.cmdChannel)` is called only when the gate is `true`; its unrecognised-token
+fallback is folded into the same pure function (task 8), not a second call site. When the gate is
+`false`, nothing beside the copy chips is rendered at all: not the fallback string, not an empty
+string standing in for it, nothing.
 
-**`TRACKER_CHANNEL_REASONS` lives outside the fence, next to `CMD_TONES`, not inside it next to
-`TRACKER_MESSAGES`.** This is a scope decision, not an architectural inevitability — a lookup this
-shape *could* go inside the fence, the same as `TRACKER_MESSAGES`. It stays out because the one
-function this card adds to the fence is `trackerLiveIds()` (above), for the button axis; this card
-does not also move the reason-text table in to chase a second automated check. The cost is stated
-plainly, not discovered later: the "unrecognised token falls to the page's fixed string, and its
-bytes appear nowhere in the rendered view" half of criterion 7 is verified by task 13's real
-browser launch, the same way criterion 15's own DOM-only half already is in this file — not by
-`test_ui_commands.py`, which stops at what `trackerLiveIds()` can reach.
+**`TRACKER_CHANNEL_REASONS` now lives inside the fence, next to `trackerLiveIds()` — this reverses
+this card's own earlier scope decision, and the reasoning for reversing it matters more than the
+change itself.** The decision to keep it outside (recorded in this section, reviewed and left
+uncited in round 3 of this card's compliance review) was reasonable when it was made: the one
+function this card had added to the fence was `trackerLiveIds()`, for the button axis, and moving
+a second table in to chase a second automated check looked like scope growth for its own sake. The
+cost was stated plainly there, not discovered later: the "unrecognised token falls to the page's
+fixed string, and its bytes appear nowhere in the rendered view" half of criterion 7 would be
+"verified by task 13's real browser launch." Round 4 priced that cost precisely, and it turned out
+to be unpayable: a real server can only ever emit one of the five legal tokens (D1's closed enum),
+so no launch task 13 runs can ever *produce* an unrecognised one — the browser receipt the earlier
+revision promised cannot exist, on any implementation, no matter how carefully task 13 is written.
+A claimed verification path that cannot be exercised is worse than an admitted gap, so the boundary
+moves: `trackerChannelReason(token)` (above) is a pure, dependency-free function inside the fence,
+and task 8 drives it directly with a token outside the five-member set — a real red-then-green
+test, not a promise. `test_ui_commands.py` no longer stops short of this half of criterion 7; only
+the DOM-level question of whether the mapped or fallback *string* actually reaches the rendered
+page without the raw attribute leaking elsewhere in the markup stays task 13's, because that is a
+question about React's render output, not about the lookup.
 
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
@@ -843,11 +872,14 @@ Scenario: the handler slice is still extractable
    tokens and no server-generated text.
 7. On a degraded server — `hasToken && !channelOk`, D5's render condition, stated once there —
    the page offers a live Re-analyze button plus `/clear` and `/handoff` copy chips, and displays
-   the reason mapped from `S.cmdChannel` by `TRACKER_CHANNEL_REASONS`; an unrecognised token falls
-   to the page's fixed generic string and the attribute's bytes appear nowhere in the rendered
-   view. In the other two copy-chip-rendering modes — `file://` (`hasToken` is `false`) and
-   served/channel-ok/terminal-outcome (`channelOk` is `true`) — copy chips render but no reason
-   text does, ever.
+   the reason `trackerChannelReason(S.cmdChannel)` maps from the meta token; an unrecognised token
+   falls to the page's own fixed generic string and the attribute's bytes appear nowhere in the
+   output — checked directly by task 8's node test against `trackerChannelReason`, not inferred
+   from a real launch, because a real server can only ever emit one of the five legal tokens (D1)
+   and no launch can produce the sixth. In the other two copy-chip-rendering modes — `file://`
+   (`hasToken` is `false`, verified by task 13's third launch) and served/channel-ok/
+   terminal-outcome (`channelOk` is `true`, verified per criterion 10) — copy chips render but no
+   reason text does, ever.
 8. `no_channel` is **absent** from `TRACKER_TERMINAL_OUTCOMES`, and a `no_channel` outcome leaves
    `offersButton` true (D5).
 9. Every non-surface startup failure still exits `2` and still refuses a connection: bad port,
@@ -856,11 +888,21 @@ Scenario: the handler slice is still extractable
    `assert_aborted` is unchanged and still used for all of them.
 10. With a live surface and an idle view, behaviour is byte-identical to today: the banner has no
     `reason=` field, all three buttons render, no copy chip renders, and `clear`/`handoff` reach
-    `cmux`. This also holds, unchanged by this card, in the pre-existing served/channel-ok/
-    terminal-outcome sub-mode: copy chips render for the terminality reason D5 already states —
-    not because the channel is degraded — and `channelOk` stays `true`, so D5's render condition
-    stays `false` and no reason text ever joins them. A healthy server whose last command ended
-    the session must never be mistaken, on screen, for a degraded channel.
+    `cmux` — verified end to end by task 13's healthy launch, the only place the full meta →
+    `componentDidMount` → state → `commandProps` wire is observable together. This also holds,
+    unchanged by this card, in the pre-existing served/channel-ok/terminal-outcome sub-mode: copy
+    chips render for the terminality reason D5 already states — not because the channel is
+    degraded — which is pre-existing `trackerViewFor` behaviour this card does not touch. On the
+    axis this card *does* change, `trackerLiveIds(true, true)` (task 8, one of the four
+    combinations already required) resolves to the full command set, not the degraded subset —
+    node-level proof that a channel-ok surface is never handed the degraded button set, even at a
+    terminal outcome. `channelOk` stays `true` in this sub-mode — task 13's healthy launch already
+    confirms `cmdChannel` reads `'ok'` for a genuine live surface — so D5's once-stated gate
+    (`hasToken && !channelOk`) evaluates `false` and `trackerChannelReason` is never called; that
+    follows from the gate being written in exactly one place (D5), the same way D4's anti-injection
+    closure is structural rather than independently tested, and it is not re-verified by a
+    dedicated receipt. A healthy server whose last command ended the session must never be
+    mistaken, on screen, for a degraded channel.
 11. The marker-fenced region still loads in node with no page dependency, still exports exactly
     `clear`, `handoff`, `reanalyze`, and its send/local partition is asserted equal to
     `server.SEND_COMMANDS` / `server.LOCAL_COMMANDS` read from Python.
@@ -924,16 +966,25 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 - [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
       bridge: `trackerLiveIds(hasToken, channelOk)` resolves to `[]` / `LOCAL_IDS` / `IDS` for all
       four combinations, including the fail-closed case — `channelOk=false` for every value other
-      than the literal `'ok'`, which is the automated half of D4's anti-injection guarantee; the
+      than the literal `'ok'`, which is the automated half of D4's anti-injection guarantee —
+      **and** `trackerLiveIds(true, true) === IDS`, which is criterion 10's second half: proof that
+      a channel-ok surface is never handed the degraded button set, even at a terminal outcome; the
       `no_channel` row driven against a really-degraded server (so `ROW_OUTCOMES` grows and the
       `zz` gate is satisfied honestly); `no_channel` leaves `offersButton` true; the send/local
-      partition (`LOCAL_IDS`/`SEND_IDS`) matches `server.py`'s, read from both sides. What this
-      task does **not** cover — the reason table's text actually reaching the screen, and the raw
-      meta attribute appearing nowhere in the rendered page — is task 13's: `TRACKER_CHANNEL_REASONS`
-      and the render that uses it sit outside the fence, the same as `CMD_TONES` (D5), so no node
-      test can reach them.
+      partition (`LOCAL_IDS`/`SEND_IDS`) matches `server.py`'s, read from both sides;
+      `trackerChannelReason(token)` returns each of the four mapped strings for its own token, and
+      — criterion 7's security clause — returns the fixed fallback string for a token outside the
+      five-member set, with the input token's own text asserted absent from the returned string.
+      This last case is what closes criterion 7's "unrecognised token" clause: a real server can
+      only ever emit one of the five legal tokens (D1), so this is the only way that clause is
+      exercised at all. What this task does **not** cover — the mapped or fallback text actually
+      reaching the rendered page without the raw meta attribute leaking elsewhere in the markup —
+      is task 13's: that is a question about React's render output, not about the lookup, and
+      stays outside the fence the same way `CMD_TONES` and `commandProps` itself do (D5).
 - [ ] 9. Implement the fence additions (`trackerLiveIds`, `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS`,
-      the grown `module.exports`), `commandProps`, **`componentDidMount`'s second meta read and
+      `TRACKER_CHANNEL_REASONS`, `trackerChannelReason`, the grown `module.exports`),
+      `commandProps` (now calling `trackerChannelReason(S.cmdChannel)` under D5's gate instead of
+      indexing the table directly), **`componentDidMount`'s second meta read and
       `cmdChannel:null` on `state`** (D4 — the one omission that would ship a healthy server
       rendering as degraded), `runCommand`'s guard, `CMD_TONES`, and `_serve_index`'s second meta.
       Task 8 goes green. Keep the fenced region dependency-free — `test_ui_commands.py:182` is the
@@ -949,10 +1000,10 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `nohup`/`setsid`/`&` (any of the three detaches the server from the parent whose death its
       watchdog is watching for via `getppid()`). Once outside cmux (`env -u CMUX_SURFACE_ID
       python3 treko/server.py --open`): confirm the board renders, the reason line matches the
-      table, Re-analyze works, the two copy chips copy, and — the half `trackerLiveIds()` cannot
-      reach on its own, because `TRACKER_CHANNEL_REASONS` and the render that uses it sit outside
-      the fence — that the raw `tracker-channel` attribute value appears nowhere in the rendered
-      page (view source, not just the visible text). Once with a live surface: confirm the banner
+      table, Re-analyze works, the two copy chips copy, and — the half no node test can reach,
+      because it is a question about React's actual render output, not about `trackerChannelReason`
+      itself (task 8) — that the raw `tracker-channel` attribute value appears nowhere in the
+      rendered page (view source, not just the visible text). Once with a live surface: confirm the banner
       carries no `reason=`, all three buttons render live, no copy chip renders, and `cmdChannel`
       reads `'ok'` — this is the only place the full meta → `componentDidMount` → state →
       `commandProps` wire is observable end to end, so a passing degraded run alone does not clear
@@ -1077,10 +1128,20 @@ healthy, and `file://`. The `file://` receipt is the one this card added specifi
 render condition is verified rather than promised: it owes the view-source check showing no
 `tracker-channel` meta and no reason text on screen. A missing third receipt is what turns the
 new scenario back into an unverified claim, which is why it is named here and not left implied.
-Task 13 also owes criterion 10's second half — the served/channel-ok/terminal-outcome sub-mode —
-from the healthy launch: copy chips present for the terminality reason, `channelOk` still `true`,
-and no reason text beside them. That sub-mode is asserted by criterion 10 but was, until this
-line, the one acceptance clause with no task producing evidence for it.
+Criterion 10's second half — the served/channel-ok/terminal-outcome sub-mode — is **not** owed by
+task 13. It is owed by task 8: `trackerLiveIds(true, true)` (one of the four combinations task 8
+already requires) resolving to the full command set is the node-level evidence that a channel-ok
+surface is never handed the degraded button set, even at a terminal outcome. The sub-mode's other
+half — that no reason text joins the chips — is not independently re-verified by any task; it
+follows by construction from D5's gate (`hasToken && !channelOk`) being written in exactly one
+place, combined with task 13's healthy launch already confirming `cmdChannel` reads `'ok'` for a
+genuine live surface. An earlier revision of this section instead asked task 13's healthy launch to
+produce a screen receipt for this sub-mode, while that same launch's own step never drove a healthy
+server into the terminal outcome needed to observe it — an obligation with no step behind it, cited
+in round 4. It is removed here rather than given a step, because the step it would need (reliably
+ending a real cmux session mid-launch, inside a "launch the app for real" task) is itself the kind
+of fragile, underspecified instruction this card elsewhere avoids; the node-level and structural
+evidence above is what actually backs the claim.
 Task 14 owes the same red-for-the-right-reason discipline as 2/4/6/8, and its own green run,
 folded into one task rather than split: the watchdog code itself is untouched (§Security), only
 the case run against it is new.
