@@ -328,6 +328,40 @@ color-scheme:light}
           <div style="font-size:15px;color:var(--color-neutral-100);flex:1">Configuration</div>
           <div onClick="{{ closeSettings }}" title="Close" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-100);background:var(--hover)"><i class="ph ph-x" style="font-size:13px"></i></div>
         </div>
+
+        <div style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Appearance</div>
+        <!-- criterion-2-exempt:start §D2 -- the two preview cards are the ONE place the dark
+             literals stay literal. Each card is a miniature of the OTHER theme, so it must not
+             follow the active one: tokenizing these would make both previews render identically
+             and the selection control would stop meaning anything. Every other occurrence of the
+             dark rail hex and the white-alpha hairline/hover values belongs in a :root
+             declaration -- and this comment deliberately names them in words rather than
+             quoting them, because a quoted literal here would sit outside its own exemption. -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div onClick="{{ setDark }}" style="padding:12px;border-radius:9px;cursor:pointer;border:1px solid {{ darkEdge }};background:{{ darkBg }}">
+            <div style="height:34px;border-radius:6px;background:#161826;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:5px;padding:0 8px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#38c4e3"></span>
+              <span style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.22)"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;color:{{ darkC }}"><i class="ph ph-moon" style="font-size:14px"></i>Dark</div>
+          </div>
+          <div onClick="{{ setLight }}" style="padding:12px;border-radius:9px;cursor:pointer;border:1px solid {{ lightEdge }};background:{{ lightBg }}">
+            <div style="height:34px;border-radius:6px;background:#f5f6fa;border:1px solid rgba(15,18,35,.14);display:flex;align-items:center;gap:5px;padding:0 8px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#0e93b2"></span>
+              <span style="flex:1;height:4px;border-radius:2px;background:rgba(15,18,35,.2)"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;color:{{ lightC }}"><i class="ph ph-sun" style="font-size:14px"></i>Light</div>
+          </div>
+        </div>
+        <!-- criterion-2-exempt:end -->
+
+        <div style="height:1px;margin:22px 0;background:var(--color-divider)"></div>
+
+        <div style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Layout</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="flex:1;font-size:12.5px;color:var(--color-neutral-400)">Sidebar width<div style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-600);margin-top:2px">{{ sideW }} — drag its edge to resize</div></div>
+          <button class="btn btn-ghost" onClick="{{ resetSideW }}" style="font-size:12px">Reset</button>
+        </div>
       </div>
     </div>
   </sc-if>
@@ -676,6 +710,13 @@ class Component extends DCLogic {
       agentC:S.agentOpen?'var(--color-accent)':'var(--color-neutral-600)',agentBg:S.agentOpen?'var(--color-accent-900)':'transparent',
       agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'var(--hover-soft)':'transparent',
       settingsOpen:S.settingsOpen,openSettings:()=>this.setState({settingsOpen:true}),closeSettings:()=>this.setState({settingsOpen:false}),
+      // §D5's Appearance section. Six ternaries on S.theme, which §D3 validates against the
+      // closed set {'dark','light'} at mount -- so exactly one arm fires and exactly one card is
+      // ever marked selected. That is what makes criterion 7's "a corrupt stored theme leaves the
+      // Dark card selected, never neither" true by construction rather than by a second check.
+      setDark:()=>this.setTheme('dark'),setLight:()=>this.setTheme('light'),
+      darkEdge:S.theme==='dark'?'var(--color-accent)':'var(--color-neutral-700)',darkBg:S.theme==='dark'?'var(--color-accent-900)':'transparent',darkC:S.theme==='dark'?'var(--color-accent-300)':'var(--color-neutral-400)',
+      lightEdge:S.theme==='light'?'var(--color-accent)':'var(--color-neutral-700)',lightBg:S.theme==='light'?'var(--color-accent-900)':'transparent',lightC:S.theme==='light'?'var(--color-accent-300)':'var(--color-neutral-400)',
       collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:(S.collapsed?56:S.sideW)+'px',
       sideW:S.sideW+'px',sideHandleL:(S.sideW-3)+'px',sideHandleDown:this.sideHandleDown,
       resetSideW:()=>{lsSet('taskTracker.sideW',String(SIDE_W_DEFAULT));this.setState({sideW:SIDE_W_DEFAULT})},

@@ -924,8 +924,21 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       §Verification "Task 6". Do not restate it here.
       **Task 7 still owes three things**, all needing the drawer's *sections*: criterion 11's
       Reset clause, criterion 13's Layout readout, and criterion 7's "Dark card selected" clause.
-- [ ] 7. **Drawer sections.** Appearance (two preview cards, six selection values, literals kept and
+- [x] 7. **Drawer sections.** Appearance (two preview cards, six selection values, literals kept and
       commented) and Layout (readout + Reset). **No Artifacts section** — §D9.
+      **Red half** `ee068a5`: 15 tests, 12 red, 3 green by design — but the first run was hidden by
+      an unrelated blocker, and that is the part worth carrying forward: **Chrome auto-updated off
+      the pin mid-task**, and `cdp_harness` asserts the pin before it launches, so 36 tests failed
+      at construction without reaching a page. Re-pinned in `54c84e1`; §"Pinned versions" carries
+      the safety argument.
+      **Green half**: two pure insertions, `+331,34` and `+713,7`, both outside the fence; `wc -l`
+      699 → 740. **294 passed, 0 failed.** Two bugs the landing exposed — a marker comment that
+      quoted the literals it was exempting and therefore fell outside its own exemption, and a
+      probe that omitted `card` from its success payload so a correct card read as a missing
+      border. Both are recorded once, in §Verification "Task 7". Do not restate them here.
+      **All three debts task 6 recorded as owed are closed**: criterion 11's Reset clause (its
+      first and only caller), criterion 13's live readout, and criterion 7's "Dark card selected"
+      clause. Criterion 2 also gained its first test, which it had never had.
 - [x] 8. **Regression guards.** Criteria 15, 16 and 17 as tests. Criterion 15 compares against the
       bytes captured in task 1.
       **Pulled forward, ahead of tasks 5-7.** It is test-only and independent of every remaining
@@ -1621,6 +1634,55 @@ drawer's own contents pass criterion 5 — criterion 5 measures the page at moun
 is closed, so nothing here or there scores the open drawer. Task 9 eyeballs it and records it as
 eyeballed. §D9's absence check asserts the prototype's five `art*` names are gone; it cannot prove
 nobody adds an unrelated third section later.
+
+### Task 7 green half — the two sections land, and two bugs the landing exposed (2026-08-24)
+
+**The change.** Two pure insertions into `Treko.dc.html`, zero deletions and zero modified lines:
+`+331,34` (the Appearance grid, the divider and the Layout row, inside the drawer panel) and
+`+713,7` (`setDark` / `setLight` and §D5's six ternaries, beside `settingsOpen`). `wc -l` 699 →
+740, well under criterion 19's 800. Both hunks are outside the fenced slice (`:365-458` before
+this change), which is why criterion 15's guard is untouched — verified from the diff's own hunk
+headers, not assumed from where the edits were aimed.
+
+**Bug 1 — the exemption that excluded itself (implementation).** The `criterion-2-exempt:start`
+marker comment quoted the two literals it was exempting. The exempt region begins *after* the
+opening comment ends, so the comment's own text sat outside its own exemption and the checker
+correctly flagged line 337 for both literals. Fixed by naming them in words — "the dark rail hex
+and the white-alpha hairline/hover values" — with a sentence in the comment saying why it does not
+quote them. A checker that scans raw text cannot tell a rendered literal from a documented one,
+and widening it to skip comments would have blinded it to a literal hidden in a commented-out
+style. Narrowing the *comment* was the cheaper correct fix.
+
+**Bug 2 — a measurement bug in this task's own probe (test).** Seven Appearance tests failed on
+`the dark glyph has no bordered ancestor`. The page was right: dumping the real ancestor chain
+showed the card at depth 2 with `borderTopWidth: 1px`, `borderTopColor: rgb(56, 196, 227)` (=
+`--color-accent`) and `background: rgb(16, 56, 69)` (= `--color-accent-900`) — Dark correctly
+selected. `_APPEARANCE_PROBE_JS` set `card: 'ok'` only on its **failure** path and omitted it from
+the success return, so `_assert_cards_found`'s `card is not None` read a *missing key* as a
+*missing border*. Same class as task 5's "main column" bug: the assertion was right and the
+payload was wrong, and the diagnosis came from dumping the real render rather than from reasoning
+about the markup.
+
+**What that bug earned: `test_appearance_assertions_are_falsifiable`.** The defect was inside the
+assertion path, where nothing in a runtime test can separate "the assertion is wrong" from "the
+payload is wrong" — both read as a red test. So the two helpers are now exercised as pure
+functions over built payloads: a correct payload must pass (satisfiability first, or every failure
+case below means nothing), a payload with the key missing must raise `no bordered ancestor`, a
+glyph count of 0 must raise its own message, and both of criterion 7's named failures must
+fire — **neither** card selected, and **both** selected at once. Fixtures are built from a pinned
+token dict, never captured from a render, so they cannot drift with the page (`50e9a32`).
+
+**The suite after both repairs: 294 passed, 205.76s**, with **0 failed** and **0 deselected /
+skipped / xfailed / errors**. 294 = the 279 at `3474a91` plus this file's 15 — 14 written in the
+red half plus `test_appearance_assertions_are_falsifiable`, added by the green half for the reason
+above. A changed total is not a regression (criterion 18); the node-ID set diff that proves nothing
+was *lost* is task 10's, not this one's, and is still owed.
+
+**Criterion 7's third clause is now true by construction and asserted.** §D3 validates the seed
+against `{'dark','light'}` at mount, so `S.theme` is always exactly one of two strings and exactly
+one ternary arm fires. All six parametrized cases pass, including the control (`'light'`, which
+must select the *other* card — without it a hardwired "Dark is always selected" implementation
+would pass every corrupt-input case).
 
 ### Task 8 — the regression guards (2026-08-24)
 
