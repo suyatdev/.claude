@@ -8,7 +8,12 @@
 # Final line is exactly "PANE_RESULT: DONE" or "PANE_RESULT: FAILED"; the write
 # is atomic (temp + mv in the result file's own directory, same filesystem).
 #
-# Usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd>
+# Usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd> [model]
+#
+# [model] is optional and positional: when non-empty it becomes --model <model> on the
+# CLI, letting a dispatch honor a model-switch gate. Empty/absent means no --model flag
+# at all, so the configured default (settings.json) still wins and 4-arg callers are
+# unchanged.
 set -u
 umask 077
 
@@ -17,9 +22,9 @@ JQ_BIN="/usr/bin/jq"
 CMUX_BIN="/Applications/cmux.app/Contents/Resources/bin/cmux"
 STDERR_TAIL_LINES=20
 
-agent_type="${1:-}"; prompt_file="${2:-}"; result_file="${3:-}"; run_cwd="${4:-}"
+agent_type="${1:-}"; prompt_file="${2:-}"; result_file="${3:-}"; run_cwd="${4:-}"; model="${5:-}"
 if [ -z "$agent_type" ] || [ -z "$prompt_file" ] || [ -z "$result_file" ] || [ -z "$run_cwd" ]; then
-  printf 'usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd>\n' >&2
+  printf 'usage: run-pane-agent.sh <agent-type> <prompt-file> <result-file> <cwd> [model]\n' >&2
   exit 64
 fi
 
@@ -53,8 +58,14 @@ status=DONE
 # --dangerously-skip-permissions matches the machine-wide posture (shell alias +
 # cmux launch argv); without it a headless run auto-denies non-allowlisted tool
 # calls and the agent dies mid-task. It skips prompts, not hooks.
+# Optional --model, kept as an array so the pinned flags above stay a single
+# invocation. The ${a[@]+"${a[@]}"} guard is required: this is bash 3.2 (macOS),
+# where a bare "${a[@]}" on an empty array is an unbound-variable error under set -u.
+model_args=()
+[ -n "$model" ] && model_args=(--model "$model")
 "$CLAUDE_BIN" -p "$(cat "$prompt_file")" --agent "$agent_type" \
   --output-format json --dangerously-skip-permissions \
+  ${model_args[@]+"${model_args[@]}"} \
   > "$tmp_out" 2> "$tmp_err" || status=FAILED
 
 body=""

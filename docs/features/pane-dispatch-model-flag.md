@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: low
-branch: none
+branch: feat/pane-agent-model-flag
 ---
 
 # `--model` passthrough for pane dispatch
@@ -58,14 +58,22 @@ runner's argv — already covers the positional path.
 
 ## Tasks
 
-- [ ] 1 — `panes/run-pane-agent.sh`: optional 5th positional, conditional `--model` on the `claude`
+- [x] 1 — `panes/run-pane-agent.sh`: optional 5th positional, conditional `--model` on the `claude`
       invocation. Do not touch the 4-arg validation or the usage string's required args.
-- [ ] 2 — `panes/run-pane-agent.test.sh`: add cases 1, 2 and 4 above using the existing
+- [x] 2 — `panes/run-pane-agent.test.sh`: add cases 1, 2 and 4 above using the existing
       `PANE_ARGS_OUT` + `PANE_CLAUDE_BIN` stub seam.
 - [ ] 3 — `panes/dispatch-pane-agent.sh`: `--model` parsing, regex validation, usage string, and the
       conditional extra `%q` in the launcher.
+      - Partial as of `6734027`+WIP: parsing and the usage string landed; **regex validation and the
+        conditional `%q` did not**. Line 373 emits the 6th arg unconditionally, so an unflagged
+        dispatch writes a trailing `''` — harmless downstream, but not the byte-identical launcher
+        the Design pinned. An in-code comment argues against an *allowlist of model ids*; the spec
+        asks for a character-class shape check, which is a different thing and still required.
 - [ ] 4 — `panes/dispatch-pane-agent.test.sh`: assert the launcher contains the model when flagged and
       is unchanged when not (case 3's fail-fast included).
+      - Partial: `--model accepted` / `reaches the launcher` / `no value -> exit 64` landed.
+        Still missing the two the criteria name: launcher byte-unchanged when unflagged, and
+        `--model "a b"` rejected with no pane opened.
 - [ ] 5 — `skills/dispatching-pane-agents/SKILL.md`: document `--model` in the Procedure step that
       shows the `dispatch` command line. One line; do not restate the design here.
 - [ ] 6 — Run both suites (`bash panes/run-pane-agent.test.sh`, `bash panes/dispatch-pane-agent.test.sh`)

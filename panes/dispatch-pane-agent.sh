@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-pane-agent.sh — entry point for pane orchestration.
 #
-#   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]
+#   dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux] [--model <m>]
 #   wait --result-file <f> [--timeout <secs>]
 #   handoff [--cwd <dir>]
 #   set-policy {inline | panes --max <N>}      (this session's pane-split policy)
@@ -308,14 +308,19 @@ case "$cmd" in
   dispatch)
     agent_type="${1:-}"
     # shellcheck disable=SC2015 # non-empty agent_type guarantees $1 exists, so shift never fails into die
-    [ -n "$agent_type" ] && shift || die "usage: dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux]"
-    prompt_file=""; result_file=""; run_cwd="$PWD"; role="aux"
+    [ -n "$agent_type" ] && shift || die "usage: dispatch <agent-type> --prompt-file <f> [--result-file <f>] [--cwd <dir>] [--role implementer|aux] [--model <m>]"
+    prompt_file=""; result_file=""; run_cwd="$PWD"; role="aux"; model=""
     while [ $# -gt 0 ]; do
       case "$1" in
         --prompt-file) [ $# -ge 2 ] || die "--prompt-file needs a value"; prompt_file="$2"; shift 2 ;;
         --result-file) [ $# -ge 2 ] || die "--result-file needs a value"; result_file="$2"; shift 2 ;;
         --cwd)         [ $# -ge 2 ] || die "--cwd needs a value";         run_cwd="$2";     shift 2 ;;
         --role)        [ $# -ge 2 ] || die "--role needs a value";        role="$2";        shift 2 ;;
+        # Optional. Forwarded verbatim as the runner's 5th positional; empty means
+        # "no --model", so the configured default still wins. Not allowlisted here --
+        # the CLI is the authority on valid model ids, and hardcoding a list would go
+        # stale silently.
+        --model)       [ $# -ge 2 ] || die "--model needs a value";       model="$2";       shift 2 ;;
         *) die "unknown option: $1" ;;
       esac
     done
@@ -365,7 +370,7 @@ case "$cmd" in
     launcher="$run_dir/launch.sh"
     {
       printf '#!/usr/bin/env bash\n'
-      printf 'bash %q %q %q %q %q\n' "$PANES_DIR/run-pane-agent.sh" "$agent_type" "$run_dir/prompt.md" "$result_file" "$run_cwd"
+      printf 'bash %q %q %q %q %q %q\n' "$PANES_DIR/run-pane-agent.sh" "$agent_type" "$run_dir/prompt.md" "$result_file" "$run_cwd" "$model"
       printf 'echo; echo "[pane kept open for inspection -- agent exit $?]"\n'
       printf 'exec /bin/zsh -i\n'
     } > "$launcher"
