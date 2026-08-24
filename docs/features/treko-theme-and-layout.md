@@ -51,8 +51,13 @@ Each was a user decision. The implementation does not relitigate them.
    `--info`. Not a subset, not "the neutral parts only".
 3. **Tokenize first, re-tint second — as two tasks and two commits.** The user's "take the whole
    thing" and the tokenize pass's "prove nothing moved" cannot both be true of one diff. §D1.
-4. **Dark stays the default.** An unset `taskTracker.theme` is dark, so today's users see no change
-   until they ask for one.
+4. **Dark stays the default mode, not the default colours.** An unset `taskTracker.theme` renders
+   with `body[data-theme="dark"]` — the seed defaults to the string `'dark'` (§D8) and `applyTheme`
+   sets the attribute **unconditionally**, on every mount (§D3) — both before and after task 4. What
+   task 4 changes is what "dark" itself looks like: the re-tint repaints the dark palette (cyan
+   accent, `#1c1e2b` surfaces, new `--ok` / `--info`) for every user, including one who never opens
+   the drawer. A non-choosing user is guaranteed the mode they have today, never the exact colours
+   they have today.
 
 ## Scope
 
@@ -65,8 +70,10 @@ Each was a user decision. The implementation does not relitigate them.
   **Layout** sections only (§D5, §D6, §D7).
 - Exactly two new `localStorage` keys: `taskTracker.sideW`, `taskTracker.theme` (§D8).
 - The palette re-tint, as its own task and its own commit (§D1).
-- Three light-theme overrides for `--shadow-sm` / `--shadow-md` / `--shadow-lg`, which the prototype
-  does **not** ship and which our page reads eight times (§D3).
+- Two light-theme overrides, `--shadow-sm` and `--shadow-lg`, which the prototype does **not** ship
+  (§D3). `--shadow-sm` is read eight times in our page and `--shadow-lg` is what the drawer takes.
+  `--shadow-md` is **not** overridden — it has zero readers in our page, the same reasoning
+  §Background 5 used to exclude `--panel` (§D3).
 - ADR for the theming decision; the `treko` skill's UI notes.
 
 ### Out
@@ -94,7 +101,10 @@ Each was measured in this tree at `984e7ac`. Re-measure before citing; do not re
 `/Users/marksuyat/Other Docs/AI/AI_Projx/Prototypes/Treko/Treko/Task Tracker.dc.html` (723 lines)
 diverged: ours has the real command handler and the real reanalyze; theirs has Rally rows, a fake
 reanalyze, and the drawer. **Overwriting ours with theirs already cost a rework during card 1.**
-Every port in this card is a deliberate, diffed lift of a named region.
+Every port in this card is a deliberate, diffed lift of a named region. That absolute path — and
+every other citation of it in this card — falls under the named out-of-repo-prototype-provenance
+carve-out to the no-absolute-paths rule; the portability cost (no other clone can resolve it) is
+accepted for the traceability this card leans on.
 
 **2. `nocturne.css` is byte-identical to the prototype's except one line.** Verified by `diff`:
 
@@ -219,20 +229,26 @@ Those are hardcoded dark hexes — unlike `.btn-secondary:hover`, which is
 self-adapts when `--color-text` flips. `var(--shadow-sm)` appears **8 times** in our page, on every
 stat tile and card, and the ported drawer takes `var(--shadow-lg)` — the same token `nocturne.css`'s
 own `.dialog` uses at `:286`. Left alone, light mode renders charcoal rings on white cards and a
-`rgba(0,0,0,0.65)` bloom under a white drawer.
+`rgba(0,0,0,0.65)` bloom under a white drawer — for the two of these our page actually reads.
+`--shadow-md` has **zero readers**: `.elev-md{box-shadow:var(--shadow-md)}` is `nocturne.css:218`,
+and no `elev-*` class appears anywhere in `Treko.dc.html` (verified: 0 hits). Left dark-hardcoded, it
+changes nothing anyone sees, because nothing paints it.
 
-**We override all three. The prototype does not; this is a deliberate divergence.** The values
-follow the rule `nocturne.css:76-77` states for itself — "soft ink-tinted shadows on a light theme,
-a hairline edge + ambient darkness on a dark one":
+**We override the two tokens with a reader, `--shadow-sm` and `--shadow-lg`. The prototype overrides
+neither; this is a deliberate divergence.** `--shadow-md` is **not** ported, for the same reason
+§Background 5 excluded `--panel`: a declared value nothing reads is not a state
+(`rules/core-conduct.md`). The values follow the rule `nocturne.css:76-77` states for itself —
+"soft ink-tinted shadows on a light theme, a hairline edge + ambient darkness on a dark one":
 
 ```css
 --shadow-sm: 0 1px 2px rgba(15,18,35,.06), 0 0 0 1px rgba(15,18,35,.07);
---shadow-md: 0 4px 12px rgba(15,18,35,.09), 0 0 0 1px rgba(15,18,35,.08);
 --shadow-lg: 0 16px 40px rgba(15,18,35,.16), 0 0 0 1px rgba(15,18,35,.10);
 ```
 
-Our light block therefore declares **52** custom properties: 33 nocturne + 3 shadows + 8 status
-(`--ok`…`--info-bg`, from `Treko.dc.html:21`) + 8 chrome (§D2).
+Our light block therefore declares **51** custom properties: 33 nocturne + 2 shadows + 8 status
+(`--ok`…`--info-bg`, from `Treko.dc.html:21`) + 8 chrome (§D2). That total coincidentally matches
+`nocturne.css`'s own count of 51 declared properties, above — a different 51, not a copy-paste of it:
+33 of nocturne's 51 are the ones we override here, the other 18 are unrelated to this count.
 
 **Where the block lives, and why it works.** In the page's `<style>` at `Treko.dc.html:18-22`, after
 `:root`. Every element that reads a token is a descendant of `<body>`, and custom properties
@@ -242,16 +258,56 @@ inside the body. Two things ride on this and both already work: `body{background
 `color-mix(in srgb, var(--color-bg) 90%, transparent)` (`:81`) resolves against the overridden value.
 
 Applied exactly as the prototype does it — `document.body.setAttribute('data-theme', t)`
-(`Task Tracker.dc.html:529`), called from `componentDidMount` (`:485`) and from the setter (`:530`).
+(`Task Tracker.dc.html:529`), called from `componentDidMount` (`:484`) and from the setter (`:530`).
 The `try/catch` is kept: it is what keeps a DOM-less test environment from throwing.
+
+**The seed, validated at mount — corrected, not copied, the identical defect §D4 corrects for
+`taskTracker.sideW`.** The prototype's seed is `theme:ls('taskTracker.theme')||'dark'` (its `:481`):
+`||` only substitutes for `null` or `''`, so any other stored string — anything a user or a browser
+extension can write directly into `localStorage`, a boundary this page does not control — passes
+straight through and into `setAttribute('data-theme', …)` unchanged. §D5's six selection values are
+ternaries on exact equality against `S.theme` (`darkEdge`/`darkBg`/`darkC` test `=== 'dark'`,
+`lightEdge`/`lightBg`/`lightC` test `=== 'light'`, `Task Tracker.dc.html:704-705`); a value that is
+neither matches none of the six, and the Appearance section renders with *both* preview cards
+unselected — a UI state no scenario described until this revision. `localStorage` is user-editable
+input crossing a system boundary (`rules/core-conduct.md`), so the seed is validated against its own
+closed set, `{'dark','light'}`, the same discipline §D4 applies to `sideW`'s numeric range:
+
+```js
+const THEME_DEFAULT = 'dark';
+```
+
+```js
+theme: (t => t === 'light' ? 'light' : THEME_DEFAULT)(ls('taskTracker.theme'))
+```
+
+Anything other than the literal string `'light'` — `null`, `''`, `'banana'`, `'Dark'`, `'true'` —
+falls to `THEME_DEFAULT`, so `S.theme` is always exactly one of the two strings the six selection
+ternaries test for. `setTheme` (§D5) only ever writes the literal `'dark'` or `'light'` back to
+storage, so this check exists entirely for a value that reached storage some other way — the same
+reasoning §D4 gives for validating `sideW`'s seed even though the drag handler already clamps.
 
 ### D4 — Sidebar drag-resize
 
-Ported from `Task Tracker.dc.html:531-534`, unchanged:
+Ported from `Task Tracker.dc.html:531-534`, with two changes from the prototype: the bounds and the
+default become named module constants, and the seed is **corrected, not copied**. The prototype's
+`+(ls('taskTracker.sideW')||236)` (its `:480`) cannot satisfy criterion 11: `localStorage` is
+user-editable input crossing a system boundary, and `+("banana")` is `NaN`, not 236, so `mainML`
+would render `"NaNpx"`. This page already has the right pattern for exactly this at `:432`
+(`agentH:parseInt(ls('taskTracker.agentH'))||300`) — the seed below follows it, and goes one step
+further: the prototype's 190–440 clamp lives only inside the drag handler, so a stored `"0"` or
+`"99999"` reaches `mainML` unclamped at mount. Ours clamps at mount too.
+
+Three named module constants, declared alongside `OPEN_PR` / `TRACKER_COMMAND_IDS` / `TONES` — this
+page's existing pattern for a value used more than once:
+
+```js
+const SIDE_W_MIN = 190, SIDE_W_MAX = 440, SIDE_W_DEFAULT = 236;
+```
 
 ```js
 sideHandleDown = e => { e.preventDefault();
-  const move = ev => { const w = Math.max(190, Math.min(440, ev.clientX)); this.setState({sideW:w}) };
+  const move = ev => { const w = Math.max(SIDE_W_MIN, Math.min(SIDE_W_MAX, ev.clientX)); this.setState({sideW:w}) };
   const up = () => { removeEventListener('mousemove',move); removeEventListener('mouseup',up);
                      lsSet('taskTracker.sideW', String(this.state.sideW)) };
   addEventListener('mousemove',move); addEventListener('mouseup',up); };
@@ -260,14 +316,23 @@ sideHandleDown = e => { e.preventDefault();
 **Persist on mouseup, never per frame.** A drag fires `mousemove` at frame rate; a `lsSet` per frame
 is a synchronous localStorage write per frame. The prototype already made this call and we keep it.
 
-Seed: `sideW:+(ls('taskTracker.sideW')||236)` (`:480`). The three computed substitutions
-(`:695-696`):
+**Seed, validated at mount:**
+
+```js
+sideW: (w => isNaN(w) ? SIDE_W_DEFAULT : Math.max(SIDE_W_MIN, Math.min(SIDE_W_MAX, w)))
+       (parseInt(ls('taskTracker.sideW')))
+```
+
+A non-numeric stored value — `parseInt` returns `NaN` — falls to `SIDE_W_DEFAULT`, matching
+criterion 11. A numeric-but-out-of-range value (`"0"`, `"99999"`) is clamped to `SIDE_W_MIN` /
+`SIDE_W_MAX` at mount, the same bound the drag handler already enforces; the clamp is no longer
+something only a drag can produce. The three computed substitutions (`:695-696`):
 
 ```js
 mainML: (S.collapsed ? 56 : S.sideW) + 'px',      // replaces Treko.dc.html:621's literal
 sideW:  S.sideW + 'px',
 sideHandleL: (S.sideW - 3) + 'px',
-resetSideW: () => { lsSet('taskTracker.sideW','236'); this.setState({sideW:236}) },   // :697
+resetSideW: () => { lsSet('taskTracker.sideW', String(SIDE_W_DEFAULT)); this.setState({sideW:SIDE_W_DEFAULT}) },   // :697
 ```
 
 Handle markup, from `Task Tracker.dc.html:70-72` — a 7px `position:fixed` strip centred on the
@@ -295,7 +360,10 @@ bubble out and close it. `stopEvt` already exists in our page (`Treko.dc.html:28
 **Appearance** (`:428-444`): two clickable preview cards side by side, `setDark` / `setLight`, each
 a miniature mock chrome bar (§D2 — literals, deliberately) with a `ph-moon` / `ph-sun` label. Six
 computed values drive selection styling (`:704-705`): `darkEdge` / `darkBg` / `darkC` and
-`lightEdge` / `lightBg` / `lightC`, each a ternary on `S.theme`.
+`lightEdge` / `lightBg` / `lightC`, each a ternary on `S.theme`. Because §D3 validates the seed
+against `{'dark','light'}`, `S.theme` is always exactly one of those two strings, so exactly one
+card is always marked selected — the "neither card selected" state a corrupt stored value used to
+produce cannot occur.
 
 **Layout** (`:448-452`): a read-only `{{ sideW }}` readout — the *actual* state, `S.sideW + 'px'`,
 not a stored duplicate — plus a `btn-ghost` Reset wired to `resetSideW`.
@@ -381,15 +449,42 @@ to the prototype's `:472-473`):
 | `taskTracker.sidebar` | ✔ | `:432` |
 | `taskTracker.resolved` | ✔ | `:432` |
 | `taskTracker.agentH` | ✔ | `:432` |
-| `taskTracker.sideW` | **new** | seed `+(ls(…)||236)` |
-| `taskTracker.theme` | **new** | seed `ls(…)||'dark'` |
+| `taskTracker.sideW` | **new** | seed: `parseInt` + `NaN` fallback + clamp, validated at mount (§D4) |
+| `taskTracker.theme` | **new** | seed: validated against `{'dark','light'}`, falls back to `THEME_DEFAULT` (§D3) |
 
 The prototype also writes `taskTracker.artifactsPath` (§D9) and `taskTracker.deletedRuns` (part of
 the run-delete feature, out of scope). **Neither is added.**
 
 Both new keys degrade the same way the existing four do: `ls` returns `null` inside its `try/catch`
-when storage is unavailable, so the seeds fall through to `236` and `'dark'` and the page works
-unpersisted. No new failure mode.
+when storage is unavailable, so `parseInt(null)` is `NaN` and the seeds fall through to
+`SIDE_W_DEFAULT` (236) and `THEME_DEFAULT` (`'dark'`), and the page works unpersisted. No new
+failure mode.
+
+**Every `ls()` read is validated at its point of use — the rule for this page, stated once.**
+`ls()` (`Treko.dc.html:319`) is `function ls(k){try{return localStorage.getItem(k)}catch(_){return
+null}}`: its `try/catch` guards only the `getItem` call itself. It guarantees the *read* did not
+throw; it says nothing about whether the string that comes back is well-formed for whatever the
+caller does with it next, because a browser's storage is a boundary this page's own code does not
+control. Two consecutive review rounds each found exactly one call site that skipped that guard —
+`sideW`, then `theme` — which is the pattern of patching instances instead of closing the class.
+Measured in this checkout, here is every `ls()` read that exists or will exist once this card lands,
+all four of today's on the same line:
+
+| Key | Expression | Guard |
+|---|---|---|
+| `taskTracker.run` | `ls('taskTracker.run')\|\|''` | defaulted — safe |
+| `taskTracker.sidebar` | `ls('taskTracker.sidebar')==='1'` | compared — safe |
+| `taskTracker.agentH` | `parseInt(ls('taskTracker.agentH'))\|\|300` | parsed + defaulted — safe |
+| `taskTracker.resolved` | `JSON.parse(ls('taskTracker.resolved')\|\|'{}')` | **unguarded — throws on invalid JSON** (§Risks, hazard 5 — pre-existing, out of scope for this card) |
+| `taskTracker.sideW` | `parseInt` + `NaN` fallback + range clamp (§D4) | validated — added by this card |
+| `taskTracker.theme` | validated against `{'dark','light'}` (§D3) | validated — added by this card |
+
+All six sit at `Treko.dc.html:432` today except the two this card adds. The rule that closes the
+class rather than the instance: **validate every `ls()` result at the point of use, against the
+domain the caller actually needs — a boolean comparison, a numeric parse with range clamp, or (as
+here) a closed-set membership check — because `ls()` promises only that reading did not throw, never
+that what it read is usable.** Both keys this card adds follow it. `taskTracker.resolved` does not,
+and it predates this card; §Risks records why it is left alone rather than fixed here.
 
 ### D9 — Why the Artifacts section is omitted, not deferred
 
@@ -451,7 +546,7 @@ Scenario: the mapping is exhaustive
 Scenario: dark is still the default
   Given taskTracker.theme is unset
   When  the page mounts
-  Then  body carries no data-theme attribute, or carries data-theme="dark"
+  Then  body carries data-theme="dark"
   And   every computed colour equals the dark-mode value
 
 Scenario: no token is left dark on a white ground
@@ -461,14 +556,17 @@ Scenario: no token is left dark on a white ground
   And   the exception list contains only --font-*, --space-*, --radius-*
 
 Scenario: light-mode text stays readable
-  Given data-theme="light"
-  When  each (colour token, ground token) pair that co-occurs in one inline style is composited
+  Given data-theme="light", set in localStorage and mounted for real in headless Chrome
+  When  every element under body with non-zero rendered area is resolved to its getComputedStyle
+        color and its effective background (walking ancestors for the first opaque background,
+        alpha-compositing any translucent layer crossed)
   Then  its WCAG contrast ratio is at least 4.5:1 below 18px, and at least 3:1 at or above 18px
 
 Scenario: the card shadows are not dark rings on white
   Given data-theme="light"
-  Then  --shadow-sm, --shadow-md and --shadow-lg each resolve to an ink-tinted rgba value
-  And   none of them contains #3f424d, #595d6c or #9397ab
+  Then  --shadow-sm and --shadow-lg each resolve to an ink-tinted rgba value
+  And   neither contains #3f424d or #9397ab
+  And   --shadow-md is left at its nocturne.css dark value, unread by anything in the page
 
 Scenario: the theme survives a reload
   Given the user picks Light
@@ -479,6 +577,12 @@ Scenario: storage is unavailable
   Given localStorage.getItem throws
   When  the page mounts
   Then  it renders in dark mode and does not throw
+
+Scenario: a corrupt stored theme
+  Given taskTracker.theme is "banana"
+  When  the page mounts
+  Then  body carries data-theme="dark"
+  And   the Appearance section's Dark preview card is marked selected, not neither card
 
 # --- the palette re-tint (task 4) ---
 
@@ -517,6 +621,11 @@ Scenario: a corrupt stored width
   Given taskTracker.sideW is "banana"
   When  the page mounts
   Then  the sidebar is 236px
+
+Scenario: a stored width outside the clamp range is corrected at mount
+  Given taskTracker.sideW is "0", then separately "99999"
+  When  the page mounts
+  Then  the sidebar is 190px, then 440px
 
 Scenario: no handle while collapsed
   Given the sidebar is collapsed
@@ -578,29 +687,50 @@ Scenario: no CDN URL reaches a fetching position
    declarations and in the drawer's two preview cards, which are exempt by explicit name and
    comment. The 27 are 3 hex + 24 rgba, and 3 of the 24 are JS string literals (`:596`, `:603`,
    `:620`) — a check that only walks HTML attributes fails this criterion.
-3. **Dark is unchanged for an existing user.** With `taskTracker.theme` unset, every computed colour
-   on the board equals its value at the base commit.
+3. **Dark is unchanged for an existing user — at the tokenize commit, not at HEAD.** With
+   `taskTracker.theme` unset, every computed colour on the board equals its value at the base commit.
+   Scoped exactly as criterion 1 is scoped by criterion 8: asserted at the tokenize commit (task 2)
+   and never re-checked after task 4, whose entire purpose is to change those colours for every user.
+   What survives task 4 is the **default mode** (see Decisions §4) — an unset `taskTracker.theme`
+   still renders dark, and `body` still carries `data-theme="dark"` (§D3's setAttribute is
+   unconditional; §D8 seeds the state to `'dark'`) — never that the rendered colours themselves are
+   unchanged.
 4. **The light block covers everything the page reads.** Every custom property reachable through
    `var()` from `Treko.dc.html` or from a `nocturne.css` rule the page's classes hit is declared
    under `body[data-theme="light"]`, or appears on an exception list whose only members are
    `--font-*`, `--space-*` and `--radius-*`. `--color-section*` may join the list only with the
    measured "0 readers" evidence attached.
-5. **No invisible-on-white surface.** For every (colour token, ground token) pair that co-occurs in
-   one inline style, WCAG contrast under the light block is ≥ 4.5:1 below 18px and ≥ 3:1 at or above
-   it, with alpha composited over the nearest opaque ground. **What this does not prove:** that the
-   page looks good. A human opens it once (task 9) and that is recorded as eyeballed, not measured.
-6. **The three shadow tokens are overridden in light mode** and none of the light values contains
-   `#3f424d`, `#595d6c` or `#9397ab`.
+5. **No invisible-on-white surface.** Render the page in headless Chrome with `data-theme="light"`
+   applied exactly as the app applies it — `taskTracker.theme` set in `localStorage` before mount,
+   never simulated by setting the attribute directly. For every element under `<body>` with non-zero
+   rendered area, its resolved `getComputedStyle().color` and its effective background — the first
+   non-transparent `getComputedStyle().backgroundColor` found walking up from the element through its
+   ancestors, alpha-compositing any translucent layer crossed on the way — meet WCAG contrast ≥ 4.5:1
+   below an 18px resolved `font-size`, ≥ 3:1 at or above it, ≥ 4.5:1 when `font-size` cannot be
+   resolved. This is a rendered check over the whole page, inline-styled and class-styled colour
+   alike, reading the foreground/background pair from the browser's own paint rather than inferring
+   it from markup proximity — there is no "one inline style" scope left to disagree about
+   (§Verification, Proof C). **What this does not prove:** that the page looks good. A human opens it
+   once (task 9) and that is recorded as eyeballed, not measured.
+6. **The two shadow tokens with a reader, `--shadow-sm` and `--shadow-lg`, are overridden in light
+   mode**, and neither light value contains `#3f424d` or `#9397ab`. `--shadow-md` is not overridden —
+   it has zero readers in our page (§D3), the same reasoning that excluded `--panel` (§Background 5).
 7. **The theme survives a reload**, and an unavailable `localStorage` yields dark mode without
-   throwing.
+   throwing. **A stored value outside the closed set `{'dark','light'}` also yields dark mode** — in
+   the applied `data-theme` attribute and in the drawer's Appearance selection state, where it leaves
+   the Dark card selected rather than neither card — the identical validate-at-the-boundary treatment
+   criterion 11 already requires for `taskTracker.sideW`.
 8. **The re-tint is a separate commit** whose diff touches only `:root` and the light block — zero
-   changed inline style attributes. Criterion 1 is asserted at the tokenize commit, not at HEAD.
+   changed inline style attributes. Criteria 1 and 3 are asserted at the tokenize commit, not at
+   HEAD — task 4 is exactly the commit at which criterion 3 stops holding, by design. This depends on
+   both commits reaching `main` unsquashed (task 13 — no squash merge).
 9. **Sidebar drag clamps at 190 and 440**, updates both the sidebar and `mainML` in the same frame,
    and survives a reload.
 10. **The width is persisted once per drag, on mouseup** — not once per `mousemove`.
-11. **Reset returns 236**, in both the DOM and `taskTracker.sideW`. A non-numeric stored value also
-    yields 236. No drag handle exists while collapsed, and `Treko.dc.html:514`'s `mainML:'0px'` is
-    unchanged.
+11. **Reset returns `SIDE_W_DEFAULT` (236)**, in both the DOM and `taskTracker.sideW`. A non-numeric
+    stored value also yields `SIDE_W_DEFAULT`. A numeric stored value outside `SIDE_W_MIN`–
+    `SIDE_W_MAX` (190–440) is clamped to the nearer bound **at mount**, not only during a drag. No
+    drag handle exists while collapsed, and `Treko.dc.html:514`'s `mainML:'0px'` is unchanged.
 12. **The drawer opens on the gear, closes on the scrim and on Esc, and does not close on a click
     inside the panel.** The Esc arm is **prepended**; the three existing arms keep their bodies and
     their relative order, verified by diffing the four arms.
@@ -634,6 +764,7 @@ Carried forward from `docs/features/treko-rename.md` §"Pinned versions", unchan
 | Phosphor Icons | 2.1.1 | already vendored under `vendor/phosphor/` — do not re-fetch |
 | Inter | vendored `inter-latin.woff2` | `vendor/inter/` — no version upstream; the file is the pin |
 | Nocturne export | `73641b21-c7ad-488a-8264-a28262dfe83e`, schema `version: 1` | `_ds/` directory name; ADR 0023 |
+| Chrome | `151.0.7922.172` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. |
 
 **No new dependency.** All four glyphs the drawer needs (`gear-six`, `moon`, `sun`, `x`) resolve in
 the vendored Phosphor set (1,530 classes, regular and fill). Adding a dependency would need a
@@ -648,11 +779,15 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       else in this card can be checked without them.
 - [ ] 2. **Tokenize.** Add the eight `:root` declarations; replace all 27 literals — including the
       three JS string literals. **No light block, no palette change, no DOM change.** Commit alone.
-      Proof A must pass on this commit and is asserted against it forever after.
-- [ ] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5 and 6
-      against the *current* dark-only page and confirm each fails for the stated reason. Then add
-      `body[data-theme="light"]` with all 52 declarations, `applyTheme` / `setTheme`, and the mount
-      call. Do not touch implementation and tests in the same step.
+      Proof A must pass on this commit and is asserted against it forever after. Record this commit's
+      SHA; once task 4 lands, Proof A becomes a frozen comparison between it and the base-commit SHA
+      from task 1 — label it **ARCHIVED RECEIPT** in the test itself (§Verification, Proof A), not a
+      live regression guard.
+- [ ] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5, 6 and 7
+      (including the corrupt-stored-theme case) against the *current* dark-only page and confirm each
+      fails for the stated reason. Then add `body[data-theme="light"]` with all 51 declarations,
+      `THEME_DEFAULT`, the validated seed, `applyTheme` / `setTheme`, and the mount call. Do not touch
+      implementation and tests in the same step.
 - [ ] 4. **Palette re-tint.** Replace `:root` with the prototype's block (cyan accent, `#1c1e2b`
       surface, lifted neutrals, `--ok:#82dfa9`, `--info:#89b4f2`, `--hair-3` to `.12`). One commit,
       `:root` and the light block only. **Pixels move here, by design.**
@@ -674,7 +809,10 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       answer on its own.
 - [ ] 12. `skills/treko/SKILL.md`: the two new `localStorage` keys and the theme default.
 - [ ] 13. Compliance judge on this spec (before task 0), observability judge on the change (before
-      the PR), then the PR.
+      the PR), then the PR. **Do not squash-merge.** The tokenize and re-tint commits are the design's
+      whole rollback point (§D1), and criterion 8 pins an assertion to the tokenize commit
+      specifically — a squash deletes both. Use a merge or rebase-merge, and state in the PR body
+      that both commits must reach `main` intact.
 
 ## Risks
 
@@ -713,6 +851,21 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
   with theirs cost a rework during card 1. Every lift in this card names its source lines; take those
   and diff, never the file.
 
+- **Hazard 5 — `taskTracker.resolved` is unguarded and pre-existing; measured, not assumed.**
+  `JSON.parse(ls('taskTracker.resolved')||'{}')` at `Treko.dc.html:432` has no `try/catch` on that
+  expression — `||'{}'` only substitutes when `ls()` returns `null` or `''`; a stored value that is
+  *present* but not valid JSON is neither. Confirmed under `node`: a stored `"banana"` throws
+  `SyntaxError: Unexpected token 'b', "banana" is not valid JSON`, and a stored `"[1,2"` throws
+  `SyntaxError: Expected ',' or ']' after array element`. The expression sits inside `state={...}`, a
+  class field initializer, so the throw happens during construction — `Component` never finishes
+  mounting, and it takes down the whole board, not one control. That is strictly worse than either
+  unvalidated-`localStorage` finding raised against this card (§D8's class-level rule, above), and it
+  is **pre-existing**: `taskTracker.resolved` is one of the four keys this page already reads, not
+  one of the two this card adds (§D8). **It is out of scope for this card.** Fixing it here would be
+  a drive-by against a section this card does not otherwise touch, on a page already at 639 of
+  criterion 19's 800-line ceiling. It needs its own card; this entry is that card's evidence, not its
+  fix.
+
 - **Nothing tests appearance today.** §Background 6: 221 tests, one of which reads the page, and only
   for the fenced slice. Criteria 1, 2, 4, 5, 6, 15 and 17 all need a test file that does not exist
   yet. The risk is quietly downgrading them to "looked right" — the exact failure
@@ -739,10 +892,22 @@ recorded here before it has been run and its output re-read (`rules/core-conduct
 The oracle. A Python check, run at the task-2 commit and pinned as a test:
 
 1. Read the base file: `git show <base>:treko/Treko.dc.html`.
-2. Read the tokenized file.
+2. Read the tokenized file: `git show <task-2-sha>:treko/Treko.dc.html` — the tokenize commit
+   specifically, never the working tree, so the comparison stays pinned to the same two commits once
+   task 4 changes `:root` again.
 3. From the tokenized file's `:root`, build `{token: value}` for the eight new names.
 4. In the tokenized file's **whole text** — markup, attributes and script alike — replace every
-   `var(--rail)`, `var(--hair*)`, `var(--hover*)` with its value.
+   `var(<token>)` with its value, iterating the map from step 3. **Match the full literal string
+   including the closing paren, and never a pattern.** The wildcard shorthand this step used to
+   carry (`var(--hair*)`) is not a specification: `--hair`, `--hair-2` and `--hair-3` are three
+   distinct tokens with three distinct values, and a reader who turns that shorthand into a regex
+   gets a wrong answer either way — measured, `var\(--hair.*\)` (greedy) swallows the rest of the
+   declaration, and `var\(--hair.*?\)` (lazy) silently rewrites all three hairlines to `--hair`'s
+   value. Exact literal `str.replace` per key is correct precisely because the `)` terminates the
+   name, so `var(--hair)` cannot match inside `var(--hair-2)`.
+   This fails *closed* — a botched expansion mismatches at step 6 rather than passing — but it
+   fails **misattributed**: the red looks like "the tokenize moved a pixel" when it is really
+   "the oracle's own substitution is wrong." Do not chase it by editing token values.
 5. Delete the eight declarations the task added to `:root`.
 6. Assert the result equals the base file byte for byte.
 
@@ -754,6 +919,14 @@ Falsifiable by construction: change one alpha and step 6 fails. Confirm that bef
 value-preserving but structurally different — moving a `style` attribute to another element, for
 instance. Task 2's "no DOM change" constraint is what closes that, and the byte comparison in step 6
 enforces it directly: any DOM edit changes the base-file comparison too.
+
+**After task 4, Proof A is an archived receipt, not a live guard.** Once the re-tint changes `:root`
+again, step 2's `<task-2-sha>` and step 1's `<base>` are both fixed history — Proof A is comparing two
+frozen snapshots and will pass forever, regardless of what happens to the live page. That is fine as a
+record of what the tokenize commit did, but it is not evidence about anything after it. Name both SHAs
+in the test's own docstring or header comment once they exist, and mark it **ARCHIVED RECEIPT**
+there — a permanently-green check sitting unlabelled next to tests that still guard something is
+exactly the failure this note exists to prevent.
 
 ### Proof B — rendered corroboration (criterion 1, secondary)
 
@@ -768,25 +941,52 @@ shasum -a 256 /tmp/treko-before.png /tmp/treko-after.png
 ```
 
 `file://` is not an option — the browser tool refuses it, and the page needs the server for
-`tracker-data.js` anyway. Record the Chrome version alongside the hashes; two hashes from different
-Chrome builds are not comparable. Per §Risks, a mismatch is a lead, not a verdict.
+`tracker-data.js` anyway. Chrome is pinned in §Pinned versions, measured rather than assumed; use
+that exact build for both Proof B and Proof C, and record the version alongside the hashes here —
+two hashes from different Chrome builds are not comparable. Per §Risks, a mismatch is a lead, not a
+verdict.
 
-### Criteria 4 and 5 — the light block's coverage and contrast
+### Criterion 4 — the light block's coverage
 
-Both are static analyses over token values, not renders:
+A static analysis over token values, not a render: collect every `--name` appearing inside a
+`var(--name)` in `Treko.dc.html`, plus every `--name` read by a `nocturne.css` rule whose selector
+matches a class the page uses. Assert each is declared under `body[data-theme="light"]` or is on the
+`--font-*` / `--space-*` / `--radius-*` exception list.
 
-- **Coverage (4):** collect every `--name` appearing inside a `var(--name)` in `Treko.dc.html`, plus
-  every `--name` read by a `nocturne.css` rule whose selector matches a class the page uses. Assert
-  each is declared under `body[data-theme="light"]` or is on the `--font-*` / `--space-*` /
-  `--radius-*` exception list.
-- **Contrast (5):** for each inline `style` attribute, pair its colour-valued property with its
-  ground (the nearest `background` in the same attribute, else the enclosing surface token).
-  Composite any alpha over that ground, compute WCAG relative luminance, assert the ratio floor for
-  the attribute's own `font-size`.
+Needs the falsification step before its first green run: break one override, see the coverage test
+fire. A "0 failures" from a check that has never been shown able to fail is not evidence.
 
-Both need the falsification step before their first green run: break one override, see the coverage
-test fire; darken one light-mode text token, see the contrast test fire. A "0 failures" from a check
-that has never been shown able to fail is not evidence.
+### Proof C — contrast, via headless Chrome computed style (criterion 5)
+
+Unlike criterion 4, this is not a static analysis. A static checker has to guess which background a
+colour sits on, and a wrong guess produces a comfortable passing ratio instead of an error — the
+sharpest concern raised against the original draft. This check removes the guess entirely by
+rendering the page for real and reading resolved styles, never inferring them from markup:
+
+1. Start `python3 treko/server.py &`, note the port from the banner (as Proof B does).
+2. Drive Chrome **headlessly from the command line** — a `--headless --dump-dom` /
+   `--virtual-time-budget` style invocation, or the headless `--repl` console piped a script — never
+   through the interactive browser tool. That tool is for interactive use and already refuses
+   `file://` in this card (Proof B, above); an automated Verification step cannot depend on it
+   regardless of URL scheme.
+3. In-page: `localStorage.setItem('taskTracker.theme','light')`, then reload, so `data-theme` is
+   applied exactly the way `applyTheme` / `componentDidMount` apply it — never simulated by setting
+   the attribute directly.
+4. After mount, walk every element under `<body>` with non-zero rendered area. For each, read
+   `getComputedStyle(el).color`, then resolve its effective background by walking from `el` up
+   through its ancestors for the first non-transparent `getComputedStyle(ancestor).backgroundColor`,
+   alpha-compositing any translucent layer crossed on the way. `body{background:var(--color-bg)}`
+   (`Treko.dc.html:19`, §D3) guarantees the walk always terminates in an opaque colour.
+5. Compute WCAG contrast on that resolved pair and assert the floor: ≥ 4.5:1 below an 18px resolved
+   `font-size`, ≥ 3:1 at or above it, ≥ 4.5:1 when `font-size` cannot be resolved.
+
+This covers inline-styled and class-styled colour identically, so it needs no separate accounting of
+"the 13 sites that co-occur in one inline style" versus the rest — every element the browser actually
+paints with a distinct foreground colour is in scope, full stop.
+
+Falsifiable by construction, the same discipline as Proof A: darken one light-mode text token below
+its resolved ground's floor and confirm this check reports that specific element before trusting a
+pass. A "0 failures" from a check that has never been shown able to fail is not evidence.
 
 ### Criterion 15 — the command-handler region
 

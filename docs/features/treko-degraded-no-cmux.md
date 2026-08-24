@@ -196,6 +196,7 @@ of its failure: it raises **`SurfaceUnavailable`, a subclass of `StartupAbort`**
 machine-readable `reason` drawn from a closed set of four.
 
 ```yaml
+class: Reason(enum.Enum)      # a plain Enum, not a str mixin -- see "Wire format", below
 reasons:                      # the closed set; a fifth is a spec change
   surface_unset:    CMUX_SURFACE_ID is unset or empty
   probe_timeout:    `cmux read-screen` exceeded CMUX_TIMEOUT_SECS (5s)
@@ -203,9 +204,41 @@ reasons:                      # the closed set; a fifth is a spec change
   cmux_unrunnable:  the cmux binary could not be run at all (OSError)
 exception:
   class: SurfaceUnavailable(StartupAbort)
-  carries: [reason (enum member), message (the existing human string)]
+  carries: [reason (a Reason member -- always serialized via .value, never bare),
+            message (the existing human string)]
   message: unchanged from today, verbatim -- it still goes to stderr
 ```
+
+**Wire format — stated once, here, so every boundary below just uses it.** On this repo's pinned
+interpreter (Python 3.9.6 — confirmed `hasattr(enum, "StrEnum") is False`; `enum.StrEnum` does not
+exist before 3.11), the obvious ways to turn a `Reason` member into text do not agree with each
+other, and the disagreement is not the same for a plain `Enum` and a `str`-mixin `Enum`. Measured
+directly against this interpreter, not assumed:
+
+```
+form              plain Enum             str-mixin Enum
+"%s" %            Reason.surface_unset   Reason.surface_unset   -- class-qualified either way
+"{}".format()     Reason.surface_unset   surface_unset          -- diverges by mixin
+f"{e}"            Reason.surface_unset   surface_unset          -- diverges by mixin
+str()             Reason.surface_unset   Reason.surface_unset   -- class-qualified either way
+.value            surface_unset          surface_unset          -- the only form both agree on
+```
+
+**`.value` is the mandated form, at every boundary — the second stderr line, `config["channel"]`,
+and the `tracker-channel` meta's content — and `Reason` is declared as a plain `Enum`, not a `str`
+mixin, so that requirement is enforced rather than merely correct.** A `str`-mixin enum would make
+`f"{}"` and `.format()` *coincidentally* render the bare token today, which is worse than being
+wrong: it is a correctness that depends on a declaration style nothing in this spec or its tests
+asserts, and it breaks silently the day anyone changes that declaration. A plain `Enum` fails every
+shortcut identically, so `.value` reads as required, not optional, to whoever implements this.
+
+**`CHANNEL_OK` is the fifth token, and it is deliberately not a `Reason` member.**
+`CHANNEL_OK = "ok"` is a plain module-level string constant in `channel.py`, sibling to `Reason`.
+Success is not a failure reason, so it does not belong in the closed set of *why the channel is
+unavailable* — putting it there would make `len(Reason)` describe something other than "how many
+ways `bind_surface` can fail." Because both `CHANNEL_OK` and every `Reason` member's `.value` are
+plain `str`, `channel` (D2) and `config["channel"]` (D4) are always a `str` — never sometimes a
+bare string and sometimes an enum member depending on which branch ran.
 
 **Subclassing rather than adding a flag is what keeps the change narrow.** `main()` wraps *only*
 the `bind_surface()` call in a `except SurfaceUnavailable` — every other `StartupAbort` raised
@@ -222,9 +255,9 @@ adds a channel, it does not remove the one that already reports the cause.
 try:
     surface, channel = bind_surface(), CHANNEL_OK
 except SurfaceUnavailable as exc:
-    sys.stderr.write("server: %s\n" % exc)                # unchanged text, same stream
-    sys.stderr.write("server: degraded -- no control channel (%s)\n" % exc.reason)
-    surface, channel = None, exc.reason
+    sys.stderr.write("server: %s\n" % exc)                       # unchanged text, same stream
+    sys.stderr.write("server: degraded -- no control channel (%s)\n" % exc.reason.value)
+    surface, channel = None, exc.reason.value                    # .value: see D1's wire format
 ```
 
 | Condition | Today | After |
@@ -252,11 +285,20 @@ server: http://127.0.0.1:8422/ surface=none reason=surface_unset idle=1800s poll
 today's banner, which is what lets the existing `test_autolaunch.py` / `test_server_lifetime.py`
 serving assertions stay untouched.
 
-`build_config` stores `surface=None` and gains `"channel": CHANNEL_OK | <reason>`. `None` is the
-representation, not `""` and not `"-"`: an empty string is what an *unset environment variable*
-looks like after `.strip()` (`server.py:219`), and reusing it would make "no surface" and "a
-surface the user failed to set" indistinguishable inside the process. The audit line keeps
-printing `-`, which is already its value for every non-send request.
+`build_config` gains a `channel` parameter, appended after `store_dir`; the call at `server.py:734`
+becomes `build_config(surface, token, repo_root, port, analyze_secs, store_dir, channel)`, and the
+function stores it verbatim as `config["channel"]`. Because `channel` is already a bare `str` by
+the time it reaches `build_config` — `CHANNEL_OK` or `exc.reason.value`, never the enum member
+itself — no further conversion happens here or anywhere downstream; this is the point of D1
+mandating `.value` at the source rather than leaving it to whichever boundary happens to render the
+value last.
+
+`config["surface"]` stores `None` on the same branch as always, which is unrelated to the channel
+value above and untouched by it: `None` is the representation, not `""` and not `"-"`: an empty
+string is what an *unset environment variable* looks like after `.strip()` (`server.py:219`), and
+reusing it would make "no surface" and "a surface the user failed to set" indistinguishable inside
+the process. The audit line keeps printing `-`, which is already its value for every non-send
+request.
 
 ### D3 — `clear` and `handoff` are refused by the server, at `503 no_channel`
 
@@ -307,6 +349,18 @@ Injected by `_serve_index` at `server.py:494-495`, the same one-line `<head>` re
 already carries the token, so `check_index_injectable` (`server.py:196-208`) already guards its
 precondition and no new startup check is needed.
 
+**The `config["channel"]` → meta-content mapping, stated explicitly because nothing else states
+it.** `_serve_index` appends a second `<meta>` line to the same `<head>` replacement that already
+injects the token (`server.py:493`), using the identical `%s`-interpolation idiom:
+`'<meta name="tracker-channel" content="%s">' % self.config["channel"]`. No conversion happens at
+this boundary, because none is needed — `config["channel"]` already holds the bare token by
+construction (D1's `.value` rule, applied at D2), so the meta's `content` is byte-identical to it.
+The closure this buys is the one §Security calls the entire risk of this card: `CHANNEL_OK` and the
+four `Reason` values are the *only* five strings that can ever reach `.channel`, so the four human
+messages that interpolate `CMUX_BIN`, `exc.strerror`, `probe.returncode` and the surface UUID have
+no path to this attribute — not "are filtered out of it", but structurally cannot reach it, because
+nothing on the way from `bind_surface`'s `raise` to this `%s` ever reads those messages.
+
 **One meta, not two.** An earlier shape used `content="ok|none"` plus a separate reason meta. Two
 metas admit a state that means nothing — `channel=ok` with a reason, or `channel=none` without one
 — and the page would need a rule for it. One attribute over a five-member closed set has no
@@ -331,14 +385,64 @@ attribute.
 | **A `GET /channel` endpoint** | Adds a route to a deliberately closed surface, and makes the page's first render depend on a round-trip that can fail — a new state to design for, to answer a question the page could have been told at load. |
 | **Injecting the live id set** (`<meta name="tracker-commands" content="reanalyze">`) | Genuinely attractive: it makes the button set a projection of the server's authorization set instead of a rule the page re-derives. Rejected on two counts. It gives the page *what* but not *why*, so the reason meta comes back and we are at two metas again. And it requires the page to parse a list and intersect it against `TRACKER_COMMAND_IDS` — new boundary-validation code inside the node-loadable slice, to express a two-way split the page can hold as a constant. Worth revisiting only if a fourth verb ever exists, which §Out forbids. |
 
-**The page-side split, and the one rule that generalises it.** `commandProps`
-(`Treko.dc.html:475-494`) is rewritten around three values instead of one:
+**`componentDidMount` (`state` at `:432`, the method itself at `:433`) must read the new meta too,
+and this is where the implement-list below most needs correcting, not just here.** Today it reads
+exactly one meta, at `:437-438`:
 
 ```js
+const meta=document.querySelector('meta[name="tracker-token"]');
+if(meta&&meta.content)this.setState({cmdToken:meta.content});
+```
+
+It gains a second, parallel read for `tracker-channel`:
+
+```js
+const chMeta=document.querySelector('meta[name="tracker-channel"]');
+if(chMeta&&chMeta.content)this.setState({cmdChannel:chMeta.content});
+```
+
+and `state` (`:432`) gains the field it initialises: `cmdChannel:null` next to the existing
+`cmdToken:null,cmdView:null`. **Without both of these, `S.cmdChannel` is `undefined` forever,
+`channelOk` (below) is always `false`, and a perfectly healthy server renders as degraded** —
+Re-analyze live, `/clear` and `/handoff` demoted to copy chips, criterion 10 broken on the one path
+this card is not supposed to touch at all, with every test in task 8 passing, because none of them
+launch a healthy server and check what the *button* set looks like. Confirmed against the running
+text of this file at `984e7ac`: `state` (`:432`) declares `cmdToken` and `cmdView` and nothing
+else, and `componentDidMount`'s only `querySelector` (`:437`) is the token's. Task 9's
+implement-list is corrected below to name `componentDidMount` explicitly, because it is the item
+in this card most likely to be implemented by analogy — get the token read right, assume the
+channel read is the same shape, and skip actually adding it.
+
+**The page-side split, and the one rule that generalises it.** `commandProps`
+(`Treko.dc.html:475-494`) is rewritten around three values instead of one — but the
+value-*selection* does not live in `commandProps`. It moves **inside** the node-loadable fence
+(`:325-418`), as a new pure function, so it gets a real automated check rather than a promise:
+
+```js
+// inside the fence, beside TRACKER_COMMAND_IDS -- pure, no S, no document, no window
+var TRACKER_LOCAL_IDS = ['reanalyze'];
+var TRACKER_SEND_IDS  = ['clear', 'handoff'];
+function trackerLiveIds(hasToken, channelOk) {
+  return !hasToken ? [] : (channelOk ? TRACKER_COMMAND_IDS : TRACKER_LOCAL_IDS);
+}
+```
+
+```js
+// commandProps, still outside the fence -- now a caller, not the owner of the rule
 const hasToken = !!S.cmdToken;                    // was: hasChannel
 const channelOk = S.cmdChannel === 'ok';
-const liveIds = !hasToken ? [] : (channelOk ? TRACKER_COMMAND_IDS : TRACKER_LOCAL_IDS);
+const liveIds = trackerLiveIds(hasToken, channelOk);
 ```
+
+`trackerLiveIds` takes two booleans and returns one of the two constants above, or `[]` — nothing
+else, which is what "dependency-free" (`:326-332`) requires of anything added to the fence. It is
+also where this card's anti-injection guarantee actually lives on the button axis: `channelOk` is
+a strict `=== 'ok'` comparison, so *every* value the meta could ever carry other than the literal
+string `'ok'` — all four real reasons, and, if D1/D4's closure were ever broken by a later edit,
+anything else — resolves to the same safe, local-only id set. The function does not need to know
+the five-token closed set to be safe; it only needs to recognise the one string it treats as
+privileged, which is exactly why it is small enough to be both pure and completely tested
+(task 8).
 
 and then **one rule replaces the current two**:
 
@@ -348,16 +452,43 @@ and then **one rule replaces the current two**:
 That rule reproduces all three existing modes exactly, which is why it is worth preferring to a
 new branch:
 
-| Mode | `liveIds` | Buttons | Copy chips |
-|---|---|---|---|
-| `file://` — no token | `[]` | none | all three (today's behaviour) |
-| served, channel ok, idle | all three | all three | none (today's behaviour) |
-| served, channel ok, terminal outcome | all three | none (`offersButton` false) | all three (today's behaviour) |
-| **served, degraded** | `['reanalyze']` | Re-analyze | `/clear`, `/handoff` |
+| Mode | `liveIds` | Buttons | Copy chips | Reason text (D5) |
+|---|---|---|---|---|
+| `file://` — no token | `[]` | none | all three (today's behaviour) | none — `hasToken` is `false` |
+| served, channel ok, idle | all three | all three | none (today's behaviour) | none — no chips to show it beside |
+| served, channel ok, terminal outcome | all three | none (`offersButton` false) | all three (today's behaviour) | none — `channelOk` is `true` |
+| **served, degraded** | `['reanalyze']` | Re-analyze | `/clear`, `/handoff` | **`TRACKER_CHANNEL_REASONS[S.cmdChannel]`** |
 
-`TRACKER_LOCAL_IDS` and `TRACKER_SEND_IDS` are added to the slice as the page's mirror of
-`server.py`'s `LOCAL_COMMANDS` / `SEND_COMMANDS`. They are a duplication, and D7 pins them with a
-test that reads both sides rather than trusting either.
+The last column is stated precisely, once, in D5 — this table only summarises it. Three of the
+four chip-rendering rows above render no reason text at all; only the fourth does.
+
+**`module.exports` (`:413-415`) grows to expose the new function and the two constants above:**
+
+```js
+if(typeof module!=='undefined'&&module.exports){
+  module.exports={IDS:TRACKER_COMMAND_IDS,COPY_TEXT:TRACKER_COPY_TEXT,
+                  MESSAGES:TRACKER_MESSAGES,idleView:trackerIdleView,
+                  applyCommand:trackerApplyCommand,
+                  LOCAL_IDS:TRACKER_LOCAL_IDS,SEND_IDS:TRACKER_SEND_IDS,
+                  liveIds:trackerLiveIds};
+}
+```
+
+`TRACKER_LOCAL_IDS` / `TRACKER_SEND_IDS` are the page's mirror of `server.py`'s `LOCAL_COMMANDS` /
+`SEND_COMMANDS` — a duplication — and D7 already commits to a test that reads both sides rather
+than trusting either; exporting them from the node bridge is what makes that test possible without
+a third, hand-written copy of the partition living in the test file itself.
+
+**The fence grows by a few lines, and that is a deliberate cost of this design, not an
+oversight.** `Treko.dc.html` was 639 lines and the fence ran `:325-418` at this card's baseline
+(`984e7ac`, criterion 14's measurement). Both numbers move once the two constants and
+`trackerLiveIds` land inside the marker pair. `wc -l` under 800 still has to hold (criterion 14;
+task 12 re-measures it), and this document's own citations to `:325-418` must be re-derived after
+implementation rather than assumed unchanged — the same discipline §Corrections already applies to
+every other line number in this document. Nothing about the *test* needs updating for this:
+`test_the_handler_slice_is_fenced_exactly_once_and_loads_standalone` re-derives the fence's
+boundaries from the marker text at run time (`test_ui_commands.py:68-78`), never from a stored byte
+count, so a longer fence is not a broken assumption anywhere except in this spec's own prose.
 
 `runCommand`'s guard (`Treko.dc.html:497`) becomes `if(!S.cmdToken || liveIds.indexOf(id)<0)
 return;` — the same belt-and-braces the existing comment at `:499-501` explains, extended to the
@@ -383,6 +514,39 @@ explanation shown beside the copy chips:
 | `probe_failed` | This surface is not a terminal; an agent-session surface has no control channel. |
 | `cmux_unrunnable` | cmux could not be run on this host. |
 | *(unrecognised)* | No control channel. |
+
+**The render condition, stated once, so the table above is read exactly one way.** The lookup —
+and the whole reason-text block — is gated on `hasToken && !channelOk`, the same two booleans D4
+already computes in `commandProps` (`hasToken = !!S.cmdToken`, `channelOk = S.cmdChannel === 'ok'`):
+a token must exist (the page was served, not opened `file://`) **and** the channel must not be
+`ok` (the launch is degraded). This is narrower than "copy chips are rendered" — D4's own mode
+table lists three chip-rendering modes, and the gate is `true` in exactly one of them:
+
+- `file://` — no token — `hasToken` is `false` (there is no `<meta name="tracker-token">` at all,
+  because the page was never served, so `_serve_index` never ran), so the gate is `false`
+  regardless of `channelOk`. No reason text. This is the mode `Treko.dc.html:434-436` calls "a
+  supported runtime mode, not a degradation" — the gate must never fire here.
+- served, channel ok, terminal outcome — `hasToken` is `true` but `channelOk` is also `true`
+  (`S.cmdChannel === 'ok'`), so the gate is `false`. Copy chips render, for D5's pre-existing
+  terminality rule below, which has nothing to do with the channel — but no reason text joins
+  them.
+- served, degraded — `hasToken` is `true` and `channelOk` is `false` (`S.cmdChannel` holds one of
+  the four reason tokens), so the gate is `true`. This is the only mode the table above is ever
+  read for.
+
+`TRACKER_CHANNEL_REASONS[S.cmdChannel]` — or its unrecognised-token fallback row — is read only
+when the gate is `true`. When it is `false`, nothing beside the copy chips is rendered at all: not
+the fallback row, not an empty string standing in for it, nothing.
+
+**`TRACKER_CHANNEL_REASONS` lives outside the fence, next to `CMD_TONES`, not inside it next to
+`TRACKER_MESSAGES`.** This is a scope decision, not an architectural inevitability — a lookup this
+shape *could* go inside the fence, the same as `TRACKER_MESSAGES`. It stays out because the one
+function this card adds to the fence is `trackerLiveIds()` (above), for the button axis; this card
+does not also move the reason-text table in to chase a second automated check. The cost is stated
+plainly, not discovered later: the "unrecognised token falls to the page's fixed string, and its
+bytes appear nowhere in the rendered view" half of criterion 7 is verified by task 13's real
+browser launch, the same way criterion 15's own DOM-only half already is in this file — not by
+`test_ui_commands.py`, which stops at what `trackerLiveIds()` can reach.
 
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
@@ -413,9 +577,10 @@ behaviour D4 does not already give. Rejected on KISS.
 `984e7ac`. There is one line of headroom, and this card adds a guard in `_run_send`, a branch in
 `main()`, a key in `build_config`, a meta in `_serve_index` and a banner variant. It does not fit.
 
-So `bind_surface`, `SurfaceUnavailable` and the reason enum move to **`treko/channel.py`**, which
-is a *net removal* from `server.py`: lines 211-238 leave, an import arrives. It is the same shape
-D5 of `treko-store-location.md` used for `store_location.py`, and for the same reason.
+So `bind_surface`, `SurfaceUnavailable`, the `Reason` enum and `CHANNEL_OK` move to
+**`treko/channel.py`**, which is a *net removal* from `server.py`: lines 211-238 leave, an import
+arrives. It is the same shape D5 of `treko-store-location.md` used for `store_location.py`, and for
+the same reason.
 
 `channel.py` imports `StartupAbort` from `store_location` (where card `treko-store-location`
 already moved it — `server.py:37`), so nothing is duplicated and the existing handler at
@@ -423,8 +588,9 @@ already moved it — `server.py:37`), so nothing is duplicated and the existing 
 
 **New server-side tests need a new module: `treko/test_degraded.py`.** `test_server.py` is 774
 lines and this card's server-side surface — four launch conditions × (serves, banner, config) plus
-the 503 path — is not a handful of cases. `test_server_lifetime.py` (270 lines) receives the
-*flips*, not the new coverage: its subject is aborts, and these stop being aborts.
+the 503 path, plus a watchdog/idle-bound check on a degraded launch (criterion 17) — is not a
+handful of cases. `test_server_lifetime.py` (270 lines) receives the *flips*, not the new coverage:
+its subject is aborts, and these stop being aborts.
 
 **Budget check is a task, not an assumption.** Task 12 runs `wc -l` on every file this card
 touches and the result goes in §Verification. If `server.py` comes back at 800 or more, the answer
@@ -520,11 +686,14 @@ exists because of it.
   same `_serve_index`.
 
 - **Nothing server-generated crosses into the page as text.** The `tracker-channel` meta carries
-  one of five fixed tokens (D4). The four human messages interpolate `CMUX_BIN`, a surface UUID
-  and an `errno` string — all environment-influenced — and they go to stderr, where they already
-  go, and nowhere else. The `503` body is produced by `_fail`, which echoes no request content by
-  construction (`server.py:425-429`). The page maps both the meta token and the error code to its
-  own fixed strings and renders neither back.
+  one of five fixed tokens (D4), and it can only ever be one of the five: `CHANNEL_OK` or a
+  `Reason` member's `.value` (D1), never a formatted or interpolated string, so there is no code
+  path between a human message and this attribute for a serialization bug to open up. The four
+  human messages interpolate `CMUX_BIN`, a surface UUID and an `errno` string — all
+  environment-influenced — and they go to stderr, where they already go, and nowhere else. The
+  `503` body is produced by `_fail`, which echoes no request content by construction
+  (`server.py:425-429`). The page maps both the meta token and the error code to its own fixed
+  strings and renders neither back.
 
 - **The reachable surface does not grow.** No route is added. No manifest row is added. No verb is
   added. `ALLOWED_IDS` is unchanged — `clear` and `handoff` remain *allowlisted*, and are refused
@@ -536,7 +705,8 @@ exists because of it.
   `poll_secs` and still exits after `idle_secs`. The bound-lifetime argument in
   `tracking-feature-state.spec.md` §Security applies unchanged, and it applies *more* strongly
   here — a server that starts in more environments is a server that can be forgotten in more
-  environments.
+  environments. Criterion 17 is what turns that into a check run against a degraded launch
+  specifically, not only inferred from the two existing tests that both launch a healthy one.
 
 - **Genuinely fatal problems stay fatal.** Widening one abort into a served page is a one-off
   decision about one condition, and D1's narrow `except SurfaceUnavailable` is what stops it
@@ -624,6 +794,13 @@ Scenario: the page never renders the meta's bytes
   Then  it shows its own fixed "No control channel." string
   And   no part of the rendered view contains the attribute's text
 
+Scenario: a file:// launch shows no reason text
+  Given the page is opened as a local file, not served by server.py
+  When  it renders
+  Then  no tracker-token or tracker-channel meta exists, so hasToken is false
+  And   Re-analyze, /clear and /handoff are all offered as copy chips, exactly as today
+  And   no reason text is shown beside them
+
 Scenario: a direct 503 does not withdraw the Re-analyze button
   Given a degraded page whose last command returned 503 no_channel
   When  the view is recomputed
@@ -664,17 +841,26 @@ Scenario: the handler slice is still extractable
    from the source.
 6. `GET /` on a degraded server carries both metas; `tracker-channel` holds one of the five
    tokens and no server-generated text.
-7. The page offers a live Re-analyze button plus `/clear` and `/handoff` copy chips, and displays
-   the reason mapped from the meta by the page's own table; an unrecognised token falls to the
-   page's fixed generic string and the attribute's bytes appear nowhere in the rendered view.
+7. On a degraded server — `hasToken && !channelOk`, D5's render condition, stated once there —
+   the page offers a live Re-analyze button plus `/clear` and `/handoff` copy chips, and displays
+   the reason mapped from `S.cmdChannel` by `TRACKER_CHANNEL_REASONS`; an unrecognised token falls
+   to the page's fixed generic string and the attribute's bytes appear nowhere in the rendered
+   view. In the other two copy-chip-rendering modes — `file://` (`hasToken` is `false`) and
+   served/channel-ok/terminal-outcome (`channelOk` is `true`) — copy chips render but no reason
+   text does, ever.
 8. `no_channel` is **absent** from `TRACKER_TERMINAL_OUTCOMES`, and a `no_channel` outcome leaves
    `offersButton` true (D5).
 9. Every non-surface startup failure still exits `2` and still refuses a connection: bad port,
    busy port, unmapped manifest extension, unreadable index, `<head>`-less index, disabled
    timeout, store directory that is a file, unwritable store directory, corrupt legacy store.
    `assert_aborted` is unchanged and still used for all of them.
-10. With a live surface, behaviour is byte-identical to today: the banner has no `reason=` field,
-    all three buttons render, no copy chip renders, and `clear`/`handoff` reach `cmux`.
+10. With a live surface and an idle view, behaviour is byte-identical to today: the banner has no
+    `reason=` field, all three buttons render, no copy chip renders, and `clear`/`handoff` reach
+    `cmux`. This also holds, unchanged by this card, in the pre-existing served/channel-ok/
+    terminal-outcome sub-mode: copy chips render for the terminality reason D5 already states —
+    not because the channel is degraded — and `channelOk` stays `true`, so D5's render condition
+    stays `false` and no reason text ever joins them. A healthy server whose last command ended
+    the session must never be mistaken, on screen, for a degraded channel.
 11. The marker-fenced region still loads in node with no page dependency, still exports exactly
     `clear`, `handoff`, `reanalyze`, and its send/local partition is asserted equal to
     `server.SEND_COMMANDS` / `server.LOCAL_COMMANDS` read from Python.
@@ -692,6 +878,9 @@ Scenario: the handler slice is still extractable
     passes.
 16. **ADR 0036** records the pivot: why a startup abort became a served page, why all four
     conditions and not one, why `503`, and why no surface is deduced.
+17. A degraded launch is still bounded by the watchdog: it exits within `poll_secs` of its parent
+    process dying, and within `idle_secs` of its last request — exactly as a healthy launch does
+    (`server.py:676-691`, unchanged by this card).
 
 ## Pinned versions
 
@@ -717,8 +906,9 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 - [ ] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
-- [ ] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable` and the enum;
-      `server.py` imports it. Task 2 goes green. Confirm `server.py` **dropped** below 799.
+- [ ] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable`, the `Reason`
+      enum (a plain `Enum`, D1) and `CHANNEL_OK = "ok"`; `server.py` imports all four. Task 2 goes
+      green. Confirm `server.py` **dropped** below 799.
 - [ ] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
       banner carries `reason=<token>`, and — the other half — the nine fatal conditions in
       criterion 9 still exit 2 and still refuse a connection.
@@ -731,23 +921,53 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `no_channel`, audit `reason=no_channel`, and **zero** entries in the fake-cmux log;
       `reanalyze` → `200`; an unknown id → `403` (the allowlist check still runs first).
 - [ ] 7. Implement `_run_send`'s guard. Task 6 goes green.
-- [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7: the channel meta drives `liveIds`; the
+- [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
+      bridge: `trackerLiveIds(hasToken, channelOk)` resolves to `[]` / `LOCAL_IDS` / `IDS` for all
+      four combinations, including the fail-closed case — `channelOk=false` for every value other
+      than the literal `'ok'`, which is the automated half of D4's anti-injection guarantee; the
       `no_channel` row driven against a really-degraded server (so `ROW_OUTCOMES` grows and the
-      `zz` gate is satisfied honestly); `no_channel` leaves `offersButton` true; an unrecognised
-      meta token renders the page's own string and leaks no bytes; the send/local partition
-      matches `server.py`'s, read from both sides.
-- [ ] 9. Implement the slice changes, `commandProps`, `runCommand`'s guard, `CMD_TONES`, and
-      `_serve_index`'s second meta. Task 8 goes green. Keep the fenced region dependency-free —
-      `test_ui_commands.py:182` is the guard on the guard.
+      `zz` gate is satisfied honestly); `no_channel` leaves `offersButton` true; the send/local
+      partition (`LOCAL_IDS`/`SEND_IDS`) matches `server.py`'s, read from both sides. What this
+      task does **not** cover — the reason table's text actually reaching the screen, and the raw
+      meta attribute appearing nowhere in the rendered page — is task 13's: `TRACKER_CHANNEL_REASONS`
+      and the render that uses it sit outside the fence, the same as `CMD_TONES` (D5), so no node
+      test can reach them.
+- [ ] 9. Implement the fence additions (`trackerLiveIds`, `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS`,
+      the grown `module.exports`), `commandProps`, **`componentDidMount`'s second meta read and
+      `cmdChannel:null` on `state`** (D4 — the one omission that would ship a healthy server
+      rendering as degraded), `runCommand`'s guard, `CMD_TONES`, and `_serve_index`'s second meta.
+      Task 8 goes green. Keep the fenced region dependency-free — `test_ui_commands.py:182` is the
+      guard on the guard.
 - [ ] 10. **ADR 0036** — verified free against `origin/main` @ `984e7ac` and every other ref.
 - [ ] 11. `skills/treko/SKILL.md`: split the table (criterion 15), and document that the board is
       always served.
 - [ ] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
-      by name; per-module counts; `wc -l` for criterion 14.
-- [ ] 13. Launch for real outside cmux (`env -u CMUX_SURFACE_ID python3 treko/server.py --open`),
-      confirm the board renders, the reason line is right, Re-analyze works and the two copy chips
-      copy. The criterion-7 check nothing automated can make.
-- [ ] 14. Observability judge, then the PR.
+      by name; per-module counts; `wc -l` for criterion 14 — including `Treko.dc.html`, which is
+      what re-captures the fence's grown byte range (D4); if its own end marker has moved from
+      `:418`, this document's citations to it must be corrected in the same pass.
+- [ ] 13. Launch for real **three times**. For the two that go through `server.py`, never with
+      `nohup`/`setsid`/`&` (any of the three detaches the server from the parent whose death its
+      watchdog is watching for via `getppid()`). Once outside cmux (`env -u CMUX_SURFACE_ID
+      python3 treko/server.py --open`): confirm the board renders, the reason line matches the
+      table, Re-analyze works, the two copy chips copy, and — the half `trackerLiveIds()` cannot
+      reach on its own, because `TRACKER_CHANNEL_REASONS` and the render that uses it sit outside
+      the fence — that the raw `tracker-channel` attribute value appears nowhere in the rendered
+      page (view source, not just the visible text). Once with a live surface: confirm the banner
+      carries no `reason=`, all three buttons render live, no copy chip renders, and `cmdChannel`
+      reads `'ok'` — this is the only place the full meta → `componentDidMount` → state →
+      `commandProps` wire is observable end to end, so a passing degraded run alone does not clear
+      this task. Once by opening `Treko.dc.html` directly as a `file://` URL — no server, no
+      `--open` flag: confirm no `tracker-token` or `tracker-channel` meta exists, `hasToken` is
+      `false`, all three commands render as copy chips exactly as today, and — the render
+      condition D5 and criterion 7 name explicitly (`hasToken && !channelOk`) — no reason text
+      renders beside them. This third launch is what keeps criterion 7's `file://` clause and the
+      "a file:// launch shows no reason text" Gherkin scenario from being unverified promises.
+- [ ] 14. Red test in `test_degraded.py` for criterion 17: a server launched with no surface still
+      exits within `poll_secs` of its parent dying, and still exits after `idle_secs` of
+      inactivity — the same two assertions `test_server_lifetime.py` already makes for a healthy
+      server (`:157`, `:195`), run again against a degraded one. Never `nohup`/`setsid`/`&` the
+      server under test, for the same reason as task 13.
+- [ ] 15. Observability judge, then the PR.
 
 ## Risks
 
@@ -760,6 +980,13 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
   easy half. If the server-side guard (D3) is skipped, forgotten, or placed *after*
   `confirm_surface`, every page-level test still passes. Criterion 5's "no subprocess was invoked"
   is the assertion that can tell the difference; a rendering assertion cannot.
+- **The channel meta needs a second read, and it is the one easy to skip by analogy.** The token
+  meta and the channel meta are read the same way, in the same lifecycle method, so
+  `componentDidMount` reading only the first one *looks* complete — the diff is small enough to
+  miss in review, and this card's own first draft missed it (D4 corrects it). Task 9 names
+  `componentDidMount` explicitly for this reason. Criterion 10's healthy-path assertions are what
+  would catch it if it slipped through anyway; a suite that only ever launches degraded servers
+  would not.
 - **`server.py` has one line of headroom.** 799 of 800. D6 moves 28 lines out before adding any,
   but the wiring still lands in a nearly-full file. If task 12's `wc -l` reaches 800, move more
   into `channel.py` — never delete comments, which in this file carry the reasoning behind its
@@ -844,7 +1071,19 @@ reason** record: a collection error cannot distinguish "N tests red" from "one b
 each red round is confirmed test-by-test against a throwaway stub, as
 `treko-store-location.md` §"Tasks 2-3" and §"Task 5" did. Tasks 3, 5, 7 and 9 owe the green run
 plus the running total against task 1's baseline. Task 12 owes the set diff with the three renamed
-nodes named. Task 13 owes what it saw on screen, not what it expected to.
+nodes named, plus `Treko.dc.html`'s new line count and the fence's corrected line range. Task 13
+owes what it saw on screen, not what it expected to, for **all three** launches — degraded,
+healthy, and `file://`. The `file://` receipt is the one this card added specifically so D5's
+render condition is verified rather than promised: it owes the view-source check showing no
+`tracker-channel` meta and no reason text on screen. A missing third receipt is what turns the
+new scenario back into an unverified claim, which is why it is named here and not left implied.
+Task 13 also owes criterion 10's second half — the served/channel-ok/terminal-outcome sub-mode —
+from the healthy launch: copy chips present for the terminality reason, `channelOk` still `true`,
+and no reason text beside them. That sub-mode is asserted by criterion 10 but was, until this
+line, the one acceptance clause with no task producing evidence for it.
+Task 14 owes the same red-for-the-right-reason discipline as 2/4/6/8, and its own green run,
+folded into one task rather than split: the watchdog code itself is untouched (§Security), only
+the case run against it is new.
 
 ## Corrections to the dispatch brief
 
