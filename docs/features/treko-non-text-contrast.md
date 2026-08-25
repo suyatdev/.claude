@@ -194,8 +194,11 @@ searching the marks for a 7px `rgb(56, 196, 227)`: zero.
 fail loudly and never score (§D7); the second is simply outside the population:**
 
 - **5 gradient-painted elements**, from two declarations: the progress-bar fill
-  (`linear-gradient(90deg, var(--color-accent-700), var(--color-accent))`) and the section-header
-  rule (`linear-gradient(to right, var(--color-divider), transparent)`, repeated by `sc-for`).
+  (`linear-gradient(90deg, var(--color-accent-700), var(--color-accent))`, one element, 31x6) and
+  the section-header rule (`linear-gradient(to right, var(--color-divider), transparent)`, four
+  elements, each 1px tall). **All five are leaves in the paint order: measured, exactly 0 scored
+  marks sit over one as backdrop, in either theme.** They are enumerated so that stops being true
+  loudly rather than silently (§D7).
 - **The sticky header**, `background: color-mix(in srgb, var(--color-bg) 90%, transparent)` with
   `backdrop-filter: blur(10px)`. Chrome serialises this as `color(srgb 0.0862745 0.0941176 0.14902
   / 0.9)` — arithmetically `--color-bg` at 90%, but it does not string-match the token's declared
@@ -408,10 +411,17 @@ The rule the implementation inherits:
    exactly one of two paths, and which one is decided by whether this card has already enumerated
    it:
    - **On the enumerated list → excluded, and the exclusion's own count is asserted.** The list is
-     closed and short: the 5 gradient-painted elements and the sticky-header fill at
-     `Treko.dc.html:102` (1 mark per theme). The check asserts it excluded *exactly* that many, at
-     exactly those paths. An exclusion whose count grows is a failure, so the list cannot quietly
-     absorb new marks.
+     closed and short, and it has **two kinds of entry that are counted differently** — conflating
+     them is how an earlier draft produced `334 + 6 ≠ 336`:
+     - **The sticky-header fill** (`Treko.dc.html:102`) is a real mark that is excluded from
+       scoring. **Asserted: exactly 1 excluded mark per theme, at that path.**
+     - **The 5 gradient-painted elements** paint no scoreable mark at all — a gradient is not a
+       flat colour, so no fill mark is emitted for them — and **measured, exactly 0 scored marks
+       sit over one as backdrop**, in either theme (§Background 6). **Asserted: exactly 5
+       gradient-painted elements, and exactly 0 scored marks whose backdrop chain crosses one.**
+
+     An exclusion whose count grows is a failure, so the list cannot quietly absorb new marks.
+     Neither number is part of the scored total: 334 / 347 is the whole scored population.
    - **Not on the enumerated list → abort, naming the path and why it could not be composited.**
      A newly-uncompositable mark is a change to the page that a human has not classified.
 
@@ -435,7 +445,7 @@ flowchart TD
     B -->|no| Z["not in the population"]
     B -->|yes| C{"mark and backdrop both<br/>composite to flat sRGB?"}
     C -->|no| X{"on the enumerated<br/>exclusion list?"}
-    X -->|"yes — 5 gradients, 1 header fill"| F1["EXCLUDE, and assert the<br/>exclusion count — rule 2"]
+    X -->|"yes — the header fill"| F1["EXCLUDE, and assert<br/>exactly 1 per theme — rule 2"]
     X -->|no| F2["ABORT, name the path and why<br/>rule 1 + rule 2"]
     C -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
     E --> G{"(colour, kind) key<br/>on the allowlist?"}
@@ -454,12 +464,18 @@ flowchart TD
     V -->|no| FV["FAIL: vacuity / drift / misfiling<br/>criterion 7"]
 ```
 
-Two further probe defects are recorded here so the implementation does not re-ship them:
+Three further probe defects are recorded here so the implementation does not re-ship them:
 
 - **The SVG predicate scored `rgb(0, 0, 0)` on the `<svg>` root element**, which paints nothing.
   Gate on real shape tags (`circle`, `path`, `rect`, `line`, …), not on the root.
 - **A box-shadow regex read only the first colour of a multi-shadow list.** 13 of 16 outset shadows
   in light are multi-valued.
+- **`effectiveBackground()` ignores `background-image` entirely** — it accumulates
+  `background-color` up the ancestor chain and stops at the first opaque one, so a mark sitting
+  over a gradient is scored against a ground that is not what is painted, with no warning. Today
+  that is harmless *by measurement, not by design*: 0 scored marks cross a gradient in either
+  theme. The implementation does not have to composite gradients; it has to **assert that count is
+  still 0**, which converts a latent wrong answer into a loud failure the day the layout changes.
 
 ### D8 — Where it lives and what it asserts
 
@@ -519,14 +535,19 @@ Assertions, per theme:
   list is caught even in a run where the page did not render.
 - **Exact mark counts, not a floor** — the **scored** total is asserted at **334 dark / 347 light**,
   and every entry at its own `marks` figure. "Scored" excludes the enumerated exclusions (§D7),
-  whose own count is asserted separately at 1 header mark + 5 gradient elements per theme; the two
-  numbers together are what the page actually paints. A floor is the wrong instrument here: `≥ 200`
+  which are asserted separately and in their own units: **1 excluded header mark**, **5
+  gradient-painted elements**, and **0 scored marks over a gradient backdrop**. Those are not
+  addends of 334 — the header mark is the only real mark among them, so what the page paints is
+  334 scored + 1 excluded = 335, plus the `<svg>`-root artefact the probe wrongly emitted = the 336
+  the planning probe reported (§Background 1a). A floor is the wrong instrument here: `≥ 200`
   against a real 334 would stay green after 134 marks disappeared, and `≥ 1` per token would stay
   green after 41 of `--hair`'s 42 went. **This is only sound because the page is deterministic**: it is
   served from the fixed tree fixture (`server_harness.build_tree`), and two independent probe runs
-  in two different sessions produced byte-identical output (§Verification). Task 2 re-confirms that
-  before the counts are written in; if it does not reproduce, the counts become floors at the
-  measured value and the card records why.
+  in two different sessions produced byte-identical output (§Verification). **Task 3 re-confirms it
+  with the implementation's own walk** — run twice, dumps diffed — rather than with the planning
+  probe, which is a throwaway this card neither commits nor locates and which the mandatory `/clear`
+  at the gate destroys. If it does not reproduce, the counts become floors at the measured value and
+  the card records why.
 - **PIN** — every mark of every `pin` token is ≥ 3.0:1 against its outside surface. Failure message
   names the token, the ratio, the mark's kind and its path.
 - **DEBT** — asserted at its **recorded measured value to 4 dp**, not at 3.0, **tolerance
@@ -572,7 +593,8 @@ Scenario: The board is untouched and the guard is quiet
   And the pinned Chrome 152.0.7977.54 renders the fixed tree fixture
   When the non-text check runs
   Then it scores exactly 334 marks in dark and 347 in light
-  And it excludes exactly 1 sticky-header mark and 5 gradient elements per theme
+  And it excludes exactly 1 sticky-header mark per theme
+  And it finds exactly 5 gradient-painted elements and 0 scored marks over a gradient backdrop
   And all 23 allowlist entries match their recorded mark counts in both themes
   And every (colour, kind) key among the scored marks maps to exactly one entry
   And the 6 PIN tokens are all at or above 3.0:1
@@ -652,19 +674,25 @@ Scenario: The check runs on the default theme
    `rgb(63, 66, 77)` is claimed by both `--color-neutral-800` (`fill`) and `--shadow-sm`
    (`shadow-outset`), and the `kinds` filter is what makes that unambiguous.
 6. An uncompositable mark is handled by exactly one of two paths and never a third: **on the
-   enumerated exclusion list** (5 gradient elements, 1 sticky-header fill per theme) it is excluded
-   and the exclusion's own count is asserted; **not on the list** it aborts the test with its path
-   and reason named. A colour string the parser cannot read always aborts. Nothing is scored against
-   a guessed backdrop and nothing is silently skipped.
+   enumerated exclusion list** it is excluded and the exclusion's own count is asserted — 1
+   sticky-header mark, 5 gradient-painted elements, and **0 scored marks over a gradient backdrop**,
+   each in its own unit and none of them an addend of the scored 334 / 347; **not on the list** it
+   aborts the test with its path and reason named. A colour string the parser cannot read always
+   aborts. Nothing is scored against a guessed backdrop and nothing is silently skipped.
 7. Mark counts are asserted **exactly**, not as floors: the scored population is **334 in dark and
    347 in light**, and every one of the 23 entries sits at its own per-theme figure. The exclusion
    counts are asserted separately. If task 1 finds the page is not reproducible run to run, the
-   counts become floors at the measured value and this card records that it did. 334 / 347 is
+   counts become floors at the measured value and this card records that it did. Task 3 owns that
+   re-measurement — task 1 is the baseline only. 334 / 347 is
    336 / 349 minus the one `<svg>`-root artefact (criterion 8, a deleted bug) and the one
    sticky-header fill (criterion 6, an enumerated exclusion) per theme — §Background 1a.
 8. The SVG predicate scores only real shape elements; the `<svg>` root is never scored.
 9. Box-shadow parsing reads every colour in a multi-shadow list, not only the first.
-10. **Exactly one file added and no other file changed:** `treko/test_nontext_contrast.py`. The new
+10. **Exactly one file added under `treko/`, and no other file under `treko/` changed:**
+    `treko/test_nontext_contrast.py`. The criterion is scoped to `treko/` deliberately — this
+    card's own scope changes four things outside it (an ADR under `docs/decisions/`, this file's
+    falsifier record from §Tasks 8, the `docs/features/` links, and the `treko` skill's UI notes),
+    and an unscoped "no other file changed" could never pass. The new
     module reuses `cdp_harness` and `server_harness` the way `test_theme.py` already does and needs
     **no edit to `treko/conftest.py`**, which other test modules share; if the implementation finds
     it does need one, that is a finding to report before making it, not a licence in this criterion.
@@ -713,15 +741,20 @@ Red half and green half are separate commits throughout; never the same commit
 (`rules/core-conduct.md`, Testing).
 
 1. **Baseline.** Full suite on the pinned Chrome; record passed / failed / deselected **and which
-   tests ran**. Re-run the measurement and confirm the table in §Background 1 still reproduces at
-   the implementation HEAD. **Run it twice and diff the two dumps** — the exact counts in §D8
-   depend on that reproducibility, and it is cheap to re-establish rather than inherit.
+   tests ran**. No measurement here — the re-measurement belongs to task 3, which owns the walk that
+   produces it. The planning probe is deliberately not a dependency of any task: it is a throwaway
+   this card does not commit, and the mandatory `/clear` at the planning→implementation gate ends
+   the session holding it.
 2. **Red:** the harness and the count assertions — walk the page, collect non-text marks in both
    themes, assert the exact totals and `parseFailures == 0`. No allowlist yet. Must fail first for a
    stated reason.
-3. **Green:** land the walk. Confirm a scored **334 / 347** alongside an excluded 1 header mark and
-   5 gradient elements per theme, and that the three §D7 probe defects are absent (SVG root not
-   scored; multi-shadow read in full; `color(srgb …)` parsed). A scored 336 / 349 means the SVG-root
+3. **Green:** land the walk. Confirm a scored **334 / 347**, alongside 1 excluded header mark, 5
+   gradient-painted elements and 0 scored marks over a gradient backdrop per theme, and that the
+   four §D7 probe defects are absent (SVG root not
+   scored; multi-shadow read in full; `color(srgb …)` parsed; 0 marks over a gradient).
+   **Then run the walk a second time and diff the two dumps** — §D8's exact counts and criterion 7's
+   floors-fallback both rest on that reproducibility, and this is where it is established rather
+   than inherited from planning. A scored 336 / 349 means the SVG-root
    fix did not land and criterion 8 is unmet; a scored 335 / 348 means the header exclusion did not
    land and criterion 6 is unmet — whatever the other assertions say.
 4. **Red:** the coverage assertion — every distinct declared colour maps to an allowlist entry.
@@ -729,8 +762,8 @@ Red half and green half are separate commits throughout; never the same commit
    count, and reason; the two collision comments required by criterion 13.
 6. **Red:** PIN and DEBT assertions.
 7. **Green:** land them; both themes go green with zero palette edits.
-8. **Falsify — eleven cases.** For each: introduce the defect in a throwaway copy, confirm the test
-   goes red, and **record which assertion caught it**. A count of "11 of 11 caught" without naming
+8. **Falsify — twelve cases.** For each: introduce the defect in a throwaway copy, confirm the test
+   goes red, and **record which assertion caught it**. A count of "12 of 12 caught" without naming
    the catching assertion is not evidence.
 
    | # | Defect introduced | Assertion expected to catch it |
@@ -746,6 +779,7 @@ Red half and green half are separate commits throughout; never the same commit
    | 9 | **a colour string the parser cannot read** | parse-failure abort |
    | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
    | 11 | **a multi-shadow list read as single** | `--shadow-sm` light count, 13 against 26 |
+   | 12 | **a scored mark moved over a gradient backdrop** | "0 scored marks over a gradient", 1 against 0 |
 
    Cases 9, 10 and 11 are on this list because they are the card's own origin story: the planning
    probe shipped all three (§D7), and criteria 6, 8 and 9 would otherwise ship with no falsifier at
@@ -754,7 +788,7 @@ Red half and green half are separate commits throughout; never the same commit
    check green (§Background 8). Case 8 exists because an exclusion list that can grow silently is
    the same failure as a silent skip.
 
-   **Record all eleven cases and their catching assertions in this file**, not only in the throwaway
+   **Record all twelve cases and their catching assertions in this file**, not only in the throwaway
    copy — a falsifier that is discarded proves the check worked once, on a day nobody can revisit.
 9. Prove criterion 10 — diff the three files and blocks it names (`treko/Treko.dc.html` `:root` at
    `:21` and `:27` and `body[data-theme="light"]` at `:33`; `treko/nocturne.css` `:root`;
@@ -885,6 +919,31 @@ card's §D7 argues about, and it happened inside the card itself.
 
 Falsification went from nine cases to eleven, adding the misfiled-mark-at-unchanged-total case
 (case 6 — literally this round's own bug) and the growing-exclusion-list case (case 8).
+
+### Corrections made in compliance round 3 (verdict: fail, 3 violations; all 6 of round 2's closed)
+
+Round 3 is the capped round, and the three findings were escalated to the user before being fixed,
+per `running-the-compliance-judge`. The user directed all three fixes and a fourth round.
+
+- **The exclusion list counted elements as if they were marks.** §D8 claimed "1 header mark + 5
+  gradient elements … the two numbers together are what the page actually paints", which is
+  334 + 6 = 340 against a measured 336. **Measured this round** with a fresh probe over the real
+  page in both themes: the 5 gradient-painted elements are leaves — one 31x6 progress fill and four
+  1px header rules — they emit no scoreable mark of their own, and **exactly 0 scored marks sit
+  over one as backdrop**. So the exclusions are asserted in three separate units, none of them an
+  addend of the scored total: 1 excluded mark, 5 gradient elements, 0 marks over a gradient.
+  334 / 347 did not move.
+- **That measurement surfaced a fourth planning-probe defect**, and it is the most consequential of
+  the four: `effectiveBackground()` ignores `background-image` entirely, so a mark over a gradient
+  is scored against a ground that is not painted, silently. It is harmless today **by measurement,
+  not by design** — hence the new assertion and falsifier case 12.
+- **Criterion 10's "no other file changed" was an absolute the card's own tasks break four times**
+  (an ADR, this file, `docs/features/` links, the `treko` skill). Scoped to `treko/`.
+- **Task 1 depended on a probe this card declares throwaway and never locates**, and the mandatory
+  `/clear` at the gate destroys the session holding it — while criterion 7's floors-fallback and
+  §D8's determinism argument both rested on that re-run. The re-measurement now belongs to **task
+  3**, done with the implementation's own walk, run twice and diffed. The card previously
+  attributed the step to task 1 and task 2 in different places; it is task 3 everywhere now.
 
 ### The DEBT tolerance is a measured number, not a chosen one
 
