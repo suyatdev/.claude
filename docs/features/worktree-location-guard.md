@@ -2006,3 +2006,79 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 - Session pane policy recorded this session: `panes max=3`.
 - `cmux-layout` warns that cmux 0.64.22 is not the verified 0.64.20; pane placement rides an
   unverified heuristic. Not blocking, but `panes/cmux-layout-probe.sh` is stale.
+
+## Round 8 — Arm D moves off text (user decision, 2026-08-25). Measured, not yet designed.
+
+Compliance round 7 cited `writing-specs/scope-unknown-contradiction` for the **fifth consecutive
+round** (3, 4, 5, 6, 7). The user's direction: stop classifying shell text for Arm D and detect the
+HEAD move at the git layer instead. This section records what was **measured** before any of it is
+written into the design above. The derivation-3 text above is now superseded for Arm D and must not
+be treated as the design.
+
+**Instrument:** throwaway repos under the session scratchpad, `git 2.50.1 (Apple Git-155)`,
+macOS 25.5.0, probes `probe_reftx{1..6}.sh` (disposable — the findings below are the durable part).
+Every run carried a control that had to fire in the opposite direction.
+
+### What a `reference-transaction` hook can do
+
+| Command in the primary checkout | Ref the hook sees at `prepared` | Aborts on exit 1? |
+|---|---|---|
+| `git switch <b>` / `git checkout <b>` | `HEAD` → `ref:refs/heads/<b>` | **yes**, rc=128, HEAD does not move |
+| `git rebase <b>` | `HEAD`, then `refs/heads/<b>`, then `HEAD` | yes |
+| `git reset --hard <ancestor>` | `ORIG_HEAD`, then `refs/heads/<current>` | yes, but see below |
+| `git commit` | `refs/heads/<current>` | yes, but see below |
+| `git merge <b>` | `refs/heads/<current>` | yes, but see below |
+
+**It sees the ref update, never the command line.** Both shapes that defeated the text classifier —
+`sh -c 'git switch side'` and `sh -c 'env -C <path> git switch side'` — were **denied**, rc=128,
+HEAD unmoved. That is the whole point of the move: no lexing, no wrapper list, no quoting.
+
+### Three measured constraints the design must answer
+
+1. **`reset` and `merge` are not distinguishable from `commit` by ref name.** All three write
+   `refs/heads/<current>`. `GIT_REFLOG_ACTION` is **unset** for commit, reset, switch and rebase
+   (only `merge` set it), so it is not the discriminator. What does separate them is ancestry:
+   `git merge-base --is-ancestor <old> <new>` is true for a commit or a fast-forward and false for
+   a rewind. A rule of *"a branch ref may only advance to a descendant of its own tip"* allowed
+   `commit` and `merge` and denied `reset --hard HEAD~1`, measured.
+2. **`git worktree add` writes HEAD in the primary context, byte-identical to `git switch`.**
+   This is the blocking finding. Measured side by side:
+   - `git switch side` → `ref=HEAD`, `GIT_DIR` **unset**, `rev-parse --git-dir` = `.git`,
+     `new=ref:refs/heads/side`
+   - `git worktree add <path> side` → `ref=HEAD`, `GIT_DIR` **unset**, `rev-parse --git-dir` =
+     `.git`, `new=ref:refs/heads/side`
+
+   Identical in every field. The *later* transactions of `worktree add` (`ORIG_HEAD`,
+   `refs/heads/<b>`) do carry `GIT_DIR=<common>/worktrees/<name>`, but the HEAD write does not.
+   A naive "deny HEAD symref moves in the primary checkout" rule therefore **blocked
+   `git worktree add` outright** — both the plain and the `-b` form, rc=128, no worktree created.
+   The guard would forbid the one operation it exists to mandate.
+3. **Hooks are shared with every linked worktree** (`$GIT_COMMON_DIR/hooks`), so the rule must be
+   scoped. `GIT_DIR != GIT_COMMON_DIR` does identify a linked worktree correctly for ordinary
+   in-worktree operations — it is only the `worktree add` HEAD write, above, where it reads
+   `primary`.
+
+### The composition that answers constraint 2 — proposed, NOT yet verified
+
+Keep `worktree-guard.sh` as a PreToolUse hook, but **invert what it is for**. Today it must prove a
+command is dangerous, which fails **open** on anything it cannot lex — that is the root of all five
+citations. Instead it should prove a command is *permitted*: when it recognises a plain, legal
+`git worktree add` to a path under `~/.worktrees/<repo>/`, it sets a marker in the environment, and
+the `reference-transaction` hook allows a HEAD move only while that marker is present.
+
+Anything it fails to recognise — quoted, wrapped, inside a script file — simply carries no marker,
+and the git hook denies. **Recognition-for-allow fails closed; recognition-for-deny fails open.**
+The coverage the text classifier could never reach stops being load-bearing.
+
+⚠️ **Unverified.** Two things must be measured before this is written up as the design: whether a
+PreToolUse hook can export an environment variable into the Bash tool's own process (it may only be
+able to write a file the git hook reads), and whether the marker can be scoped tightly enough — to
+one command, one repo, one moment — that it is not a standing bypass. Neither has been probed.
+
+### Also still open from round 7 — `core-conduct/metric-must-be-sourceable`
+
+Independent of the Arm D pivot. The 19/21/9 figures at the derivation-3 section record date and
+instrument but not the **shapes**: 6 of 21 written down, 0 of 19, and the prose says 9 must-deny
+while task 3 lists 8. Either the lists go into the card or the numbers come out. The observability
+judge notes the 36,187-command corpus used for its own measurement is already on disk and already
+cited twice in this card, so re-running against a recorded population is available.
