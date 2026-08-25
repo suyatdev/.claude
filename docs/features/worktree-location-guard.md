@@ -557,8 +557,18 @@ file's documented token style, tab-separated:
 - `SEG_ENV<tab><i><tab><name>` — one per entry in segment `i`'s `assignments` dict whose name begins
   `GIT_`. A **prefix** test over the namespace git owns, so a variable added upstream is covered the
   day it ships.
-- `SEG_OPAQUE<tab><i><tab><token>` — segment `i` has `git` or `cd` somewhere in `argv` but **not** at
-  `argv[0]`. Derived as `argv[0] not in ("git", "cd") and ("git" in argv[1:] or "cd" in argv[1:])`.
+- `SEG_OPAQUE<tab><i><tab><token>` — segment `i` runs `git` or `cd` somewhere the guard cannot hold
+  `argv[0]` accountable for. **Two clauses, one fact** (see derivation 3):
+  - **3a, bare token** — `argv[0] not in ("git","cd") and ("git" in argv[1:] or "cd" in argv[1:])`.
+  - **3b, collapsed token** — for the same segments, re-lex every whitespace-bearing token through
+    `segments()` (bound: depth 3) and fire if any inner segment has `git` or `cd` at **`argv[0]`**.
+    A token still collapsed at the bound, or one `segments()` returns `[]` for, fires as
+    unresolvable. The emitted `<token>` is the collapsed token, so the deny message names the thing
+    the reader can actually see on their command line.
+
+  3b tests *command position*, not presence, and the difference is load-bearing: presence was
+  measured on 2026-08-25 to falsely deny `gh pr create --title "fix git guard"` and 3 other real
+  shapes out of 19. Neither clause names a shell, a wrapper word, or `-c`.
 
 **The granting/denying distinction does not apply to these seven.** That rule exists *because* a flat
 fact cannot say which segment it came from, so a permission granted by one segment could excuse
@@ -583,7 +593,9 @@ one of them was complete. There is now **one rule**, and no arm may carry its ow
 >
 > **`cd` and `-C` are the only two redirects this rule resolves.** Every other way a segment can
 > address a different repository — or hide that it runs git at all — **denies**, by the four
-> derivations in the next section. This rule never carries its own list of them.
+> derivations in the next section, **except the two residuals recorded in Non-goals**, which no
+> amount of lexing can reach and which are therefore stated rather than claimed closed. This rule
+> never carries its own list of them.
 
 Worked examples, each previously a hole:
 
@@ -597,14 +609,20 @@ Worked examples, each previously a hole:
 
 #### Everything else that can redirect a segment — four derivations, no fifth list
 
-Rounds 1–5 each closed one redirect and each left the next one open: `-C` (round 3), `cd`
-(round 4), then `--git-dir` / `GIT_DIR=` / subshell `cd` (round 5). **Five hand-maintained lists have
-now been written and five have been found short.** So this section does not write a sixth. Each rule
-below is a *test against a structure one of the two modules already exposes*, so a shape the modules
-learn about tomorrow is covered without editing this card.
+Rounds 1–6 each closed one redirect and each left the next one open: `-C` (round 3), `cd`
+(round 4), then `--git-dir` / `GIT_DIR=` / subshell `cd` (round 5), then **quoted command wrappers**
+(round 6). **Five hand-maintained lists have now been written and five have been found short.** So
+this section does not write a sixth. Each rule below is a *test against a structure one of the two
+modules already exposes*, so a shape the modules learn about tomorrow is covered without editing this
+card.
 
-All five measurements below were re-run first-hand on 2026-08-24 against `/usr/bin/python3` 3.9.6,
-the interpreter the hooks actually use.
+**Round 6 did not add a fifth derivation.** It found derivation 3 deriving from *half* of the comment
+it quotes, and completed it — see clause 3b. The lesson is narrower than "write another rule": a
+derivation is only as sound as the whole of the premise it cites.
+
+Measurements marked 2026-08-24 were re-run first-hand that day against `/usr/bin/python3` 3.9.6, the
+interpreter the hooks actually use; the round-6 additions in clause 3b were measured the same way on
+2026-08-25.
 
 **1 — Global options: read `blocking_option`, not a list of names.**
 `resolve_subcommand` returns its third element non-`None` for *both* bucket 2 (`GLOBAL_REDIRECT`,
@@ -632,12 +650,26 @@ The rule is a prefix test, not an enumeration: **any assignment on segment `i` w
 values; they are named here as evidence the dict works, **not** as the set being matched.
 
 **3 — `argv[0]` is only trustworthy when it is accounted for.**
-`WRAPPERS` (`shell_segments.py:64`) is explicitly a **denylist**, and its own comment says so at
-`shell_segments.py:62-63`: *"This is a denylist: `env`, `timeout` and loop keywords are not in it,
-so those shapes stay open. Recorded in ADR 0012 as accepted, not fixed."* Accepted for the existing
-guards; **not** acceptable here, for the same reason `SEG_UNPARSED` overrides the lexer's fail-open
-below — this guard is the last line of defence, and ADR 0012's trade-off was struck for callers
-that are not.
+`WRAPPERS` (`shell_segments.py:64`) carries a comment that states **two** separate limitations, and
+this derivation must answer both. Verified line numbers 2026-08-25 — the round-6 verdict cites
+`:59-61` for the second sentence; the measured range is `:60-62`.
+
+- **`shell_segments.py:62-63`** — *"This is a denylist: `env`, `timeout` and loop keywords are not
+  in it, so those shapes stay open. Recorded in ADR 0012 as accepted, not fixed."* → **clause 3a.**
+- **`shell_segments.py:60-62`** — *"`eval` covers only the unquoted form — `eval "gh pr create"`
+  keeps the whole command as one quoted token, which by design can never reach a command position.
+  That limit is inherent to lexing, not an oversight."* → **clause 3b.**
+
+Both are accepted for the existing guards; **neither** is acceptable here, for the same reason
+`SEG_UNPARSED` overrides the lexer's fail-open below — this guard is the last line of defence, and
+ADR 0012's trade-off was struck for callers that are not.
+
+⚠️ **Rounds 4, 5 and 6 all cited this one derivation** (`writing-specs/scope-unknown-contradiction`).
+Rounds 4 and 5 were missing redirects. Round 6 was different in kind: the derivation quoted the
+denylist half of the comment above and silently ignored the quoted-token half, then claimed to cover
+"anything else in that family". **A derivation is only as sound as the whole of the premise it
+cites** — which is why both sentences are now quoted in full, side by side, each bound to the clause
+it produces.
 
 Measured, each emitting **no fact at all** because `argv[0] != "git"`:
 
@@ -648,16 +680,58 @@ Measured, each emitting **no fact at all** because `argv[0] != "git"`:
 | `if cd /tmp/other; then git commit -m x; fi` | *(none)* | `if`/`then` hold the command position; `git` sits at `argv[1]`. |
 | `timeout 5 git commit -m x` | *(none)* | Named in the denylist comment as knowingly open. |
 
-**Rule: if `argv[0]` is neither `git` nor `cd`, yet `git` or `cd` appears anywhere later in `argv`,
-the segment is unaccountable — emit `SEG_OPAQUE` and deny**, naming the token and the index. This is
-derived from the module's stated limitation rather than from a list of wrapper words, so `env`,
+**Clause 3a — bare tokens. Rule: if `argv[0]` is neither `git` nor `cd`, yet `git` or `cd` appears
+anywhere later in `argv`, the segment is unaccountable — emit `SEG_OPAQUE` and deny**, naming the
+token and the index. Derived from `:62-63` rather than from a list of wrapper words, so `env`,
 `timeout`, `if`, `for`/`do` and anything else in that family are covered by one rule.
 
-**Accepted cost, stated rather than discovered:** this denies `echo git switch main` and
-`grep -r 'git switch' .` — commands that merely *mention* git. That is a false denial on a rare
-shape, against a fail-open on a live HEAD move; the deny message names the token so the cause is
-obvious, and `WORKTREE_EXEMPT` clears it. The alternative is enumerating shell keywords, which is
-the fifth-list bet this section exists to stop making.
+**Clause 3b — collapsed tokens. Rule: for a segment whose `argv[0]` is neither `git` nor `cd`,
+re-lex every whitespace-bearing token through `segments()`; if any resulting inner segment holds
+`git` or `cd` in *command position* (`argv[0]`), emit `SEG_OPAQUE` and deny**, naming the token and
+the index. Recurse to a bound of **3**; a token still collapsed at the bound, or one `segments()`
+returns `[]` for, is unresolvable and **denies** — the same fail-closed direction as `SEG_UNPARSED`.
+`eval` needs no special case: `WRAPPERS` strips it, leaving the whole command as `argv[0]`, which
+clause 3b re-lexes like any other collapsed token.
+
+This is the direct answer to `:60-62`. That comment says a quoted command *"can never reach a
+command position"* — so the rule re-lexes until it can, then applies the ordinary command-position
+test. **No shell name, no `-c`, and no wrapper word appears in the rule**, which is what keeps it a
+derivation: `zsh -c '…'` is covered without `zsh` being written down anywhere.
+
+Measured 2026-08-25 against the live `segments()` on `/usr/bin/python3` 3.9.6. The left column is
+what `segments()` returns; note the git call survives lexing as **one token**, which is exactly why
+clause 3a cannot see it:
+
+| Command line | `segments()` argv | 3a | 3b |
+|---|---|---|---|
+| `env -C /tmp/other git switch main` | `['env','-C','/tmp/other','git','switch','main']` | **deny** | — |
+| `timeout 5 git commit -m x` | `['timeout','5','git','commit','-m','x']` | **deny** | — |
+| `sh -c 'git switch main'` | `['sh','-c','git switch main']` | allows | **deny** |
+| `bash -c "git switch main"` | `['bash','-c','git switch main']` | allows | **deny** |
+| `zsh -c 'git switch main'` | `['zsh','-c','git switch main']` | allows | **deny** |
+| `eval "git switch main"` | `['git switch main']` (`eval` stripped) | allows | **deny** |
+| `sh -c 'cd /tmp/other && git switch main'` | `['sh','-c','cd … && git switch main']` | allows | **deny** |
+| `sh -c "sh -c 'git switch main'"` | nested two deep | allows | **deny** |
+
+**Accepted cost, measured rather than asserted.** Clause 3b's command-position test was chosen over
+the wider "`git` anywhere in the re-lexed tokens" precisely because the wider form was measured and
+rejected: against **19 real command shapes** drawn from this repo's own workflow, the wider form
+falsely denied **4**, including `gh pr create --title "fix git guard"` and
+`gh issue comment 12 --body "the git switch case is covered"` — shapes this workflow types
+constantly. The command-position form was then measured on two lists on the same day: **21 shapes
+that must be allowed — 0 false denials**, and **9 shapes that must be denied — 9 denied**.
+
+What both clauses still deny, unchanged from round 5 and still accepted: `echo git switch main`
+(3a) and `grep -r 'git switch' .` / `rg 'git switch' hooks/` (3b) — commands that merely *mention*
+git. `ssh host "git pull"` also denies, which is arguably correct: it does run git, just elsewhere.
+That is a false denial on a narrow shape against a fail-open on a live HEAD move; the deny message
+names the token, and `WORKTREE_EXEMPT` clears it.
+
+**Two residuals this clause does NOT close** — recorded in Non-goals, not claimed closed:
+`./myscript.sh` (the guard cannot read a script file) and a git call built inside an interpreter
+string, e.g. `python3 -c 'import subprocess; subprocess.run(["git","log"])'` (measured: allowed).
+Both were verified allowed on 2026-08-25. Widening to catch them means reading arbitrary files and
+parsing arbitrary languages, which is not lexing at all.
 
 **4 — Grouping: `segments()` is flat, so a grouped `cd` is unresolvable by construction.**
 `shell_segments.py:139-140` appends a fresh segment for every control operator and **throws the
@@ -1378,6 +1452,79 @@ Feature: Arm D — moving a primary checkout's HEAD
     # Stated, not discovered. Denying a command that merely mentions git is the
     # price of not enumerating shell keywords; WORKTREE_EXEMPT clears it.
 
+  # Clause 3b — collapsed tokens. Round 6. Everything above reads bare argv
+  # tokens; a quoted command survives lexing as ONE token, so "git" is never a
+  # member of argv[1:] and every scenario above allows it. shell_segments.py:60-62
+  # states this limit outright; clause 3a derived from :62-63 and ignored it.
+
+  Scenario: A git command hidden inside a quoted shell string
+    Given the session cwd is a primary checkout
+    When Bash runs "sh -c 'git switch main'"
+    Then the hook denies
+    And the message names the token "git switch main" and segment 0
+    # SEG_OPAQUE via clause 3b. segments() returns ['sh','-c','git switch main'];
+    # re-lexing the third token puts git in command position. Measured 2026-08-25.
+
+  Scenario: eval leaves the whole command as argv[0]
+    Given the session cwd is a primary checkout
+    When Bash runs "eval \"git switch main\""
+    Then the hook denies
+    # WRAPPERS strips `eval`, leaving argv == ['git switch main'] — a single
+    # collapsed token IN command position. No special case: clause 3b re-lexes
+    # argv[0] like any other whitespace-bearing token.
+
+  Scenario: A shell the rule never names
+    Given the session cwd is a primary checkout
+    When Bash runs "zsh -c 'git switch main'"
+    Then the hook denies
+    # THE REGRESSION CANARY. Clause 3b contains no shell name, no `-c`, and no
+    # wrapper word — it tests whether a re-lexed token reaches command position.
+    # If this scenario ever needs `zsh` added to a list to pass, the rule has been
+    # rewritten as the sixth hand-list and the change must be rejected.
+
+  Scenario: A cd inside a quoted shell string
+    Given the session cwd is a primary checkout
+    When Bash runs "sh -c 'cd /tmp/other && git switch main'"
+    Then the hook denies
+    # The inner lex yields two segments; the first holds cd in command position.
+    # Clause 3b tests both git and cd, so a redirect hidden one quoting level
+    # deeper is caught by the same rule that catches the git call.
+
+  Scenario: A collapsed token still collapsed at the depth bound
+    Given the session cwd is a primary checkout
+    When Bash runs a command nesting quoted shells more than 3 deep
+    Then the hook denies
+    And the message names the unresolved token
+    # Fail closed, same direction as SEG_UNPARSED. An unbounded recursion is a
+    # denial-of-service surface on a PreToolUse hook, so the bound is required;
+    # denying at the bound is what keeps the bound from becoming a bypass.
+
+  Scenario: A PR title that mentions git — must NOT deny
+    Given the session cwd is a primary checkout
+    When Bash runs "gh pr create --title \"fix git guard\" --body \"closes the hole\""
+    Then the hook allows
+    # THE FALSE-DENY GUARD. Clause 3b tests COMMAND POSITION, not presence. The
+    # wider "git anywhere in the re-lexed tokens" variant was measured on
+    # 2026-08-25 and falsely denied 4 of 19 real shapes, this one among them —
+    # a shape this workflow types constantly. Deleting this scenario is how that
+    # regression gets re-introduced.
+
+  Scenario: A git call inside a script file — a stated residual, allowed
+    Given the session cwd is a primary checkout
+    When Bash runs "./myscript.sh"
+    Then the hook allows
+    # NOT A DEFECT. Recorded in Non-goals and measured 2026-08-25. The hook gets
+    # the command text, never the file's contents; there is no token to re-lex.
+    # This asserts the gap ON PURPOSE so it is decided, not rediscovered.
+
+  Scenario: A git call built inside an interpreter string — a stated residual, allowed
+    Given the session cwd is a primary checkout
+    When Bash runs "python3 -c 'import subprocess; subprocess.run([\"git\",\"log\"])'"
+    Then the hook allows
+    # Measured 2026-08-25: re-lexes to argv[0] == "import", so command position is
+    # not git and the rule correctly does not fire. Closing this means parsing
+    # arbitrary languages, which is not lexing. Non-goals, not a round-7 finding.
+
   # Derivation 4 — grouping constructs.
 
   Scenario: A cd inside a subshell — the accepted over-denial
@@ -1663,6 +1810,19 @@ Feature: create-worktree.sh
   on the hook path whether or not anything was removed (measured). This feature makes the removal
   real; it cannot make the message honest. A refusal on a dirty worktree (boundary 26) will
   therefore be accompanied by a session message claiming success.
+- **Two redirect residuals clause 3b cannot reach, and does not claim to** (round 6, measured
+  2026-08-25 — both confirmed **allowed** by the live lexer, not inferred):
+  - **A git call inside a script file** — `./myscript.sh`, `bash deploy.sh`. The guard receives the
+    command text, never the file's contents; there is no token to re-lex.
+  - **A git call built inside an interpreter string** — measured:
+    `python3 -c 'import subprocess; subprocess.run(["git","log"])'` re-lexes to `argv[0] == "import"`,
+    so the command-position test correctly does not fire. Any indirection through a shell variable
+    (`c="git switch main"; sh -c "$c"`) is the same class.
+
+  Closing either means reading arbitrary files or parsing arbitrary languages, which is not lexing.
+  These are **stated, pinned by tests that assert the allow**, and accepted — not oversights to be
+  rediscovered as defects in round 7. The residual is bounded the same way every other one here is:
+  a session that wants to defeat the guard can, and this was never a security boundary.
 - Not a security boundary. A momentum guardrail, like every Tier 1 guard here.
 - Does not migrate the 4 existing worktrees. Two conventions therefore live at once until they are
   retired by hand.
@@ -1741,6 +1901,26 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       `if cd …; then git …; fi`, `timeout 5 git …`), each of which emits **no fact at all** today.
       Neither may be written by copying a list into the test — (a) reads the tuple, (b) pins
       behavior. A rule asserted only in prose is the sixth hand-list wearing different clothes.
+
+      **(c) Clause 3b — the round-6 cases, three groups, all three required.** Every command below
+      was measured against the live `segments()` on 2026-08-25; the suite pins the measurement, it
+      does not restate the prose.
+      - **Must deny** (8): `sh -c 'git switch main'`, `bash -c "git switch main"`,
+        `zsh -c 'git switch main'`, `eval "git switch main"`,
+        `sh -c 'cd /tmp/other && git switch main'`, `sh -c "sh -c 'git switch main'"`,
+        a token still collapsed at the depth bound of 3, and a collapsed token `segments()`
+        returns `[]` for. **`zsh` must be in the suite and must not be in the rule** — it is the
+        case that fails if anyone reintroduces a shell-name list.
+      - **Must allow — the false-deny guard** (at least these 4, the shapes the wider variant was
+        measured to break): `gh pr create --title "fix git guard" --body "closes the hole"`,
+        `gh issue comment 12 --body "the git switch case is covered"`,
+        `git commit -m 'fix: git switch is now denied'`, `curl -s "https://github.com/o/r.git"`.
+        This group is why clause 3b tests command position rather than mere presence; without it
+        the next revision silently widens the rule and breaks the PR workflow.
+      - **Must allow — the stated residuals** (2, asserting the *gap*, per Non-goals):
+        `./myscript.sh` and `python3 -c 'import subprocess; subprocess.run(["git","log"])'`.
+        These assert an allow **on purpose**. If a later change makes either deny, that is a
+        behavior change to decide deliberately, not a bug fix to land quietly.
 - [ ] 4. Implement Arm A.
 - [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
@@ -1794,6 +1974,17 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       wrong refusal occurred.** Do not restate it elsewhere as "zero wrong refusals". Boundary 10
       rule 3 — the bypass fail-open, the other place a line can be lost — cannot fire during this
       window at all, because a bypass exists only in `deny` mode.
+
+      **Recall is established by task 3's suite before arming, never by this window.** The log
+      records only commands the guard turned away; a command it failed to recognise leaves no line
+      at all. So a guard that has gone blind to an entire shape produces a log that reads
+      *flawless* — the clean log and the broken guard are the same piece of paper, and every
+      criterion above is read out of that log. This is not hypothetical: rounds 4, 5 and 6 each
+      found a live shape the guard could not see, and **none of them would have appeared in a
+      refusal-only log.** The criteria above therefore measure **precision** — of the refusals
+      recorded, were they right — and must never be reported as evidence of coverage. Coverage is
+      what task 3's suite asserts, against shapes chosen deliberately rather than shapes that
+      happened to be typed during the window.
 - [ ] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
