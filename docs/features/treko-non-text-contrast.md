@@ -428,6 +428,12 @@ The rule the implementation inherits:
        sit over one as backdrop**, in either theme (§Background 6). **Asserted: exactly 5
        gradient-painted elements, and exactly 0 scored marks whose backdrop chain crosses one.**
 
+       **That count *is* the abort for this case — it is not a second, competing behaviour.** A
+       mark whose backdrop chain crosses a `background-image` is exactly what the count counts, so
+       when it goes to 1 the run fails, listing each such mark's path and the ancestor that
+       carries the image. There is no separate path that aborts first and leaves the count
+       unconstructible, which matters because falsifier case 12 must be able to fire (below).
+
      An exclusion whose count grows is a failure, so the list cannot quietly absorb new marks.
      Neither number is part of the scored total: 334 / 347 is the whole scored population.
    - **Not on the enumerated list → abort, naming the path and why it could not be composited.**
@@ -629,11 +635,19 @@ Scenario: The board is untouched and the guard is quiet
   And the 3 DEBT tokens are all within 0.0005 of their recorded values
   And the check passes
 
-Scenario: A pinned token is dulled toward its background
+Scenario: A pinned token is dulled toward its background, and the list is updated with it
   Given --color-accent passes at 8.01:1 in dark and 4.63:1 in light
   When an edit moves --color-accent to a value 2.4:1 against --color-surface
-  Then the non-text check fails in both themes
-  And the message names --color-accent, the ratio, and the 5px span it paints
+  And the allowlist entry's declared colours are updated to match, so coverage passes
+  Then the PIN floor assertion fails in both themes
+  And the message names --color-accent, the measured ratio, the mark's kind and its path
+
+# This is the scenario the PIN floor exists for, and the "and the list is updated" line is
+# load-bearing. An edit that does NOT update the list is caught earlier and more loudly by
+# coverage, because the token's declared colour string is new and its key is unmapped -- the
+# PIN floor never sees a ratio at all. So the failure this card actually defends against is
+# the diligent one: someone re-tints a token AND dutifully re-records it, and the floor is
+# what refuses to let 2.4:1 through. Falsifier case 1 constructs exactly this state.
 
 Scenario: A recorded defect is edited in either direction
   Given --color-accent-700 is recorded as debt at 1.2718 in light
@@ -670,8 +684,10 @@ Scenario: An allowlisted token stops painting
 
 Scenario: A backdrop becomes uncompositable and nobody classified it
   Given a mark is scored against a flat surface today
-  When an edit puts a gradient behind it
-  Then the check aborts, naming that mark's path and why it could not be composited
+  And exactly 0 scored marks cross a background-image in either theme
+  When an edit puts a gradient behind that mark
+  Then the "0 scored marks over a background-image" count goes to 1 and the run fails
+  And the message names that mark's path and the ancestor carrying the image
   And it does not silently drop the mark or score it against a guessed colour
 
 Scenario: An enumerated exclusion quietly grows
@@ -800,13 +816,13 @@ Red half and green half are separate commits throughout; never the same commit
 
    | # | Defect introduced | Assertion expected to catch it |
    |---|---|---|
-   | 1 | a PIN token dulled below 3.0:1 | PIN floor |
+   | 1 | a PIN token dulled below 3.0:1 **and its allowlist entry updated to match**, so coverage passes | PIN floor |
    | 2 | a DEBT token's value edited (either direction) | Coverage — its key is new |
    | 3 | a DEBT token untouched, its backdrop re-tinted | DEBT ratio, ±0.0005 |
    | 4 | a new mark in a colour on no entry | Coverage — unmapped key |
    | 5 | a mark deleted from the page | that entry's exact count |
    | 6 | **a mark misfiled under the wrong entry, total unchanged** | per-entry counts + "matches at least one mark" |
-   | 7 | a gradient put behind a scored mark | abort, not on the enumerated list |
+   | 7 | a scored mark's own background replaced by a `color-mix()` | abort — own colour uncompositable, not on the enumerated list |
    | 8 | **a second `color-mix()` element added** | exclusion count, 2 against a recorded 1 |
    | 9 | **a colour string the parser cannot read** | parse-failure abort |
    | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
@@ -1028,6 +1044,28 @@ Its first finding is the sharpest thing either judge produced, and it is about t
 - Task 3's two runs are **both the implementation's own walk**, diffed against each other — not
   against the planning artefact, which would test agreement with a throwaway rather than
   reproducibility.
+
+### Corrections made in compliance round 5 (verdict: fail, 2 violations; all 3 of round 4's closed)
+
+Both findings predate round 4 and surfaced only because round 4's edits made the surrounding
+mechanisms precise enough to contradict each other. The first is the most serious thing any round
+found, and it is about this card's headline guarantee.
+
+- **Nothing in the card could ever exercise the 3:1 PIN floor.** The PIN scenario and falsifier
+  case 1 both dulled `--color-accent` below 3.0 and expected the floor to catch it — but by §D8's
+  own Coverage rule, editing a token's value makes its declared colour string new, its key
+  unmapped, and Coverage fires first. The entry matches zero marks, so the floor has no ratio to
+  print. **The fix names the failure the guard actually defends against:** not the careless edit
+  (Coverage catches that, earlier and louder) but the *diligent* one — someone re-tints a token and
+  dutifully updates the allowlist to match, so Coverage passes, and the floor is what refuses to let
+  2.4:1 through. Both the scenario and case 1 now construct that state explicitly.
+- **A mark drifting over a gradient had two incompatible outcomes.** §D7 rule 2 and falsifier case 7
+  said it aborts; §D7's "0 scored marks over a gradient" and case 12 said the count goes 1 against
+  0. If the abort fired first, case 12 — the case §D7 declares *non-waivable because it must be seen
+  to fail* — would be unconstructible, which is precisely the unfalsifiability that requirement
+  exists to close. Resolved by saying it once: **the count is the abort for this case.** Case 7 now
+  covers a genuinely different path — a mark whose *own* colour becomes uncompositable and is not
+  enumerated.
 
 ### What was NOT verified
 
