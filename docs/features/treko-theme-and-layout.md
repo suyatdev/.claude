@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: review
+model_tier: low
+branch: feat/treko-theme-and-layout
 ---
 
 # Treko: a Configuration drawer, a light theme, and a sidebar you can drag
@@ -553,7 +553,7 @@ Scenario: no token is left dark on a white ground
   Given data-theme="light"
   When  every custom property the page reads via var() is collected
   Then  each one is declared in the light block, or on the named exception list
-  And   the exception list contains only --font-*, --space-*, --radius-*
+  And   the exception list contains only --font-*, --space-*, --radius-* and --mono
 
 Scenario: light-mode text stays readable
   Given data-theme="light", set in localStorage and mounted for real in headless Chrome
@@ -698,19 +698,44 @@ Scenario: no CDN URL reaches a fetching position
 4. **The light block covers everything the page reads.** Every custom property reachable through
    `var()` from `Treko.dc.html` or from a `nocturne.css` rule the page's classes hit is declared
    under `body[data-theme="light"]`, or appears on an exception list whose only members are
-   `--font-*`, `--space-*` and `--radius-*`. `--color-section*` may join the list only with the
-   measured "0 readers" evidence attached.
+   `--font-*`, `--space-*`, `--radius-*` and `--mono`. `--color-section*` may join the list only
+   with the measured "0 readers" evidence attached.
+
+   **`--mono` joins the list by measurement, 2026-08-24 — the resolution of the gate task 3
+   raised.** It is declared in `Treko.dc.html:21` beside the eight status hues, which is the only
+   reason a colour-shaped rule catches it; its value is `ui-monospace,Menlo,Consolas,monospace`, a
+   font stack with no light or dark form. It is genuinely reachable (33 `var(--mono)` uses,
+   measured on this branch) and §D3's 51-property block does not declare it, so **without this
+   entry criterion 4 could never pass against a correct implementation** — the same defect class
+   the compliance judge flagged on card B's task 13. The exception is scoped to this one literal
+   name, **not** to a `--mono-*` pattern: nothing else matches it today, and a pattern would
+   pre-approve tokens nobody has weighed. Full accounting of all 40 reachable names, and the split
+   between what this criterion measures and what it does not: §Verification, "Criterion 4".
 5. **No invisible-on-white surface.** Render the page in headless Chrome with `data-theme="light"`
    applied exactly as the app applies it — `taskTracker.theme` set in `localStorage` before mount,
-   never simulated by setting the attribute directly. For every element under `<body>` with non-zero
-   rendered area, its resolved `getComputedStyle().color` and its effective background — the first
+   never simulated by setting the attribute directly. For every element under `<body>` that has
+   non-zero rendered area **and paints a mark in its own `color`** — defined as: it has at least one
+   direct child text node whose content is not entirely whitespace, **or** its `::before`/`::after`
+   resolves a `content` other than `none`/`normal`/`""` (which is how an icon font paints a glyph) —
+   its resolved `getComputedStyle().color` and its effective background — the first
    non-transparent `getComputedStyle().backgroundColor` found walking up from the element through its
    ancestors, alpha-compositing any translucent layer crossed on the way — meet WCAG contrast ≥ 4.5:1
    below an 18px resolved `font-size`, ≥ 3:1 at or above it, ≥ 4.5:1 when `font-size` cannot be
    resolved. This is a rendered check over the whole page, inline-styled and class-styled colour
    alike, reading the foreground/background pair from the browser's own paint rather than inferring
    it from markup proximity — there is no "one inline style" scope left to disagree about
-   (§Verification, Proof C). **What this does not prove:** that the page looks good. A human opens it
+   (§Verification, Proof C).
+   **Why the population is elements that paint, not elements that exist** (narrowed 2026-08-24,
+   after implementation measured the original wording as unsatisfiable). `color` inherits, so an
+   element that paints no mark still reports one. Nine 7×7px decorative dots
+   (`Treko.dc.html:251`) inherit `--color-neutral-200` from their parent and render only a
+   background-colour disc; scoring that inherited colour against the disc's own fill demanded a
+   foreground of 249..255 from a token whose 59 other uses need it near-black, so no palette
+   assignment could satisfy the criterion — it was failing on colours nobody can see. The
+   `::before`/`::after` arm is what keeps this from over-narrowing: a Phosphor `<i>` has no text
+   node but does paint a glyph in its `color`, and 25 such elements stay in scope. Measured on
+   this page: 848 elements have area, **367** paint a mark.
+   **What this does not prove:** that the page looks good. A human opens it
    once (task 9) and that is recorded as eyeballed, not measured.
 6. **The two shadow tokens with a reader, `--shadow-sm` and `--shadow-lg`, are overridden in light
    mode**, and neither light value contains `#3f424d` or `#9397ab`. `--shadow-md` is not overridden —
@@ -764,7 +789,32 @@ Carried forward from `docs/features/treko-rename.md` §"Pinned versions", unchan
 | Phosphor Icons | 2.1.1 | already vendored under `vendor/phosphor/` — do not re-fetch |
 | Inter | vendored `inter-latin.woff2` | `vendor/inter/` — no version upstream; the file is the pin |
 | Nocturne export | `73641b21-c7ad-488a-8264-a28262dfe83e`, schema `version: 1` | `_ds/` directory name; ADR 0023 |
-| Chrome | `151.0.7922.172` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. |
+| Chrome | `152.0.7977.54` | measured in this checkout: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version`. Both Proof B and Proof C invoke this exact build — two hashes, or two contrast reads, from different Chrome builds are not comparable. **Re-pinned from `151.0.7922.172` on 2026-08-24, mid-task-7** (see below). |
+
+**The Chrome re-pin, 2026-08-24.** Chrome auto-updated on this machine at 15:04 local, from
+`151.0.7922.172` to `152.0.7977.54`. `cdp_harness.Chrome.__init__` asserts the pin before it
+launches anything, so every browser-driven test in the suite failed at construction — none of them
+reached the page. The old framework is still on disk under
+`Google Chrome Framework.framework/Versions/151.0.7922.172/`, but only the `Versions/Current`
+symlink selects a version, and repointing it would mutate the user's Chrome install and be undone
+by the next auto-update.
+
+**Why re-pinning is a re-measurement and not a mixed-build comparison** — checked, not assumed,
+before the pin moved:
+
+- `test_guards.py`'s three sha256 figures hash **file bytes**, not renders. No Chrome involved.
+- **Proof A** is a byte-for-byte source comparison. No Chrome involved.
+- **Proof B**'s before/after screenshot hashes were both taken on `151.0.7922.172` and are an
+  **archived receipt** at the tokenize commit, already closed. They are not re-derived, so no pair
+  spanning two builds is ever formed.
+- **Proof C / criterion 5** asserts WCAG ratios against the thresholds `4.5` and `3.0` at runtime.
+  It stores no recorded number to compare against, so running it on `152` measures `152` — which
+  is exactly what the criterion claims about the page a user renders today.
+
+The contrast counts recorded in §Verification's task 3 and task 4 entries were measured on `151`
+and stay labelled as `151` measurements; they are history, not live assertions. The user approved
+this re-pin on 2026-08-24, and it is the reason this card's frontmatter was briefly returned to
+`planning` mid-implementation (the flip-edit-flip precedent is `28933a1`).
 
 **No new dependency.** All four glyphs the drawer needs (`gear-six`, `moon`, `sun`, `x`) resolve in
 the vendored Phosphor set (1,530 classes, regular and fill). Adding a dependency would need a
@@ -772,43 +822,177 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 ## Tasks
 
-- [ ] 0. Branch `feat/treko-theme-and-layout` + worktree. **Only after `gate confirmed`**, and after
+- [x] 0. Branch `feat/treko-theme-and-layout` + worktree. **Only after `gate confirmed`**, and after
       model-switch checkpoint 2.
-- [ ] 1. **Baseline.** Record the full node-ID set and per-module counts from `pytest treko/`, the
+      Done: branch cut from `main` @ `a5a66a7`; this worktree carries it. Both checkpoints on record.
+- [x] 1. **Baseline.** Record the full node-ID set and per-module counts from `pytest treko/`, the
       base commit SHA, `wc -l treko/Treko.dc.html`, and the extracted bytes of `:325-418`. Nothing
       else in this card can be checked without them.
-- [ ] 2. **Tokenize.** Add the eight `:root` declarations; replace all 27 literals — including the
+      Done: recorded under §Verification "Task 1 baseline". 221/221 green, no deselections.
+- [x] 2. **Tokenize.** Add the eight `:root` declarations; replace all 27 literals — including the
       three JS string literals. **No light block, no palette change, no DOM change.** Commit alone.
-      Proof A must pass on this commit and is asserted against it forever after. Record this commit's
+      Proof A must pass on this commit and is asserted against it forever after.
+      Done: one `:root` line (8 tokens at today's dark values), 27 literals replaced, 639->640
+      lines. Proof A byte-identical; see §Verification "Proof A — result". Record this commit's
       SHA; once task 4 lands, Proof A becomes a frozen comparison between it and the base-commit SHA
       from task 1 — label it **ARCHIVED RECEIPT** in the test itself (§Verification, Proof A), not a
       live regression guard.
-- [ ] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5, 6 and 7
+      ⚠️ **This last instruction was NOT carried out, and the tick above overstates the task.**
+      `git grep "ARCHIVED RECEIPT" -- treko/` returns nothing and `test_guards.py`'s 16 tests cover
+      criteria 15, 16 and 17 only. Proof A was *run* and passed — twice at the time, and a third
+      time by the observability judge at `60cfcf6` with an independently written oracle — but it is
+      **a receipt, never a pinned test**, so nothing goes red if history is rewritten under those
+      SHAs. Found by the judge on 2026-08-24 and confirmed independently; recorded here rather than
+      in the ADR alone, because the checkbox is what a later reader trusts. ADR 0036 states the same
+      gap. Closing it is follow-up work, not this card's.
+- [x] 3. **Red first, then the light block.** Write the failing tests for criteria 4, 5, 6 and 7
       (including the corrupt-stored-theme case) against the *current* dark-only page and confirm each
       fails for the stated reason. Then add `body[data-theme="light"]` with all 51 declarations,
       `THEME_DEFAULT`, the validated seed, `applyTheme` / `setTheme`, and the mount call. Do not touch
       implementation and tests in the same step.
-- [ ] 4. **Palette re-tint.** Replace `:root` with the prototype's block (cyan accent, `#1c1e2b`
-      surface, lifted neutrals, `--ok:#82dfa9`, `--info:#89b4f2`, `--hair-3` to `.12`). One commit,
-      `:root` and the light block only. **Pixels move here, by design.**
-- [ ] 5. **Sidebar.** Red tests for criteria 9, 10 and 11 first. Then the handle markup, the
+      Red half PARTIALLY done (`treko/test_theme.py`, `treko/cdp_harness.py`). **Criterion 7's tests
+      were written and run** in `5cc3bc2` — the dispatch brief that omitted them said "4, 5 and 6",
+      taken from this task's pre-revision text, and round 3 added criterion 7 here. All 14 collected
+      tests fail, and as of `9ad983c` all 14 are red for their own stated reason — the
+      headless-Chrome blocker that had killed 11 of them was diagnosed and worked around.
+      **The evidence, the diagnosis and the falsifiable-not-satisfiable caveat are recorded once,
+      in §Verification "Task 3 red half" — do not restate them here.**
+      **Second half done in `af5321a`: 13 of 14 green.** The light block (51 properties),
+      `THEME_DEFAULT`, the validated seed, `applyTheme`/`setTheme` and the mount call are all in,
+      at §D3's values. Criterion 5 is the one still red and **is not this task's to close** — it
+      needs a light-palette redesign, which task 4 now owns; the numbers are in §Verification
+      "Task 3 second half".
+      **GATE — RESOLVED 2026-08-24 by a spec change, not a workaround.** The conflict: criterion 4
+      required every `var()`-reachable custom property be declared under `body[data-theme="light"]`,
+      with an exception list of only `--font-*`, `--space-*`, `--radius-*` (+ `--color-section*` with
+      evidence). `--mono` IS reachable — 33 `var(--mono)` uses in `Treko.dc.html` — matched no
+      exception pattern, yet §D3's 51-property plan never declares it, so the criterion-4 test could
+      never have passed against a correct implementation.
+      **Resolution:** the card was returned to `phase: planning` at `model_tier: high`, the user was
+      asked the entering-planning model-switch question and chose the high tier, and `--mono` was
+      added to criterion 4's exception list by literal name with its evidence attached. Three sites
+      were updated together — criterion 4, the Gherkin step in §Scenarios, and §Verification's
+      "Criterion 4". A fourth mention (§Background's "12 non-colour") was deliberately left alone:
+      it measures `nocturne.css`'s own inventory, and `--mono` is declared in `Treko.dc.html:21`,
+      not in `nocturne.css` — changing it would have corrupted a recorded measurement.
+      **Measured while resolving, and worth keeping:** of the 40 distinct `var()`-reachable names in
+      `Treko.dc.html`, 38 are declared by §D3's light block and 2 are excepted (`--font-heading`,
+      `--mono`) — `--mono` was the only uncovered name. The eight status hues on the same `:root`
+      line ARE covered, by §D3's "8 status"; that was checked, not assumed. Table in §Verification.
+- [x] 4. **Palette re-tint, and the contrast pass criterion 5 needs.** Replace `:root` with the
+      prototype's block (cyan accent, `#1c1e2b` surface, lifted neutrals, `--ok:#82dfa9`,
+      `--info:#89b4f2`, `--hair-3` to `.12`). One commit, `:root` and the light block only.
+      **Pixels move here, by design.**
+      **This task also owns criterion 5.** Task 3 landed the light block at §D3's prototype values
+      and measured **127** contrast violations under the narrowed criterion — four text tokens,
+      every one of them a real defect: `--color-neutral-700` at **1.64:1** on white (18 elements,
+      the "invisible on white" this criterion is named for), `--color-neutral-600` at 3.06 (82),
+      `--color-accent` at 3.23 (16), `--color-accent-300` at 3.87 (11). It is this task and not
+      task 3 because criterion 5 is a card-level criterion, because the fix is a design pass on
+      the palette rather than wiring, and because this task already owns the light block.
+      **It is a redesign, not a scaling.** A trial darkening of exactly those four tokens was
+      measured, not assumed: it took the *unnarrowed* count 205 → 40 rather than → 9, because
+      `--color-accent` is also a background under `--color-text` (28 new violations at 3.33), and
+      three tokens solved to exactly 4.50 with no margin. Re-derive the values against the real
+      render; do not reuse those trial numbers.
+      **Done in `4adfda4`. Both halves of that warning were re-checked against the narrowed
+      render before acting on them, and they did not survive intact** — the accent-as-background
+      clause turned out to be an artefact of the unnarrowed population and does not apply here
+      (§Verification, "Task 4"). The margin clause did hold and drove the 4.8 target. The reason
+      it is still a redesign is a different one, found by measurement: fixing
+      `--color-neutral-600` alone lands it *darker* than `--color-neutral-500` and inverts the
+      ramp, so the ink ramp had to be re-spaced rather than four values patched.
+      **Dark mode fails the same check 104 times and is out of scope here** — measured on the
+      untouched page, so it predates this card. Criterion 5 is light-only by its own wording.
+      Recording it so the next reader does not mistake it for a regression this card caused.
+- [x] 5. **Sidebar.** Red tests for criteria 9, 10 and 11 first. Then the handle markup, the
       handler, the seed, and the three computed substitutions replacing `:621`.
-- [ ] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
+      **Red half done** in `treko/test_sidebar.py`: 8 red, each on its own assertion, plus 2 source
+      guards that pass by design. Evidence, the two Gherkin scenarios that are not runtime-testable,
+      and the Reset clause task 7 now owes are recorded once, in §Verification "Task 5 red half" —
+      do not restate them here.
+      **`:621` is `:650` today**, and every other line number this card cites has moved with it
+      (`:514`→`:543`, `:432`→`:455`). Re-derive them; do not copy.
+      **Green half done** in `227e355` + the test-harness repair after it: **10/10**, `wc -l` 682.
+      The first run was 8/10, and both failures were measurement bugs in the test rather than
+      defects in the page — a mid-transition `getComputedStyle` read, and a "main column" selector
+      that matched 13 elements and used the wrong one. Both are recorded once, in §Verification
+      "Task 5 green half"; **task 7 still owes criterion 11's Reset clause.**
+- [x] 6. **Drawer shell.** Gear button grafted after `:97`; scrim; panel; `openSettings` /
       `closeSettings`; the prepended Esc arm. Red tests for criterion 12 first, including the
       "existing arms undisturbed" diff.
-- [ ] 7. **Drawer sections.** Appearance (two preview cards, six selection values, literals kept and
+      **`:97` is `:118` today** — the header cluster the card maps as `:90-97` is `:111-118`, and
+      the gear went after the `cmdCopies` `sc-for`, before the header div closes. Re-derive; do
+      not copy.
+      **Red half** `e989956`: 9 tests, 6 red, 3 green by design. **Green half** `6ded764`: five
+      edits, all outside the fence, `wc -l` 682 → 699. **Repair** `50e9a32`: the falsifier had
+      anchored itself to the live page and drifted the moment the implementation landed.
+      **279 passed, 0 failed.** Evidence — the probe's own `count == 0` control, the six broken
+      parsers and which assertion caught each, and what is *not* proven — is recorded once, in
+      §Verification "Task 6". Do not restate it here.
+      **Task 7 still owes three things**, all needing the drawer's *sections*: criterion 11's
+      Reset clause, criterion 13's Layout readout, and criterion 7's "Dark card selected" clause.
+- [x] 7. **Drawer sections.** Appearance (two preview cards, six selection values, literals kept and
       commented) and Layout (readout + Reset). **No Artifacts section** — §D9.
-- [ ] 8. **Regression guards.** Criteria 15, 16 and 17 as tests. Criterion 15 compares against the
+      **Red half** `ee068a5`: 15 tests, 12 red, 3 green by design — but the first run was hidden by
+      an unrelated blocker, and that is the part worth carrying forward: **Chrome auto-updated off
+      the pin mid-task**, and `cdp_harness` asserts the pin before it launches, so 36 tests failed
+      at construction without reaching a page. Re-pinned in `54c84e1`; §"Pinned versions" carries
+      the safety argument.
+      **Green half**: two pure insertions, `+331,34` and `+713,7`, both outside the fence; `wc -l`
+      699 → 740. **294 passed, 0 failed.** Two bugs the landing exposed — a marker comment that
+      quoted the literals it was exempting and therefore fell outside its own exemption, and a
+      probe that omitted `card` from its success payload so a correct card read as a missing
+      border. Both are recorded once, in §Verification "Task 7". Do not restate them here.
+      **All three debts task 6 recorded as owed are closed**: criterion 11's Reset clause (its
+      first and only caller), criterion 13's live readout, and criterion 7's "Dark card selected"
+      clause. Criterion 2 also gained its first test, which it had never had.
+- [x] 8. **Regression guards.** Criteria 15, 16 and 17 as tests. Criterion 15 compares against the
       bytes captured in task 1.
-- [ ] 9. **Launch for real** (`--open`): drag the sidebar, flip to light, reload, press Esc from
+      **Pulled forward, ahead of tasks 5-7.** It is test-only and independent of every remaining
+      implementation task, and criterion 15 exists to catch exactly the failure tasks 6-7 could
+      cause — a drawer port reaching into the fenced slice — so it is worth more standing before
+      that port than after it.
+      Done in `treko/test_guards.py`: **25 tests, all green**, every check falsified before its
+      pass was believed. Two findings are recorded in §Verification "Task 8" and are the reason
+      this task took a second pass: the card's 4851-byte fence figure is **confirmed correct** (it
+      names the marker-inclusive span, and base lines 325/418 *are* the marker lines), and the
+      criterion-17 scanner had a real case-sensitivity hole — `<LINK HREF="https://…">` was
+      invisible to it — found by falsification and closed. **Do not restate either here.**
+- [x] 9. **Launch for real** (`--open`): drag the sidebar, flip to light, reload, press Esc from
       three states, and look at the light board. Record what was eyeballed as eyeballed.
-- [ ] 10. **Post-change suite**: node-ID set diff vs task 1, zero lost nodes, `wc -l` under 800.
-- [ ] 11. **ADR** — the token layer, the tokenize/re-tint split, the shadow divergence from the
+      Done — §"Task 9". All four Esc arms driven (not three; the fourth is reachable), a real
+      click-then-reload theme flip, and the open drawer looked at in **both** themes, which
+      criterion 5 never covers. One finding, not fixed here: the run title hard-clips mid-glyph at
+      `sideW` 440 — pre-existing markup this card makes reachable.
+      **Human sign-off recorded 2026-08-25**, closing the last debt this task carried. The user ran
+      `server.py --open` themselves (2026-08-24 23:41Z; 33 request lines, every one `status=200
+      errno=-`, one `id=reanalyze` at 23:42Z, server exited 0 on its own 1800s idle timer), was
+      given a written checklist of the seven areas automation cannot reach — non-text contrast
+      first, the 440px clip second — and replied "It looks good."
+      **What that settles, and what it does not.** It settles criterion 5's own closing sentence on
+      its own terms: a human opened the rendered page and accepted its appearance. It is **not** a
+      per-item attestation — which checklist items were exercised is not known to me, and no
+      measurement was taken. The 481-of-848 non-text-contrast gap is unchanged by it: still
+      eyeballed, still uncovered by any test.
+- [x] 10. **Post-change suite**: node-ID set diff vs task 1, zero lost nodes, `wc -l` under 800.
+      Done — §"Task 10". 294 passed, **0 nodes lost**, 221 → 294 (+73), `wc -l` 740. Task 1's
+      recorded set-hash does **not** reproduce under nine serializations; the `comm` set diff
+      carries the criterion instead.
+- [x] 11. **ADR** — the token layer, the tokenize/re-tint split, the shadow divergence from the
       prototype, and the Artifacts omission. **Check the next free number against `origin/main`, not
       a stale local ref**; 0026 is duplicated and 0028 is unused, so "highest + 1" is not the
       answer on its own.
-- [ ] 12. `skills/treko/SKILL.md`: the two new `localStorage` keys and the theme default.
-- [ ] 13. Compliance judge on this spec (before task 0), observability judge on the change (before
+      Done — `docs/decisions/0036-the-token-layer-is-the-feature-and-the-repaint-ships-alone.md`.
+      0036 confirmed free across every ref, with `origin/main` checked current against
+      `git ls-remote` (`07c4e6e`). Its figures were spot-re-verified independently at HEAD: one
+      source file changed (155 lines), `nocturne.css` zero diff, shadow readers 8 / 0 / 1,
+      surviving literals `#12131e` ×1 and `rgba(255,255,255,` ×9.
+- [x] 12. `skills/treko/SKILL.md`: the two new `localStorage` keys and the theme default.
+      Done — both keys documented under §"Where the survey is stored", verified against the page
+      itself (`SIDE_W_MIN=190, SIDE_W_MAX=440, SIDE_W_DEFAULT=236`, `THEME_DEFAULT='dark'`).
+      Confirmed no `.py` under `treko/` reads or writes either key.
+- [x] 13. Compliance judge on this spec (before task 0), observability judge on the change (before
       the PR), then the PR. **Do not squash-merge.** The tokenize and re-tint commits are the design's
       whole rollback point (§D1), and criterion 8 pins an assertion to the tokenize commit
       specifically — a squash deletes both. Use a merge or rebase-merge, and state in the PR body
@@ -891,8 +1075,8 @@ recorded here before it has been run and its output re-read (`rules/core-conduct
 
 The oracle. A Python check, run at the task-2 commit and pinned as a test:
 
-1. Read the base file: `git show <base>:treko/Treko.dc.html`.
-2. Read the tokenized file: `git show <task-2-sha>:treko/Treko.dc.html` — the tokenize commit
+1. Read the base file: `git show 2b96d60:treko/Treko.dc.html`.
+2. Read the tokenized file: `git show 76c3772:treko/Treko.dc.html` — the tokenize commit
    specifically, never the working tree, so the comparison stays pinned to the same two commits once
    task 4 changes `:root` again.
 3. From the tokenized file's `:root`, build `{token: value}` for the eight new names.
@@ -921,7 +1105,7 @@ instance. Task 2's "no DOM change" constraint is what closes that, and the byte 
 enforces it directly: any DOM edit changes the base-file comparison too.
 
 **After task 4, Proof A is an archived receipt, not a live guard.** Once the re-tint changes `:root`
-again, step 2's `<task-2-sha>` and step 1's `<base>` are both fixed history — Proof A is comparing two
+again, step 2's `76c3772` and step 1's `2b96d60` are both fixed history — Proof A is comparing two
 frozen snapshots and will pass forever, regardless of what happens to the live page. That is fine as a
 record of what the tokenize commit did, but it is not evidence about anything after it. Name both SHAs
 in the test's own docstring or header comment once they exist, and mark it **ARCHIVED RECEIPT**
@@ -951,7 +1135,30 @@ verdict.
 A static analysis over token values, not a render: collect every `--name` appearing inside a
 `var(--name)` in `Treko.dc.html`, plus every `--name` read by a `nocturne.css` rule whose selector
 matches a class the page uses. Assert each is declared under `body[data-theme="light"]` or is on the
-`--font-*` / `--space-*` / `--radius-*` exception list.
+`--font-*` / `--space-*` / `--radius-*` / `--mono` exception list.
+
+**The `Treko.dc.html` half of that set, measured on this branch at `16faaa4`** — distinct names
+inside a `var(--…)` in `Treko.dc.html`:
+
+| Group | Count | Covered by |
+|---|---|---|
+| Status hues, `Treko.dc.html:21` | 8 | light block — §D3's "8 status" |
+| Chrome tokens, `Treko.dc.html:22` | 8 | light block — §D3's "8 chrome" (§D2) |
+| Nocturne colour tokens | 21 | light block — within §D3's "33 nocturne" |
+| `--shadow-sm` | 1 | light block — one of §D3's 2 shadows |
+| `--font-heading` | 1 | exception list, via `--font-*` |
+| `--mono` | 1 | exception list, by literal name |
+| **Total** | **40** | 38 declared + 2 excepted, 0 uncovered |
+
+`--mono` was the only uncovered name, which is what the task 3 gate recorded and what this
+revision fixes.
+
+**What this table does not establish.** It measures only the `var()` calls written in
+`Treko.dc.html`. The criterion's *other* source — properties read by a `nocturne.css` rule whose
+selector matches a class the page uses — was **not** enumerated here, so the 12 properties in
+§D3's 33 that no local `var()` reaches are unverified by this table. Enumerating that second
+source is the coverage test's job, not this table's; a green run of the test, not this row count,
+is what discharges criterion 4.
 
 Needs the falsification step before its first green run: break one override, see the coverage test
 fire. A "0 failures" from a check that has never been shown able to fail is not evidence.
@@ -972,7 +1179,9 @@ rendering the page for real and reading resolved styles, never inferring them fr
 3. In-page: `localStorage.setItem('taskTracker.theme','light')`, then reload, so `data-theme` is
    applied exactly the way `applyTheme` / `componentDidMount` apply it — never simulated by setting
    the attribute directly.
-4. After mount, walk every element under `<body>` with non-zero rendered area. For each, read
+4. After mount, walk every element under `<body>` with non-zero rendered area **that paints a mark
+   in its own `color`** (criterion 5's definition: a non-whitespace direct child text node, or a
+   `::before`/`::after` `content` other than `none`/`normal`/`""`). For each, read
    `getComputedStyle(el).color`, then resolve its effective background by walking from `el` up
    through its ancestors for the first non-transparent `getComputedStyle(ancestor).backgroundColor`,
    alpha-compositing any translucent layer crossed on the way. `body{background:var(--color-bg)}`
@@ -995,8 +1204,895 @@ pass. A "0 failures" from a check that has never been shown able to fail is not 
 bytes captured in task 1. Report the diff, not just a boolean — a failure here is someone editing a
 region they were told not to, and the reviewer needs to see what they changed.
 
-### Task 10 — the suite
+### Task 3 red half — criterion 7 added, a Chrome blocker, and its cause (2026-08-24)
 
-`python3 -m pytest treko/` at HEAD, node-ID set diffed against task 1's 221. Report per-module counts
-and the diff of the two sets, not the totals: a total can stay level while a node is lost and another
-gained.
+Criterion 7's tests were added to `treko/test_theme.py` (the original task-3 brief said "4, 5 and
+6", copied from this task's pre-revision text). The file went from 3 collected tests to **14**:
+9 parametrised corrupt-stored-theme cases, a reload-persistence case, and an
+unavailable-`localStorage` case installed via a new `Chrome.add_startup_script` (CDP
+`Page.addScriptToEvaluateOnNewDocument`) so the poison is in place before the page's seed runs.
+
+**First run: `python3 -m pytest treko/test_theme.py` → 14 failed in 230.56s.** Red was not the
+whole claim, because only 3 of the 14 were red for the reason they state: criterion 4 (static,
+39 non-exempt reachable tokens, no light block), criterion 6 (static, no light block so no
+`--shadow-sm`/`--shadow-lg` override), and criterion 7 `[Dark]`. The other 11 died on the
+harness — Chrome never started — so their failure proved nothing about the page.
+
+**The blocker, and its cause.** Every CDP test failed at "chrome never reported a page target on
+the devtools endpoint": the process stayed alive, never bound its `--remote-debugging-port`,
+never wrote a `DevToolsActivePort`, and printed nothing. Identical under `--headless=new`,
+`--headless=old`, bare `--headless`, and with `--no-sandbox`. Ruled out first: the tool sandbox
+(same failure with it disabled), orphaned Chrome processes (none), the version pin (`Google
+Chrome 151.0.7922.172`, exactly the pinned build, and its assert never fires), and the Claude
+Chrome extension (the harness launches its own process with its own `--user-data-dir`).
+
+None of those was the cause. `sample` on the hung process parked **2612 of 2612 main-thread
+frames** in this stack:
+
+```
+-[NSFileManager ubiquityIdentityToken] → LBCopyUbiquityAccountToken (CloudDocs)
+  → +[BRAccount _refreshCurrentLoggedInAccountForcingRefresh:personaID:error:]
+  → __NSXPCCONNECTION_IS_WAITING_FOR_A_SYNCHRONOUS_REPLY__ → mach_msg2_trap
+```
+
+Chrome's browser process asks macOS which iCloud Drive account is signed in, **synchronously**,
+over XPC to the launchd agent `com.apple.bird` — and on this machine bird is crash-looping.
+`launchctl print gui/$UID/com.apple.bird` reported `runs = 48`, `successive crashes = 48`,
+`state = spawn scheduled`, `minimum runtime = 1200`; the crash reports show `EXC_BREAKPOINT`
+inside CloudKit's `-[NSXPCEncoder _encodeObject:]`, recurring all day. launchd therefore queues
+Chrome's message for a service that never comes up, and Chrome blocks *before* the DevTools HTTP
+handler binds. `launchctl kickstart -k` does not clear it — the call itself blocks, and `runs`
+stayed at 48 with no new crash report.
+
+**This is not a Chrome fault and not a harness defect.** A standalone stdlib-only Python program
+calling `-[NSFileManager ubiquityIdentityToken]` and nothing else hangs identically (no reply in
+10s), which is what rules Chrome out. Measured on macOS 26.5.2 (25F84).
+
+**The escape hatch.** `TREKO_CHROME_DENY_BIRD=1` relaunches Chrome under `sandbox-exec` with
+`^com\.apple\.bird` denied (`treko/cdp_harness.py`, `BIRD_DENY_PROFILE`); the lookup then fails
+and the call returns nil in 0s instead of hanging. It is opt-in rather than an automatic retry
+on purpose — a silent relaunch under a weakened sandbox would let a genuine Chrome fault look
+like a pass. macOS forbids nesting seatbelt profiles, so Chrome cannot initialise its own child
+sandbox inside ours; `--no-sandbox` is therefore required and is added **only** on that path,
+which is acceptable here and nowhere else because the harness renders a local `file://` page out
+of this repo, headless, in a throwaway profile, killed at teardown. The machine-side fix (stop
+bird crash-looping) is owed separately and is not this branch's to make.
+
+**Second run, with the hatch: `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/test_theme.py`
+→ 14 failed in 17.51s, and all 14 are now red for their own stated reason** — the 2 static tests
+plus all 12 CDP tests, every CDP failure reporting `got None` against the missing `data-theme`
+(the 11 that had died on the harness, and criterion 7 `[Dark]`, which had attached once), with no
+harness error anywhere in the run. What this proves is that the suite is **falsifiable**: it can
+execute and fail for the documented reason. It does not prove the suite is **satisfiable** —
+that these tests go green against a correct light theme — and that half stays unproven until
+task 3's second half lands.
+
+**The criterion 4 exemption count also changed here**, and the two figures in this document count
+different source sets rather than disagreeing. Measured by running `test_theme._reachable_tokens()`
+at this HEAD, not reasoned about: the **union** of both of criterion 4's sources reaches 46 names,
+of which 7 are exempt, leaving **39** non-exempt — the number the test reports. `Treko.dc.html`
+**alone** reaches **40**, of which 2 are exempt (`--font-heading`, `--mono`), leaving **38** — the
+non-exempt subset of the 40-name table above. So 39 is one larger than **38**, not one larger than
+40, because the second source contributes exactly one further non-exempt name: `--color-text`.
+Do not "correct" either number to match the other.
+
+The 848-visible-elements figure measured while writing `16faaa4` is recorded at
+`treko/test_theme.py:305` and `:353`, not in this document. (There is no §"Criterion 5" here to
+cite: Proof C is criterion 5's *plan* and records no run.)
+
+Task 3's red half is **verified red** as of the second run above. It is still **not signed off**
+as complete: the second half — the light block, `THEME_DEFAULT`, the validated seed,
+`applyTheme`/`setTheme` and the mount call — is unwritten.
+
+### Task 3 second half — the light block lands, criterion 5 escalates (2026-08-24)
+
+`af5321a`. `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/test_theme.py` → **13 passed,
+1 failed in 17.38s**. Criterion 4 passes with **51** properties declared under
+`body[data-theme="light"]` and all **39** non-exempt `var()`-reachable tokens covered (re-derived
+by running `test_theme._reachable_tokens()` at this HEAD, not copied); criterion 6 passes with
+`--shadow-sm` and `--shadow-lg` overridden, no dark ring hex in either, and `--shadow-md` absent;
+all 11 criterion-7 cases pass. No test file was touched in that commit.
+
+**Criterion 5 was unsatisfiable as originally worded, and the criterion was narrowed rather than
+the palette bent to it.** What the measurement showed, in the order it was taken:
+
+| Measurement | Result |
+|---|---|
+| Light, original wording | 205 violations of 848 elements |
+| **Dark, untouched page, same check** | **196** of 848 — pre-existing, not caused by this card |
+| Light, narrowed to elements that paint | **127** of 367 |
+| Dark, narrowed | 104 of 367 |
+
+Nine of the original 205 were 7×7px decorative dots (`Treko.dc.html:251`) that inherit
+`--color-neutral-200` and render only a background disc. Solved numerically: clearing 4.5:1
+against their four status-colour grounds needs a foreground of **249..255**, while the token's 59
+other uses need it near-black — so **no palette assignment satisfied the criterion**. That is a
+defect in the criterion's population, not in the palette, which is why criterion 5 and Proof C
+now score only elements that paint a mark in their own `color`. The `::before`/`::after` arm
+keeps icon fonts in scope: **25** Phosphor `<i>` elements have no text node but do paint a glyph,
+and they are still measured.
+
+**The remaining 127 are real and belong to task 4.** A trial darkening of the four offending
+tokens was run against the live render rather than reasoned about, and it is recorded here
+because its *failure* is the useful part: it took the unnarrowed count 205 → **40**, not → 9.
+`--color-accent` turns out to be a background under `--color-text` as well as a foreground, so
+darkening it created 28 new violations at 3.33, and three tokens solved to exactly 4.50 with no
+margin. Task 4 must re-derive against the render; the trial values are not a starting point.
+
+### Task 4 — the re-tint and the contrast pass (2026-08-24)
+
+`4adfda4`. One commit, `:root` and the light block only; 4 lines out, 9 in, **zero inline `style`
+attributes changed** — criterion 8 holds, and criterion 3 stops holding here exactly as it was
+designed to. `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/test_theme.py` → **14 passed in
+17.64s**, criterion 5 green for the first time with no edit to the assertion, the floors or
+`paintsText`. Full suite → **235 passed in 138.13s**, against the 234-passed/1-failed baseline.
+
+**Criterion 5, re-derived against the live render rather than reasoned from task 3's numbers.**
+The walk is `test_theme.CONTRAST_CHECK_JS`'s own helpers, re-used verbatim by the diagnostic so
+the two agree by construction rather than by copy.
+
+| | before (`dd0c0d7`) | after (`4adfda4`) |
+|---|---|---|
+| painted elements scored | 367 | 367 |
+| distinct (fg, bg, floor) pairs | 47 | 47 |
+| **violations** | **127** | **0** |
+| worst pair in the whole render | 1.64 | 4.66 — `--ok` on `--ok-bg`, untouched by this commit |
+
+**The values, and why the ramp moved and not just four tokens.** Fixing `--color-neutral-600`
+alone lands it darker than `--color-neutral-500`, inverting the light ramp (100 darkest → 900
+lightest). So the ink ramp was re-spaced in OKLab, holding `--color-neutral-300` as the anchor and
+`--color-neutral-700` at its contrast ceiling; darkening was done in OKLCH so hue and chroma
+survived the move. White contrast now falls monotonically **18.04 · 14.28 · 10.26 · 8.54 · 7.17 ·
+5.95 · 4.80** across 100→700.
+
+| token | before | after | worst real ground, after |
+|---|---|---|---|
+| `--color-neutral-400` | `#4e5468` | `#464c5f` | 7.37 on `--rail` |
+| `--color-neutral-500` | `#646a80` | `#51576c` | 6.18 on `--rail` |
+| `--color-neutral-600` | `#7d8398` | `#5e6377` | **4.84** on hover-over-rail (was 3.06) |
+| `--color-neutral-700` | `#c6cad8` | `#6e727e` | **4.80** on white (was 1.64) |
+| `--color-accent` / `-500` | `#0e93b2` | `#007492` | **4.81** on `--color-accent-900` (was 3.23) |
+| `--color-accent-300` | `#0d7d99` | `#006d88` | **4.82** on hover-over-rail (was 3.87) |
+
+Six light tokens moved; the **four that were failing** now clear at **4.80–4.84**, not at a
+bare 4.50 — the no-margin outcome task 3's trial is recorded to warn about. The other two
+(`--color-neutral-400`, `--color-neutral-500`) were already passing and moved only to keep the
+re-spaced ramp monotonic.
+
+**The inherited accent-as-background warning did not survive re-checking, and that is the finding
+worth keeping.** Task 3 recorded that darkening `--color-accent` created 28 new violations at 3.33
+because it is also a background under `--color-text`. Checked before acting on it: the render's
+full 47-pair table contains **no accent background and no light foreground at all**, so those 28
+came from elements that paint no mark and left the population when criterion 5 was narrowed. The
+only accent-as-ground pair that exists is `--color-accent` *text* on `--color-accent-900`
+(`Treko.dc.html:199`), which the darkening improves. The warning was true of the population it was
+measured on and false of this one; it was neither obeyed nor deleted.
+
+**Known limits, stated rather than left to be discovered.**
+- The new `--color-neutral-700` clears 4.5 on white, the only ground it lands on today, but reads
+  **3.89** on the hover-over-rail ground. Making it robust there would collapse it onto
+  `--color-neutral-600`. Criterion 5 is a rendered check, so this is compliant — but a later
+  layout that puts the `—` placeholder on the rail re-opens it.
+- `--color-accent-400` `#1298b8` remains *lighter* than `--color-accent-500`, a pre-existing
+  inversion in the light accent ramp. Nothing paints it, so no measurement backs changing it; left
+  alone rather than swept into this diff.
+
+**Dark mode, same narrowed check: 104 → 18 violations**, measured on the same 367 elements. A side
+effect of the lifted greys in the re-tint, not a goal of this task. Recorded so the number does not
+drift unrecorded — it is **not** a claim that dark passes, and criterion 5 remains light-only by
+its own wording.
+
+**The three value decisions were the user's, asked before any value was picked**, as this task's
+entry required: the re-spaced ramp over minimum churn; a 4.8 target over 4.5; and yes to the one
+unavoidable visual consequence — the em-dash no-PR placeholder (18 spans, `Treko.dc.html:322` and
+`:573`) stops being invisible at 1.64:1 and becomes a legible mid-grey at 4.80:1. Re-routing those
+elements to a different token would have edited markup, which criterion 8 forbids in this commit.
+
+### Task 5 red half — the sidebar's tests (2026-08-24)
+
+`treko/test_sidebar.py`, 10 tests: **8 failed, 2 passed in 12.04s**, and every one of the 8 fails on
+its own assertion with a diagnostic message — none errored in setup, timed out, or died in the
+harness. The 3 drag tests fail on "no element with `cursor:col-resize` exists in the DOM"; the 4
+mount-seed tests fail on the sidebar rendering 236 where a stored width should have been honoured or
+clamped; `test_no_handle_while_collapsed` fails on finding 0 handles while *expanded*, which is the
+paired precondition that stops it passing vacuously.
+
+The 2 that pass are the source guard for criterion 11's last clause and its own falsification test —
+see below. They guard something unchanged, so passing is the correct state.
+
+**Seven of the nine Gherkin scenarios are covered at runtime. The other two are not, and neither is
+quietly dropped.**
+
+**"The pre-data state is untouched" is a source assertion, because the value is unobservable.**
+`mainML` is consumed at exactly two sites, `Treko.dc.html:100` and `:301`, and both sit inside
+`<sc-if value="{{ ready }}">` (opens `:56`); `renderVals()` returns `ready:false` whenever `!data`.
+So in the precise state the scenario describes, no element carrying `mainML` renders at all — there
+is no node to read the value from, before this task or after it. This is not a fallback: criterion
+11's wording is itself a claim about the source (*"`Treko.dc.html:514`'s `mainML:'0px'` is
+unchanged"*), so a source check is the faithful test. It anchors on the `if(!data)return
+{ready:false,` early-return text rather than on a line number — `:514` is a base-commit number, it
+is `:543` today, and tasks 6-7 will move it again. **Falsified before its pass was believed**, all
+four cases run against mutated text with the real file never touched: the unmodified control returns
+true; `mainML:'236px'` is rejected; `mainML:S.sideW+'px'` is rejected; deleting the clause entirely
+is rejected. **What it does not prove:** that the pre-data branch *renders* correctly — nothing in
+this file covers that.
+
+**"Reset returns 236" is owed at task 7, and is stated as owed in the test file itself.** `resetSideW`
+ships in task 5 because §D4 places it there, but its only caller is the drawer's Layout Reset button
+(§D5), which does not exist until task 7 — and no global handle to the mounted component exists to
+invoke it through (checked: no `window.__DC*`, nothing exposed in `support.js`). So **criterion 11's
+Reset clause is not proven by task 5**, and task 7 owes both the button and its test. The deferral is
+written into `test_sidebar.py`'s module docstring so the reader who arrives at task 7 knows they are
+the one who owes it, rather than it living only in a report read once.
+
+**Size.** 578 lines, against the 400-line preference and the 800-line maximum — in family with
+`test_theme.py`'s 549. It has a real seam (the 5 drag-interaction tests against the 5 mount-time and
+source tests), but `_MEASURE_LAYOUT_JS`, `SIDE_W_MIN`/`MAX`/`DEFAULT` and `SIDEW_KEY` are used by
+both halves, so splitting it would mean a third shared module for a file already under the maximum.
+Left whole, deliberately.
+
+### Task 5 green half — the sidebar lands, and two measurement bugs it exposed (2026-08-24)
+
+Implementation in `227e355`, all six §D4 substitutions; the test-harness repair in the commit after
+it. `treko/test_sidebar.py`: **10 passed in 12.73s.** `wc -l treko/Treko.dc.html` is **682**, under
+criterion 19's 800.
+
+**The first run against the implementation was 8 passed / 2 failed, and neither failure was a
+defect in the page.** Both were defects in how the test measured it, and they were two independent
+bugs that produced one symptom — `margin-left` reading a number that was neither the old value nor
+the new one. Recording both, because each is a trap the next task will walk into.
+
+**Bug 1 — `getComputedStyle` returns the in-flight value during a transition.** `Treko.dc.html:101`
+carries `transition:margin-left .18s ease`. Sampled against a real build immediately after clicking
+collapse:
+
+| t | `sidebarWidth` | `mainMarginLeft` |
+|---|---|---|
+| 0 ms | 56 | `236px` |
+| 60 ms | 56 | `150.886px` |
+| 120 ms | 56 | `76.863px` |
+| 200 ms | 56 | **`56px`** — settled |
+
+The page animates `0px → 236px` on mount too, so even the first read after `_wait_for_mount` is
+mid-flight. The fix polls until two consecutive reads agree rather than sleeping a fixed interval —
+a fixed sleep is flaky under load and would encode `.18s` in a second place. It waits for the value
+to stop moving and then asserts the same number as before, so a wrong width still fails; that was
+confirmed, not assumed, by temporarily asserting `'99px'` against a settled `'300px'` and against a
+settled `'56px'` and watching both fail.
+
+**Bug 2 — the "main column" selector matched 13 elements, and used the wrong one.** It identified
+the main column as the first element whose `style` attribute *starts with* `margin-left:`. On the
+mounted board that predicate is true of **13** elements: the collapse toggle at `:80`
+(`margin-left:auto`), eleven `margin-left:auto` count/label spans, and the real main column. The
+`if (!mainCol)` guard locked onto the first — the collapse toggle — whose flex `auto` margin
+genuinely shifts when the sidebar widens, which is exactly why the reading looked like a stuck
+transition rather than an obviously wrong element. Narrowed by additionally requiring
+`transition-property` to contain `margin-left`, which only the real main column carries; re-measured
+on the live render, that predicate matches **exactly 1** element.
+
+The two bugs masked each other: bug 2 governs the expanded/drag cases, bug 1 the collapsed case, and
+the first diagnosis found only bug 1 because the collapsed tree has no `margin-left:auto` toggle in
+it to collide with.
+
+`Treko.dc.html:302`'s `transition:left .18s ease` on the agent panel needs no equivalent treatment —
+no test in this file reads that element's `left`.
+
+**Still owed by criterion 11: the Reset clause.** `resetSideW` ships in task 5 per §D4, but its only
+caller is the drawer's Layout Reset button. **Task 7 owes the button and its test.**
+
+### Task 6 red half — the drawer shell's tests (2026-08-24)
+
+`treko/test_drawer.py`, **9 tests: 6 red, 3 green by design.** Measured, not assumed:
+`6 failed, 3 passed in 15.68s`. Suite baseline immediately before, re-run on this checkout at
+`f2fdf6b`: **270 passed in 191.31s** — the figure the green half is diffed against.
+
+All six failures land on their own assertion with a diagnostic message. None errored in setup,
+timed out, or died in the harness — the difference between a red test and a broken one. The four
+runtime tests fail identically and honestly at the first thing that is missing, `expected exactly
+one element with title='Settings' (the gear, §D7), found 0`; the two source tests fail on what
+they measure (`found 3` Escape arms, not 4; `found 0` gear markers).
+
+**The probe's own control is already measured, and it is the reason these are worth trusting.**
+Criterion 14 forbids a DOM `id` in the drawer, so the scrim cannot be found by selector. It is
+located instead by the one property §D5 gives it that nothing else on this page has —
+`position:fixed` covering the full viewport. That could silently match some pre-existing element
+and pass for the wrong reason, which is exactly the failure task 5's "main column" selector hit.
+So `_open_drawer` asserts `count == 0` **before** clicking the gear, and on the live render that
+assertion **passed** (the failure came one line later, at the gear). The selector matches nothing
+on today's page: confirmed against the browser, not reasoned about.
+
+**Falsifiable and confirmed falsifiable.** The two source oracles are the things most able to be
+quietly wrong, so each ships with a mutation test that passes today:
+
+| Oracle | Mutations run against an in-memory copy | Result |
+|---|---|---|
+| `_esc_arms` (the chain parser) | drawer arm **appended** instead of prepended; first two arms **swapped**; an arm's **body** changed | all three detected |
+| the `id="…"` counter | an eighth, non-`sec-` id inserted | detected (8 ids, `settings-panel` reported) |
+
+The parser is a parser rather than a regex over raw text on purpose. Prepending an arm necessarily
+rewrites the old first arm's leading keyword from `if` to `else if`; a raw-text comparison would
+fail on that keyword and would be testing the chain's punctuation instead of its arms. Criterion 12
+names conditions, bodies and order, so those are what is compared. The three base arms are pinned
+from `git show a5a66a75…:treko/Treko.dc.html`, not retyped from this card, and were confirmed
+byte-identical at `f2fdf6b`.
+
+**The negative clause carries its own falsifier inside the test.** "Does not close on a click
+inside the panel" cannot be proven by polling until something happens, so it watches for 1.0s and
+requires the drawer open in every reading. That alone would also pass against a page where nothing
+ever closes the drawer — so the same test then clicks the scrim and requires the close to be
+observed within a window of the same length. The click is dispatched with `bubbles: true`
+deliberately: a non-bubbling click would satisfy the clause for the wrong reason, never reaching
+the scrim listener that §D5's `stopEvt` exists to stop.
+
+**What the red half does not prove — falsifiable is not satisfiable.** All four runtime tests fail
+at the same early assertion, so none of them has yet been observed getting past it. Nothing here
+shows the geometry assertions that follow (right-flush panel, `min(400px,92vw)`, full height,
+scrollable overflow) can *pass* against a correct implementation; only the green half can show
+that, and a geometry assertion that turns out to be unsatisfiable is a defect in this file, not in
+the page. Recorded now so a green run is read as evidence rather than as confirmation.
+
+**Deliberately not covered here, and owed by name:** criterion 13 (the Layout readout) and
+criterion 11's Reset clause both need the Layout *section*, and criterion 7's "Dark card selected"
+clause needs Appearance — all three are **task 7**, and all three are already recorded as owed in
+`test_sidebar.py`'s docstring and in this card. Task 6 is the shell only.
+
+### Task 6 green half — the drawer shell lands, and a stale falsifier it exposed (2026-08-24)
+
+Five edits to `Treko.dc.html`, all **outside** the fenced slice, and `wc -l` **682 → 699** (under
+criterion 19's 800). Suite after: **278 passed, 1 failed in 173.36s** — 270 baseline plus this
+task's 9. The one failure is named below and is a defect in the test file, not in the page.
+
+| # | Edit | Where | Why there |
+|---|---|---|---|
+| 1 | the gear `<button>` | after the `cmdCopies` `sc-for`, rightmost in the header | §D7 — static, like the Agent button; `cmdButtons`' ids live inside the fence |
+| 2 | scrim + panel + header row | sibling of the agent panel, inside `<sc-if ready>` | the only state whose props carry `settingsOpen` |
+| 3 | the prepended Esc arm | `this._key`'s `Escape` branch | §D6 — a modal overlay is dismissed before field-level Esc |
+| 4 | `settingsOpen:false` | the state seed | no stored key: the drawer never reopens itself across a reload |
+| 5 | `settingsOpen`/`openSettings`/`closeSettings` | the ready return | `openSettings` carries no `artPathDraft`/`artSaved` — §D9 omits Artifacts, so there is no draft to seed |
+
+**The four runtime tests are now satisfiable, which the red half explicitly could not show.** All
+four had failed at the same early assertion, so nothing proved the geometry checks after it could
+ever pass. They pass now against the real render: the panel is flush with the right edge, its width
+is `min(400px, 92vw)`, its height is the full viewport, and its `overflow-y` is scrollable. The
+scrollbar hazard that could have made `panel.right == window.innerWidth` unsatisfiable did not
+materialise on this build — measured, not assumed.
+
+**The one failure: `test_esc_arm_parser_is_falsifiable`, a stale fixture.** It builds its "appended
+instead of prepended" mutation by duplicating the drawer arm onto the *live* page text. That
+constructed the intended scenario while the page had three arms; now that the page has four, the
+mutation yields five and the first arm is legitimately `settingsOpen`, so the mutation no longer
+builds the case it was written to detect. The parser is not wrong — the same file's
+`test_criterion12_the_esc_arm_is_prepended_and_the_others_are_undisturbed` passes against the real
+page, confirming exactly four arms, the drawer's first, and the three base arms byte-intact.
+
+The repair is to derive all three mutations from a **fixed three-arm base string** rather than from
+the live page, so the falsifier keeps testing the parser instead of drifting with whatever the page
+currently is. It lands as its own test-only commit — the same separation `f2fdf6b` used for task 5's
+two measurement bugs.
+
+### Task 6 repair — the falsifier that drifted with the page (2026-08-24)
+
+Test-only. Suite after: **279 passed in 160.31s** — 270 baseline plus this task's 9, zero
+failures, zero regressions in `test_theme`, `test_guards`, `test_sidebar` or `test_ui_commands`.
+
+`test_esc_arm_parser_is_falsifiable` now builds every case from `BASE_ESC_ARMS` through a new
+`_chain_from_arms` builder rather than by editing the live page text, and a round-trip assertion
+(`_esc_arms(_chain_from_arms(BASE_ESC_ARMS)) == BASE_ESC_ARMS`) ties the builder and the parser
+together so a bug in either is reported instead of cancelling out. It also gained a
+**satisfiability** case — a correctly prepended chain must *pass* the checks — because a check
+proven able to fail is not thereby proven able to pass.
+
+**The round-trip guard was doing too much of the work, and that was measured rather than assumed.**
+The first probe ran three broken parsers; all three were caught, but two of them tripped the
+round-trip assertion, so the mutation cases themselves had still never been shown to catch
+anything. Three more parsers were written specifically to **survive** the round trip — each
+correct on the three base arms, each blind to exactly one thing the mutations test. All six are
+caught, each of the last three by its intended case, with the real parser passing as the control:
+
+| Broken parser | Survives round trip | Caught by |
+|---|---|---|
+| always returns the base arms | no | the satisfiability case (3 arms, not 4) |
+| drops every arm after the first | no | round trip |
+| ignores bodies (condition only) | no | round trip |
+| hoists any `settingsOpen` arm to the front | **yes** | falsifiable 1 — appended read as prepended |
+| re-sorts a permutation of the base arms back to canonical order | **yes** | falsifiable 2 — reorder undetected |
+| substitutes the base body for any condition it recognises | **yes** | falsifiable 3 — changed body undetected |
+
+0 of 6 missed. The probe is a throwaway that monkeypatches `_esc_arms` in memory; the file on disk
+was never edited by it, and the falsifier that ships is the one in the test module.
+
+**The lesson, stated once so task 7 does not repeat it.** The original mutation was correct when
+written and wrong three commits later, because it derived its "before" state from the artefact
+under test. A falsifier must be anchored to something the implementation cannot move.
+
+### Task 7 red half — the sections' tests, and a Chrome the machine moved (2026-08-24)
+
+**A new file, `treko/test_drawer_sections.py`, not an addition to `test_drawer.py`.** That file is
+594 lines at `3474a91`; task 7's tests are ~350 more, which would put it past
+`rules/core-conduct.md`'s 800-line ceiling. The shell and its sections are separable subjects, and
+the only thing the new file borrows is `_open_drawer` / `_probe`, imported rather than copied.
+
+**The Chrome pin broke first, and it hid the red half.** The first run of the new tests reported
+12 failures that had nothing to do with the page: Chrome had auto-updated at 15:04 local, and
+`cdp_harness.Chrome.__init__` asserts the pin before it launches. Measured on the whole suite at
+that moment: **36 failed, 257 passed** — 24 of the 36 were tests that were green at `3474a91`.
+None of them reached a page, so *"red for its own stated reason" was unproven, not proven*, and it
+would have been easy to read the version assert as evidence the sections were missing. The re-pin
+and its safety argument are in §"Pinned versions"; the commit is `54c84e1`.
+
+**After the re-pin, the red half is red for its own reasons.** Full suite: **12 failed, 281
+passed, 167.27s**, with **0 deselected / skipped / xfailed / errors** and **0 failures outside the
+new file** — 293 collected against the 279 at `3474a91`, so the 2 new passes are the two tests that
+pass by design and every previously-green test survived the Chrome move, including all 24
+browser-driven ones. The 12 failures read:
+
+| Node | Fails on |
+|---|---|
+| `…criterion7_appearance_selection_follows_the_validated_theme` (6 params) | `expected exactly one \`i.ph-moon\` glyph in the open drawer … found 0` |
+| `…appearance_cards_switch_the_theme_both_ways` | the same missing glyph |
+| `…criterion13_layout_readout_reads_the_stored_width` (2 params) | `expected exactly one \`<n>px\` readout inside the drawer panel … found 0` |
+| `…criterion13_readout_follows_state_without_reopening` | the same missing readout |
+| `…criterion11_reset_returns_the_default_in_the_dom_and_in_storage` | `expected exactly one Reset button inside the drawer panel … found 0` |
+| `…criterion2_dark_literals_live_only_in_root_and_the_preview_cards` | the exemption marker comments do not exist |
+
+The two that pass by design are `…criterion2_checker_is_falsifiable_and_satisfiable` and
+`…d9_no_artifacts_section_was_ported`.
+
+**Preconditions that passed, and are worth naming.** Criterion 7's six cases each asserted
+`data-theme` *before* reaching the selection assertions, and all six were already correct — the
+seed §D3 landed in task 3 holds under Chrome 152 too. Criterion 11's 300px precondition also
+passed, so its later reading of 236px will mean Reset acted rather than that the page never moved.
+
+**Criterion 2 gained its first test here, beyond the three criteria this task was scoped to.**
+It had **zero** tests anywhere in the suite (measured: no test file mentions either literal), and
+task 7 is the commit that can make it false, because §D2 keeps the preview cards' literals
+deliberately. The checker requires `criterion-2-exempt:start` / `criterion-2-exempt:end` HTML
+comments bracketing the two cards, which is what turns §D2's "say so in a comment" into something
+enforceable. It also rejects a region widened to swallow the scrim, and a region that does not
+contain both `ph-moon` and `ph-sun` — a marker pair with no cards in it is not an exemption.
+
+**Measured while writing it, and load-bearing:** the page carries **two** `:root{` rules — `:21`
+(the eight status hues plus `--mono`) and `:27` (§D2's eight tokens) — so "the `:root`
+declarations" is a plural span, not one line. An earlier draft asserted exactly one and failed on
+the page for that reason rather than for the missing exemption. All 8 literal occurrences are on
+`:27` today; `:21` has none.
+
+**Also checked before writing the green half, so it is not discovered mid-implementation:** every
+custom property the new markup will read — `--color-divider`, `--color-neutral-400/600/700`,
+`--color-accent`, `--color-accent-300`, `--color-accent-900` — is already declared in the light
+block, and `--mono` is criterion 4's named exception. The sections cannot break criterion 4.
+
+**What this red half does not prove.** That the sections look right in either theme, and that the
+drawer's own contents pass criterion 5 — criterion 5 measures the page at mount, where the drawer
+is closed, so nothing here or there scores the open drawer. Task 9 eyeballs it and records it as
+eyeballed. §D9's absence check asserts the prototype's five `art*` names are gone; it cannot prove
+nobody adds an unrelated third section later.
+
+### Task 7 green half — the two sections land, and two bugs the landing exposed (2026-08-24)
+
+**The change.** Two pure insertions into `Treko.dc.html`, zero deletions and zero modified lines:
+`+331,34` (the Appearance grid, the divider and the Layout row, inside the drawer panel) and
+`+713,7` (`setDark` / `setLight` and §D5's six ternaries, beside `settingsOpen`). `wc -l` 699 →
+740, well under criterion 19's 800. Both hunks are outside the fenced slice (`:365-458` before
+this change), which is why criterion 15's guard is untouched — verified from the diff's own hunk
+headers, not assumed from where the edits were aimed.
+
+**Bug 1 — the exemption that excluded itself (implementation).** The `criterion-2-exempt:start`
+marker comment quoted the two literals it was exempting. The exempt region begins *after* the
+opening comment ends, so the comment's own text sat outside its own exemption and the checker
+correctly flagged line 337 for both literals. Fixed by naming them in words — "the dark rail hex
+and the white-alpha hairline/hover values" — with a sentence in the comment saying why it does not
+quote them. A checker that scans raw text cannot tell a rendered literal from a documented one,
+and widening it to skip comments would have blinded it to a literal hidden in a commented-out
+style. Narrowing the *comment* was the cheaper correct fix.
+
+**Bug 2 — a measurement bug in this task's own probe (test).** Seven Appearance tests failed on
+`the dark glyph has no bordered ancestor`. The page was right: dumping the real ancestor chain
+showed the card at depth 2 with `borderTopWidth: 1px`, `borderTopColor: rgb(56, 196, 227)` (=
+`--color-accent`) and `background: rgb(16, 56, 69)` (= `--color-accent-900`) — Dark correctly
+selected. `_APPEARANCE_PROBE_JS` set `card: 'ok'` only on its **failure** path and omitted it from
+the success return, so `_assert_cards_found`'s `card is not None` read a *missing key* as a
+*missing border*. Same class as task 5's "main column" bug: the assertion was right and the
+payload was wrong, and the diagnosis came from dumping the real render rather than from reasoning
+about the markup.
+
+**What that bug earned: `test_appearance_assertions_are_falsifiable`.** The defect was inside the
+assertion path, where nothing in a runtime test can separate "the assertion is wrong" from "the
+payload is wrong" — both read as a red test. So the two helpers are now exercised as pure
+functions over built payloads: a correct payload must pass (satisfiability first, or every failure
+case below means nothing), a payload with the key missing must raise `no bordered ancestor`, a
+glyph count of 0 must raise its own message, and both of criterion 7's named failures must
+fire — **neither** card selected, and **both** selected at once. Fixtures are built from a pinned
+token dict, never captured from a render, so they cannot drift with the page (`50e9a32`).
+
+**The suite after both repairs: 294 passed, 205.76s**, with **0 failed** and **0 deselected /
+skipped / xfailed / errors**. 294 = the 279 at `3474a91` plus this file's 15 — 14 written in the
+red half plus `test_appearance_assertions_are_falsifiable`, added by the green half for the reason
+above. A changed total is not a regression (criterion 18); the node-ID set diff that proves nothing
+was *lost* is task 10's, not this one's, and is still owed.
+
+**Criterion 7's third clause is now true by construction and asserted.** §D3 validates the seed
+against `{'dark','light'}` at mount, so `S.theme` is always exactly one of two strings and exactly
+one ternary arm fires. All six parametrized cases pass, including the control (`'light'`, which
+must select the *other* card — without it a hardwired "Dark is always selected" implementation
+would pass every corrupt-input case).
+
+### Task 8 — the regression guards (2026-08-24)
+
+`treko/test_guards.py`, 25 tests, all green. These guard things that must **not** change, so a green
+run proves nothing on its own — every check was falsified before its pass was believed, and the case
+list is recorded here beside the count.
+
+**Criterion 15 — the fence span is three numbers, and the card's is the right one.** At the base
+commit `a5a66a7`, lines **325 and 418 are themselves the START and END marker comments**, so
+criterion 15's `:325-418` names the **marker-inclusive** span. That span is **4851 bytes**, sha256
+`f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136` — re-derived here against both
+the base commit and HEAD, identical at each, so the recorded baseline is confirmed rather than
+copied. Two other spans exist and neither is the criterion's:
+
+| span | bytes | sha256 | what it is |
+|---|---|---|---|
+| marker-inclusive | **4851** | `f0a37389…` | the criterion's span; what the guard pins |
+| marker-exclusive, byte offset | 4728 | `1aa22b5f…` | what `test_ui_commands.py`'s `NODE_BRIDGE.loadHandler` actually `require()`s — it keeps the `\n` after the START marker |
+| marker-exclusive, line-based | 4727 | `5409d62e…` | a line-based cut; drops that same `\n`. Recorded for provenance; asserted by nothing |
+
+The guard pins the inclusive span because it is what the criterion says **and** because it is
+strictly stronger: it also guards the two fence comments, which the node loader needs in order to
+locate the slice at all. The 4728-byte span is kept as an explicitly subsumed secondary assertion.
+The markers sit at `:348-441` on this branch — the test locates them by marker text, never by line
+number, because they have already moved once and tasks 6-7 will move them again.
+
+**Falsifiers, all executed:** a one-byte edit inside the fence — caught; a line added inside the
+fence — caught; `'settings'` appended to `TRACKER_COMMAND_IDS` (Hazard 1's exact scenario) — caught.
+One case came back **differently from the prediction, and is recorded as it happened**: mutating a
+marker comment's own text (`begins` → `starts`) was expected to be caught by the inclusive check and
+missed by the exclusive one. In fact **both** fail, identically and loudly — each locates the fence
+by searching for the literal marker bytes, so a corrupted marker yields `found 0 start / 1 end`
+rather than a digest mismatch. There is no asymmetry between the two spans here. Asserted directly
+via `pytest.raises` rather than left as prose.
+
+**Criterion 16.** `TRACKER_COMMAND_IDS` pinned to exactly `['clear','handoff','reanalyze']`, and
+both `cmdButtons` and `cmdCopies` verified to `.map()` over that one array rather than a second
+list. Falsified with a fourth id and with a renamed id; both caught. **What this does not prove:**
+that the three rows *render* correctly — that is `test_ui_commands.py`'s 11 tests, unchanged here.
+
+**Criterion 17.** No CDN URL in a fetching position in `Treko.dc.html`, `nocturne.css`, or any
+vendored `.css`; `server.CSP` still opens `default-src 'self'`; `STATIC_MANIFEST` measured at **17**
+rows against the live constant, matching the recorded figure.
+
+The scanner was falsified against a 26-case list, not a spot check, and **one real gap was found and
+closed by it**: attribute matching was case-sensitive, so `<LINK HREF="https://…">` and
+`<script SRC="…">` were invisible, as were CSS `URL(` and `@IMPORT`. HTML attribute names and CSS
+function names are both case-insensitive, so this was a genuine hole in a criterion that claims to
+check `src=` and `href=`. Fixed with `re.IGNORECASE`; all four uppercase forms are now permanent
+cases. Re-scanning the real tree after the widening still yields zero hits on every file.
+
+Cases that must fire, and do: protocol-relative `//cdn…` in both `src=` and `url()`; `@import "…";`
+with no `url()` wrapper; `url()` with single quotes and with internal whitespace; `@font-face`
+`src:url(…)`. Cases that must stay silent, and do: `data:` URIs, `#fragment` hrefs, relative paths,
+and bare URLs in CSS or HTML comment prose.
+
+**One behaviour is deliberate, not accidental:** a *commented-out* fetching construct — 
+`/* @import url(https://…); */` — **does** fire. That is correct for a supply-chain guard, which is
+not a renderer; stripping comments would create somewhere to hide one. It is also why the
+`vendor/inter/inter.css:3` false-positive test is meaningful: that line passes because it states its
+upstream URL as **bare prose with no fetching construct around it**, not because comments are
+exempt. A future edit that wraps it in `url()` should, and will, fail.
+
+### Task 13 — the observability judge, and PR #79 (2026-08-24)
+
+**Verdict: `risk=medium`, `confidence=high`**, recorded at HEAD `60cfcf6` in
+`coding-memory/observability-judge/`. Draft PR: **#79**, opened while the verdict was still
+uncommitted so `judge-guard`'s `head_sha == HEAD` check could see it.
+
+**The judge did not take this card's word for anything, and that is the point of the entry.** It
+re-ran the suite itself (294 passed, exit 0), wrote its **own** oracle for Proof A and got the base
+file byte-for-byte, and reproduced the node-ID diff by a *different* route — `git archive` into a
+temp directory rather than a worktree — landing on the same 0 lost / 73 added. It also re-hashed the
+header block and confirmed base `:82-83` and HEAD `:103-104` are identical, so §Task 9's
+"pre-existing, merely made reachable" reading of the 440px title clip is independently correct.
+
+**What it found that this card had not.**
+
+1. **Task 2's tick overstates.** Proof A is a receipt, not a pinned test — see the ⚠️ now attached
+   to task 2 itself. Confirmed here independently: `git grep "ARCHIVED RECEIPT" -- treko/` is empty
+   and `test_guards.py`'s 16 tests cover criteria 15–17 only.
+2. **Stale `Expected RED` docstrings on passing tests.** The judge reported 16; the measured count
+   is **14**, across three files (`test_drawer_sections.py` 3, `test_sidebar.py` 6,
+   `test_theme.py` 5). The number is recorded as measured rather than as relayed. All 14 were
+   genuinely false — one asserts "the Appearance section does not exist" on a test that passes
+   because it does. Swept in the follow-up commit: `Expected RED …` → `Was RED when written. At
+   that commit: …`, prose only, 14 insertions against 14 deletions, no assertion touched.
+3. **Non-text contrast is checked nowhere.** Criterion 5's population is the 367 of 848 elements
+   that paint a mark in their own colour. The judge agrees the narrowing is correct — it read
+   `paintsText()` — but notes the consequence: decorative dots, borders and accent chrome have zero
+   contrast coverage, and a green suite does not disclose that. Not a defect in this card; a
+   scope boundary this card should have named out loud. Named now.
+4. **The stale task-1 digest needs an in-place marker.** The correction lives ~200 lines away in
+   §Task 10; a reader landing on task 1's table sees a digest that looks authoritative.
+
+**On the two things this card asked it to attack:** it judged the eyeballed/measured split honest
+and clearly drawn — with one fair snag, that §Task 9's state table mixes eye-reads and `rgb()`
+measurements in a single column — and judged the two recorded screenshot-read corrections
+*actionable* rather than self-flagellating, each ending in a stated verdict.
+
+**Still owed after this card closes:** the Proof A pin, the 440px title clip, non-text contrast
+coverage, §D8's stale line numbers, and an in-place marker on task 1's digest. The sixth item this
+list carried — a human opening the page, criterion 5's own words — was **closed 2026-08-25**; see
+task 9's entry for what the sign-off does and does not settle.
+
+### Task 9 — launched for real, and what was EYEBALLED (2026-08-24)
+
+Criterion 5 ends "**A human opens it once (task 9) and that is recorded as eyeballed, not
+measured.**" This entry keeps that split honest, and it is the one entry in this card where the
+weaker word is the accurate one.
+
+**How it was driven, and the caveat that comes with it.** `python3 treko/server.py --open` bound
+`127.0.0.1:8422` and opened the board in the machine's own Chrome. The states below were then
+driven over CDP against **that same live server** — real `Input.dispatchMouseEvent` /
+`dispatchKeyEvent`, on the pinned `152.0.7977.54`, never `file://` and never a simulated
+`data-theme`. **The looking was done by the agent from full-resolution screenshots, not by a
+person** — everything below is what the agent saw, plus, where a screenshot was ambiguous, a
+computed-style measurement that settled it. The human sign-off this entry said was owed **was
+given 2026-08-25**, against the user's own `--open` run rather than against this table; the table
+below stands as the agent's record and was not re-validated by that sign-off.
+
+| # | state | what was seen |
+|---|---|---|
+| 1 | dark at mount, nothing stored | `data-theme="dark"`, body `rgb(22,24,38)`. Board legible. |
+| 2 | drawer open, **dark** | panel `rgb(28,30,43)` (`--color-surface`), text `rgb(233,233,237)`. |
+| 3 | drawer open, **light** | panel `rgb(255,255,255)`, text `rgb(27,29,41)`. |
+| 4 | the two preview cards, both themes | each renders the **other** theme's bar — the `criterion-2-exempt` literals doing exactly their job. Selection ring follows the live theme. |
+| 5 | light board at mount | body `rgb(245,246,250)`; nothing washed out, no invisible text found by eye. |
+| 6 | sidebar dragged to 410, then past the max | rail `410px` → clamps at `440px`; long run names that ellipsized at 236 now show in full. |
+| 7 | reload after the drag | `440px` survives, from `taskTracker.sideW` alone. |
+
+**Two screenshot reads were wrong and the measurement corrected them.** Recorded because the
+correction is the useful part, not the conclusion:
+
+1. The dark drawer *looked* white in the downscaled full-page shot. It is not:
+   `getComputedStyle(panel).backgroundColor` is `rgb(28,30,43)` in dark and `rgb(255,255,255)` in
+   light, and a 2× crop of the same PNG agrees with the measurement. **No defect.**
+2. The dark drawer's left edge carries a light 1px ring, which is `--shadow-lg`'s
+   `0 0 0 1px #9397ab` — the divergence ADR 0036 records, seen rather than inferred. Subtle in
+   place; not a defect.
+
+**The Esc chain, all four arms, on the live page — in precedence order.** The card's brief said
+"three states"; the handler has four arms and the fourth is reachable, so all four were driven:
+
+| arm | driven from | result |
+|---|---|---|
+| 1 `settingsOpen` | drawer open | drawer closes |
+| 2 search focused | search holding `treko` | value cleared **and** blurred; `activeElement` → `BODY` |
+| 3 any other `INPUT` | the agent panel's own `Ask about this run…` input | **blurs only — the panel stays open** |
+| 4 `agentOpen` | panel open, nothing focused | panel closes |
+
+Arm 3's only reachable surface on this page is the agent-panel input; the board otherwise has
+exactly **one** `INPUT` (the search box). A first attempt reported arms 3 and 4 as passing when the
+agent panel had in fact never opened — the click missed and the two reads were the closed state
+repeated. They were re-driven through the header's real `Agent` button before being recorded.
+
+**A real theme flip, then a real reload, with nothing seeded.** Earlier states set
+`taskTracker.theme` in a startup script, which proves the seed path and *not* persistence. So:
+first visit with an empty store → `dark`; a genuine click on the drawer's Light card →
+`data-theme="light"` and `taskTracker.theme='light'`; `Page.reload` with **no** startup script →
+still `light`. That is criterion 7's reload claim, seen end to end.
+
+#### Finding — the run title hard-clips mid-glyph at the new maximum width
+
+At `sideW` **440** on a 1440px viewport the header title renders `guard + memsearch pus` — the
+final `h` cut through, with **no ellipsis** — and the run's directory (`~/dev/.claude`) disappears
+entirely while the subtitle wraps to two lines. Confirmed at 2× on the captured PNG, and measured:
+the painted title text ends at x`697.8` while the search input begins at x`697.1`.
+
+**The markup is not this card's.** The header block is byte-identical between the base commit and
+HEAD — base `:82-83` equals HEAD `:103-104` — and the `<h1 style="…white-space:nowrap">` carries no
+`text-overflow:ellipsis`, while the `runDir` span beside it does. Its `overflow:hidden` parent is
+likewise unchanged.
+
+**What this card changed is reachability.** At a fixed 236px sidebar the header never ran out of
+room, so the missing property could not be seen. Drag-to-440 makes the state reachable.
+
+**Not fixed here, deliberately.** It is a one-property change to pre-existing markup, it needs its
+own red test first, and it is outside every criterion this card asserts — a drive-by fix at task 9
+of 13 would widen the branch's scope and put an untested inline-style edit into a page whose
+byte-level guards are the point. Carried as a debt beside the unguarded `taskTracker.resolved`
+`JSON.parse`.
+
+### Task 10 — the suite, and the node-ID set diff
+
+**Suite at HEAD `3c44ee2`: `294 passed in 227.39s`.** Zero `deselected`, `skipped`, `xfailed` or
+`error` in the summary line. Run as `TREKO_CHROME_DENY_BIRD=1 python3 -m pytest treko/`.
+
+**The set diff, which is the actual criterion (18).** Task 1's baseline was re-collected from a
+detached worktree at the base commit rather than trusted from this file, and both sides were
+collected with `--color=no -p no:cacheprovider` and sorted under `LC_ALL=C`:
+
+| | value |
+|---|---|
+| base `a5a66a7` collected | **221** |
+| HEAD `3c44ee2` collected | **294** |
+| **nodes lost** | **0** |
+| nodes added | **73** |
+
+73 = `test_guards.py` 25 + `test_drawer_sections.py` 15 + `test_theme.py` 14 + `test_sidebar.py` 10
++ `test_drawer.py` 9. Every one of the nine baseline modules keeps its exact count:
+`test_server.py` 89, `test_store.py` 30, `test_analyze.py` 26, `test_store_location.py` 21,
+`test_rename.py` 19, `test_ui_commands.py` 15, `test_server_lifetime.py` 10, `test_autolaunch.py`
+10, `test_store_writer.py` 1 — summing to 221. **A changed total is not a regression; a lost node
+is, and there are none.**
+
+**`wc -l treko/Treko.dc.html` = 740**, under the 800 ceiling of criterion 19. Measured, not carried.
+
+##### The recorded baseline hash does not reproduce — and the set diff is why that is survivable
+
+Task 1 records the sorted node-ID set as sha256 `5f03a015…`. **Nine serializations of the same 221
+IDs were tried and none of them produced it**: sorted and collection-order, with and without a
+trailing newline, newline- space- and empty-joined, with and without the `treko/` path prefix, and
+under both a locale sort and a byte sort. The canonical form — byte-sorted, newline-joined, one
+trailing newline — is `8a5ed311d8e2294a81ace9337a61892a1514a9fe54d3d553c3e8ff13f5078a6b`, and
+HEAD's is `b4534b01b3a3950605015802368a4139275675c2e3f3950c11e22b970752cac5`.
+
+Task 1 recorded the digest but never the recipe, so the figure cannot be checked by anyone who did
+not run it. **It is therefore not a usable receipt and this entry does not treat it as one.** The
+guarantee criterion 18 actually asks for is carried by the `comm -23` set difference above, which
+compares the IDs themselves and does not depend on any serialization choice — a stronger check than
+the hash it failed to reproduce. The stale digest is left in task 1 as the historical record it is.
+
+**One methodology error worth keeping.** The first attempt at this diff ran both collections from
+the same directory — a `cd` that did not persist between commands — so both sides collected the
+*base* tree and the diff came back `0 lost, 0 added` from 221 vs 221. It looked like a clean pass.
+It was two measurements of the same thing. The rerun used explicit `--rootdir` and absolute paths.
+
+### Task 1 baseline — recorded, measured on this branch
+
+Everything else in this card is asserted against these. Captured at the base commit, before any
+edit to `treko/`.
+
+| quantity | value |
+|---|---|
+| base commit | `a5a66a75204f334fff09462e931981431b39081a` |
+| `wc -l treko/Treko.dc.html` | **639** |
+| fence `:325-418` | **4851 bytes**, sha256 `f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136` |
+| collected node IDs | **221** |
+| sorted node-ID set | sha256 `5f03a015bd6d7b4e86d5214acf8d3e8c6d83c722b9396ba8af721d276dbbb311` ⚠️ **does not reproduce — see §Task 10** |
+| suite result | **221 passed in 120.36s** |
+
+Per-module counts, so task 10 can diff composition and not merely the total: `test_server.py` 89,
+`test_store.py` 30, `test_analyze.py` 26, `test_store_location.py` 21, `test_rename.py` 19,
+`test_ui_commands.py` 15, `test_server_lifetime.py` 10, `test_autolaunch.py` 10,
+`test_store_writer.py` 1.
+
+⚠️ **The digest in that last row is not a usable receipt.** Task 1 recorded the number but never
+the recipe, and nine serializations of the same 221 IDs fail to reproduce it (§Task 10). The
+canonical byte-sorted form is `8a5ed311…`. The row is left as the historical record it is; what
+carries criterion 18 is the `comm` set difference in §Task 10, not this hash.
+
+**Checked for a hidden deselection, not assumed:** `pytest.ini`, `pyproject.toml`, `setup.cfg`,
+`tox.ini` and both `conftest.py` files carry no `addopts`, and the run reported zero
+`deselected`/`skipped`/`xfailed`/`error`. Collected (221) equals passed (221), so the baseline is
+the whole suite rather than a filtered subset — which matters because every later claim in this
+card is a comparison against that number.
+
+### Proof A — result at the tokenize commit
+
+**PASS — byte-identical.** Verified twice by independent implementations: the implementing agent's
+oracle, and a separate one written by the coordinator that parses the eight declarations out of the
+`:root` rule rather than assuming them, substitutes exact full literal keys longest-name-first, and
+diffs against `git show HEAD:treko/Treko.dc.html`. Per-token replacement counts matched §D2's table
+exactly and summed to 27.
+
+**The oracle was falsified before its pass was believed**, against four known-bad mutations — all
+four fired:
+
+| mutation | why it is in the list |
+|---|---|
+| a declared alpha `.06` → `.07` | the ordinary case: a value that moved |
+| `--hair-3` `.1` → `.12` | the task-4 re-tint leaking in early — the specific mistake §D1 warns about |
+| one `var(--hair-3)` → `var(--hair)` | the prefix-collision case step 4 exists to prevent |
+| a stray DOM edit | task 2's "no DOM change" constraint |
+
+The third is why substitution runs **longest-token-name-first**: `--hair` would otherwise shadow
+`--hair-2` and `--hair-3`. A pass observed without that case in the list would not have meant much.
+
+Suite at this commit: **221 passed, 0 deselected/skipped/xfailed/error**, and the sorted node-ID
+set is **identical** to task 1's — 0 lost, 0 gained, checked as a set diff rather than a total.
+
+---
+
+## Review-phase addendum (2026-08-24) — the citation drift, measured
+
+Three findings from the review pass, each re-measured against the working tree before being
+written here.
+
+**1. The line-number citations in this document have drifted broadly, not only in §D8.**
+The recorded debt named §D8 alone. An audit widened to every `Treko.dc.html:N` citation in the
+file and found roughly twenty distinct stale anchors. Four were re-measured independently:
+
+| Cited | Claimed content | Actually at that line now | Correct line |
+|---|---|---|---|
+| `:319-320` (§D8) | `ls()` / `lsSet()` definitions | agent-panel Send button | **393-394** |
+| `:432` (§D8, ×5, and Risk hazard 5) | the `state={…}` constructor's `ls()` reads | a `TRACKER_ERROR_OUTCOMES` entry | **506** |
+| `:288` | `stopEvt` definition | `</div>` | **709** |
+| `:333` | `TRACKER_COMMAND_IDS` declaration | unrelated markup | **407** |
+| `:81` | sticky-header `color-mix` background | `</div>` | **102** |
+
+Citations paired with the base commit `984e7ac` are **not** stale — they are deliberately
+historical and were checked against `git show 984e7ac:treko/Treko.dc.html`, where they hold.
+
+This is the *audit the surface* pattern rather than another patch round: tasks 5 and 6 each already
+recorded corrected numbers once, and those corrections have themselves since drifted. The durable
+fix is to cite a searchable literal instead of a line number. Left as a debt deliberately — churning
+this document while it is under review costs more than the stale anchors do.
+
+**2. One inherited debt entry was false.** A prior handoff recorded §D8 as citing three locations,
+`:319-320` / `:432` / `:517`, with `:517` to be corrected to `:551`. Verified: neither `517` nor
+`551` occurs anywhere in this file (falsifier: `432` occurs 8 times, so the search was not blind).
+§D8 cites **two** locations, not three. The proposed `:517 → :551` fix corrected a citation that
+does not exist.
+
+**3. Three factual errors in the PR #79 body were corrected in place.** (a) The no-squash banner
+pointed at an ADR 0036 section, §"the tokenize/re-tint split", that does not exist — the real header
+is `## The two-commit split, and the one literal that had to lie for a commit`. (b) "27 hardcoded
+colour values became 8 named variables" describes the tokenize commit, not the shipped file, which
+declares **52 distinct custom properties** across 92 declarations after the re-tint added the accent
+and neutral ramps. (c) The body quoted a docstring marker, "Expected RED", that appears **zero**
+times; the real markers are "Was RED when written" (13) and "Still RED" (1), which is where the
+correct count of 14 comes from.
+
+**Correction to the paragraph above, and to commit `a7124fc`'s message.** That commit asserted
+`treko/` is byte-identical between the verdict commit `60cfcf6` and HEAD. **It is not.** Measured:
+`git diff --stat 60cfcf6 HEAD -- treko/` reports three files changed, 14 insertions and 14
+deletions — `test_drawer_sections.py`, `test_sidebar.py`, `test_theme.py`, all in commit `336983c`.
+The claim was written from a check of the wrong commit pair (`336983c → 73d8be3`, which *is* empty
+for `treko/`) and generalised without re-running it against `60cfcf6`.
+
+What actually changed is docstrings only, and it closes a debt rather than opening one: `336983c`
+swept the 16 docstrings the judge flagged as claiming "Expected RED" on tests that now pass.
+`command grep` finds **zero** occurrences of "Expected RED" today.
+
+**Correction, from the round-2 observability verdict at `303e4ef`.** The sentence that stood here —
+"exactly one present-tense claim survives" — was **wrong**, and it is the third count on this branch
+to come out too narrow, after the "byte-identical" claim above and the `:517 → :551` debt entry. The
+sweep in `336983c` fixed the *per-test* docstrings and missed the rest of the class. Enumerated
+rather than pattern-matched this time, because patching the matched string is what produced three
+short counts:
+
+| Group | Sites | Where |
+|---|---|---|
+| Module-level docstrings still claiming "expected to fail" | **4** | `test_drawer_sections.py:6`, `test_drawer.py:8`, `test_sidebar.py:9`, `test_theme.py:8` |
+| `"Still RED"` on a test that now passes | **1** | `test_theme.py:351` |
+| Assertion **failure messages** claiming the feature was never built | **13** | `command grep -rn "not landed\|not built\|does not exist yet\|never built" treko/*.py` |
+| Surviving present-tense phrase | **1** | `test_sidebar.py:413` |
+| Module docstring scoping clause, "as it exists at this commit" | **3** | `test_drawer.py:5`, `test_sidebar.py:4`, `test_theme.py:5` |
+| **Total** | **22** | — |
+
+`test_server.py:593` ("Every test below is a GET") matches the first pattern and is **not** part of
+the class — it is correct as written. The third group is the damaging one: those strings print only
+on failure, which is exactly when a future regression will be told the feature was never built.
+
+The fifth row was found only after the first four were fixed: each module docstring opened with
+"Written against the page as it exists at this commit", a scoping clause that a reader at HEAD
+reads as a claim about HEAD. It now reads "as it stood at the commit this file was written
+against". **All 22 are fixed.** Verified after the sweep: zero occurrences of "Expected RED",
+"Still RED", "right now", the not-built assertion class, or the old scoping clause; the 13
+"Was RED when written" markers are intact (falsifier — a sweep that deleted content would drop
+this count); and an AST check of all 217 `%`-format expressions in `treko/test_*.py` found zero
+specifier/argument arity mismatches. That last check matters because a broken assertion message
+raises only when the assertion fires, so a green suite cannot prove it.
+
+**The squash hazard is already closed at the repo level — the banner is belt-and-braces, not the
+control.** Measured after the round-2 verdict raised it: `gh repo view suyatdev/.claude --json
+squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed` returns
+`{"mergeCommitAllowed":true,"rebaseMergeAllowed":true,"squashMergeAllowed":false}`. GitHub will not
+render a squash button for this repository, so the silent-loss scenario this card ranked as its
+top risk cannot occur through the UI. Residual risk is an admin flipping the setting or a local
+`git merge --squash`; neither turns anything red, but neither justifies holding the PR. The PR
+banner stays — it costs nothing and it explains *why* to a reader who only sees the branch.
+
+**Still open, and deliberately not decided here:** the round-1 verdict was against `60cfcf6` and a
+round-2 verdict now exists at `303e4ef` (`risk=medium`, `confidence=high`, prose at
+`coding-memory/observability-judge/2026-08-24-feat-treko-theme-and-layout-round2.md`). No executable code changed — the delta is docstrings — but the delta
+exists, and one of the judge's own findings is what it addresses, so a fresh verdict would be
+measuring something the recorded one did not see. The gate's wording is a strict `head_sha` match.
+Waiving it is the user's call, not this document's.

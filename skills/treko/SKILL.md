@@ -146,6 +146,18 @@ hold snapshots the analyzer cannot regenerate, since it reports the present.
 `tracker-data-fallback.js` stay tracked: they are vendored assets the page loads, not artifacts the
 tool writes.
 
+**Two view preferences live in the browser instead — `localStorage`, not the store.** Nothing
+server-side reads or writes them, so they never travel with a survey: `reanalyze`, a new
+`TREKO_STORE_DIR`, and a different repo all leave them alone.
+
+| Key | Holds | Absent, or not usable |
+|---|---|---|
+| `taskTracker.theme` | `dark` or `light` — written only by the drawer's two Appearance cards | **`dark`.** Anything but the literal `light` falls back, so a hand-edited value cannot leave both cards unselected |
+| `taskTracker.sideW` | sidebar width in px — written on drag mouseup, and by Layout → Reset | **`236`**, and any stored number is clamped to `190`–`440` at mount, not only while dragging |
+
+Both are keyed to the served origin, port included, so a changed `TREKO_PORT` — or the `file://`
+mode above — starts again from those defaults.
+
 ## Stopping it
 
 `Ctrl-C` in the foreground. Otherwise it stops itself: a 30-minute idle timeout

@@ -72,6 +72,7 @@
       is unchanged (#71)
 - [x] Model-aware session-context thresholds: the checkpoint nudge and the status-line bar scale to the running model (100k Sonnet, 130k Opus/Fable, 75k otherwise) instead of a fixed 75k. The anchors are context-rot budgets, not window fractions — they deliberately do not grow with a 1M window — and are still capped by the model's real context window so the warning can never sit past the wall (ADR 0035; #67)
 - [x] Hook-wiring health check: a session-start guard that says so when a registered guard cannot actually run, or when the live `settings.json` has drifted from the reviewed one — measured, a missing hook script fails silently and open, so silence had been indistinguishable from approval (#66)
+- [x] Treko's board is themeable: 27 hardcoded colours became a named token layer — 8 tokens at the tokenize commit, 52 distinct custom properties in the shipped file once the accent and neutral ramps landed — which is what makes the rest possible — a light theme, a Configuration drawer behind the gear (Appearance and Layout), and a sidebar you can drag from 190 to 440px and that remembers where you left it. The tokenize pass ships as a provable no-op in its own commit and the repaint in a second, so the colour change has a rollback point; before this branch nothing tested the page's appearance at all (ADR 0036; #79)
 
 ## New machine?
 
