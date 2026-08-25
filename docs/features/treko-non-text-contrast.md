@@ -116,9 +116,10 @@ the planning probe and diffing its output against the stored artifact. The re-ru
 | gradient-painted elements (uncompositable) | 5 | 5 |
 | colour-parse failures | 0 | 0 |
 
-**1a. Those 336 / 349 marks reconcile exactly against the allowlist, and three of the sources are
-not palette tokens.** The §D2 tables account for 321 of them in each theme; this is where the rest
-go. The reconciliation is arithmetic, not narrative — it must close, and it does:
+**1a. Those 336 / 349 marks reconcile exactly, and two of them are never scored.** The §D2 tables
+account for **334 in dark and 347 in light**; the remaining two per theme are handled without being
+scored, for two different reasons. The reconciliation is arithmetic, not narrative — it must close,
+and it does:
 
 | source | dark | light | handled by |
 |---|---|---|---|
@@ -126,15 +127,25 @@ go. The reconciliation is arithmetic, not narrative — it must close, and it do
 | 3 DEBT tokens | 78 | 78 | §D2, recorded value |
 | 13 palette EXEMPT tokens | 188 | 188 | §D2, reason string |
 | `--shadow-sm` (a *shadow* token, not a colour token) | 13 | 26 | §D2 EXEMPT, 14th entry |
-| sticky-header `color-mix()` ground | 1 | 1 | §D7 — aborts, never scores |
-| `<svg>` root element, `rgb(0, 0, 0)` | 1 | 1 | **a probe defect** — see below |
-| **total** | **336** | **349** | |
+| **subtotal — the scored population** | **334** | **347** | |
+| sticky-header `color-mix()` fill | 1 | 1 | §D7 — **enumerated exclusion, count asserted** |
+| `<svg>` root element, `rgb(0, 0, 0)` | 1 | 1 | **a probe defect** — deleted, see below |
+| **total the planning probe found** | **336** | **349** | |
 
-The `<svg>` root mark is not real: the root element paints nothing, and the probe scored its
-inherited `rgb(0, 0, 0)`. §D7 and §Acceptance criteria 8 delete it. **So the implementation's own
-totals will be 335 dark / 348 light, not 336 / 349** — this card states both numbers deliberately,
-because a later reader comparing an implementation run against §Background 1 would otherwise read a
-correct implementation as a one-mark regression.
+Two numbers, and the card means both. **334 / 347 is the scored population** — what the assertions
+in §D8 run over. **336 / 349 is what the planning probe found**, and it is larger for two reasons
+that are not the same reason:
+
+- The `<svg>` root mark **is not real**. The root element paints nothing; the probe scored its
+  inherited `rgb(0, 0, 0)`. §D7 and §Acceptance criteria 8 fix the predicate, so this mark stops
+  existing — it is a bug being removed, not a mark being excluded.
+- The sticky-header fill **is real and is deliberately not scored**, because its own colour is a
+  `color-mix()` that cannot be composited to a flat sRGB value (§Background 6). It is excluded **by
+  enumerated path, with its count asserted at exactly 1 per theme** — so the exclusion cannot
+  silently grow. §D7.
+
+Stating both is deliberate: a later reader comparing an implementation run against §Background 1
+would otherwise read a correct 334 as a two-mark regression.
 
 `--shadow-sm` contributes 13 marks in dark (one colour) and 26 in light (**two** colours, from
 `--shadow-sm: 0 1px 2px rgba(15,18,35,.06), 0 0 0 1px rgba(15,18,35,.07)` at `Treko.dc.html:40`) —
@@ -161,9 +172,16 @@ are non-monotonic in light: `--color-accent-400` (`#1298b8`) is lighter than `--
 (`#007492`). A token that is a border in dark can be a background-weight colour in light, which is
 why the same token scores 2.88 in one theme and 1.27 in the other.
 
-**4. Interactive controls, counted in source:** 29 `onClick` attributes, 9 natively focusable
-elements (6 `<button>`, 2 `<input>`, 1 `<a>`), and **0 `tabindex` attributes**. Roughly twenty
-click targets cannot receive keyboard focus at all. §D9.
+**4. Interactive controls, counted in source.** Three counts, kept separate because composing them
+is where the earlier draft went wrong:
+
+- **29 elements carry an `onClick`**: 16 `<div>`, 6 `<button>`, 5 `<span>`, 1 `<i>`, 1 `<a>`.
+- **9 elements are natively focusable**: 6 `<button>`, 2 `<input>`, 1 `<a>`.
+- **0 `tabindex` attributes** anywhere in the file.
+
+The intersection is what matters and it is **7**, not 9: the two `<input>`s are focusable but carry
+no `onClick` (they use `onChange` / `onKeyDown`). So **7 of the 29 click targets can take keyboard
+focus and 22 cannot.** §D9.
 
 **5. Circular marks ("dots") in source: 5 `border-radius:50%` sites.** Three are live board
 marks — the source dot, the five-per-row phase dots, the branch dot. **Two are the drawer's
@@ -202,9 +220,18 @@ attribution, not a measurement.** The allowlist indexes marks by their declared 
   this card filed those 13 marks under `--color-neutral-800`; §D2 now files them under
   `--shadow-sm`.**
 
-The consequence is stated rather than solved: a same-value collision files a mark under whichever
-entry claims the string, so the *guarantee* is over the colour, and the token name beside it is
-this card's best attribution. §Risks 3.
+**One of the two is solved by measurement; the other is not, and the difference matters.**
+
+- **`--shadow-sm` vs `--color-neutral-800` splits cleanly on mark kind.** All 22 of the token's dark
+  marks are `fill` and all 13 of the shadow's are `shadow-outset` — measured, an exact partition
+  with no overlap. So the allowlist index keys on **(declared colour, mark kind)**, not on colour
+  alone, and both entries can claim `rgb(63, 66, 77)` without ambiguity (§D8). Across both themes
+  this is the **only** colour claimed by two different entries; every other multi-kind colour
+  belongs to a single token painting several kinds.
+- **`--color-accent` vs `--color-accent-500` does not split**, because they share the colour *and*
+  every kind. Nothing measurable distinguishes them, so this one stays an attribution: the guarantee
+  is over the colour, and the token name beside it is this card's best reading. Criterion 13 puts
+  that in the test data so a reader cannot mistake it for a measurement. §Risks 3.
 
 **7. Card A's criterion-5 comment and this probe disagree on the denominator.** The comment says
 "848 elements with rendered area … 367 paint a mark in their own color". This probe measures
@@ -278,7 +305,7 @@ card's population. §Risks 3.
 | `--bad-bg` | 6 / 6 | **1.15** | **1.23** | bad badge fill |
 | `--info-bg` | 3 / 3 | **1.14** | **1.22** | info badge fill |
 | `--color-accent-900` | 11 / 11 | **1.32** | **1.03** | accent badge fill |
-| `--shadow-sm` | 13 / 26 | **1.76** | **1.13** | card elevation hairline: 13 cards, one colour in dark, **two in light** |
+| `--shadow-sm` | 13 / 26 | **1.76** | **1.13** | card elevation hairline: 13 cards, one colour in dark, **two in light**; matched on kind `shadow-outset`, because its dark colour is `--color-neutral-800`'s (§Background 8) |
 "Min ratio" is the **minimum, over every mark that token paints, of the WCAG ratio between the mark
 and the surface immediately outside it** — the strictest single number the token has to survive.
 **Bold** marks a value below 3:1. `dk` = dark, `lt` = light.
@@ -376,16 +403,28 @@ The rule the implementation inherits:
 
 1. A colour string the parser cannot read → **count it and fail the test**, never treat as
    transparent.
-2. A mark whose backdrop includes a gradient, a `color-mix()` ground, or a `backdrop-filter` →
-   **exclude by explicit, enumerated path and say so in the failure message**, never score it as if
-   the backdrop were flat.
+2. A mark that cannot be composited — because its backdrop includes a gradient, a `color-mix()`
+   ground or a `backdrop-filter`, **or because its own colour is one of those** — is handled by
+   exactly one of two paths, and which one is decided by whether this card has already enumerated
+   it:
+   - **On the enumerated list → excluded, and the exclusion's own count is asserted.** The list is
+     closed and short: the 5 gradient-painted elements and the sticky-header fill at
+     `Treko.dc.html:102` (1 mark per theme). The check asserts it excluded *exactly* that many, at
+     exactly those paths. An exclusion whose count grows is a failure, so the list cannot quietly
+     absorb new marks.
+   - **Not on the enumerated list → abort, naming the path and why it could not be composited.**
+     A newly-uncompositable mark is a change to the page that a human has not classified.
+
+   The distinction is the whole point: an enumerated exclusion is a decision this card made and can
+   be audited against; an un-enumerated one is a silent skip wearing the same clothes.
 3. An allowlist token that matched **zero** marks in a theme → **fail**. A token that stopped
    painting is either a regression or a stale list; both need a human.
-4. A mark whose **own colour** is a `color-mix()` or otherwise not a flat sRGB value → **abort with
-   its path named**, never score. This is a separate rule from 2, which is about a mark's
-   *backdrop*, and it has exactly one instance today: the sticky header's own fill,
-   `color-mix(in srgb, var(--color-bg) 90%, transparent)`, one mark per theme (§Background 1a). It
-   is the mark, not the ground, so rule 2 would not have caught it.
+4. The one instance of rule 2's *own-colour* half today is the sticky header at
+   `Treko.dc.html:102`: `background: color-mix(in srgb, var(--color-bg) 90%, transparent)` with
+   `backdrop-filter: blur(10px)`. Chrome serialises it as `color(srgb 0.0862745 0.0941176 0.14902
+   / 0.9)`, which is arithmetically `--color-bg` at 90% but matches no token's declared string. It
+   is enumerated, excluded, and its count asserted at 1 per theme — it is **not** scored, and it is
+   **not** an abort, because this card has classified it.
 
 The whole pipeline, from a rendered element to a verdict — every path either asserts or aborts, and
 none of them silently drops a mark:
@@ -394,13 +433,13 @@ none of them silently drops a mark:
 flowchart TD
     A["every element with rendered area<br/>(851 per theme)"] --> B{"paints a non-text mark?<br/>fill / 4 borders / outset shadow / SVG shape"}
     B -->|no| Z["not in the population"]
-    B -->|yes| C{"mark colour parses<br/>to flat sRGB?"}
-    C -->|"no — color-mix(), unreadable"| F1["ABORT, name the path<br/>rule 1 + rule 4"]
-    C -->|yes| D{"backdrop compositable?<br/>no gradient / color-mix / backdrop-filter"}
-    D -->|no| F2["ABORT, name the path<br/>rule 2"]
-    D -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
-    E --> G{"declared colour string<br/>on the allowlist?"}
-    G -->|no| F3["FAIL: unmapped colour, printed<br/>criterion 5"]
+    B -->|yes| C{"mark and backdrop both<br/>composite to flat sRGB?"}
+    C -->|no| X{"on the enumerated<br/>exclusion list?"}
+    X -->|"yes — 5 gradients, 1 header fill"| F1["EXCLUDE, and assert the<br/>exclusion count — rule 2"]
+    X -->|no| F2["ABORT, name the path and why<br/>rule 1 + rule 2"]
+    C -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
+    E --> G{"(colour, kind) key<br/>on the allowlist?"}
+    G -->|no| F3["FAIL: unmapped key, printed<br/>criterion 5"]
     G -->|yes| H{"class"}
     H -->|PIN| P{"ratio >= 3.0?"}
     H -->|DEBT| Q{"ratio within 0.0005<br/>of the recorded value?"}
@@ -411,8 +450,8 @@ flowchart TD
     P -->|yes| OK["pass"]
     Q -->|yes| OK
     R -->|yes| OK
-    E --> V{"mark count == the<br/>recorded count, per token?"}
-    V -->|no| FV["FAIL: vacuity / drift<br/>criterion 7"]
+    E --> V{"scored total == 334 dark / 347 light<br/>and each entry at its own count?"}
+    V -->|no| FV["FAIL: vacuity / drift / misfiling<br/>criterion 7"]
 ```
 
 Two further probe defects are recorded here so the implementation does not re-ship them:
@@ -427,37 +466,63 @@ Two further probe defects are recorded here so the implementation does not re-sh
 New module `treko/test_nontext_contrast.py`, alongside `test_theme.py`, reusing `cdp_harness` +
 `server_harness` exactly as card A's criterion 5 does. The allowlist is module-level data:
 
-The allowlist entry has to carry four things the assertions read — a class, the declared colour
-strings that identify the token's marks, the exact number of marks it paints, and the recorded
-ratio — and **each of the last three is per theme**, because §Background 3 means a token's dark and
-light figures have no relationship to each other. A token may own **more than one** colour string in
-a theme (`--shadow-sm` owns two in light), so `colors` is a list:
+**Marks are indexed by `(declared colour, mark kind)`, not by colour alone.** One colour on this
+page is claimed by two different entries — dark `rgb(63, 66, 77)`, which is `--color-neutral-800`'s
+22 fills and `--shadow-sm`'s 13 outset shadows (§Background 8) — and keying on colour alone makes
+criterion 5 ("exactly one entry") and criterion 7 (per-entry counts) impossible to satisfy at the
+same time. Keying on the pair splits them exactly, with no overlap and nothing left over.
+
+An entry therefore carries a class, the declared colours that identify its marks, an **optional**
+`kinds` filter, the exact mark count, and the recorded ratio — and **each of the last three is per
+theme**, because §Background 3 means a token's dark and light figures have no relationship to each
+other. `colors` is a list because a token may own more than one string in a theme (`--shadow-sm`
+owns two in light). `kinds` is omitted unless the entry needs it: an entry with no `kinds` claims
+every kind its colours paint, and **today exactly two entries need one.**
 
 ```yaml
-# shape, with two real entries. Every figure comes from the tables in §D2.
+# shape, with the three entries that exercise every field. Figures come from §D2.
 - token: "--color-accent"
   klass: pin                                  # pin | debt | exempt
   floor: 3.0                                  # pin only
   reason: null                                # required non-empty for debt and exempt
-  dark:  {colors: ["rgb(56, 196, 227)"],  marks: 34, min_ratio: null}
-  light: {colors: ["rgb(0, 116, 146)"],   marks: 34, min_ratio: null}
+  # shares its value with --color-accent-500 in both themes, and shares every kind
+  # too, so this entry is an attribution, not a measurement (§Background 8, criterion 13)
+  dark:  {colors: ["rgb(56, 196, 227)"], kinds: null, marks: 34, min_ratio: null}
+  light: {colors: ["rgb(0, 116, 146)"],  kinds: null, marks: 34, min_ratio: null}
+
+- token: "--color-neutral-800"
+  klass: debt
+  floor: null
+  reason: "unfilled phase dot; an inverted-ramp defect, recorded not fixed (§D5)"
+  dark:  {colors: ["rgb(63, 66, 77)"],     kinds: ["fill"], marks: 22, min_ratio: 1.6519}
+  light: {colors: ["rgb(227, 230, 239)"],  kinds: ["fill"], marks: 22, min_ratio: 1.2477}
 
 - token: "--shadow-sm"
   klass: exempt
   floor: null
   reason: "card elevation hairline; same species as --hair (§D4). Not a colour token."
-  dark:  {colors: ["rgb(63, 66, 77)"], marks: 13, min_ratio: null}
-  light: {colors: ["rgba(15, 18, 35, 0.06)", "rgba(15, 18, 35, 0.07)"], marks: 26, min_ratio: null}
+  # dark value is the literal hex #3f424d, identical to --color-neutral-800's:
+  # the kinds filter is what separates them (§Background 8)
+  dark:  {colors: ["rgb(63, 66, 77)"], kinds: ["shadow-outset"], marks: 13, min_ratio: null}
+  light: {colors: ["rgba(15, 18, 35, 0.06)", "rgba(15, 18, 35, 0.07)"],
+          kinds: ["shadow-outset"], marks: 26, min_ratio: null}
 ```
 
 `min_ratio` is populated for `debt` entries only, to 4 decimal places, from the §D2 table.
+`--color-neutral-800` and `--shadow-sm` are the only two entries that need a `kinds` filter today.
 
 Assertions, per theme:
 
-- **Exact mark counts, not a floor** — the total is asserted at **335 dark / 348 light**, and every
-  entry is asserted at its own `marks` figure. A floor is the wrong instrument here: `≥ 200` against
-  a real 335 would stay green after 134 marks disappeared, and `≥ 1` per token would stay green
-  after 41 of `--hair`'s 42 went. **This is only sound because the page is deterministic**: it is
+- **Key uniqueness** — no `(colour, kind)` pair is claimed by two entries, asserted over the
+  allowlist data itself before any page is loaded. This is the machine-checkable form of criterion
+  5's "exactly one entry", and it fails at import time rather than at measurement time, so a stale
+  list is caught even in a run where the page did not render.
+- **Exact mark counts, not a floor** — the **scored** total is asserted at **334 dark / 347 light**,
+  and every entry at its own `marks` figure. "Scored" excludes the enumerated exclusions (§D7),
+  whose own count is asserted separately at 1 header mark + 5 gradient elements per theme; the two
+  numbers together are what the page actually paints. A floor is the wrong instrument here: `≥ 200`
+  against a real 334 would stay green after 134 marks disappeared, and `≥ 1` per token would stay
+  green after 41 of `--hair`'s 42 went. **This is only sound because the page is deterministic**: it is
   served from the fixed tree fixture (`server_harness.build_tree`), and two independent probe runs
   in two different sessions produced byte-identical output (§Verification). Task 2 re-confirms that
   before the counts are written in; if it does not reproduce, the counts become floors at the
@@ -481,18 +546,19 @@ Assertions, per theme:
   string stops matching the entry's `colors`, and the test fails with it printed. The DEBT ratio
   assertion guards the other direction — the token is untouched but what it sits on moved.
 - **EXEMPT** — asserted only to have a non-empty `reason`, and to match its `marks` count. No ratio.
-- **Coverage** — every distinct declared colour among the measured marks maps to exactly one
-  allowlist entry, and every entry's `colors` match at least one mark, or the test fails with the
-  offending string printed. This is what stops the list going stale as the page grows, and it is the
-  assertion that makes an edit to *any* token's value fail loudly.
+- **Coverage** — every `(colour, kind)` key among the scored marks maps to exactly one allowlist
+  entry, and every entry matches at least one mark, or the test fails with the offending key
+  printed. This is what stops the list going stale as the page grows, and it is the assertion that
+  makes an edit to *any* token's value fail loudly — the edited token's colour string is new, so its
+  key is unmapped.
 
 ### D9 — Focus rings are out, and the reason is not "they fail"
 
 They pass. A real `Input.dispatchKeyEvent` (rawKeyDown/keyUp, VK 9) makes `:focus-visible` match and
-paints a 2px `rgb(56, 196, 227)` ring. The reason to exclude them is §Background 4: **9 of 29 click
-targets can take focus, and there are 0 `tabindex` attributes on the page.** A green focus-ring tick
-would certify the ring on the 9 while saying nothing about the ~20 that can never show one — a
-guard that is most reassuring exactly where the coverage is worst.
+paints a 2px `rgb(56, 196, 227)` ring. The reason to exclude them is §Background 4: **7 of the 29
+click targets can take keyboard focus, 22 cannot, and there are 0 `tabindex` attributes on the
+page.** A green focus-ring tick would certify the ring on the 7 while saying nothing about the 22
+that can never show one — a guard that is most reassuring exactly where the coverage is worst.
 
 Their own card should fix the tabindex gap first, then guard the ring. It is also worth noting that
 no existing code drives focus at all — `cdp_harness` sends only Page and Runtime methods today, so
@@ -505,9 +571,10 @@ Scenario: The board is untouched and the guard is quiet
   Given Treko.dc.html is unmodified at the implementation HEAD
   And the pinned Chrome 152.0.7977.54 renders the fixed tree fixture
   When the non-text check runs
-  Then it finds exactly 335 marks in dark and 348 in light
+  Then it scores exactly 334 marks in dark and 347 in light
+  And it excludes exactly 1 sticky-header mark and 5 gradient elements per theme
   And all 23 allowlist entries match their recorded mark counts in both themes
-  And every distinct declared colour among those marks maps to exactly one entry
+  And every (colour, kind) key among the scored marks maps to exactly one entry
   And the 6 PIN tokens are all at or above 3.0:1
   And the 3 DEBT tokens are all within 0.0005 of their recorded values
   And the check passes
@@ -518,33 +585,50 @@ Scenario: A pinned token is dulled toward its background
   Then the non-text check fails in both themes
   And the message names --color-accent, the ratio, and the 5px span it paints
 
-Scenario: A recorded defect is silently made worse
-  Given --color-accent-700 is recorded as debt at 1.27:1 in light
-  When an edit takes it to 1.10:1
-  Then the debt assertion fails
-  And the message says the recorded value is 1.27 and the measured value is 1.10
+Scenario: A recorded defect is edited in either direction
+  Given --color-accent-700 is recorded as debt at 1.2718 in light
+  When any edit changes its value, whether it dulls it to 1.10 or lifts it to 3.4
+  Then the coverage assertion fails first, because the token's declared colour string is new
+  And the message prints the unmapped (colour, kind) key and the entry that no longer matches
+  And the message says a debt entry cannot be edited without re-recording it in this card
 
-Scenario: A recorded defect is repaired
-  Given --color-accent-700 is recorded as debt at 1.27:1 in light
-  When a later palette card lifts it to 3.4:1
-  Then the debt assertion fails
-  And the message says to move the token from debt to pin and update this card
+Scenario: A recorded defect gets worse without its own value changing
+  Given --color-neutral-800 is recorded as debt at 1.6519 in dark
+  And it is unchanged, but the surface its dots sit on has been re-tinted
+  When the non-text check runs
+  Then the coverage assertion passes, because the token's own colour string is unchanged
+  And the debt assertion fails on the ratio moving outside +/- 0.0005
+  And the message states the recorded value, the measured value, and which direction it moved
 
 Scenario: A new token starts painting a mark
   Given the allowlist's 23 entries cover every mark painted today
-  When an edit introduces a mark in a colour on no allowlist entry
-  Then the coverage assertion fails with the unmapped colour string printed
+  When an edit introduces a mark whose (colour, kind) key is on no allowlist entry
+  Then the coverage assertion fails with the unmapped key printed
+
+Scenario: A mark is filed under the wrong entry and the total does not move
+  Given dark rgb(63, 66, 77) is painted by --color-neutral-800 as 22 fills
+  And by --shadow-sm as 13 outset shadows
+  When an implementation keys on colour alone and files all 35 under one entry
+  Then that entry's recorded mark count assertion fails
+  And the other entry's "matches at least one mark" assertion fails
+  And the scored total of 334 does not move, so the total alone would not have caught it
 
 Scenario: An allowlisted token stops painting
   Given --info paints exactly one mark, a tab underline
   When an edit removes that underline
   Then the vacuity assertion fails rather than passing on an empty set
 
-Scenario: A backdrop becomes uncompositable
+Scenario: A backdrop becomes uncompositable and nobody classified it
   Given a mark is scored against a flat surface today
   When an edit puts a gradient behind it
-  Then the check fails naming that mark as unscoreable
+  Then the check aborts, naming that mark's path and why it could not be composited
   And it does not silently drop the mark or score it against a guessed colour
+
+Scenario: An enumerated exclusion quietly grows
+  Given the sticky-header fill is the only excluded own-colour mark, 1 per theme
+  When an edit gives a second element a color-mix() background
+  Then the exclusion-count assertion fails at 2 against a recorded 1
+  And the new mark is not absorbed into the exclusion list without a human
 
 Scenario: The check runs on the default theme
   Given no taskTracker.theme is set
@@ -562,20 +646,39 @@ Scenario: The check runs on the default theme
    **±0.0005**, and the assertion fails on movement in **either** direction.
 4. Every one of the 14 EXEMPT tokens carries a non-empty, specific reason string. No exemption reads
    "decorative".
-5. Every distinct declared colour among the measured marks maps to exactly one allowlist entry, and
-   every entry's declared colours match at least one mark; either failure prints the offending
-   string. `--shadow-sm` maps **two** colours in light and one in dark, and the check handles that
-   without a special case.
-6. A parse failure, a gradient backdrop, a `color-mix()` ground or a `backdrop-filter` backdrop
-   **fails** the test; none of them is scored and none is silently skipped.
-7. Mark counts are asserted **exactly**, not as floors: 335 in dark and 348 in light, and every one
-   of the 23 entries at its own per-theme figure. If task 2 finds the page is not reproducible run
-   to run, the counts become floors at the measured value and this card records that it did.
-   The 335/348 figures are 336/349 minus the one `<svg>`-root artefact per theme (criterion 8).
+5. Every `(colour, kind)` key among the **scored** marks maps to exactly one allowlist entry, and
+   every entry matches at least one mark; either failure prints the offending key. The check also
+   asserts, over the allowlist data alone, that no key is claimed by two entries — dark
+   `rgb(63, 66, 77)` is claimed by both `--color-neutral-800` (`fill`) and `--shadow-sm`
+   (`shadow-outset`), and the `kinds` filter is what makes that unambiguous.
+6. An uncompositable mark is handled by exactly one of two paths and never a third: **on the
+   enumerated exclusion list** (5 gradient elements, 1 sticky-header fill per theme) it is excluded
+   and the exclusion's own count is asserted; **not on the list** it aborts the test with its path
+   and reason named. A colour string the parser cannot read always aborts. Nothing is scored against
+   a guessed backdrop and nothing is silently skipped.
+7. Mark counts are asserted **exactly**, not as floors: the scored population is **334 in dark and
+   347 in light**, and every one of the 23 entries sits at its own per-theme figure. The exclusion
+   counts are asserted separately. If task 1 finds the page is not reproducible run to run, the
+   counts become floors at the measured value and this card records that it did. 334 / 347 is
+   336 / 349 minus the one `<svg>`-root artefact (criterion 8, a deleted bug) and the one
+   sticky-header fill (criterion 6, an enumerated exclusion) per theme — §Background 1a.
 8. The SVG predicate scores only real shape elements; the `<svg>` root is never scored.
 9. Box-shadow parsing reads every colour in a multi-shadow list, not only the first.
-10. No file under `treko/` other than the new test module and its registration changes. **Zero
-    palette edits** — verified by a diff over `:root` and the `body[data-theme="light"]` block.
+10. **Exactly one file added and no other file changed:** `treko/test_nontext_contrast.py`. The new
+    module reuses `cdp_harness` and `server_harness` the way `test_theme.py` already does and needs
+    **no edit to `treko/conftest.py`**, which other test modules share; if the implementation finds
+    it does need one, that is a finding to report before making it, not a licence in this criterion.
+    **Zero palette edits**, proven by a diff that names its files and blocks, because the tokens
+    this card newly depends on are not all in one of them:
+    - `treko/Treko.dc.html` — **both** `:root` blocks (`:21` and `:27`) and the
+      `body[data-theme="light"]` block (`:33`).
+    - `treko/nocturne.css` — the `:root` block, which is where dark `--color-neutral-800` (`:28`)
+      is declared.
+    - `treko/_ds/nocturne-*/styles.css` — where dark `--shadow-sm` (`:78`) and
+      `--color-neutral-800` (`:28`) are declared.
+
+    Expect zero changed lines across all three. An earlier draft diffed only `Treko.dc.html`, which
+    would have proven nothing about the two tokens the round-1 revision added.
 11. Each test docstring states plainly that a green run means "these tokens have not regressed", not
     "the board is accessible".
 12. Full suite green, on the pinned Chrome, recording **which tests ran** and the passed/failed/
@@ -616,26 +719,47 @@ Red half and green half are separate commits throughout; never the same commit
 2. **Red:** the harness and the count assertions — walk the page, collect non-text marks in both
    themes, assert the exact totals and `parseFailures == 0`. No allowlist yet. Must fail first for a
    stated reason.
-3. **Green:** land the walk. Confirm **335 / 348** — 336 / 349 minus the one `<svg>`-root artefact
-   per theme — and that the three §D7 probe defects are absent (SVG root not scored; multi-shadow
-   read in full; `color(srgb …)` parsed). If the totals come back 336 / 349, the SVG-root fix did
-   not land and criterion 8 is unmet, whatever the other assertions say.
+3. **Green:** land the walk. Confirm a scored **334 / 347** alongside an excluded 1 header mark and
+   5 gradient elements per theme, and that the three §D7 probe defects are absent (SVG root not
+   scored; multi-shadow read in full; `color(srgb …)` parsed). A scored 336 / 349 means the SVG-root
+   fix did not land and criterion 8 is unmet; a scored 335 / 348 means the header exclusion did not
+   land and criterion 6 is unmet — whatever the other assertions say.
 4. **Red:** the coverage assertion — every distinct declared colour maps to an allowlist entry.
 5. **Green:** land the allowlist data, all 23 entries with class, per-theme colours, per-theme mark
    count, and reason; the two collision comments required by criterion 13.
 6. **Red:** PIN and DEBT assertions.
 7. **Green:** land them; both themes go green with zero palette edits.
-8. **Falsify — nine cases, not six.** For each of: PIN below floor, DEBT worse, DEBT better,
-   coverage (unmapped colour), count drift, uncompositable backdrop, **colour-parse failure**,
-   **`<svg>`-root scored**, and **multi-shadow read as single** — introduce the defect in a
-   throwaway copy, confirm the test goes red, and **record which assertion caught it**. A count of
-   "9 of 9 caught" without naming the catching assertion is not evidence.
+8. **Falsify — eleven cases.** For each: introduce the defect in a throwaway copy, confirm the test
+   goes red, and **record which assertion caught it**. A count of "11 of 11 caught" without naming
+   the catching assertion is not evidence.
 
-   The last three are on this list because they are the card's own origin story: the planning probe
-   shipped all three (§D7), and criteria 6, 8 and 9 would otherwise ship with no falsifier at all.
-   **Record the nine cases and their catching assertions in this file**, not only in the throwaway
+   | # | Defect introduced | Assertion expected to catch it |
+   |---|---|---|
+   | 1 | a PIN token dulled below 3.0:1 | PIN floor |
+   | 2 | a DEBT token's value edited (either direction) | Coverage — its key is new |
+   | 3 | a DEBT token untouched, its backdrop re-tinted | DEBT ratio, ±0.0005 |
+   | 4 | a new mark in a colour on no entry | Coverage — unmapped key |
+   | 5 | a mark deleted from the page | that entry's exact count |
+   | 6 | **a mark misfiled under the wrong entry, total unchanged** | per-entry counts + "matches at least one mark" |
+   | 7 | a gradient put behind a scored mark | abort, not on the enumerated list |
+   | 8 | **a second `color-mix()` element added** | exclusion count, 2 against a recorded 1 |
+   | 9 | **a colour string the parser cannot read** | parse-failure abort |
+   | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
+   | 11 | **a multi-shadow list read as single** | `--shadow-sm` light count, 13 against 26 |
+
+   Cases 9, 10 and 11 are on this list because they are the card's own origin story: the planning
+   probe shipped all three (§D7), and criteria 6, 8 and 9 would otherwise ship with no falsifier at
+   all. Case 6 is here because the round-1 revision of this card *was* that bug — 13 marks filed
+   under `--color-neutral-800` by hex collision, with the total unchanged and every total-based
+   check green (§Background 8). Case 8 exists because an exclusion list that can grow silently is
+   the same failure as a silent skip.
+
+   **Record all eleven cases and their catching assertions in this file**, not only in the throwaway
    copy — a falsifier that is discarded proves the check worked once, on a day nobody can revisit.
-9. Prove criterion 10 — diff `:root` and the light block against the base; expect zero lines.
+9. Prove criterion 10 — diff the three files and blocks it names (`treko/Treko.dc.html` `:root` at
+   `:21` and `:27` and `body[data-theme="light"]` at `:33`; `treko/nocturne.css` `:root`;
+   `treko/_ds/nocturne-*/styles.css`) against the base branch; expect zero changed lines in all
+   three. Also confirm `treko/conftest.py` is unchanged.
 10. ADR; update `docs/features/` links and the `treko` skill's UI notes.
 11. Observability judge, then PR.
 
@@ -726,6 +850,41 @@ a number or a claim, not merely wording:
   `:325`), which also surfaced the agent panel (`sc-if agentOpen`, `:302`) as a second
   interaction-gated region missing from §Scope/Out.
 - **Two colour collisions are live** (§Background 8), one of them on a PIN token.
+
+### Corrections made in compliance round 2 (verdict: fail, 6 violations; 5 of round 1's 7 closed)
+
+Round 2 judged `3e21d55` at `d841364`. Two of the six were created by round 1's own fix — recorded
+here because a revision that introduces a defect while closing another is the failure mode this
+card's §D7 argues about, and it happened inside the card itself.
+
+- **Keying marks by declared colour alone made criteria 5 and 7 unsatisfiable together.** Round 1
+  added `--shadow-sm` while leaving `--color-neutral-800` claiming the same dark hex, so one colour
+  had to map to two entries. Measured resolution: the 35 dark marks split **exactly** by kind, 22
+  `fill` and 13 `shadow-outset`, with no overlap — so the index keys on `(colour, kind)` and both
+  entries are unambiguous. Across both themes this is the **only** colour claimed by two entries.
+- **The sticky-header mark had three different specified behaviours.** §Background 1a counted it
+  inside the totals, §D7 rule 2 excluded it, rule 4 aborted on it, and criterion 6 failed the test
+  on it — so the happy-path scenario could not pass. Resolved as an **enumerated exclusion with its
+  own asserted count**: it is not scored, not an abort, and the exclusion cannot grow silently. The
+  scored totals are therefore **334 / 347**, which is exactly what the §D2 tables sum to.
+- **"The §D2 tables account for 321 in each theme" was stale** the moment `--shadow-sm` joined them.
+  They sum to 334 dark and 347 light.
+- **Both DEBT scenarios asserted the wrong mechanism.** Editing a DEBT token's value changes its
+  declared colour string, so **Coverage** fires, not the ratio assertion — which could not report
+  the measured value the scenarios demanded, because no mark would match the entry at all. The DEBT
+  ratio assertion guards the other case: the token untouched, its backdrop moved. Both scenarios
+  were rewritten to the mechanism the design actually produces.
+- **"9 of 29 click targets can take focus" was a composed metric, and wrong.** The 29 `onClick`
+  elements and the 9 natively focusable elements are two separately-measured populations; their
+  intersection is **7** (6 `<button>` + 1 `<a>`), because the two `<input>`s carry no `onClick`.
+  So 22 click targets cannot take focus, not "~20". §Background 4 now keeps the three counts apart.
+- **The zero-palette-edits proof diffed a surface that does not contain the tokens it guards.**
+  It named no file, `Treko.dc.html` has two `:root` blocks, and dark `--shadow-sm` and
+  `--color-neutral-800` are declared in `treko/_ds/nocturne-*/styles.css:78,28` and
+  `treko/nocturne.css:28` — outside the diff entirely. Criterion 10 now names three files.
+
+Falsification went from nine cases to eleven, adding the misfiled-mark-at-unchanged-total case
+(case 6 — literally this round's own bug) and the growing-exclusion-list case (case 8).
 
 ### The DEBT tolerance is a measured number, not a chosen one
 
