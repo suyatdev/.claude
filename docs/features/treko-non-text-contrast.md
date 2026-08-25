@@ -145,9 +145,8 @@ that are not the same reason:
   inherited `rgb(0, 0, 0)`. §D7 and §Acceptance criteria 8 fix the predicate, so this mark stops
   existing — it is a bug being removed, not a mark being excluded.
 - The sticky-header fill **is real and is deliberately not scored**, because its own colour is a
-  `color-mix()` that cannot be composited to a flat sRGB value (§Background 6). It is excluded **by
-  enumerated path, with its count asserted at exactly 1 per theme** — so the exclusion cannot
-  silently grow. §D7.
+  `color-mix()` that cannot be composited to a flat sRGB value (§Background 6). **§D7 says what
+  happens to it**; this section only records that it is not part of the scored 334 / 347.
 
 Stating both is deliberate: a later reader comparing an implementation run against §Background 1
 would otherwise read a correct 334 as a two-mark regression.
@@ -413,9 +412,9 @@ per theme, because §Background 3 means the two numbers have no relationship to 
 ### D7 — Uncompositable marks are excluded and tallied; only a parse failure aborts directly
 
 > **This section is the single normative statement of what happens to a mark the check cannot
-> composite.** Every other mention in this card — §Scope/In, §Background 6, §D8, acceptance
-> criterion 6, the scenarios, the falsifier table, the flowchart — **points here and does not
-> restate the mechanism.** That rule exists because this exact statement drifted in three
+> composite.** Every other mention in this card — §Scope/In, §Background 1a, §Background 6, §D8,
+> acceptance criterion 6, the scenarios, the falsifier table, the flowchart — **points here and does
+> not restate the mechanism.** That rule exists because this exact statement drifted in three
 > consecutive compliance rounds, each time in a different duplicate: first the prose, then a
 > scenario, then the diagram, then this heading. A statement made in seven places is a statement
 > that will disagree with itself.
@@ -482,11 +481,11 @@ flowchart TD
     A["every element with rendered area<br/>(851 per theme)"] --> B{"paints a non-text mark?<br/>fill / 4 borders / outset shadow / SVG shape"}
     B -->|no| Z["not in the population"]
     B -->|yes| N{"mark colour parses<br/>to a colour at all?"}
-    N -->|no| FN["ABORT: parse failure<br/>rule 1 - case 9"]
+    N -->|no| FN["ABORT: parse failure<br/>criterion 6 - case 9"]
     N -->|yes| C{"mark and backdrop both<br/>composite to flat sRGB?"}
     C -->|no| X["EXCLUDE from scoring, and<br/>tally against its class:<br/>own colour uncompositable, or<br/>backdrop crosses a background-image"]
     X --> W{"is every exclusion count still at<br/>its recorded value?<br/>1 excluded mark - 5 gradient elements -<br/>0 marks over a background-image"}
-    W -->|no| F2["FAIL, and this IS the abort:<br/>name each offending path and why.<br/>There is no earlier per-mark abort.<br/>cases 7, 8, 12"]
+    W -->|no| F2["FAIL, and this IS the abort:<br/>name each offending path and why.<br/>There is no earlier per-mark abort.<br/>criterion 6 - cases 7, 8, 12"]
     W -->|yes| OKX["excluded, not scored,<br/>and not part of 334 / 347"]
     C -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
     E --> G{"(colour, kind) key<br/>on the allowlist?"}
@@ -630,10 +629,10 @@ Assertions, per theme:
   the smallest possible palette edit and cannot be — a one-step (1/255) change on a single channel
   moves these six minima by between **0.0009 and 0.0057** (measured, §Verification), so ±0.0005 is
   under the smallest of them, but only by a factor of 1.8, and a lateral hue change at equal
-  luminance would not move the ratio at all. **The assertion that actually catches a changed token
-  value is Coverage**, below: any edit to a DEBT token changes its declared colour string, the
-  string stops matching the entry's `colors`, and the test fails with it printed. The DEBT ratio
-  assertion guards the other direction — the token is untouched but what it sits on moved.
+  luminance would not move the ratio at all. **The tolerance is not what catches an edited token
+  value — see the Coverage bullet below, which is this card's single normative statement of that
+  rule.** This assertion guards the case that survives it: the token untouched, its surroundings
+  moved.
 - **EXEMPT** — asserted only to have a non-empty `reason`, and to match its `marks` count. No ratio.
 - **Every DEBT and EXEMPT entry** is asserted to carry a non-empty `reason` and every PIN entry to
   carry a `floor`, over the allowlist data alone, before any page loads. The schema in this section
@@ -641,9 +640,19 @@ Assertions, per theme:
   are checked by.
 - **Coverage** — every `(colour, kind)` key among the scored marks maps to exactly one allowlist
   entry, and every entry matches at least one mark, or the test fails with the offending key
-  printed. This is what stops the list going stale as the page grows, and it is the assertion that
-  makes an edit to *any* token's value fail loudly — the edited token's colour string is new, so its
-  key is unmapped.
+  printed. This is what stops the list going stale as the page grows.
+
+  > **This bullet is the single normative statement of which assertion catches an edited token
+  > value.** Every other mention — the PIN and DEBT bullets above, the scenarios, the falsifier
+  > table, the flowchart's `G → F3` branch — **points here and does not restate it.** The rule:
+  > **any edit to a token's value is caught by Coverage**, because the edited token's declared
+  > colour string is new and its key is therefore unmapped, so neither the PIN floor nor the DEBT
+  > ratio ever sees a ratio to compare. The PIN floor and the DEBT ratio fire only when the token's
+  > own value is *unchanged* — either because the surface under it moved, or because someone edited
+  > the token **and updated its allowlist entry to match**, which is the case falsifier 1 and 3
+  > construct. This statement is demoted to one place deliberately: it is stated in six sites, and
+  > §D7's identical shape drifted in three consecutive compliance rounds before being made
+  > single-source.
 
 ### D9 — Focus rings are out, and the reason is not "they fail"
 
@@ -680,17 +689,15 @@ Scenario: A pinned token is dulled toward its background, and the list is update
   Then the PIN floor assertion fails in both themes
   And the message names --color-accent, the measured ratio, the mark's kind and its path
 
-# This is the scenario the PIN floor exists for, and the "and the list is updated" line is
-# load-bearing. An edit that does NOT update the list is caught earlier and more loudly by
-# coverage, because the token's declared colour string is new and its key is unmapped -- the
-# PIN floor never sees a ratio at all. So the failure this card actually defends against is
-# the diligent one: someone re-tints a token AND dutifully re-records it, and the floor is
-# what refuses to let 2.4:1 through. Falsifier case 1 constructs exactly this state.
+# The "and the list is updated" line is load-bearing: without it Coverage fires instead and the
+# floor never sees a ratio. Why that is so is stated once, in §D8's Coverage bullet. The failure
+# this card defends against is the diligent edit -- someone re-tints a token AND dutifully
+# re-records it -- and the floor is what refuses 2.4:1. Falsifier case 1 constructs this state.
 
 Scenario: A recorded defect is edited in either direction
   Given --color-accent-700 is recorded as debt at 1.2718 in light
   When any edit changes its value, whether it dulls it to 1.10 or lifts it to 3.4
-  Then the coverage assertion fails first, because the token's declared colour string is new
+  Then the coverage assertion fails, not the debt ratio assertion
   And the message prints the unmapped (colour, kind) key and the entry that no longer matches
   And the message says a debt entry cannot be edited without re-recording it in this card
 
@@ -732,7 +739,6 @@ Scenario: An enumerated exclusion quietly grows
   Given the sticky-header fill is the only excluded own-colour mark, 1 per theme
   When an edit gives a second element a color-mix() background
   Then the excluded-mark count assertion fails at 2 against a recorded 1
-  And that failure is the abort for an un-enumerated uncompositable mark, not a separate check
   And the message names the new mark's path and why it could not be composited
   And the new mark is not absorbed into the exclusion list without a human
 
@@ -761,8 +767,7 @@ Scenario: The check runs on the default theme
    and this criterion deliberately does not restate the mechanism. What is checked here is that the
    implementation matches it: the three exclusion counts (1 sticky-header mark, 5 gradient-painted
    elements, 0 scored marks over a `background-image` backdrop) are each asserted in their own unit,
-   none is an addend of the scored 334 / 347, and falsifier cases 7, 8, 9 and 12 each go red. A colour string the parser cannot read always
-   aborts. Nothing is scored against a guessed backdrop and nothing is silently skipped.
+   none is an addend of the scored 334 / 347, and falsifier cases 7, 8, 9 and 12 each go red.
 7. Mark counts are asserted **exactly**, not as floors: the scored population is **334 in dark and
    347 in light**, and every one of the 23 entries sits at its own per-theme figure. The exclusion
    counts are asserted separately. If **task 3** finds the page is not reproducible run to run, the
@@ -1183,6 +1188,32 @@ each failure box.
   now true — all eight boxes carry their criterion and case — and the overclaim is recorded here
   rather than quietly repaired, because the failure is the same one §D7 argues about: a statement
   that reads as settled while nothing checked it.
+
+### Corrections made in compliance round 9 (verdict: fail, 2 violations)
+
+Round 8's structural fix worked — `writing-specs/exclusion-abort-vs-count` closed after three
+rounds, and every site now agrees. Both of round 9's findings are about the *repair*, not the
+original design.
+
+- **The round-8 record in this section overclaimed, in the paragraph recording an overclaim.** It
+  said "all eight boxes carry their criterion and case"; two of the eight (`FN`, `F2`) named only a
+  case. That is precisely the fault round 8 had cited against round 7's record, committed one round
+  later while writing it down. Both nodes now carry criterion 6. **The pattern is worth naming: a
+  changelog entry that grades its own edit is a claim like any other, and re-reading the artefact
+  it grades is not optional.** Three consecutive rounds have now caught one.
+- **§D7's single-source note was itself false.** It promised every other mention points at §D7 and
+  does not restate the mechanism — while §Background 1a restated it, the "enumerated exclusion
+  quietly grows" scenario asserted it in a `Then` step, and acceptance criterion 6 restated it three
+  sentences after promising not to. All three reduced to pointers, and §Background 1a added to
+  §D7's list.
+
+**Acting on the round-9 judge's answer to a question this card asked it:** the next statement with
+the same shape is *"an edit to a token's value is caught by Coverage, not by the PIN floor or the
+DEBT ratio"* — stated normatively in six places that agree today (§D8's DEBT bullet, §D8's Coverage
+bullet, both scenario comment blocks, falsifier case 2, and the flowchart's `G → F3` branch). It has
+been demoted the same way §D7 was, **before** it drifted rather than after: §D8's Coverage bullet is
+now the single normative statement, the DEBT bullet and both scenarios point at it, and the
+scenarios assert only which assertion fires and what it prints.
 
 ### What was NOT verified
 
