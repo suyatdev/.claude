@@ -963,9 +963,18 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       three states, and look at the light board. Record what was eyeballed as eyeballed.
       Done — §"Task 9". All four Esc arms driven (not three; the fourth is reachable), a real
       click-then-reload theme flip, and the open drawer looked at in **both** themes, which
-      criterion 5 never covers. **A human sign-off is still owed**: the looking was done by the
-      agent from screenshots. One finding, not fixed here: the run title hard-clips mid-glyph at
+      criterion 5 never covers. One finding, not fixed here: the run title hard-clips mid-glyph at
       `sideW` 440 — pre-existing markup this card makes reachable.
+      **Human sign-off recorded 2026-08-25**, closing the last debt this task carried. The user ran
+      `server.py --open` themselves (2026-08-24 23:41Z; 33 request lines, every one `status=200
+      errno=-`, one `id=reanalyze` at 23:42Z, server exited 0 on its own 1800s idle timer), was
+      given a written checklist of the seven areas automation cannot reach — non-text contrast
+      first, the 440px clip second — and replied "It looks good."
+      **What that settles, and what it does not.** It settles criterion 5's own closing sentence on
+      its own terms: a human opened the rendered page and accepted its appearance. It is **not** a
+      per-item attestation — which checklist items were exercised is not known to me, and no
+      measurement was taken. The 481-of-848 non-text-contrast gap is unchanged by it: still
+      eyeballed, still uncovered by any test.
 - [x] 10. **Post-change suite**: node-ID set diff vs task 1, zero lost nodes, `wc -l` under 800.
       Done — §"Task 10". 294 passed, **0 nodes lost**, 221 → 294 (+73), `wc -l` 740. Task 1's
       recorded set-hash does **not** reproduce under nine serializations; the `comm` set diff
@@ -1807,9 +1816,10 @@ and clearly drawn — with one fair snag, that §Task 9's state table mixes eye-
 measurements in a single column — and judged the two recorded screenshot-read corrections
 *actionable* rather than self-flagellating, each ending in a stated verdict.
 
-**Still owed after this card closes:** a human opening the page (criterion 5's own words), the
-Proof A pin, the 440px title clip, non-text contrast coverage, §D8's stale line numbers, and an
-in-place marker on task 1's digest.
+**Still owed after this card closes:** the Proof A pin, the 440px title clip, non-text contrast
+coverage, §D8's stale line numbers, and an in-place marker on task 1's digest. The sixth item this
+list carried — a human opening the page, criterion 5's own words — was **closed 2026-08-25**; see
+task 9's entry for what the sign-off does and does not settle.
 
 ### Task 9 — launched for real, and what was EYEBALLED (2026-08-24)
 
@@ -1822,9 +1832,10 @@ weaker word is the accurate one.
 driven over CDP against **that same live server** — real `Input.dispatchMouseEvent` /
 `dispatchKeyEvent`, on the pinned `152.0.7977.54`, never `file://` and never a simulated
 `data-theme`. **The looking was done by the agent from full-resolution screenshots, not by a
-person.** A human sign-off on "does it look good" is therefore still owed and is the user's to
-give; everything below is what the agent saw, plus, where a screenshot was ambiguous, a computed
--style measurement that settled it.
+person** — everything below is what the agent saw, plus, where a screenshot was ambiguous, a
+computed-style measurement that settled it. The human sign-off this entry said was owed **was
+given 2026-08-25**, against the user's own `--open` run rather than against this table; the table
+below stands as the agent's record and was not re-validated by that sign-off.
 
 | # | state | what was seen |
 |---|---|---|
