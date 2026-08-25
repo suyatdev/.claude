@@ -72,8 +72,11 @@ Each was a user decision. The implementation does not relitigate them.
 - The allowlist itself, as data in the test module: **23 entries** — 6 PIN, 3 DEBT and 14 EXEMPT,
   each with per-theme declared colours, a per-theme mark count, and a reason string on every DEBT
   and EXEMPT entry (§D2, §D8).
-- A loud-failure rule for surfaces the probe cannot composite — gradients, `color-mix()` grounds,
-  `backdrop-filter` — which must abort the check, never score (§D7).
+- A loud-failure rule for marks the probe cannot composite — gradients, `color-mix()` grounds,
+  `backdrop-filter` — which are excluded from scoring and **tallied**, with the tally asserted
+  against a recorded value; a tally out of range is what fails the run, and there is no separate
+  per-mark abort ahead of it. A colour string that does not parse at all is the one exception and
+  aborts directly (§D7).
 - A vacuity floor: the check must assert it found marks at all, in each theme (§D8).
 - The three debt entries recorded in this file, with their measured ratios and their call sites
   (§D5). No palette edit.
@@ -472,10 +475,13 @@ none of them silently drops a mark:
 flowchart TD
     A["every element with rendered area<br/>(851 per theme)"] --> B{"paints a non-text mark?<br/>fill / 4 borders / outset shadow / SVG shape"}
     B -->|no| Z["not in the population"]
-    B -->|yes| C{"mark and backdrop both<br/>composite to flat sRGB?"}
-    C -->|no| X{"on the enumerated<br/>exclusion list?"}
-    X -->|"yes — the header fill"| F1["EXCLUDE, and assert<br/>exactly 1 per theme — rule 2"]
-    X -->|no| F2["ABORT, name the path and why<br/>rule 1 + rule 2"]
+    B -->|yes| N{"mark colour parses<br/>to a colour at all?"}
+    N -->|no| FN["ABORT: parse failure<br/>rule 1 - case 9"]
+    N -->|yes| C{"mark and backdrop both<br/>composite to flat sRGB?"}
+    C -->|no| X["EXCLUDE from scoring, and<br/>tally against its class:<br/>own colour uncompositable, or<br/>backdrop crosses a background-image"]
+    X --> W{"is every exclusion count still at<br/>its recorded value?<br/>1 excluded mark - 5 gradient elements -<br/>0 marks over a background-image"}
+    W -->|no| F2["FAIL, and this IS the abort:<br/>name each offending path and why.<br/>There is no earlier per-mark abort.<br/>cases 7, 8, 12"]
+    W -->|yes| OKX["excluded, not scored,<br/>and not part of 334 / 347"]
     C -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
     E --> G{"(colour, kind) key<br/>on the allowlist?"}
     G -->|no| F3["FAIL: unmapped key, printed<br/>criterion 5"]
@@ -490,7 +496,9 @@ flowchart TD
     Q -->|yes| OK
     R -->|yes| OK
     E --> V{"scored total == 334 dark / 347 light<br/>and each entry at its own count?"}
-    V -->|no| FV["FAIL: vacuity / drift / misfiling<br/>criterion 7"]
+    V -->|no| FV["FAIL: vacuity / drift / misfiling,<br/>with a per-entry delta table<br/>criterion 7 - cases 5, 6, 10, 11"]
+    D0["the allowlist data, before any page loads"] --> D1{"no (colour, kind) key claimed twice?<br/>every DEBT/EXEMPT reason non-empty?<br/>every PIN floor present?"}
+    D1 -->|no| FD["FAIL at import time<br/>criteria 3, 4, 5 - case 13"]
 ```
 
 Three further probe defects are recorded here so the implementation does not re-ship them:
@@ -1132,6 +1140,27 @@ the DEBT/EXEMPT `reason` the schema requires was asserted nowhere (both now cove
 assertion and falsifier case 13); §Background was numbered 6, 8, 7 and is now 6, 7, 8; and the
 SVG shape-tag list ended in "…" inside a predicate whose output is asserted exactly — it is now a
 closed list of seven tags, with the reason it must be closed.
+
+### Corrections made in compliance round 7 (verdict: fail, 1 violation; both of round 6's closed)
+
+One violation, and it is the same id round 6 raised — recurring in the one site the round-6
+revision did not reach. **The Mermaid flowchart still drew the design the prose had spent two
+rounds deleting**: it routed an un-enumerated uncompositable mark to a separate, earlier, per-mark
+`ABORT` box, while the surrounding prose says in six places that the exclusion counter going out of
+range *is* the abort and that there is "no separate path that aborts first". An implementer building
+from the picture rather than the paragraphs would make falsifier cases 8 and 12 unconstructible —
+the unfalsifiability §D7 declares non-waivable, arriving through the diagram instead of the text.
+
+That is worth recording as a class, not just a fix: **a diagram is a requirement, and it drifts the
+way any other duplicated statement drifts.** Rounds 5 and 6 each closed this contradiction once, in
+prose, and neither round looked at the picture.
+
+Fixed in three places: the flowchart now sends both branches into a tally node whose count
+comparison is the failure; a `W` node asserts all three exclusion counts, which the diagram
+previously asserted nowhere; and §Scope/In's "must abort the check" is restated as exclude-and-tally
+with the parse failure named as the one direct abort. The diagram also gained the data-only
+assertion node (criteria 3, 4, 5 before any page loads) and now names the falsifier case behind
+each failure box.
 
 ### What was NOT verified
 
