@@ -2070,10 +2070,80 @@ Anything it fails to recognise — quoted, wrapped, inside a script file — sim
 and the git hook denies. **Recognition-for-allow fails closed; recognition-for-deny fails open.**
 The coverage the text classifier could never reach stops being load-bearing.
 
-⚠️ **Unverified.** Two things must be measured before this is written up as the design: whether a
-PreToolUse hook can export an environment variable into the Bash tool's own process (it may only be
-able to write a file the git hook reads), and whether the marker can be scoped tightly enough — to
-one command, one repo, one moment — that it is not a standing bypass. Neither has been probed.
+### Both marker questions are now measured (2026-08-25)
+
+**Instrument:** `claude 2.1.241` headless with `--settings` adding a PreToolUse `Bash` hook, and
+throwaway repos under the session scratchpad with a `reference-transaction` hook, `git 2.50.1
+(Apple Git-155)`. Probes `p1/` and `p2/stage{A..F}.sh` in the session scratchpad — disposable; the
+findings below are the durable part. Every claim below has a control that fired the other way.
+
+**Q1 — how does the marker reach git? By rewriting the command, not the environment.**
+
+A PreToolUse hook **cannot** put an environment variable into the Bash tool's process. The hook
+exported `WT_MARKER_FROM_HOOK_EXPORT=yes` in its own process; that name appears **0 times** in the
+tool process's environment. The control that had to fire did: a `settings.json` `env` block **does**
+reach the tool process (`WT_PROBE_SETTINGS_ENV=control-present`, 1 match), so the check can see an
+env var when one is there. That channel is useless to us anyway — a settings `env` entry is a
+*standing* variable, exactly the bypass this design is trying not to create.
+
+What does work is `hookSpecificOutput.updatedInput` (PreToolUse only, per the binary's own embedded
+hook documentation). The hook rewrote the Bash tool's `command`, and **the rewritten command is what
+ran**: the rewrite's marker files were written and the original command's output file was never
+created. So the marker channel is an assignment prefix the hook writes onto the one command it
+recognised — `WT_TOKEN=<nonce> git worktree add …` — scoped to that invocation by construction.
+
+⚠️ **Transparency cost, observed.** The model is shown the rewritten command's output while
+believing it ran the original. The probe session noticed unprompted: *"the tool result came back as
+`PROBE1_DONE` — the output I was shown doesn't match what the command emits."* Any design that
+rewrites commands owes the user a visible record of the substitution.
+
+**Q2 — how tightly can the marker be scoped? Repo, moment and target: yes. Command identity: no.**
+
+An env var set on the git command line **does** reach the `reference-transaction` hook — including
+the sub-invocations `worktree add` spawns internally (`git branch <b> HEAD`, `git reset --hard
+--no-recurse-submodules`) and the linked-worktree transactions. Control: the same commands without
+it logged the marker absent.
+
+An 11-case matrix was run against three progressively tighter token bindings. Each denial names a
+**distinct** assertion in the log, so no single check is absorbing the matrix:
+
+| Binding | Closes | Still leaks |
+|---|---|---|
+| nonce + repo + expiry + single-use | no-token, token reuse, other repo, expired, a second git call in the same command, a bystander shell while the token is live | a replay of the token onto **any** other HEAD move |
+| + expected new `HEAD` value | replay onto a *different* branch | replay onto the **same** branch the token names |
+| + invoking argv must be a `worktree add` | the above | see the two failures below |
+
+Controls that had to pass, and did: `git commit` with no token allowed (it advances a branch ref,
+it is not a `HEAD` symref move), and `git switch` **inside a linked worktree** allowed
+(`GIT_DIR != GIT_COMMON_DIR`).
+
+**The argv binding fails in both directions — do not ship it.** The hook can read the invoking git's
+argv only as `ps -o command= -p $PPID`, which is the argv array **joined by single spaces**, not the
+original command line (a double space between `worktree` and `add` was normalised away).
+
+- *False deny:* `git -C <repo> worktree add …` and `git --git-dir=… --work-tree=… worktree add …`
+  were both **denied**. This is the same "global option ahead of the subcommand" shape that
+  ADR 0029 already had to fix once in `merge-guard.sh`.
+- *False allow:* `git -c "note.x=git worktree add" switch feat` was **allowed** and HEAD moved. Any
+  argument can carry the substring.
+- Aliases are transparent: `git wa` re-execs as `git-core/git worktree add …`, so the expanded form
+  is what `ps` reports.
+
+**End-to-end, measured.** One command that a `worktree add`-recognising minter would approve —
+`git branch feat; git -c "note.x=git worktree add" switch feat; git worktree add <path> -b feat2` —
+moved the **primary** HEAD from `main` to `feat`. The bypass is at least **noisy**: it spends the
+single-use token, so the legitimate `worktree add` that followed was denied and failed loudly
+(`fatal: ref updates aborted by hook`) rather than the guard failing silently.
+
+**A state discriminator that replaces argv entirely.** At the instant of the gated `HEAD` symref
+transaction during `git worktree add`, the new worktree is **already registered** under
+`$GIT_COMMON_DIR/worktrees/`: the entry `wtF1` was present during its own HEAD write, and `wtF2`
+during the second add. A plain `git switch` adds no entry. So the rule can be *"allow this HEAD
+symref move only if the token's expected worktree name now exists under `worktrees/`"* — a check on
+git's own state, which no argument string can forge and which is indifferent to `-C`, `--git-dir`,
+aliases, wrappers and quoting. Measured: entry **presence** only; whether the entry's `gitdir` file
+is readable and populated at that instant was **not** measured, and recovering the true argv array
+(macOS `KERN_PROCARGS2`) was **not** probed.
 
 ### Also still open from round 7 — `core-conduct/metric-must-be-sourceable`
 
