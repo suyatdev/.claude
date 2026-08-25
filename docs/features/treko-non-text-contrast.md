@@ -212,35 +212,42 @@ fail loudly and never score (§D7); the second is simply outside the population:
 - **0 inset shadows at mount.** The drawer's selection ring is an inset shadow, so it is outside the
   population for the same reason.
 
-**8. Two declared colours are shared by more than one token today — so the "Token" column is an
-attribution, not a measurement.** The allowlist indexes marks by their declared colour string
-(§D8), and a string that two tokens share cannot be attributed to one of them by machine:
+**7. Exactly one declared colour is shared by two tokens that both paint — and it splits cleanly.**
+The allowlist indexes marks by their declared colour string (§D8), so a string two *painting*
+tokens share would be unattributable by machine. Measured, there is one such string:
 
-- `--color-accent` and `--color-accent-500` are the **same hex in both themes** (`#38c4e3` dark,
-  `#007492` light — `Treko.dc.html:25,36`); `--color-accent-2` and `--color-accent-2-500` likewise.
-  `--color-accent` is a PIN token, so its 34 marks are correctly guarded either way — but a reader
-  must not conclude that `--color-accent-500` is guarded, because nothing names it.
-- **`--shadow-sm` in dark is the literal hex `#3f424d`** (`treko/_ds/nocturne-.../styles.css:78`,
-  `--shadow-sm: 0 0 0 1px #3f424d`), which is exactly `--color-neutral-800`'s dark value. The 13
-  dark card shadows therefore look like `--color-neutral-800` marks and are not: editing
-  `--color-neutral-800` would not move them, and editing `--shadow-sm` would. **An earlier draft of
-  this card filed those 13 marks under `--color-neutral-800`; §D2 now files them under
-  `--shadow-sm`.**
+**`--shadow-sm` in dark is the literal hex `#3f424d`** (`treko/_ds/nocturne-.../styles.css:78`,
+`--shadow-sm: 0 0 0 1px #3f424d`), which is exactly `--color-neutral-800`'s dark value. The 13 dark
+card shadows therefore look like `--color-neutral-800` marks and are not: editing
+`--color-neutral-800` would not move them, and editing `--shadow-sm` would. **An earlier draft of
+this card filed those 13 marks under `--color-neutral-800`; §D2 now files them under
+`--shadow-sm`.**
 
-**One of the two is solved by measurement; the other is not, and the difference matters.**
+**It splits on mark kind, exactly.** All 22 of the token's dark marks are `fill` and all 13 of the
+shadow's are `shadow-outset` — an exact partition, no overlap. So the allowlist index keys on
+**(declared colour, mark kind)**, not on colour alone, and both entries can claim `rgb(63, 66, 77)`
+without ambiguity (§D8). Across both themes this is the **only** colour claimed by two entries;
+every other multi-kind colour belongs to a single token painting several kinds.
 
-- **`--shadow-sm` vs `--color-neutral-800` splits cleanly on mark kind.** All 22 of the token's dark
-  marks are `fill` and all 13 of the shadow's are `shadow-outset` — measured, an exact partition
-  with no overlap. So the allowlist index keys on **(declared colour, mark kind)**, not on colour
-  alone, and both entries can claim `rgb(63, 66, 77)` without ambiguity (§D8). Across both themes
-  this is the **only** colour claimed by two different entries; every other multi-kind colour
-  belongs to a single token painting several kinds.
-- **`--color-accent` vs `--color-accent-500` does not split**, because they share the colour *and*
-  every kind. Nothing measurable distinguishes them, so this one stays an attribution: the guarantee
-  is over the colour, and the token name beside it is this card's best reading. Criterion 13 puts
-  that in the test data so a reader cannot mistake it for a measurement. §Risks 3.
+**A second collision was claimed by an earlier draft of this card and is false. It is recorded here
+rather than deleted, because the way it was wrong is instructive.** `--color-accent` and
+`--color-accent-500` *are* the same hex in both themes (`#38c4e3` / `#007492`,
+`Treko.dc.html:25,36`), and from that the card concluded a live ambiguity, wrote it into
+§Background, §D8, §Risks and an acceptance criterion, and would have committed it as a comment in
+the test data. **It never checked whether `--color-accent-500` paints anything.** It does not:
 
-**7. Card A's criterion-5 comment and this probe disagree on the denominator.** The comment says
+```
+git grep -c 'var(--color-accent-500' -- treko/   ->  no matches (exit 1)
+git grep -c 'var(--color-accent)'    -- treko/Treko.dc.html  ->  20
+```
+
+The token is declared four times (`Treko.dc.html:25,36`, `nocturne.css:35`,
+`_ds/nocturne-*/styles.css:35`) and consumed nowhere, so it paints no mark, shares no kind with
+anything, and cannot be misattributed. **This is the same check that already cleared `--hair-2` and
+`--hair-3` in §D2** — the card ran it for those two and did not run it here. A shared value is not a
+collision; a shared value between two tokens that both *paint* is. §Risks 3.
+
+**8. Card A's criterion-5 comment and this probe disagree on the denominator.** The comment says
 "848 elements with rendered area … 367 paint a mark in their own color". This probe measures
 **851 / 368** on the same page and the same Chrome build. The two predicates are not identical (this
 probe's element walk is its own), so this is a discrepancy to resolve during implementation, not a
@@ -297,7 +304,7 @@ green PIN assertion means
 |---|---|---|---|---|
 | `--color-accent-700` | 21 / 21 | **2.88** | **1.27** | 5 merge-wave badges x 4 border sides (20 marks) + **1 outset shadow, which is where the minimum comes from** |
 | `--color-neutral-700` | 35 / 35 | **2.53** | 4.80 | 7 graph nodes x 4 border sides (28), 4 SVG fills, 3 SVG strokes — **min via an SVG stroke** |
-| `--color-neutral-800` | 22 / 22 | **1.65** | **1.25** | unfilled phase dot (22 x 5px fills), and nothing else — the 13 dark card shadows that an earlier draft listed here belong to `--shadow-sm` (§Background 8) |
+| `--color-neutral-800` | 22 / 22 | **1.65** | **1.25** | unfilled phase dot (22 x 5px fills), and nothing else — the 13 dark card shadows that an earlier draft listed here belong to `--shadow-sm` (§Background 7) |
 
 **EXEMPT (14)** — scored by nothing here beyond a reason string and a mark count
 
@@ -316,7 +323,7 @@ green PIN assertion means
 | `--bad-bg` | 6 / 6 | **1.15** | **1.23** | bad badge fill |
 | `--info-bg` | 3 / 3 | **1.14** | **1.22** | info badge fill |
 | `--color-accent-900` | 11 / 11 | **1.32** | **1.03** | accent badge fill |
-| `--shadow-sm` | 13 / 26 | **1.76** | **1.13** | card elevation hairline: 13 cards, one colour in dark, **two in light**; matched on kind `shadow-outset`, because its dark colour is `--color-neutral-800`'s (§Background 8) |
+| `--shadow-sm` | 13 / 26 | **1.76** | **1.13** | card elevation hairline: 13 cards, one colour in dark, **two in light**; matched on kind `shadow-outset`, because its dark colour is `--color-neutral-800`'s (§Background 7) |
 "Min ratio" is the **minimum, over every mark that token paints, of the WCAG ratio between the mark
 and the surface immediately outside it** — the strictest single number the token has to survive.
 **Bold** marks a value below 3:1. `dk` = dark, `lt` = light.
@@ -375,7 +382,7 @@ in the same place the list is.
   is a pale blue drawn on a white card.
 - `--color-neutral-700` — graph node border and SVG edge, **2.53 dk** / 4.80 lt.
 - `--color-neutral-800` — unfilled phase dot, **1.65 dk / 1.25 lt**. This token paints the 22 dots
-  and nothing else; the 13 dark card shadows that share its hex are `--shadow-sm` (§Background 8),
+  and nothing else; the 13 dark card shadows that share its hex are `--shadow-sm` (§Background 7),
   so repairing this entry means repainting the dots, not the card elevation.
 
 **Why not fix them here:** card A's task 4 is the evidence. That re-tint moved the light text check
@@ -422,7 +429,12 @@ The rule the implementation inherits:
      closed and short, and it has **two kinds of entry that are counted differently** — conflating
      them is how an earlier draft produced `334 + 6 ≠ 336`:
      - **The sticky-header fill** (`Treko.dc.html:102`) is a real mark that is excluded from
-       scoring. **Asserted: exactly 1 excluded mark per theme, at that path.**
+       scoring. **Asserted: exactly 1 excluded mark per theme, at that path.** As with the gradient
+       count below, **that assertion *is* the abort for a new own-colour-uncompositable mark**, not
+       a second competing behaviour: a second such mark takes the count to 2, the run fails, and the
+       message names its path and why it could not be composited. "Not on the enumerated list →
+       abort" and "the exclusion count went up" are one event described from two sides, and the
+       card states it once so falsifier case 8 is constructible.
      - **The 5 gradient-painted elements** paint no scoreable mark at all — a gradient is not a
        flat colour, so no fill mark is emitted for them — and **measured, exactly 0 scored marks
        sit over one as backdrop**, in either theme (§Background 6). **Asserted: exactly 5
@@ -437,7 +449,10 @@ The rule the implementation inherits:
      An exclusion whose count grows is a failure, so the list cannot quietly absorb new marks.
      Neither number is part of the scored total: 334 / 347 is the whole scored population.
    - **Not on the enumerated list → abort, naming the path and why it could not be composited.**
-     A newly-uncompositable mark is a change to the page that a human has not classified.
+     A newly-uncompositable mark is a change to the page that a human has not classified. **The
+     abort is raised by the exclusion counts going above their recorded values** — 1 excluded mark,
+     0 marks over a `background-image` — never by a separate earlier check, so every enumerated
+     count is also the falsifier for its own class.
 
    The distinction is the whole point: an enumerated exclusion is a decision this card made and can
    be audited against; an un-enumerated one is a silent skip wearing the same clothes.
@@ -481,7 +496,12 @@ flowchart TD
 Three further probe defects are recorded here so the implementation does not re-ship them:
 
 - **The SVG predicate scored `rgb(0, 0, 0)` on the `<svg>` root element**, which paints nothing.
-  Gate on real shape tags (`circle`, `path`, `rect`, `line`, …), not on the root.
+  Gate on an explicit, closed list of shape tags — `circle`, `ellipse`, `line`, `path`, `polygon`,
+  `polyline`, `rect` — and not on `svg`, `g`, `defs`, `title` or any other container. The list is
+  closed rather than illustrative because the counts it feeds are asserted exactly (§D8): a
+  trailing "…" would let two implementations produce two different totals and both call themselves
+  correct. A shape tag outside this list appearing on the page is an unmapped key, so criterion 5
+  surfaces it rather than the predicate silently widening.
 - **A box-shadow regex read only the first colour of a multi-shadow list.** 13 of 16 outset shadows
   in light are multi-valued.
 - **`effectiveBackground()` ignores `background-image` entirely** — it accumulates
@@ -511,7 +531,7 @@ New module `treko/test_nontext_contrast.py`, alongside `test_theme.py`, reusing 
 
 **Marks are indexed by `(declared colour, mark kind)`, not by colour alone.** One colour on this
 page is claimed by two different entries — dark `rgb(63, 66, 77)`, which is `--color-neutral-800`'s
-22 fills and `--shadow-sm`'s 13 outset shadows (§Background 8) — and keying on colour alone makes
+22 fills and `--shadow-sm`'s 13 outset shadows (§Background 7) — and keying on colour alone makes
 criterion 5 ("exactly one entry") and criterion 7 (per-entry counts) impossible to satisfy at the
 same time. Keying on the pair splits them exactly, with no overlap and nothing left over.
 
@@ -528,8 +548,8 @@ every kind its colours paint, and **today exactly two entries need one.**
   klass: pin                                  # pin | debt | exempt
   floor: 3.0                                  # pin only
   reason: null                                # required non-empty for debt and exempt
-  # shares its value with --color-accent-500 in both themes, and shares every kind
-  # too, so this entry is an attribution, not a measurement (§Background 8, criterion 13)
+  # no kinds filter needed: nothing else paints this colour. --color-accent-500 declares
+  # the same hex but has zero var() consumers, so it paints nothing (§Background 7)
   dark:  {colors: ["rgb(56, 196, 227)"], kinds: null, marks: 34, min_ratio: null}
   light: {colors: ["rgb(0, 116, 146)"],  kinds: null, marks: 34, min_ratio: null}
 
@@ -545,7 +565,7 @@ every kind its colours paint, and **today exactly two entries need one.**
   floor: null
   reason: "card elevation hairline; same species as --hair (§D4). Not a colour token."
   # dark value is the literal hex #3f424d, identical to --color-neutral-800's:
-  # the kinds filter is what separates them (§Background 8)
+  # the kinds filter is what separates them (§Background 7)
   dark:  {colors: ["rgb(63, 66, 77)"], kinds: ["shadow-outset"], marks: 13, min_ratio: null}
   light: {colors: ["rgba(15, 18, 35, 0.06)", "rgba(15, 18, 35, 0.07)"],
           kinds: ["shadow-outset"], marks: 26, min_ratio: null}
@@ -601,6 +621,10 @@ Assertions, per theme:
   string stops matching the entry's `colors`, and the test fails with it printed. The DEBT ratio
   assertion guards the other direction — the token is untouched but what it sits on moved.
 - **EXEMPT** — asserted only to have a non-empty `reason`, and to match its `marks` count. No ratio.
+- **Every DEBT and EXEMPT entry** is asserted to carry a non-empty `reason` and every PIN entry to
+  carry a `floor`, over the allowlist data alone, before any page loads. The schema in this section
+  requires both; without an assertion the requirement is a comment. This is what criteria 3 and 4
+  are checked by.
 - **Coverage** — every `(colour, kind)` key among the scored marks maps to exactly one allowlist
   entry, and every entry matches at least one mark, or the test fails with the offending key
   printed. This is what stops the list going stale as the page grows, and it is the assertion that
@@ -693,7 +717,9 @@ Scenario: A backdrop becomes uncompositable and nobody classified it
 Scenario: An enumerated exclusion quietly grows
   Given the sticky-header fill is the only excluded own-colour mark, 1 per theme
   When an edit gives a second element a color-mix() background
-  Then the exclusion-count assertion fails at 2 against a recorded 1
+  Then the excluded-mark count assertion fails at 2 against a recorded 1
+  And that failure is the abort for an un-enumerated uncompositable mark, not a separate check
+  And the message names the new mark's path and why it could not be composited
   And the new mark is not absorbed into the exclusion list without a human
 
 Scenario: The check runs on the default theme
@@ -719,9 +745,11 @@ Scenario: The check runs on the default theme
    (`shadow-outset`), and the `kinds` filter is what makes that unambiguous.
 6. An uncompositable mark is handled by exactly one of two paths and never a third: **on the
    enumerated exclusion list** it is excluded and the exclusion's own count is asserted — 1
-   sticky-header mark, 5 gradient-painted elements, and **0 scored marks over a gradient backdrop**,
-   each in its own unit and none of them an addend of the scored 334 / 347; **not on the list** it
-   aborts the test with its path and reason named. A colour string the parser cannot read always
+   sticky-header mark, 5 gradient-painted elements, and **0 scored marks over a `background-image`
+   backdrop**, each in its own unit and none of them an addend of the scored 334 / 347; **not on
+   the list** it aborts the test with its path and reason named — and **that abort is raised by one
+   of those same counts exceeding its recorded value**, never by a separate earlier check, so each
+   count is the falsifier for its own class (falsifier cases 7, 8 and 12). A colour string the parser cannot read always
    aborts. Nothing is scored against a guessed backdrop and nothing is silently skipped.
 7. Mark counts are asserted **exactly**, not as floors: the scored population is **334 in dark and
    347 in light**, and every one of the 23 entries sits at its own per-theme figure. The exclusion
@@ -757,10 +785,12 @@ Scenario: The check runs on the default theme
 12. Full suite green, on the pinned Chrome, recording **which tests ran** and the passed/failed/
     deselected counts against the pre-change baseline — a bare pass count cannot show that the new
     module was collected.
-13. The two live colour collisions (§Background 8) are stated in the test data as a comment on the
-    affected entries: `--color-accent` shares its value with `--color-accent-500`, and
-    `--shadow-sm`'s dark value equals `--color-neutral-800`'s. A reader must not conclude from a
-    green run that `--color-accent-500` is guarded.
+13. The one live colour collision (§Background 7) is stated in the test data as a comment on the
+    two affected entries: `--shadow-sm`'s dark value is the literal hex `#3f424d`, identical to
+    `--color-neutral-800`'s, and the `kinds` filter is what separates them. **No other collision is
+    claimed** — an earlier draft asserted one between `--color-accent` and `--color-accent-500`,
+    which is false because `--color-accent-500` has zero `var()` consumers and paints nothing
+    (§Background 7).
 
 ## Pinned versions
 
@@ -810,8 +840,8 @@ Red half and green half are separate commits throughout; never the same commit
    count, and reason; the two collision comments required by criterion 13.
 6. **Red:** PIN and DEBT assertions.
 7. **Green:** land them; both themes go green with zero palette edits.
-8. **Falsify — twelve cases.** For each: introduce the defect in a throwaway copy, confirm the test
-   goes red, and **record which assertion caught it**. A count of "12 of 12 caught" without naming
+8. **Falsify — thirteen cases.** For each: introduce the defect in a throwaway copy, confirm the test
+   goes red, and **record which assertion caught it**. A count of "13 of 13 caught" without naming
    the catching assertion is not evidence.
 
    | # | Defect introduced | Assertion expected to catch it |
@@ -822,21 +852,22 @@ Red half and green half are separate commits throughout; never the same commit
    | 4 | a new mark in a colour on no entry | Coverage — unmapped key |
    | 5 | a mark deleted from the page | that entry's exact count |
    | 6 | **a mark misfiled under the wrong entry, total unchanged** | per-entry counts + "matches at least one mark" |
-   | 7 | a scored mark's own background replaced by a `color-mix()` | abort — own colour uncompositable, not on the enumerated list |
-   | 8 | **a second `color-mix()` element added** | exclusion count, 2 against a recorded 1 |
+   | 7 | **the sticky header's `color-mix()` background removed** | excluded-mark count, 0 against a recorded 1 — a stale enumeration in the *shrinking* direction |
+   | 8 | **a second `color-mix()` element added** | excluded-mark count, 2 against a recorded 1 — *and that failure is the abort*, see §D7 |
    | 9 | **a colour string the parser cannot read** | parse-failure abort |
    | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
    | 11 | **a multi-shadow list read as single** | `--shadow-sm` light count, 13 against 26 |
    | 12 | **a scored mark moved over a gradient backdrop** | "0 scored marks over a gradient", 1 against 0 — **record the predicate that caught it** |
+   | 13 | an EXEMPT entry's `reason` emptied, and a PIN entry's `floor` removed | the data-only reason/floor assertion, before any page loads (criteria 3 and 4) |
 
    Cases 9, 10 and 11 are on this list because they are the card's own origin story: the planning
    probe shipped all three (§D7), and criteria 6, 8 and 9 would otherwise ship with no falsifier at
    all. Case 6 is here because the round-1 revision of this card *was* that bug — 13 marks filed
    under `--color-neutral-800` by hex collision, with the total unchanged and every total-based
-   check green (§Background 8). Case 8 exists because an exclusion list that can grow silently is
+   check green (§Background 7). Case 8 exists because an exclusion list that can grow silently is
    the same failure as a silent skip.
 
-   **Record all twelve cases and their catching assertions in this file**, not only in the throwaway
+   **Record all thirteen cases and their catching assertions in this file**, not only in the throwaway
    copy — a falsifier that is discarded proves the check worked once, on a day nobody can revisit.
 9. Prove criterion 10 — diff the three files and blocks it names (`treko/Treko.dc.html` `:root` at
    `:21` and `:27` and `body[data-theme="light"]` at `:33`; `treko/nocturne.css` `:root`;
@@ -852,13 +883,19 @@ Red half and green half are separate commits throughout; never the same commit
    keeping its value.
 2. **The DEBT assertions are recorded numbers and will need re-recording after any Chrome re-pin.**
    Stated in §Pinned versions; the failure is loud, not silent.
-3. **Attribution by colour string is ambiguous, and two collisions are live today — not
-   hypothetical.** `--color-accent` and `--color-accent-500` are the same hex in both themes, and
-   `--shadow-sm`'s dark value is the same hex as `--color-neutral-800` (§Background 8). Marks are
-   filed under whichever entry claims the string, so **the guarantee is over the colour; the token
-   name beside it is this card's attribution, and criterion 13 makes that explicit in the data.**
-   The alternative — indexing by CSS custom-property name — is not available: `getComputedStyle`
-   does not give the property name back for a resolved mark. Accepted, disclosed, not solved.
+3. **Attribution by colour string is ambiguous in principle, and one collision is live today.**
+   `--shadow-sm`'s dark value is the same hex as `--color-neutral-800`'s (§Background 7). That one
+   splits exactly on mark kind, so the index resolves it. What remains unsolved is the *general*
+   case: if a future token shares both a value and a kind with an existing entry, marks are filed
+   under whichever entry claims the key and nothing would surface it. **The guarantee is over the
+   `(colour, kind)` key; the token name beside it is this card's attribution.** The alternative —
+   indexing by CSS custom-property name — is not available: `getComputedStyle` does not give the
+   property name back for a resolved mark. Accepted, disclosed, not solved.
+
+   A shared *value* alone is not a collision, and this card got that wrong once: it claimed
+   `--color-accent` / `--color-accent-500` as live without checking whether the latter paints. It
+   does not — zero `var()` consumers (§Background 7). The check that settles it is one `git grep`,
+   and it is the same one the card already ran for `--hair-2` and `--hair-3`.
 
    The same ambiguity is what limits the coverage criterion's reach over `--hair-2` and `--hair-3`,
    which paint nothing at mount (§D2). If their gated call sites ever paint, criterion 5 catches
@@ -931,7 +968,7 @@ a number or a claim, not merely wording:
 - **`--hair-2` and `--hair-3` are gated, not dormant** — three live call sites (`:117`, `:303`,
   `:325`), which also surfaced the agent panel (`sc-if agentOpen`, `:302`) as a second
   interaction-gated region missing from §Scope/Out.
-- **Two colour collisions are live** (§Background 8), one of them on a PIN token.
+- **Two colour collisions are live** (§Background 7), one of them on a PIN token.
 
 ### Corrections made in compliance round 2 (verdict: fail, 6 violations; 5 of round 1's 7 closed)
 
@@ -1067,12 +1104,41 @@ found, and it is about this card's headline guarantee.
   covers a genuinely different path — a mark whose *own* colour becomes uncompositable and is not
   enumerated.
 
+### Corrections made in compliance round 6 (verdict: fail, 2 violations; both of round 5's closed)
+
+One of the two is a claim this card asserted for five rounds and never checked. It is corrected in
+place and the error is recorded, because how it happened is more useful than the fact of it.
+
+- **The "two live colour collisions" claim was half false.** `--color-accent` and
+  `--color-accent-500` do share a hex — and from that the card concluded a live ambiguity, wrote it
+  into §Background, §D8's schema comment, §Risks 3 and acceptance criterion 13, and would have
+  committed it as a comment inside `treko/test_nontext_contrast.py`. **It never asked whether
+  `--color-accent-500` paints anything.** It does not: `git grep -c 'var(--color-accent-500' --
+  treko/` returns no matches, against 20 for `var(--color-accent)`. It is declared four times and
+  consumed nowhere, so it paints no mark and cannot be misattributed. **Only the `--shadow-sm` /
+  `--color-neutral-800` collision is real**, and that one splits exactly on mark kind. The check
+  that settles it is one `git grep` — the same one this card had already run for `--hair-2` and
+  `--hair-3` two sections earlier, and did not think to run here. A shared value is not a collision;
+  a shared value between two tokens that both *paint* is.
+- **A second `color-mix()` mark had two specified outcomes** — abort as un-enumerated (§D7 rule 2,
+  criterion 6) or the exclusion count going 2 against 1 (the scenario, case 8) — the same shape as
+  round 5's gradient finding, one level over. Resolved the same way: **the count is the abort**,
+  raised by an enumerated count exceeding its recorded value and never by a separate earlier check.
+  Falsifier case 7 was re-pointed at the shrinking direction — the header's `color-mix()` removed,
+  count 0 against 1 — so cases 7 and 8 no longer take the same input.
+
+Three non-blocking notes from the same round were also acted on: criterion 4 had no falsifier and
+the DEBT/EXEMPT `reason` the schema requires was asserted nowhere (both now covered by a data-only
+assertion and falsifier case 13); §Background was numbered 6, 8, 7 and is now 6, 7, 8; and the
+SVG shape-tag list ended in "…" inside a predicate whose output is asserted exactly — it is now a
+closed list of seven tags, with the reason it must be closed.
+
 ### What was NOT verified
 
 - **"902 body descendants."** Carried in the planning notes, not reproducible from the stored
   artifact (which records `elementsWithArea` and `textPainters` only) and not re-measured this
   session. **Dropped from this card rather than repeated.** The related discrepancy — this probe's
-  851/368 against card A's inline comment of 848/367 — is recorded at §Background 7 as a discrepancy
+  851/368 against card A's inline comment of 848/367 — is recorded at §Background 8 as a discrepancy
   to resolve during implementation, not as a proven error.
 - **No implementation exists.** Nothing in §Tasks has been run. The allowlist's *classification* is
   a human decision recorded here; only its *ratios* are measured.
