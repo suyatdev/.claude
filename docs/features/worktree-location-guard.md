@@ -2105,6 +2105,13 @@ HEAD unmoved. That is the whole point of the move: no lexing, no wrapper list, n
    `commit` and `merge` and denied `reset --hard HEAD~1`, measured.
 2. **`git worktree add` writes HEAD in the primary context, byte-identical to `git switch`.**
    This is the blocking finding. Measured side by side:
+
+   > ⚠️ **Corrected by the second measurement pass — read that section before building on this
+   > one.** The two are identical in every field listed here, and this table is accurate as far as
+   > it goes. But "identical in the *environment*" is not "identical in the *filesystem*", and the
+   > filesystem separates them cleanly. The primary's HEAD is in fact **never moved** by
+   > `git worktree add`; the gated symref write belongs to the *new* worktree. This premise is what
+   > made the token machinery below look necessary, and it is no longer load-bearing.
    - `git switch side` → `ref=HEAD`, `GIT_DIR` **unset**, `rev-parse --git-dir` = `.git`,
      `new=ref:refs/heads/side`
    - `git worktree add <path> side` → `ref=HEAD`, `GIT_DIR` **unset**, `rev-parse --git-dir` =
@@ -2206,6 +2213,129 @@ git's own state, which no argument string can forge and which is indifferent to 
 aliases, wrappers and quoting. Measured: entry **presence** only; whether the entry's `gitdir` file
 is readable and populated at that instant was **not** measured, and recovering the true argv array
 (macOS `KERN_PROCARGS2`) was **not** probed.
+
+### Second measurement pass, 2026-08-25 — the token machinery is unnecessary, and one premise was wrong
+
+Four parallel probes were run before writing the Arm D design, on the principle that a fifth
+hand-maintained list is the bet that has lost five times. Three have reported. **Two of their
+findings remove the entire marker design above; one of them threatens the whole approach.**
+
+**Attribution, stated per claim.** Rows marked ✅ were re-run first-hand in this session against
+throwaway repos, each with a control that fired the other way, and the probe scripts are named.
+Rows marked ⬜ are reported by a probe agent and were **not** independently re-run here.
+
+#### Correction — the primary's HEAD is never moved by `git worktree add` ✅
+
+The constraint-2 premise above says `worktree add` and `switch` are byte-identical at the gated
+transaction. In the **environment** they are. In the **filesystem** they are not, and the difference
+is exactly the discriminator the design needed:
+
+| Operation | HEAD lock git holds | Primary's HEAD afterwards |
+|---|---|---|
+| `git switch <b>` / `checkout` / `switch --detach` | `$GIT_COMMON_DIR/HEAD.lock` | moved |
+| `git worktree add …` (4 forms) | `$GIT_COMMON_DIR/worktrees/<n>/HEAD.lock` | **unmoved — stays `main`** |
+
+Verified: `scratchpad/verify_lockrule.sh`, git 2.50.1 (Apple Git-155), ref-format `files`. All four
+`worktree add` forms reported `HEAD main -> main moved=no` while creating 4 real worktrees
+(`git worktree list` count 5, primary included).
+
+#### The rule this yields — no token, no nonce, no command rewriting ✅
+
+> In the primary context (`--absolute-git-dir` == `--git-common-dir`), **deny a write to `HEAD`
+> if and only if `$GIT_COMMON_DIR/HEAD.lock` exists.**
+
+Measured 10/10 with **both clauses demonstrably firing** — the attribution log is reported per
+clause, so this is not one clause absorbing every case:
+
+| Case | Result | Clause that fired |
+|---|---|---|
+| `git switch other` | **deny** rc=128 | `DENY primary-HEAD-lock-held` |
+| `git checkout other` | **deny** rc=128 | same |
+| `git switch --detach HEAD` | **deny** rc=128 | same (an **OID** write, not a symref) |
+| `sh -c 'git switch other'` | **deny** rc=128 | same |
+| `env -C . git switch other` | **deny** rc=128 | same |
+| `git worktree add <p> wtb1` | allow rc=0 | `ALLOW no-primary-HEAD-lock` |
+| `git worktree add <p> -b newbr` | allow rc=0 | same |
+| `git worktree add --detach <p>` | allow rc=0 | same |
+| `git worktree add --no-checkout <p>` | allow rc=0 | same |
+| `git commit --allow-empty` | allow rc=0 | not gated — writes `refs/heads/main`, never `HEAD` |
+| hand-made `mkdir .git/worktrees/fakeA` then `switch` | **deny** rc=128 | `DENY primary-HEAD-lock-held` |
+
+**What this deletes from the design above:** the nonce, the repo binding, the expiry, the
+single-use ledger, the expected-new-HEAD binding, and — most importantly — the
+`hookSpecificOutput.updatedInput` command rewriting and its stated transparency cost (*"the model
+is shown the rewritten command's output while believing it ran the original"*). None of it is
+needed. The guard stops needing to recognise anything about the command at all, which is the same
+win the pivot was chosen for, taken one step further. It also closes the `--detach` hole: the rule
+gates OID writes to `HEAD`, not just symref writes.
+
+#### The state discriminator proposed above is broken — do not build on it ⬜
+
+The `worktrees/<name>`-presence check recorded above as "a check on git's own state, which no
+argument string can forge" is **forgeable by `mkdir`**. An empty hand-made directory satisfies it;
+git does not even list it as a worktree. A stale entry (worktree deleted, never pruned) satisfies it
+too, and requiring the entry be non-prunable is not a repair — writing a plausible `gitdir` file
+erases prunability. **The live `~/.claude/.git/worktrees` already holds four qualifying names**
+(`rule-surface-trim`, `treko-card-b-spec`, `treko-ui-update`, `verifying-durable-claims`), so the
+precondition is met today with no attacker action. The lock rule above replaces it entirely.
+
+One salvage worth keeping: `gitdir` is written **absolute, `..`-resolved and symlink-resolved**, so
+a prefix test against `~/.worktrees/<repo>/` is sound against symlink escape — relevant to Arm B2,
+not to Arm D.
+
+#### 🚩 The blocking finding — an aborted switch leaves the destination content staged ✅
+
+**This applies no matter how good the discriminator is, and it is worse than not blocking at all.**
+Vetoing the HEAD write does not roll back the checkout. Verified, `scratchpad/verify_rollback.sh`:
+
+```
+BEFORE (clean main)          AFTER the veto (rc=128)
+  HEAD symref : main           HEAD symref : main          <- correctly unmoved
+  marker.txt  : ON-MAIN        marker.txt  : ON-FEATURE    <- destination content
+  shared.txt  : shared-v1      shared.txt  : shared-v2
+  featonly    : absent         featonly    : PRESENT
+  status      : []             status      : A featonly.txt / M marker.txt / M shared.txt
+```
+
+HEAD stays on `main` while the index and working tree hold `feature`'s complete content, **staged**.
+A `git commit` at that moment lands feature's content on `main` — and `git status` presents it as
+ordinary staged work, indistinguishable from something the session did itself. Control: the same
+switch with the hook disarmed completed cleanly, empty `status`. A blocked `git rebase` likewise
+leaves `.git/rebase-merge` behind, requiring `git rebase --abort` ⬜.
+
+For a feature whose entire purpose is *"another session must not find its checkout changed under
+it"*, the guard firing produces exactly that outcome in a more confusing form. **Any design that
+ships this arm owes a remediation step** — the hook cannot roll back from inside a veto, so the
+options are a follow-up `PreToolUse`/`PostToolUse` restore, or accepting and loudly documenting a
+dirty tree after every refusal.
+
+#### Installation and enforcement strength
+
+- **Channel:** a global `core.hooksPath` reaches every repo including ones created later ⬜, with no
+  per-repo setup. There is no per-repo alternative that does not mean shimming every hook name in
+  every repo ⬜.
+- **Cost:** `core.hooksPath` **replaces** `.git/hooks` rather than adding to it ⬜ — and the
+  reciprocal risk is the sharper one: husky and lefthook install by setting `core.hooksPath`
+  **locally**, which beats global, so the first repo to run `husky install` silently deletes the
+  guard for the repo where work is happening ⬜. Blast radius today measured at 12 `.git/hooks`
+  directories under `$HOME`, **0** with a non-sample executable hook and **0** setting
+  `core.hooksPath` locally ⬜ — so nothing breaks now; the cost is latent, not absent.
+- **Bypasses, all verified ✅** (`scratchpad/verify_bypass.sh`; armed baseline rc=128, control
+  rc=0): `git -c core.hooksPath=/dev/null switch` → rc=0; `-c core.hooksPath=<empty dir>` → rc=0;
+  `GIT_CONFIG_GLOBAL=/dev/null` → rc=0; `git config --local core.hooksPath <dir>` → rc=0, **and the
+  config write itself is not blocked**. Also ⬜ `printf 'ref: refs/heads/other' > .git/HEAD` moves
+  HEAD with zero hook invocations.
+- **Fail-open, all verified ✅ and all silent:** hook not executable → rc=0 HEAD moved; hook file
+  missing → rc=0; entire hooksPath directory missing → rc=0. **The guard's own disappearance is
+  indistinguishable from its success**, which is the same shape as the refusal-only-log problem
+  task 10 already records. A positive liveness check is required, not optional.
+- **`reftable` fails open** ⬜ — `.git/HEAD.lock` never exists under that backend, so the lock rule
+  allows everything. This repo is `files` (verified ✅ via `git rev-parse --show-ref-format`), so it
+  is latent; the rule must be backend-aware before it can be called general.
+
+**Standing conclusion: Arm D cannot be described as a security boundary under any of these designs**
+— four one-flag bypasses and a direct file write all defeat it. That was already the card's
+position for the text classifier; it survives the pivot unchanged and must be said explicitly.
 
 ### Round 7's second violation — `core-conduct/metric-must-be-sourceable` — CLOSED 2026-08-25
 
