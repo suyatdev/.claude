@@ -715,11 +715,64 @@ clause 3a cannot see it:
 
 **Accepted cost, measured rather than asserted.** Clause 3b's command-position test was chosen over
 the wider "`git` anywhere in the re-lexed tokens" precisely because the wider form was measured and
-rejected: against **19 real command shapes** drawn from this repo's own workflow, the wider form
-falsely denied **4**, including `gh pr create --title "fix git guard"` and
-`gh issue comment 12 --body "the git switch case is covered"` — shapes this workflow types
-constantly. The command-position form was then measured on two lists on the same day: **21 shapes
-that must be allowed — 0 false denials**, and **9 shapes that must be denied — 9 denied**.
+rejected. Rounds 3, 5 and 7 all cited `core-conduct/metric-must-be-sourceable` here, because the
+card recorded the counts and not the populations. **The three populations are now written out in
+full below**, and both harnesses were **re-run on 2026-08-25 against the live
+`hooks/lib/shell_segments.py` on `/usr/bin/python3` 3.9.6** — not restated from the original run.
+Both reproduced their original result exactly. Provenance for anyone re-deriving: the harnesses
+were session-scratchpad heredocs, recovered verbatim from the session transcript
+`projects/-Users-marksuyat--claude/bc079685-3598-4010-8598-2a1061a90025.jsonl`, tool call at
+**line 184** (wider form) and **line 195** (command-position form). They have never been committed
+to this repo on any ref — `git grep` over `git rev-list --all` returns zero hits for three of the
+shapes below — so the transcript is the only source, and that is exactly why the lists belong here.
+
+**Population 1 — the wider form against 19 real command shapes: 4 false denials.** The shapes are
+drawn from this repo's own workflow. All four false denials are named; earlier revisions named two.
+
+| # | Shape | Wider form |
+|---|---|---|
+| 1 | `gh pr create --title "fix git guard" --body "closes the hole"` | **DENY — false** |
+| 2 | `gh issue comment 12 --body "the git switch case is covered"` | **DENY — false** |
+| 3 | `rg 'git switch' hooks/` | **DENY — false** |
+| 4 | `ssh host "git pull"` | **DENY — false** |
+| 5 | `git commit -m 'fix: git switch is now denied'` | allow |
+| 6 | `echo "Co-Authored-By: Claude"` | allow |
+| 7 | `python3 -c 'print(1)'` | allow |
+| 8 | `python3 -c 'import subprocess; subprocess.run(["git","log"])'` | allow |
+| 9 | `jq -r ".git"` | allow |
+| 10 | `sed -i "" "s/git/hg/" f.txt` | allow |
+| 11 | `find . -name "*.py"` | allow |
+| 12 | `curl -s "https://github.com/o/r.git"` | allow |
+| 13 | `echo "see docs/features/worktree-location-guard.md"` | allow |
+| 14 | `test -d "$HOME/.claude"` | allow |
+| 15 | `make test ARGS="-v"` | allow |
+| 16 | `docker run -e MSG="hello" img` | allow |
+| 17 | `ssh host "uptime"` | allow |
+| 18 | `gh pr create --body-file /tmp/body.md` | allow |
+| 19 | `npm run build -- --watch` | allow |
+
+Rows 3 and 4 are the two that earlier revisions left unnamed, because both are separately discussed
+below as *accepted* over-denials. That is a defensible reading of rows 3 and 4 and an indefensible
+way to report a count: "falsely denied 4, including…" followed by two shapes reads as a sample of
+four comparable items. Named in full, the honest summary is **2 false denials this design rejects
+outright, and 2 it accepts under a different rule** — a materially different sentence.
+
+**Population 2 — the command-position form, 9 shapes that must deny: 9 denied.**
+`sh -c 'git switch main'`; `bash -c "git switch main"`; `zsh -c 'git switch main'`;
+`eval "git switch main"`; `sh -c 'cd /tmp/other && git switch main'`;
+`sh -c "sh -c 'git switch main'"`; `env -C /tmp/other git switch main`;
+`timeout 5 git commit -m x`; `if cd /tmp/other; then git commit -m x; fi`.
+
+**Population 3 — the command-position form, 21 shapes that must allow: 0 false denials.**
+Rows 5–19 of population 1 above (15 shapes), plus `git switch main`, `echo hello`, `ls -la /tmp`,
+`npm test`, `cat README.md`, and `gh pr create --title "fix git guard" --body "closes the hole"` /
+`gh issue comment 12 --body "the git switch case is covered"` — the two rows the wider form broke.
+That accounts for 21. **`git switch main` allows in this harness on purpose**: the harness measures
+only the collapsed-token clause, not the branch-move classification, so a bare `git` in command
+position is not its subject. Reading that row as "Arm D allows `git switch`" is a misreading.
+
+A fourth group of 2 ran alongside them, asserting an **allow** deliberately — `./myscript.sh` and
+`python3 -c 'import subprocess; subprocess.run(["git","log"])'`, the two Non-goals residuals.
 
 What both clauses still deny, unchanged from round 5 and still accepted: `echo git switch main`
 (3a) and `grep -r 'git switch' .` / `rg 'git switch' hooks/` (3b) — commands that merely *mention*
@@ -1905,12 +1958,21 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       **(c) Clause 3b — the round-6 cases, three groups, all three required.** Every command below
       was measured against the live `segments()` on 2026-08-25; the suite pins the measurement, it
       does not restate the prose.
-      - **Must deny** (8): `sh -c 'git switch main'`, `bash -c "git switch main"`,
-        `zsh -c 'git switch main'`, `eval "git switch main"`,
-        `sh -c 'cd /tmp/other && git switch main'`, `sh -c "sh -c 'git switch main'"`,
-        a token still collapsed at the depth bound of 3, and a collapsed token `segments()`
-        returns `[]` for. **`zsh` must be in the suite and must not be in the rule** — it is the
-        case that fails if anyone reintroduces a shell-name list.
+      - **Must deny** (11 = the 9 measured, plus 2 that no shape can express). Rounds 3–7 read a
+        contradiction here — the prose said 9 and this list said 8 — because the two lists are
+        *differently composed*, not one short. They share 6 literal shapes; the measured population
+        adds 3 carried over from round 5, and this list adds 2 abstract cases a literal command
+        cannot stand for. 6 + 3 = 9 measured; 6 + 2 = 8 as previously written; the union is 11.
+        - The 6 shared: `sh -c 'git switch main'`, `bash -c "git switch main"`,
+          `zsh -c 'git switch main'`, `eval "git switch main"`,
+          `sh -c 'cd /tmp/other && git switch main'`, `sh -c "sh -c 'git switch main'"`.
+        - The 3 round-5 carryovers, also measured: `env -C /tmp/other git switch main`,
+          `timeout 5 git commit -m x`, `if cd /tmp/other; then git commit -m x; fi`.
+        - The 2 abstract cases, which the suite must construct rather than quote: a token still
+          collapsed at the depth bound of 3, and a collapsed token `segments()` returns `[]` for.
+
+        **`zsh` must be in the suite and must not be in the rule** — it is the case that fails if
+        anyone reintroduces a shell-name list.
       - **Must allow — the false-deny guard** (at least these 4, the shapes the wider variant was
         measured to break): `gh pr create --title "fix git guard" --body "closes the hole"`,
         `gh issue comment 12 --body "the git switch case is covered"`,
@@ -2145,10 +2207,21 @@ aliases, wrappers and quoting. Measured: entry **presence** only; whether the en
 is readable and populated at that instant was **not** measured, and recovering the true argv array
 (macOS `KERN_PROCARGS2`) was **not** probed.
 
-### Also still open from round 7 — `core-conduct/metric-must-be-sourceable`
+### Round 7's second violation — `core-conduct/metric-must-be-sourceable` — CLOSED 2026-08-25
 
-Independent of the Arm D pivot. The 19/21/9 figures at the derivation-3 section record date and
-instrument but not the **shapes**: 6 of 21 written down, 0 of 19, and the prose says 9 must-deny
-while task 3 lists 8. Either the lists go into the card or the numbers come out. The observability
-judge notes the 36,187-command corpus used for its own measurement is already on disk and already
-cited twice in this card, so re-running against a recorded population is available.
+Independent of the Arm D pivot, and now fixed at the derivation-3 section rather than here. All
+three populations behind the 19/21/9 figures are written out in full, and both harnesses were
+**re-run against the live `shell_segments.py`** rather than restated: 4/19, 9/9, 21/21, 0 failures,
+each reproducing its original result. The 9-vs-8 contradiction in task 3 is resolved — the two lists
+were differently composed (6 shared literals, +3 measured carryovers vs. +2 abstract cases), and
+task 3 now carries the 11-item union with the arithmetic shown.
+
+Two things the fix deliberately did **not** do, so neither reads as settled:
+
+- It did not re-run against the observability judge's **36,187-command corpus**. That corpus
+  measured a different question — how often the *deny* rule fires on real traffic — and the pivot
+  below may remove the deny rule this population was chosen to calibrate. Re-running it before the
+  Arm D design settles would produce a number measuring a superseded mechanism.
+- It did not claim the populations are representative. They are shapes chosen by hand from this
+  repo's workflow, not a sample; they establish that the wider form breaks 2 shapes this workflow
+  types constantly, and nothing about the rate at which it would break others.
