@@ -412,9 +412,11 @@ per theme, because §Background 3 means the two numbers have no relationship to 
 ### D7 — Uncompositable marks are excluded and tallied; only a parse failure aborts directly
 
 > **This section is the single normative statement of what happens to a mark the check cannot
-> composite.** Every other mention in this card — §Scope/In, §Background 1a, §Background 6, §D8,
-> acceptance criterion 6, the scenarios, the falsifier table, the flowchart — **points here and does
-> not restate the mechanism.** That rule exists because this exact statement drifted in three
+> composite.** Every **prose** mention in this card — §Scope/In, §Background 1a, §Background 6,
+> §D8, acceptance criterion 6, the scenarios — **points here and does not restate the mechanism.**
+> The flowchart and the falsifier table necessarily carry a compressed form of it, because a diagram
+> node and a table cell cannot be pointers; the requirement on those two is that they must not
+> *diverge* from this section.** That rule exists because this exact statement drifted in three
 > consecutive compliance rounds, each time in a different duplicate: first the prose, then a
 > scenario, then the diagram, then this heading. A statement made in seven places is a statement
 > that will disagree with itself.
@@ -643,16 +645,29 @@ Assertions, per theme:
   printed. This is what stops the list going stale as the page grows.
 
   > **This bullet is the single normative statement of which assertion catches an edited token
-  > value.** Every other mention — the PIN and DEBT bullets above, the scenarios, the falsifier
-  > table, the flowchart's `G → F3` branch — **points here and does not restate it.** The rule:
-  > **any edit to a token's value is caught by Coverage**, because the edited token's declared
-  > colour string is new and its key is therefore unmapped, so neither the PIN floor nor the DEBT
-  > ratio ever sees a ratio to compare. The PIN floor and the DEBT ratio fire only when the token's
-  > own value is *unchanged* — either because the surface under it moved, or because someone edited
-  > the token **and updated its allowlist entry to match**, which is the case falsifier 1 and 3
-  > construct. This statement is demoted to one place deliberately: it is stated in six sites, and
-  > §D7's identical shape drifted in three consecutive compliance rounds before being made
-  > single-source.
+  > value.** The rule has two halves and the second is what makes the first safe to state:
+  >
+  > 1. **An edit to a token's value that does *not* also update its allowlist entry is caught by
+  >    Coverage** — the edited token's declared colour string is new, its key is unmapped, and
+  >    neither the PIN floor nor the DEBT ratio ever sees a ratio to compare.
+  > 2. **An edit that *does* update the entry to match passes Coverage by construction, and is
+  >    caught by the PIN floor or the DEBT ratio instead.** This is the diligent edit. **Falsifier
+  >    case 1 constructs it for PIN; there is no DEBT analogue in the table, and that is a stated
+  >    gap** — case 2 is the *careless* DEBT edit (Coverage fires) and case 3 is the DEBT token left
+  >    untouched under a moved surface. So do not read half 1 as "any edit"; without the
+  >    qualifying clause it would say the floor is unreachable, which is the false premise round 5
+  >    of this card's compliance loop had to correct.
+  >
+  > The PIN floor and the DEBT ratio therefore fire in exactly two situations: the token's own value
+  > is unchanged and the surface under it moved, or the token changed *and* the entry changed with
+  > it.
+  >
+  > **Every prose mention of this rule — the PIN and DEBT bullets above, the scenario comment
+  > block — points here and does not restate the mechanism.** The flowchart and the falsifier table
+  > necessarily carry a compressed form of it, because a diagram node and a table cell cannot be
+  > pointers; the requirement on those two is that they must not *diverge* from this bullet, and
+  > round 10 of the compliance loop checked that they do not. This statement is single-sourced
+  > deliberately: §D7's identical shape drifted in three consecutive rounds before being demoted.
 
 ### D9 — Focus rings are out, and the reason is not "they fail"
 
@@ -705,7 +720,7 @@ Scenario: A recorded defect gets worse without its own value changing
   Given --color-neutral-800 is recorded as debt at 1.6519 in dark
   And it is unchanged, but the surface its dots sit on has been re-tinted
   When the non-text check runs
-  Then the coverage assertion passes, because the token's own colour string is unchanged
+  Then the coverage assertion passes
   And the debt assertion fails on the ratio moving outside +/- 0.0005
   And the message states the recorded value, the measured value, and which direction it moved
 
@@ -870,7 +885,7 @@ Red half and green half are separate commits throughout; never the same commit
    | 5 | a mark deleted from the page | that entry's exact count |
    | 6 | **a mark misfiled under the wrong entry, total unchanged** | per-entry counts + "matches at least one mark" |
    | 7 | **the sticky header's `color-mix()` background removed** | excluded-mark count, 0 against a recorded 1 — a stale enumeration in the *shrinking* direction |
-   | 8 | **a second `color-mix()` element added** | excluded-mark count, 2 against a recorded 1 — *and that failure is the abort*, see §D7 |
+   | 8 | **a second `color-mix()` element added** | excluded-mark count, 2 against a recorded 1 (§D7) |
    | 9 | **a colour string the parser cannot read** | parse-failure abort |
    | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
    | 11 | **a multi-shadow list read as single** | `--shadow-sm` light count, 13 against 26 |
@@ -1212,8 +1227,11 @@ the same shape is *"an edit to a token's value is caught by Coverage, not by the
 DEBT ratio"* — stated normatively in six places that agree today (§D8's DEBT bullet, §D8's Coverage
 bullet, both scenario comment blocks, falsifier case 2, and the flowchart's `G → F3` branch). It has
 been demoted the same way §D7 was, **before** it drifted rather than after: §D8's Coverage bullet is
-now the single normative statement, the DEBT bullet and both scenarios point at it, and the
-scenarios assert only which assertion fires and what it prints.
+now the single normative statement, and the DEBT bullet and the one Gherkin comment block point at
+it. (Round 10 corrected this paragraph: an earlier version said "both scenario comment blocks" and
+"both scenarios point at it" — there is one comment block in the whole Gherkin section, and the
+scenarios themselves are steps, not pointers. The paragraph was describing an edit without
+re-reading the file it described, for the third round running.)
 
 ### What was NOT verified
 
