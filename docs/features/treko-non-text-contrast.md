@@ -73,10 +73,8 @@ Each was a user decision. The implementation does not relitigate them.
   each with per-theme declared colours, a per-theme mark count, and a reason string on every DEBT
   and EXEMPT entry (§D2, §D8).
 - A loud-failure rule for marks the probe cannot composite — gradients, `color-mix()` grounds,
-  `backdrop-filter` — which are excluded from scoring and **tallied**, with the tally asserted
-  against a recorded value; a tally out of range is what fails the run, and there is no separate
-  per-mark abort ahead of it. A colour string that does not parse at all is the one exception and
-  aborts directly (§D7).
+  `backdrop-filter`. **§D7 is the normative statement of what that rule does**; this card states it
+  there and nowhere else.
 - A vacuity floor: the check must assert it found marks at all, in each theme (§D8).
 - The three debt entries recorded in this file, with their measured ratios and their call sites
   (§D5). No palette edit.
@@ -197,8 +195,8 @@ of the *other* theme cannot use a token, because a token would render the curren
 previews.** Neither appears in the measured population (drawer closed at mount) — confirmed by
 searching the marks for a 7px `rgb(56, 196, 227)`: zero.
 
-**6. Surfaces no probe can composite, and marks that do not exist at mount. The first group must
-fail loudly and never score (§D7); the second is simply outside the population:**
+**6. Surfaces no probe can composite, and marks that do not exist at mount. The first group is
+never scored — §D7 says what happens to it instead; the second is simply outside the population:**
 
 - **5 gradient-painted elements**, from two declarations: the progress-bar fill
   (`linear-gradient(90deg, var(--color-accent-700), var(--color-accent))`, one element, 31x6) and
@@ -412,7 +410,15 @@ and the only way the check exercises the app's own mount logic rather than simul
 A token whose ratio differs between themes gets **two** allowlist entries' worth of assertion, one
 per theme, because §Background 3 means the two numbers have no relationship to each other.
 
-### D7 — Uncompositable surfaces abort; they never score
+### D7 — Uncompositable marks are excluded and tallied; only a parse failure aborts directly
+
+> **This section is the single normative statement of what happens to a mark the check cannot
+> composite.** Every other mention in this card — §Scope/In, §Background 6, §D8, acceptance
+> criterion 6, the scenarios, the falsifier table, the flowchart — **points here and does not
+> restate the mechanism.** That rule exists because this exact statement drifted in three
+> consecutive compliance rounds, each time in a different duplicate: first the prose, then a
+> scenario, then the diagram, then this heading. A statement made in seven places is a statement
+> that will disagree with itself.
 
 A silent skip is indistinguishable from a passing check. This is not a hypothetical: the planning
 probe's first version copied `parseColor` verbatim from `test_theme.py`, could not read Chrome's
@@ -484,14 +490,14 @@ flowchart TD
     W -->|yes| OKX["excluded, not scored,<br/>and not part of 334 / 347"]
     C -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
     E --> G{"(colour, kind) key<br/>on the allowlist?"}
-    G -->|no| F3["FAIL: unmapped key, printed<br/>criterion 5"]
+    G -->|no| F3["FAIL: unmapped key, printed<br/>criterion 5 - cases 2, 4"]
     G -->|yes| H{"class"}
     H -->|PIN| P{"ratio >= 3.0?"}
     H -->|DEBT| Q{"ratio within 0.0005<br/>of the recorded value?"}
     H -->|EXEMPT| R{"reason string non-empty?"}
-    P -->|no| FP["FAIL: token, ratio, kind, path"]
-    Q -->|no| FQ["FAIL: recorded vs measured,<br/>and which direction"]
-    R -->|no| FR["FAIL: exemption without a reason"]
+    P -->|no| FP["FAIL: token, ratio, kind, path<br/>criterion 2 - case 1"]
+    Q -->|no| FQ["FAIL: recorded vs measured,<br/>and which direction<br/>criterion 3 - case 3"]
+    R -->|no| FR["FAIL: exemption without a reason<br/>criterion 4 - case 13"]
     P -->|yes| OK["pass"]
     Q -->|yes| OK
     R -->|yes| OK
@@ -751,13 +757,11 @@ Scenario: The check runs on the default theme
    asserts, over the allowlist data alone, that no key is claimed by two entries — dark
    `rgb(63, 66, 77)` is claimed by both `--color-neutral-800` (`fill`) and `--shadow-sm`
    (`shadow-outset`), and the `kinds` filter is what makes that unambiguous.
-6. An uncompositable mark is handled by exactly one of two paths and never a third: **on the
-   enumerated exclusion list** it is excluded and the exclusion's own count is asserted — 1
-   sticky-header mark, 5 gradient-painted elements, and **0 scored marks over a `background-image`
-   backdrop**, each in its own unit and none of them an addend of the scored 334 / 347; **not on
-   the list** it aborts the test with its path and reason named — and **that abort is raised by one
-   of those same counts exceeding its recorded value**, never by a separate earlier check, so each
-   count is the falsifier for its own class (falsifier cases 7, 8 and 12). A colour string the parser cannot read always
+6. Uncompositable marks are handled exactly as **§D7** specifies — §D7 is the normative statement
+   and this criterion deliberately does not restate the mechanism. What is checked here is that the
+   implementation matches it: the three exclusion counts (1 sticky-header mark, 5 gradient-painted
+   elements, 0 scored marks over a `background-image` backdrop) are each asserted in their own unit,
+   none is an addend of the scored 334 / 347, and falsifier cases 7, 8, 9 and 12 each go red. A colour string the parser cannot read always
    aborts. Nothing is scored against a guessed backdrop and nothing is silently skipped.
 7. Mark counts are asserted **exactly**, not as floors: the scored population is **334 in dark and
    347 in light**, and every one of the 23 entries sits at its own per-theme figure. The exclusion
@@ -1161,6 +1165,24 @@ previously asserted nowhere; and §Scope/In's "must abort the check" is restated
 with the parse failure named as the one direct abort. The diagram also gained the data-only
 assertion node (criteria 3, 4, 5 before any page loads) and now names the falsifier case behind
 each failure box.
+
+### Corrections made in compliance round 8 (verdict: fail, 2 violations)
+
+- **The same excluded-vs-abort statement drifted for a third consecutive round**, this time in the
+  §D7 *heading* ("Uncompositable surfaces abort; they never score") and §Background 6's lead-in
+  ("must fail loudly"), both contradicting §D7 rule 4's "it is **not** an abort". Rounds 6, 7 and 8
+  each closed this in a different duplicate — prose, then the diagram, then the label on the door.
+  **The durable fix is structural, not another edit to another copy:** §D7 now carries an explicit
+  note that it is the *single normative statement* of the mechanism, and §Scope/In and acceptance
+  criterion 6 were rewritten as pointers that check conformance without restating it. A statement
+  made in seven places is a statement that will disagree with itself.
+- **The round-7 record in this section overclaimed what that edit did.** It said the flowchart "now
+  names the falsifier case behind each failure box"; four of the eight boxes named none — including
+  the PIN-floor box, whose falsifier (case 1) is the most-argued item in this card. The claim was
+  written into a durable artefact without being checked against the artefact it described. It is
+  now true — all eight boxes carry their criterion and case — and the overclaim is recorded here
+  rather than quietly repaired, because the failure is the same one §D7 argues about: a statement
+  that reads as settled while nothing checked it.
 
 ### What was NOT verified
 
