@@ -53,8 +53,12 @@ Each was a user decision. The implementation does not relitigate them.
 2. **The population is a named token allowlist, classified once by a human.** Not "all marks", not
    sibling-contrast, not blanket pin-whatever-passes-today. §Background 2 is the measurement that
    forces this; §D2 is the list.
-3. **The two measured defect classes are recorded as debt, not fixed here.** Repairing an inverted
-   palette ramp is a design pass with its own card. §D5.
+3. **The three measured defects are recorded as debt, not fixed here.** Repairing an inverted
+   palette ramp is a design pass with its own card. §D5. (The planning note behind this decision
+   said "two"; the measurement it was taken on lists three tokens — `--color-accent-700`,
+   `--color-neutral-700`, `--color-neutral-800` — and every operative section of this card says
+   three. The count was a slip in the note, not a narrower decision; the decision itself — record,
+   do not fix — is unchanged.)
 4. **Focus rings are out of scope and get their own card.** §D9.
 5. **The dot population is cited by content, never by line number.** Line numbers in this file have
    drifted twice already (card A §"Review-phase addendum").
@@ -272,7 +276,11 @@ panel's top border (`:303`, inside `sc-if agentOpen`, and `agentOpen` initialise
 `:506`). They are gated, not dormant, and §Scope/Out puts every interaction-gated region out of this
 card's population. §Risks 3.
 
-**PIN (6)** — pass today; the guard freezes them
+**PIN (6)** — pass today; the guard holds them at a **3.0 floor**, which is not the same as
+freezing them. `--ok` may slide from 10.30 to 3.01 with the suite green. That is deliberate — a
+floor is the property this card claims and can defend, and pinning six healthy tokens to four
+decimal places would make every legitimate re-tint a failure — but it is the honest limit of what a
+green PIN assertion means
 
 | Token | marks dk / lt | min ratio dk | min ratio lt | Where it paints |
 |---|---|---|---|---|
@@ -477,6 +485,19 @@ Three further probe defects are recorded here so the implementation does not re-
   theme. The implementation does not have to composite gradients; it has to **assert that count is
   still 0**, which converts a latent wrong answer into a loud failure the day the layout changes.
 
+  **Two things make that assertion real rather than decorative, and both are requirements, not
+  advice:**
+
+  1. **The backdrop predicate reads `background-image !== 'none'`, not "is a gradient".** A `url()`
+     backdrop defeats compositing exactly as a gradient does; there are zero on the page today, so
+     a gradient-only predicate would be silently wrong the first time one appears.
+  2. **A "0 of something" assertion is worthless until it has been seen to fail**, and it is
+     uniquely easy to write one that *cannot*: a detector built with the same ancestor walk
+     `effectiveBackground()` uses returns 0 on every page, forever, green. **Falsifier case 12 is
+     therefore not optional and may not be waived** — and its record must name the predicate that
+     caught it, not merely that something did. A detector that reports 0 because it never looks is
+     the exact failure this whole card was written about, reappearing inside the fix for it.
+
 ### D8 — Where it lives and what it asserts
 
 New module `treko/test_nontext_contrast.py`, alongside `test_theme.py`, reusing `cdp_harness` +
@@ -541,7 +562,14 @@ Assertions, per theme:
   334 scored + 1 excluded = 335, plus the `<svg>`-root artefact the probe wrongly emitted = the 336
   the planning probe reported (§Background 1a). A floor is the wrong instrument here: `≥ 200`
   against a real 334 would stay green after 134 marks disappeared, and `≥ 1` per token would stay
-  green after 41 of `--hair`'s 42 went. **This is only sound because the page is deterministic**: it is
+  green after 41 of `--hair`'s 42 went.
+
+  **The failure message is part of the requirement.** This assertion is the one most likely to fire
+  first, and `333 != 334` across 23 entries tells a reader nothing. It prints a per-entry delta
+  table — token, theme, expected, measured, difference — with unchanged entries omitted, so the
+  first thing a reader sees is *which* entry moved and by how much.
+
+  **This is only sound because the page is deterministic**: it is
   served from the fixed tree fixture (`server_harness.build_tree`), and two independent probe runs
   in two different sessions produced byte-identical output (§Verification). **Task 3 re-confirms it
   with the implementation's own walk** — run twice, dumps diffed — rather than with the planning
@@ -681,9 +709,10 @@ Scenario: The check runs on the default theme
    aborts. Nothing is scored against a guessed backdrop and nothing is silently skipped.
 7. Mark counts are asserted **exactly**, not as floors: the scored population is **334 in dark and
    347 in light**, and every one of the 23 entries sits at its own per-theme figure. The exclusion
-   counts are asserted separately. If task 1 finds the page is not reproducible run to run, the
-   counts become floors at the measured value and this card records that it did. Task 3 owns that
-   re-measurement — task 1 is the baseline only. 334 / 347 is
+   counts are asserted separately. If **task 3** finds the page is not reproducible run to run, the
+   counts become floors at the measured value and this card records that it did. **Task 3** owns
+   that re-measurement and is the only task that can produce that finding; task 1 is the baseline
+   only. 334 / 347 is
    336 / 349 minus the one `<svg>`-root artefact (criterion 8, a deleted bug) and the one
    sticky-header fill (criterion 6, an enumerated exclusion) per theme — §Background 1a.
 8. The SVG predicate scores only real shape elements; the `<svg>` root is never scored.
@@ -752,11 +781,14 @@ Red half and green half are separate commits throughout; never the same commit
    gradient-painted elements and 0 scored marks over a gradient backdrop per theme, and that the
    four §D7 probe defects are absent (SVG root not
    scored; multi-shadow read in full; `color(srgb …)` parsed; 0 marks over a gradient).
-   **Then run the walk a second time and diff the two dumps** — §D8's exact counts and criterion 7's
-   floors-fallback both rest on that reproducibility, and this is where it is established rather
-   than inherited from planning. A scored 336 / 349 means the SVG-root
-   fix did not land and criterion 8 is unmet; a scored 335 / 348 means the header exclusion did not
-   land and criterion 6 is unmet — whatever the other assertions say.
+   **Then run the walk a second time and diff its two dumps against each other** — both runs from
+   the implementation's own walk, never a comparison against the planning artefact, which would test
+   agreement with a throwaway rather than reproducibility. §D8's exact counts and criterion 7's
+   floors-fallback both rest on this, and this is where it is established rather than inherited. **A scored total other than 334 / 347 cannot tell you
+   which criterion is unmet, and must not be read as if it could:** either single failure yields
+   335 / 348 and both together yield 336 / 349, so read the *excluded-mark count* (criterion 6) and
+   the SVG predicate (criterion 8) to tell them apart. Falsifier case 10 agrees: re-scoring the
+   `<svg>` root alone gives 335 / 348.
 4. **Red:** the coverage assertion — every distinct declared colour maps to an allowlist entry.
 5. **Green:** land the allowlist data, all 23 entries with class, per-theme colours, per-theme mark
    count, and reason; the two collision comments required by criterion 13.
@@ -779,7 +811,7 @@ Red half and green half are separate commits throughout; never the same commit
    | 9 | **a colour string the parser cannot read** | parse-failure abort |
    | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
    | 11 | **a multi-shadow list read as single** | `--shadow-sm` light count, 13 against 26 |
-   | 12 | **a scored mark moved over a gradient backdrop** | "0 scored marks over a gradient", 1 against 0 |
+   | 12 | **a scored mark moved over a gradient backdrop** | "0 scored marks over a gradient", 1 against 0 — **record the predicate that caught it** |
 
    Cases 9, 10 and 11 are on this list because they are the card's own origin story: the planning
    probe shipped all three (§D7), and criteria 6, 8 and 9 would otherwise ship with no falsifier at
@@ -960,6 +992,42 @@ themes, moves the ratio by:
 The smallest is **0.0009**, so ±0.0005 sits under every one of them — but by a factor of 1.8, not by
 an order of magnitude, and it says nothing about an equal-luminance hue change. That is why §D8
 records the Coverage assertion, not this tolerance, as the guard against an edited token value.
+
+### Corrections made in compliance round 4 (verdict: fail, 3 violations; 2 of round 3's 3 closed)
+
+All three were internal contradictions a reader could act on wrongly, and all three were one-line.
+
+- **§Tasks 3 claimed a scored total could identify *which* criterion failed. It cannot.** Either the
+  `<svg>`-root fix or the header exclusion failing alone gives 335 / 348; both failing gives
+  336 / 349. The card said 336 meant the SVG fix and 335 meant the header — and falsifier case 10
+  said the opposite. Now it says what the number can and cannot source, and points at the two
+  assertions that *can* tell them apart.
+- **Criterion 7 still attributed the floors-fallback to task 1** one sentence before the card said
+  task 1 is the baseline only. Worse, §Verification's round-3 record claimed "it is task 3
+  everywhere now" — **a claim written into this file that this file falsified.** Both fixed; the
+  claim is recorded here rather than deleted, because the failure mode it demonstrates is the one
+  this card's §D7 argues about.
+- **Decision 3 said "the two measured defect classes"** where every operative section says three
+  DEBT tokens. It had been wrong since the first commit and was never cited in rounds 1–3. The
+  planning note behind it said "two" while listing three; the count was a slip, the decision was not.
+
+### Changes made from the round-4 observability read (advisory, risk=low)
+
+Its first finding is the sharpest thing either judge produced, and it is about the round-3 fix:
+
+- **"0 scored marks over a gradient" can be green forever without being able to fail.** A detector
+  built with the same `background-image`-blind ancestor walk that `effectiveBackground()` already
+  has returns 0 on every page, always. §D7 now makes falsifier case 12 **non-waivable** and requires
+  its record to name the predicate that caught it. A "0 of something" assertion that has never been
+  seen to fail is not evidence.
+- The uncompositable predicate reads **`background-image !== 'none'`**, not "is a gradient" — a
+  `url()` backdrop defeats compositing identically, and there are zero today.
+- The exact-count assertion **prints a per-entry delta table**, not `333 != 334` across 23 entries.
+- **§D2 no longer says PIN "freezes"** its tokens: it is a 3.0 floor, so `--ok` may slide 10.30 →
+  3.01 green. That is the deliberate limit, now stated where the claim is made.
+- Task 3's two runs are **both the implementation's own walk**, diffed against each other — not
+  against the planning artefact, which would test agreement with a throwaway rather than
+  reproducibility.
 
 ### What was NOT verified
 
