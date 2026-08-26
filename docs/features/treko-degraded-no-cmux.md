@@ -14,9 +14,15 @@ Model-switch checkpoint 1 (entering planning): the dispatching session fixed `mo
 for this card, and the planning was done there. **Checkpoint 2 (planning → implementation) has
 not been asked** and must be asked before any branch is cut.
 
-> **Gate status: CLOSED.** No branch, no task 1, no source edit until the literal user phrase
-> `gate confirmed`. The spec-compliance gate (`running-the-compliance-judge`) has not run against
-> this card yet; it must, before the user review gate.
+> **Gate status: `gate confirmed` given, transition deferred by the user's own direction.** The
+> user gave the literal phrase and then directed that the compliance judge re-run first, so there
+> is still no branch, no task 1 and no source edit; frontmatter stays `phase: planning` until a
+> compliance `pass`. The spec-compliance gate (`running-the-compliance-judge`) **has** run against
+> this card — **nine rounds, every one `fail`** (rounds 1-9 at `3ca9b8c`, `3ca9b8c`, `3ca9b8c`,
+> `f759832`, `2a0c459`, `2a0c459`, `2a0c459`, `0580403`, `6adf470`); rounds 5-9 cite the same two
+> violation ids. `coding-memory/compliance-judge/verdicts.jsonl` is the record, re-derived
+> 2026-08-26. This banner claimed the gate had never run and stayed false through all nine of
+> them — see task 1a clause (c), which was widened because of it.
 
 **This card almost certainly earns an ADR.** It converts a startup abort into a served page —
 a direction-pivoting change to the trust boundary, which is exactly the class
@@ -519,7 +525,7 @@ boundaries from the marker text at run time (`test_ui_commands.py:68-78`), never
 count, so a longer fence is not a broken assumption anywhere except in this spec's own prose.
 
 `runCommand`'s guard (`Treko.dc.html:588`) becomes `if(!S.cmdToken || liveIds.indexOf(id)<0)
-return;` — the same belt-and-braces the existing comment at `:590-592` explains, extended to the
+return;` — the same belt-and-braces the existing comment at `:590-591` explains, extended to the
 new axis. It is **presentation only**: the authorization control is D3's server-side refusal.
 
 ### D5 — `no_channel` is a page outcome, and it is deliberately **not** terminal
@@ -1068,7 +1074,8 @@ Scenario: the handler slice is still extractable
     `server.SEND_COMMANDS` / `server.LOCAL_COMMANDS` read from Python.
 12. `ROW_OUTCOMES` gains `no_channel` and `test_zz_every_table_row_was_driven_by_a_real_response`
     passes — meaning the row was driven against a really-degraded server, not a stub.
-13. The full suite passes with **no test lost** — node-ID set diff against the pre-change set. A
+13. The full suite passes with **no test lost** — node-ID set diff against the pre-change set,
+    both sides run with `TREKO_CHROME_DENY_BIRD=1` (task 1). A
     changed total is not a regression; a lost node is. The three flipped
     `test_server_lifetime.py` nodes are *renamed and relocated*, so the diff must show them
     accounted for by name, not merely absorbed into a larger total. **The three are named here
@@ -1080,10 +1087,19 @@ Scenario: the handler slice is still extractable
 14. `wc -l` is under 800 for `server.py`, `channel.py`, `test_degraded.py`, `test_server.py`,
     `test_guards.py` (tasks 9a/9b edit it),
     `test_server_lifetime.py`, `test_ui_commands.py` and `Treko.dc.html` — measured, not assumed.
-15. `skills/treko/SKILL.md` splits its refusal table: the four surface rows move to a new
-    "When it starts degraded" table, the rest stay under "When it refuses to start". Its live
-    test (`test_autolaunch.py:400` — no `nohup`/`setsid`/`2>`/`&` on any `server.py` line) still
-    passes.
+15. `skills/treko/SKILL.md` splits its refusal table. **This criterion is the single
+    authoritative statement of the split; task 11 executes it and repeats nothing.** Measured
+    2026-08-26, the table has exactly **two** surface rows — `SKILL.md:190`
+    (`CMUX_SURFACE_ID is unset or empty`) and `:191` (`read-screen --surface … exited N`). Those
+    two **move** to a new "When it starts degraded" table. The other two degraded reasons — probe
+    timeout and unrunnable cmux — have **no row today and are added**, not moved. Everything else
+    stays under "When it refuses to start". Its live test (`test_autolaunch.py:400`
+    `test_the_skill_documents_a_launch_command_that_does_not_detach` — no `nohup`/`setsid`/`2>`/`&`
+    on any `server.py` line) still passes.
+    *This criterion said "the four surface rows move" from the planning commit through round 9.
+    Round 8 cited it; the repair annotated task 11 and left the false sentence standing here, so
+    the document then asserted both readings 265 lines apart. Corrected at the source in round 9,
+    and the duplicate removed rather than synced.*
 16. **The ADR** records the pivot: why a startup abort became a served page, why all four
     conditions and not one, why `503`, and why no surface is deduced. Its *number* is whatever
     task 10's re-verification returns at the moment of writing — `0038` as of 2026-08-26, but
@@ -1121,6 +1137,21 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 - [ ] 1. Pre-change baseline in this tree: full node-ID set (`--collect-only -q`), per-module
       counts, and `wc -l` for every file in criterion 14. Record the set's `sha256`.
+      **Export `TREKO_CHROME_DENY_BIRD=1` for every run that executes tests** (collection alone
+      does not need it). Without it the 64 nodes that route through `cdp_harness.py` fail on this
+      machine against the macOS iCloud (`com.apple.bird`) hang, and a red baseline makes
+      criterion 13's node-ID diff unreadable. Measured 2026-08-26 in this worktree at `6adf470`:
+
+      ```
+      pytest test_guards.py test_drawer.py                      -> 4 failed, 30 passed in 84.45s
+        all four: cdp_harness.py:235 "chrome never reported a page target on the devtools endpoint"
+      TREKO_CHROME_DENY_BIRD=1 pytest test_guards.py test_drawer.py -> 34 passed in 7.31s
+      ```
+
+      This is environmental, not a defect in the tree — `cdp_harness.py:235`'s own assertion
+      message names the diagnosis and the remedy — but the card previously asserted a green
+      baseline without naming the precondition that makes it green. Found by observability
+      round 5.
 - [ ] 1a. **Enumerate every currently-green assertion this card invalidates, before writing any
       test.** Three separate review rounds each surfaced exactly one more such assertion — the
       fence digests (`test_guards.py`), the `cmdButtons` source-text regex (`test_guards.py`), and
@@ -1131,13 +1162,25 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       **The two shapes that do not announce themselves, and must be searched for by shape rather
       than by reading test names:**
       (a) **source-scraping guards** — a test that reads another file's *text* and asserts
-      against a hand-maintained table or a compiled pattern. Search for **`read_text()` plus any
-      regex applied to that text** — `re.findall`, `.search`, `.match`, `.fullmatch` — not
-      `re.findall` alone. Measured 2026-08-26: `CMD_BUTTONS_RE` is used via `.search()`
-      (`test_guards.py:340`), and `test_theme.py`, `test_drawer.py`, `test_sidebar.py` and
-      `test_autolaunch.py` contain **zero** `re.findall` between them while carrying 5, 2, 1 and 2
-      `re.compile` over `read_text()` respectively. A `re.findall` recipe finds two of the three
-      known doors and stops;
+      against a hand-maintained table, a compiled pattern, **or a bare Python containment check**.
+      Search for **`read_text()`/`read_bytes()` plus ANY assertion over that text** — not "plus a
+      regex", and emphatically not `re.findall` alone. The recipe has now been narrowed twice by
+      review and widened twice in response; each narrowing hid a door:
+      - `re.findall` alone → missed `CMD_BUTTONS_RE`, used via `.search()` (`test_guards.py:340`).
+        Corroborating measurement, 2026-08-26: `test_theme.py`, `test_drawer.py`, `test_sidebar.py`
+        and `test_autolaunch.py` carry **zero** `re.findall` between them while carrying 5, 2, 1
+        and 2 `re.compile` over `read_text()` respectively.
+      - "plus any regex" → **still** missed `test_rename.py:85`, which is
+        `source = Path(server.__file__).read_text()` followed by `assert retired not in source`.
+        Measured 2026-08-26: `test_rename.py` contains **0** `re.findall`, **0** `re.compile` and
+        **0** `.search(` against **3** `read_text()` calls — the file is wholly invisible to any
+        regex-keyed search. Exactly **three** sites assert over `server.py`'s own source:
+        `test_server.py:311` (`"env=" not in source`), `test_server.py:750` (`re.findall`) and
+        `test_rename.py:86` (`retired not in source`); a regex recipe sees **one** of the three.
+        (`test_server_lifetime.py:88` also reads `server.py` but to *mutate* it, not to assert
+        over it — it is a mutation harness, not a guard.)
+      The lesson the recipe must carry forward: **key the search on the read, never on the
+      matcher.** `read_text()` is the thing every one of these has in common; `re.*` is not;
       (b) **digest and byte-identity pins** — a test that hashes a region and compares to a stored
       constant (`test_guards.py:130-137`).
       Both are invisible to "does this test mention the thing I changed", because neither mentions
@@ -1145,12 +1188,31 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       already-known doors** (`test_guards.py`'s digests, `test_guards.py`'s `CMD_BUTTONS_RE`,
       `test_server.py`'s reason scrape). A recipe that cannot re-find what is already known is not
       evidence about what is not.
-      **(c) A parallel sweep for counted prose claims.** Compliance rounds 5-8 kept finding a
-      second species that (a) and (b) do not cover: not a broken test, but a broken *sentence*
-      about a file this card already read — "the four surface rows", "the repo's only §Security
-      section", "shares no substring (verified)". Every "the N <things> in `<file>`" claim in this
-      document must be re-derived by a command whose **output is pasted into §Verification**
-      beside the claim. A count with no pasted output is treated as unverified.
+      **(c) A parallel sweep for factual prose claims — not only counted ones, and not only ones
+      about source files.** Compliance rounds 5-9 kept finding a second species that (a) and (b)
+      do not cover: not a broken test, but a broken *sentence*. Clause (c) was first written
+      scoped to "the N <things> in `<file>`", and round 9 proved that scope one category too
+      narrow in **both** directions:
+      - **The claim need not be counted.** Round 9's finding was the gate-status banner asserting
+        the compliance judge "has not run against this card yet". Nine verdicts were on disk. No
+        number appeared in the sentence, so a counted-claims sweep would never have reached it.
+      - **The claim need not be about a source file.** That banner is a claim about *this card's
+        own process state*. Claims of that shape — which gate has run, which checkpoint was asked,
+        what a prior round concluded, what phase the card is in — are exactly the ones no
+        code-facing sweep looks at, and they had gone unchallenged since the original planning
+        commit `3ca9b8c`, surviving all nine rounds.
+      So the rule is: **every factual assertion in this document is re-derived by a command whose
+      output is pasted into §Verification beside it** — counts, `file:line` spans, "the only X",
+      "verified, not assumed", and the card's own claims about gates, rounds, branches and phase.
+      An assertion with no pasted output is treated as unverified. Claims about process state are
+      settled against `coding-memory/*/verdicts.jsonl` and `git log`, not from recollection.
+      **(d) Freshly-minted citations are re-opened before the commit that writes them.** Round 9's
+      second finding, `Treko.dc.html:590-592` for a comment that occupies `:590-591`, appears in
+      **no revision before `0580403`** — the commit that re-derived every *inherited* citation. It
+      was written **by** the audit and then never audited, because the discipline only ever looked
+      backwards. Rounds 7 and 8 both passed over it. Every `file:line` written or edited in a
+      revision is re-opened in that same revision, before it is committed; "I just derived it" is
+      the condition under which this has failed, not an exemption from it.
       Record the enumeration in §Verification; tasks 2 onward may not start until it exists.
       **Known rows this enumeration must already contain** (found by review, not by the recipe —
       they are the floor, not the ceiling):
@@ -1164,6 +1226,16 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       than a red one.
       D6 -> `server_harness.py:45`'s comment "CMUX_TIMEOUT_SECS (5s, pinned in `server.py`)" goes
       false once D6 moves that constant.
+      D6 -> `test_rename.py:85-86` reads `server.py`'s source and asserts `retired not in source`
+      for every retired name. It scans `server.py` **only**, so once D6 moves `bind_surface` and
+      the cmux constants into `channel.py` this guard covers one fewer file while staying green —
+      the same shrinking-guard failure as `test_server.py:311`, and it must be widened with it.
+      Verified 2026-08-26 that it stays green through the move: all four `RETIRED_NAMES`
+      (`test_rename.py:44-49` — `TASK_TRACKER_PORT`, `_IDLE_SECS`, `_POLL_SECS`, `_ANALYZE_SECS`)
+      score `grep -c TASK_TRACKER treko/server.py` = **0** across the whole file, so every one of
+      the four parametrised cases passes before the move and passes after it — which is precisely
+      why nothing would surface the narrowing. Found by observability round 5, **not** by the recipe — the fourth review round
+      running to find one more door by hand, which is the whole argument for clause (a)'s rewrite.
 - [ ] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
@@ -1289,7 +1361,8 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
       trust the number recorded here: it was 0036 at planning time and 0036/0037 have since
       been taken. A duplicate ADR number merges cleanly and is never reported.
-- [ ] 11. `skills/treko/SKILL.md`: split the table (criterion 15 — note it names **two** existing surface rows, `SKILL.md:190` and `:191`; there is no row for probe timeout or unrunnable cmux, so those are *added*, not moved), and document that the board is
+- [ ] 11. `skills/treko/SKILL.md`: split the table exactly as **criterion 15** specifies — which
+      rows move and which are added is stated there and only there — and document that the board is
       always served.
 - [ ] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
       by name — `test_an_unset_surface_id_aborts_before_serving`,
@@ -1414,9 +1487,33 @@ No `addopts`, `testpaths` or `-m` selector exists in `pytest.ini`, `setup.cfg`, 
 arrived from the treko UI cards that merged in the intervening 125 commits. All six read
 `Treko.dc.html`, which is the file this card edits. §D7 and task 8 are scoped against them.
 
-Collection only — **the suite was not run for this card.** `test_server_lifetime.py` alone costs
-at least a minute by design (`test_server_lifetime.py:23-25`), and a planning card does not need
-a green run; task 1 owes one, with the node-ID set and its `sha256`.
+Collection only for the **whole** suite — `test_server_lifetime.py` alone costs at least a minute
+by design (`test_server_lifetime.py:23-25`), and a planning card does not need a full green run;
+task 1 owes one, with the node-ID set and its `sha256`. Two modules **were** run, in round 9, to
+settle the baseline-precondition question observability round 5 raised:
+
+```
+$ pytest test_guards.py test_drawer.py
+4 failed, 30 passed in 84.45s
+  all four in test_drawer.py, all four cdp_harness.py:235
+  "chrome never reported a page target on the devtools endpoint"
+
+$ TREKO_CHROME_DENY_BIRD=1 pytest test_guards.py test_drawer.py
+34 passed in 7.31s
+```
+
+So the tree is green and the failure is the documented macOS iCloud (`com.apple.bird`) hang, which
+`cdp_harness.py:235`'s own assertion message names along with the remedy. **The blast radius is
+64 of the 310 nodes** — the five modules that import `cdp_harness` (`test_drawer.py`,
+`test_drawer_sections.py`, `test_nontext_contrast.py`, `test_sidebar.py`, `test_theme.py`):
+
+```
+$ pytest --collect-only -q $(grep -ln cdp_harness test_*.py)   ->  64 tests collected
+$ pytest --collect-only -q                                     -> 310 tests collected
+```
+
+Task 1 and criterion 13 now name the env var; before round 9 the card asserted a green baseline
+without it.
 
 Line counts, `wc -l`:
 
@@ -1424,6 +1521,7 @@ Line counts, `wc -l`:
 treko/server.py             799     # 1 line of headroom against the 800 ceiling (unchanged)
 treko/analyze.py            797     # unchanged
 treko/test_server.py        774     # unchanged
+treko/test_guards.py        540     # added round 9 -- criterion 14 requires it and 9a/9b edit it
 treko/Treko.dc.html         740     # was 639 at 984e7ac -- only 60 lines of headroom now, not 161
 treko/test_autolaunch.py    417     # unchanged
 treko/test_ui_commands.py   330     # unchanged
@@ -1494,6 +1592,64 @@ evidence above is what actually backs the claim.
 Task 14 owes the same red-for-the-right-reason discipline as 2/4/6/8, and its own green run,
 folded into one task rather than split: the watchdog code itself is untouched (§Security), only
 the case run against it is new.
+
+### Round-9 claim receipts (clause (c) and (d))
+
+The two claims round 9 cited, and the commands that settle them — pasted per clause (c), which
+round 9 itself forced to be widened past counted, source-file-only claims:
+
+```
+$ python3 - <<'EOF'   # every compliance verdict recorded for this spec_path
+(1, 'fail', '3ca9b8c')  (2, 'fail', '3ca9b8c')  (3, 'fail', '3ca9b8c')
+(4, 'fail', 'f759832')  (5, 'fail', '2a0c459')  (6, 'fail', '2a0c459')
+(7, 'fail', '2a0c459')  (8, 'fail', '0580403')  (9, 'fail', '6adf470')
+TOTAL rows for this spec: 9
+EOF
+```
+The gate-status banner said the gate "has not run against this card yet". Nine rounds had run;
+rounds 5-9 cite the same two violation ids. Banner corrected.
+
+```
+$ awk 'NR>=590 && NR<=592' treko/Treko.dc.html
+590|  // A terminal outcome has already withdrawn the button; a stray call must not revive
+591|  // the channel behind it. The guard is here as well as in the render for that reason.
+592|  if(!view.offersButton)return;          <-- executable, not comment
+```
+§D4 called `:590-592` "the existing comment"; the comment is `:590-591`. Corrected. This citation
+was **written by** `0580403`, the commit that re-derived every inherited citation — which is the
+gap clause (d) now closes.
+
+```
+$ grep -c re.findall test_rename.py   -> 0
+$ grep -c re.compile test_rename.py   -> 0
+$ grep -c '.search(' test_rename.py   -> 0
+$ grep -c 'read_text()' test_rename.py -> 3
+$ grep -c TASK_TRACKER treko/server.py -> 0
+```
+`test_rename.py:85-86` scrapes `server.py`'s source with a bare `not in` and no regex anywhere in
+the file — invisible to clause (a)'s previous "read_text() plus a regex" recipe, and the fourth
+door found by review rather than by the recipe. Clause (a) is now keyed on the **read**, not the
+matcher. Found by observability round 5.
+
+### Clause (d) applied to this revision
+
+Every `file:line` written or edited in round 9 was re-opened **before** the commit, by a script
+that asserts the named line contains what the card says it does — the discipline that `:590-592`
+escaped because it was minted by the audit that only looked backwards:
+
+```
+17/17 citations resolve to what they name
+  test_rename.py:44,:49,:85,:86   test_server.py:311,:750   test_guards.py:340
+  test_server_lifetime.py:23,:88  Treko.dc.html:590,:591,:592
+  cdp_harness.py:235  SKILL.md:190,:191  test_autolaunch.py:400  test_drawer.py:571
+```
+
+The script was falsified before its result was trusted: shifting one entry `Treko.dc.html:592`
+-> `:593` makes it print `BAD` and exit 1, so a green run is a measurement rather than a
+tautology. Two entries reported `BAD` on the first pass; both were wrong *expectation strings in
+the probe*, not wrong citations in the card — `test_guards.py:340` is the `.search()` assert
+itself and `cdp_harness.py:235` is the `raise AssertionError(` that pytest names in its own
+traceback. The mismatch was chased to a cause rather than edited away.
 
 ## Corrections to the dispatch brief
 
