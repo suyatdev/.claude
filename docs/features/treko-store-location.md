@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: high
-branch: feat/treko-store-location
+branch: none  # merged via PR #68 (d499d60), 2026-08-23
 compliance_verdict: pass  # rounds 2-5, 2026-08-22; subject blob 348364d (content at 4fc3479)
 adr: 0034  # verified free against origin/main; 0026 is duplicated, 0028 unused
 ---

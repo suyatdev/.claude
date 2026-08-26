@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: high
-branch: feat/treko-non-text-contrast
+branch: none  # merged via PR #80 (d740ce2), 2026-08-26
 ---
 
 # Treko: a non-text contrast guard, on a named token allowlist
