@@ -36,15 +36,17 @@
 # scrollback says which layer produced it.
 #
 # ⚠️ A VETO LEAVES THE DESTINATION BRANCH'S CONTENT STAGED. Stopping the ref write does not
-# undo the checkout, and this hook cannot roll back from inside a veto. The full
-# state-describing message that fact requires — HEAD's unmoved branch, the staged
-# destination, any sequencer directory by name, and the two exits — is task 6d and is NOT in
-# this file yet. The messages below are minimal and factual on purpose; none of them
-# prescribes a destructive command, and none claims the tree is clean.
+# undo the checkout, and this hook cannot roll back from inside a veto. The message that fact
+# requires — HEAD's unmoved branch, the staged destination, any sequencer directory by name,
+# and the one exit that can be offered — is the refusal-remediation contract at step 5 below
+# (task 6d). No message in this file prescribes a destructive command, and none describes the
+# tree as clean, unchanged or restored.
 #
-# Also deliberately absent, so nobody reads the absence as an oversight: WORKTREE_GUARD_MODE
-# and WORKTREE_EXEMPT. Layer 1 reads both from its own environment; whether they should
-# reach a hook running as a child of `git` is tasks 6d and 8, not this one.
+# WORKTREE_EXEMPT is honoured, at that one refusal and nowhere else — it is the forward exit
+# the message names, and a message naming an escape hatch the hook did not honour would be
+# prescribing a command that fails. WORKTREE_GUARD_MODE is still deliberately absent, so
+# nobody reads the absence as an oversight: layer 2's mode source is task 6e, which must not
+# depend on an environment read this hook cannot verify reaches it.
 #
 # Design, boundaries (28-37) and scenarios: docs/features/worktree-location-guard.md.
 #
@@ -90,6 +92,20 @@ SUPPORTED_BACKEND='files'
 # The lockfile whose presence IS the rule, relative to the common git directory.
 LOCK_NAME='HEAD.lock'
 
+# The sequencer markers the refusal names when they are present, relative to the common git
+# directory. Each one means an operation is mid-flight whose own `--abort` is the only thing
+# that ends it, so a message describing the tree without naming it describes half the state.
+# Measured 2026-08-26: a `git rebase` whose ref transaction is vetoed leaves `rebase-merge`
+# here, and it is already present at the rebase's FIRST transaction.
+SEQUENCER_NAMES='rebase-merge rebase-apply CHERRY_PICK_HEAD REVERT_HEAD MERGE_HEAD'
+
+# The bypass, same name and same shape as layer 1's and as MERGE_EXEMPT/TEST_EXEMPT/
+# JUDGE_EXEMPT. Layer 1 reads it off the COMMAND LINE, because a PreToolUse hook's own
+# environment is the session's and not the command's; layer 2 has no command line at all and
+# reads its own environment, which task 6c measured survives the `git` -> hook hop for both
+# the assignment-prefix form and the inherited form.
+EXEMPT_VAR='WORKTREE_EXEMPT'
+
 # Same override knob as layer 1's, so one setting moves both logs. Task 6c measured that an
 # inherited environment variable survives the git -> hook hop, which is what makes this
 # reachable at all from here. `${HOME:-}` and not `$HOME` — under `set -u` an unset HOME is an
@@ -118,8 +134,11 @@ append_log() { # $1 "DECISION clause", $2 detail
   local ts detail
   ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ') || return 1
   # A ref name cannot contain a newline, but a diagnostic quoted back into the detail field
-  # can. A line-oriented log whose fields hold raw newlines is not parseable.
+  # can. A line-oriented log whose fields hold raw newlines is not parseable. The TAB escape
+  # is the same argument one field over: the detail now carries a USER-SUPPLIED string (the
+  # bypass reason), and a tab inside it would invent a fourth field in a three-field format.
   detail=${2//"$LF"/\\n}
+  detail=${detail//"$TAB"/\\t}
   mkdir -p "$STATE_DIR" 2>/dev/null
   # The append runs in a subshell so bash's own "cannot create" diagnostic for a failed
   # redirection lands there and not in the middle of git's output. A trailing `2>/dev/null`
@@ -184,6 +203,12 @@ esac
 # dropped: `read` returns non-zero at EOF while still having filled the variable.
 saw_gated_ref=0
 tx_count=0
+# The destination the refusal names, taken from the transaction git sent and from nowhere
+# else — this hook inspects no command line. `git switch <b>` sends `ref:refs/heads/<b>` in
+# the new-value field; `git switch --detach` sends a bare OID there. A single transaction may
+# carry more than one HEAD line, so every one is collected rather than the first being
+# presented as the destination. Newline-separated: a ref value cannot contain one.
+gated_targets=''
 while IFS= read -r tx_line || [ -n "$tx_line" ]; do
   tx_count=$((tx_count+1))
   # Deliberate word splitting: the fields are separated by single spaces and none of the
@@ -197,7 +222,10 @@ fields the reference-transaction contract specifies (<old-value> <new-value> <re
 had $#. The ref name is what decides whether this transaction touches HEAD, so a line that
 cannot be read makes the whole transaction undecidable."
   fi
-  [ "$3" = "$GATED_REF" ] && saw_gated_ref=1
+  if [ "$3" = "$GATED_REF" ]; then
+    saw_gated_ref=1
+    gated_targets="$gated_targets$2$LF"
+  fi
 done
 
 # Zero lines denies for the same reason (boundary 37): a descriptor that closed before any
@@ -336,11 +364,77 @@ lock_diag=$(ls -ld -- "$lock_path" 2>&1 >/dev/null)
 lock_rc=$?
 
 if [ "$lock_rc" -eq 0 ]; then
-  # THE REFUSAL. Deliberately minimal: the full state-describing message this moment requires
-  # — the branch HEAD is still on, the destination content now staged, any sequencer directory
-  # by name, and the two exits — is task 6d. What must stay true of whatever replaces it: it
-  # prescribes no destructive command (`git reset --hard HEAD` was tried and destroyed another
-  # session's staged work), and it never describes the tree as clean, unchanged or restored.
+  # THE REFUSAL, AND THE REMEDIATION CONTRACT THAT GOES WITH IT (task 6d, decided 2026-08-25
+  # after the remedy this file used to point at was actually run: `git reset --hard HEAD`
+  # destroyed another session's staged `other-session-work.txt`). Three rules hold whatever
+  # else changes here, and the suite asserts each on the ABSENCE so a later revision cannot
+  # quietly undo them:
+  #
+  #   * it prescribes no command that discards anything;
+  #   * it never describes this tree as clean, unchanged or restored;
+  #   * it offers no rollback exit, and says outright that it names no command for one.
+  #
+  # THE SECOND EXIT IS NOT MISSING BY OVERSIGHT. The card's contract reads "rollback only when
+  # layer 1 recorded a clean pre-command tree". Layer 1 records no such thing — it runs no
+  # pre-command `git status --porcelain` and writes no tree-state fact anywhere — and the
+  # design section declines the cross-process handoff that would carry one for v1. So the
+  # precondition is never satisfied and the exit is never offered; stating the precondition
+  # and naming no command is exactly what the design prescribes until the handoff exists.
+  # GROUP M's M10 is the tripwire: it asserts this message is byte-identical over a clean and
+  # a dirty pre-command tree, so adding the handoff fails a test rather than passing one.
+
+  # EXIT A, read lazily — only when a refusal is actually due, so an allowed HEAD write never
+  # pays for the read and never logs a bypass it did not need. An EMPTY value is not a reason:
+  # an accidental `WORKTREE_EXEMPT=` would otherwise be a silent machine-wide off switch.
+  #
+  # Scoped to THIS refusal and to no other. The backend refusal (boundary 28) is this guard
+  # declining to run at all rather than a verdict about a HEAD write, and widening the hatch
+  # to cover it is a decision the card has not made.
+  #
+  # A failed append must not turn the bypass into a refusal — the user reaching for the escape
+  # hatch is by construction already blocked on something. allow() already has that shape: it
+  # warns on stderr and exits 0. Layer 1 needs a bypass-specific warning because its own
+  # MSG_LOG_WARN says "the guard is in log mode", which would be false here; this file's
+  # MSG_LOG_WARN says only that the record is lost, which is true of a bypass too.
+  if [ -n "${WORKTREE_EXEMPT:-}" ]; then
+    allow 'bypass-worktree-exempt' "reason=[${WORKTREE_EXEMPT}]"
+  fi
+
+  # HEAD's own branch, READ rather than assumed. At `prepared` the ref has not moved, so this
+  # is the branch the user is still on. A detached HEAD has no symbolic ref: it is reported as
+  # what it is instead of a branch name being invented, which is the failure this card refuses
+  # by name elsewhere. Neither read can change the verdict — both run inside a deny that has
+  # already been decided — so a failure costs a worse line, not a wrong answer.
+  head_now=$(git symbolic-ref HEAD 2>/dev/null) || head_now=''
+  if [ -z "$head_now" ]; then
+    head_oid=$(git rev-parse HEAD 2>/dev/null) || head_oid=''
+    if [ -n "$head_oid" ]; then
+      head_now="<detached, at $head_oid>"
+    else
+      head_now='<could not be read: neither symbolic-ref nor rev-parse answered>'
+    fi
+  fi
+
+  # Deliberate word splitting on both loops: neither a ref value nor a name in
+  # $SEQUENCER_NAMES can contain whitespace.
+  dest_block=''
+  # shellcheck disable=SC2086
+  for one_target in $gated_targets; do
+    dest_block="$dest_block  destination:  $one_target$LF"
+  done
+
+  # `[ -e ]` here, and NOT boundary 31's `ls -ld`, on purpose: this text is DESCRIPTIVE and
+  # never a verdict, so an unreadable path costs an omitted line rather than a wrong allow.
+  # That asymmetry is also why nothing is printed when none is found — "no sequencer operation
+  # is in progress" would be a claim this test cannot source.
+  seq_block=''
+  # shellcheck disable=SC2086
+  for one_seq in $SEQUENCER_NAMES; do
+    if [ -e "${common_dir%/}/$one_seq" ]; then
+      seq_block="$seq_block  in progress:  $one_seq$LF"
+    fi
+  done
+
   deny 'primary-HEAD-lock-held' "$lock_path" \
     "$PREFIX HEAD write refused — this is the PRIMARY checkout of a shared repository.
 
@@ -349,11 +443,30 @@ switch under another session's feet swaps the files it is editing, and nothing i
 records that it happened. \`git worktree add\` is unaffected — it holds a lock of its own and
 never moves this HEAD — so creating a worktree and working there is not blocked.
 
-  git dir:   $common_dir
-  lock held: $lock_path
+  git dir:      $common_dir
+  lock held:    $lock_path
+  HEAD still:   $head_now
+$dest_block$seq_block
+WHAT THIS TREE HOLDS NOW. HEAD did not move, and the checkout was NOT undone: this hook stops
+the ref write only, and git had already written the index and the working tree by the time it
+ran. So the files here are the DESTINATION's content, staged, sitting on the branch HEAD still
+names. \`git status\` shows that as ordinary staged work and carries no field saying where it
+came from — a commit made now would land the destination's content on the branch above.
 
-HEAD did not move. The checkout itself was NOT undone: this hook stops the ref write only,
-so the index and working tree may now hold the destination's content."
+THE ONE EXIT THIS HOOK CAN OFFER IS FORWARD. Re-run the same command with
+$EXEMPT_VAR=<reason> set; this hook reads that from its own environment and allows the write.
+The tree already holds the destination's content, so letting the switch finish leaves this
+checkout self-consistent instead of mixed. The cost is real and is stated rather than buried:
+that is the guard overridden, not the guard satisfied, and the shared-HEAD problem above is
+then live for every session working in this checkout.
+
+GOING BACK IS YOURS TO DECIDE, AND THIS HOOK NAMES NO COMMAND FOR IT. From inside a veto it
+sees the ref update and nothing else, so it cannot tell its own residue from work another
+session staged — the two carry identical \`git status\` markers. Discarding here is safe only
+if this checkout held nothing of its own before the command ran, and layer 2 has no record of
+that: the layer that could take it does not (declined for v1). The precondition is stated
+because it cannot be checked here. A blanket recovery command was tried during this guard's
+own design and destroyed another session's staged file."
 fi
 
 case "$lock_diag" in
