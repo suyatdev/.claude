@@ -620,6 +620,38 @@ the DOM-level question of whether the mapped or fallback *string* actually reach
 page without the raw attribute leaking elsewhere in the markup stays task 13's, because that is a
 question about React's render output, not about the lookup.
 
+**The render wire, named explicitly — round 11 finding, not settled anywhere before this.**
+`commandProps` gains two new fields, following the exact precedent `cmdMsg`/`cmdMsgC` already set
+for the command-status text beside it (`Treko.dc.html:576`, consumed at `:112`):
+
+```js
+// inside commandProps' returned object, alongside cmdMsg/cmdMsgC/cmdButtons/cmdCopies
+cmdReason: (hasToken && !channelOk) ? trackerChannelReason(S.cmdChannel) : '',
+cmdReasonC: 'var(--warn)',
+```
+
+`cmdReason` is the empty string, never `null`/`undefined`, in every mode the gate above marks
+`false` — so the template can render it unconditionally with no `sc-if`, the same way `cmdMsg`
+already does, and an empty string renders nothing. `cmdReasonC` is a fixed tone, not a lookup: D5
+has exactly one reason state (degraded), not a palette per token, so there is nothing for a second
+constants table to select between — `CMD_TONES.no_channel` (§"Three page-side additions", above)
+is the fence-side digest fixture's fixture, `cmdReasonC` is the page-side color, and the two are
+independent by design, not duplicated.
+
+**New template element**, placed in the command cluster after the existing status text and before
+the buttons — it explains *why* the buttons became chips, so it reads before them:
+
+```html
+<div style="flex:none;font-size:11.5px;line-height:1.35;max-width:300px;text-align:right;color:{{ cmdMsgC }}">{{ cmdMsg }}</div>
+<div style="flex:none;font-size:11.5px;line-height:1.35;max-width:220px;text-align:right;color:{{ cmdReasonC }}">{{ cmdReason }}</div>
+<sc-for list="{{ cmdButtons }}" as="c">
+```
+
+No `id`, matching task 1a's floor row on `test_drawer.py:571`'s exact-7 count — the element is
+reached by React state, never `getElementById`, so it needs none. Criterion 7 and task 13's
+"the reason line matches the table" receipt (§Verification) now name what they check: this
+element's rendered text, read from `#dc-root`'s mounted subtree.
+
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
 server is permanent for that process's lifetime. That is true, and it is still the wrong row,
@@ -1360,12 +1392,21 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       stays outside the fence the same way `CMD_TONES` and `commandProps` itself do (D5).
 - [ ] 9. Implement the fence additions (`trackerLiveIds`, `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS`,
       `TRACKER_CHANNEL_REASONS`, `trackerChannelReason`, the grown `module.exports`),
-      `commandProps` (now calling `trackerChannelReason(S.cmdChannel)` under D5's gate instead of
-      indexing the table directly), **`componentDidMount`'s second meta read and
+      **`TRACKER_MESSAGES.no_channel` and `TRACKER_ERROR_OUTCOMES.no_channel`** (D5's "three
+      page-side additions" — the implement-list named only `CMD_TONES` of the three before round
+      11), `commandProps` (now calling `trackerChannelReason(S.cmdChannel)` under D5's gate instead
+      of indexing the table directly, **and returning the new `cmdReason`/`cmdReasonC` fields** —
+      D5's "render wire" section, above), **the new template element that renders `cmdReason`**
+      (D5, same section — this is what actually puts the reason text on screen; every symbol above
+      it was plumbing with nowhere to surface), **`componentDidMount`'s second meta read and
       `cmdChannel:null` on `state`** (D4 — the one omission that would ship a healthy server
       rendering as degraded), `runCommand`'s guard, `CMD_TONES`, and `_serve_index`'s second meta.
       Task 8 goes green. Keep the fenced region dependency-free — `test_ui_commands.py:182` is the
       guard on the guard.
+      *Round 11 finding: this list previously named the lookup function and its fence-side table
+      but never the template element that displays the result, so following it literally shipped
+      every mechanism and no visible reason line — the exact gap D5's render-wire section now
+      closes.*
 - [ ] 9a. **Re-baseline `test_guards.py`'s fence digests, in a commit of its own, after task 9 is
       green.** Recompute `BASE_FENCE_BYTES` / `BASE_FENCE_SHA256` and
       `BASE_FENCE_NODE_BRIDGE_BYTES` / `BASE_FENCE_NODE_BRIDGE_SHA256` from the implemented
