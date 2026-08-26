@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/treko-non-text-contrast
 ---
 
 # Treko: a non-text contrast guard, on a named token allowlist
@@ -10,11 +10,13 @@ Planned 2026-08-25 in the `treko-ui-update` worktree on `feat/treko-theme-and-la
 immediately after card A (`treko-theme-and-layout.md`) merged as PR #79 (`82a9315`). Scope approved
 by the user the same day. Written at `model_tier: high` (Opus 5) per the planning handoff.
 
-**Model-switch checkpoint 2 (planning → implementation) is still owed and is unconditional.**
+**Model-switch checkpoint 2 (planning → implementation) was run 2026-08-26; the user chose to stay
+at `model_tier: high` (Opus 5), on the grounds that the hard part is the measurement being correct.**
 
-> **Gate status: CLOSED.** No branch, no source edit, no commit. Implementation opens only on the
-> literal user phrase `gate confirmed`, and only after the compliance judge and the observability
-> judge's architecting read have both recorded a verdict against this file.
+> **Gate status: OPEN.** The user said `gate confirmed` on 2026-08-26, after ten compliance rounds
+> (31 violations cited, 31 closed) and three observability architecting reads (risk=low each time).
+> Implementation proceeds on `feat/treko-non-text-contrast`, branched from the twelve planning
+> commits on `feat/treko-theme-and-layout`.
 
 ## Why
 
