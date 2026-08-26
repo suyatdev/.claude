@@ -1492,6 +1492,18 @@ RUN_ENV=(WORKTREE_GUARD_MODE=log)
 allow_silent 'L8 layer 1 honours the inherited mode (layer-2 arrival NOT MEASURED — card 6c)' \
   "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-l8)"
 
+# L9 — the report reaches EVERY arm, not Arm D alone. The design says "every arm
+# of worktree-guard.sh already runs on the relevant tool calls, so it is the
+# natural place to assert layer 2 is actually armed" (card :2466), and L1..L3
+# above cannot tell that apart from a check wired into Arm D only: all three
+# drive `git switch`, which is Arm D's. This case is the discriminator — an Arm A
+# WRITE refusal, in the same unarmed repo, must name the same resolved hooksPath.
+# Numbered after L8 rather than beside L1..L5 because it pins where the report is
+# attached, which is task 6b's own judgement call and not an Examples row.
+RUN_ENV=(GIT_CONFIG_GLOBAL="$TMP/live/gc-nofile")
+deny 'L9 an Arm A write refusal carries the same liveness report' "$LIVE" \
+  "$(payload_write Write file_path "$LIVE/hooks/git-guard.sh" s-l9)" "$HP_NOFILE"
+
 # ================================================================= GROUP G ===
 # Feature: Arming and the log (card :2678)
 
