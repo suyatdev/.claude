@@ -3573,7 +3573,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         state dir left the suite at 139/0/1, because this suite drives layer 2 only, so the file is
         absent in both cases. Nothing in the test file keeps the declined handoff from being added
         silently except M9's counted skip. Corrected in `6675e04`.
-- [ ] 6e. **Install and identify layer 2 — without this it is built and never armed.** Round 8's
+- [x] 6e. **Install and identify layer 2 — without this it is built and never armed.** Round 8's
       observability judge found no task setting `core.hooksPath`, no log line, no `<arm>` value and
       no deny-message prefix for layer 2. Four pieces:
       1. **`hooks/install-layer2.sh`** — tracked, idempotent, and reviewable: refuse on a non-`files`
@@ -3623,6 +3623,140 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
          and a re-verification that the exemption is narrow enough not to also allow a real
          primary-checkout HEAD move that merely fails a probe for an unrelated reason (boundary
          28's existing "unusable probe denies" rule must still hold everywhere else).
+      **DONE — five files, three suites green.** `hooks/reference-transaction` 489 -> 683 lines;
+      `hooks/reference-transaction.mode` (36, new, tracked); `hooks/install-layer2.sh` (280,
+      new); `hooks/install-layer2.test.sh` (390, new); `hooks/lib/worktree_guard_liveness.sh`
+      (80, new); `hooks/worktree-guard.sh` 647 -> 644; `hooks/reference-transaction.test.sh`
+      1058 -> 1470; `hooks/worktree-guard.test.sh` 1683 -> 1705. Suites, re-run at the finished
+      state: `worktree-guard.test.sh` **189 passed, 0 failed, 1 skipped** (was 188/0/1);
+      `reference-transaction.test.sh` **182 passed, 0 failed, 1 skipped** (was 139/0/1);
+      `install-layer2.test.sh` **40 passed, 0 failed, 0 skipped** (new). Everything below was
+      run in throwaway repositories under `$TMPDIR` on git 2.50.1 (Apple Git-155), never
+      against a real checkout, and never against the machine's real global git config.
+      - ✅ **The `git init` discriminator, and the shape of the measurement that chose it.** A
+        probe hook that dumped its own environment and every `rev-parse` answer, armed via
+        `core.hooksPath`, reported at `prepared` during `git init`: `GIT_DIR` **set** to the
+        `.git` being created, `--show-ref-format` / `--absolute-git-dir` / `--git-dir` /
+        `--is-inside-work-tree` / `--show-toplevel` / `--path-format=absolute --git-common-dir`
+        **all rc=128** with `fatal: not a git repository: '<that .git>'`, `<GIT_DIR>/HEAD`
+        **absent**, `<GIT_DIR>/HEAD.lock` **present**, listing
+        `HEAD.lock config description hooks info refs`. The same dump at a real `git switch`
+        showed `GIT_DIR` **unset** and every probe rc=0. So the shipped rule is four
+        conditions — `GIT_DIR` set; `<GIT_DIR>/HEAD` absent; `<GIT_DIR>/HEAD.lock` present;
+        `git rev-parse --git-dir` fails — and it fires **before** the version floor, using
+        `--git-dir` rather than `--show-ref-format` so a git too old to be judged still works.
+      - ✅ **Boundary 28 was re-verified rather than assumed, and the strongest evidence is
+        that git never gets there.** Four shapes were run under an armed hook: `GIT_DIR` at an
+        empty directory, `GIT_DIR` at a missing path, `GIT_COMMON_DIR` at an empty directory,
+        and a checkout whose `HEAD` had been deleted. **All four exited 128 with the hook never
+        invoked at all** and the primary's HEAD unmoved — git refuses before opening a ref
+        transaction. "The repository cannot be opened" is therefore a state only `git init`
+        reaches a hook in. Pinned anyway as N6-N9 and N11, and `git switch` in a primary
+        checkout, `git checkout`, `--detach`, the four `worktree add` forms and the whole
+        pinned matrix are unchanged.
+      - ✅ **The exemption was falsified by mutation, not merely written.** Control 178/0/1
+        restored after each: deleting the `HEAD.lock` condition fails N6 (176/2/1); deleting the
+        `HEAD`-absent condition fails N11. 🚩 ⬜ **Two of the four conditions survive every
+        mutation, and the hook says so in place rather than letting their greenness read as
+        coverage** — the `rev-parse` call is implied by the `HEAD`-absent test on this git (a
+        directory with no `HEAD` is one git cannot open, so no state reaches one test and not
+        the other), and the `[ -n "${GIT_DIR:-}" ]` test cannot be falsified without writing to
+        the filesystem **root** (`${GIT_DIR%/}` on an unset variable expands to empty and does
+        **not** trip `set -u`, measured, so a mutant dropping it tests `/HEAD` and `/HEAD.lock`).
+        Both are kept and both are labelled.
+      - 🚩 ✅ **`git clone` IS BROKEN BY AN ARMED LAYER 2, AND THIS TASK DID NOT FIX IT.**
+        Measured while verifying the exemption: `git clone` exits **128** and **git removes the
+        clone directory entirely**, so the command leaves nothing behind — a harder breakage
+        than the `git init` one this task was given. It is a **different mechanism** and no
+        `git init` test can see it: the clone's final HEAD write happens in the freshly-created
+        clone, which is its own primary checkout, the repository **is** openable,
+        `--show-ref-format` answers `files`, and the clone holds its own `HEAD.lock`, so the
+        ordinary lock rule fires and the clause is `primary-HEAD-lock-held`. Pinned as **N10**
+        as *what was measured*, exactly as 6a pinned K6. **Whether to carve a second exemption
+        is the same kind of user decision K6 was, and has not been made.**
+      - 🚩 ✅ **`git init --ref-format=reftable` is broken too, and the exemption structurally
+        cannot reach it.** Both inits dumped side by side at `prepared`: the `files` init has
+        `HEAD` **absent** and `HEAD.lock` **present**; the reftable init has `HEAD` **present**
+        and **no** `HEAD.lock`, listing `HEAD config description hooks info refs reftable`, and
+        the lock it holds is `reftable/tables.list.lock`. So "the repository has no HEAD yet" —
+        the condition that makes the `files` case recognisable at all — is simply **false** for
+        a reftable init. Covering it would mean teaching a guard that refuses to implement
+        reftable (boundary 28) about a reftable lock file, which is a design change and not a
+        fix. Pinned as **N12**; also a user decision, also not made.
+      - ✅ **The mode file's format, and why absence denies here when it does not at layer 1.**
+        `hooks/reference-transaction.mode`, tracked, read from beside the hook via
+        `${BASH_SOURCE[0]}` and from **nowhere else** — no `WORKTREE_GUARD_MODE` read exists in
+        layer 2, so nothing in this task depends on task 8. Format: blank lines and `#` lines
+        skipped, surrounding whitespace trimmed, first remaining line decides, and it must be
+        exactly `log` or `deny`. The file is comment-bearing on purpose: it is meant to be read
+        before it is flipped. **A missing or unparseable mode file DENIES and writes no log
+        line** — deliberately unlike layer 1, where an absent `WORKTREE_GUARD_MODE` means `log`
+        because absence there is the documented ship state. Here the file is tracked and is
+        placed by the installer, so its absence is a broken install; reading it as `log` would
+        leave a hook armed, silent and enforcing nothing. In `log` mode **every** refusal is
+        downgraded, the precondition ones included, and the clause is unchanged so one grep over
+        one field answers "what would this have refused". Pinned as GROUP W (W1-W8); falsified
+        by mutation — ignoring the mode fails W2/W3/Z8 (172/6/1), defaulting a missing file to
+        `log` fails W4 and W7 (174/4/1).
+      - ✅ **The log line and the `<arm>` value.** `<iso8601> <session_id> <arm> <mode> <DECISION
+        clause> <detail>`, tab-separated — layer 1's leading field list, so one reader
+        understands both files. `<arm>` is **`D-L2`**, deliberately neither of layer 1's `A` or
+        `B2D`. `<session_id>` is **empty and asserted empty** (F2), never synthesised. Live
+        sample, quoted from a real armed run: `2026-08-26T21:04:16Z<TAB><TAB>D-L2<TAB>deny<TAB>ALLOW
+        git-init-own-repository<TAB>GIT_DIR=[…/repos/fresh/.git]`. The deny-message prefix
+        `worktree-location-guard (layer 2):` was already shipped by 6a; M2e pins it and the live
+        run reproduces it.
+      - ✅ **The installer, run live end to end against a real git.** Armed in `deny` mode into
+        an isolated `HOME`/`GIT_CONFIG_GLOBAL` (git's own override — the machine's real global
+        `core.hooksPath` was read afterwards and is still **empty**). Results, quoted:
+        `git init` → **rc=0**, `.git/HEAD` reads `ref: refs/heads/main`; `git init --bare` →
+        **rc=0** with its HEAD written; `git switch other` in a primary checkout → **rc=128**,
+        `HEAD still: refs/heads/main`, message beginning `worktree-location-guard (layer 2):
+        HEAD write refused`; a **reftable** repo (created disarmed) → **rc=128**,
+        `refusing to run — this repository's ref backend reads as [reftable]`, HEAD unmoved;
+        a **broken** repo (`HEAD` deleted, `GIT_DIR` set) → **rc=128** from git itself, hook
+        never invoked; `git clone` → **rc=128**, clone directory gone. Whole-run attribution:
+        3 `ALLOW git-init-own-repository`, 2 `DENY backend-not-files`, 4
+        `DENY primary-HEAD-lock-held`, all at arm `D-L2` mode `deny`. `--uninstall` then unset
+        the config and removed both files, rc=0.
+      - ✅ **The installer is falsified by mutation too.** Control 40/0/0 restored after each:
+        deleting the log-mode refusal fails 4, overwriting a foreign `core.hooksPath` fails 3,
+        skipping the backend check fails 2, placing the hook non-executable fails 5, not placing
+        the mode file fails 3 (including both end-to-end cases), never writing the config fails
+        5, ignoring an unknown flag fails 1. **One mutation survived the first round and found a
+        real defect**: letting `--uninstall` unset anything left the suite green at 40/0/0,
+        because `--uninstall` was handled *after* the log-mode gate, so U2's `rc=1` was true for
+        an unrelated reason. `--uninstall` now runs **before** the backend and mode gates — the
+        only route out of a machine-wide config write must not depend on the thing it undoes —
+        and U3/U4 pin it. Three assertions in that suite were also written with a `|| printf
+        'FAIL …'` tail that never incremented the counter; they now route through `bad()`.
+      Four judgement calls, stated because none is written in the card:
+      1. **The install directory is `${XDG_CONFIG_HOME:-$HOME/.config}/git/hooks`**, outside any
+         checkout. A global `core.hooksPath` pointing into this repo would break the moment the
+         checkout moved and would leave an untracked copy of a tracked file in `git status`
+         forever. XDG is the convention this repo already uses (`$TREKO_STORE_DIR`).
+      2. **The liveness check became shared code** — `hooks/lib/worktree_guard_liveness.sh`,
+         sourced by both `worktree-guard.sh` and `install-layer2.sh`. Two copies of "is layer 2
+         armed?" would drift invisibly, with the installer reporting success under criteria
+         layer 1 does not use; this is the argument round 4 made about `resolve_effective_repo`.
+         The prose stays with each caller, only the verdict is shared. The new failure mode a
+         shared file introduces — the lib itself missing — is pinned as **L10**: the refusal
+         still stands, still exits 2, and says the check could not be *run*.
+      3. **The liveness check deliberately does NOT verify the mode file.** Its absence does not
+         fail open — layer 2 refuses every HEAD move with a message naming it — and this check
+         exists for the three modes measured to fail open *silently*. The installer verifies it
+         separately, because placing it is the installer's job.
+      4. **`--uninstall` is not among this task's four bullets and ships anyway.** The
+         `git config --global` write lives outside every checkout, so no commit, checkout or
+         revert removes it; an unrevertable machine-wide write with no documented way back is
+         worse than the papercut it prevents. Same argument `memsearch/bin/install-schedule`
+         makes for its own.
+      ⬜ **Not done here, and named so it is not assumed:** `hooks/README.md` carries no entry
+      for `install-layer2.sh` or for layer 2 — that file documents *registered* Claude Code
+      hooks, and layer 2 is registered by task 9. `rules/gates.md` is task 12 and the ADR is
+      task 11; piece 2's tracked-**detection**-standing-in-for-tracked-**state** trade is stated
+      in `install-layer2.sh`'s own header and must be repeated there. Nothing in this task was
+      registered in `settings.json`.
 - [ ] 7. Implement `create-worktree.sh` (Arm B) including the 0700 store, the `.repo-root` marker,
       the branch/base contract, and failure boundaries 15–27. Three requirements the probes
       produced: create and report **atomically** (a create-then-misreport leaves an orphan in
