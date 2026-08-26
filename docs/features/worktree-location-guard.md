@@ -3520,6 +3520,63 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       (c) with a **dirty** pre-command tree, the message offers exit A only, and the pre-existing
       staged file still exists afterwards. That third case is the regression test for the exact
       failure that retired the old remedy.
+      **IMPLEMENTED EXCEPT FOR ONE OPEN SPEC QUESTION — left unchecked on purpose.** The message,
+      exit A, the no-destructive-command guarantee and every part of (a), (b) and (c) that does not
+      need a cross-process handoff shipped in `44b79ee` (implementation) behind `b358ff0` (the
+      failing suite) and `6675e04` (a comment correction). Suite: **139 passed, 0 failed, 1
+      skipped**; layer 1's suite re-run as a regression check, **188 passed, 0 failed, 1 skipped**.
+      - ❓ **THE OPEN QUESTION, for the user, not for an implementer.** This task's contract says
+        rollback is offered "**only** when layer 1 recorded a clean pre-command tree", and (c) asks
+        for a test in which "with a **dirty** pre-command tree, the message offers exit A only".
+        Both readings presuppose that layer 2 can learn layer 1's pre-command tree state. It cannot,
+        and the design section above **declines that handoff for v1** in as many words. Verified
+        rather than inferred: `command grep -c porcelain hooks/worktree-guard.sh
+        hooks/lib/worktree_guard_bash_arms.sh` answers **0** and **0**, so neither layer-1 file
+        contains the probe at all, and layer 1 writes no tree-state fact anywhere. (`command grep
+        -rn "status --porcelain" hooks/` answers ten lines across five files as of `6675e04`, all
+        in `verify-hook-wiring.probe.sh`, `doc-guard.sh`, `checkpoint-before-modify.sh` and this
+        task's own two layer-2 files — where five of the six are prose and the sixth is the test
+        suite's own `assert_porcelain` helper.) So the precondition is **never satisfied**, and
+        v1 ships one exit. Consequence for (c): its *tree* half is a real regression test and
+        passes; its *message* half asserts a property the clean case shares, because clean and
+        dirty produce the same message. **Building the handoff to close this was deliberately not
+        done** — it is the token/ledger machinery the second measurement pass deleted. Two ways to
+        settle it: amend (c) to drop the clean/dirty contrast, or reopen the handoff decision.
+        That is the user's call.
+      - ✅ **The post-refusal tree state, measured first-hand 2026-08-26** in a throwaway repo, git
+        2.50.1, ref-format `files`, an unconditional-deny hook armed: `git switch feature` exits
+        **128**, `git symbolic-ref HEAD` still answers `refs/heads/main`, and
+        `git status --porcelain` answers exactly `A  featonly.txt` / `M  marker.txt` /
+        `M  shared.txt` — the card's own table, re-run rather than copied. `marker.txt` holds
+        `ON-FEATURE` and `shared.txt` holds `shared-v2`. Pinned as M1.
+      - ✅ **The dirty case, measured the same way.** With `other-session-work.txt` staged
+        beforehand, the refusal leaves it present **and still staged**: `A  featonly.txt` /
+        `M  marker.txt` / `A  other-session-work.txt` / `M  shared.txt`. This is the regression pin
+        for the incident that retired `git reset --hard HEAD`. Pinned as M8.
+      - ✅ **`rebase-merge` is present when the message is written, so it can be named.** The ⬜ on
+        this task's line said only that the withdrawn reset left it behind. Measured now: a `git
+        rebase` under a deny hook leaves `rebase-merge` under the common git dir, and it is already
+        there at the rebase's **first** transaction (`ORIG_HEAD`) — which the real hook allows,
+        since it is not `HEAD` — so it exists by the time the gated HEAD write is refused. The
+        refusal names it. Pinned end to end as M7.
+      - ✅ **`WORKTREE_EXEMPT` is honoured by layer 2, not merely named.** A message naming an
+        escape hatch the hook did not honour would prescribe a command that fails. It is read from
+        the environment (layer 2 has no command line), scoped to this one refusal, and an empty
+        value is not a reason. Measured end to end: `WORKTREE_EXEMPT=hotfix git switch feature`
+        exits 0 and HEAD moves (M5); `WORKTREE_EXEMPT= git switch feature` still denies (M6).
+      - ✅ **The suite was falsified, not just run.** Four mutations against the finished hook:
+        reintroducing `git reset --hard HEAD` fails M3a/M3b/M8e/M8f (135/4/1); calling the tree
+        clean, unchanged and restored fails M3i/M3j/M3k (136/3/1); deleting the `WORKTREE_EXEMPT`
+        branch while the message still names it fails M5/M5a/M5b/Z5 (135/4/1); printing the staged
+        path list — a guess at the prior tree from inside the veto — fails M10 (138/1/1). Control
+        after each: 139/0/1.
+      - 🚩 ⬜ **M10 is a weaker tripwire than it was first written to be, and the comment now says
+        so.** It compares the clean-tree and dirty-tree refusal messages for byte equality. Measured
+        2026-08-26: it catches a hook that *guesses* at the prior tree from inside the veto, and it
+        does **not** catch a genuine layer-1 handoff — a mutation reading a `pre-tree` file from the
+        state dir left the suite at 139/0/1, because this suite drives layer 2 only, so the file is
+        absent in both cases. Nothing in the test file keeps the declined handoff from being added
+        silently except M9's counted skip. Corrected in `6675e04`.
 - [ ] 6e. **Install and identify layer 2 — without this it is built and never armed.** Round 8's
       observability judge found no task setting `core.hooksPath`, no log line, no `<arm>` value and
       no deny-message prefix for layer 2. Four pieces:
