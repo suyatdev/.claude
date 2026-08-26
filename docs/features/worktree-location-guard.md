@@ -3674,6 +3674,57 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         ordinary lock rule fires and the clause is `primary-HEAD-lock-held`. Pinned as **N10**
         as *what was measured*, exactly as 6a pinned K6. **Whether to carve a second exemption
         is the same kind of user decision K6 was, and has not been made.**
+        **RESOLVED (investigated 2026-08-26) — no clean signal found; N10 stays an accepted
+        limitation, not a defect.** Four candidates were built and run live in throwaway repos
+        under `$TMPDIR`, git 2.50.1, side by side with a real `git switch` on an established
+        primary:
+        - **The transaction's old-value field.** Ruled out first — this file's own header
+          already documents the shape (`0000…0000 ref:refs/heads/other HEAD`), and it is
+          identical for `git clone`'s HEAD write and a real `git switch`'s. Not a discriminator.
+        - **`<common-dir>/logs/HEAD` (the reflog) absent at `prepared`.** True for clone's gated
+          HEAD transaction (measured: absent through every stage up to and including the branch
+          ref's own commit). But also true, on a genuinely **established** primary, for any
+          repository with `core.logAllRefUpdates=false` — a real, one-line, non-malicious git
+          config option, not a forgery — combined with `GIT_DIR` explicitly set (the
+          `--git-dir`/`--work-tree` alias pattern some workflows use routinely, e.g. a bare
+          "dotfiles" checkout — though that specific case was measured to still get a reflog,
+          because attaching a work tree overrides the bare default). Built and measured directly:
+          an established repo with `core.logAllRefUpdates=false`, `GIT_DIR` set to its own
+          `.git`, real commit history, two real branches, `HEAD.lock` held by an in-flight
+          `git switch -c <new-branch>` — every one of the exemption's candidate conditions held,
+          and this was the actual repository's own live HEAD move, not a directory that could
+          never be the primary. Unlike K6's `git init` exemption, whose three conditions compose
+          into "this directory cannot be opened" — a property no real, in-use checkout can ever
+          have while a session is working in it — reflog-absence is a fact about *content*, and
+          content is something a legitimate config choice can reproduce on the real primary.
+        - **`refs/heads/` (loose) empty.** Also true for clone's gated transaction — no local
+          branch exists yet. But `git pack-refs --all` (which ordinary auto-gc runs) empties
+          `refs/heads/` as a directory on **any** established repo while `packed-refs` holds the
+          real branches — measured directly. Checked alone, this signal would misfire on every
+          repository that happened to have been gc'd, with no adversarial action needed at all.
+        - **`refs/heads/` empty AND `packed-refs` carries no `refs/heads/` line.** The
+          combination survives the gc case (measured: `packed-refs` still lists both branches)
+          and the reflog-disabled attack above (measured: `packed-refs` still lists both branches
+          there too, so this condition alone would have denied it). But closing that gap costs a
+          new kind of check this hook does not otherwise perform — parsing `packed-refs`, a
+          lockfile format outside the file-existence tests every other clause here uses — and it
+          still is not structurally airtight: a primary whose HEAD is detached with every branch
+          deliberately deleted (`git branch -D` down to zero, `HEAD` pointing at a raw OID) has a
+          genuinely empty `refs/heads/` and `packed-refs`, and creating the repository's first
+          branch from that state (`git switch -c`) is a real HEAD move on the real primary that a
+          second session could be looking at via that same detached commit — exactly the
+          shared-HEAD collision this guard exists to stop.
+        **Why this generalises rather than being four unlucky misses:** K6's exemption is safe
+        because "the repository cannot be opened" is a structural fact — no session can be
+        actively using an unopenable directory, so nothing built on that fact can also match the
+        live shared primary. `git clone`'s final HEAD write happens in a directory that **is**
+        open, so every candidate here was necessarily a fact about that open repository's
+        history or ref *contents* — and contents are mutable by an ordinary config choice or an
+        unusual-but-legitimate repository state, never structurally exclusive to "just created."
+        No further work; carving this exemption stays declined for the reason the class of
+        machinery this card has repeatedly turned down elsewhere is declined — a signal that only
+        holds by adding an unproven new parsing surface, and that still has a real (if narrow)
+        counter-example, is exactly the fragility this design has chosen not to ship.
       - 🚩 ✅ **`git init --ref-format=reftable` is broken too, and the exemption structurally
         cannot reach it.** Both inits dumped side by side at `prepared`: the `files` init has
         `HEAD` **absent** and `HEAD.lock` **present**; the reftable init has `HEAD` **present**
