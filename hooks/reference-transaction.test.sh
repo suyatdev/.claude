@@ -1161,6 +1161,22 @@ d_allow 'N9 a hand-built <lock, no HEAD, unopenable> directory IS exempted (meas
 assert_log_has 'N9 …attributed to the git-init clause' 'ALLOW git-init-own-repository'
 rm -f "$FORGED/HEAD.lock"
 
+# N11 — the falsifier for the HEAD-IS-ABSENT condition, which N6..N9 do not reach.
+# A directory holding BOTH a HEAD and a HEAD.lock, that git still cannot open (no
+# objects/, no refs/): every other condition of the exemption is satisfied and
+# this one is not. Measured by mutation 2026-08-26 — with the HEAD-absent test
+# deleted the hook exits 0 here and the suite is otherwise unchanged at 178/0/1,
+# so without this case that condition is a line no test pins.
+HASHEAD="$TMP/hashead"
+mkdir -p "$HASHEAD"
+printf 'ref: refs/heads/main\n' > "$HASHEAD/HEAD"
+: > "$HASHEAD/HEAD.lock"
+RUN_ENV=(GIT_DIR="$HASHEAD")
+d_deny 'N11 GIT_DIR at an unopenable directory that HAS a HEAD still denies' \
+  "$PRIMARY" prepared "$HEAD_TX"
+assert_log_lacks 'N11 …and the git-init clause did not fire' 'ALLOW git-init-own-repository'
+rm -f "$HASHEAD/HEAD.lock"
+
 # ---- N10: a SECOND breakage of the same family, newly measured -------------
 # 🚩 NOT COVERED BY TASK 6e's DECISION, WHICH NAMES `git init` AND NOTHING ELSE.
 # Measured 2026-08-26 while verifying the exemption: `git clone` is refused by an
