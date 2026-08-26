@@ -1214,6 +1214,43 @@ else
 fi
 reset_fixture "$PRIMARY"
 
+# ---- N12: a THIRD breakage of the same family, newly measured --------------
+# 🚩 ALSO NOT COVERED BY TASK 6e's DECISION, and a different mechanism again.
+# Measured 2026-08-26: `git init --ref-format=reftable` is refused by an armed
+# hook, so creating a reftable repository is impossible while layer 2 is armed.
+#
+# The exemption cannot reach it, and the reason is a fact about git rather than a
+# gap in the rule. Dumped from inside the hook at `prepared`, both inits side by
+# side on git 2.50.1:
+#
+#   files init:     HEAD absent, HEAD.lock PRESENT,
+#                   listing [HEAD.lock config description hooks info refs]
+#   reftable init:  HEAD PRESENT, HEAD.lock absent,
+#                   listing [HEAD config description hooks info refs reftable],
+#                   and the lock it holds is reftable/tables.list.lock
+#
+# So "the repository has no HEAD yet" — the condition that makes the files case
+# recognisable at all — is simply FALSE for a reftable init: git writes HEAD
+# eagerly and locks the reftable stack instead. Covering it would mean teaching a
+# guard that refuses to implement reftable (boundary 28) about a reftable lock
+# file, which is a design change and not a fix, and it is not a decision this task
+# was given. Pinned as WHAT WAS MEASURED, like N10.
+if [ -d "$RT/.git" ]; then
+  e_run "$TMP" "$GIT_REAL" -c user.email=t@t -c user.name=t -c init.defaultBranch=main \
+    -c core.hooksPath="$HOOKS_DIR" init -q --ref-format=reftable "$TMP/repos/freshrt"
+  if [ "$e_rc" -ne 0 ]; then
+    ok "N12 an armed hook refuses git init --ref-format=reftable too (measured, undecided — rc=$e_rc)"
+  else
+    printf 'FAIL — N12 reftable init was expected to be refused as measured (got rc=0)\n'
+    fail=$((fail+1))
+  fi
+  assert_log_has 'N12 …by the backend clause, because its HEAD already exists at prepared' \
+    'DENY backend-not-files'
+else
+  skipped 'N12 an armed hook refuses git init --ref-format=reftable too (no --ref-format support)'
+  skipped 'N12 …by the backend clause, because its HEAD already exists at prepared'
+fi
+
 # ================================================================= GROUP W ===
 # Feature: the arming switch (card task 6e, piece 4). Layer 2 reads `log`/`deny`
 # from a TRACKED file beside itself and from nowhere else.
