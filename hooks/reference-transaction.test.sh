@@ -758,9 +758,8 @@ assert_log_empty 'R12 …and nothing is attributed, because no clause was reache
 # (grepped), and the design section states the cross-process handoff that would
 # carry it is "declined for v1". So in v1 the precondition is never satisfied,
 # the rollback exit is never offered, and the CLEAN case and the DIRTY case
-# produce the SAME message. M9 records that as a skip and M10 pins the sameness,
-# so a later revision that quietly adds the handoff fails a test instead of
-# passing one.
+# produce the SAME message. M9 records that as a counted skip; M10 pins the
+# sameness, within the limit measured at M10 itself.
 
 MREPO="$TMP/repos/remedy"
 mkdir -p "$MREPO"
@@ -970,12 +969,31 @@ m_has   "$M_DIRTY_ERR" 'M8g …and says outright that it names no rollback comma
 # totals, where "0 failed" would read as "every scenario is pinned".
 skipped 'M9 clean pre-command tree offers a rollback exit — NOT CONSTRUCTIBLE: layer 1 records no pre-command tree state and the handoff is declined for v1 (card, "Why exit B is conditional")'
 
-# M10 — the pin that makes M9 falsifiable instead of merely asserted. If layer 2
-# genuinely cannot see the prior tree, then the clean-tree refusal (M1) and the
-# dirty-tree refusal (M8) must produce the SAME bytes. This case is the tripwire:
-# a later revision that adds the handoff, or that guesses at the prior tree from
-# inside the veto, fails here and forces the card's decision to be reopened
-# rather than silently reversed.
+# M10 — the pin on "layer 2 cannot see the prior tree". If that is true, the
+# clean-tree refusal (M1) and the dirty-tree refusal (M8) must produce the SAME
+# bytes, and this compares them.
+#
+# WHAT IT WAS MEASURED TO CATCH, AND WHAT IT WAS MEASURED TO MISS — stated
+# because the first version of this comment claimed both and a mutation run
+# disproved half of it. Probed 2026-08-26 against the finished hook:
+#
+#   ✅ A hook that GUESSES at the prior tree from inside the veto. Mutation:
+#      print `git diff --cached --name-only` into the message. It differs
+#      (`featonly.txt,marker.txt,shared.txt` vs the same plus
+#      `other-session-work.txt`) and M10 fails — 138 passed, 1 failed.
+#   ❌ A real layer-1 -> layer-2 HANDOFF. Mutation: read a `pre-tree` file from
+#      the state dir and print it. M10 does NOT fail — 139 passed, 0 failed —
+#      because this suite drives layer 2 only, so the file is absent in BOTH
+#      cases and the messages stay identical. A handoff would have to be driven
+#      end to end here to be caught, and nothing in this file does that.
+#
+#   (A third mutation, branching on whether `--cached` is merely NON-EMPTY, also
+#   did not fail — correctly: it is non-empty in both cases, because git stages
+#   the destination before the ref transaction. That is reason 2 in the card,
+#   reproduced. The probe was wrong, not the assertion.)
+#
+# So M10 is a tripwire against the cheap wrong fix, not against the declined
+# design. The declined design is covered by M9's skip and by nothing else.
 if cmp -s "$M_CLEAN_ERR" "$M_DIRTY_ERR"; then
   ok 'M10 the refusal message is byte-identical over a clean and a dirty pre-command tree (layer 2 cannot see the prior tree, and does not pretend to)'
 else
