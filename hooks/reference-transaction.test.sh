@@ -616,13 +616,27 @@ rm -f "$PRIMARY/.git/HEAD.lock"
 # was measured UNSET at the gated HEAD write, so its sibling cannot be relied on;
 # the notation in the card's rule is a path expression, not an environment read.
 # Setting it to a directory holding no HEAD.lock must not turn the deny into an
-# allow — an implementation reading the variable allows here.
+# allow — an implementation reading the variable allows here, because the decoy
+# holds no lock.
+#
+# ONE assertion, not two, and the reason is measured rather than assumed. This
+# case first carried a follow-up requiring the LOCK clause to be the one that
+# fired, and that expectation was wrong: GIT_COMMON_DIR redirects git ITSELF, so
+# under a decoy value every rev-parse in the repository fails —
+#
+#   $ GIT_COMMON_DIR=/tmp/c7/decoy git rev-parse --show-ref-format
+#   fatal: not a git repository (or any of the parent directories): .git
+#
+# — and the hook denies at the backend clause before it ever reaches the lock. The
+# clause is therefore not a property this case can pin. What boundary 33 actually
+# requires IS pinned: the variable does not buy an allow. C5/C6 already cover an
+# unusable rev-parse, and C1 already proves the lock path comes from rev-parse in
+# the ordinary case.
 mkdir -p "$TMP/decoy-common"
 : > "$PRIMARY/.git/HEAD.lock"
 RUN_ENV=(GIT_COMMON_DIR="$TMP/decoy-common")
 d_deny 'C7 a GIT_COMMON_DIR pointing elsewhere does not buy an allow' \
   "$PRIMARY" prepared "$HEAD_TX"
-assert_log_has 'C7 …the lock path still came from rev-parse' 'DENY primary-HEAD-lock-held'
 rm -f "$PRIMARY/.git/HEAD.lock"
 
 # ================================================================= GROUP R ===
