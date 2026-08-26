@@ -944,25 +944,35 @@ def test_every_pin_has_a_floor_and_every_debt_and_exempt_a_reason():
     Falsifier case 13 empties one reason and removes one floor, and this is what catches it --
     at import time, in a run where the browser never starts.
     """
+    # Every violation is collected before anything is asserted, deliberately. An earlier draft
+    # asserted inside the loops, and a missing floor then masked an emptied reason entirely --
+    # falsifier case 13 breaks BOTH at once and only one of them was ever reported.
+    problems = []
     for entry in _by_class(PIN):
-        assert isinstance(entry["floor"], float), (
-            "PIN entry %s has floor %r; every PIN entry needs a numeric floor, which is the whole "
-            "claim its class makes." % (entry["token"], entry["floor"]))
+        if not isinstance(entry["floor"], float):
+            problems.append(
+                "  %-22s PIN with floor %r -- every PIN entry needs a numeric floor, which is "
+                "the whole claim its class makes." % (entry["token"], entry["floor"]))
     for entry in _by_class(DEBT) + _by_class(EXEMPT):
         reason = entry["reason"]
-        assert isinstance(reason, str) and reason.strip(), (
-            "%s entry %s has reason %r. An exemption or a recorded defect without a specific "
-            "reason is not reviewable, and this list is only as auditable as its reasons."
-            % (entry["klass"], entry["token"], reason))
-        assert "decorative" not in reason.lower(), (
-            "%s's reason calls the mark 'decorative' -- criterion 4 forbids that word by name. "
-            "It is how an exemption list stops being auditable: it explains nothing and cannot "
-            "be argued with." % entry["token"])
+        if not (isinstance(reason, str) and reason.strip()):
+            problems.append(
+                "  %-22s %s with reason %r -- an exemption or a recorded defect without a "
+                "specific reason is not reviewable, and this list is only as auditable as its "
+                "reasons." % (entry["token"], entry["klass"], reason))
+        elif "decorative" in reason.lower():
+            problems.append(
+                "  %-22s reason calls the mark 'decorative', which criterion 4 forbids by name: "
+                "it explains nothing and cannot be argued with." % entry["token"])
     for entry in _by_class(DEBT):
         for theme in THEMES:
-            assert isinstance(entry[theme]["min_ratio"], float), (
-                "DEBT entry %s has no recorded %s ratio (%r). A debt entry with no number is a "
-                "note, not a guard." % (entry["token"], theme, entry[theme]["min_ratio"]))
+            if not isinstance(entry[theme]["min_ratio"], float):
+                problems.append(
+                    "  %-22s DEBT with no recorded %s ratio (%r) -- a debt entry with no number "
+                    "is a note, not a guard." % (entry["token"], theme, entry[theme]["min_ratio"]))
+    assert not problems, (
+        "%d allowlist entr%s incompletely classified:\n%s"
+        % (len(problems), "y is" if len(problems) == 1 else "ies are", "\n".join(problems)))
 
 
 @pytest.mark.parametrize("theme", THEMES)

@@ -255,12 +255,19 @@ anything, and cannot be misattributed. **This is the same check that already cle
 `--hair-3` in §D2** — the card ran it for those two and did not run it here. A shared value is not a
 collision; a shared value between two tokens that both *paint* is. §Risks 3.
 
-**8. Card A's criterion-5 comment and this probe disagree on the denominator.** The comment says
-"848 elements with rendered area … 367 paint a mark in their own color". This probe measures
-**851 / 368** on the same page and the same Chrome build. The two predicates are not identical (this
-probe's element walk is its own), so this is a discrepancy to resolve during implementation, not a
-proven error in the test — **but the test's `>= 200` floor is unaffected either way**, and no
-assertion depends on 848 or 367.
+**8. Card A's criterion-5 comment and this probe disagree on the denominator — resolved
+2026-08-26, and the predicates were not the cause.** The comment says "848 elements with rendered
+area … 367 paint a mark in their own color"; this card's walk measures **851 / 368**.
+
+During implementation both numbers were re-measured on one page load, and the text count was taken
+by running **card A's own `CONTRAST_CHECK_JS`**, unmodified, rather than a re-implementation of it.
+It reports **368**, in both themes, against 851 elements with rendered area. So the difference is
+not two predicates disagreeing: card A's predicate agrees with this card's measurement today. **The
+comment records an older state of the page**, from before the drawer and sidebar work landed, and
+its numbers went stale in place — the same class of defect as a recorded line number. No assertion
+depends on 848 or 367 (card A's floor is `>= 200`), so this is a stale comment, not a live bug, and
+this card does not edit `treko/test_theme.py` to correct it — criterion 10 forbids it, and a
+drive-by fix in another card's file is its own task.
 
 ## Design
 
@@ -862,15 +869,15 @@ recorded numbers.
 Red half and green half are separate commits throughout; never the same commit
 (`rules/core-conduct.md`, Testing).
 
-1. **Baseline.** Full suite on the pinned Chrome; record passed / failed / deselected **and which
+1. ✅ **Baseline.** Full suite on the pinned Chrome; record passed / failed / deselected **and which
    tests ran**. No measurement here — the re-measurement belongs to task 3, which owns the walk that
    produces it. The planning probe is deliberately not a dependency of any task: it is a throwaway
    this card does not commit, and the mandatory `/clear` at the planning→implementation gate ends
    the session holding it.
-2. **Red:** the harness and the count assertions — walk the page, collect non-text marks in both
+2. ✅ **Red:** the harness and the count assertions — walk the page, collect non-text marks in both
    themes, assert the exact totals and `parseFailures == 0`. No allowlist yet. Must fail first for a
    stated reason.
-3. **Green:** land the walk. Confirm a scored **334 / 347**, alongside 1 excluded header mark, 5
+3. ✅ **Green:** land the walk. Confirm a scored **334 / 347**, alongside 1 excluded header mark, 5
    gradient-painted elements and 0 scored marks over a gradient backdrop per theme, and that the
    four §D7 probe defects are absent (SVG root not
    scored; multi-shadow read in full; `color(srgb …)` parsed; 0 marks over a gradient).
@@ -882,12 +889,12 @@ Red half and green half are separate commits throughout; never the same commit
    335 / 348 and both together yield 336 / 349, so read the *excluded-mark count* (criterion 6) and
    the SVG predicate (criterion 8) to tell them apart. Falsifier case 10 agrees: re-scoring the
    `<svg>` root alone gives 335 / 348.
-4. **Red:** the coverage assertion — every distinct declared colour maps to an allowlist entry.
-5. **Green:** land the allowlist data, all 23 entries with class, per-theme colours, per-theme mark
+4. ✅ **Red:** the coverage assertion — every distinct declared colour maps to an allowlist entry.
+5. ✅ **Green:** land the allowlist data, all 23 entries with class, per-theme colours, per-theme mark
    count, and reason; the two collision comments required by criterion 13.
-6. **Red:** PIN and DEBT assertions.
-7. **Green:** land them; both themes go green with zero palette edits.
-8. **Falsify — thirteen cases.** For each: introduce the defect in a throwaway copy, confirm the test
+6. ✅ **Red:** PIN and DEBT assertions.
+7. ✅ **Green:** land them; both themes go green with zero palette edits.
+8. ✅ **Falsify — thirteen cases.** For each: introduce the defect in a throwaway copy, confirm the test
    goes red, and **record which assertion caught it**. A count of "13 of 13 caught" without naming
    the catching assertion is not evidence.
 
@@ -916,12 +923,12 @@ Red half and green half are separate commits throughout; never the same commit
 
    **Record all thirteen cases and their catching assertions in this file**, not only in the throwaway
    copy — a falsifier that is discarded proves the check worked once, on a day nobody can revisit.
-9. Prove criterion 10 — diff the three files and blocks it names (`treko/Treko.dc.html` `:root` at
+9. ✅ Prove criterion 10 — diff the three files and blocks it names (`treko/Treko.dc.html` `:root` at
    `:21` and `:27` and `body[data-theme="light"]` at `:33`; `treko/nocturne.css` `:root`;
    `treko/_ds/nocturne-*/styles.css`) against the base branch; expect zero changed lines in all
    three. Also confirm `treko/conftest.py` is unchanged.
-10. ADR; update `docs/features/` links and the `treko` skill's UI notes.
-11. Observability judge, then PR.
+10. ✅ ADR; update `docs/features/` links and the `treko` skill's UI notes.
+11. ⬜ Observability judge, then PR.
 
 ## Risks
 
@@ -958,6 +965,90 @@ Red half and green half are separate commits throughout; never the same commit
 ## Verification
 
 ### Findings made during implementation, 2026-08-26
+
+### Criterion 12 — the full suite, against the task-1 baseline
+
+|  | baseline (`355904b`) | after (`feat/treko-non-text-contrast`) |
+|---|---|---|
+| collected | 294 | 310 |
+| passed | 259 | **310** |
+| failed | **35** | 0 |
+| deselected | 0 | 0 |
+
+**A pass count cannot show the new module was collected, so the node-ID sets were diffed rather
+than the totals.** Result: **0 lost, 16 gained, all 16 from `treko/test_nontext_contrast.py`**. The
+35 baseline failures were the Chrome pin, every one of them raised in `Chrome.__init__` before a
+page loaded; they pass on the re-pinned build. There is no pytest config in this repo — no
+`pytest.ini`, `setup.cfg`, `pyproject.toml` or `tox.ini`, and no `collect_ignore` — so nothing is
+deselected and the count is the whole suite.
+
+(One node ID collapses in that diff, `test_criterion17_falsifiers_are_caught[CSS …]`, whose
+parameter contains a space. It collapses identically on both sides, so the set difference is
+unaffected: 294 rows / 293 ids before, 310 / 309 after.)
+
+### Criterion 10 — the palette diff
+
+Measured with `git diff origin/main...HEAD`:
+
+| file | changed lines |
+|---|---|
+| `treko/Treko.dc.html` — both `:root` blocks and `body[data-theme="light"]` | **0** |
+| `treko/nocturne.css` — the `:root` block | **0** |
+| `treko/_ds/nocturne-*/styles.css` | **0** |
+| `treko/conftest.py` | **0** |
+| `treko/test_nontext_contrast.py` | +1044 (new file) |
+| `treko/cdp_harness.py` | +12 / −2 — 11 comment lines and the one `PINNED_VERSION` string |
+
+Two files under `treko/` change rather than one. The second is the re-pin, and it is the exception
+§Pinned versions declares; see the finding above. **Zero palette edits**, which is what the
+criterion is actually protecting.
+
+**The module is 1044 lines, over the 800-line ceiling in `rules/core-conduct.md`.** Recorded rather
+than quietly ignored: criterion 10 requires exactly one new file under `treko/`, so the two rules
+disagree and the card's explicit, specific requirement wins. About 220 lines are the allowlist data
+and about 230 are the browser-side walk; the rest is assertions and the docstrings criterion 11
+requires. If a later card relaxes criterion 10, the data and the walk are the two clean seams.
+
+### The thirteen falsifier cases, run 2026-08-26 — 13 of 13 caught
+
+Each defect was introduced into a private copy of the tree (`server_harness.build_tree`) or into a
+freshly reloaded copy of the module, and **every** assertion was then run, not only the one
+expected to fire. The table names the assertion the card predicted and, where others also went
+red, what they said — a count of "13 of 13" without the catching assertion is not evidence, and
+neither is one that hides which *other* checks were doing the catching.
+
+| # | defect | predicted catcher | what actually fired |
+|---|---|---|---|
+| 1 | `--color-accent` dulled to `#565a6d` (2.42:1) **and its entry updated to match** | PIN floor | **PIN floor, dark, alone.** Coverage passed by construction — this is the diligent edit §D8 describes, and the floor is the only thing standing in its way |
+| 2 | `--color-neutral-800` dark edited to `#4f5260`, entry not updated | Coverage | Coverage (unmapped key), per-entry count, and the DEBT assertion failing loudly on "matched no marks" rather than skipping |
+| 3 | `--color-surface` re-tinted and **its own** entry updated; `--color-neutral-800` untouched | DEBT ratio ±0.0005 | **DEBT ratio, dark, alone** — 2 debts moved, coverage green. The isolation the scenario asks for |
+| 4 | a `#ff00ff` `border-top` added to the progress track | Coverage | Coverage in both themes, plus the scored total at 335 / 348 |
+| 5 | the sticky header's `border-bottom: 1px solid var(--hair)` deleted | that entry's exact count | per-entry count (`--hair` 41 against 42) in both themes, plus the total at 333 / 346 |
+| 6 | `kinds` filters swapped so colour alone decides | per-entry counts + "matches at least one mark" | **both**, exactly as predicted: `--shadow-sm` matched zero marks and two entries were off their counts, **while the scored total stayed 334** |
+| 7 | the header's `backdrop-filter` removed | excluded-fill count, 0 against 1 | excluded-fill count in both themes, plus coverage and the total at 335 / 348 |
+| 8 | a second element given a `backdrop-filter` | excluded-fill count, 2 against 1 | excluded-fill count in both themes, plus per-entry counts and the total at 333 / 346 |
+| 9 | `--rail` set to `color(display-p3 …)`, which this parser cannot read | parse-failure abort | parse failures = 6 in dark, plus `--rail` matching zero marks and the total at 333 |
+| 10 | `svg` added to the shape-tag list | scored total 335 / 348 | the total at exactly **335 / 348** in both themes, plus coverage on the root's `rgb(0, 0, 0)` |
+| 11 | `splitShadows` truncated to its first entry | `--shadow-sm` light count, 13 against 26 | per-entry count in light, plus the light total at 334 against 347 — **a drop of exactly 13** |
+| 12 | a 4x4 magenta span placed inside the progress-bar gradient | "0 scored marks over a background-image", 1 against 0 | **that predicate, in both themes, and nothing else.** Constructed to move nothing else: the span carries no `background-image` of its own, so the gradient-element count stays 5 and the scored total stays 334 |
+| 13 | `--hair`'s reason emptied **and** `--warn`'s floor removed | the data-only assertion, before any page loads | the data-only assertion, reporting **both** — and it reported both only after the fix below |
+
+**Two of the thirteen did not go red on the first attempt, and both are recorded because the near
+miss is the useful part.**
+
+- **Case 5 fired nothing at all.** Its first version deleted a `--hair` `border-right` from the
+  icon rail at `Treko.dc.html:59` — an element that is not rendered at mount, so the mark it
+  removed was never in the population. Nothing was wrong with the assertion; the *falsifier* was
+  testing a mark that does not exist. Re-pointed at the sticky header's `border-bottom`, which is
+  in the population, it goes red immediately. **A falsifier that mutates outside the population
+  proves the check is quiet, not that it is broken** — and it is indistinguishable from a passing
+  check unless you notice nothing turned red.
+- **Case 13's second half was masked by its first.** The data-only assertion asserted inside its
+  loops, so the missing PIN floor raised before the emptied reason was ever examined: the case
+  reported one of the two defects it introduced. The assertion now collects every violation and
+  asserts once. **A test that stops at the first of N independent checks cannot be falsified by a
+  case that breaks two of them**, which is exactly what criteria 3 and 4 asked case 13 to do.
+
 
 Recorded here rather than fixed silently: each changed something this card had asserted, and the
 way each was wrong is more useful than the fact of it.
