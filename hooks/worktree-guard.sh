@@ -78,6 +78,17 @@ CLASSIFIER="$LIB_DIR/classify-git-command.py"
 # like the classifier, so a suite substituting one substitutes the other from the same knob
 # — which is how GROUP S drives a mutated copy of the shared resolution rule.
 BASH_ARMS="$LIB_DIR/worktree_guard_bash_arms.sh"
+# The shared "is layer 2 armed?" judgement, sourced HERE rather than at a dispatch point:
+# check_liveness() runs from refuse(), which every arm reaches. Task 6e's installer sources
+# the same file and reports through the same verdict, so the two cannot drift apart — the
+# argument round 4 made about resolve_effective_repo(), applied to a check whose whole job is
+# to be right about something nobody looks at twice.
+LIVENESS_LIB="$LIB_DIR/worktree_guard_liveness.sh"
+LIVENESS_LIB_OK=0
+if [ -r "$LIVENESS_LIB" ]; then
+  # shellcheck source=lib/worktree_guard_liveness.sh
+  . "$LIVENESS_LIB" && LIVENESS_LIB_OK=1
+fi
 
 # The sentinel classify-git-command.py puts in an indexed fact whose operand it could not
 # read off the command line (its own UNRESOLVABLE). Spelled out rather than imported: the
@@ -96,17 +107,9 @@ MARKER_NAME='.repo-root'
 # env-assignment on the command line, exactly as classify-pr-command.py reads its own.
 EXEMPT_VAR='WORKTREE_EXEMPT'
 
-# Layer 2 — the git-side hook (card task 6a). This file never runs it and never reads it;
-# the liveness check needs only its NAME and the directory git would look for it in.
-LAYER2_HOOK='reference-transaction'
-
-# The path handed to `git rev-parse --git-path`, which is how the effective core.hooksPath
-# is resolved. Measured against a throwaway repo, all four shapes: --git-path honours the
-# whole config precedence (a repo-LOCAL core.hooksPath beats a global one, which is the
-# husky/lefthook case the check exists for), falls back to <git-dir>/hooks when it is unset,
-# resolves a relative value against the repository rather than the caller's cwd, and answers
-# the COMMON hooks directory from inside a linked worktree.
-HOOKS_GIT_PATH='hooks'
+# Layer 2's hook NAME and the git-path used to resolve its directory both live in
+# $LIVENESS_LIB now ($WG_LAYER2_HOOK, $WG_HOOKS_GIT_PATH), because the installer needs the
+# same two values and a second spelling of either is a second thing to keep in step.
 
 # --- messages ---------------------------------------------------------------------------
 # Every message carries the `worktree-guard:` prefix. phase-guard.sh prefixes its own and
@@ -185,37 +188,30 @@ append_log() { # $1 arm, $2 decision, $3 repo-root, $4 path-or-command, [$5 exem
 # caller that passes a non-empty root has already been through require_git's version floor.
 LIVENESS_NOTE=''
 check_liveness() { # $1 the repository this refusal was judged against, '' when there is none
-  local hooks_path hook state
+  local rc
   LIVENESS_NOTE=''
   [ -n "$1" ] || return 0
-  hooks_path=$(git -C "$1" rev-parse --path-format=absolute --git-path "$HOOKS_GIT_PATH" \
-    2>/dev/null) || hooks_path=''
-  if [ -z "$hooks_path" ]; then
-    # Silence is what an ARMED layer 2 looks like, so an unanswerable probe may not be
-    # silent — that is the whole shape this check exists to break.
-    LIVENESS_NOTE="${LF}${LF}worktree-guard: layer 2 could not be checked — git would not report a hooks path for $1, so whether the \`$LAYER2_HOOK\` hook is armed for this repository is unknown."
+  # A missing lib is a new way for this check to be absent, and the ONE thing it may not do
+  # then is nothing: silence is exactly what an armed layer 2 looks like, so an unrunnable
+  # check reports that it could not run. The refusal above is unaffected either way.
+  if [ "$LIVENESS_LIB_OK" != 1 ]; then
+    LIVENESS_NOTE="${LF}${LF}worktree-guard: layer 2 could not be checked — $LIVENESS_LIB is missing or could not be sourced, so whether the \`reference-transaction\` hook is armed for this repository is unknown."
     return 0
   fi
-  hook="$hooks_path/$LAYER2_HOOK"
-  # Armed means a REGULAR file that is executable, which is what git itself requires. A
-  # presence test alone would pass the mode that reads most like a working install.
-  if [ ! -d "$hooks_path" ]; then
-    state='that directory does not exist'
-  elif [ ! -e "$hook" ]; then
-    state="no \`$LAYER2_HOOK\` file is in it"
-  elif [ ! -f "$hook" ]; then
-    state="\`$LAYER2_HOOK\` is there but is not a regular file"
-  elif [ ! -x "$hook" ]; then
-    state="\`$LAYER2_HOOK\` is there but is not executable"
-  else
+  wg_liveness "$1"
+  rc=$?
+  [ "$rc" -eq 0 ] && return 0
+  if [ "$rc" -eq 2 ]; then
+    # Unanswerable, not unarmed. Still not silent, for the reason above.
+    LIVENESS_NOTE="${LF}${LF}worktree-guard: layer 2 could not be checked — $WG_LIVENESS_STATE ($1), so whether the \`$WG_LAYER2_HOOK\` hook is armed for this repository is unknown."
     return 0
   fi
-  LIVENESS_NOTE="${LF}${LF}worktree-guard: separately — LAYER 2 IS NOT ARMED for this repository: $state.
+  LIVENESS_NOTE="${LF}${LF}worktree-guard: separately — LAYER 2 IS NOT ARMED for this repository: $WG_LIVENESS_STATE.
 
-  hooks path: $hooks_path
-  expected:   $hook, executable
+  hooks path: $WG_LIVENESS_PATH
+  expected:   $WG_LIVENESS_PATH/$WG_LAYER2_HOOK, executable
 
-Layer 2 is the git-side \`$LAYER2_HOOK\` hook. It is what refuses a HEAD move in
+Layer 2 is the git-side \`$WG_LAYER2_HOOK\` hook. It is what refuses a HEAD move in
 a shared primary checkout however the move is started, including from a terminal no
 PreToolUse hook ever sees, and every way it can be absent was measured to exit 0 and move
 HEAD without a word — so this paragraph is the only signal that it is off. The refusal
@@ -223,6 +219,7 @@ above came from layer 1 and stands on its own; it is unaffected by layer 2's sta
 
 This check is not self-hosting: if this hook is itself unregistered, nothing checks either
 layer. That regress terminates at settings.json, which is tracked and reviewable."
+  return 0
 }
 
 # --- refusal ------------------------------------------------------------------------------
