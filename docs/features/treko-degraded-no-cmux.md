@@ -18,11 +18,14 @@ not been asked** and must be asked before any branch is cut.
 > user gave the literal phrase and then directed that the compliance judge re-run first, so there
 > is still no branch, no task 1 and no source edit; frontmatter stays `phase: planning` until a
 > compliance `pass`. The spec-compliance gate (`running-the-compliance-judge`) **has** run against
-> this card — **nine rounds, every one `fail`** (rounds 1-9 at `3ca9b8c`, `3ca9b8c`, `3ca9b8c`,
-> `f759832`, `2a0c459`, `2a0c459`, `2a0c459`, `0580403`, `6adf470`); rounds 5-9 cite the same two
-> violation ids. `coding-memory/compliance-judge/verdicts.jsonl` is the record, re-derived
-> 2026-08-26. This banner claimed the gate had never run and stayed false through all nine of
-> them — see task 1a clause (c), which was widened because of it.
+> this card, repeatedly. **This banner is deliberately not a round count** — round 9's finding was
+> this banner stating "has not run yet" against nine already-recorded verdicts, and round 11 found
+> a *replacement* banner already stale by two rounds within the same commit that wrote it, because
+> a number written into prose is wrong the moment the round after it runs. The count is never
+> restated here again; it is read, not recorded:
+> `python3 -c "import json; print(sum(1 for l in open('coding-memory/compliance-judge/verdicts.jsonl') if l.strip() and json.loads(l).get('spec_path')=='docs/features/treko-degraded-no-cmux.md'))"`
+> against this repo's `coding-memory/compliance-judge/verdicts.jsonl` is the one source of truth
+> for how many rounds have run and what each one found — see task 1a clause (c).
 
 **This card almost certainly earns an ADR.** It converts a startup abort into a served page —
 a direction-pivoting change to the trust boundary, which is exactly the class
@@ -659,6 +662,13 @@ re-declares its own copy, the health probe and the send can resolve `CMUX_BIN` t
 binaries, and nothing in the suite would say so, because each module would be internally
 consistent.
 
+**`SURFACE_ENV` moves too — found round 11, and it is not a duplication risk, it is a crash.**
+`SURFACE_ENV = "CMUX_SURFACE_ID"` (`server.py:55`) is read once, at `:219`, inside `bind_surface`
+itself. `bind_surface` is the function this decision moves to `channel.py`; if `SURFACE_ENV` is
+left behind, `channel.py`'s copy of `bind_surface` raises `NameError` on its very first call. Not
+a silent narrowing like the two constants above — a hard failure task 2's red tests would catch
+immediately, but only if task 2 runs before someone notices the module doesn't import at all.
+
 `channel.py` therefore declares both and `server.py` imports them, exactly as `server.py:37`
 already imports `StartupAbort` from `store_location.py` for the same "two modules, one definition"
 reason. `server_harness.py:256` injects `CMUX_BIN` into the environment and is unaffected — it sets
@@ -1253,25 +1263,34 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       D6 -> `test_rename.py:85-86` reads `server.py`'s source and asserts `retired not in source`
       for every retired name. It scans `server.py` **only**, so once D6 moves `bind_surface` and
       the cmux constants into `channel.py` this guard covers one fewer file while staying green —
-      the same shrinking-guard failure as `test_server.py:311`, and it must be widened with it.
+      the same shrinking-guard failure as `test_server.py:311`. **Owned by task 3**, alongside it.
       Verified 2026-08-26 that it stays green through the move: all four `RETIRED_NAMES`
       (`test_rename.py:44-49` — `TASK_TRACKER_PORT`, `_IDLE_SECS`, `_POLL_SECS`, `_ANALYZE_SECS`)
       score `grep -c TASK_TRACKER treko/server.py` = **0** across the whole file, so every one of
       the four parametrised cases passes before the move and passes after it — which is precisely
       why nothing would surface the narrowing. Found by observability round 5, **not** by the recipe — the fourth review round
       running to find one more door by hand, which is the whole argument for clause (a)'s rewrite.
+      **Round 11: naming this row on the floor did not widen the test — task 3 now says so
+      explicitly, closing the gap between enumerating a risk and remediating it.**
 - [ ] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
 - [ ] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable`, the `Reason`
-      enum (a plain `Enum`, D1), `CHANNEL_OK = "ok"`, **and — per D6 — `CMUX_BIN` and
-      `CMUX_TIMEOUT_SECS`, moved from `server.py:53-54`, with `channel.py` as their single owner.**
-      `server.py` imports all six. Task 2 goes green. Confirm `server.py` **dropped** below 799.
-      *Round 10 finding: this task previously listed four symbols and omitted the two D6 requires,
-      so following the task list left both constants declared in `server.py` -- the exact
-      two-different-binaries state D6 exists to prevent, with nothing in the suite positioned to
-      catch it. `confirm_surface` (`server.py:299`) and `send_keys` (`:321`) keep reading
-      `CMUX_BIN` after the move -- via the import, not a re-declaration.*
+      enum (a plain `Enum`, D1), `CHANNEL_OK = "ok"`, and — per D6 — `CMUX_BIN`,
+      `CMUX_TIMEOUT_SECS` **and `SURFACE_ENV`**, moved from `server.py:53-55`, with `channel.py`
+      as their single owner. `server.py` imports all **seven**. Task 2 goes green. Confirm
+      `server.py` **dropped** below 799. **Also widen the two guards D6 narrows** (task 1a's known
+      rows): `test_server.py:311`'s `"env=" not in source` and `test_rename.py:85-86`'s
+      `retired not in source` both scan `server.py` only; extend both to scan `channel.py` as
+      well, in this same task, before task 2/3's green run is trusted as complete.
+      *Round 10 finding: this task previously listed four symbols and omitted `CMUX_BIN`/
+      `CMUX_TIMEOUT_SECS`, so following the task list left both constants declared in `server.py`
+      -- the exact two-different-binaries state D6 exists to prevent. Round 11 findings: `confirm_
+      surface` (`server.py:299`) and `send_keys` (`:321`) keep reading `CMUX_BIN` after the move --
+      via the import, not a re-declaration; `SURFACE_ENV` (`:55`) is a seventh symbol `bind_surface`
+      needs and was never named; and the two known-shrinking-guard rows on task 1a's floor had no
+      task actually widening them -- naming a gap on the floor is not the same as closing it, and
+      nothing enforced that distinction until this task said so explicitly.*
 - [ ] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
       banner carries `reason=<token>`, and — the other half — the nine fatal conditions in
       criterion 9 still exit 2 and still refuse a connection.
