@@ -3682,7 +3682,13 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         the condition that makes the `files` case recognisable at all — is simply **false** for
         a reftable init. Covering it would mean teaching a guard that refuses to implement
         reftable (boundary 28) about a reftable lock file, which is a design change and not a
-        fix. Pinned as **N12**; also a user decision, also not made.
+        fix. Pinned as **N12**.
+        **RESOLVED (user decision, 2026-08-26) — no further work; documented limitation, not a
+        defect.** N12 is a direct, already-accepted consequence of boundary 28's own decision to
+        refuse arming on any ref backend but `files` rather than risk a silent fail-open under
+        `reftable`. A `reftable`-format repo — new or established — gets no exemption; it is
+        wholesale unsupported by design, and `git init --ref-format=reftable` failing under an
+        armed layer 2 is that design working as specified, not a gap in it. No follow-up task.
       - ✅ **The mode file's format, and why absence denies here when it does not at layer 1.**
         `hooks/reference-transaction.mode`, tracked, read from beside the hook via
         `${BASH_SOURCE[0]}` and from **nowhere else** — no `WORKTREE_GUARD_MODE` read exists in
