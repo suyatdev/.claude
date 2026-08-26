@@ -1421,14 +1421,23 @@ it. (Round 10 corrected this paragraph: an earlier version said "both scenario c
 scenarios themselves are steps, not pointers. The paragraph was describing an edit without
 re-reading the file it described, for the third round running.)
 
-### What was NOT verified
+### What was NOT verified at the end of planning
+
+**Read this list as of the planning gate, 2026-08-25.** Two of its three items were closed by the
+implementation on 2026-08-26 and say so inline; leaving them unmarked would make this the one
+section of the card that disagrees with the rest of it.
 
 - **"902 body descendants."** Carried in the planning notes, not reproducible from the stored
-  artifact (which records `elementsWithArea` and `textPainters` only) and not re-measured this
-  session. **Dropped from this card rather than repeated.** The related discrepancy — this probe's
-  851/368 against card A's inline comment of 848/367 — is recorded at §Background 8 as a discrepancy
-  to resolve during implementation, not as a proven error.
-- **No implementation exists.** Nothing in §Tasks has been run. The allowlist's *classification* is
-  a human decision recorded here; only its *ratios* are measured.
+  artifact (which records `elementsWithArea` and `textPainters` only) and not re-measured in that
+  session. **Dropped from this card rather than repeated.** The related discrepancy — 851/368
+  against card A's inline comment of 848/367 — **is now closed**: §Background 8 records the
+  resolution, and card A's own unmodified predicate returns 368 on today's page, so its comment is
+  a stale snapshot rather than a competing definition.
+- ~~**No implementation exists.** Nothing in §Tasks has been run.~~ **Closed 2026-08-26**: tasks 1
+  through 10 are done and ticked, the suite is at 310 passed / 0 failed / 0 deselected, and all 13
+  falsifier cases go red. The standing part of this bullet is unchanged and is not a temporary
+  gap: the allowlist's **classification** — which token is PIN, DEBT or EXEMPT — is a human
+  decision recorded here and is not measurable by any run. Only its **ratios and counts** are
+  measured.
 - **The focus-ring behaviour in §D9** was established in the earlier planning session and is not
   re-measured here. It is out of scope, so no assertion in this card depends on it.

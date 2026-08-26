@@ -153,6 +153,7 @@ server-side reads or writes them, so they never travel with a survey: `reanalyze
 | Key | Holds | Absent, or not usable |
 |---|---|---|
 | `taskTracker.theme` | `dark` or `light` — written only by the drawer's two Appearance cards | **`dark`.** Anything but the literal `light` falls back, so a hand-edited value cannot leave both cards unselected |
+| `taskTracker.sideW` | sidebar width in px — written on drag mouseup, and by Layout → Reset | **`236`**, and any stored number is clamped to `190`–`440` at mount, not only while dragging |
 
 **Both themes are contrast-guarded, and the two guards cover different halves of the page.**
 `treko/test_theme.py`'s criterion 5 scores every element that paints **text** in its own `color`,
@@ -166,7 +167,6 @@ accessible** — marks that appear only after an interaction (the settings drawe
 the agent panel, hover and focus states) are outside both populations, and three tokens are
 recorded as known defects rather than fixed. `docs/decisions/0037-*` has the reasoning;
 `docs/features/treko-non-text-contrast.md` has the table.
-| `taskTracker.sideW` | sidebar width in px — written on drag mouseup, and by Layout → Reset | **`236`**, and any stored number is clamped to `190`–`440` at mount, not only while dragging |
 
 Both are keyed to the served origin, port included, so a changed `TREKO_PORT` — or the `file://`
 mode above — starts again from those defaults.
