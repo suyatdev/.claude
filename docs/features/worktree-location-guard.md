@@ -3397,10 +3397,21 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       report when it is not. All three absence modes were measured to fail open **silently**
       (rc=0, HEAD moved), so an unreported absence is indistinguishable from a working guard. Pin a
       test per mode: missing file, missing directory, present-but-not-executable.
-- [ ] 6c. **Measure whether `settings.json` `env` reaches layer 2**, which is a *different process*
+- [x] 6c. **Measure whether `settings.json` `env` reaches layer 2**, which is a *different process*
       from the one task 8 measures — layer 2 is a child of `git`, not of the hook. Assignment
       prefixes on the git command line were measured to reach it; inherited environment was not.
       Until this is run, no claim that `WORKTREE_GUARD_MODE` arms layer 2 may be written down.
+      **DONE — the `git → reference-transaction` hop preserves an inherited variable.** Measured
+      in a throwaway repo: a var exported in the parent shell (not passed as a command-line
+      assignment prefix, which is the already-measured path) appeared in `reference-transaction`'s
+      captured environment across both `git commit` and `git update-ref`, at both the `prepared`
+      and `committed` stage, 9/9 capture files; a negative control (`WT6C_NEVER_SET`) appeared in
+      none. **This closes only the second hop.** Whether a `settings.json` `env:` entry reaches the
+      Bash *tool* process in the first place is task 8's separate, still-unmeasured question — the
+      end-to-end claim "`WORKTREE_GUARD_MODE` arms layer 2" needs both halves and may not be written
+      down until task 8 closes the first. Also unmeasured: `worktree add`'s internal sub-invocations
+      specifically under the inherited path (only the prefix form is recorded above), and any
+      intermediary between the tool process and `git` that might sanitize the environment.
 - [ ] 6d. **The refusal-remediation contract — decided 2026-08-25, implement as decided.** A layer-2
       veto leaves the destination branch's content staged in the shared tree (measured). Both options
       this task used to offer are **rejected**, each for a measured reason: `git reset --hard HEAD`
