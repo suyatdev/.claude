@@ -81,11 +81,6 @@ print(json.dumps(d))' "$@"
 # PATH by naming it again.
 RUN_ENV=()
 
-# Per-case hook path, consumed and cleared exactly like RUN_ENV. Only GROUP S sets
-# it, to drive a MUTATED copy of the hook; every other case leaves it empty and runs
-# the real one, so a leaked value cannot silently take a whole group off the guard.
-RUN_HOOK=''
-
 got=0; out=""; err=""
 _run() { # $1 cwd, $2 payload text — exit code in $got, streams in $out/$err
   n=$((n+1)); out="$TMP/out.$n"; err="$TMP/err.$n"
@@ -94,14 +89,14 @@ _run() { # $1 cwd, $2 payload text — exit code in $got, streams in $out/$err
       WORKTREE_GUARD_STATE_DIR="$STATE_DIR" \
       WORKTREE_GUARD_MODE=deny \
       ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
-      bash "${RUN_HOOK:-$HOOK}" ) >"$out" 2>"$err"
+      bash "$HOOK" ) >"$out" 2>"$err"
   got=$?
   # 127 is bash reporting the hook is not on disk. Every "stderr does not say X"
   # assertion is trivially true against that, so the negative helpers below
   # refuse to count until some invocation in this run has actually reached the
   # hook. See LOG_LIVE for the same argument about the log.
   [ "$got" -ne 127 ] && HOOK_RAN=1
-  RUN_ENV=(); RUN_HOOK=''
+  RUN_ENV=()
 }
 HOOK_RAN=0
 
@@ -1317,24 +1312,38 @@ allow_silent 'D-3B-R4 residual, allowed on purpose: git worktree add past the de
 # when there is none) and EFF_PRIMARY (1 when that repository's shared primary
 # checkout is the one being acted on). An arm carrying its own copy answers from
 # the real command line instead, does not move, and fails here.
+#
+# The rule lives in lib/worktree_guard_bash_arms.sh, which the hook sources through
+# $LIB_DIR — so the substitution is a MUTATED LIB DIRECTORY, reached by the same
+# WORKTREE_GUARD_LIB knob GROUP G already uses for its broken-lexer case. Everything
+# else in that directory is symlinked through: the arms read the classifier and
+# shell_segments.py from $LIB_DIR too, and a stub dir holding only the arms file would
+# fail at the lexer instead of exercising the rule.
 B2_OTHER="$TMP/repos/other"          # GROUP B's second repo; GROUP D reassigned $OTHER
-STUB_DIR="$TMP/stub-resolution"
-STUB_HOOK="$STUB_DIR/worktree-guard.sh"
-mkdir -p "$STUB_DIR"
+STUB_LIB="$TMP/stub-resolution/lib"
+ARMS_REL='worktree_guard_bash_arms.sh'
+mkdir -p "$STUB_LIB"
+ln -s "$LIB"/* "$STUB_LIB"/
 
 # The mutation, and its own premise. `count == 1` is the structural half — two
 # definitions of the rule is the failure this group exists to catch, and it is the
 # one shape the behavioural half below cannot see, because the second definition
-# would simply win and both arms would move together.
-if python3 - "$HOOK" "$STUB_HOOK" "$LINKED" "$B2_OTHER" <<'PY'
-import sys
-src, dst, eff_dir, eff_root = sys.argv[1:5]
+# would simply win and both arms would move together. The count is taken across BOTH
+# of the guard's own files and not just the one being rewritten: now that the arms are
+# split out a second copy could re-appear in either, and a check reading only the lib
+# would call a copy in worktree-guard.sh "exactly one". The stub REPLACES the symlink
+# rather than writing through it, which would rewrite the real lib file in the repo.
+if python3 - "$LIB/$ARMS_REL" "$STUB_LIB/$ARMS_REL" "$HOOK" "$LINKED" "$B2_OTHER" <<'PY'
+import os, sys
+src, dst, hook, eff_dir, eff_root = sys.argv[1:6]
 text = open(src).read()
 marker = "resolve_effective_repo() {\n"
-count = text.count(marker)
+count = text.count(marker) + open(hook).read().count(marker)
 if count != 1:
     sys.stderr.write("resolve_effective_repo() is defined %d times, want exactly 1\n" % count)
     sys.exit(1)
+if os.path.islink(dst) or os.path.exists(dst):
+    os.unlink(dst)
 stub = marker + "  EFF_DIR='%s'; EFF_ROOT='%s'; EFF_PRIMARY=0; return 0\n" % (eff_dir, eff_root)
 open(dst, "w").write(text.replace(marker, stub))
 PY
@@ -1345,10 +1354,8 @@ fi
 # S1 — Arm D reads the substituted rule. Identical to D1, which DENIES: the only
 # difference is the stub reporting EFF_PRIMARY=0, so an Arm D that calls the shared
 # function allows here and an Arm D deriving "am I in a primary checkout?" for
-# itself still denies. WORKTREE_GUARD_LIB is named because the copy lives outside
-# hooks/, so `dirname $0`/lib would not find the classifier.
-RUN_HOOK="$STUB_HOOK"
-RUN_ENV=(WORKTREE_GUARD_LIB="$LIB")
+# itself still denies.
+RUN_ENV=(WORKTREE_GUARD_LIB="$STUB_LIB")
 allow_silent 'S1 Arm D moves when the shared rule is substituted (cf. D1, a deny)' \
   "$PRIMARY" "$(payload_bash 'git switch main' s-s1)"
 
@@ -1357,8 +1364,7 @@ allow_silent 'S1 Arm D moves when the shared rule is substituted (cf. D1, a deny
 # is ~/.worktrees/other, so the correctly-placed ~/.worktrees/.claude/feat-y is now
 # in the wrong namespace and must deny. Both directions are required — a stub that
 # only ever produced allows could be satisfied by an arm that had stopped judging.
-RUN_HOOK="$STUB_HOOK"
-RUN_ENV=(WORKTREE_GUARD_LIB="$LIB")
+RUN_ENV=(WORKTREE_GUARD_LIB="$STUB_LIB")
 deny 'S2 Arm B2 moves when the shared rule is substituted (cf. B1, an allow)' \
   "$PRIMARY" "$(payload_bash "git worktree add $WT_ROOT/feat-y -b feat/y" s-s2)"
 

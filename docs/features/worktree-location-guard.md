@@ -3360,13 +3360,46 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         to place it under, so it fails closed (card, Arm B2 step 4); for Arm D a non-repository is
         one of the four cases that are genuinely none of the guard's business (boundary 5). `B3`
         reaches its deny by this route, not by the path test.
-      - ⚠️ **`hooks/worktree-guard.sh` is 1048 lines and EXCEEDS the 800-line maximum** in
+      - ⚠️ **`hooks/worktree-guard.sh` was 1048 lines and EXCEEDED the 800-line maximum** in
         `rules/core-conduct.md`. Measured, not estimated: **375 lines of code**, 310 comment, 305
         continuation lines of deny-message text, 58 blank — 59% prose, and the deny messages are
         the contract's own five elements, not padding. Splitting the Bash arms into `hooks/lib/`
-        is the obvious remedy and was **deliberately not taken here**: the card does not ask for
-        it, it adds a runtime dependency and a failure mode needing tests of its own, and it moves
-        the function GROUP S mutates. Raised for decision rather than taken unilaterally.
+        was named as the obvious remedy and raised for decision rather than taken unilaterally.
+        **RESOLVED 2026-08-26 — the user decided to split, before task 6b adds the liveness check
+        to the same file.** Arms B2 and D, `resolve_effective_repo()` with them, moved verbatim to
+        `hooks/lib/worktree_guard_bash_arms.sh`; `worktree-guard.sh` keeps Arm A and every shared
+        precondition and sources the new file at its `Bash` dispatch point. **560 and 545 lines**,
+        both under the maximum. The three objections raised above were answered rather than
+        overruled:
+        - *A runtime dependency and a failure mode of its own.* Real, and handled explicitly
+          rather than by fallthrough. `source` of an absent or unparseable file returns non-zero
+          **without stopping the script**, so an unchecked source would leave a `Bash` call that no
+          arm judged — indistinguishable from the guard being switched off. `deny_arms()` refuses on
+          both, mode-subject like every other precondition; verified by hand in `deny` mode against
+          a missing file and against a deliberately unparseable one, exit 2 and one log line each.
+        - *It moves the function GROUP S mutates.* It does, and GROUP S moved with it: the
+          substitution now rewrites the **lib** file and is reached through the existing
+          `WORKTREE_GUARD_LIB` knob (a stub lib directory symlinking the rest of `lib/` through, so
+          the arms still find the classifier). `RUN_HOOK`, which existed only to drive a mutated
+          copy of the hook, is gone. The premise check now counts `resolve_effective_repo() {`
+          across **both** files, so a second copy re-appearing in either one fails S0.
+        - *The card does not ask for it.* It does now.
+        **The split is pinned as still discriminating, not assumed.** Two falsifiers were run and
+        reverted: (a) a second definition of the rule added to `worktree-guard.sh` — S0, S1 and S2
+        all failed; (b) Arm D re-deriving "am I in a primary checkout?" inline, which is *not* a
+        textual duplicate and is the exact shape of the round-4 hole — S0 passed (blind to it, as
+        designed) and **S1 caught it**. Both halves of the group survive the move. Suite after the
+        split: **183 passed, 4 failed, 1 skipped**, the same counts and the same four failures
+        (`L1`/`L2`/`L3`/`L5`, the task-6b liveness check) as before it.
+      - **Naming, judgement call.** `worktree_guard_bash_arms.sh` uses underscores because the one
+        existing sourced-bash lib in `hooks/lib/` does (`guard_test_helpers.sh`); the hyphenated
+        names in that directory are all Python. **No `hooks/lib/*.test.sh` was added**, following
+        the same precedent: `guard_test_helpers.sh` has no test file of its own either, and the
+        arms are still covered by `hooks/worktree-guard.test.sh` through the sourced file.
+        Arms-only *constants* (`SENTINEL`, `STORE_REL`, `MARKER_NAME`, `EXEMPT_VAR`,
+        `MSG_BYPASS_WARN`) were **left in the hook** with the rest of the shared top-of-file block
+        — moving them would shave ~25 lines off a file already under the cap, at the cost of a
+        larger diff on a refactor whose whole claim is zero behaviour change.
       - **Not implemented, and not claimed:** the submodule exemption on the Bash arms. Arm A has
         one (step A5) because a submodule's `--git-dir` and `--git-common-dir` are equal and it
         would otherwise read as a primary checkout; Arm D's primary test is the same comparison,
