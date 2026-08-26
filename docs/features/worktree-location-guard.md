@@ -3218,7 +3218,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         list them, so the five belongs to this card's Deny message contract (`:1438`). The
         comment was corrected to attribute each to its real source and to claim no mapping
         between them, since none is determinable from `phase-guard.sh`.
-- [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
+- [x] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
       before emitting any new tab-bearing fact. Then extend `classify-git-command.py` with
       the seven **segment-indexed** facts — `SEG_CD`, `SEG_GIT_C`, `SEG_WORKTREE_ADD`,
@@ -3234,6 +3234,54 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       `-C` case, the matching `cd` case, the `-C`-does-not-carry-forward case, and the
       two-adds-one-line case. The regression test asserts `doc-guard`'s **behavior** is unchanged —
       not the fact set, which necessarily grows.
+
+      **DONE 2026-08-26 — seven files.** Every suite below was re-run and re-read by the
+      orchestrator, not copied from the implementer:
+      `classify-git-command` **203/0** (was 114/0), `shell_segments` **37/0** (was 35/0),
+      `doc-guard` **26/0** (was 20/0), `classify-pr-command` 59/0, `classify-commit-command`
+      52/0, `git-guard` 152/0, `test-marker-guard` 248/0, `write-test-marker` **61/0** (was
+      60/0 — `check_all_pairs_wired` counts sibling pairs on disk and task 4 added one).
+      `worktree-guard.test.sh` is **unchanged at 90/94/1**: the new facts exist but no arm
+      consumes them until task 6.
+      - **The four required cases were run against the live classifier, not assumed.**
+        `git -C /tmp/other worktree add /tmp/x` → `SCOPE_UNKNOWN\t-C` **plus** `SEG_GIT_C 0`
+        and `SEG_WORKTREE_ADD 0`, i.e. in addition and never in place (`:1261`);
+        `git -C /repos/other log && git switch main` → `SEG_GIT_C 0` + `SEG_BRANCH_MOVE 1`,
+        so `-C` does not carry to segment 1 (`:848`); `cd /tmp/other && git worktree add /bad`
+        → `SEG_CD 0` + `SEG_WORKTREE_ADD 1`; two adds on one line → indices 0 and 1.
+      - **One lexer, two views — verified structurally, not by assertion.** `has_grouping()`
+        and `segments()` both call `_lex(src)`, and `has_grouping` contains no tokenizer of its
+        own. The implementer also added `check_one_lexer`, which goes RED against a
+        `has_grouping` carrying its own parser.
+      - ⚠️ **`hooks/shell-segments-falsifier.sh` was changed, and the change deserves the
+        scrutiny any falsifier edit does.** Its `old` arm pins a 2026-08-04 `shell_segments.py`
+        against **today's** rest-of-lib, so adding `has_grouping` made today's
+        `classify-git-command.py` fail to *import* → the hook failed closed → every row read
+        "block", collapsing the harness into a constant. A `return False` shim keeps the old
+        arm importable. **Its justification was checked independently: `git-guard.sh` — the
+        only hook this harness drives — references zero `SEG_*` facts**, so a constant there
+        cannot move any row. Re-run after the change: all rows as expected, and the
+        discriminating rows still differ across arms (`old=2 new=0`, `old=0 new=2`).
+      - **The implementer flagged "indexed facts survive the `-C` bail" as an unspecified
+        choice. It is specified** — `:788-789` requires the indexed facts be collected *before*
+        the `SCOPE_UNKNOWN` `continue`, and `:1261` requires them emitted in addition to it.
+        The implementation matches the card; the ambiguity flag was an under-read, not a gap.
+      - **`resolve_subcommand` has three callers, not one** — `git-guard.sh:325`,
+        `classify-commit-command.py:216`, `decide-commit-gate.py:78`. Widening its tuple broke
+        two suites (git-guard 152→141, test-marker 248→149); resolved by extracting
+        `_walk_globals()` and leaving the public 3-tuple untouched. Worth recording because
+        task 6 will be tempted by the same widening.
+      - **Not independently verified by the orchestrator**, recorded as the implementer stated
+        them: the `-C=/x` and double-`-C` → `UNRESOLVABLE` rulings, `cd -`/`cd -P` →
+        `UNRESOLVABLE`, the `worktree add` safe-flag list, and `SEG_BRANCH_MOVE`'s stash
+        operand being `stash` rather than `stash pop`. Each is fail-closed, and each is pinned
+        by a case in `classify-git-command.test.py`.
+      - **Population 1 is deliberately not pinned here** — reproducing it needs the *rejected*
+        wider form, i.e. a second parser. Populations 2, 3, group 4 and the clause-3c pair are.
+      - `classify-git-command.py` is **601 lines**, over the 400 soft target and under the 800
+        max. Measured rather than asserted: 198 docstring + 101 comment = **49% prose**, 242
+        lines of actual code. The docstring *is* the fact contract, so splitting it off would
+        separate the contract from the code that emits it.
 - [ ] 6. Implement Arms B2 and D against the extended classifier. **The shared "effective repo for
       segment `i`" rule is implemented once, in one function, and both arms call it** — the round-4
       finding was two arms deriving it separately with only one of them complete, so a review that

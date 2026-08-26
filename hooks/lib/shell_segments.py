@@ -24,6 +24,12 @@ import shlex
 # while `( gh pr create )` did not.
 OPS = "(){};<>|&"
 
+# The subset of OPS that opens or closes a COMMAND GROUP rather than separating
+# two commands. `<(` and `>(` are process substitutions: they contain `(` and open
+# a command context exactly as `(` does, which is why _is_redirect already refuses
+# to treat them as redirections.
+GROUPING = "(){}"
+
 
 def _is_redirect(tok):
     """True for a punctuation token that redirects rather than separates two commands.
@@ -66,18 +72,15 @@ WRAPPERS = ("rtk", "time", "eval", "command", "builtin", "exec", "nohup")
 ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
-def segments(src):
-    """Return [(assignments, argv), ...] -- one entry per shell segment of `src`.
+def _lex(src):
+    """Return the raw shlex token list for `src`, or None if shlex cannot parse it.
 
-    `assignments` maps the leading `VAR=value` prefixes of that segment to their values;
-    `argv` is the remaining tokens, with wrapper words already stripped, so argv[0] is the
-    command that segment really runs (or the segment is empty).
+    The token-producing head of segments(), extracted so has_grouping() can take a SECOND
+    VIEW of the same tokens. One lexer, two views: a second parser would be free to disagree
+    with this one about what is quoted, and the disagreement would land in a guard.
 
-    Returns [] for input shlex cannot parse. That is a deliberate fail-OPEN, not a bug: a
-    command that is valid bash but not shlex-parseable (some exotic quoting forms) is treated
-    as running nothing. Failing closed here would block unrelated commands that merely contain
-    such quoting, which is wrong for a momentum guardrail -- the callers' repo/branch checks
-    still fail closed for the cases that matter.
+    None, not [], for unparseable input -- segments() has to tell that case apart from a
+    genuinely empty command, and both legitimately produce no tokens.
     """
     # A backslash-newline is a line CONTINUATION: bash joins the two lines into one command. So
     # this pair is deleted BEFORE the newline translation below, which routes the result into the
@@ -100,8 +103,49 @@ def segments(src):
         joined = src.replace("\\\n", "")
         lex = shlex.shlex(joined.replace("\n", ";"), posix=True, punctuation_chars=True)
         lex.whitespace_split = True
-        toks = list(lex)
+        return list(lex)
     except ValueError:
+        return None
+
+
+def has_grouping(src):
+    """True if `src` holds a command-grouping operator OUTSIDE quotes.
+
+    segments() appends a fresh segment for every control operator and throws the operator
+    away, so `(`, `)`, `{` and `}` are indistinguishable in its return value. That distinction
+    is load-bearing and unrecoverable from the outside: bash discards a `cd` at `)` but keeps
+    it past `}`, so an index-ordered rule over the flat segment list carries a subshell's `cd`
+    to segments bash would never have applied it to. A caller that cannot resolve the
+    ambiguity can at least refuse to guess, which is what this answers.
+
+    False for unparseable input: it reports what the lexer SAW, and it saw nothing. Callers
+    that must fail closed on that read it off segments() returning [], which is the signal
+    that already exists for it.
+    """
+    toks = _lex(src)
+    if toks is None:
+        return False
+    return any(tok and all(ch in OPS for ch in tok) and any(ch in GROUPING for ch in tok)
+               for tok in toks)
+
+
+def segments(src):
+    """Return [(assignments, argv), ...] -- one entry per shell segment of `src`.
+
+    `assignments` maps the leading `VAR=value` prefixes of that segment to their values;
+    `argv` is the remaining tokens, with wrapper words already stripped, so argv[0] is the
+    command that segment really runs (or the segment is empty).
+
+    Returns [] for input shlex cannot parse. That is a deliberate fail-OPEN, not a bug: a
+    command that is valid bash but not shlex-parseable (some exotic quoting forms) is treated
+    as running nothing. Failing closed here would block unrelated commands that merely contain
+    such quoting, which is wrong for a momentum guardrail -- the callers' repo/branch checks
+    still fail closed for the cases that matter. classify-git-command.py is the one caller
+    that overrides this, because it is the last line of defence and this rationale is written
+    for callers that are not.
+    """
+    toks = _lex(src)
+    if toks is None:
         return []
 
     # A redirection is consumed with its target instead of splitting; only control operators split.
