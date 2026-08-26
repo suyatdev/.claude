@@ -44,7 +44,18 @@ SCORED_MARKS = {"dark": 334, "light": 347}
 # §D7's enumerated exclusions. None of these is an addend of SCORED_MARKS; each is asserted in
 # its own unit, and each count going above OR below its recorded value IS the abort for its
 # class — there is no separate earlier per-mark abort.
-EXCLUDED_OWN_COLOUR_MARKS = 1        # the sticky header's color-mix() fill, Treko.dc.html:102
+#
+# §D7 as written said the header fill is excluded because its own colour is a `color-mix()`,
+# which Chrome serialises as `color(srgb ...)` and which therefore matches no token's declared
+# value by string. **Measured, that rule excludes 41 marks in dark, not 1**: `--color-divider`'s
+# dark value is itself `color-mix(in srgb, #e9e9ed 16%, transparent)` (`treko/nocturne.css:17`)
+# and §D2 scores its 40 marks as EXEMPT -- the card's own 334 total requires them scored. The
+# narrower rule below reproduces every figure the card recorded, and is the physically honest
+# one: behind a `backdrop-filter` is blurred page content, not a flat colour, so a fill painted
+# there has nothing to be scored against. The same element's border IS scored, because a border
+# is measured against the surface outside the element, which the blur does not touch -- and it
+# has to be, since §D2 records `--hair` at 42 marks and excluding it would give 41.
+EXCLUDED_BLURRED_FILLS = 1           # the sticky header's fill, Treko.dc.html:102
 GRADIENT_PAINTED_ELEMENTS = 5        # progress-bar fill x1, section-header rule x4
 MARKS_OVER_BACKGROUND_IMAGE = 0      # measured: nothing is scored against a guessed ground
 
@@ -139,19 +150,15 @@ def walk(tmp_path_factory):
         server.stop()
 
 
-def _delta_table(expected, measured):
-    """`token | theme | expected | measured | delta`, unchanged rows omitted.
+def _kind_breakdown(by_kind):
+    """`kind  count`, for a total that moved.
 
-    §D8 makes this part of the requirement, not a nicety: `333 != 334` across 23 entries tells a
-    reader nothing about which entry moved.
+    Deliberately NOT laid out as an expected/measured/delta table: there is no recorded
+    per-kind expectation to compare against, and a column of zeroes in an `expected` heading
+    reads as a measurement while being a placeholder. The per-ENTRY delta table §D8 requires
+    arrives with the allowlist, which is what gives it a real expected column.
     """
-    rows = []
-    for key in sorted(set(expected) | set(measured)):
-        want, got = expected.get(key, 0), measured.get(key, 0)
-        if want != got:
-            rows.append("  %-28s expected %4d  measured %4d  delta %+d"
-                        % (key, want, got, got - want))
-    return "\n".join(rows) if rows else "  (no per-entry differences)"
+    return "\n".join("  %-16s %4d" % (kind, by_kind[kind]) for kind in sorted(by_kind)) or "  (none)"
 
 
 # --------------------------------------------------------------------- criterion 7
@@ -172,7 +179,7 @@ def test_scored_mark_count_is_exact(walk, theme):
     assert walk[theme]["scoredMarks"] == SCORED_MARKS[theme], (
         "%s: scored %d non-text marks, recorded %d\n%s"
         % (theme, walk[theme]["scoredMarks"], SCORED_MARKS[theme],
-           _delta_table({}, walk[theme].get("byKind", {}))))
+           _kind_breakdown(walk[theme]["byKind"])))
 
 
 # --------------------------------------------------------------------- criterion 6
@@ -213,12 +220,12 @@ def test_enumerated_exclusions_are_at_their_recorded_counts(walk, theme):
     """
     assert walk is not None, _RED_REASON
     result = walk[theme]
-    assert result["excludedOwnColourMarks"] == EXCLUDED_OWN_COLOUR_MARKS, (
-        "%s: %d mark(s) excluded for an uncompositable own colour, recorded %d. The one this "
-        "card enumerated is the sticky header's color-mix() fill (Treko.dc.html:102); anything "
-        "else here is a mark no human has classified:\n%s"
-        % (theme, result["excludedOwnColourMarks"], EXCLUDED_OWN_COLOUR_MARKS,
-           json.dumps(result["excludedOwnColourSamples"], indent=2)))
+    assert result["excludedBlurredFills"] == EXCLUDED_BLURRED_FILLS, (
+        "%s: %d fill(s) excluded for sitting over a backdrop-filter, recorded %d. The one this "
+        "card enumerated is the sticky header (Treko.dc.html:102); anything else here is a mark "
+        "no human has classified:\n%s"
+        % (theme, result["excludedBlurredFills"], EXCLUDED_BLURRED_FILLS,
+           json.dumps(result["excludedBlurredFillSamples"], indent=2)))
     assert result["gradientPaintedElements"] == GRADIENT_PAINTED_ELEMENTS, (
         "%s: %d element(s) paint a background-image, recorded %d. The predicate is "
         "`background-image !== 'none'`, not `is a gradient`: a url() backdrop defeats "

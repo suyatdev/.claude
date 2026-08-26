@@ -74,9 +74,9 @@ Each was a user decision. The implementation does not relitigate them.
 - The allowlist itself, as data in the test module: **23 entries** — 6 PIN, 3 DEBT and 14 EXEMPT,
   each with per-theme declared colours, a per-theme mark count, and a reason string on every DEBT
   and EXEMPT entry (§D2, §D8).
-- A loud-failure rule for marks the probe cannot composite — gradients, `color-mix()` grounds,
-  `backdrop-filter`. **§D7 is the normative statement of what that rule does**; this card states it
-  there and nowhere else.
+- A loud-failure rule for marks the probe cannot composite — a `background-image` backdrop, and a
+  fill painted over a `backdrop-filter`. **§D7 is the normative statement of what that rule does**;
+  this card states it there and nowhere else.
 - A vacuity floor: the check must assert it found marks at all, in each theme (§D8).
 - The three debt entries recorded in this file, with their measured ratios and their call sites
   (§D5). No palette edit.
@@ -135,7 +135,7 @@ and it does:
 | 13 palette EXEMPT tokens | 188 | 188 | §D2, reason string |
 | `--shadow-sm` (a *shadow* token, not a colour token) | 13 | 26 | §D2 EXEMPT, 14th entry |
 | **subtotal — the scored population** | **334** | **347** | |
-| sticky-header `color-mix()` fill | 1 | 1 | §D7 — **enumerated exclusion, count asserted** |
+| sticky-header fill, over a `backdrop-filter` | 1 | 1 | §D7 — **enumerated exclusion, count asserted** |
 | `<svg>` root element, `rgb(0, 0, 0)` | 1 | 1 | **a probe defect** — deleted, see below |
 | **total the planning probe found** | **336** | **349** | |
 
@@ -146,9 +146,9 @@ that are not the same reason:
 - The `<svg>` root mark **is not real**. The root element paints nothing; the probe scored its
   inherited `rgb(0, 0, 0)`. §D7 and §Acceptance criteria 8 fix the predicate, so this mark stops
   existing — it is a bug being removed, not a mark being excluded.
-- The sticky-header fill **is real and is deliberately not scored**, because its own colour is a
-  `color-mix()` that cannot be composited to a flat sRGB value (§Background 6). **§D7 says what
-  happens to it**; this section only records that it is not part of the scored 334 / 347.
+- The sticky-header fill **is real and is deliberately not scored**, because what sits behind it
+  is blurred page content rather than a flat surface (§Background 6). **§D7 says what happens to
+  it**; this section only records that it is not part of the scored 334 / 347.
 
 Stating both is deliberate: a later reader comparing an implementation run against §Background 1
 would otherwise read a correct 334 as a two-mark regression.
@@ -206,9 +206,15 @@ never scored — §D7 says what happens to it instead; the second is simply outs
   marks sit over one as backdrop, in either theme.** They are enumerated so that stops being true
   loudly rather than silently (§D7).
 - **The sticky header**, `background: color-mix(in srgb, var(--color-bg) 90%, transparent)` with
-  `backdrop-filter: blur(10px)`. Chrome serialises this as `color(srgb 0.0862745 0.0941176 0.14902
-  / 0.9)` — arithmetically `--color-bg` at 90%, but it does not string-match the token's declared
-  value, so a raw-string allowlist index files it as UNMAPPED. §D7.
+  `backdrop-filter: blur(10px)` (`Treko.dc.html:102`). Its **fill** has no flat surface behind it —
+  the `backdrop-filter` blurs whatever scrolls under it — so there is nothing to score the fill
+  against. Its 1px `border-bottom` **is** scored: a border is measured against the surface *outside*
+  the element, which the blur does not touch. §D7.
+
+  Chrome serialises the fill as `color(srgb 0.0862745 0.0941176 0.14902 / 0.9)`, arithmetically
+  `--color-bg` at 90%. **An earlier revision of this card made that serialisation the reason for
+  the exclusion, and it is the wrong reason** — see §Verification, "The §D7 exclusion rule named
+  the wrong mechanism".
 - **The drawer scrim**, `background: rgba(0,0,0,.45)` with `backdrop-filter: blur(2px)` — not
   painted at mount.
 - **0 inset shadows at mount.** The drawer's selection ring is an inset shadow, so it is outside the
@@ -433,20 +439,27 @@ The rule the implementation inherits:
 
 1. A colour string the parser cannot read → **count it and fail the test**, never treat as
    transparent.
-2. A mark that cannot be composited — because its backdrop includes a gradient, a `color-mix()`
-   ground or a `backdrop-filter`, **or because its own colour is one of those** — is handled by
-   exactly one of two paths, and which one is decided by whether this card has already enumerated
-   it:
+2. A mark that cannot be composited — because its backdrop chain crosses a `background-image`,
+   or because it is a **fill** painted on an element carrying a `backdrop-filter` (behind which is
+   blurred page content, not a flat colour) — is handled by exactly one of two paths, and which one
+   is decided by whether this card has already enumerated it.
+
+   **The predicate is about what is BEHIND the mark, never about how the mark's own colour is
+   spelled.** A token declared with `color-mix()` composites perfectly well and is scored like any
+   other: `--color-divider`'s dark value *is* a `color-mix()` (`treko/nocturne.css:17`) and §D2
+   scores its 40 marks. A rule keyed on the `color(srgb …)` serialisation excludes 41 marks in dark
+   rather than 1 — measured, §Verification.
    - **On the enumerated list → excluded, and the exclusion's own count is asserted.** The list is
      closed and short, and it has **two kinds of entry that are counted differently** — conflating
      them is how an earlier draft produced `334 + 6 ≠ 336`:
      - **The sticky-header fill** (`Treko.dc.html:102`) is a real mark that is excluded from
-       scoring. **Asserted: exactly 1 excluded mark per theme, at that path.** As with the gradient
-       count below, **that assertion *is* the abort for a new own-colour-uncompositable mark**, not
-       a second competing behaviour: a second such mark takes the count to 2, the run fails, and the
-       message names its path and why it could not be composited. "Not on the enumerated list →
-       abort" and "the exclusion count went up" are one event described from two sides, and the
-       card states it once so falsifier case 8 is constructible.
+       scoring, because the `backdrop-filter` on that element means there is no flat surface behind
+       it. **Asserted: exactly 1 excluded fill per theme, at that path.** As with the gradient
+       count below, **that assertion *is* the abort for a new blurred fill**, not a second competing
+       behaviour: a second such mark takes the count to 2, the run fails, and the message names its
+       path and why it could not be composited. "Not on the enumerated list → abort" and "the
+       exclusion count went up" are one event described from two sides, and the card states it once
+       so falsifier case 8 is constructible.
      - **The 5 gradient-painted elements** paint no scoreable mark at all — a gradient is not a
        flat colour, so no fill mark is emitted for them — and **measured, exactly 0 scored marks
        sit over one as backdrop**, in either theme (§Background 6). **Asserted: exactly 5
@@ -470,12 +483,12 @@ The rule the implementation inherits:
    be audited against; an un-enumerated one is a silent skip wearing the same clothes.
 3. An allowlist token that matched **zero** marks in a theme → **fail**. A token that stopped
    painting is either a regression or a stale list; both need a human.
-4. The one instance of rule 2's *own-colour* half today is the sticky header at
-   `Treko.dc.html:102`: `background: color-mix(in srgb, var(--color-bg) 90%, transparent)` with
-   `backdrop-filter: blur(10px)`. Chrome serialises it as `color(srgb 0.0862745 0.0941176 0.14902
-   / 0.9)`, which is arithmetically `--color-bg` at 90% but matches no token's declared string. It
-   is enumerated, excluded, and its count asserted at 1 per theme — it is **not** scored, and it is
-   **not** an abort, because this card has classified it.
+4. The one instance of rule 2's *blurred-fill* half today is the sticky header at
+   `Treko.dc.html:102`, whose `backdrop-filter: blur(10px)` leaves its fill nothing flat to be
+   scored against. It is enumerated, excluded, and its count asserted at 1 per theme — it is
+   **not** scored, and it is **not** an abort, because this card has classified it. **Its
+   `border-bottom: 1px solid var(--hair)` is scored**, and must be: §D2 records `--hair` at 42
+   marks, and excluding the border would give 41.
 
 The whole pipeline, from a rendered element to a verdict — every path either asserts or aborts, and
 none of them silently drops a mark:
@@ -487,8 +500,8 @@ flowchart TD
     B -->|yes| N{"mark colour parses<br/>to a colour at all?"}
     N -->|no| FN["ABORT: parse failure<br/>criterion 6 - case 9"]
     N -->|yes| C{"mark and backdrop both<br/>composite to flat sRGB?"}
-    C -->|no| X["EXCLUDE from scoring, and<br/>tally against its class:<br/>own colour uncompositable, or<br/>backdrop crosses a background-image"]
-    X --> W{"is every exclusion count still at<br/>its recorded value?<br/>1 excluded mark - 5 gradient elements -<br/>0 marks over a background-image"}
+    C -->|no| X["EXCLUDE from scoring, and<br/>tally against its class:<br/>fill over a backdrop-filter, or<br/>backdrop crosses a background-image"]
+    X --> W{"is every exclusion count still at<br/>its recorded value?<br/>1 blurred fill - 5 gradient elements -<br/>0 marks over a background-image"}
     W -->|no| F2["FAIL, and this IS the abort:<br/>name each offending path and why.<br/>There is no earlier per-mark abort.<br/>criterion 6 - cases 7, 8, 12"]
     W -->|yes| OKX["excluded, not scored,<br/>and not part of 334 / 347"]
     C -->|yes| E["composite, compute WCAG ratio<br/>vs the surface outside"]
@@ -753,9 +766,9 @@ Scenario: A backdrop becomes uncompositable and nobody classified it
   And it does not silently drop the mark or score it against a guessed colour
 
 Scenario: An enumerated exclusion quietly grows
-  Given the sticky-header fill is the only excluded own-colour mark, 1 per theme
-  When an edit gives a second element a color-mix() background
-  Then the excluded-mark count assertion fails at 2 against a recorded 1
+  Given the sticky-header fill is the only fill excluded for sitting over a blur, 1 per theme
+  When an edit gives a second element a backdrop-filter
+  Then the excluded-fill count assertion fails at 2 against a recorded 1
   And the message names the new mark's path and why it could not be composited
   And the new mark is not absorbed into the exclusion list without a human
 
@@ -886,8 +899,8 @@ Red half and green half are separate commits throughout; never the same commit
    | 4 | a new mark in a colour on no entry | Coverage — unmapped key |
    | 5 | a mark deleted from the page | that entry's exact count |
    | 6 | **a mark misfiled under the wrong entry, total unchanged** | per-entry counts + "matches at least one mark" |
-   | 7 | **the sticky header's `color-mix()` background removed** | excluded-mark count, 0 against a recorded 1 — a stale enumeration in the *shrinking* direction |
-   | 8 | **a second `color-mix()` element added** | excluded-mark count, 2 against a recorded 1 (§D7) |
+   | 7 | **the sticky header's `backdrop-filter` removed** | excluded-fill count, 0 against a recorded 1 — a stale enumeration in the *shrinking* direction |
+   | 8 | **a second element given a `backdrop-filter`** | excluded-fill count, 2 against a recorded 1 (§D7) |
    | 9 | **a colour string the parser cannot read** | parse-failure abort |
    | 10 | **the `<svg>` root scored again** | scored total 335 / 348 against 334 / 347 |
    | 11 | **a multi-shadow list read as single** | `--shadow-sm` light count, 13 against 26 |
@@ -943,6 +956,88 @@ Red half and green half are separate commits throughout; never the same commit
    docstrings. Mitigated by criteria 1 and 11 and by the card's title; not eliminated.
 
 ## Verification
+
+### Findings made during implementation, 2026-08-26
+
+Recorded here rather than fixed silently: each changed something this card had asserted, and the
+way each was wrong is more useful than the fact of it.
+
+**The Chrome pin moved, and the figures were re-measured rather than carried over.** Chrome
+auto-updated `152.0.7977.54` → `152.0.7977.65` between planning and implementation — a patch bump
+inside the same build — and `cdp_harness.Chrome.__init__` asserts the pin before launch, so the
+task-1 baseline was **259 passed / 35 failed / 0 deselected**, every one of the 35 failing at
+construction without reaching a page. The user approved re-pinning to `.65` in preference to
+downgrading Chrome. §Pinned versions obliges a re-measurement of the allowlist on a re-pin, and it
+was done. The scored population came back at **334 dark / 347 light**, and **all six** DEBT minima
+reproduced to 4 dp, each over the mark count §D2 records for it:
+
+| token | theme | recorded | measured on `.65` | marks |
+|---|---|---|---|---|
+| `--color-accent-700` | dark | 2.8791 | 2.8791 | 21 |
+| `--color-neutral-700` | dark | 2.5253 | 2.5253 | 35 |
+| `--color-neutral-800` | dark | 1.6519 | 1.6519 | 22 |
+| `--color-accent-700` | light | 1.2718 | 1.2718 | 21 |
+| `--color-neutral-700` | light | 4.8042 | 4.8042 | 35 |
+| `--color-neutral-800` | light | 1.2477 | 1.2477 | 22 |
+
+Two consecutive walks in one session produced **byte-identical dumps** in both themes, which is
+what task 3 owed and what §D8's exact counts rest on. **That is evidence the patch bump moved
+nothing this card measures — it is not evidence that no Chrome bump ever could**, which is why
+§Pinned versions keeps demanding the re-measurement rather than reasoning from this one.
+
+**Criterion 10 is amended by §Pinned versions, and the amendment is this paragraph.** Criterion 10
+says exactly one file changes under `treko/`. The re-pin changes a second, `treko/cdp_harness.py`.
+The two clauses of this card disagree and §Pinned versions is the specific one, so it wins; the
+criterion-10 diff is therefore run over the palette files it names, and `cdp_harness.py`'s one-line
+pin change is the single declared exception. Card A's re-pin comment justified moving the pin on
+the grounds that "nothing stores a Chrome-derived constant" — **that stops being true with this
+card**, and the comment now says so in place.
+
+### The §D7 exclusion rule named the wrong mechanism
+
+**§D7 said a mark is excluded when its own colour is a `color-mix()`.** Applied literally that
+excludes **41 marks in dark, not 1** — measured, with the walk this card specifies. The reason is
+`--color-divider`, whose dark value is `color-mix(in srgb, #e9e9ed 16%, transparent)`
+(`treko/nocturne.css:17`) and which Chrome serialises exactly like the header's fill. §D2 lists
+`--color-divider` as an EXEMPT entry with 40 marks per theme, and 294 + 40 = 334 — so the card's
+own scored total requires those 40 scored. The two halves of the card could not both be satisfied.
+
+**The rule that reproduces every figure the card recorded is narrower and is now what §D7 says:**
+exclude a **fill** painted on an element carrying a `backdrop-filter`. It was already in §D7's own
+list of uncompositable reasons, and it is the physically honest one — behind a blur is page
+content, not a flat colour. It leaves the header's `border-bottom` scored, which is required:
+§D2 records `--hair` at 42 marks and excluding that border would give 41.
+
+Measured both ways, same page, same build:
+
+| exclusion predicate | scored dark | scored light | excluded dark | excluded light |
+|---|---|---|---|---|
+| own colour serialises as `color(srgb …)` — §D7 as written | 294 | 347 | 41 | 1 |
+| **fill over a `backdrop-filter`** — §D7 as amended | **334** | **347** | **1** | **1** |
+
+Light was 347 under both, which is why a single-theme check would have missed this entirely: the
+light palette declares `--color-divider` as a plain `rgba()` (`Treko.dc.html:34`). **The card's own
+§D6 argument — that dark and light have no relationship to each other and both must be scored — is
+what surfaced the defect**, on the first run.
+
+The class, worth more than the instance: **the rule was written from the one mark it was invented
+to explain, and never checked against the population it would run over.** The check that settles it
+is narrow and was never run — `color-mix` itself appears 57 times in 7 files under `treko/`, which
+is why counting occurrences answers nothing, but exactly **one custom property is declared with a
+`color-mix` value**:
+
+```
+git grep -nE '^[[:space:]]*--[A-Za-z0-9_-]+:[[:space:]]*color-mix' -- 'treko/*.css' 'treko/_ds/*/styles.css'
+  treko/nocturne.css:17                    --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  treko/_ds/nocturne-*/styles.css:17       --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+```
+
+That is the same shape as §Background 7's `--color-accent-500` error — a claim about a mechanism,
+taken from a single example, never counted. **This very paragraph got it wrong once first**: its
+first draft said the grep "returns three declarations", which is what a bare `git grep color-mix`
+looked like at a glance; the real answer is 57 occurrences, 1 token, and the two numbers point in
+opposite directions.
+
 
 ### What was measured during planning, and how to re-run it
 
