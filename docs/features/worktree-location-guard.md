@@ -680,11 +680,13 @@ place task 9 registers the hook and task 8 arms it.
 **Mode and bypass must reach a different process.** `WORKTREE_GUARD_MODE` and `WORKTREE_EXEMPT` are
 read by layer 1 from its own environment, but layer 2 runs as a child of `git`, not of the hook.
 Measured: an assignment prefix on the git command line (`WORKTREE_EXEMPT=x git switch main`) **does**
-reach the `reference-transaction` hook, including `worktree add`'s internal sub-invocations. **Not
-measured, and required before task 8 can claim the mode switch works end to end:** whether a
-`settings.json` `env` entry, which reaches the Bash *tool* process, is still in git's environment by
-the time the hook runs. It should be — env is inherited — but the card asserts nothing it has not
-run, and this is the switch that arms a machine-wide deny.
+reach the `reference-transaction` hook, including `worktree add`'s internal sub-invocations. **The
+other hop — whether a `settings.json` `env` entry reaches the Bash *tool* process in the first
+place — is task 8's, and is now measured: it does.** See task 8's line for the probe. That closes
+layer 1's own mode switch end to end (`settings.json` `env` → Bash tool process → this hook's own
+environment, task 6c's already-measured second hop). Layer 2 still does not read it — its switch is
+the tracked `reference-transaction.mode` file, for the reasons stated where it lives, independent of
+this result.
 
 **The deny message describes the state and prescribes no destructive command** (revised 2026-08-25,
 after the observability judge ran the remedy this card used to name). Because a veto leaves the
@@ -1469,11 +1471,12 @@ ignores `/hooks/state/`** ("machine-local, never committed"), so arming a hard d
 repo on this machine would have left no record in git at all, and task 10's "flip it in a separate
 commit" could not have existed. `settings.json` is already tracked, is already on the exemption
 list, and is the same file that registers the hook — so arming becomes a one-line reviewable diff
-next to the registration it arms. There is no `env` block in `settings.json` today; task 8 adds one.
+next to the registration it arms. Task 8 added the `env` block above (session-wide, not scoped to
+one hook entry — see task 8's line); the `hooks` array entry that would actually register
+`worktree-guard.sh` is still absent, deliberately, until task 9.
 
-**Unverified:** that Claude Code exports `settings.json` `env` entries into hook subprocesses. It is
-the documented purpose of the key, but this design does not assume it — task 8 measures it first,
-and falls back to a tracked file beside the hook if the export does not happen.
+**Measured, task 8:** Claude Code does export `settings.json` `env` entries into a `PreToolUse`
+hook's Bash subprocess. See task 8's line for the probe and its two runs.
 
 Absent → `log`. Any other value → `deny` (boundary 9).
 
@@ -3849,10 +3852,57 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       invoking it — a real, reproducible `EBADF` write failure — and asserting `git worktree
       list` shows no orphan and the directory is gone afterward, rather than a fault-injection
       knob invented for the test.
-- [ ] 8. **First verify that `settings.json` `env` entries reach hook subprocesses** — measure it,
-      do not assume. If they do, add the `env` block with `WORKTREE_GUARD_MODE: "log"`. If they do
-      not, fall back to a tracked file beside the hook and record the change here. Then implement
-      the mode read and the refusals-only log.
+- [x] 8. **Measured — `settings.json` `env` entries reach a `PreToolUse` hook's Bash subprocess.**
+      Answer is **yes**. This is the hop task 6c's own measurement explicitly left open (6c closed
+      only `git` → `reference-transaction`, one layer further downstream); this one is Claude
+      Code's own dispatch, one hop earlier, and required a real `claude` invocation, not a
+      simulation.
+
+      **What was run.** A scratch directory outside this repo and outside the primary checkout
+      (`/tmp/wg-env-probe-<pid>/`, removed after) held its own `settings.json` — passed via
+      `claude --settings <file>`, never merged into this worktree's or the primary checkout's own
+      `settings.json` — defining `"env": {"WG_ENV_PROBE_VAR": "<value>"}` (a stand-in name, so the
+      probe could not be confused with the real `WORKTREE_GUARD_MODE` value this task ships) and a
+      `PreToolUse` hook on the `Bash` matcher whose command appended its own captured environment
+      to a log file, then exited 0. Two separate live invocations:
+      `claude -p "Run exactly this bash command and then stop: echo hello-from-probe" --settings
+      <scratch>/settings.json --permission-mode bypassPermissions --model haiku`, each with the
+      probe env var (`WG_ENV_PROBE_VAR`) set to a different, freshly generated value not reused
+      between runs, plus a negative control (`WG_ENV_PROBE_CONTROL`) set nowhere in either
+      settings file. CLI version `2.1.246`.
+
+      **What it showed, both runs:** the hook's captured environment held exactly the value that
+      run's `settings.json` `env` block set for `WORKTREE_GUARD_MODE`'s stand-in
+      (`reached-via-settings-env`, then `second-run-47939-value`) — confirming it is not a leftover
+      from a prior run or the outer session's own environment — and the negative control read
+      `<UNSET>` both times. **Yes, a `settings.json` `env:` entry reaches a `PreToolUse` hook's Bash
+      subprocess**, at least at CLI 2.1.246.
+
+      **Change made — the `env` block, not the registration.** Added a top-level
+      `"env": {"WORKTREE_GUARD_MODE": "log"}` to this repo's `settings.json`. No `hooks` array entry
+      for `worktree-guard.sh` was added — that stays task 9's, since an armed guard would block
+      edits to its own source in the primary checkout. Because no such entry exists yet, this
+      variable is inert: nothing reads `WORKTREE_GUARD_MODE` until task 9 registers the hook.
+      **Judgment call:** this task's own phrasing ("scoped to worktree-guard.sh's PreToolUse
+      registration entries") reads as if `env` attaches to one hook entry specifically. The probe
+      above and the design's own JSON snippet (see "Arming — log-only, then deny") both use a
+      single top-level `env` object, which is session-wide, not scoped to a matcher or a command —
+      nothing in what was exercised here supports per-hook-entry scoping. "Scoped" is honored the
+      only way available: exactly one variable was added, tied to `worktree-guard.sh` by name and
+      nothing else, and no registration entry was invented to hang it from.
+
+      **Mode read and the refusals-only log — already built, not new work here.**
+      `hooks/worktree-guard.sh:311-318` already reads `$WORKTREE_GUARD_MODE` from the hook's own
+      environment (absent → `log`; `log`/`deny` accepted; anything else is a hard deny naming the
+      bad value) — this predates task 8 and was not touched. `append_log()`
+      (`hooks/worktree-guard.sh:146-164`) is called only from `refuse()` (a `deny`/`would-deny`
+      decision) and from Arm D's `WORKTREE_EXEMPT` bypass path
+      (`hooks/lib/worktree_guard_bash_arms.sh:121`) — grepped, there is no call on an allow path.
+      That already satisfies "refusals-only" as specified; nothing needed adding. No `.sh` file was
+      edited for this task, so no TDD cycle applies — regression run instead:
+      `hooks/worktree-guard.test.sh` **189 passed, 0 failed, 1 skipped**;
+      `hooks/reference-transaction.test.sh` **182 passed, 0 failed, 1 skipped** (both suites
+      unchanged in outcome from before this task, as expected).
 - [ ] 9. Register in `settings.json`. **Do this last** — an armed guard blocks edits to its own
       source from the primary checkout, since `hooks/*` is not on the exemption list.
 - [ ] 10. Run in `log` mode, then flip to `deny` in a separate, deliberate commit. **Flip criteria,
