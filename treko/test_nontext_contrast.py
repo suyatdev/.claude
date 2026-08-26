@@ -64,9 +64,273 @@ THEMES = ("dark", "light")
 
 # --------------------------------------------------------------------- the walk
 #
-# Task 3 lands this. Kept as a module-level constant rather than inline so the red half asserts
-# against a named absence instead of a NameError.
-NONTEXT_WALK_JS = None
+# Kept as a module-level constant rather than inline so it can be driven from outside pytest when
+# a figure has to be re-measured.
+#
+# Four defects of the throwaway planning probe are fixed here by construction, and each has a
+# falsifier in the card's task 8 because "we fixed it" is not evidence that it stays fixed:
+#   * the SVG predicate is a closed list of shape tags, so the <svg> root -- which paints nothing
+#     and merely inherits `fill: rgb(0,0,0)` -- is never scored (criterion 8, case 10);
+#   * box-shadow is split on top-level commas, so all colours in a multi-shadow list are read,
+#     not just the first (criterion 9, case 11);
+#   * parseColor reads Chrome's `color(srgb r g b / a)` serialisation of `color-mix()` instead of
+#     returning alpha 0 and having the caller mistake it for "not painted" (criterion 6, case 9);
+#   * effectiveBackground reports whether the chain it walked crossed a `background-image`, and it
+#     checks EVERY node it crosses rather than only the ones contributing an opaque-enough layer
+#     -- a gradient normally sits on a transparent background-color, so a detector that only
+#     looked at pushed layers would report 0 on every page, forever, green (case 12).
+NONTEXT_WALK_JS = r"""
+(() => {
+  // A closed list, not an illustrative one: the counts it feeds are asserted exactly, and a
+  // trailing "..." would let two implementations produce two different totals and both call
+  // themselves correct. A shape tag outside this list appearing on the page surfaces as an
+  // unmapped (colour, kind) key rather than by this predicate silently widening.
+  const SHAPE_TAGS = {circle:1, ellipse:1, line:1, path:1, polygon:1, polyline:1, rect:1};
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  let parseFailures = 0;
+  const parseFailureSamples = [];
+
+  function describe(el) {
+    const parts = [];
+    let node = el, depth = 0;
+    while (node && node.nodeType === 1 && depth < 4) {
+      let seg = node.localName;
+      const cls = (node.getAttribute && node.getAttribute('class')) || '';
+      if (cls) seg += '.' + cls.trim().split(/\s+/).slice(0, 2).join('.');
+      parts.unshift(seg);
+      node = node.parentElement;
+      depth++;
+    }
+    return parts.join(' > ');
+  }
+
+  function noteParseFailure(str, el, where) {
+    parseFailures++;
+    if (parseFailureSamples.length < 10) {
+      parseFailureSamples.push({value: String(str), property: where, path: describe(el)});
+    }
+  }
+
+  // Returns {r,g,b,a} with channels in 0..255, or null when the string cannot be read.
+  // null is never coerced to transparent: that coercion is the bug this whole card is about.
+  function parseColor(str) {
+    if (!str) return null;
+    const s = String(str).trim();
+    if (s === 'transparent') return {r:0, g:0, b:0, a:0};
+    let m = s.match(/^rgba?\(([^)]*)\)$/);
+    if (m) {
+      // A percentage would parseFloat to its face value and be silently 255x wrong, so it is a
+      // parse failure rather than a guess. Chrome does not emit one today.
+      if (m[1].indexOf('%') !== -1) return null;
+      const parts = m[1].split(/[,\/\s]+/).filter(t => t.length).map(parseFloat);
+      if (parts.length < 3 || parts.slice(0, 3).some(isNaN)) return null;
+      const a = parts.length > 3 ? parts[3] : 1;
+      if (isNaN(a)) return null;
+      return {r: parts[0], g: parts[1], b: parts[2], a: a};
+    }
+    // How Chrome serialises color-mix(in srgb, ...) -- the form the planning probe could not
+    // read, which cost it 41 painted marks in dark with no warning.
+    m = s.match(/^color\(srgb\s+([^)]*)\)$/);
+    if (m) {
+      if (m[1].indexOf('%') !== -1) return null;
+      const parts = m[1].split(/[\/\s]+/).filter(t => t.length).map(parseFloat);
+      if (parts.length < 3 || parts.slice(0, 3).some(isNaN)) return null;
+      const a = parts.length > 3 ? parts[3] : 1;
+      if (isNaN(a)) return null;
+      return {r: parts[0]*255, g: parts[1]*255, b: parts[2]*255, a: a};
+    }
+    return null;
+  }
+
+
+  function compositeOver(fg, bg) {
+    const a = fg.a;
+    return {r: fg.r*a + bg.r*(1-a), g: fg.g*a + bg.g*(1-a), b: fg.b*a + bg.b*(1-a), a: 1};
+  }
+
+  const WHITE = {r:255, g:255, b:255, a:1};
+
+  // The surface behind `el`: background-color layers accumulated up the ancestor chain, stopping
+  // at the first opaque one. `crossedImage` is produced by this same walk on purpose -- a
+  // separate walk could drift out of agreement with the one that actually decided the colour.
+  function effectiveBackground(el) {
+    const layers = [];
+    let crossedImage = null;
+    let node = el;
+    while (node && node.nodeType === 1) {
+      const cs = getComputedStyle(node);
+      // Checked before the opacity test and on every node, including ones contributing no
+      // layer: a gradient element carries `background-color: transparent`, so checking only
+      // pushed layers is the detector that can never fire.
+      if (crossedImage === null && cs.backgroundImage && cs.backgroundImage !== 'none') {
+        crossedImage = {path: describe(node), image: cs.backgroundImage.slice(0, 120)};
+      }
+      const rgba = parseColor(cs.backgroundColor);
+      if (rgba === null) {
+        noteParseFailure(cs.backgroundColor, node, 'background-color');
+      } else if (rgba.a > 0) {
+        layers.push(rgba);
+        if (rgba.a >= 0.999) break;
+      }
+      node = node.parentElement;
+    }
+    let result = layers.length ? layers[layers.length - 1] : WHITE;
+    if (result.a < 0.999) result = compositeOver(result, WHITE);
+    for (let i = layers.length - 2; i >= 0; i--) result = compositeOver(layers[i], result);
+    return {color: result, crossedImage: crossedImage};
+  }
+
+  function relLuminance(c) {
+    const chan = v => { v /= 255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+    return 0.2126*chan(c.r) + 0.7152*chan(c.g) + 0.0722*chan(c.b);
+  }
+
+  function contrastRatio(c1, c2) {
+    const L1 = relLuminance(c1), L2 = relLuminance(c2);
+    return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+  }
+
+  // Split a box-shadow list on top-level commas only -- the commas inside rgba(...) are not
+  // separators. Reading only the first entry drops 13 of the 16 outset shadows in light.
+  function splitShadows(value) {
+    const out = [];
+    let depth = 0, start = 0;
+    for (let i = 0; i < value.length; i++) {
+      const ch = value[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      else if (ch === ',' && depth === 0) { out.push(value.slice(start, i)); start = i + 1; }
+    }
+    out.push(value.slice(start));
+    return out.map(s => s.trim()).filter(s => s.length);
+  }
+
+  function shadowColour(entry) {
+    const m = entry.match(/(rgba?\([^)]*\)|color\([^)]*\))/);
+    return m ? m[1] : null;
+  }
+
+  const SIDES = ['top', 'right', 'bottom', 'left'];
+
+  const marks = [];                     // {key, kind, ratio, path}
+  const excludedBlurred = [];
+  const gradientPainted = [];
+  const overImage = [];
+
+  function record(el, colourStr, kind, blurred) {
+    // A fill painted on an element with `backdrop-filter` has no flat surface behind it -- what
+    // is behind is blurred page content -- so there is nothing to score it against. The SAME
+    // element's border is still scored: a border is measured against the surface OUTSIDE the
+    // element, which the blur does not touch.
+    if (blurred && kind === 'fill') {
+      excludedBlurred.push({path: describe(el), kind: kind, color: String(colourStr),
+                                   why: 'fill over a backdrop-filter: the backdrop is blurred ' +
+                                        'page content, not a flat colour'});
+      return;
+    }
+    const own = parseColor(colourStr);
+    if (own === null) { noteParseFailure(colourStr, el, kind); return; }
+    if (own.a <= 0) return;
+    const outside = effectiveBackground(el.parentElement);
+    if (outside.crossedImage) {
+      overImage.push({path: describe(el), kind: kind, color: String(colourStr),
+                      ancestor: outside.crossedImage.path, image: outside.crossedImage.image});
+      return;
+    }
+    const painted = own.a >= 0.999 ? own : compositeOver(own, outside.color);
+    marks.push({
+      key: String(colourStr) + '|' + kind,
+      color: String(colourStr),
+      kind: kind,
+      ratio: contrastRatio(painted, outside.color),
+      path: describe(el)
+    });
+  }
+
+  const all = document.querySelectorAll('body *');
+  let elementsWithArea = 0;
+
+  all.forEach(el => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    elementsWithArea++;
+    const cs = getComputedStyle(el);
+    const isSvg = el.namespaceURI === SVG_NS;
+    const blurred = !!(cs.backdropFilter && cs.backdropFilter !== 'none');
+
+    if (isSvg) {
+      // Gated on a closed list of shape tags: svg, g, defs and title paint nothing, and `fill`
+      // is an inherited property, so reading it off a container invents a mark.
+      if (!SHAPE_TAGS[el.localName]) return;
+      if (cs.fill && cs.fill !== 'none') record(el, cs.fill, 'svg-fill', blurred);
+      if (cs.stroke && cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0) {
+        record(el, cs.stroke, 'svg-stroke', blurred);
+      }
+      return;
+    }
+
+    // A background-image is not a flat colour, so the element emits no fill mark at all; it is
+    // tallied instead, and the tally is what fails when the set of them changes.
+    if (cs.backgroundImage && cs.backgroundImage !== 'none') {
+      gradientPainted.push({path: describe(el), image: cs.backgroundImage.slice(0, 120),
+                            size: Math.round(rect.width) + 'x' + Math.round(rect.height)});
+    } else {
+      record(el, cs.backgroundColor, 'fill', blurred);
+    }
+
+    SIDES.forEach(side => {
+      const cap = side[0].toUpperCase() + side.slice(1);
+      const style = cs['border' + cap + 'Style'];
+      if (!style || style === 'none' || style === 'hidden') return;
+      if (parseFloat(cs['border' + cap + 'Width']) <= 0) return;
+      record(el, cs['border' + cap + 'Color'], 'border-' + side, blurred);
+    });
+
+    if (cs.boxShadow && cs.boxShadow !== 'none') {
+      splitShadows(cs.boxShadow).forEach(entry => {
+        if (/\binset\b/.test(entry)) return;
+        const colour = shadowColour(entry);
+        if (colour === null) { noteParseFailure(entry, el, 'box-shadow'); return; }
+        record(el, colour, 'shadow-outset', blurred);
+      });
+    }
+  });
+
+  const byKey = {}, byKind = {};
+  marks.forEach(m => {
+    byKind[m.kind] = (byKind[m.kind] || 0) + 1;
+    const slot = byKey[m.key];
+    if (!slot || m.ratio < slot.minRatio) {
+      byKey[m.key] = {count: (slot ? slot.count : 0) + 1, minRatio: m.ratio,
+                      worstKind: m.kind, worstPath: m.path};
+    } else {
+      slot.count++;
+    }
+  });
+  Object.keys(byKey).forEach(k => {
+    byKey[k].minRatio = Math.round(byKey[k].minRatio * 10000) / 10000;
+  });
+
+  return {
+    dataTheme: document.body.getAttribute('data-theme'),
+    elementsWithArea: elementsWithArea,
+    scoredMarks: marks.length,
+    byKey: byKey,
+    byKind: byKind,
+    dump: marks.map(m => m.key + ' @ ' + m.path + ' = ' +
+                         (Math.round(m.ratio * 10000) / 10000)).sort(),
+    parseFailures: parseFailures,
+    parseFailureSamples: parseFailureSamples,
+    excludedBlurredFills: excludedBlurred.length,
+    excludedBlurredFillSamples: excludedBlurred.slice(0, 10),
+    gradientPaintedElements: gradientPainted.length,
+    gradientPaintedSamples: gradientPainted.slice(0, 10),
+    marksOverBackgroundImage: overImage.length,
+    marksOverBackgroundImageSamples: overImage.slice(0, 10)
+  };
+})()
+"""
 
 _RED_REASON = (
     "NONTEXT_WALK_JS is still None -- the element walk is task 3 (green half) of "
