@@ -52,12 +52,22 @@ CHROME_BINARY = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 #
 # Re-pinned 2026-08-24 from `151.0.7922.172`, which Chrome auto-updated away from at 15:04 local.
 # The assert below fires before launch, so the whole browser-driven half of the suite (24 tests at
-# that commit) failed at construction without reaching a page. Safe to move because nothing stores
+# that commit) failed at construction without reaching a page. Safe to move because nothing stored
 # a Chrome-derived constant: `test_guards.py`'s sha256s hash file bytes, Proof A is a source
 # comparison, Proof B's hashes are an archived 151 receipt that is never re-derived, and Proof C
 # asserts WCAG thresholds live rather than against a recorded number. Full reasoning and the
 # user's approval: the card's §"Pinned versions", "The Chrome re-pin, 2026-08-24".
-PINNED_VERSION = "152.0.7977.54"
+#
+# Re-pinned again 2026-08-26 from `152.0.7977.54` -- a patch bump inside the same build, which
+# Chrome took on its own; 35 browser tests failed at construction. **That 2026-08-24 rationale no
+# longer covers a re-pin on its own**, and a future one must not lean on it: as of card D
+# (`docs/features/treko-non-text-contrast.md`) this repo DOES store Chrome-derived constants --
+# `test_nontext_contrast.py` asserts an exact scored mark count per theme and three DEBT contrast
+# ratios to four decimal places, all read out of a rendered page. So the move was made the way that
+# card's §"Pinned versions" requires: every one of those figures was re-measured on this build
+# rather than carried over, and the card records what reproduced and what did not. Approved by the
+# user 2026-08-26 in preference to downgrading Chrome.
+PINNED_VERSION = "152.0.7977.65"
 
 DEVTOOLS_TIMEOUT_SECS = 10
 NAV_TIMEOUT_SECS = 20

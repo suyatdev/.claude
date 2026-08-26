@@ -724,6 +724,14 @@ Scenario: no CDN URL reaches a fetching position
    resolved. This is a rendered check over the whole page, inline-styled and class-styled colour
    alike, reading the foreground/background pair from the browser's own paint rather than inferring
    it from markup proximity — there is no "one inline style" scope left to disagree about
+
+   > **Follow-on, landed 2026-08-26.** This criterion scores **text**, in **light** only. The other
+   > half of the page — 334 non-text marks in dark and 347 in light: fills, border sides, outset
+   > shadows, SVG fills and strokes — is guarded by
+   > `docs/features/treko-non-text-contrast.md` and `treko/test_nontext_contrast.py`, on a named
+   > 23-token allowlist, in **both** themes. The two populations are disjoint by construction:
+   > this one is elements that paint in their own `color`, that one is everything that does not.
+   > Rationale for the allowlist over a blanket rule: **ADR 0037**.
    (§Verification, Proof C).
    **Why the population is elements that paint, not elements that exist** (narrowed 2026-08-24,
    after implementation measured the original wording as unsatisfiable). `color` inherits, so an
