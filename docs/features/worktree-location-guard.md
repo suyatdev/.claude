@@ -3406,7 +3406,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         so `git switch` inside a submodule is denied. The card's Arm D section says nothing about
         submodules and no scenario covers it, so no probe was added — recorded as a known
         over-block rather than left to be discovered.
-- [ ] 6a. Implement **layer 2**, `hooks/reference-transaction` — the lock rule, in this order:
+- [x] 6a. Implement **layer 2**, `hooks/reference-transaction` — the lock rule, in this order:
       bail unless stage is `prepared`; bail unless the ref is `HEAD`; bail unless
       `--absolute-git-dir` equals `--path-format=absolute --git-common-dir` (so linked worktrees are
       never judged — **`--path-format=absolute` is required; without it the two are never equal and
@@ -3425,6 +3425,62 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       it: written without `--path-format=absolute` the comparison is false *everywhere*, so a suite
       asserting only "a linked worktree is not judged" stays fully green against a guard that judges
       nothing at all.
+      **DONE — `hooks/reference-transaction` (376 lines) and `hooks/reference-transaction.test.sh`
+      (787 lines), 95 passed / 0 failed / 0 skipped.** `hooks/worktree-guard.test.sh` re-run at
+      188 passed / 0 failed / 1 skipped. Six measurements, each run in a throwaway repo under
+      `$TMPDIR` on git 2.50.1 (Apple Git-155), never inside a real checkout:
+      - ✅ **The invocation contract, dumped verbatim rather than recalled.** A hook that printed
+        its own argv and stdin, armed via `core.hooksPath`, reported `ARGC=1` with
+        `ARGV[0]=prepared` (and `committed` / `aborted` on the other invocations), and stdin
+        `0000000000000000000000000000000000000000 ref:refs/heads/other HEAD` — one line per ref
+        update, `<old-value> SP <new-value> SP <ref-name> LF`, exactly as `githooks(5)` specifies.
+      - ✅ **The lock discriminator reproduces.** At `prepared`, `git switch other` showed
+        `HEAD.lock=PRESENT` at `<common>/HEAD.lock`; `git worktree add` showed the primary's
+        `HEAD.lock` **absent** and `<common>/worktrees/wt1/HEAD.lock` held instead, with the
+        primary's HEAD still `refs/heads/main` afterwards. This is the card's own earlier
+        measurement, re-run first-hand rather than copied.
+      - ✅ **Backend detection: `git rev-parse --show-ref-format`.** Answers `files` (rc=0) in an
+        ordinary repo and `reftable` in one created with `git init --ref-format=reftable`. Under
+        `reftable` the armed hook refused: rc=128, HEAD unmoved, message naming the backend —
+        so the reftable row is no longer ⬜ *for the refusal*; what stays unmeasured is whether
+        any reftable equivalent of `HEAD.lock` exists, which the refusal makes moot.
+        ⬜ **The git version at which `--show-ref-format` appeared was NOT measured** — 2.50.1 is
+        the only git available here. It is not given a floor of its own: a git that rejects the
+        option exits non-zero and lands on boundary 28's deny, so the gap costs a worse message,
+        not a wrong verdict. The **2.31** floor for `--path-format=absolute` is kept, and is
+        explicitly **diagnostic rather than load-bearing** at layer 2 — every probe failure here
+        already denies, so what the check buys is a message naming the real cause.
+      - ✅ **`--path-format=absolute` is load-bearing at layer 2 too, but for a different reason
+        than at layer 1.** Measured: **git chdirs a hook to the repository toplevel** — a
+        `git switch` run from `<repo>/sub` reported `CWD=<repo>` inside the hook. So the bare
+        `--git-common-dir` answers `.git` (not the `../.git` subdirectory form the layer-1
+        derivation cites) while `--absolute-git-dir` answers `/…/repo/.git`. Never equal either
+        way; the conclusion is unchanged and the mechanism is not.
+      - ✅ **`GIT_COMMON_DIR` redirects `git` itself, so it can never be a mere decoy.** With
+        `GIT_COMMON_DIR=<empty dir>` set, `git rev-parse --show-ref-format`,
+        `--absolute-git-dir` and `--path-format=absolute --git-common-dir` all answer
+        `fatal: not a git repository (or any of the parent directories): .git`. Boundary 33's
+        requirement — that the variable buys no allow — holds and is pinned; **which clause
+        fires is not a property a test can pin**, because the hook denies at the backend probe
+        before the lock test is reached.
+      - 🚩 ✅ **A measured COST of boundaries 28/29 that this card had not anticipated: an armed
+        hook breaks `git init`.** `git init` runs `reference-transaction` for its own initial
+        `HEAD` write, at `prepared`, in a state where `GIT_DIR` is **set** to the `.git` being
+        created and every `rev-parse` there answers
+        `fatal: not a git repository: '<path>/.git'`. Boundary 28 denies on an unreadable
+        backend, so the measured result is `git init` exiting **128** with `.git/` created and
+        **no `HEAD` file written**. Pinned as case K6 so it is not discovered by surprise, and
+        asserted as *what was measured*, not as what is wanted. **This is task 6e's decision to
+        make** — a global `core.hooksPath` would carry this cost machine-wide; if 6e carves an
+        exemption, K6 is the case that must change with it.
+      Two judgement calls, stated because neither is written in the card: the refusal carries the
+      prefix `worktree-location-guard (layer 2):`, deliberately **not** a superstring of layer 1's
+      `worktree-guard:` so a scrollback holding both stays splittable (the boundary-table preamble
+      forbids reusing layer 1's prefix, not identifying the hook at all); and the attribution log
+      is a file of its own, `<state-dir>/reference-transaction.log`, rather than a share of layer
+      1's — layer 1's line format requires a `session_id` that a hook running as a child of `git`
+      does not have. It is read through the same `WORKTREE_GUARD_STATE_DIR` knob, which task 6c
+      measured survives the `git → hook` hop.
 - [ ] 6b. Implement the **liveness check** in `worktree-guard.sh` — resolve the effective repo's
       `core.hooksPath`, assert a `reference-transaction` file is present *and executable*, and
       report when it is not. All three absence modes were measured to fail open **silently**
