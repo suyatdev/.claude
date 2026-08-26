@@ -3083,7 +3083,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         to files inside a bare repo and discard the stated "no working tree to violate" rationale.
         ⚠️ This is a spec edit made during `phase: implementation`, so the **spec-compliance gate
         re-arms**: the compliance judge must run again before task 3's suite is judged complete.
-- [ ] 3. Write the failing test suite first — `hooks/worktree-guard.test.sh`, house style per
+- [x] 3. Write the failing test suite first — `hooks/worktree-guard.test.sh`, house style per
       `hooks/lib/guard_test_helpers.sh`, one case per scenario in Acceptance scenarios. The
       git-absent and sub-2.31 cases require a **stubbed `git` on `PATH`** — no real git on this
       machine reproduces them. Add a case asserting a non-repo is *not* misread as unsupported-git,
@@ -3134,6 +3134,50 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         layers allow**, the one genuinely unbackstopped residual the relaxation creates).
         These assert an allow **on purpose**. If a later change makes any of them deny, that is a
         behavior change to decide deliberately, not a bug fix to land quietly.
+
+      **DONE 2026-08-26 — 185 assertion lines, red.** Against the absent hook: **3 passed,
+      181 failed, 1 skipped**, and the three passes are the hook-independent premise checks below,
+      not cases. Six groups: P (preconditions), A (Arm A), B (Arm B2), D (Arm D layer 1 plus
+      clauses a/b/c), L (liveness), G (arming and the log).
+      - **The suite was falsified, not merely written.** Against a stub hook that always allows:
+        57 passed / 127 failed / 1 skipped. Against one that always denies with a generic message:
+        64 / 120 / 1. **Five assertions pass under both** — the three premise checks, which are
+        hook-independent by construction, and two required-absence assertions (`B9 …does not name
+        segment 0`, `L4 …says nothing about liveness`). Each of those two is paired with a positive
+        assertion that *was* measured to fail under a stub, so the pair discriminates even though
+        the negative half alone cannot.
+      - **Two vacuity controls, because four assertions were passing for the wrong reason.**
+        `LOG_LIVE` — a negative log assertion is refused as VACUOUS until `log_control()` has been
+        seen to produce exactly one line in the same run. `HOOK_RAN` — a "stderr does not say X"
+        assertion is refused as VACUOUS until some invocation has exited other than 127. Without
+        them, "nothing was appended" and "stderr is silent about X" are true of every conceivable
+        implementation, including no implementation at all.
+      - **Clause (a) reads the tuple, as required.** `GLOBAL_REDIRECT` is imported at run time via
+        `importlib.util.spec_from_file_location` (the filename carries a hyphen) — **11 members
+        measured**, `-C` excluded, so 10 deny cases. The import itself is asserted first: a failed
+        import yields an empty loop and ten assertions vanish with no FAIL line.
+      - **Clause (c)'s abstract case was measured, not quoted.** `segments('git worktree add
+        "unclosed')` returns `[]`, while the same token inside `sh -c` returns one segment carrying
+        it — measured against the live `shell_segments.py` on `/usr/bin/python3` 3.9.6, 2026-08-26.
+        The suite re-asserts that premise at run time, so a fixture that stops constructing its case
+        fails loudly instead of passing.
+      - ⚠️ **Two test-time contracts the card does not specify — task 4 must honour them or these
+        cases cannot go green.** `WORKTREE_GUARD_STATE_DIR` relocates
+        `hooks/state/worktree-guard.log` (precedent: `phase-guard.sh`'s `PHASE_GUARD_STATE_DIR`);
+        `WORKTREE_GUARD_LIB` points the hook at a lib directory holding a deliberately broken lexer,
+        for boundary 7. Both are harness isolation rather than guard behaviour, so no spec GATE was
+        raised — but they are now part of what task 4 must satisfy.
+      - ⚠️ **Wording the suite pins by fiat, because the card fixes the fact and not the phrasing:**
+        the literal substrings `segment 0` / `segment 1`. And **boundary 12's deny must name `$d`
+        while `SEG_CD` carries the sentinel `UNRESOLVABLE`** (`:778` against `:1832`) — satisfiable
+        only by re-reading the raw command line out of the payload. Task 5 should say where that
+        text comes from.
+      - **Not expressible in this suite, recorded rather than faked:** `L6` — the liveness check is
+        not self-hosting, its `Given` is "settings.json does not register the hook", and this suite
+        reaches the guard by invoking it directly — is a **counted skip**, not a pass; the summary
+        line carries a third number so a zero-failure run can never read as full coverage. The
+        layer-2 halves of `L7`, `D26`, `D42` and `D-3B-R3` belong to task 6a's own suite: layer 2 is
+        a child of `git`, and this suite never runs `git` on the guard's behalf.
 - [ ] 4. Implement Arm A.
 - [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
