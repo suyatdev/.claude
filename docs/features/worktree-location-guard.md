@@ -583,8 +583,36 @@ derivation 3's `SEG_OPAQUE` as specified.
 **The rule, entire:**
 
 > Judge only the **primary context** — `git rev-parse --absolute-git-dir` equals
-> `git rev-parse --git-common-dir`. There, at stage `prepared`, for a transaction line whose ref is
-> `HEAD`: **deny if `$GIT_COMMON_DIR/HEAD.lock` exists.** Otherwise allow.
+> `git rev-parse --path-format=absolute --git-common-dir`. There, at stage `prepared`, for a
+> transaction line whose ref is `HEAD`: **deny if `<that common dir>/HEAD.lock` exists.**
+> Otherwise allow.
+
+🚩 **Two corrections to this rule, both measured 2026-08-25 — the earlier wording disabled the
+guard entirely.**
+
+1. **`--path-format=absolute` is load-bearing, not tidiness.** The rule previously compared
+   `--absolute-git-dir` against a bare `--git-common-dir`. Those are **never equal**, in the primary
+   checkout or anywhere else, because the second returns a path relative to the cwd. Measured in
+   this repo: `--absolute-git-dir` → `/Users/marksuyat/.claude/.git`; `--git-common-dir` → `.git`
+   at the root and `../.git` from `hooks/`. The hook would therefore have failed its scope test on
+   **every** invocation, bailed, and allowed every HEAD move — while the liveness check went on
+   reporting it armed. That is precisely the failure mode this card names twice: a guard whose
+   absence is indistinguishable from its success. Layer 1's boundary 6 already uses
+   `--path-format=absolute`; layer 2 must use it too.
+   **The corrected form discriminates in both directions, both measured:** in the primary,
+   `/Users/marksuyat/.claude/.git` == `/Users/marksuyat/.claude/.git` → judged; in the linked
+   worktree `…/.claude/worktrees/rule-surface-trim`, `--absolute-git-dir` →
+   `/Users/marksuyat/.claude/.git/worktrees/rule-surface-trim` ≠ `/Users/marksuyat/.claude/.git` →
+   bailed. A check only verified in the direction that passes is not verified.
+   ⚠️ `--path-format` requires git ≥ 2.31, the same floor task 2 established, and task 2 recorded
+   that probing for its support **by exit code is ambiguous against a non-repo** — so layer 2 must
+   detect it the way layer 1 does, not by re-inventing the probe.
+2. **`$GIT_COMMON_DIR` is not an environment variable here.** The rule was written as though the
+   hook could read it from its environment. The second measurement pass measured `GIT_DIR`
+   **unset** in the hook's environment at the gated write, and nothing establishes
+   `GIT_COMMON_DIR` is set either. The path must come from the `rev-parse` above — the same value
+   the scope test just computed — never from the environment. Boundary 33 covers the case where
+   something sets it anyway.
 
 No token, no nonce, no expiry, no ledger, no command inspection. `git worktree add` holds
 `worktrees/<name>/HEAD.lock` and not the primary's, so it passes; `switch`, `checkout`,
@@ -1249,9 +1277,12 @@ recognize:
 
 Rounds 1 and 2 both cited `core-conduct/explicit-error-handling`, each time naming boundaries the
 previous revision had not listed. Patching the named instances kept producing the next batch, so
-this table is built the other way round: **every place either script calls out to something that
-can fail**, enumerated from the design rather than from a review finding. If a boundary is not in
-this table, it is not in the design.
+this table is built the other way round: **every place each of the three scripts calls out to
+something that can fail** — `worktree-guard.sh`, `create-worktree.sh` and
+`hooks/reference-transaction` — enumerated from the design rather than from a review finding. If
+a boundary is not in this table, it is not in the design. ⚠️ This sentence read "**either**
+script" until 2026-08-25; it became false the moment layer 2 was added, and it is the exact
+claim round 8 cited.
 
 **The governing policy, so a new boundary has a default:** once the guard has established that a
 git repository is involved, any failure it cannot interpret **denies**. "Allow silently" is
@@ -1259,6 +1290,13 @@ reserved for the four cases that are genuinely none of the guard's business (no 
 payload, not a git repo, bare repo, submodule). **There is no observability exception.** Round 3
 removed the one that existed: a failed log append now denies (boundary 10), because task 10's
 arm-it decision is computed from that log.
+
+**How the policy applies to layer 2, which has a different precondition.** For layer 2 the
+precondition is satisfied by construction: the hook exists only because git invoked it, so "a
+git repository is involved" is never in question and **none of the four none-of-our-business
+allows can apply**. Layer 2 has exactly one legitimate silent allow — the scope bail on a
+non-primary context, which is a scope *test* rather than a failure — and exactly one boundary
+with no verdict available to it at all (boundary 34, where no layer-2 code runs).
 
 **`worktree-guard.sh` (`PreToolUse`):**
 
@@ -1351,6 +1389,35 @@ Non-goals so the choice is not re-litigated as an oversight.
 **The harness's response to each failure mode is no longer unverified** — the task 1b probe
 measured it, and every malformed output fails closed. The table is in the Arm B contract above.
 
+**`hooks/reference-transaction` (layer 2, git `reference-transaction` hook):**
+
+For this hook **deny** means: exit non-zero at the `prepared` stage. Git turns that into `rc=128`
+with the ref unmoved — and, per "The blocking finding", with the destination branch's content left
+staged in the shared tree. There is no exit-2 convention and no `worktree-guard:` prefix here; those
+belong to layer 1.
+
+| # | Boundary | Behavior |
+|---|---|---|
+| 28 | `git rev-parse --show-ref-format` exits non-zero, prints nothing, or names any backend other than `files` | **Deny**, and the message names the backend it read and says the guard does not implement it. The lock rule is defined only for `files`: under `reftable` there is no `HEAD.lock`, so the deny clause can never fire and the hook allows every `HEAD` write — a fail-open across an entire **backend** rather than a missed shape (⬜, "Installation and enforcement strength"). Refusing to arm converts a silent total bypass into a loud refusal to run. ⬜ The git version at which `--show-ref-format` appeared was not measured; a git that rejects the option exits non-zero and lands in this row, which denies. |
+| 29 | `git rev-parse --absolute-git-dir` exits non-zero or prints nothing | **Deny.** This value decides whether the context is the primary one, and without it the hook cannot tell a shared `HEAD` from a linked worktree's own. Boundary 5's "not a git repository" allow cannot apply: the hook runs only because git invoked it. |
+| 30 | `git rev-parse --path-format=absolute --git-common-dir` exits non-zero or prints nothing | **Deny.** Same reasoning as 29, and this value is additionally the base of the lock path in boundary 31 — an empty read would test `/HEAD.lock`, which never exists, so the deny clause would stop firing silently. **The `--path-format=absolute` form is required, not stylistic:** measured this session (git 2.50.1, repo `~/.claude`), the bare `--git-common-dir` returns `.git` at the repo root and `../.git` from a subdirectory while `--absolute-git-dir` returns the absolute path, so comparing the bare pair is **never** equal — including in the primary checkout, where the rule must be equal for layer 2 to judge anything at all. Layer 1's boundary 6 already uses the absolute form. |
+| 31 | The existence test on `<git-common-dir>/HEAD.lock` fails for any reason other than the file being absent — `EACCES`, `ELOOP`, `ENOTDIR`, or a `stat` that errors | **Deny.** "Absent" is the lock rule's *allow* answer, so every non-absent error must be distinguished from it. An implementation using a bare `[ -e ]` collapses "the file is not there" and "the test could not be performed" into the same false, which converts every permission error into an allowed `HEAD` move. Distinguish `ENOENT` from failure explicitly. |
+| 32 | A transaction line on stdin is empty, or does not split into exactly three fields (`<old-value> SP <new-value> SP <ref-name>`) | **Deny.** The ref name is the only field that decides whether the transaction touches `HEAD`, so an unparseable line is an undecidable transaction. A single transaction may carry several lines — `git rebase` writes `HEAD`, then `refs/heads/<b>`, then `HEAD` ("What a `reference-transaction` hook can do") — so one bad line makes the whole transaction unclassifiable, not just that ref. |
+| 33 | `GIT_COMMON_DIR` is unset in the hook's environment | **Not a failure — it is the expected state, and the design must not read it.** `GIT_DIR` was measured **unset** in the hook's environment at the gated `HEAD` write, for both `git switch` and `git worktree add` (constraint 2), so its sibling cannot be relied on either. The common directory comes from boundary 30's `rev-parse`, never from the environment; the `$GIT_COMMON_DIR/HEAD.lock` notation in the rule is a path expression, not an environment read. If an implementation nevertheless reads the variable, an unset or empty value **denies** — a lock path rooted at the empty string tests `/HEAD.lock`, which never exists, and the deny clause silently stops firing. ⬜ Whether git exports `GIT_COMMON_DIR` to hooks at all was not measured; probe: print `env \| grep '^GIT_'` from the hook at `prepared`. |
+| 34 | The hook cannot run at all — file missing, present but not executable, or the resolved `hooksPath` directory does not exist | **No verdict is available — layer 2 cannot deny, and no mechanism can be specified that would let it.** All three were measured to fail open **silently**: rc=0, `HEAD` moved (✅, "Installation and enforcement strength"). No layer-2 code executes, so nothing in layer 2 can respond, and a design that claimed otherwise would be inventing a mechanism. The mitigation is entirely external — layer 1's liveness check (task 6b) — and that check is itself not self-hosting. This is the one row in the table with no behavior of its own, and it is written out rather than omitted so the gap is not read as an oversight later. |
+| 35 | The stage argument (`$1`) is absent or holds a value the hook does not recognise | **Deny (exit non-zero), with no message.** The two *known* non-vetoing stages are handled by the rule itself: at `aborted` and `committed` the hook exits 0 silently, because a non-zero exit there is **ignored by git** — rc=0 and the ref moves anyway (measured, "Only `prepared` can veto") — and a refusal message for a transaction that then succeeds contradicts the tree. An **unrecognised** stage is the different case: it may be one that can veto, so it takes the policy default. Suppressing the message keeps an ineffective refusal from being announced as an effective one. ⬜ No stage beyond the three documented ones was observed. |
+| 36 | `git` cannot be invoked from the hook's environment | **Deny.** Boundaries 28–30 are all `git` calls, so an uninvocable `git` leaves the backend, the scope and the lock path all undetermined. Precedent: boundary 3, and `test-marker-guard`'s `MSG_NO_PYTHON`, which blocks everywhere. ⬜ Whether git guarantees its own executable is on a hook's `PATH` was not measured; probe: print `command -v git` and `PATH` from the hook at `prepared`. |
+| 37 | stdin cannot be read — a read error, or the descriptor closes before any line arrives | **Deny.** Same reasoning as 32: an unread transaction is an unclassified one, and at `prepared` a deny is still effective. |
+
+**One consequence worth stating beside the table.** Boundaries 28–32, 36 and 37 all deny, and a deny
+at `prepared` leaves the destination content staged (the blocking finding). So a layer-2 boundary
+failure is not a quiet refusal — it produces `rc=128` **and** a dirty shared tree, and the state-describing message
+specified in task 6d is therefore required on the boundary paths too, not only on the lock-rule
+refusal. On a boundary deny the message has one thing *less* to say and must not invent it: the
+hook failed before it could classify the transaction, so it cannot name the destination branch the
+way the lock-rule refusal does. It names what it knows — which boundary failed, that `HEAD` did not
+move, and that the tree may hold another branch's content — and stops.
+
 ### Deny message contract
 
 `phase-guard.sh:537-561` sets the house shape and it should be followed: what was blocked, why, the
@@ -1427,8 +1494,16 @@ evidence; only the *switch* needed to be in git.
 
 ## Acceptance scenarios
 
-Written against Arm A unless stated. `deny` means exit 2 with a `worktree-guard:` message; in
-`log` mode every `deny` below becomes "allow, and append a `would-deny` line".
+Written against Arm A unless stated. For `worktree-guard.sh` (layer 1), `deny` means exit 2 with
+a `worktree-guard:` message, and in `log` mode every layer-1 `deny` below becomes "allow, and
+append a `would-deny` line".
+
+**The layer-2 features are different on both counts, and say so in their own `Background`.**
+Layer 2 is `hooks/reference-transaction`, a child of `git` rather than of the hook process: it
+denies by exiting non-zero at the `prepared` stage, which git reports as `rc=128` with the ref
+unmoved — not as exit 2, and with no `worktree-guard:` prefix. Whether `WORKTREE_GUARD_MODE`
+reaches layer 2 at all is **unmeasured** (task 6c), so no layer-2 scenario below is written in
+terms of a mode.
 
 ```gherkin
 Feature: worktree-guard.sh — preconditions shared by every arm
@@ -1971,7 +2046,7 @@ Feature: Arm D — moving a primary checkout's HEAD
 
   Scenario: A collapsed token segments() cannot parse — layer 1 still denies
     Given the session cwd is a primary checkout
-    When Bash runs "sh -c 'git worktree add \"unclosed"
+    When Bash runs "sh -c 'git worktree add \"unclosed'"
     Then layer 1 denies
     And the message names the unresolved token
     # The other half of clause 3c, and the half that does NOT relax. Here the
@@ -1979,6 +2054,12 @@ Feature: Arm D — moving a primary checkout's HEAD
     # here" — the exact failure SEG_UNPARSED exists to stop. Arm B2 has no
     # layer-2 backstop (layer 2 allows worktree add by design), so this one
     # must keep denying for both arms.
+    # Measured 2026-08-25 — the closing quote matters and the first draft of this
+    # scenario omitted it. WITH it, segments() lexes the outer line to
+    # ['sh','-c','git worktree add "unclosed'] and the inner token lexes to [],
+    # which is the empty-lex branch this scenario is for. WITHOUT it the OUTER
+    # line is unparseable, so the case is caught by line-scoped SEG_UNPARSED and
+    # never reaches clause 3c at all — a different rule, passing for the wrong reason.
 
   Scenario: A worktree add nested past the depth bound — the named residual
     Given the session cwd is a primary checkout
@@ -2041,6 +2122,510 @@ Feature: Arm D — moving a primary checkout's HEAD
     When Bash runs "WORKTREE_EXEMPT=hotfix git switch main"
     Then the hook allows
     And worktree-guard.log records arm=D decision=bypass exempt-reason=hotfix
+
+Feature: Arm D layer 2 — the reference-transaction hook
+
+  # Layer 1 is deliberately in log mode throughout this feature. With layer 1 in
+  # deny mode it refuses "git switch main" before git ever runs, so every scenario
+  # below would pass without layer 2 existing at all. Layer 2 is the layer under
+  # test, so layer 1 must not be the thing that decides.
+
+  # <path>, <b>, <sha> and <n> stand for operands the suite supplies, matching the
+  # notation the measured tables in this card already use. They are not Gherkin
+  # Examples placeholders except where they appear in an Examples header.
+
+  Background:
+    Given the primary checkout ~/.claude is on branch main with a clean tree
+    And hooks/reference-transaction is installed and executable via a global core.hooksPath
+    And git version 2.50.1 (Apple Git-155) is installed
+    And git rev-parse --show-ref-format reports "files"
+    And worktree-guard.sh is in log mode, so layer 1 records and allows
+
+  # --- The allow clause: git worktree add, all four measured forms ---
+
+  Scenario Outline: git worktree add is allowed from the primary checkout
+    When "<command>" runs with the session cwd at the primary checkout
+    Then the hook exits 0 at the prepared stage
+    And the attribution log records ALLOW no-primary-HEAD-lock
+    And the worktree is created
+    And the primary's HEAD still names main
+    Examples:
+      | command                                    |
+      | git worktree add <path> wtb1               |
+      | git worktree add <path> -b newbr           |
+      | git worktree add --detach <path>           |
+      | git worktree add --no-checkout <path>      |
+    # ✅ Measured 4/4, scratchpad/verify_lockrule.sh, and again in the 10/10 table
+    # ("Second measurement pass"). The lock git holds for these is
+    # worktrees/<n>/HEAD.lock, never the primary's, so the allow clause fires.
+    # The falsifier is the naive "deny HEAD symref moves in the primary checkout"
+    # rule, which blocked the plain and the -b form outright — rc=128, no worktree
+    # created — i.e. the guard forbidding the one operation it exists to mandate
+    # (constraint 2, "Three measured constraints").
+    # The attribution assertion is load-bearing, not decoration: a run in which
+    # every case denies proves nothing about the allow clause (task 6a).
+
+  Scenario: The primary's HEAD is not moved by git worktree add
+    When "git worktree add <path> side" runs from the primary checkout
+    Then the primary's HEAD symref still names refs/heads/main
+    And git worktree list reports the new worktree
+    # ✅ scratchpad/verify_lockrule.sh: all four forms reported
+    # "HEAD main -> main moved=no" while creating four real worktrees.
+    # This is the premise the whole lock rule rests on, so it is asserted
+    # separately from the allow verdict: an implementation could allow the four
+    # forms for the wrong reason and this scenario would still catch a git version
+    # that starts moving the primary's HEAD.
+
+  Scenario: The scope test is not read off the GIT_DIR environment variable
+    When "git worktree add <path> side" runs from the primary checkout
+    Then at the gated HEAD write the hook sees GIT_DIR unset
+    And git rev-parse --git-dir reports .git
+    And the hook treats the context as primary
+    And the allow clause decides the case, not the scope bail
+    # ✅ Measured (constraint 2): at the HEAD write, `worktree add` and `git switch`
+    # are byte-identical in the environment — GIT_DIR unset, rev-parse --git-dir
+    # ".git", new value "ref:refs/heads/side". Only the LATER transactions of
+    # worktree add carry GIT_DIR=<common>/worktrees/<name>.
+    # The falsifier: an implementation that bails on "GIT_DIR names a worktree"
+    # allows this case for a reason that is not true of it, and would allow a plain
+    # git switch identically the moment git changes when it exports GIT_DIR.
+
+  # --- The deny clause: symref writes to the primary's HEAD ---
+
+  Scenario Outline: A HEAD move in the primary checkout is denied
+    When "<command>" runs with the session cwd at the primary checkout
+    Then the hook exits non-zero at the prepared stage
+    And git exits 128
+    And the primary's HEAD symref still names refs/heads/main
+    And the attribution log records DENY primary-HEAD-lock-held
+    Examples:
+      | command                    |
+      | git switch other           |
+      | git checkout other         |
+      | sh -c 'git switch other'   |
+      | env -C . git switch other  |
+    # ✅ Measured 10/10 ("The rule this yields"). The last two are the exact shapes
+    # that defeated the text classifier and are the reason for the pivot: layer 2
+    # sees the ref update, never the command line, so quoting and wrappers are not
+    # a category it has.
+
+  Scenario Outline: An OID write to HEAD is denied — the rule keys on the lock
+    When "<command>" runs with the session cwd at the primary checkout
+    Then the hook exits non-zero at the prepared stage
+    And git exits 128
+    And the primary's HEAD still names main
+    And the attribution log records DENY primary-HEAD-lock-held
+    Examples:
+      | command                  | new value written to HEAD |
+      | git switch --detach HEAD | a raw OID                 |
+      | git checkout --detach    | a raw OID                 |
+      | git checkout <sha>       | a raw OID                 |
+    # ✅ The first form in the 10/10 table, the other two in the measured table in
+    # "Arm D is two layers". All three write an OID to HEAD rather than a symref.
+    # This is the discriminating group for the RULE'S WORDING: a rule phrased as
+    # "deny HEAD -> ref:refs/heads/..." passes every scenario above this one and is
+    # blind to all three of these. The rule keys on the LOCK, and the three rows
+    # are what prove the difference matters.
+
+  Scenario: A hand-made worktree directory does not buy an allow
+    Given .git/worktrees/fakeA has been created with mkdir and nothing else
+    When "git switch other" runs from the primary checkout
+    Then the hook exits non-zero at the prepared stage
+    And git exits 128
+    And the attribution log records DENY primary-HEAD-lock-held
+    # ✅ Measured (10/10 table, final row). The superseded discriminator — "allow a
+    # HEAD symref move only if the expected worktree name now exists under
+    # worktrees/" — is satisfied by an empty hand-made directory, and the live
+    # ~/.claude/.git/worktrees already holds four qualifying names with no attacker
+    # action ("The state discriminator proposed above is broken"). This scenario is
+    # the regression pin against that discriminator returning.
+
+  Scenario: An ordinary commit is not gated
+    When "git commit --allow-empty -m x" runs from the primary checkout
+    Then the hook exits 0
+    And git exits 0
+    # ✅ Measured (10/10 table). The transaction writes refs/heads/main and never
+    # HEAD, so the ref test bails before the lock test is reached. Committing in the
+    # primary checkout is not what this card is trying to stop, and a rule that
+    # gated every ref write would stop it.
+
+  # --- The stage guard ---
+
+  Scenario Outline: Exiting non-zero outside the prepared stage is ignored by git
+    Given the hook is invoked at stage <stage>
+    When it exits non-zero
+    Then git exits 0
+    And the ref moves anyway
+    Examples:
+      | stage     |
+      | aborted   |
+      | committed |
+    # ✅ Measured ("Only prepared can veto"). The stage guard is load-bearing, not
+    # defensive tidiness. The falsifier is an implementation that judges at every
+    # stage: it does not block anything extra, it prints a refusal for a move that
+    # succeeded — a message that contradicts the tree, which is worse than silence.
+
+  Scenario: The hook says nothing at the stages it cannot veto
+    Given the hook is invoked at stage committed for a HEAD write it would refuse
+    Then the hook exits 0
+    And it writes nothing to stderr
+    And it appends nothing to the attribution log
+    # The other half of the stage guard. Boundary 35.
+
+  # --- Backend ---
+
+  Scenario: The ref backend is reftable — refuse to arm rather than allow
+    Given the repository was created with git init --ref-format=reftable
+    When "git switch other" runs from its primary checkout
+    Then the hook exits non-zero at the prepared stage
+    And the message names the backend it read
+    And the message says the guard does not implement that backend
+    And the message does not claim the HEAD move was itself unsafe
+    # Under reftable there is no .git/HEAD.lock, so the deny clause can never fire
+    # and the lock rule allows every HEAD write — a fail-open across an entire
+    # BACKEND, not a missed shape. Refusing to arm converts a silent total bypass
+    # into a loud refusal to run, which is the trade this card takes everywhere
+    # else. Boundary 28.
+    # ⬜ The reftable behaviour is probe-reported and was NOT re-run
+    # ("Installation and enforcement strength"). This repo being `files` is ✅
+    # (git rev-parse --show-ref-format), so the gap is latent, not absent.
+    # Probe that settles it: `git init --ref-format=reftable` in a throwaway repo,
+    # arm the hook unmodified, run `git switch other`, and record (a) whether
+    # <common-dir>/HEAD.lock exists at the prepared stage, (b) git's rc, (c) whether
+    # HEAD moved — with a `files` repo in the same run as the control, which must
+    # deny. Until that runs, the reported equivalent signal
+    # (reftable/tables.list.lock) is not a design input.
+
+  # --- The post-veto tree state: asserted messy, on purpose ---
+
+  Scenario: A refused switch leaves the destination branch's content staged
+    Given the primary checkout is clean on main
+    And marker.txt contains ON-MAIN and shared.txt contains shared-v1
+    And branch feature holds ON-FEATURE, shared-v2, and a file featonly.txt
+    When "git switch feature" runs and layer 2 refuses it
+    Then git exits 128
+    And HEAD's symref still names refs/heads/main
+    And marker.txt contains ON-FEATURE
+    And shared.txt contains shared-v2
+    And featonly.txt is present
+    And git status reports "A featonly.txt", "M marker.txt", "M shared.txt"
+    And the deny message names the staged state
+    And the deny message names no destructive command
+    And the deny message offers WORKTREE_EXEMPT as the forward exit
+    And the deny message does not offer rollback, because layer 2 cannot see the pre-command tree
+    And the deny message does not describe the tree as clean, unchanged, or restored
+    # ✅ Measured, scratchpad/verify_rollback.sh ("The blocking finding"). Control:
+    # the same switch with the hook disarmed completed cleanly, empty status.
+    # THIS SCENARIO ASSERTS THE MESSY STATE DELIBERATELY. A veto stops the ref
+    # write; it does not undo the checkout, and the hook cannot roll back from
+    # inside a veto. An implementation that "fixes" this scenario by asserting an
+    # empty status is asserting a rollback no measurement supports.
+    # Why the message assertions are part of the same scenario: a git commit at
+    # this moment lands feature's content on main, and git status presents it as
+    # ordinary staged work, indistinguishable from something the session did
+    # itself. The message is the only thing between the user and that commit.
+    # AMENDED 2026-08-25. This scenario named `git reset --hard HEAD` as the
+    # recovery until task 6d withdrew it: the observability judge RAN that remedy
+    # and it destroyed another session's staged work. A PostToolUse restore was
+    # rejected for the same reason, not deferred. See "The deny message describes
+    # the state and prescribes no destructive command".
+    # Note this scenario's Given is a CLEAN pre-command tree -- the one case where
+    # rollback would have been safe -- and the message still does not offer it,
+    # because layer 2 cannot see the pre-command tree from inside the veto. The
+    # dirty counterpart is task 6d test (c).
+
+  Scenario: A dirty tree after a refusal is the signal that layer 1 needs widening
+    Given layer 1 emitted no fact for the command, so it allowed
+    When layer 2 refuses the HEAD write
+    Then the refusal arrives with rc=128 and a message, not silently
+    And worktree-guard.log carries no would-deny line for that command
+    # The diagnostic reading of the dirty tree, stated so it is not read as a
+    # second defect. It holds for HEAD moves and for nothing else — see the
+    # "no HEAD transaction" feature below.
+
+  Scenario: A refused rebase leaves .git/rebase-merge behind
+    When "git rebase other" runs from the primary checkout and layer 2 refuses it
+    Then .git/rebase-merge exists
+    And the deny message names "git rebase --abort" as the recovery for this shape
+    # ⬜ Probe-reported in "The blocking finding", NOT independently re-run, and the
+    # message requirement is derived from it rather than measured.
+    # Probe that settles it: arm the hook in a throwaway repo, run `git rebase <b>`
+    # from the primary checkout, record rc, the presence of .git/rebase-merge, and
+    # what `git status` reports as the in-progress operation, with a disarmed
+    # control in the same run that must complete cleanly. Note that git rebase
+    # writes HEAD, then refs/heads/<b>, then HEAD ("What a reference-transaction
+    # hook can do"), so the refusal may land on either HEAD write; the probe must
+    # record which.
+
+  # --- Scope: the non-primary context is never judged ---
+
+  Scenario: A HEAD move inside a linked worktree is not judged
+    Given the session cwd is a linked worktree of ~/.claude
+    And git rev-parse --absolute-git-dir reports <common>/worktrees/<name>
+    And git rev-parse --path-format=absolute --git-common-dir reports <common>
+    When "git switch main" runs there
+    Then the hook exits 0 at the prepared stage
+    And the attribution log records the scope bail, not the allow clause
+    And that worktree's HEAD moves to main
+    # The hook is shared with every linked worktree ($GIT_COMMON_DIR/hooks —
+    # measured, constraint 3), so without the scope test it judges every worktree
+    # in the repo. A linked worktree's HEAD is its own; nobody else shares it.
+    # The attribution assertion separates the two ways to reach rc=0: bailing on
+    # scope and allowing on the lock are different verdicts and only one is correct
+    # here.
+    # ⬜ The end-to-end allow was NOT measured. The 10/10 table carries no
+    # linked-worktree case, and what constraint 3 measured is that the ENVIRONMENT
+    # pair GIT_DIR != GIT_COMMON_DIR identifies a linked worktree — a different
+    # mechanism from the rev-parse pair the rule is written in terms of.
+    # Probe that settles it: from a linked worktree with the hook armed, run
+    # `git switch <b>`, and record rc, both rev-parse values as the hook sees them,
+    # and the attribution line — with a primary-context run in the same script as
+    # the control, which must deny.
+
+  Scenario: The two rev-parse values are compared in the same path format
+    Given the session cwd is the primary checkout
+    Then git rev-parse --absolute-git-dir reports an absolute path
+    And git rev-parse --git-common-dir reports a path relative to the cwd
+    And the hook compares --absolute-git-dir with --path-format=absolute --git-common-dir
+    And the two are equal, so the context is judged
+    # ✅ Re-run during this drafting pass, git 2.50.1 (Apple Git-155), repo
+    # ~/.claude, ref-format files. Commands, so the claim is reproducible without
+    # the script: `git -C <dir> rev-parse --absolute-git-dir`,
+    # `git -C <dir> rev-parse --git-common-dir`,
+    # `git -C <dir> rev-parse --path-format=absolute --git-common-dir`.
+    #   primary, repo root : /Users/marksuyat/.claude/.git  vs  .git
+    #   primary, hooks/    : /Users/marksuyat/.claude/.git  vs  ../.git
+    #   linked worktree    : <common>/worktrees/<n>         vs  /Users/…/.claude/.git
+    # THE BARE PAIR IS NEVER EQUAL, INCLUDING IN THE PRIMARY CHECKOUT. A hook that
+    # compares them as the rule is currently worded bails on scope every time and
+    # allows every HEAD move in every repo — layer 2 dead, silently, with the
+    # liveness check still reporting it armed because the file is present and
+    # executable. This scenario is the falsifier for that, and it is the reason
+    # boundary 30 names the --path-format=absolute form.
+
+  # --- Liveness: what layer 2 cannot do for itself ---
+
+  Scenario: Layer 2 cannot report its own absence
+    Given hooks/reference-transaction has been removed
+    When "git switch other" runs from the primary checkout
+    Then git exits 0
+    And HEAD moves to other
+    And nothing is written to stderr by any layer-2 code
+    # ✅ Measured ("Installation and enforcement strength"), one of three silent
+    # fail-open modes. Asserted here so the absence of a verdict is on the record:
+    # no code in layer 2 runs, so nothing in layer 2 can respond. Boundary 34.
+    # The mitigation is external and lives in the liveness feature below.
+
+Feature: Arm D layer 2 — the liveness check (layer 1 checks layer 2)
+
+  Background:
+    Given the session cwd is the primary checkout ~/.claude
+    And worktree-guard.sh is registered in settings.json
+
+  Scenario Outline: Layer 1 reports when layer 2 is not armed
+    Given the effective repo's core.hooksPath resolves to a directory
+    And <state>
+    When Bash runs "git switch main"
+    Then worktree-guard.sh reports that layer 2 is not armed
+    And the report names the resolved hooksPath
+    Examples:
+      | state                                                   |
+      | no reference-transaction file exists there              |
+      | reference-transaction exists but is not executable      |
+      | the resolved hooksPath directory does not exist         |
+    # ✅ All three measured to fail open SILENTLY at layer 2 — rc=0, HEAD moved
+    # ("Installation and enforcement strength"). The guard's own disappearance is
+    # indistinguishable from its success, which is the same shape as the
+    # refusal-only log that task 10 already records.
+    # The falsifier is a check that tests presence only: "present but not
+    # executable" is the mode that reads most like a working install, and it is the
+    # one a file-existence test passes.
+    # ⚠️ OPEN — this scenario asserts a REPORT, not a verdict. The design says
+    # "say so"; it does not say whether layer 1 denies the command, allows it with
+    # a warning, or only logs. Task 6b must decide before this scenario can assert
+    # an outcome, and the decision is not obvious: denying every Bash git command
+    # because a hook file is missing is a large blast radius, while warning on
+    # stderr inherits git-guard.sh:409's unverified reachability.
+
+  Scenario: A repo-local core.hooksPath silently removes layer 2
+    Given the global core.hooksPath names the guard's directory
+    And this repo sets core.hooksPath locally to .husky
+    When Bash runs "git switch main"
+    Then the liveness check resolves the EFFECTIVE hooksPath, not the global one
+    And it reports that layer 2 is not armed for this repo
+    # The reciprocal risk, and the sharper one: husky and lefthook install by
+    # setting core.hooksPath LOCALLY, and local beats global, so the first repo to
+    # run `husky install` does not get broken by the guard — it silently removes
+    # the guard from the repo where work is happening.
+    # The falsifier is a check that reads `git config --global core.hooksPath`:
+    # it reports "armed" for precisely the one repo where the guard is gone.
+    # ⬜ Both the local-beats-global precedence and the husky/lefthook install
+    # mechanism are probe-reported, not re-run ("Installation and enforcement
+    # strength"). Probe: in a throwaway repo with the guard armed globally, run
+    # `git config --local core.hooksPath .husky`, then `git switch <b>`, and record
+    # rc, whether HEAD moved, and what `git config core.hooksPath` (no scope flag)
+    # returns — with the same repo before the local set as the control, which must
+    # deny. Blast radius today is measured: 12 .git/hooks directories under $HOME,
+    # 0 with a non-sample executable hook, 0 setting core.hooksPath locally ⬜ —
+    # so nothing breaks now; the cost is latent, not absent.
+
+  Scenario: The check is not self-hosting
+    Given settings.json does not register worktree-guard.sh
+    When Bash runs "git switch main" with layer 2 also absent
+    Then nothing checks either layer
+    And the command runs unexamined
+    # Stated, not discovered ("The liveness check"). The regress terminates at
+    # settings.json, which is tracked and reviewable, and is the same file task 9
+    # registers the hook in and task 8 arms it from. No hook can guard its own
+    # registration.
+
+  Scenario: An assignment prefix on the git command line reaches layer 2
+    When Bash runs "WORKTREE_EXEMPT=hotfix git switch main"
+    Then the reference-transaction hook sees WORKTREE_EXEMPT=hotfix in its environment
+    # ✅ Measured ("Mode and bypass must reach a different process"), including
+    # worktree add's internal sub-invocations. This scenario asserts only that the
+    # value ARRIVES. What layer 2 does with it is a separate decision that the card
+    # does not currently record — see the next scenario.
+
+  Scenario: WORKTREE_GUARD_MODE reaches layer 2 from settings.json env
+    Given settings.json sets env.WORKTREE_GUARD_MODE
+    When Bash runs "git switch main"
+    Then the reference-transaction hook reads that value from its environment
+    # ⬜ NOT MEASURED, and required before task 8 can claim the mode switch works
+    # end to end. Layer 2 is a child of git, not of the hook process, so the
+    # measured assignment-prefix route above does not settle this one; only
+    # inherited environment would. It should work — env is inherited — but the card
+    # asserts nothing it has not run, and this is the switch that arms a
+    # machine-wide deny (task 6c).
+    # Probe: with the hook armed and settings.json carrying the env entry, have the
+    # hook print its own `env | grep '^WORKTREE_'` to stderr at the prepared stage,
+    # run `git switch <b>` through the Bash tool, and read it back — with a run
+    # that has no env entry as the control, which must print nothing.
+    # ⚠️ OPEN, and deliberately not asserted here: even once the value arrives, the
+    # card does not define what `log` mode MEANS for layer 2. Layer 1's log mode is
+    # "allow and append a would-deny line" to a file layer 1 owns; layer 2 has no
+    # log of its own specified, and a layer 2 that allows in log mode is a layer 2
+    # that is off during exactly the window task 10 uses to decide whether to arm.
+
+Feature: Arm D layer 2 — the commands it does not see
+
+  # This feature asserts a GAP, on purpose, the same way the two Non-goals
+  # residuals do. If a later change makes any of these deny, that is a behaviour
+  # change to decide deliberately, not a bug fix to land quietly.
+
+  Background:
+    Given the primary checkout ~/.claude is on branch main
+    And hooks/reference-transaction is installed and executable
+    And worktree-guard.sh is in log mode, so layer 1 records and allows
+
+  Scenario Outline: Six Arm-D commands produce no HEAD transaction
+    When "<command>" runs from the primary checkout
+    Then no transaction line the hook receives names HEAD
+    And the hook exits 0
+    And git exits 0
+    And the shared working tree changes: <effect>
+    Examples:
+      | command                  | effect                                          |
+      | git stash pop            | MAIN2 -> DIRTY                                  |
+      | git stash apply          | MAIN2 -> DIRTY                                  |
+      | git reset --hard HEAD    | DIRTY -> MAIN2, uncommitted work destroyed      |
+      | git revert <sha>         | MAIN2 -> MAIN1                                  |
+      | git merge --ff-only <b>  | the whole manifest; a new file appears          |
+      | git cherry-pick <sha>    | the whole manifest                              |
+    # ✅ Measured 2026-08-25, scratchpad/verify_lockgaps.sh and
+    # scratchpad/verify_ffmerge.sh, each with controls that fired the other way
+    # (the table in "Arm D is two layers").
+    # These six are inside Arm D's own scope and layer 1 denies every one of them
+    # by name in the Arm D feature above — but layer 1 still fails open on any
+    # shape it cannot lex, and layer 2 never sees these at all, so for these six
+    # LAYER 1 IS THE SOLE DEFENCE. Every earlier round's criticism of layer 1's
+    # fail-open applies to them undiminished.
+    # git merge --ff-only is the command in this repo's own logged incident
+    # (session-state.md:85).
+
+  Scenario: A script file running a HEAD move is refused; the same script running a stash pop is not
+    Given ./myscript.sh contains "git switch main"
+    And ./other.sh contains "git stash pop"
+    When Bash runs "./myscript.sh"
+    Then layer 1 allows, emitting no fact for the git call
+    And layer 2 exits non-zero at the prepared stage
+    And git exits 128
+    When Bash runs "./other.sh"
+    Then layer 1 allows
+    And layer 2 exits 0
+    And the shared working tree changes
+    # The three-part assertion Non-goals requires: layer 1 allows (the gap is real
+    # at that layer); layer 2 denies the HEAD-moving form (the feature does not
+    # have THAT gap); neither layer catches the working-tree-overwriting form (the
+    # feature DOES have that one). Asserting only the first understates the design;
+    # asserting only the first two overstates it.
+    # ⬜ The layer-1 allow for ./myscript.sh is measured against the live lexer
+    # (Non-goals, round 6). The layer-2 halves are derived from the measured tables
+    # rather than run in this shape. Probe: put each one-line script in a throwaway
+    # repo with the hook armed, run it, and record rc and whether HEAD moved.
+
+  Scenario: git reset --hard to an ancestor writes ORIG_HEAD and the branch ref, not HEAD
+    When "git reset --hard HEAD~1" runs from the primary checkout
+    Then the hook receives lines naming ORIG_HEAD and refs/heads/main
+    And no line names HEAD
+    And the hook exits 0
+    # The measured six-command table used `git reset --hard HEAD`; this is the
+    # commit-moving form, and it reaches layer 2's ref test the same way — the ref
+    # names in the transaction come from "What a reference-transaction hook can
+    # do", where reset writes ORIG_HEAD then refs/heads/<current>.
+    # ⬜ DERIVED from that table, not measured as an allow. It is written out
+    # because it is exactly the kind of near-miss that gets rediscovered as a
+    # "newly found gap" — the six-row table does not cover it, and the shape
+    # differs from the row that is covered.
+    # Probe: arm the hook, run `git reset --hard HEAD~1` in a throwaway repo, and
+    # have the hook log every (stage, old, new, ref) tuple it receives; control is
+    # `git switch <b>` in the same run, which must produce a HEAD line and deny.
+    # Note the ancestry rule considered in constraint 1 — "a branch ref may only
+    # advance to a descendant of its own tip" — WOULD catch this, and was dropped
+    # with the token machinery. Reinstating it is a design decision, not a fix.
+
+  Scenario: git bisect start now denies, inverting the layer-1 allow
+    When "git bisect start" runs from the primary checkout
+    Then the hook exits non-zero at the prepared stage
+    And git exits 128
+    # Non-goals records this as a deliberate behaviour change: layer 1 allows an
+    # unrecognized subcommand, and bisect moves HEAD, so layer 2 refuses it in the
+    # primary checkout. The Arm D feature's scenario was rewritten on
+    # 2026-08-25 to assert the layer-1 allow AND the layer-2 deny together, per
+    # Non-goals -- rewritten, not deleted. This scenario is its layer-2 half,
+    # stated from layer 2's side.
+    # The usability cost is real and accepted: bisecting in the primary checkout
+    # stops working, and the remedy is to bisect in a worktree, which is what this
+    # card asks for anyway.
+    # ⬜ NOT MEASURED — no probe in this card ran git bisect. Probe: arm the hook
+    # in a throwaway repo, run `git bisect start`, record rc, whether HEAD moved,
+    # and every ref name in the transaction; control is `git bisect start` with the
+    # hook disarmed, which must succeed. Whether the refusal leaves bisect state
+    # behind (the .git/BISECT_* files) must be recorded in the same run, because
+    # the post-veto tree finding says a veto does not roll back what preceded it.
+
+Feature: Arm D layer 2 — what defeats it, asserted so no revision can claim otherwise
+
+  Scenario Outline: A one-flag bypass defeats layer 2
+    Given hooks/reference-transaction is installed and executable
+    When "<command>" runs from the primary checkout
+    Then git exits 0
+    And HEAD moves
+    Examples:
+      | command                                                   |
+      | git -c core.hooksPath=/dev/null switch other              |
+      | git -c core.hooksPath=<empty dir> switch other            |
+      | GIT_CONFIG_GLOBAL=/dev/null git switch other              |
+      | git config --local core.hooksPath <dir> then git switch other |
+    # ✅ All four measured, scratchpad/verify_bypass.sh, armed baseline rc=128 and
+    # a control at rc=0. The config write in the fourth row is itself not blocked.
+    # ⬜ Also reported and not re-run: `printf 'ref: refs/heads/other' > .git/HEAD`
+    # moves HEAD with zero hook invocations.
+    # These are asserted deliberately. The card's standing conclusion is that Arm D
+    # is not a security boundary under any of these designs, and pinning the
+    # bypasses in the suite is what stops a later revision from quietly claiming
+    # otherwise. Layering raises the floor on ACCIDENTS — the logged incident was a
+    # stray git merge --ff-only, not an attack.
 
 Feature: Arming and the log
 
@@ -2488,14 +3073,23 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       longer the whole of Arm D.
 - [ ] 6a. Implement **layer 2**, `hooks/reference-transaction` — the lock rule, in this order:
       bail unless stage is `prepared`; bail unless the ref is `HEAD`; bail unless
-      `--absolute-git-dir` equals `--git-common-dir` (so linked worktrees are never judged); then
-      deny iff `$GIT_COMMON_DIR/HEAD.lock` exists. **Detect the ref backend first and refuse to arm
+      `--absolute-git-dir` equals `--path-format=absolute --git-common-dir` (so linked worktrees are
+      never judged — **`--path-format=absolute` is required; without it the two are never equal and
+      the hook bails on every invocation**, measured); then deny iff `<that common dir>/HEAD.lock`
+      exists — the path taken from that same `rev-parse`, **never** from `$GIT_COMMON_DIR`, which is
+      not established to be set in the hook's environment. **Detect the ref backend first and refuse to arm
       on anything but `files`** — under `reftable` there is no `HEAD.lock` and the rule allows
       everything, which is a fail-open across an entire backend rather than a missed shape.
       Its test suite must show **both clauses firing separately** in an attribution log: a run where
       every case is denied proves nothing about the allow clause, and vice versa. Pin the four
       `worktree add` forms as allows and `switch`/`checkout`/`switch --detach`/`sh -c`/`env -C` as
       denies, plus the `mkdir .git/worktrees/<n>` forgery.
+      **The scope test needs a case in each direction, and the passing one alone is not enough** —
+      a primary checkout where the two paths are equal *and* a linked worktree where they are not.
+      The bug this task now avoids had no test because a one-directional one would not have caught
+      it: written without `--path-format=absolute` the comparison is false *everywhere*, so a suite
+      asserting only "a linked worktree is not judged" stays fully green against a guard that judges
+      nothing at all.
 - [ ] 6b. Implement the **liveness check** in `worktree-guard.sh` — resolve the effective repo's
       `core.hooksPath`, assert a `reference-transaction` file is present *and executable*, and
       report when it is not. All three absence modes were measured to fail open **silently**
