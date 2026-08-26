@@ -3814,11 +3814,41 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       task 11; piece 2's tracked-**detection**-standing-in-for-tracked-**state** trade is stated
       in `install-layer2.sh`'s own header and must be repeated there. Nothing in this task was
       registered in `settings.json`.
-- [ ] 7. Implement `create-worktree.sh` (Arm B) including the 0700 store, the `.repo-root` marker,
+- [x] 7. Implement `create-worktree.sh` (Arm B) including the 0700 store, the `.repo-root` marker,
       the branch/base contract, and failure boundaries 15–27. Three requirements the probes
       produced: create and report **atomically** (a create-then-misreport leaves an orphan in
       `git worktree list`); implement **real removal** in `WorktreeRemove`, since Claude does none
       and reports success anyway; and refuse rather than force on a dirty worktree.
+
+      **Measured while implementing.** `mkdir -p -m 700 a/b` applies mode 700 to every
+      intermediate directory it CREATES but leaves an already-existing parent's mode untouched
+      (macOS, `stat -f %OLp` before/after) — so a single `mkdir -p -m 700 ~/.worktrees/<repo>`
+      cannot by itself catch a widened `~/.worktrees` when `<repo>` doesn't exist yet; the
+      implementation checks and creates each level separately for exactly this reason.
+      `git worktree remove <path>` can be run from the repo's main root via `-C <main_root>`
+      without ever `cd`-ing into the worktree being removed, including for the branch it had
+      checked out (`git -C <worktree> symbolic-ref --short -q HEAD`, captured before removal) —
+      confirmed live in a throwaway repo (git 2.50.1, Apple Git-155): dirty tree refused without `--force`,
+      clean tree removed, `git worktree list` and `git branch -D` both confirmed after.
+
+      **Boundary 27 judgment call.** There is no persisted record, across separate hook
+      invocations, of whether a given worktree's branch was newly created (`-b`) or reused
+      (boundary 22). `WorktreeRemove` deletes whatever branch the worktree has checked out at
+      removal time, whichever case produced it — the practical reading of "delete the branch
+      the hook created" given the hook is stateless like every other hook in this card. A
+      detached-HEAD worktree has none, and nothing is deleted.
+
+      **Test suite caught what review did not.** The first field-parsing draft used
+      `${rest#*"$LF"}` (prefix strip) for the final payload field instead of `${rest%"$LF"}`
+      (suffix strip, the convention `worktree-guard.sh` already uses for its own last field) —
+      silently correct whenever a preceding field was non-empty, and silently wrong whenever it
+      was empty, which is every `WorktreeRemove` payload (`name` is absent from that event).
+      `worktree_path` ended up carrying one literal trailing newline instead of being empty or
+      exact; every `WorktreeRemove` case in the suite failed for that one reason before the fix.
+      Boundary 25 (atomic create-and-report) is pinned by closing the hook's own stdout before
+      invoking it — a real, reproducible `EBADF` write failure — and asserting `git worktree
+      list` shows no orphan and the directory is gone afterward, rather than a fault-injection
+      knob invented for the test.
 - [ ] 8. **First verify that `settings.json` `env` entries reach hook subprocesses** — measure it,
       do not assume. If they do, add the `env` block with `WORKTREE_GUARD_MODE: "log"`. If they do
       not, fall back to a tracked file beside the hook and record the change here. Then implement
