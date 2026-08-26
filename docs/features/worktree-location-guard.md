@@ -2995,8 +2995,36 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       detection cases re-derived from scratch; found `--path-format` support detection by exit code
       is ambiguous against a non-repo. **The sub-2.31 branch is untested** (no such git on this
       machine) and must be covered by stubbing `git` in task 3.
-- [ ] 2a. Test the bare-repo and submodule `rev-parse` probes in a throwaway repo. Still reasoned,
-      not measured — task 2 did not cover them.
+- [x] 2a. Test the bare-repo and submodule `rev-parse` probes in a throwaway repo. **DONE, and it
+      split: the submodule claim reproduced exactly, the bare-repo one falsified the recipe.**
+      Measured 2026-08-26, git 2.50.1 (Apple Git-155), ten populations built from scratch, every
+      probe run in Arm A's own order.
+      - **Submodule — confirmed, both halves.** `--show-superproject-working-tree` printed the
+        superproject path at the submodule root *and* in a subdirectory of it, and printed **empty**
+        for the primary checkout, the linked worktree and the superproject itself — so the probe
+        discriminates rather than merely being non-empty somewhere. `--path-format=absolute
+        --git-dir` and `--git-common-dir` both returned `<super>/.git/modules/mod`, i.e. **equal**,
+        so without the step-5 exclusion a submodule reads as a primary checkout and denies. That is
+        exactly what the "Repo shapes that are out of scope" section reasoned.
+      - **Bare — the probe is right and unreachable.** `--is-bare-repository` printed `true` at the
+        bare directory and in `objects/`. But **step 4 denies first**: `--show-toplevel` in a bare
+        repo exits **128** printing `fatal: this operation must be run in a work tree`, which is not
+        the "not a git repository" diagnostic boundary 5 recognizes, so boundary 6 catches it as a
+        validation failure. Step 5's "bare → allow" and the `Bare repository` scenario can never be
+        reached. ⚠️ **Recipe defect — spec change needed; see the GATE bullet below.**
+      - **New population the card does not name:** a worktree checked out *from* a bare repo is
+        **not** bare (`--is-bare-repository` = `false`), `--show-toplevel` succeeds, and the pair
+        differs (`<bare>/worktrees/<name>` vs `<bare>`) → reads LINKED → allow. Correct as-is, but
+        task 3 should pin it so "bare repo" and "worktree of a bare repo" cannot be conflated later.
+      - **Not-a-repo control:** all five probes exit 128 with the *same* "not a git repository"
+        diagnostic, so step 4's text discrimination is available on every probe, not just
+        `--show-toplevel`.
+      - ⚠️ **GATE: Spec change needed — switch back to the high-tier model to revise.** Arm A step 4
+        must recognize `fatal: this operation must be run in a work tree` as its own outcome and
+        route it to the bare-repo allow, otherwise the bare scenario is untestable. Ordering alone
+        does not fix it: `--is-bare-repository` also exits 128 on a non-repo, so whichever probe runs
+        first still needs the diagnostic text to tell "bare" from "not a repo". Blocks the two bare
+        cases in task 3 only; every other case in task 3 is unaffected.
 - [ ] 3. Write the failing test suite first — `hooks/worktree-guard.test.sh`, house style per
       `hooks/lib/guard_test_helpers.sh`, one case per scenario in Acceptance scenarios. The
       git-absent and sub-2.31 cases require a **stubbed `git` on `PATH`** — no real git on this
