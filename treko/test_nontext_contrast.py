@@ -507,12 +507,244 @@ def test_enumerated_exclusions_are_at_their_recorded_counts(walk, theme):
 
 # --------------------------------------------------------------------- the allowlist
 #
-# RED HALF (task 4). ALLOWLIST is empty at this commit and the three assertions below fail on
-# that, naming every key they could not map. Task 5 lands the 23 entries.
+# Twenty-three entries: 6 PIN, 3 DEBT, 14 EXEMPT. Twenty-two are palette colour tokens; the
+# twenty-third is --shadow-sm, a shadow token whose value carries one colour in dark and two in
+# light. Classified by hand once, per §D2 -- a machine guessing which marks are load-bearing
+# fails three quarters of the page (§Background 2), including hairlines designed to be barely
+# visible.
+#
+# Every colour string below is what Chrome serialises the token to, read off the live page in
+# each theme rather than converted from the declared hex by hand. A token's dark and light
+# figures have no relationship to each other (the light palette is a hand-inverted ramp, not a
+# re-tinted one -- §Background 3), which is why every field is per theme.
+#
+# `kinds` is omitted unless an entry needs it: an entry with no filter claims every kind its
+# colours paint, and today exactly two entries need one.
+#
+# --hair-2 and --hair-3 are NOT here, and not because they are unused: each has a live call site
+# behind an interaction gate (the command-copy chip and the drawer's left edge; the agent panel's
+# top border), and §Scope/Out puts every interaction-gated region outside this card's population.
 
 PIN, DEBT, EXEMPT = "pin", "debt", "exempt"
 
-ALLOWLIST = []
+ALLOWLIST = [
+    {
+     "token": "--color-accent", "klass": PIN, "floor": None,
+     "reason": None,
+     "dark": {"colors": ["rgb(56, 196, 227)"],
+               "kinds": None, "marks": 34, "min_ratio": None},
+     "light": {"colors": ["rgb(0, 116, 146)"],
+               "kinds": None, "marks": 34, "min_ratio": None},
+    },
+    {
+     "token": "--color-accent-300", "klass": PIN, "floor": None,
+     "reason": None,
+     "dark": {"colors": ["rgb(130, 216, 240)"],
+               "kinds": None, "marks": 2, "min_ratio": None},
+     "light": {"colors": ["rgb(0, 109, 136)"],
+               "kinds": None, "marks": 2, "min_ratio": None},
+    },
+    {
+     "token": "--ok", "klass": PIN, "floor": None,
+     "reason": None,
+     "dark": {"colors": ["rgb(130, 223, 169)"],
+               "kinds": None, "marks": 4, "min_ratio": None},
+     "light": {"colors": ["rgb(18, 121, 74)"],
+               "kinds": None, "marks": 4, "min_ratio": None},
+    },
+    {
+     "token": "--warn", "klass": PIN, "floor": None,
+     "reason": None,
+     "dark": {"colors": ["rgb(216, 176, 108)"],
+               "kinds": None, "marks": 7, "min_ratio": None},
+     "light": {"colors": ["rgb(138, 97, 19)"],
+               "kinds": None, "marks": 7, "min_ratio": None},
+    },
+    {
+     "token": "--bad", "klass": PIN, "floor": None,
+     "reason": None,
+     "dark": {"colors": ["rgb(232, 150, 142)"],
+               "kinds": None, "marks": 7, "min_ratio": None},
+     "light": {"colors": ["rgb(176, 58, 48)"],
+               "kinds": None, "marks": 7, "min_ratio": None},
+    },
+    {
+     "token": "--info", "klass": PIN, "floor": None,
+     "reason": None,
+     "dark": {"colors": ["rgb(137, 180, 242)"],
+               "kinds": None, "marks": 1, "min_ratio": None},
+     "light": {"colors": ["rgb(40, 86, 159)"],
+               "kinds": None, "marks": 1, "min_ratio": None},
+    },
+    {
+     "token": "--color-accent-700", "klass": DEBT, "floor": None,
+     "reason": "merge-wave badge border, 5 badges x 4 sides, plus 1 outset shadow; an inverted-ramp "
+     "defect recorded rather than fixed (§D5). The minimum comes from the shadow, not a "
+     "border.",
+     "dark": {"colors": ["rgb(34, 122, 147)"],
+               "kinds": None, "marks": 21, "min_ratio": None},
+     "light": {"colors": ["rgb(164, 226, 243)"],
+               "kinds": None, "marks": 21, "min_ratio": None},
+    },
+    {
+     "token": "--color-neutral-700", "klass": DEBT, "floor": None,
+     "reason": "graph node border, 7 nodes x 4 sides, plus 4 SVG fills and 3 SVG strokes; an "
+     "inverted-ramp defect recorded rather than fixed (§D5). The minimum comes from an SVG "
+     "stroke.",
+     "dark": {"colors": ["rgb(89, 93, 108)"],
+               "kinds": None, "marks": 35, "min_ratio": None},
+     "light": {"colors": ["rgb(110, 114, 126)"],
+               "kinds": None, "marks": 35, "min_ratio": None},
+    },
+    # CRITERION 13 -- the one live colour collision on this page. This token's dark value is
+    # #3f424d, and --shadow-sm's dark value is the literal hex #3f424d too
+    # (_ds/nocturne-*/styles.css:78). Both serialise to rgb(63, 66, 77). The `kinds` filter is
+    # the whole separation: all 22 of this token's dark marks are fills, all 13 of the
+    # shadow's are outset shadows, and the partition is exact with nothing left over.
+    # No other collision is claimed. An earlier draft asserted one between --color-accent and
+    # --color-accent-500 -- false: --color-accent-500 has zero var() consumers and paints
+    # nothing, so it cannot be misattributed (§Background 7).
+    {
+     "token": "--color-neutral-800", "klass": DEBT, "floor": None,
+     "reason": "unfilled phase dot, 22 fills and nothing else; an inverted-ramp defect recorded "
+     "rather than fixed (§D5). This ratio is vs the surface: filled-vs-unfilled dot is "
+     "4.85 dk / 4.30 lt and reads fine, so do not repaint a meter that is already legible.",
+     "dark": {"colors": ["rgb(63, 66, 77)"],
+               "kinds": ['fill'], "marks": 22, "min_ratio": None},
+     "light": {"colors": ["rgb(227, 230, 239)"],
+               "kinds": ['fill'], "marks": 22, "min_ratio": None},
+    },
+    {
+     "token": "--hair", "klass": EXEMPT, "floor": None,
+     "reason": "1px hairline on 4 sides. Pushed to 3:1 it would be a visible regression -- being "
+     "nearly invisible is the job (§D4).",
+     "dark": {"colors": ["rgba(255, 255, 255, 0.06)"],
+               "kinds": None, "marks": 42, "min_ratio": None},
+     "light": {"colors": ["rgba(15, 18, 35, 0.09)"],
+               "kinds": None, "marks": 42, "min_ratio": None},
+    },
+    {
+     "token": "--hover", "klass": EXEMPT, "floor": None,
+     "reason": "static row separator: border-top at Treko.dc.html:97,156,205,237,257,292, repeated "
+     "by sc-for. Painted at mount with no pointer on the page, despite the token's name "
+     "(§D4).",
+     "dark": {"colors": ["rgba(255, 255, 255, 0.05)"],
+               "kinds": None, "marks": 30, "min_ratio": None},
+     "light": {"colors": ["rgba(15, 18, 35, 0.05)"],
+               "kinds": None, "marks": 30, "min_ratio": None},
+    },
+    {
+     "token": "--hover-soft", "klass": EXEMPT, "floor": None,
+     "reason": "the selected sidebar row's fill, computed at Treko.dc.html:687,694,711 and applied "
+     "through :84. Painted at mount despite the token's name (§D4).",
+     "dark": {"colors": ["rgba(255, 255, 255, 0.03)"],
+               "kinds": None, "marks": 2, "min_ratio": None},
+     "light": {"colors": ["rgba(15, 18, 35, 0.03)"],
+               "kinds": None, "marks": 2, "min_ratio": None},
+    },
+    {
+     "token": "--color-divider", "klass": EXEMPT, "floor": None,
+     "reason": "1px divider on 4 sides, same species as --hair (§D4). Its dark value is a "
+     "color-mix(), which composites perfectly well and is scored like any other token -- "
+     "see §D7.",
+     "dark": {"colors": ["color(srgb 0.913725 0.913725 0.929412 / 0.16)"],
+               "kinds": None, "marks": 40, "min_ratio": None},
+     "light": {"colors": ["rgba(15, 18, 35, 0.12)"],
+               "kinds": None, "marks": 40, "min_ratio": None},
+    },
+    {
+     "token": "--color-bg", "klass": EXEMPT, "floor": None,
+     "reason": "the page ground. Surfaces are what other marks are measured against; scoring one "
+     "against itself is not a meaningful question (§D4).",
+     "dark": {"colors": ["rgb(22, 24, 38)"],
+               "kinds": None, "marks": 18, "min_ratio": None},
+     "light": {"colors": ["rgb(245, 246, 250)"],
+               "kinds": None, "marks": 18, "min_ratio": None},
+    },
+    {
+     "token": "--color-surface", "klass": EXEMPT, "floor": None,
+     "reason": "the card ground -- a surface other marks are measured against (§D4).",
+     "dark": {"colors": ["rgb(28, 30, 43)"],
+               "kinds": None, "marks": 14, "min_ratio": None},
+     "light": {"colors": ["rgb(255, 255, 255)"],
+               "kinds": None, "marks": 14, "min_ratio": None},
+    },
+    {
+     "token": "--rail", "klass": EXEMPT, "floor": None,
+     "reason": "the sidebar ground -- a surface other marks are measured against (§D4).",
+     "dark": {"colors": ["rgb(18, 19, 30)"],
+               "kinds": None, "marks": 1, "min_ratio": None},
+     "light": {"colors": ["rgb(236, 238, 245)"],
+               "kinds": None, "marks": 1, "min_ratio": None},
+    },
+    {
+     "token": "--color-neutral-900", "klass": EXEMPT, "floor": None,
+     "reason": "the inset well ground behind the progress track -- a surface other marks are "
+     "measured against (§D4).",
+     "dark": {"colors": ["rgb(41, 43, 49)"],
+               "kinds": None, "marks": 11, "min_ratio": None},
+     "light": {"colors": ["rgb(240, 242, 248)"],
+               "kinds": None, "marks": 11, "min_ratio": None},
+    },
+    {
+     "token": "--ok-bg", "klass": EXEMPT, "floor": None,
+     "reason": "ok badge fill. It sits directly behind badge text, and card A's criterion 5 already "
+     "scores that text against this exact alpha-composited background -- move it toward "
+     "--ok and that check goes red first (§D3).",
+     "dark": {"colors": ["rgb(18, 53, 38)"],
+               "kinds": None, "marks": 5, "min_ratio": None},
+     "light": {"colors": ["rgb(219, 243, 230)"],
+               "kinds": None, "marks": 5, "min_ratio": None},
+    },
+    {
+     "token": "--warn-bg", "klass": EXEMPT, "floor": None,
+     "reason": "warn badge fill; scored indirectly by card A's criterion 5 through the text on it "
+     "(§D3).",
+     "dark": {"colors": ["rgb(58, 45, 21)"],
+               "kinds": None, "marks": 5, "min_ratio": None},
+     "light": {"colors": ["rgb(250, 238, 210)"],
+               "kinds": None, "marks": 5, "min_ratio": None},
+    },
+    {
+     "token": "--bad-bg", "klass": EXEMPT, "floor": None,
+     "reason": "bad badge fill; scored indirectly by card A's criterion 5 through the text on it "
+     "(§D3).",
+     "dark": {"colors": ["rgb(66, 32, 29)"],
+               "kinds": None, "marks": 6, "min_ratio": None},
+     "light": {"colors": ["rgb(251, 226, 223)"],
+               "kinds": None, "marks": 6, "min_ratio": None},
+    },
+    {
+     "token": "--info-bg", "klass": EXEMPT, "floor": None,
+     "reason": "info badge fill; scored indirectly by card A's criterion 5 through the text on it "
+     "(§D3).",
+     "dark": {"colors": ["rgb(22, 41, 74)"],
+               "kinds": None, "marks": 3, "min_ratio": None},
+     "light": {"colors": ["rgb(223, 233, 251)"],
+               "kinds": None, "marks": 3, "min_ratio": None},
+    },
+    {
+     "token": "--color-accent-900", "klass": EXEMPT, "floor": None,
+     "reason": "accent badge fill; scored indirectly by card A's criterion 5 through the text on it "
+     "(§D3).",
+     "dark": {"colors": ["rgb(16, 56, 69)"],
+               "kinds": None, "marks": 11, "min_ratio": None},
+     "light": {"colors": ["rgb(226, 246, 252)"],
+               "kinds": None, "marks": 11, "min_ratio": None},
+    },
+    # CRITERION 13, the other half of the same collision: this token's dark value is the
+    # literal hex #3f424d, identical to --color-neutral-800's, so both entries legitimately
+    # claim rgb(63, 66, 77) and the `kinds` filter is what tells their marks apart.
+    {
+     "token": "--shadow-sm", "klass": EXEMPT, "floor": None,
+     "reason": "card elevation hairline on 13 cards, same species as --hair (§D4). Not a colour "
+     "token: its value is a shadow list, one colour in dark and two in light.",
+     "dark": {"colors": ["rgb(63, 66, 77)"],
+               "kinds": ['shadow-outset'], "marks": 13, "min_ratio": None},
+     "light": {"colors": ["rgba(15, 18, 35, 0.06)", "rgba(15, 18, 35, 0.07)"],
+               "kinds": ['shadow-outset'], "marks": 26, "min_ratio": None},
+    },
+]
 
 _NO_ALLOWLIST = (
     "ALLOWLIST is still empty -- the 23 entries are task 5 (green half) of "
