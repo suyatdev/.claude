@@ -938,7 +938,7 @@ Red half and green half are separate commits throughout; never the same commit
    `treko/_ds/nocturne-*/styles.css`) against the base branch; expect zero changed lines in all
    three. Also confirm `treko/conftest.py` is unchanged.
 10. ✅ ADR; update `docs/features/` links and the `treko` skill's UI notes.
-11. ⬜ Observability judge, then PR.
+11. ✅ Observability judge, then PR.
 
 ## Risks
 
