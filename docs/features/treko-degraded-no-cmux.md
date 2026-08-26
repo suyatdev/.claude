@@ -667,7 +667,15 @@ the table" receipt (§Verification) now name what they check: this element's ren
 from `#dc-root`'s mounted subtree. **No flex item is emitted when the gate is `false`, so the
 healthy-board header's geometry is unchanged** — stated this way, not as "byte-identical", because
 observability round 9 measured that every `data-dc-tpl` index after the insertion point shifts by
-2; nothing reads those indices today, but the claim is scoped to what was actually verified.
+2. **Round 14 correction: this document previously claimed "nothing reads those indices today" —
+false.** `support.js` reads `data-dc-tpl` at four sites (`:665`, `:701`, `:789`, `:1038`) and
+re-emits it onto every rendered node (`:729`, `:799`); it is the mechanism `__dcAnnotatedTemplate`
+(`:1887`) uses to map a rendered node back to its source template location for the host editor.
+That bridge maps by re-reading each render's own live attribute values, not against a stored
+baseline, so a shift in what number a given node carries is not itself a defect — but the earlier
+sentence was a factual claim about what the code does, and it was wrong. No task owns re-checking
+this, because nothing in this card's runtime path (server responses, command wiring, the drawer)
+touches the editor bridge; noted here rather than left standing.
 
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
@@ -1464,12 +1472,21 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       by one that owns that oracle. **This task, unlike 9a, is explicitly permitted to add tests
       to `test_guards.py`** — 9a's "change nothing else" whitelist governs 9a only. Record in the
       commit message which assertion caught which mutation, not just the count.
-      **Also add the header-child-count assertion observability round 9 built and verified catches
-      the D5 `sc-if` gate being silently deleted:** render the healthy/idle path and assert the
-      command cluster's flex-child count (or the equivalent gap measurement) matches today's,
-      **and** render the degraded path and assert it grows by exactly one. Without this, nothing
-      in the suite notices if a later edit removes the `sc-if` wrapper — the suite stays green and
-      the regression this card spent two rounds finding and fixing comes back invisibly.
+      **Round 14 relocation: the header-child-count assertion below moved out of this task.**
+      `test_guards.py` is a text-and-checksum guard — it has no Chrome or server fixtures, and
+      none of `test_guards.py`'s other tests launch a browser. Under 9b's "no other files" scope
+      pressure, an implementer would reach for a text-search substitute (grep the template for
+      `<sc-if value="{{ cmdReason }}">`) that proves nothing about whether the node is actually
+      *emitted* — the whole point of the check. Moved to task 9c, which already has the fixtures.
+- [ ] 9c. **Header-child-count assertion, in `test_drawer.py`** (it already imports `cdp_harness`
+      and drives `srv`/Chrome — `test_criterion12_the_gear_opens_the_drawer` at `:264` is the
+      pattern to follow). Render the healthy/idle path and assert the command cluster has its
+      known child count; render a degraded path and assert it has exactly **one more**. Verified
+      by observability round 9 against the real template: healthy is **8** children, degraded is
+      **9** — state both numbers explicitly rather than "matches today's", since they are already
+      derived. This is what catches a later edit silently deleting D5's `sc-if` gate (round 12's
+      finding) — without it the suite stays green and the layout regression this card spent two
+      rounds finding and fixing comes back invisibly, undetected by anything else in the suite.
 - [ ] 10. **ADR 0038** — re-verify free against `origin/main` at the moment of writing, and
       against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
       trust the number recorded here: it was 0036 at planning time and 0036/0037 have since
@@ -1494,7 +1511,8 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       **`#dc-root`, the mounted subtree**, read as `document.getElementById('dc-root').innerHTML`
       after mount. **Scope the check to that subtree; never to whole-document view source.**
       A correct degraded launch carries the raw token in the served bytes **twice**, and neither
-      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4 `:369`, built
+      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4,
+      §"The `config[\"channel\"]` → meta-content mapping", built
       exactly as the `tracker-token` sibling at `server.py:495` is), and the
       `TRACKER_CHANNEL_REASONS` **keys** (D5, above) — which *are* the token literals — riding
       inside the marker-fenced inline script that `_serve_index` serves verbatim
@@ -1750,10 +1768,19 @@ matcher. Found by observability round 5.
 revision") while the document moved three revisions past it** — rounds 10, 11 and 12 each minted
 new citations (`Treko.dc.html:500`, `:44`, `:47`, `:56`, `:58`, `:566`, `:576`, `:112`,
 `support.js:165-168`, `:195-198`, `server.py:53-55`, among others) with no audit receipt here,
-even though clause (d) requires exactly that. Retitled to say what it actually covers. Each
-later round's commit message carries its own citation self-audit inline instead (see `git log`
-on this file) — that is where clause (d)'s discipline for rounds 10-13 actually lives; it is not
-consolidated into this section, which is retained only as the round-9 record it always was.
+even though clause (d) requires exactly that. Retitled to say what it actually covers.
+
+**Round 14 correction: the replacement claim was itself unverified — checked here, against
+`git log` on this file, rather than repeated.** Round 10's commit (`c92987b`), round 12's
+(`2aa5024`) and round 13's (`ab1c2bd`) each carry an inline "citations verified/re-opened before
+writing" statement. **Round 11's commit (`375d656`) does not** — the citations it introduced
+(`server.py:55`, `:219`, `test_server.py:311`, `test_rename.py:85`) were in fact checked with a
+script before that commit was made, but the check was never written into the commit message, so
+the repo itself carries no receipt of it. That is the same species of gap this whole clause
+exists to close — a real verification that happened but was not recorded — one commit closer to
+where it happened than the finding that names it here. Not repaired retroactively (rewriting
+`375d656` is not how this record works); named so the pattern is visible rather than implied to
+be uniform.
 
 Every `file:line` written or edited in round 9 was re-opened **before** the commit, by a script
 that asserts the named line contains what the card says it does — the discipline that `:590-592`
