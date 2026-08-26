@@ -81,6 +81,11 @@ print(json.dumps(d))' "$@"
 # PATH by naming it again.
 RUN_ENV=()
 
+# Per-case hook path, consumed and cleared exactly like RUN_ENV. Only GROUP S sets
+# it, to drive a MUTATED copy of the hook; every other case leaves it empty and runs
+# the real one, so a leaked value cannot silently take a whole group off the guard.
+RUN_HOOK=''
+
 got=0; out=""; err=""
 _run() { # $1 cwd, $2 payload text — exit code in $got, streams in $out/$err
   n=$((n+1)); out="$TMP/out.$n"; err="$TMP/err.$n"
@@ -89,14 +94,14 @@ _run() { # $1 cwd, $2 payload text — exit code in $got, streams in $out/$err
       WORKTREE_GUARD_STATE_DIR="$STATE_DIR" \
       WORKTREE_GUARD_MODE=deny \
       ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
-      bash "$HOOK" ) >"$out" 2>"$err"
+      bash "${RUN_HOOK:-$HOOK}" ) >"$out" 2>"$err"
   got=$?
   # 127 is bash reporting the hook is not on disk. Every "stderr does not say X"
   # assertion is trivially true against that, so the negative helpers below
   # refuse to count until some invocation in this run has actually reached the
   # hook. See LOG_LIVE for the same argument about the log.
   [ "$got" -ne 127 ] && HOOK_RAN=1
-  RUN_ENV=()
+  RUN_ENV=(); RUN_HOOK=''
 }
 HOOK_RAN=0
 
@@ -1293,6 +1298,70 @@ allow_silent 'D-3B-R3 residual, allowed on purpose: git switch past the depth bo
   "$PRIMARY" "$(payload_bash "$NEST4_SWITCH" s-d3br3)"
 allow_silent 'D-3B-R4 residual, allowed on purpose: git worktree add past the depth bound' \
   "$PRIMARY" "$(payload_bash "$NEST4_WTADD" s-d3br4)"
+
+# ================================================================= GROUP S ===
+# Feature: the shared "effective repo for segment i" rule (card :821, task 6)
+#
+# Round 4's finding was Arm B2 and Arm D each deriving "which repository is this?"
+# separately, with only one of them complete. The card's answer is ONE function
+# that both arms call, and it says a review finding a second copy should reject
+# the change. Prose cannot enforce that, and neither can a grep: a second copy is
+# not a textual duplicate of the first — that is precisely how the round-4 hole
+# survived six review rounds. So this is a RUNTIME check, built the way
+# shell_segments.test.py's check_one_lexer is built: substitute the one function
+# and require BOTH views to move.
+#
+# THE CONTRACT IT PINS. The rule is a single bash function `resolve_effective_repo`
+# taking a zero-based segment index and reporting through three globals — EFF_DIR
+# (the effective working directory), EFF_ROOT (the repository that owns it, empty
+# when there is none) and EFF_PRIMARY (1 when that repository's shared primary
+# checkout is the one being acted on). An arm carrying its own copy answers from
+# the real command line instead, does not move, and fails here.
+B2_OTHER="$TMP/repos/other"          # GROUP B's second repo; GROUP D reassigned $OTHER
+STUB_DIR="$TMP/stub-resolution"
+STUB_HOOK="$STUB_DIR/worktree-guard.sh"
+mkdir -p "$STUB_DIR"
+
+# The mutation, and its own premise. `count == 1` is the structural half — two
+# definitions of the rule is the failure this group exists to catch, and it is the
+# one shape the behavioural half below cannot see, because the second definition
+# would simply win and both arms would move together.
+if python3 - "$HOOK" "$STUB_HOOK" "$LINKED" "$B2_OTHER" <<'PY'
+import sys
+src, dst, eff_dir, eff_root = sys.argv[1:5]
+text = open(src).read()
+marker = "resolve_effective_repo() {\n"
+count = text.count(marker)
+if count != 1:
+    sys.stderr.write("resolve_effective_repo() is defined %d times, want exactly 1\n" % count)
+    sys.exit(1)
+stub = marker + "  EFF_DIR='%s'; EFF_ROOT='%s'; EFF_PRIMARY=0; return 0\n" % (eff_dir, eff_root)
+open(dst, "w").write(text.replace(marker, stub))
+PY
+then ok 'S0 premise: exactly one resolve_effective_repo(), and it was substituted'
+else bad 'S0 premise: resolve_effective_repo() is missing, or defined more than once'
+fi
+
+# S1 — Arm D reads the substituted rule. Identical to D1, which DENIES: the only
+# difference is the stub reporting EFF_PRIMARY=0, so an Arm D that calls the shared
+# function allows here and an Arm D deriving "am I in a primary checkout?" for
+# itself still denies. WORKTREE_GUARD_LIB is named because the copy lives outside
+# hooks/, so `dirname $0`/lib would not find the classifier.
+RUN_HOOK="$STUB_HOOK"
+RUN_ENV=(WORKTREE_GUARD_LIB="$LIB")
+allow_silent 'S1 Arm D moves when the shared rule is substituted (cf. D1, a deny)' \
+  "$PRIMARY" "$(payload_bash 'git switch main' s-s1)"
+
+# S2 — Arm B2 reads the same substituted rule, in the OPPOSITE direction. Identical
+# to B1, which ALLOWS: the stub reports the effective repo as $B2_OTHER, whose store
+# is ~/.worktrees/other, so the correctly-placed ~/.worktrees/.claude/feat-y is now
+# in the wrong namespace and must deny. Both directions are required — a stub that
+# only ever produced allows could be satisfied by an arm that had stopped judging.
+RUN_HOOK="$STUB_HOOK"
+RUN_ENV=(WORKTREE_GUARD_LIB="$LIB")
+deny 'S2 Arm B2 moves when the shared rule is substituted (cf. B1, an allow)' \
+  "$PRIMARY" "$(payload_bash "git worktree add $WT_ROOT/feat-y -b feat/y" s-s2)"
+
 # ================================================================= GROUP L ===
 # Feature: the liveness check — layer 1 reports when layer 2 is not armed (card :2467)
 
