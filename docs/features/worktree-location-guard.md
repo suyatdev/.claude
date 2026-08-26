@@ -3501,7 +3501,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       down until task 8 closes the first. Also unmeasured: `worktree add`'s internal sub-invocations
       specifically under the inherited path (only the prefix form is recorded above), and any
       intermediary between the tool process and `git` that might sanitize the environment.
-- [ ] 6d. **The refusal-remediation contract — decided 2026-08-25, implement as decided.** A layer-2
+- [x] 6d. **The refusal-remediation contract — decided 2026-08-25, implement as decided.** A layer-2
       veto leaves the destination branch's content staged in the shared tree (measured). Both options
       this task used to offer are **rejected**, each for a measured reason: `git reset --hard HEAD`
       destroyed another session's staged work when the observability judge ran it, is itself on Arm
@@ -3517,32 +3517,28 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       them from being conflated again;
       (b) the message contains **no** destructive command — assert on the absence, so a later
       revision cannot quietly reintroduce one;
-      (c) with a **dirty** pre-command tree, the message offers exit A only, and the pre-existing
-      staged file still exists afterwards. That third case is the regression test for the exact
-      failure that retired the old remedy.
-      **IMPLEMENTED EXCEPT FOR ONE OPEN SPEC QUESTION — left unchecked on purpose.** The message,
-      exit A, the no-destructive-command guarantee and every part of (a), (b) and (c) that does not
-      need a cross-process handoff shipped in `44b79ee` (implementation) behind `b358ff0` (the
-      failing suite) and `6675e04` (a comment correction). Suite: **139 passed, 0 failed, 1
+      (c) **REVISED (user decision, 2026-08-26) — with a dirty pre-command tree, the message
+      names no rollback command, and the pre-existing staged file still exists, still staged,
+      afterwards.** This is a regression test for the exact failure that retired the old remedy,
+      not a clean/dirty contrast — see the resolved question below for why the contrast was
+      dropped.
+      **DONE.** The message, exit A, the no-destructive-command guarantee and every part of
+      (a), (b) and (c) shipped in `44b79ee` (implementation) behind `b358ff0` (the failing suite)
+      and `6675e04` (a comment correction). Suite: **139 passed, 0 failed, 1
       skipped**; layer 1's suite re-run as a regression check, **188 passed, 0 failed, 1 skipped**.
-      - ❓ **THE OPEN QUESTION, for the user, not for an implementer.** This task's contract says
-        rollback is offered "**only** when layer 1 recorded a clean pre-command tree", and (c) asks
-        for a test in which "with a **dirty** pre-command tree, the message offers exit A only".
-        Both readings presuppose that layer 2 can learn layer 1's pre-command tree state. It cannot,
-        and the design section above **declines that handoff for v1** in as many words. Verified
-        rather than inferred: `command grep -c porcelain hooks/worktree-guard.sh
-        hooks/lib/worktree_guard_bash_arms.sh` answers **0** and **0**, so neither layer-1 file
-        contains the probe at all, and layer 1 writes no tree-state fact anywhere. (`command grep
-        -rn "status --porcelain" hooks/` answers ten lines across five files as of `6675e04`, all
-        in `verify-hook-wiring.probe.sh`, `doc-guard.sh`, `checkpoint-before-modify.sh` and this
-        task's own two layer-2 files — where five of the six are prose and the sixth is the test
-        suite's own `assert_porcelain` helper.) So the precondition is **never satisfied**, and
-        v1 ships one exit. Consequence for (c): its *tree* half is a real regression test and
-        passes; its *message* half asserts a property the clean case shares, because clean and
-        dirty produce the same message. **Building the handoff to close this was deliberately not
-        done** — it is the token/ledger machinery the second measurement pass deleted. Two ways to
-        settle it: amend (c) to drop the clean/dirty contrast, or reopen the handoff decision.
-        That is the user's call.
+      - ✅ **RESOLVED (user decision, 2026-08-26) — (c) is amended, the clean/dirty contrast is
+        dropped, no handoff is built.** The contract's "only when layer 1 recorded a clean
+        pre-command tree" and the original (c) both presupposed layer 2 can learn layer 1's
+        pre-command tree state. It cannot, and the design section above **declines that handoff
+        for v1** in as many words. Verified rather than inferred: `command grep -c porcelain
+        hooks/worktree-guard.sh hooks/lib/worktree_guard_bash_arms.sh` answers **0** and **0**, so
+        neither layer-1 file contains the probe at all, and layer 1 writes no tree-state fact
+        anywhere. So the precondition is **never satisfied**, and v1 ships one exit — the
+        contract's own "only when clean" clause is honored by there being no case where it's
+        ever true, and (c) is now scoped to what layer 2 actually does: name no rollback and
+        preserve the dirty tree. Building the handoff to close the original reading was
+        deliberately not done — it is the token/ledger machinery the second measurement pass
+        deleted, and the user chose not to reopen it.
       - ✅ **The post-refusal tree state, measured first-hand 2026-08-26** in a throwaway repo, git
         2.50.1, ref-format `files`, an unconditional-deny hook armed: `git switch feature` exits
         **128**, `git symbolic-ref HEAD` still answers `refs/heads/main`, and
