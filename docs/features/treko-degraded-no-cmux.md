@@ -1180,7 +1180,26 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
         (`test_server_lifetime.py:88` also reads `server.py` but to *mutate* it, not to assert
         over it — it is a mutation harness, not a guard.)
       The lesson the recipe must carry forward: **key the search on the read, never on the
-      matcher.** `read_text()` is the thing every one of these has in common; `re.*` is not;
+      matcher.** `read_text()` is the thing every one of these has in common; `re.*` is not.
+      **Observability round 6 pushed this one step further and found a fifth door by running the
+      recipe, not by trusting it: keying on the *Python read call* is still a matcher assumption
+      wearing a disguise.** Two of the six new modules (`§Verification`) assert over
+      `Treko.dc.html` — the file D4/D5 edit — through **neither** `read_text()` **nor**
+      `read_bytes()`:
+      - `test_ui_commands.py` reads it via `fs.readFileSync` inside a JavaScript string handed to
+        `node` — already owned (tasks 8/9/9b own 17 of its citations), found by review rather than
+        the recipe, which is itself evidence the recipe still needs (b)'s digest sweep as a
+        cross-check, not a replacement.
+      - `test_nontext_contrast.py` (16 tests, criterion 7's 334-dark/347-light exact mark counts,
+        `test_nontext_contrast.py:432-442`) never reads the file as text at all — it renders it in
+        headless Chrome and counts painted marks. It is **unowned**: it appears only in the
+        module-count table and the blast-radius list, in no task. Its safety currently rests on
+        D4's `file://` row "reproducing today's behaviour," which no criterion asserts. Added to
+        the known-rows floor below rather than left as a gap the enumeration must rediscover.
+      So (a)'s search is two-legged, not one: **every read of `Treko.dc.html` by any means** —
+      `read_text()`/`read_bytes()` in Python, `fs.readFileSync` in the embedded node harness, and
+      headless-Chrome rendering that asserts on the rendered result — is a candidate source-
+      scraping guard, and the enumeration must sweep for all three before it is trusted;
       (b) **digest and byte-identity pins** — a test that hashes a region and compares to a stored
       constant (`test_guards.py:130-137`).
       Both are invisible to "does this test mention the thing I changed", because neither mentions
@@ -1226,6 +1245,11 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       than a red one.
       D6 -> `server_harness.py:45`'s comment "CMUX_TIMEOUT_SECS (5s, pinned in `server.py`)" goes
       false once D6 moves that constant.
+      D4/D5 -> `test_nontext_contrast.py:432-442` pins the scored-mark count at exactly 334
+      dark / 347 light by rendering `Treko.dc.html` in headless Chrome, not by reading its text.
+      Unowned by any task today. Verify D4/D5's markup changes leave the scored population
+      unchanged, or extend §D8's exclusion list if they don't; an empty diff is a valid answer
+      only if task 1a states it. Found by observability round 6.
       D6 -> `test_rename.py:85-86` reads `server.py`'s source and asserts `retired not in source`
       for every retired name. It scans `server.py` **only**, so once D6 moves `bind_surface` and
       the cmux constants into `channel.py` this guard covers one fewer file while staying green —
@@ -1240,8 +1264,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
 - [ ] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable`, the `Reason`
-      enum (a plain `Enum`, D1) and `CHANNEL_OK = "ok"`; `server.py` imports all four. Task 2 goes
-      green. Confirm `server.py` **dropped** below 799.
+      enum (a plain `Enum`, D1), `CHANNEL_OK = "ok"`, **and — per D6 — `CMUX_BIN` and
+      `CMUX_TIMEOUT_SECS`, moved from `server.py:53-54`, with `channel.py` as their single owner.**
+      `server.py` imports all six. Task 2 goes green. Confirm `server.py` **dropped** below 799.
+      *Round 10 finding: this task previously listed four symbols and omitted the two D6 requires,
+      so following the task list left both constants declared in `server.py` -- the exact
+      two-different-binaries state D6 exists to prevent, with nothing in the suite positioned to
+      catch it. `confirm_surface` (`server.py:299`) and `send_keys` (`:321`) keep reading
+      `CMUX_BIN` after the move -- via the import, not a re-declaration.*
 - [ ] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
       banner carries `reason=<token>`, and — the other half — the nine fatal conditions in
       criterion 9 still exit 2 and still refuse a connection.
@@ -1381,7 +1411,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       **`#dc-root`, the mounted subtree**, read as `document.getElementById('dc-root').innerHTML`
       after mount. **Scope the check to that subtree; never to whole-document view source.**
       A correct degraded launch carries the raw token in the served bytes **twice**, and neither
-      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4 `:353`, built
+      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4 `:369`, built
       exactly as the `tracker-token` sibling at `server.py:495` is), and the
       `TRACKER_CHANNEL_REASONS` **keys** (D5, above) — which *are* the token literals — riding
       inside the marker-fenced inline script that `_serve_index` serves verbatim
