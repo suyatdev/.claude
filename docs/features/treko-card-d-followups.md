@@ -1,15 +1,16 @@
 ---
-phase: implementation
+phase: review
 model_tier: low
-branch: chore/treko-card-d-followups
+branch: none  # merged via PR #81 (2a74796), 2026-08-26; chore/treko-card-d-followups deleted local+remote 2026-08-26
 ---
 
-> **Gate status: OPEN.** The user said `gate confirmed` on 2026-08-26 for task 4 (the source-file
-> comment edit); tasks 1-3 (docs-only frontmatter) needed no gate and are already done, committed
-> as `4859144` on the now-deleted `feat/treko-non-text-contrast` and recovered onto this branch by
-> cherry-pick (`54dea3c`) after that branch's remote was deleted for task 5 — see task 5 note below.
-> Branch cut from `origin/main`. Task 5's two approved remote deletions
-> (`feat/treko-non-text-contrast`, `feat/treko-store-location`) are also already done.
+> **Gate status: CLOSED — card complete, 5/5.** All work merged as PR #81 (`2a74796`,
+> 2026-08-26). The user said `gate confirmed` on 2026-08-26 for task 4 (the source-file comment
+> edit); tasks 1-3 (docs-only frontmatter) needed no gate. Task 5 finished in a later session after
+> PR #81 merged — see its note for the two sittings and for the remote half deliberately left
+> scoped. This closing edit (frontmatter, task 5, this header) is docs-only and lands on
+> `docs/close-treko-card-d-followups`, cut fresh from `origin/main` because this card's own branch
+> was deleted as part of task 5.
 
 # Post-merge follow-ups for card D (PR #80)
 
@@ -84,25 +85,41 @@ same reason `post-merge-followups-45.md` exists.
         exactly. Both light and dark themes gave identical `elementCount`/mount numbers, as
         expected (theme-independent DOM walk). `treko/test_theme.py` + `treko/test_nontext_contrast.py`:
         30 passed, 0 failed, 0 deselected; diff is comment-text-only (two number substitutions).
-- [~] 5 — Branch cleanup. Delete `feat/treko-non-text-contrast` and `feat/treko-store-location`
+- [x] 5 — Branch cleanup. Delete `feat/treko-non-text-contrast` and `feat/treko-store-location`
       locally and on the remote (both are ancestors of `origin/main`), and any other local branch
       that is fully merged and not checked out by a live worktree. Verify merged-ness against
       `origin/main`, not `HEAD` — `git branch -d` checks HEAD and will refuse a branch that is in
       `origin/main`.
-      **Partially done, and it nearly ate task 1's work.** The user approved remote-only deletion
-      from this session (`feat/treko-non-text-contrast` and `feat/treko-store-location`, both
-      confirmed ancestors of `origin/main` via `git merge-base --is-ancestor`). But task 1-3's
-      frontmatter fix had already been committed and pushed straight to
-      `feat/treko-non-text-contrast` (following the pattern this card's own header cites,
-      `post-merge-followups-45.md`) *before* task 5 ran — so `git push origin --delete
-      feat/treko-non-text-contrast` deleted the only remote copy of that commit. It was not lost:
-      the local branch ref still held it, and it was cherry-picked onto this branch (`54dea3c`,
-      originally `4859144`) and verified present in all three files before this card was written.
-      **Lesson for next time: do task-5-shaped deletions last, after everything else on the branch
+      **Done 2026-08-26, in two sittings — and the first one nearly ate task 1's work.**
+      *Sitting 1 (remote-only, as the user scoped it then).* `feat/treko-non-text-contrast` and
+      `feat/treko-store-location` were deleted on the remote, both confirmed ancestors of
+      `origin/main` via `git merge-base --is-ancestor`. But tasks 1-3's frontmatter fix had already
+      been committed and pushed straight to `feat/treko-non-text-contrast` (following the pattern
+      this card's own header cites, `post-merge-followups-45.md`) *before* task 5 ran — so
+      `git push origin --delete feat/treko-non-text-contrast` deleted the only remote copy of that
+      commit. It was not lost: the local ref still held it, and it was cherry-picked onto this card's
+      branch (`54dea3c`, originally `4859144`) and verified present in all three files.
+      *Sitting 2 (the sweep the user deferred, run after PR #81 merged).* Six local Treko branches
+      deleted — `docs/close-treko-rename` (4fc3479), `feat/treko-rename` (f2cd7d2),
+      `feat/treko-store-location` (2f1a3ef), `feat/treko-theme-and-layout` (355904b), `treko-uddate`
+      (29503ff), `feat/treko-non-text-contrast` (4859144). The last needed `-D`: its one unique
+      commit's *effect* was already on `origin/main` (`git diff origin/main 4859144 -- <the three
+      card files>` empty), but being 7 behind meant a whole-tree diff was not empty, which `-d`
+      cannot distinguish. Four remotes deleted after re-verifying each as an ancestor of
+      `origin/main` at `2a74796` **at the moment of deletion**, not from the earlier reading:
+      `chore/treko-card-d-followups`, `docs/close-treko-rename`, `feat/treko-rename`, `treko-uddate`.
+      Then the wider sweep, **local only** at the user's direction: `chore/rule-surface-trim`
+      (e730f45), `chore/settings-split` (dd1a819), `docs/post-merge-53` (7722a2b) — all three 0
+      commits ahead of `origin/main`, their GitHub remotes deliberately left in place as a safety net
+      for the cards that own them. Finally this card's own branch `chore/treko-card-d-followups`
+      (2e706f0), once this worktree had moved off it.
+      **What was deliberately NOT done:** the three remotes above still exist, so the sweep's remote
+      half is scoped, not complete. Every deletion above is recoverable from the recorded SHA
+      (`git branch <name> <sha>`) while the objects remain reachable through `origin/main`.
+      **Lesson, unchanged: do task-5-shaped deletions last**, after everything else on the branch
       being deleted is confirmed merged elsewhere — never in the same session as a fix landed on
-      that branch with no PR.** Local branch deletion (the "skip local" half the user chose) and
-      the broader "any other fully-merged local branch" sweep are still open — do them from a
-      worktree that is not sitting on the branch being deleted.
+      that branch with no PR. And run them from a worktree that is not sitting on the branch being
+      deleted.
 
 ## Not in scope
 
@@ -121,3 +138,8 @@ same reason `post-merge-followups-45.md` exists.
 - Tasks 1–3: `git diff` shows changes confined to the three frontmatter blocks.
 - Task 5: `git branch --list` and `git ls-remote --heads origin` no longer name the deleted refs,
   and `git worktree list` is unchanged.
+  **Run 2026-08-26, after the sweep.** All ten deleted local refs absent from `refs/heads/`; all
+  four deleted remotes absent from `git ls-remote --heads origin`; the three wider-sweep remotes
+  (`origin/chore/rule-surface-trim`, `origin/chore/settings-split`, `origin/docs/post-merge-53`)
+  present as intended. `git worktree list` still shows the same six worktrees — only this one's
+  checked-out branch changed, which this card's own close did on purpose.
