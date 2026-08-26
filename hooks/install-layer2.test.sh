@@ -275,14 +275,44 @@ T="$(target_of "$F/home")"
 run_install "$F" --uninstall
 expect_rc 'U1 --uninstall exits 0' 0 "$RC"
 [ -z "$(cfg "$F")" ] && ok 'U1 …and the global core.hooksPath is gone' \
-  || printf 'FAIL — U1 core.hooksPath survived: %s\n' "$(cfg "$F")"
+  || bad "U1 …and the global core.hooksPath is gone (survived: $(cfg "$F"))"
 [ ! -e "$T/reference-transaction" ] && ok 'U1 …and the placed hook is removed' \
   || bad 'U1 …and the placed hook is removed'
+
+# U3 — THE WAY BACK MUST NOT DEPEND ON THE SWITCH, and this case exists because a
+# mutation showed U2 passing for the wrong reason. With --uninstall handled after
+# the mode check, an --uninstall on a repo whose mode file says `log` was refused
+# by the LOG-MODE guard, not by anything about uninstalling — so deleting U2's
+# own guard left the suite fully green. Uninstalling must work regardless of what
+# the mode file says, of whether it is readable, and of the ref backend: it is the
+# only route out of a machine-wide config write, and gating it on the thing being
+# undone is how an escape hatch stops being one.
+F="$(mk_fixture)"
+set_mode_src "$F" deny
+run_install "$F"
+T="$(target_of "$F/home")"
+set_mode_src "$F" log
+run_install "$F" --uninstall
+expect_rc 'U3 --uninstall works while the mode file says log' 0 "$RC"
+[ -z "$(cfg "$F")" ] && ok 'U3 …and the global core.hooksPath is gone' \
+  || bad "U3 …and the global core.hooksPath is gone (survived: $(cfg "$F"))"
+
+# U4 — the same, with no readable mode file at all. An install whose mode file was
+# deleted is exactly the state someone needs to get out of.
+F="$(mk_fixture)"
+set_mode_src "$F" deny
+run_install "$F"
+rm -f "$F/hooks/reference-transaction.mode"
+run_install "$F" --uninstall
+expect_rc 'U4 --uninstall works with no mode file at all' 0 "$RC"
+[ -z "$(cfg "$F")" ] && ok 'U4 …and the global core.hooksPath is gone' \
+  || bad "U4 …and the global core.hooksPath is gone (survived: $(cfg "$F"))"
 
 # U2 — it must not disarm somebody else's install. Same argument as I4, in the
 # other direction: an --uninstall that unset a core.hooksPath it did not write
 # would remove their hooks from every repository on the machine.
 F="$(mk_fixture)"
+set_mode_src "$F" deny          # so a log-mode refusal cannot stand in for the real one
 mkdir -p "$F/someone-elses-hooks"
 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL="$F/gitconfig-global" \
   "$GIT_REAL" config --global core.hooksPath "$F/someone-elses-hooks"
