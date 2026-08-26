@@ -177,17 +177,29 @@ case.
 
 ### Repo shapes that are out of scope
 
-- **Bare repository** (`git rev-parse --is-bare-repository` = `true`) → **allow**. No working tree
-  exists to write into, so neither rule can be violated.
+- **Bare repository** → **allow**. No working tree exists to write into, so neither rule can be
+  violated. **The signal is `--show-toplevel`'s diagnostic, not `--is-bare-repository`** — measured
+  in task 2a, a bare repo makes step 4's `git rev-parse --show-toplevel` exit **128** printing
+  `fatal: this operation must be run in a work tree`. Step 4 runs first, so an implementation that
+  waited to ask `--is-bare-repository` would already have denied; step 4 therefore recognizes that
+  second diagnostic itself. `--is-bare-repository` is **not** part of the recipe: it also exits 128
+  on a non-repo, so it cannot tell "bare" from "not a repo" without the same text match, and one
+  copy of that rule is enough. (Revised 2026-08-26 on the task-2a measurement; the original recipe
+  named `--is-bare-repository` and was unreachable.)
 - **Submodule** (`git rev-parse --show-superproject-working-tree` non-empty) → **allow**. A
   submodule's `--git-common-dir` points into the superproject's `.git/modules/<name>` and equals
   its `--git-dir`, so it reads as "primary checkout" and would be denied wholesale. Excluding
   submodules is a deliberate under-block; the alternative is blocking all submodule work machine
   -wide for a collision risk that does not apply to them.
+- **A linked worktree checked out *from* a bare repo is neither**, and needs no special case:
+  measured in task 2a it is not bare, `--show-toplevel` succeeds, and its `--git-dir`
+  (`<bare>/worktrees/<name>`) differs from its `--git-common-dir` (`<bare>`), so it reaches step 7
+  and reads as a linked worktree → allow. Pinned by its own scenario so a later revision cannot
+  collapse it into the bare case.
 
-Both probes must run **before** the primary-vs-linked compare, and both are untested claims about
-git behavior rather than measurements — **task 2a** tests them in a throwaway repo before the guard
-depends on them.
+The submodule probe runs **before** the primary-vs-linked compare. Both claims were untested when
+first written; **task 2a measured them** (git 2.50.1, throwaway repos, 2026-08-26) — the submodule
+claim reproduced exactly and the bare claim produced the revision above.
 
 ## Scope of rule 2 — where worktrees may live
 
@@ -306,11 +318,13 @@ expect coupling that does not exist. (Resolves round-1 open question #3.)
    indistinguishable from "not a git repository" (round-2 fix: the recipe and the scenarios
    disagreed on exactly this).
 3. Resolve the owning repo **from the write target**, never from the session cwd.
-4. Not in a git repo → allow, silently. This verdict is taken **only** from
-   `git rev-parse --show-toplevel` exiting non-zero *with* the recognizable
-   "not a git repository" diagnostic; any other non-zero exit is a validation failure and denies
-   (see Failure boundaries).
-5. Bare repo or submodule → allow, silently.
+4. `git rev-parse --show-toplevel`, and **branch on the diagnostic text, never on the exit code**:
+   exit 0 → continue; non-zero with the "not a git repository" diagnostic → **not in a git repo**,
+   allow silently; non-zero with the "this operation must be run in a work tree" diagnostic →
+   **bare repo**, allow silently; any other non-zero exit is a validation failure and denies (see
+   Failure boundaries). The bare branch was added 2026-08-26 on the task-2a measurement — it was
+   step 5's job in the original recipe, which step 4 denied before step 5 could run.
+5. Submodule (`git rev-parse --show-superproject-working-tree` non-empty) → allow, silently.
 6. Path matches the exemption list → allow, silently.
 7. `--path-format=absolute` compare: git-dir == common-dir → **deny** (subject to mode).
 
@@ -1307,7 +1321,8 @@ with no verdict available to it at all (boundary 34, where no layer-2 code runs)
 | 3 | `git` absent from `PATH` | **Deny**, message says the guard could not verify the checkout. Precedent: `test-marker-guard`'s `MSG_NO_PYTHON` blocks everywhere. |
 | 4 | `git --version` < 2.31, or unparseable | **Deny**, message names the 2.31 floor. |
 | 5 | `git rev-parse --show-toplevel` exits non-zero with the "not a git repository" diagnostic | **Allow, silently.** |
-| 6 | Any *other* non-zero exit or empty output from any `rev-parse` probe (`--is-bare-repository`, `--show-superproject-working-tree`, `--path-format=absolute --git-dir`, `--git-common-dir`) | **Deny.** Boundary 5 has already ruled out "not a repo", so this is a validation failure. |
+| 5a | `git rev-parse --show-toplevel` exits non-zero with the "this operation must be run in a work tree" diagnostic | **Allow, silently** — this is a bare repository (Arm A step 4). Measured in task 2a: rc=128, `fatal: this operation must be run in a work tree`, both at the bare directory and in a subdirectory of it. Without this row the bare case falls to row 6 and denies, which is what the original recipe did and why the `Bare repository` scenario was unreachable. |
+| 6 | Any *other* non-zero exit or empty output from any `rev-parse` probe (`--show-superproject-working-tree`, `--path-format=absolute --git-dir`, `--git-common-dir`) | **Deny.** Boundaries 5 and 5a have already ruled out "not a repo" and "bare", so this is a validation failure. `--is-bare-repository` is deliberately absent from this list: the recipe no longer runs it (see "Repo shapes that are out of scope"). |
 | 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. Interpreter pinned at the system `/usr/bin/python3` **3.9.6** (measured 2026-08-24); both lexers already run under it via `#!/usr/bin/env python3`, so **no floor above 3.9 is introduced** and none may be relied on. Resolution follows `git-guard.sh:54` (`command -v python3 \|\| command -v python`), which already fails closed when neither exists. |
 | 8 | `WORKTREE_GUARD_MODE` is unset | **`log`.** This is the documented ship state — the guard arrives unarmed on purpose. |
 | 9 | `WORKTREE_GUARD_MODE` is set to anything other than `log` or `deny` | **`deny`**, and the message names the bad value. A *present but wrong* value means someone tried to arm the guard and mistyped; reading a failed configuration attempt as "off" is the silent disarm the git-floor section argues against. Absence and a typo are deliberately not the same case. |
@@ -1619,11 +1634,34 @@ Feature: Arm A — writes are refused from a primary checkout
 
   Scenario: Bare repository
     Given the target resolves into a bare repository
+    And git rev-parse --show-toplevel exits 128 printing "fatal: this operation must be run in a work tree"
     Then the hook allows silently
+    # Boundary 5a. The Given is the measured behaviour, not a restatement of the
+    # verdict: task 2a recorded exactly this rc and text, at the bare directory and
+    # in a subdirectory of it. An implementation that reads "not in a work tree" as
+    # a generic validation failure denies here, which is what the recipe did before
+    # 2026-08-26 -- this scenario is the one that catches the regression.
+
+  Scenario: A linked worktree checked out from a bare repository
+    Given a bare repository with a worktree added from it
+    When Write targets a file in that worktree
+    Then the hook allows silently
+    # NOT the bare case, and the suite must keep them apart. Measured in task 2a:
+    # --show-toplevel succeeds, --git-dir is <bare>/worktrees/<name> and
+    # --git-common-dir is <bare>, so this reaches step 7 and allows as a linked
+    # worktree. It allows for a different reason than the scenario above, and an
+    # implementation that short-circuits on "the common dir ends in .git or is bare"
+    # would allow both while having stopped judging this one.
 
   Scenario: Submodule
     Given git rev-parse --show-superproject-working-tree is non-empty for the target
     Then the hook allows silently
+    # Measured in task 2a: the probe printed the superproject path from the submodule
+    # root and from a subdirectory of it, and printed EMPTY for a primary checkout, a
+    # linked worktree and the superproject itself -- so it discriminates rather than
+    # merely being non-empty somewhere. The submodule's --git-dir and --git-common-dir
+    # were both <super>/.git/modules/<name>, i.e. equal, which is why omitting this
+    # step denies every submodule as a primary checkout.
 
   Scenario: git is not installed
     Given git is absent from PATH
@@ -1690,18 +1728,18 @@ Feature: Arm A — writes are refused from a primary checkout
     # and a correct implementation produces a DENY — against a primary-checkout
     # target both answers are "deny" and the scenario proves nothing.
 
-  Scenario Outline: A repo-shape probe exits non-zero
+  Scenario: The submodule probe exits non-zero
     Given a linked worktree at ~/.worktrees/.claude/feat-x
-    And <probe> exits non-zero for the target
+    And git rev-parse --show-superproject-working-tree exits non-zero for the target
     When Write targets ~/.worktrees/.claude/feat-x/hooks/git-guard.sh
     Then the hook denies
-    Examples:
-      | probe                                          |
-      | git rev-parse --is-bare-repository             |
-      | git rev-parse --show-superproject-working-tree |
-    # Boundary 6, the two probes the existing scenario never reaches. Both run
-    # BEFORE the primary-vs-linked compare, so a swallowed failure here lands on
-    # the linked-worktree allow rather than on any error path.
+    # Boundary 6, the probe the existing scenario never reaches. It runs BEFORE the
+    # primary-vs-linked compare, so a swallowed failure here lands on the
+    # linked-worktree allow rather than on any error path.
+    # This was a Scenario Outline over two probes until 2026-08-26. The
+    # --is-bare-repository row is GONE, not merely unlisted: the recipe no longer
+    # runs that probe at all (task 2a), so a scenario asserting what the guard does
+    # when it fails would be asserting against a command the guard never issues.
 
 Feature: Arm B2 — hand-rolled git worktree add
 
@@ -2954,9 +2992,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 2. **`<repo-name>` collisions?** → Detect and refuse, via a `.repo-root` marker.
 3. **One hook or two?** → Two files: `worktree-guard.sh` (PreToolUse) and `create-worktree.sh`
    (lifecycle).
-4. **Bare repos and submodules?** → Both allowed (out of scope), with the reasoning above; **task 2a**
-   tests the two `rev-parse` probes before the guard relies on them. Task 2 is ticked done and did
-   **not** cover them — round 4 found both of these sections pointing at the finished task.
+4. **Bare repos and submodules?** → Both allowed (out of scope), with the reasoning above.
+   **Closed by task 2a's measurement, 2026-08-26**, which reproduced the submodule claim and
+   falsified the bare one: the recipe named `--is-bare-repository`, a probe step 4 denied before
+   step 5 could reach it. Arm A step 4 now branches on `--show-toplevel`'s diagnostic text
+   instead, and `--is-bare-repository` is out of the recipe entirely. (Round 4 found both of
+   these sections pointing at task 2, which never covered them.)
 5. **Does `~/.worktrees` need creating, and by whom?** → `create-worktree.sh`, `mkdir -p -m 700`,
    refusing a pre-existing directory with wider permissions.
 6. **Interaction with `phase-guard`?** → Messages are prefixed `worktree-guard:`. Whether both
@@ -3019,12 +3060,19 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       - **Not-a-repo control:** all five probes exit 128 with the *same* "not a git repository"
         diagnostic, so step 4's text discrimination is available on every probe, not just
         `--show-toplevel`.
-      - ⚠️ **GATE: Spec change needed — switch back to the high-tier model to revise.** Arm A step 4
-        must recognize `fatal: this operation must be run in a work tree` as its own outcome and
-        route it to the bare-repo allow, otherwise the bare scenario is untestable. Ordering alone
-        does not fix it: `--is-bare-repository` also exits 128 on a non-repo, so whichever probe runs
-        first still needs the diagnostic text to tell "bare" from "not a repo". Blocks the two bare
-        cases in task 3 only; every other case in task 3 is unaffected.
+      - ✅ **GATE raised and closed the same day.** Announced as `GATE: Spec change needed`; the user
+        chose "widen step 4's text match" over reordering the probes or dropping the bare allow.
+        Applied 2026-08-26: Arm A step 4 branches on the diagnostic text, step 5 carries only the
+        submodule probe, boundary row **5a** is new, `--is-bare-repository` is removed from boundary
+        row 6 and from the recipe, the `Bare repository` scenario gained the measured `Given`, the
+        `A repo-shape probe exits non-zero` outline collapsed to a single submodule scenario, and a
+        new `linked worktree checked out from a bare repository` scenario pins the third shape.
+        Rejected alternatives, both recorded so they are not re-proposed: **reordering** the probes
+        does not work alone (`--is-bare-repository` also exits 128 on a non-repo, so it needs the
+        same text match — two copies of one rule), and **dropping the bare allow** would deny writes
+        to files inside a bare repo and discard the stated "no working tree to violate" rationale.
+        ⚠️ This is a spec edit made during `phase: implementation`, so the **spec-compliance gate
+        re-arms**: the compliance judge must run again before task 3's suite is judged complete.
 - [ ] 3. Write the failing test suite first — `hooks/worktree-guard.test.sh`, house style per
       `hooks/lib/guard_test_helpers.sh`, one case per scenario in Acceptance scenarios. The
       git-absent and sub-2.31 cases require a **stubbed `git` on `PATH`** — no real git on this
