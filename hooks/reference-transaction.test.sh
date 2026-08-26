@@ -38,6 +38,15 @@ set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/reference-transaction"
+# The tracked mode file (card task 6e, piece 4). Layer 2 reads its arming switch
+# from a file BESIDE ITSELF rather than from the environment: task 6c closed the
+# `git` -> hook hop, but whether a settings.json `env:` entry reaches the Bash
+# tool process at all is task 8's still-open question, and a layer that armed in
+# `deny` on day one while layer 1 was still in `log` would enforce a machine-wide
+# refusal nobody switched on. Its presence in the repo is asserted as its own
+# control below; its VALUE is set per case, because the shipped value is `log`
+# and almost every case in this file is about a refusal.
+MODE_SRC="$HERE/reference-transaction.mode"
 
 # Physical path, not the one mktemp hands back. On macOS `mktemp -d` returns the
 # /var symlink form while `git rev-parse` resolves to /private/var — and this hook
@@ -63,6 +72,21 @@ mkdir -p "$STATE_DIR"
 # swap in a stub without touching the tracked file.
 HOOKS_DIR="$TMP/hooksdir"
 mkdir -p "$HOOKS_DIR"
+# What every case actually runs, direct cases included. It is the INSTALLED COPY,
+# not the tracked file, because the mode file layer 2 reads sits beside the hook
+# — so a direct case that invoked $HOOK would read the repo's own tracked `log`
+# and turn every deny in this suite into an allow. Driving the copy is also the
+# more faithful shape: it is the file `install-layer2.sh` places and git runs.
+HOOK_RUN="$HOOKS_DIR/reference-transaction"
+MODE_FILE="$HOOKS_DIR/reference-transaction.mode"
+
+# The per-case arming switch. `--absent` removes the file entirely, which is a
+# case of its own (boundary 9's analogue: a mode that cannot be read is not a
+# licence to run unguarded). Anything else is written verbatim, so a case can
+# hand the hook a value it must reject.
+set_mode() { # $1 = log | deny | <literal> | --absent
+  if [ "$1" = --absent ]; then rm -f "$MODE_FILE"; else printf '%s\n' "$1" > "$MODE_FILE"; fi
+}
 # An empty hooks directory, for the fixture housekeeping that must NOT be judged —
 # resetting a tree the previous deny left dirty is not a case, and running it
 # through the armed hook would let one case's cleanup decide the next case.
@@ -85,9 +109,11 @@ skipped() { printf 'skip — %s\n' "$1"; skip=$((skip+1)); }
 # guard at all. This is the falsifier for the whole ALLOW group.
 HOOK_PRESENT=0
 if [ -f "$HOOK" ] && [ -r "$HOOK" ]; then
-  cp "$HOOK" "$HOOKS_DIR/reference-transaction" && chmod +x "$HOOKS_DIR/reference-transaction" &&
-    HOOK_PRESENT=1
+  cp "$HOOK" "$HOOK_RUN" && chmod +x "$HOOK_RUN" && HOOK_PRESENT=1
 fi
+# Every case from here to GROUP W runs ARMED — `deny` — because that is the mode
+# whose verdicts this suite is about. GROUP W sets it per case and puts it back.
+set_mode deny
 
 # Control 2. A negative log assertion is VACUOUS until something in this run has
 # been seen to append a line: with no hook on disk, "nothing was appended" is true
@@ -103,9 +129,15 @@ ATTR="$TMP/attribution.all"
 
 log_reset() { rm -f "$LOG"; }
 
+# Field 5, not field 2. Task 6e piece 3 gave layer 2 the same leading field list
+# layer 1's log uses — <iso8601> <session_id> <arm> <mode> — so a reader holding
+# both files reads them the same way. The session_id field is EMPTY and stays
+# empty: it arrives on a PreToolUse payload and layer 2, a child of `git`, has no
+# payload at all. GROUP F asserts the whole shape.
+CLAUSE_FIELD=5
 log_clauses() { # the decision+clause field of every line the last case produced
   [ -f "$LOG" ] || return 0
-  cut -f2 "$LOG"
+  cut -f"$CLAUSE_FIELD" "$LOG"
 }
 
 log_harvest() { # fold the last case's lines into the cumulative record
@@ -162,10 +194,10 @@ _run() { # $1 cwd, $2 stage, $3 stdin text
   n=$((n+1)); out="$TMP/out.$n"; err="$TMP/err.$n"
   if [ "$RUN_STAGE_ABSENT" = 1 ]; then
     ( cd "$1" && printf '%s' "$3" | env ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
-        bash "$HOOK" ) >"$out" 2>"$err"
+        bash "$HOOK_RUN" ) >"$out" 2>"$err"
   else
     ( cd "$1" && printf '%s' "$3" | env ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
-        bash "$HOOK" "$2" ) >"$out" 2>"$err"
+        bash "$HOOK_RUN" "$2" ) >"$out" 2>"$err"
   fi
   got=$?
   RUN_ENV=(); RUN_STAGE_ABSENT=0
@@ -356,6 +388,26 @@ else
   bad "H1 the hook is on disk and copied into the armed hooksPath (missing: $HOOK)"
 fi
 
+# H1b — the TRACKED mode file is a shipped artefact, not a test fixture. The whole
+# point of piece 4 is that layer 2's switch lives in the repo where a diff shows
+# it; a suite that only ever wrote its own copy would stay green against a hook
+# nobody could arm. Its VALUE is asserted here too: the ship state is `log`
+# (card, "Arming — log-only, then deny"), and a repo that shipped `deny` would
+# arm a machine-wide refusal on the first install.
+if [ -f "$MODE_SRC" ] && [ -r "$MODE_SRC" ]; then
+  ok 'H1b the tracked mode file exists beside the hook'
+  if [ "$(grep -v '^[[:space:]]*#' "$MODE_SRC" | grep -v '^[[:space:]]*$' | head -1 |
+          tr -d '[:space:]')" = log ]; then
+    ok 'H1b …and ships in log mode, not deny'
+  else
+    printf 'FAIL — H1b the tracked mode file ships in log mode (read: %s)\n' \
+      "$(cat "$MODE_SRC")"; fail=$((fail+1))
+  fi
+else
+  bad "H1b the tracked mode file exists beside the hook (missing: $MODE_SRC)"
+  bad 'H1b …and ships in log mode, not deny'
+fi
+
 PRIMARY="$TMP/repos/proj"
 mk_repo "$PRIMARY" other d1 d2 d3 d4 d5 d6 d7 wtb1
 LINKED="$TMP/repos/linked"
@@ -529,25 +581,10 @@ d_deny 'K5 an unknown backend name denies (allowlist, not a reftable denylist)' 
 assert_log_has 'K5 …attributed to the backend clause' 'DENY backend-not-files'
 rm -f "$PRIMARY/.git/HEAD.lock"
 
-# K6 — the measured COST of boundary 28's fail-closed rule, pinned so it is not
-# discovered by surprise at installation (task 6e). `git init` runs this hook for
-# its own initial HEAD write, at `prepared`, in a state where every rev-parse
-# reports "not a git repository" — measured live: GIT_DIR is SET to the .git
-# being created and `git rev-parse --show-ref-format` exits 128 there. Boundary 28
-# denies, so an armed hook makes `git init` fail with rc=128 and no HEAD file.
-# This case asserts what was MEASURED, not what is wanted. If task 6e carves an
-# exemption, this is the case that must change with it.
-INITREPO="$TMP/repos/freshinit"
-e_run "$TMP" "$GIT_REAL" -c user.email=t@t -c user.name=t -c init.defaultBranch=main \
-  -c core.hooksPath="$HOOKS_DIR" init -q "$INITREPO"
-if [ "$e_rc" -ne 0 ]; then
-  ok 'K6 an armed hook refuses git init, because its own HEAD write cannot be evaluated'
-else
-  printf 'FAIL — K6 an armed hook refuses git init (want non-zero, got %s)\n  stderr: %s\n' \
-    "$e_rc" "$(cat "$err")"; fail=$((fail+1))
-fi
-assert_log_has 'K6 …attributed to the backend clause, which is where an unreadable repo lands' \
-  'DENY backend-not-files'
+# K6 lives in GROUP N now. Boundary 28's fail-closed rule used to make `git init`
+# itself exit 128 with no HEAD written; task 6e's fifth piece carved that one
+# shape out, and the case that pins it belongs with the narrowness cases that
+# keep the carve-out from swallowing boundary 28 whole.
 
 # ================================================================= GROUP C ===
 # Feature: scope — the primary context only. THE SCOPE TEST NEEDS A CASE IN EACH
@@ -1005,6 +1042,324 @@ git_bare_hooks -C "$MREPO" reset -q HEAD -- other-session-work.txt >/dev/null 2>
 rm -f "$MREPO/other-session-work.txt"
 reset_fixture "$MREPO"
 
+# ================================================================= GROUP N ===
+# Feature: `git init`'s own initial HEAD write (card task 6e, piece 5 — a user
+# decision of 2026-08-26, reversing what task 6a had pinned as a measured cost).
+#
+# WHAT WAS MEASURED, and why boundary 28 caught this at all. `git init` runs this
+# hook for the HEAD it is about to create, at `prepared`, with GIT_DIR SET to the
+# .git it is building and every `rev-parse` there answering
+#   fatal: not a git repository: '<that .git>'
+# — because the repository is not one yet: the very ref this transaction writes is
+# what will make it one. Boundary 28 reads an unanswerable backend probe as "deny",
+# so an armed hook made `git init` exit 128 with .git/ created and no HEAD file.
+#
+# THE DISCRIMINATOR, and why each of its three parts is there. Measured in a
+# throwaway repo on git 2.50.1 (Apple Git-155):
+#
+#   * GIT_DIR is set — it is UNSET at every real primary HEAD move measured
+#     (`git switch`, `git checkout`, `--detach`), so this alone excludes them all;
+#   * <GIT_DIR>/HEAD does not exist — the repository has no HEAD yet, which is
+#     precisely why git cannot open it;
+#   * <GIT_DIR>/HEAD.lock does exist — git is mid-transaction on HEAD in THIS
+#     directory, holding its lock. Without this part the exemption also fires for
+#     GIT_DIR naming any empty directory, which is not a repository being created.
+#
+# WHAT THE EXEMPTION CANNOT REACH, measured rather than argued: git never invokes
+# this hook at all when it cannot open the repository it was pointed at. Four
+# shapes were run under an armed hook — GIT_DIR at an empty directory, GIT_DIR at
+# a missing path, GIT_COMMON_DIR at an empty directory, and a checkout whose HEAD
+# had been deleted — and every one exited 128 with NO hook invocation and the
+# primary's HEAD unmoved. So "the repository cannot be opened" is a state only
+# `git init` reaches a hook in. N6-N9 pin the edges anyway.
+
+INITREPO="$TMP/repos/freshinit"
+e_run "$TMP" "$GIT_REAL" -c user.email=t@t -c user.name=t -c init.defaultBranch=main \
+  -c core.hooksPath="$HOOKS_DIR" init -q "$INITREPO"
+if [ "$e_rc" -eq 0 ]; then
+  ok 'N1 git init succeeds under an armed hook (was K6: "denies, as measured")'
+else
+  printf 'FAIL — N1 git init succeeds under an armed hook (want 0, got %s)\n  stderr: %s\n' \
+    "$e_rc" "$(cat "$err")"; fail=$((fail+1))
+fi
+
+# N2 — the half that makes N1 mean something. `git init` exiting 0 is not the
+# claim; the claim is that the ref it exists to write was written. The old
+# breakage left .git/ on disk and no HEAD in it, so a case asserting only the exit
+# code would have passed against a git that created a directory and nothing else.
+if [ -f "$INITREPO/.git/HEAD" ]; then
+  ok "N2 …and the HEAD file it exists to write is there: $(cat "$INITREPO/.git/HEAD")"
+else
+  printf 'FAIL — N2 the HEAD file was written by git init (absent: %s)\n  .git holds: %s\n' \
+    "$INITREPO/.git/HEAD" "$(ls -A "$INITREPO/.git" 2>&1 | tr '\n' ' ')"; fail=$((fail+1))
+fi
+
+assert_log_has  'N3 …attributed to the git-init clause' 'ALLOW git-init-own-repository'
+assert_log_lacks 'N4 …and NOT to the backend clause, which is where it used to land' \
+  'DENY backend-not-files'
+
+# N5 — `git init --bare` takes the same path (GIT_DIR set, HEAD absent, HEAD.lock
+# held) and is a different command. Measured, not assumed: a discriminator written
+# against the worktree shape alone would leave every bare init broken.
+BAREREPO="$TMP/repos/freshbare.git"
+e_run "$TMP" "$GIT_REAL" -c user.email=t@t -c user.name=t -c init.defaultBranch=main \
+  -c core.hooksPath="$HOOKS_DIR" init -q --bare "$BAREREPO"
+if [ "$e_rc" -eq 0 ] && [ -f "$BAREREPO/HEAD" ]; then
+  ok 'N5 git init --bare succeeds too, and writes its HEAD'
+else
+  printf 'FAIL — N5 git init --bare (rc=%s, HEAD present=%s)\n  stderr: %s\n' "$e_rc" \
+    "$( [ -f "$BAREREPO/HEAD" ] && echo yes || echo no )" "$(cat "$err")"; fail=$((fail+1))
+fi
+
+# ---- N6..N9: boundary 28 must still hold everywhere else -------------------
+# THE FALSIFIER FOR THE WHOLE CARVE-OUT. An exemption written as "an unreadable
+# backend allows" would pass N1-N5 and fail every case below; so would one written
+# as "GIT_DIR being set allows". Each case bends exactly one of the three parts.
+
+# N6 — GIT_DIR set, HEAD absent, but NO HEAD.lock: an empty directory is not a
+# repository being created, and nothing is mid-transaction in it.
+NOLOCK="$TMP/nolock"
+mkdir -p "$NOLOCK"
+RUN_ENV=(GIT_DIR="$NOLOCK")
+d_deny 'N6 GIT_DIR at a directory with no HEAD and no HEAD.lock still denies' \
+  "$PRIMARY" prepared "$HEAD_TX"
+assert_log_lacks 'N6 …and the git-init clause did not fire' 'ALLOW git-init-own-repository'
+
+# N7 — GIT_DIR set at a REAL, openable repository whose HEAD is present and whose
+# lock is held. This is the shape the guard exists for, reached with GIT_DIR set:
+# it must still be the lock clause that decides it.
+: > "$PRIMARY/.git/HEAD.lock"
+RUN_ENV=(GIT_DIR="$PRIMARY/.git")
+d_deny 'N7 GIT_DIR at a real repo with HEAD present still denies' \
+  "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has 'N7 …by the lock clause, not the exemption' 'DENY primary-HEAD-lock-held'
+rm -f "$PRIMARY/.git/HEAD.lock"
+
+# N8 — GIT_DIR UNSET and a probe that cannot answer: boundary 28's original rule,
+# unchanged. This is the re-verification task 6e asks for in as many words — "a
+# real primary-checkout HEAD move that merely fails a probe for an unrelated
+# reason must still deny".
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_FAIL_PROBE=--show-ref-format)
+d_deny 'N8 an unreadable backend with GIT_DIR unset still denies (boundary 28 intact)' \
+  "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has 'N8 …still attributed to the backend clause' 'DENY backend-not-files'
+
+# N9 — THE RESIDUAL, PINNED AS MEASURED RATHER THAN AS WANTED. All three parts can
+# be assembled by hand: a directory holding a HEAD.lock, no HEAD, named by GIT_DIR.
+# The hook allows it. Two facts bound what that costs, and neither is an argument
+# that it is tidy: git was measured never to invoke a hook in that state (see the
+# group preamble), and a write under a GIT_DIR git cannot open is confined to that
+# directory — it cannot reach the shared primary checkout this guard is about.
+# Asserted so the edge is on the record and a later revision cannot move it in
+# silence.
+FORGED="$TMP/forged"
+mkdir -p "$FORGED"
+: > "$FORGED/HEAD.lock"
+RUN_ENV=(GIT_DIR="$FORGED")
+d_allow 'N9 a hand-built <lock, no HEAD, unopenable> directory IS exempted (measured, not wanted)' \
+  "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has 'N9 …attributed to the git-init clause' 'ALLOW git-init-own-repository'
+rm -f "$FORGED/HEAD.lock"
+
+# ---- N10: a SECOND breakage of the same family, newly measured -------------
+# 🚩 NOT COVERED BY TASK 6e's DECISION, WHICH NAMES `git init` AND NOTHING ELSE.
+# Measured 2026-08-26 while verifying the exemption: `git clone` is refused by an
+# armed layer 2 as well, and harder than `git init` was — git removes the clone
+# directory on failure, so the command leaves nothing behind at all.
+#
+# It is a DIFFERENT mechanism and the exemption above does not touch it. A clone's
+# final HEAD write happens in the freshly-created clone, which is its own primary
+# checkout: GIT_DIR is set, the repository IS openable, `--show-ref-format` answers
+# `files`, --absolute-git-dir equals the common dir, and the clone holds its own
+# HEAD.lock. So the ordinary lock rule fires and the clause is
+# `primary-HEAD-lock-held` — not `backend-not-files`, and not anything a
+# "repository does not exist yet" test can see.
+#
+# Pinned here as WHAT WAS MEASURED, exactly as task 6a pinned K6 before the user
+# ruled on it. Whether to carve a second exemption is the same kind of decision and
+# has not been made.
+CLONESRC="$TMP/repos/proj"
+CLONEDST="$TMP/repos/cloned"
+e_run "$TMP" "$GIT_REAL" -c user.email=t@t -c user.name=t \
+  -c core.hooksPath="$HOOKS_DIR" clone -q "$CLONESRC" "$CLONEDST"
+if [ "$e_rc" -ne 0 ]; then
+  ok "N10 an armed hook refuses git clone too (measured cost, undecided — rc=$e_rc)"
+else
+  printf 'FAIL — N10 git clone was expected to be refused as measured (got rc=0)\n'
+  fail=$((fail+1))
+fi
+assert_log_has 'N10 …by the LOCK clause, so no git-init test could ever see it' \
+  'DENY primary-HEAD-lock-held'
+if [ ! -e "$CLONEDST" ]; then
+  ok 'N10 …and git removed the clone directory, so the command leaves nothing behind'
+else
+  printf 'FAIL — N10 the clone directory was expected to be removed (still there: %s)\n' \
+    "$CLONEDST"; fail=$((fail+1))
+fi
+reset_fixture "$PRIMARY"
+
+# ================================================================= GROUP W ===
+# Feature: the arming switch (card task 6e, piece 4). Layer 2 reads `log`/`deny`
+# from a TRACKED file beside itself and from nowhere else.
+#
+# WHY NOT THE ENVIRONMENT, stated so the absence is not read as an oversight.
+# Task 6c measured that an inherited variable survives the `git` -> hook hop, so
+# the second half of the path works. The FIRST half — whether a settings.json
+# `env:` entry reaches the Bash tool process at all — is task 8 and is unmeasured
+# today. A layer 2 whose switch depended on it would arm in `deny` on day one, in
+# every repository on the machine, while layer 1 was still in `log`. Nothing in
+# this file claims the end-to-end mode switch works; it claims only what the file
+# does.
+
+set_mode deny
+: > "$PRIMARY/.git/HEAD.lock"
+
+# W1 — the control. Without it "log mode allows" proves nothing: a hook that
+# allowed unconditionally would pass W2.
+d_deny 'W1 deny mode: the lock clause refuses (control for W2)' "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has 'W1 …recorded as DENY' 'DENY primary-HEAD-lock-held'
+
+# W2 — the same shape in `log` mode. Allowed, silent, and recorded — the decision
+# token changes and the clause does not, so one grep over the log answers "what
+# would this have refused" without a second vocabulary to learn.
+set_mode log
+d_allow 'W2 log mode: the same shape is allowed, and silently' "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has  'W2 …recorded as WOULD-DENY, same clause' 'WOULD-DENY primary-HEAD-lock-held'
+assert_log_lacks 'W2 …and not as DENY' 'DENY primary-HEAD-lock-held'
+
+# W3 — log mode covers the PRECONDITION refusals too, not just the verdict. An
+# unreadable backend that still exited 128 in `log` mode would be a guard that
+# blocks while claiming to be observing.
+set_mode log
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_REF_FORMAT=someday-format)
+d_allow 'W3 log mode: even the backend refusal is downgraded' "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has 'W3 …recorded as WOULD-DENY backend-not-files' 'WOULD-DENY backend-not-files'
+
+# W4 — the mode file is MISSING. Fails closed, and this is a judgement worth
+# stating: layer 1 treats an absent WORKTREE_GUARD_MODE as `log`, because absence
+# there is the documented ship state. Absence HERE is different — the file is
+# tracked and is placed beside the hook by install-layer2.sh, so its absence means
+# a broken install, not a chosen mode. Defaulting to `log` would leave a hook that
+# is armed, silent and enforcing nothing, which is the one failure this card
+# refuses by name. No log line: the `mode` field would have to hold the value the
+# hook just failed to read.
+set_mode --absent
+d_deny 'W4 a missing mode file denies rather than defaulting to log' \
+  "$PRIMARY" prepared "$HEAD_TX" 'reference-transaction.mode'
+assert_log_empty 'W4 …and writes no log line, because the mode field has no value'
+
+# W5 — a mode file holding something that is neither `log` nor `deny`. Same
+# argument as layer 1's boundary 9: a mistyped switch is a failed attempt to arm
+# the guard, not permission to run unguarded. The value is quoted back.
+set_mode 'DENY'
+d_deny 'W5 an unrecognised mode value denies, and the message quotes it' \
+  "$PRIMARY" prepared "$HEAD_TX" 'DENY'
+assert_log_empty 'W5 …and writes no log line either'
+
+# W6 — the file format. It is tracked and meant to be read by a human before it is
+# flipped, so it carries comments; blank lines and `#` lines are skipped and the
+# first real line decides. Surrounding whitespace is trimmed, because an editor
+# that leaves a trailing space must not arm a machine-wide refusal by accident.
+printf '# the layer 2 arming switch\n\n   deny   \n' > "$MODE_FILE"
+d_deny 'W6 comments, blank lines and surrounding whitespace are tolerated' \
+  "$PRIMARY" prepared "$HEAD_TX"
+assert_log_has 'W6 …and the value read was deny' 'DENY primary-HEAD-lock-held'
+
+# W7 — a `#`-only file names no mode at all. It is not `log`.
+printf '# nothing here\n' > "$MODE_FILE"
+d_deny 'W7 a file with no value line denies' "$PRIMARY" prepared "$HEAD_TX" \
+  'reference-transaction.mode'
+assert_log_empty 'W7 …and writes no log line'
+
+rm -f "$PRIMARY/.git/HEAD.lock"
+
+# W8 — the exemption does not depend on the mode, in either direction. `git init`
+# is allowed in `deny` mode because it is not a shape this guard judges — not
+# because the guard happens to be observing.
+set_mode deny
+INITREPO2="$TMP/repos/freshinit2"
+e_run "$TMP" "$GIT_REAL" -c user.email=t@t -c user.name=t -c init.defaultBranch=main \
+  -c core.hooksPath="$HOOKS_DIR" init -q "$INITREPO2"
+if [ "$e_rc" -eq 0 ] && [ -f "$INITREPO2/.git/HEAD" ]; then
+  ok 'W8 git init is allowed in DENY mode — the exemption is not a mode effect'
+else
+  printf 'FAIL — W8 git init in deny mode (rc=%s, HEAD present=%s)\n  stderr: %s\n' "$e_rc" \
+    "$( [ -f "$INITREPO2/.git/HEAD" ] && echo yes || echo no )" "$(cat "$err")"; fail=$((fail+1))
+fi
+
+# ================================================================= GROUP F ===
+# Feature: the log line's format (card task 6e, piece 3). Round 8's observability
+# judge found layer 2 with no `<arm>` value and no way to tell its lines from
+# layer 1's — which makes "did layer 1 miss this?" unanswerable, the exact
+# question the two-layer design exists to let you ask.
+#
+#   <iso8601> <session_id> <arm> <mode> <DECISION clause> <detail>
+#
+# session_id is EMPTY and stays empty. It arrives on a PreToolUse payload; layer 2
+# is a child of `git` and has no payload at all. Synthesising one would be a field
+# the payload cannot source — the failure this card refuses by name. The cost is
+# real and bounded: a layer-2 line answers "was this shape missed by layer 1" and
+# not "which session typed it".
+
+set_mode deny
+: > "$PRIMARY/.git/HEAD.lock"
+log_reset
+_run "$PRIMARY" prepared "$HEAD_TX"
+log_harvest
+F_LINE="$(head -1 "$LOG" 2>/dev/null)"
+
+f_field() { printf '%s' "$F_LINE" | cut -f"$1"; }
+
+if [ "$(printf '%s' "$F_LINE" | awk -F'\t' '{print NF}')" = 6 ]; then
+  ok 'F1 the line carries exactly six tab-separated fields'
+else
+  printf 'FAIL — F1 six tab-separated fields (got %s)\n  line: %s\n' \
+    "$(printf '%s' "$F_LINE" | awk -F'\t' '{print NF}')" "$F_LINE"; fail=$((fail+1))
+fi
+
+# The `-n "$F_LINE"` half is not belt and braces: without it this case is VACUOUS
+# against any hook that logs nothing at all — an absent line has an empty field 2
+# too, and the two-stub falsification caught exactly that.
+if [ -n "$F_LINE" ] && [ -z "$(f_field 2)" ]; then
+  ok 'F2 the session_id field is EMPTY, not synthesised'
+else
+  printf 'FAIL — F2 the session_id field must be empty (got [%s])\n  line: %s\n' \
+    "$(f_field 2)" "$F_LINE"; fail=$((fail+1))
+fi
+
+# F3 — the arm value. Asserted for EQUALITY and against layer 1's two values by
+# name: `A` and `B2D` are what worktree-guard.sh writes, and a layer 2 that reused
+# either would make the two logs unsplittable at exactly the field meant to split
+# them.
+F_ARM="$(f_field 3)"
+if [ -n "$F_ARM" ] && [ "$F_ARM" != A ] && [ "$F_ARM" != B2D ]; then
+  ok "F3 the arm field holds a value of layer 2's own: [$F_ARM]"
+else
+  printf "FAIL — F3 the arm field must be non-empty and neither A nor B2D (got [%s])\n" "$F_ARM"
+  fail=$((fail+1))
+fi
+
+if [ "$(f_field 4)" = deny ]; then
+  ok 'F4 the mode field holds the mode this run was armed in'
+else
+  printf 'FAIL — F4 the mode field (want deny, got [%s])\n  line: %s\n' \
+    "$(f_field 4)" "$F_LINE"; fail=$((fail+1))
+fi
+
+set_mode log
+log_reset
+_run "$PRIMARY" prepared "$HEAD_TX"
+log_harvest
+if [ "$(head -1 "$LOG" 2>/dev/null | cut -f4)" = log ]; then
+  ok 'F5 …and follows the mode when it changes'
+else
+  printf 'FAIL — F5 the mode field follows the mode (want log, got [%s])\n' \
+    "$(head -1 "$LOG" 2>/dev/null | cut -f4)"; fail=$((fail+1))
+fi
+
+set_mode deny
+rm -f "$PRIMARY/.git/HEAD.lock"
+
 # ================================================================= GROUP Z ===
 # Feature: attribution. "Its test suite must show BOTH CLAUSES FIRING SEPARATELY
 # in an attribution log: a run where every case is denied proves nothing about the
@@ -1014,7 +1369,7 @@ reset_fixture "$MREPO"
 # are the assertion that the groups above were decided by DIFFERENT rules rather
 # than by one rule absorbing everything.
 
-clause_count() { cut -f2 "$ATTR" 2>/dev/null | grep -cxF -- "$1" || true; }
+clause_count() { cut -f"$CLAUSE_FIELD" "$ATTR" 2>/dev/null | grep -cxF -- "$1" || true; }
 
 z_at_least_one() { # $1 desc, $2 clause
   local c; c="$(clause_count "$2")"
@@ -1022,7 +1377,7 @@ z_at_least_one() { # $1 desc, $2 clause
     printf 'ok   — %s (fired %s time(s))\n' "$1" "$c"; pass=$((pass+1))
   else
     printf 'FAIL — %s (fired 0 times across the whole run)\n  clauses seen:\n%s\n' "$1" \
-      "$(cut -f2 "$ATTR" 2>/dev/null | sort | uniq -c)"; fail=$((fail+1))
+      "$(cut -f"$CLAUSE_FIELD" "$ATTR" 2>/dev/null | sort | uniq -c)"; fail=$((fail+1))
   fi
 }
 
@@ -1036,6 +1391,10 @@ z_at_least_one 'Z4 the backend refusal fired: DENY backend-not-files' \
   'DENY backend-not-files'
 z_at_least_one 'Z5 the bypass clause fired: ALLOW bypass-worktree-exempt' \
   'ALLOW bypass-worktree-exempt'
+z_at_least_one 'Z7 the git-init exemption fired: ALLOW git-init-own-repository' \
+  'ALLOW git-init-own-repository'
+z_at_least_one 'Z8 log mode fired at least once: WOULD-DENY primary-HEAD-lock-held' \
+  'WOULD-DENY primary-HEAD-lock-held'
 
 # Z6 — the assertion the card actually asks for, stated as one verdict rather than
 # left implicit in Z1–Z4. A suite in which every case denied would satisfy Z2 and
@@ -1052,7 +1411,7 @@ else
 fi
 
 printf '\n--- attribution log, whole run ---\n'
-cut -f2 "$ATTR" 2>/dev/null | sort | uniq -c | sed 's/^/  /'
+cut -f"$CLAUSE_FIELD" "$ATTR" 2>/dev/null | sort | uniq -c | sed 's/^/  /'
 
 printf '\n%s passed, %s failed, %s skipped\n' "$pass" "$fail" "$skip"
 [ "$fail" -eq 0 ]
