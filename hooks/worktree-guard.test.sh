@@ -1504,6 +1504,28 @@ RUN_ENV=(GIT_CONFIG_GLOBAL="$TMP/live/gc-nofile")
 deny 'L9 an Arm A write refusal carries the same liveness report' "$LIVE" \
   "$(payload_write Write file_path "$LIVE/hooks/git-guard.sh" s-l9)" "$HP_NOFILE"
 
+# L10 — the liveness check is SHARED CODE now, and a missing copy of it must not
+# take the refusal down with it. Task 6e's installer reports through the same
+# judgement this hook uses, so "is layer 2 armed" is answered in one place rather
+# than twice with room to drift (the argument round 4 made about
+# resolve_effective_repo, one file over). The cost of sharing is a new way to be
+# missing, and this is the case that pins what happens then: the refusal still
+# stands and still exits 2, and the report says the check could not be RUN rather
+# than saying nothing — silence is what an armed layer 2 looks like.
+#
+# Arm A and not Arm D on purpose: a lib directory missing one .sh file is also
+# missing worktree_guard_bash_arms.sh, so a Bash payload would deny at deny_arms
+# and never reach the liveness check at all. The assertion names the missing FILE,
+# not any wording, on the same grounds as L1..L4.
+NOLIVE="$TMP/nolivelib"
+mkdir -p "$NOLIVE"
+cp "$LIB"/*.py "$NOLIVE/" 2>/dev/null
+cp "$LIB"/worktree_guard_bash_arms.sh "$NOLIVE/" 2>/dev/null
+RUN_ENV=(WORKTREE_GUARD_LIB="$NOLIVE" GIT_CONFIG_GLOBAL="$TMP/live/gc-nofile")
+deny 'L10 a missing liveness lib still refuses, and says the check could not run' "$LIVE" \
+  "$(payload_write Write file_path "$LIVE/hooks/git-guard.sh" s-l10)" \
+  "worktree_guard_liveness.sh"
+
 # ================================================================= GROUP G ===
 # Feature: Arming and the log (card :2678)
 
