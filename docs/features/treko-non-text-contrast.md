@@ -490,6 +490,16 @@ The rule the implementation inherits:
    be audited against; an un-enumerated one is a silent skip wearing the same clothes.
 3. An allowlist token that matched **zero** marks in a theme → **fail**. A token that stopped
    painting is either a regression or a stale list; both need a human.
+   **What this rule does *not* cover, stated because a reader will assume it does:** a mark that is
+   a **descendant** of a `backdrop-filter` element is still scored, against that element's declared
+   background colour rather than against the blurred paint the viewer actually sees. That is a real
+   approximation, and it is not asserted away: the header's fill composites to `--color-bg` at 90%
+   over the page ground, so today the error is negligible — but "negligible today" is a
+   measurement, not a design, and a heavier blur or a translucent header over busy content would
+   make it wrong without anything going red. Widening the exclusion to descendants was rejected
+   because it would silently remove marks from the scored population, which is the failure this
+   card exists to argue against; disclosing it is the honest half-measure.
+
 4. The one instance of rule 2's *blurred-fill* half today is the sticky header at
    `Treko.dc.html:102`, whose `backdrop-filter: blur(10px)` leaves its fill nothing flat to be
    scored against. It is enumerated, excluded, and its count asserted at 1 per theme — it is
@@ -966,6 +976,9 @@ Red half and green half are separate commits throughout; never the same commit
 
 ### Findings made during implementation, 2026-08-26
 
+Five subsections follow: the suite against its baseline, the palette diff, the thirteen
+falsifier cases, the one spec defect the implementation found, and the Chrome re-pin.
+
 ### Criterion 12 — the full suite, against the task-1 baseline
 
 |  | baseline (`355904b`) | after (`feat/treko-non-text-contrast`) |
@@ -1113,9 +1126,9 @@ what surfaced the defect**, on the first run.
 
 The class, worth more than the instance: **the rule was written from the one mark it was invented
 to explain, and never checked against the population it would run over.** The check that settles it
-is narrow and was never run — `color-mix` itself appears 57 times in 7 files under `treko/`, which
-is why counting occurrences answers nothing, but exactly **one custom property is declared with a
-`color-mix` value**:
+is narrow and was never run. Counting occurrences answers nothing: `color-mix` appears **44 times
+across the two CSS sources** — hover tints, pressed states, muted text — and exactly **two of those
+44 declare a custom property, both of them the same token**:
 
 ```
 git grep -nE '^[[:space:]]*--[A-Za-z0-9_-]+:[[:space:]]*color-mix' -- 'treko/*.css' 'treko/_ds/*/styles.css'
@@ -1124,10 +1137,16 @@ git grep -nE '^[[:space:]]*--[A-Za-z0-9_-]+:[[:space:]]*color-mix' -- 'treko/*.c
 ```
 
 That is the same shape as §Background 7's `--color-accent-500` error — a claim about a mechanism,
-taken from a single example, never counted. **This very paragraph got it wrong once first**: its
-first draft said the grep "returns three declarations", which is what a bare `git grep color-mix`
-looked like at a glance; the real answer is 57 occurrences, 1 token, and the two numbers point in
-opposite directions.
+taken from a single example, never counted.
+
+**This paragraph has now been wrong twice, in two different ways, and both are worth keeping.** Its
+first draft said the grep "returns three declarations" — what a bare `git grep color-mix` looks like
+at a glance — when the real answers are 44 occurrences and 1 token, two numbers that point in
+opposite directions. Its second draft fixed that and then quoted a repo-wide total, **which went
+stale inside a day**: the count rose as this card's own test module gained mentions of the word, so
+the paragraph warning about figures rotting in place had one rotting in it. The number above is
+therefore scoped to `treko/*.css` and `treko/_ds/*/styles.css` — the population the claim is
+actually about, and one that no test file can move.
 
 
 ### What was measured during planning, and how to re-run it
