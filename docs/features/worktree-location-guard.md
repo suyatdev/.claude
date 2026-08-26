@@ -3178,7 +3178,46 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         line carries a third number so a zero-failure run can never read as full coverage. The
         layer-2 halves of `L7`, `D26`, `D42` and `D-3B-R3` belong to task 6a's own suite: layer 2 is
         a child of `git`, and this suite never runs `git` on the guard's behalf.
-- [ ] 4. Implement Arm A.
+- [x] 4. Implement Arm A. **DONE 2026-08-26 — `hooks/worktree-guard.sh`, 421 lines, Arm A only.**
+      Suite after the change: **90 passed, 94 failed, 1 skipped** (re-run and re-counted by the
+      orchestrator, not copied from the implementer). Per group: **A 29 ok / 0 fail**, P 8/4,
+      G 17/4; B 5/16, D and L untouched and out of scope until tasks 5, 6, 6a and 6b.
+      `hooks/phase-guard.test.sh` re-run: 147 passed, 0 failed.
+      - **Every red case in P and G feeds a `Bash` payload**, checked one by one against the
+        suite source rather than inferred from the group name: `P4` ×2 (the lexers, task 5),
+        `P5a`/`P5b` (`$HOME`, see below), `G5` ×3 (an Arm D command), `G8` (an Arm D bypass).
+        None is an Arm A defect.
+      - ⚠️ **`G8 …and no line is appended` currently passes for the wrong reason** — nothing is
+        appended because the Bash arm allows, not because a bypass record was lost. Task 6 is
+        what makes that assertion mean anything; until then it is not evidence.
+      - **Boundary 13 (`$HOME`) is implemented as `require_home()` and called from Arm A only**,
+        not hoisted above arm dispatch, so `P5a`/`P5b` stay red by choice. The reason is a real
+        one task 6 must settle: a mode-subject deny writes a log line, and on a `Bash` payload
+        the line's `arm` field is not determinable before the command is lexed (B2 vs D). It is
+        written as a function precisely so tasks 5 and 6 call it from their own entry points.
+        **Not recorded as a spec GATE** — Arm A's own behaviour is unaffected; if task 6 finds
+        the card genuinely underspecifies the `arm` field here, that is when the gate is raised.
+      - **Boundary 9 (a mistyped `WORKTREE_GUARD_MODE`) writes no log line**, on boundary 1's
+        reasoning: the `mode` field would otherwise carry the very value the guard just
+        rejected. `G2` pins the deny and the named value; the suite says nothing about the log
+        on this path, so this is a decision, not a measurement.
+      - **Two rows the card does not cover, both resolved fail-closed and both untested by the
+        suite:** a write target with no enterable ancestor directory → deny; `--show-toplevel`
+        exiting 0 while printing nothing → deny (boundary 6's parenthetical lists the other
+        three probes but not this one).
+      - **`P3` passes by an adjacent route** — with neither `python3` nor `python` on `PATH` the
+        payload cannot be parsed at all, so the deny comes from the payload step, not the lexer
+        step the scenario names. Right verdict, different mechanism; `P4` is what actually pins
+        the lexer-failure deny.
+      - The default state dir mirrors `phase-guard.sh:62`
+        (`${WORKTREE_GUARD_STATE_DIR:-${HOME:-}/.claude/hooks/state}`) — the citation was opened
+        and confirmed byte-identical in shape, including its `${HOME:-}` rationale. Untested:
+        the suite always overrides it.
+      - One implementer comment claimed "all five elements of the house contract
+        (`phase-guard.sh:537-561`)"; that location's own comment counts **four** and does not
+        list them, so the five belongs to this card's Deny message contract (`:1438`). The
+        comment was corrected to attribute each to its real source and to claim no mapping
+        between them, since none is determinable from `phase-guard.sh`.
 - [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
       before emitting any new tab-bearing fact. Then extend `classify-git-command.py` with
