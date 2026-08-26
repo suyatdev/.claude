@@ -2,6 +2,9 @@
   "permissions": {
     "defaultMode": "default"
   },
+  "env": {
+    "WORKTREE_GUARD_MODE": "log"
+  },
   "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
