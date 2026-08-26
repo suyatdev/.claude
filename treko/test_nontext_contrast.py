@@ -890,3 +890,152 @@ def test_every_entry_sits_at_its_recorded_mark_count(walk, theme):
         "%s: %d allowlist entr%s not at %s recorded mark count:\n%s"
         % (theme, len(wrong), "y is" if len(wrong) == 1 else "ies are",
            "its" if len(wrong) == 1 else "their", _entry_delta_table(theme, walk[theme]["byKey"])))
+
+
+# --------------------------------------------------------------------- criteria 2, 3 and 4
+#
+# RED HALF (task 6). Every `floor` and `min_ratio` is None at this commit, so all three
+# assertions below fail: there is no recorded number for them to check against. Task 7 records
+# them. The assertions are written first on purpose -- a floor chosen after seeing the ratio it
+# has to clear is not a floor.
+
+PIN_FLOOR = 3.0
+
+# Absorbs float formatting and nothing else. The ratio is pure arithmetic over composited sRGB
+# triples and two byte-identical walks show there is no measurement noise to absorb. It is NOT
+# sized to catch the smallest possible palette edit and cannot be: a one-step (1/255) change on a
+# single channel moves these six minima by 0.0009 to 0.0057, so this sits under the smallest of
+# them by a factor of 1.8, and a lateral hue change at equal luminance would not move the ratio at
+# all. What catches an edited token value is Coverage -- §D8's Coverage bullet is the normative
+# statement of that rule. This assertion guards the case that survives it: the token untouched,
+# its surroundings moved.
+DEBT_TOLERANCE = 0.0005
+
+
+def _by_class(klass):
+    return [entry for entry in ALLOWLIST if entry["klass"] == klass]
+
+
+def _token_minimum(entry, theme, by_key):
+    """The lowest ratio over every mark this entry claims, or None if it claims none."""
+    ratios = [slot["minRatio"] for key, slot in by_key.items()
+              if _matches(entry, theme, *key.rsplit("|", 1))]
+    return min(ratios) if ratios else None
+
+
+def _worst_mark(entry, theme, by_key):
+    """The (key, slot) whose ratio is lowest among the marks this entry claims."""
+    claimed = [(key, slot) for key, slot in by_key.items()
+               if _matches(entry, theme, *key.rsplit("|", 1))]
+    return min(claimed, key=lambda pair: pair[1]["minRatio"])
+
+
+def test_every_pin_has_a_floor_and_every_debt_and_exempt_a_reason():
+    """Criteria 3 and 4 — asserted over the allowlist data alone, before any page loads.
+
+    A green run means the list is fully classified. It does not mean the board is accessible.
+
+    The schema in §D8 requires a floor on every PIN entry, a recorded ratio on every DEBT entry
+    and a non-empty reason on every DEBT and EXEMPT entry. Without an assertion those are
+    comments, and a requirement nothing checks is a requirement that quietly stops holding.
+    Falsifier case 13 empties one reason and removes one floor, and this is what catches it --
+    at import time, in a run where the browser never starts.
+    """
+    for entry in _by_class(PIN):
+        assert isinstance(entry["floor"], float), (
+            "PIN entry %s has floor %r; every PIN entry needs a numeric floor, which is the whole "
+            "claim its class makes." % (entry["token"], entry["floor"]))
+    for entry in _by_class(DEBT) + _by_class(EXEMPT):
+        reason = entry["reason"]
+        assert isinstance(reason, str) and reason.strip(), (
+            "%s entry %s has reason %r. An exemption or a recorded defect without a specific "
+            "reason is not reviewable, and this list is only as auditable as its reasons."
+            % (entry["klass"], entry["token"], reason))
+        assert "decorative" not in reason.lower(), (
+            "%s's reason calls the mark 'decorative' -- criterion 4 forbids that word by name. "
+            "It is how an exemption list stops being auditable: it explains nothing and cannot "
+            "be argued with." % entry["token"])
+    for entry in _by_class(DEBT):
+        for theme in THEMES:
+            assert isinstance(entry[theme]["min_ratio"], float), (
+                "DEBT entry %s has no recorded %s ratio (%r). A debt entry with no number is a "
+                "note, not a guard." % (entry["token"], theme, entry[theme]["min_ratio"]))
+
+
+@pytest.mark.parametrize("theme", THEMES)
+def test_pin_tokens_clear_their_floor(walk, theme):
+    """Criterion 2 — every mark of every PIN token is at or above 3.0:1.
+
+    A green run means these six tokens have not regressed below the floor. It does not mean the
+    board is accessible, and it does not mean they are frozen: --ok may slide from 10.30 to 3.01
+    with this green. A floor is the property this card can defend, and pinning six healthy tokens
+    to four decimal places would make every legitimate re-tint a failure.
+
+    The ratio is between the mark and the surface immediately OUTSIDE it, over every kind the
+    token paints -- not borders alone. That matters for reading a failure: two of the three DEBT
+    minima come from a kind the token's name does not suggest.
+    """
+    assert ALLOWLIST, _NO_ALLOWLIST
+    by_key = walk[theme]["byKey"]
+    failures = []
+    for entry in _by_class(PIN):
+        # Neither a missing floor nor a token that matched nothing may fall through to a pass.
+        # Other assertions own both cases, but "some other test would have caught it" is how a
+        # skip gets mistaken for a green -- the failure this whole card was written about.
+        assert isinstance(entry["floor"], float), (
+            "%s: PIN entry %s has no floor to check against (%r)."
+            % (theme, entry["token"], entry["floor"]))
+        low = _token_minimum(entry, theme, by_key)
+        assert low is not None, (
+            "%s: PIN entry %s matched no marks, so its floor was never exercised."
+            % (theme, entry["token"]))
+        if low >= entry["floor"]:
+            continue
+        key, slot = _worst_mark(entry, theme, by_key)
+        failures.append("  %-22s %.4f  <  floor %.1f   kind=%-14s %s"
+                        % (entry["token"], low, entry["floor"], slot["worstKind"],
+                           slot["worstPath"]))
+    assert not failures, (
+        "%s: %d pinned token(s) fell below their floor:\n%s"
+        % (theme, len(failures), "\n".join(failures)))
+
+
+@pytest.mark.parametrize("theme", THEMES)
+def test_debt_tokens_sit_at_their_recorded_ratio(walk, theme):
+    """Criterion 3 — the three recorded defects, pinned in place, to 4 dp.
+
+    A green run means these three defects are exactly as bad as this card says. It does not mean
+    the board is accessible.
+
+    Asserted at the recorded value rather than at 3.0, so the assertion fails in BOTH directions:
+    red if the token gets worse, and red if it gets better -- because someone repaired it and the
+    debt entry in this card has become a lie. §D5 is where the repair belongs, on its own card,
+    with its own before/after measurement.
+    """
+    assert ALLOWLIST, _NO_ALLOWLIST
+    by_key = walk[theme]["byKey"]
+    failures = []
+    for entry in _by_class(DEBT):
+        recorded = entry[theme]["min_ratio"]
+        measured = _token_minimum(entry, theme, by_key)
+        # A DEBT entry with no recorded number, or one matching no marks, must FAIL here rather
+        # than fall through to a pass. Writing that as `if recorded is None: continue` is how a
+        # deleted number turns into a green run, which is the exact shape of defect this module
+        # exists to catch.
+        assert recorded is not None, (
+            "%s: DEBT entry %s has no recorded ratio, so nothing was checked."
+            % (theme, entry["token"]))
+        assert measured is not None, (
+            "%s: DEBT entry %s matched no marks, so its recorded %s was never exercised."
+            % (theme, entry["token"], recorded))
+        if abs(measured - recorded) <= DEBT_TOLERANCE:
+            continue
+        key, slot = _worst_mark(entry, theme, by_key)
+        failures.append(
+            "  %-22s recorded %s  measured %s  moved %s by %.4f   kind=%-14s %s"
+            % (entry["token"], recorded, measured,
+               "BETTER (someone repaired it -- re-record it in §D2, or revert)" if measured > recorded
+               else "WORSE", abs(measured - recorded), slot["worstKind"], slot["worstPath"]))
+    assert not failures, (
+        "%s: %d recorded defect(s) moved outside +/-%s of their recorded ratio:\n%s"
+        % (theme, len(failures), DEBT_TOLERANCE, "\n".join(failures)))
