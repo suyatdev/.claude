@@ -321,7 +321,7 @@ CONTRAST_CHECK_JS = """
 def _wait_for_mount(chrome, timeout=15):
     """Poll until DCLogic has rendered the real board, not the loading/missing placeholder.
     Both placeholders render a handful of elements; the mounted board renders hundreds (measured
-    on this exact page: 848 visible elements) -- a low, generous floor tells 'not mounted yet'
+    on this exact page: 902 visible elements) -- a low, generous floor tells 'not mounted yet'
     from 'mounted' apart without hardcoding a selector into React's internals."""
     deadline = time.time() + timeout
     count = 0
@@ -374,7 +374,7 @@ def test_criterion5_light_mode_contrast_meets_wcag(srv, tmp_path):
         result = chrome.evaluate(CONTRAST_CHECK_JS)
 
         # Sanity floor first, regardless of theme state: a check that silently found nothing
-        # would vacuously pass. Of the 848 elements with rendered area on this exact page, 367
+        # would vacuously pass. Of the 851 elements with rendered area on this exact page, 368
         # paint a mark in their own color and are therefore scored (criterion 5's population);
         # 200 is a wide margin under that and a tight one over "the walk found basically
         # nothing." It also guards the narrowing itself: a paintsText() that wrongly returned

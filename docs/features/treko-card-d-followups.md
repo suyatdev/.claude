@@ -54,7 +54,7 @@ same reason `post-merge-followups-45.md` exists.
       `origin/main`.
       **Done** — verified via `gh pr view 68 --json mergeCommit` and
       `git merge-base --is-ancestor`.
-- [ ] 4 — `treko/test_theme.py`: two stale figures, **which are two different measurements and must
+- [x] 4 — `treko/test_theme.py`: two stale figures, **which are two different measurements and must
       not be given the same value.**
       - `:377` — "848 elements with rendered area … 367 paint a mark in their own color". Card D
         §Background 8 re-measured both on one page load, taking the text count from card A's own
@@ -70,6 +70,20 @@ same reason `post-merge-followups-45.md` exists.
         transplant 851.
       - Neither figure is load-bearing: the assertion's floor is `>= 200`. This is a stale comment,
         not a live bug.
+      - **Done.** Re-measured live via two independent standalone scripts against
+        `server_harness`/`cdp_harness` (not pytest fixtures, pinned Chrome build,
+        `TREKO_CHROME_DENY_BIRD=1`), each run twice: `:324` body-descendant count
+        (`document.querySelectorAll('body *').length` on mount) is **902**, confirmed stable
+        across repeated reads by two independent agents — the ~902 planning-notes figure this
+        card's own header called "not reproducible" turned out to be reproducible once measured
+        properly. `:377`'s pair is **851 / 368**: `CONTRAST_CHECK_JS`'s `elementCount` field
+        (368) already applies *both* filters (non-zero rendered area AND `paintsText`) in one
+        pass — there is no field for "elements with rendered area" alone, so that half (851) was
+        measured with a standalone one-off rendered-area-only JS walk mirroring filter 1 of
+        `CONTRAST_CHECK_JS`, run twice, both times 851 — matching the card's own prediction
+        exactly. Both light and dark themes gave identical `elementCount`/mount numbers, as
+        expected (theme-independent DOM walk). `treko/test_theme.py` + `treko/test_nontext_contrast.py`:
+        30 passed, 0 failed, 0 deselected; diff is comment-text-only (two number substitutions).
 - [~] 5 — Branch cleanup. Delete `feat/treko-non-text-contrast` and `feat/treko-store-location`
       locally and on the remote (both are ancestors of `origin/main`), and any other local branch
       that is fully merged and not checked out by a live worktree. Verify merged-ness against
