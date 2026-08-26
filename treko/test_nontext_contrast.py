@@ -503,3 +503,158 @@ def test_enumerated_exclusions_are_at_their_recorded_counts(walk, theme):
         "loud failure:\n%s"
         % (theme, result["marksOverBackgroundImage"], MARKS_OVER_BACKGROUND_IMAGE,
            json.dumps(result["marksOverBackgroundImageSamples"], indent=2)))
+
+
+# --------------------------------------------------------------------- the allowlist
+#
+# RED HALF (task 4). ALLOWLIST is empty at this commit and the three assertions below fail on
+# that, naming every key they could not map. Task 5 lands the 23 entries.
+
+PIN, DEBT, EXEMPT = "pin", "debt", "exempt"
+
+ALLOWLIST = []
+
+_NO_ALLOWLIST = (
+    "ALLOWLIST is still empty -- the 23 entries are task 5 (green half) of "
+    "docs/features/treko-non-text-contrast.md §D2. This assertion is the red half."
+)
+
+
+def _matches(entry, theme, colour, kind):
+    """Does `entry` claim the mark identified by this (colour, kind) key?
+
+    Marks are keyed on the PAIR, never on colour alone. Dark `rgb(63, 66, 77)` is painted by
+    `--color-neutral-800` as 22 fills and by `--shadow-sm` as 13 outset shadows (§Background 7),
+    and keying on colour alone makes criterion 5 ("exactly one entry") and criterion 7 (per-entry
+    counts) impossible to satisfy at once. An entry with no `kinds` filter claims every kind its
+    colours paint; today exactly two entries need one.
+    """
+    side = entry[theme]
+    if colour not in side["colors"]:
+        return False
+    return side["kinds"] is None or kind in side["kinds"]
+
+
+def _entry_counts(theme, by_key):
+    """`{token: marks measured}` for every allowlist entry, tokens with no marks included at 0."""
+    counts = {entry["token"]: 0 for entry in ALLOWLIST}
+    for key, slot in by_key.items():
+        colour, kind = key.rsplit("|", 1)
+        for entry in ALLOWLIST:
+            if _matches(entry, theme, colour, kind):
+                counts[entry["token"]] += slot["count"]
+    return counts
+
+
+def _entry_delta_table(theme, by_key):
+    """`token | expected | measured | delta`, unchanged entries omitted.
+
+    §D8 makes this part of the requirement rather than a nicety: `333 != 334` across 23 entries
+    tells a reader nothing about which entry moved. Unlike the per-kind breakdown above, this one
+    has a real expected column -- the allowlist is where it comes from.
+    """
+    measured = _entry_counts(theme, by_key)
+    rows = []
+    for entry in ALLOWLIST:
+        want, got = entry[theme]["marks"], measured[entry["token"]]
+        if want != got:
+            rows.append("  %-22s expected %4d  measured %4d  delta %+d"
+                        % (entry["token"], want, got, got - want))
+    return "\n".join(rows) if rows else "  (every entry sits at its recorded count)"
+
+
+# --------------------------------------------------------------------- criterion 5
+
+
+def test_no_allowlist_key_is_claimed_by_two_entries():
+    """Criterion 5, second half — asserted over the allowlist data alone, before any page loads.
+
+    A green run means no two entries fight over the same mark. It does not mean the board is
+    accessible.
+
+    This is the machine-checkable form of "exactly one entry", and it deliberately fails at
+    import time rather than at measurement time: a stale list is then caught even in a run where
+    the page never rendered. Dark `rgb(63, 66, 77)` is claimed by both `--color-neutral-800`
+    (`fill`) and `--shadow-sm` (`shadow-outset`); the `kinds` filter is what keeps that
+    unambiguous, and this assertion is what proves the filter is doing its job.
+    """
+    assert ALLOWLIST, _NO_ALLOWLIST
+    for theme in THEMES:
+        claimed = {}
+        for entry in ALLOWLIST:
+            side = entry[theme]
+            kinds = side["kinds"] if side["kinds"] is not None else ["<any kind>"]
+            for colour in side["colors"]:
+                for kind in kinds:
+                    key = (colour, kind)
+                    assert key not in claimed, (
+                        "%s: (%s, %s) is claimed by both %s and %s. Two entries cannot own one "
+                        "mark -- give one of them a `kinds` filter, or the marks are "
+                        "unattributable by machine (§Background 7)."
+                        % (theme, colour, kind, claimed.get(key), entry["token"]))
+                    claimed[key] = entry["token"]
+
+
+@pytest.mark.parametrize("theme", THEMES)
+def test_every_scored_key_maps_to_exactly_one_entry(walk, theme):
+    """Criterion 5, first half — coverage, both directions.
+
+    A green run means every mark on the board is painted in a colour a human classified. It does
+    not mean the board is accessible.
+
+    This is what stops the list going stale as the page grows, and it is also the assertion that
+    catches an edited token value: the edited token's declared colour string is new, so its key
+    is unmapped and neither the PIN floor nor the DEBT ratio ever sees a ratio to compare. §D8's
+    Coverage bullet is the normative statement of that rule and of the qualifying second half --
+    an edit that ALSO updates its entry passes here by construction and is caught by the floor or
+    the ratio instead.
+    """
+    assert ALLOWLIST, _NO_ALLOWLIST
+    by_key = walk[theme]["byKey"]
+
+    unmapped, multi = [], []
+    for key, slot in sorted(by_key.items()):
+        colour, kind = key.rsplit("|", 1)
+        hits = [e["token"] for e in ALLOWLIST if _matches(e, theme, colour, kind)]
+        if not hits:
+            unmapped.append("  %-46s x%-4d %s" % (key, slot["count"], slot["worstPath"]))
+        elif len(hits) > 1:
+            multi.append("  %-46s claimed by %s" % (key, ", ".join(hits)))
+
+    assert not unmapped, (
+        "%s: %d (colour, kind) key(s) among the scored marks map to no allowlist entry. Either "
+        "a token's value was edited without re-recording it in the card, or a new mark appeared "
+        "in a colour nobody has classified:\n%s" % (theme, len(unmapped), "\n".join(unmapped)))
+    assert not multi, (
+        "%s: %d key(s) claimed by more than one entry:\n%s" % (theme, len(multi), "\n".join(multi)))
+
+    starved = [e["token"] for e in ALLOWLIST
+               if not any(_matches(e, theme, *k.rsplit("|", 1)) for k in by_key)]
+    assert not starved, (
+        "%s: %d allowlist entr%s matched zero marks: %s. A token that stopped painting is either "
+        "a regression or a stale list, and both need a human -- passing on an empty set is the "
+        "vacuous green this card exists to prevent (§D7 rule 3)."
+        % (theme, len(starved), "y" if len(starved) == 1 else "ies", ", ".join(starved)))
+
+
+# --------------------------------------------------------------------- criterion 7
+
+
+@pytest.mark.parametrize("theme", THEMES)
+def test_every_entry_sits_at_its_recorded_mark_count(walk, theme):
+    """Criterion 7 — per-entry counts, exact.
+
+    A green run means no mark moved between entries. It does not mean the board is accessible.
+
+    The scored total alone cannot catch a misfiling: file all 35 of dark `rgb(63, 66, 77)` under
+    one entry and the total stays 334 while two entries are wrong. That is not hypothetical --
+    the round-1 revision of this card was exactly that bug, 13 shadows filed under
+    `--color-neutral-800` by hex collision, with every total-based check green.
+    """
+    assert ALLOWLIST, _NO_ALLOWLIST
+    measured = _entry_counts(theme, walk[theme]["byKey"])
+    wrong = [e["token"] for e in ALLOWLIST if measured[e["token"]] != e[theme]["marks"]]
+    assert not wrong, (
+        "%s: %d allowlist entr%s not at %s recorded mark count:\n%s"
+        % (theme, len(wrong), "y is" if len(wrong) == 1 else "ies are",
+           "its" if len(wrong) == 1 else "their", _entry_delta_table(theme, walk[theme]["byKey"])))
