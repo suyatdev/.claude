@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: xhigh
-branch: none
+branch: feat/worktree-location-guard
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
