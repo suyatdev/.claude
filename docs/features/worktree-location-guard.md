@@ -1322,7 +1322,7 @@ with no verdict available to it at all (boundary 34, where no layer-2 code runs)
 | 4 | `git --version` < 2.31, or unparseable | **Deny**, message names the 2.31 floor. |
 | 5 | `git rev-parse --show-toplevel` exits non-zero with the "not a git repository" diagnostic | **Allow, silently.** |
 | 5a | `git rev-parse --show-toplevel` exits non-zero with the "this operation must be run in a work tree" diagnostic | **Allow, silently** — this is a bare repository (Arm A step 4). Measured in task 2a: rc=128, `fatal: this operation must be run in a work tree`, both at the bare directory and in a subdirectory of it. Without this row the bare case falls to row 6 and denies, which is what the original recipe did and why the `Bare repository` scenario was unreachable. |
-| 6 | Any *other* non-zero exit or empty output from any `rev-parse` probe (`--show-superproject-working-tree`, `--path-format=absolute --git-dir`, `--git-common-dir`) | **Deny.** Boundaries 5 and 5a have already ruled out "not a repo" and "bare", so this is a validation failure. `--is-bare-repository` is deliberately absent from this list: the recipe no longer runs it (see "Repo shapes that are out of scope"). |
+| 6 | Any *other* non-zero exit or empty output from any `rev-parse` probe (`--show-superproject-working-tree`, `--path-format=absolute --git-dir`, `--git-common-dir`) | **Deny.** Boundaries 5 and 5a have already ruled out "not a repo" and "bare", so this is a validation failure. `--is-bare-repository` is deliberately absent from this list: the recipe no longer runs it (see "Repo shapes that are out of scope"). **When the failure is step 4's — a third diagnostic matching neither row 5 nor row 5a — the message quotes the text it actually read**, the same requirement rows 4 and 28 place on their own messages. Step 4 discriminates on two English sentences from git; an upstream wording change lands in this row and denies every write, and a deny that does not name what it read is indistinguishable from every other deny. |
 | 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. Interpreter pinned at the system `/usr/bin/python3` **3.9.6** (measured 2026-08-24); both lexers already run under it via `#!/usr/bin/env python3`, so **no floor above 3.9 is introduced** and none may be relied on. Resolution follows `git-guard.sh:54` (`command -v python3 \|\| command -v python`), which already fails closed when neither exists. |
 | 8 | `WORKTREE_GUARD_MODE` is unset | **`log`.** This is the documented ship state — the guard arrives unarmed on purpose. |
 | 9 | `WORKTREE_GUARD_MODE` is set to anything other than `log` or `deny` | **`deny`**, and the message names the bad value. A *present but wrong* value means someone tried to arm the guard and mistyped; reading a failed configuration attempt as "off" is the silent disarm the git-floor section argues against. Absence and a typo are deliberately not the same case. |
@@ -1708,10 +1708,20 @@ Feature: Arm A — writes are refused from a primary checkout
     # target denies under Arm A anyway, so only naming the floor proves the version
     # check ran and reached the right conclusion.
 
-  Scenario: rev-parse fails without the "not a git repository" diagnostic
+  Scenario: rev-parse fails with a diagnostic step 4 recognizes neither way
     Given git rev-parse --show-toplevel exits 128 printing "fatal: detected dubious ownership"
     When Write targets ~/.claude/panes/run-pane-agent.sh
     Then the hook denies
+    And the message quotes the diagnostic text it actually read
+    # The message assertion was added 2026-08-26 on the round-10 observability read.
+    # Step 4 now discriminates on TWO English sentences from git, and a wording
+    # change upstream lands here — in the deny-everything branch. Without the
+    # message assertion this scenario passes on a deny that is indistinguishable
+    # from a deny for any other reason, so the one failure mode the text match
+    # introduces would be undiagnosable. This matches what the version-floor and
+    # ref-format boundaries already require of their own messages (rows 4 and 28);
+    # the target denies under Arm A anyway, so only the message proves step 4 ran
+    # and reached this branch rather than some other one.
     # Boundary 5 is scoped to the recognizable diagnostic; anything else is a
     # validation failure (Arm A step 4). Reading "not a repo" off the exit code
     # alone classifies this as none-of-the-guard's-business and allows — the same
