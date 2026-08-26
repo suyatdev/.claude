@@ -630,27 +630,37 @@ cmdReason: (hasToken && !channelOk) ? trackerChannelReason(S.cmdChannel) : '',
 cmdReasonC: 'var(--warn)',
 ```
 
-`cmdReason` is the empty string, never `null`/`undefined`, in every mode the gate above marks
-`false` — so the template can render it unconditionally with no `sc-if`, the same way `cmdMsg`
-already does, and an empty string renders nothing. `cmdReasonC` is a fixed tone, not a lookup: D5
-has exactly one reason state (degraded), not a palette per token, so there is nothing for a second
-constants table to select between — `CMD_TONES.no_channel` (§"Three page-side additions", above)
-is the fence-side digest fixture's fixture, `cmdReasonC` is the page-side color, and the two are
-independent by design, not duplicated.
+`cmdReasonC` is a fixed tone, not a lookup: D5 has exactly one reason state (degraded), not a
+palette per token, so there is nothing for a second constants table to select between.
+`CMD_TONES.no_channel` (§"Three page-side additions", above) lives at `Treko.dc.html:500` —
+**outside** the fence (`:399-492`), same as `cmdReasonC` — and the two are independent constants
+for different things: `CMD_TONES` keys the *command-status* color (`cmdMsgC`) by outcome,
+`cmdReasonC` is a single fixed color for the reason line, never keyed at all.
 
-**New template element**, placed in the command cluster after the existing status text and before
-the buttons — it explains *why* the buttons became chips, so it reads before them:
+**Round 12 correction (observability round 8's finding, measured, not argued):** the first
+revision of this section said `cmdReason` renders "unconditionally with no `sc-if`" because an
+empty string "renders nothing" — that is wrong for a flexbox row. `#dc-root`'s command cluster
+uses `gap:14px` between children; an empty `<div>` is still a flex item and still consumes a gap
+slot. Measured in headless Chrome: the healthy/idle header's existing gap is `28.00px`; an
+unconditionally-rendered empty `cmdReason` div widens it to `42.00px` — on the exact path
+criterion 10 calls "byte-identical to today." **The element is instead gated with `sc-if`**, the
+same mechanism this file already uses 17 times elsewhere (`Treko.dc.html:44,47,56,58,…`), so a
+`false` gate emits **no node at all** — consistent with `:600-601`'s "not an empty string standing
+in for it, nothing":
 
 ```html
 <div style="flex:none;font-size:11.5px;line-height:1.35;max-width:300px;text-align:right;color:{{ cmdMsgC }}">{{ cmdMsg }}</div>
-<div style="flex:none;font-size:11.5px;line-height:1.35;max-width:220px;text-align:right;color:{{ cmdReasonC }}">{{ cmdReason }}</div>
+<sc-if value="{{ !!cmdReason }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:none;font-size:11.5px;line-height:1.35;max-width:220px;text-align:right;color:{{ cmdReasonC }}">{{ cmdReason }}</div>
+</sc-if>
 <sc-for list="{{ cmdButtons }}" as="c">
 ```
 
 No `id`, matching task 1a's floor row on `test_drawer.py:571`'s exact-7 count — the element is
 reached by React state, never `getElementById`, so it needs none. Criterion 7 and task 13's
 "the reason line matches the table" receipt (§Verification) now name what they check: this
-element's rendered text, read from `#dc-root`'s mounted subtree.
+element's rendered text, read from `#dc-root`'s mounted subtree — and criterion 10's
+byte-identical claim now holds structurally (no node emitted), not just visually.
 
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
