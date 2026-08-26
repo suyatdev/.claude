@@ -3282,12 +3282,97 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         max. Measured rather than asserted: 198 docstring + 101 comment = **49% prose**, 242
         lines of actual code. The docstring *is* the fact contract, so splitting it off would
         separate the contract from the code that emits it.
-- [ ] 6. Implement Arms B2 and D against the extended classifier. **The shared "effective repo for
+- [x] 6. Implement Arms B2 and D against the extended classifier. **The shared "effective repo for
       segment `i`" rule is implemented once, in one function, and both arms call it** — the round-4
       finding was two arms deriving it separately with only one of them complete, so a review that
       finds a second copy of this logic should reject the change. Measure whether two `PreToolUse`
       denies both reach the session, and record the answer here. This is **layer 1 only** — it is no
-      longer the whole of Arm D.
+      longer the whole of Arm D. **DONE 2026-08-26 — `hooks/worktree-guard.sh`, both Bash arms,
+      layer 1 only.** Suite after the change: **183 passed, 4 failed, 1 skipped** (was 90/94/1
+      against Arm A alone, plus the three new GROUP S assertions). The 4 reds are `L1`, `L2`, `L3`
+      and `L5` — every one of them asserts that the deny message names the resolved
+      `core.hooksPath`, which is the liveness check, task 6b, and out of this task's scope. `L4`,
+      the armed control, is green: it wants Arm D to deny and to say nothing about liveness.
+      Sibling suites all re-run and all green: `classify-git-command` 203/0, `shell_segments` 37/0,
+      `classify-pr-command` 59/0, `classify-commit-command` 52/0, `write-test-marker` 61/0,
+      `git-guard` 152/0, `doc-guard` 26/0, `phase-guard` 147/0, `test-marker-guard` 248/0.
+      - **THE DOUBLE-DENY QUESTION IS MEASURED, AND THE ANSWER IS "ONLY ONE".** The card asked
+        this because "Deny message contract" recorded it as unverified, on a 2.1.241 probe that
+        found a single `blockingError` slot but never established it for the exit-2 path these
+        hooks use. Measured on **CLI 2.1.245** across **14 headless `claude -p` sessions**, each
+        with two `PreToolUse` `Bash` hooks that both exit 2 with distinct marker strings, on the
+        command `echo probe-payload`. Two invariants held in **every** session:
+        **both hooks always ran** — each wrote a witness line to disk before exiting, and both
+        witness files were present in all **13** sessions whose scripts carried that line (the
+        14th was the first probe, written before the witness was added) — and **exactly one of
+        the two markers appeared anywhere in the `stream-json` transcript**, 14 of 14. In the 4
+        sessions whose `tool_result` was decoded in full it was a single
+        `PreToolUse:Bash hook error: [<path>]: <message>` string; in the other 10 the losing
+        marker's occurrence count was **0**. The second refusal is not appended, not summarised,
+        and not recorded anywhere the session can read.
+      - **WHICH one survives is not derivable from the configuration, and no design may depend on
+        it.** Listing order does not decide it: swapping the two hooks inside one matcher entry
+        left the same one winning. Nor is it a per-run coin flip — it was **stable within a batch
+        of byte-identical runs and flipped between batches**. Two batches, same settings file,
+        both hooks undelayed, the two hook scripts differing only in trivial internal spelling:
+        one batch surfaced hook A in **2 of 2** sessions, the other surfaced hook B in **3 of 3**.
+        Across all 7 undelayed sessions the tally was **A 3, B 4**. The one lever that moved it
+        reliably was timing: in **5 of 5** sessions where one hook was delayed by `sleep 2`, the
+        **delayed** hook's message was the one that survived — in both directions. Two separate
+        matcher entries behaved the same way, the first entry's message surfacing; that is **one**
+        observation and is not a rule.
+      - **What that means for this guard, and it is why the question was asked.** A hook must say
+        everything it needs to say in **one** message, and must not assume that message is the one
+        the session will read. `worktree-guard.sh` emits exactly one refusal per invocation and
+        stops at the first segment that earns it, which is the correct shape under this result;
+        and its deny message may not lean on `phase-guard.sh`'s or `git-guard.sh`'s text, since
+        either could be the one suppressed. ⚠️ **The "Deny message contract" section above still
+        reads "Unverified and deliberately not asserted"** — that paragraph is spec, not a task
+        line, so it is left for whoever next edits the spec; this bullet is the measurement it
+        should be replaced by.
+      - **Task 4's open question — the `arm` field on a `Bash` payload — is settled.** `B2` or
+        `D` once an arm has resolved a repository and is judging against it; **`B2D`** for a
+        refusal that is the shared *precondition* of both Bash arms (an unlexable line, an
+        unaccountable `argv[0]`, a GIT_ assignment, a repo-redirecting global option, `$HOME`).
+        Naming either arm alone there would claim a judgement the guard never reached. `P5a`/`P5b`
+        are green as a result.
+      - **`WORKTREE_EXEMPT` is read lazily and is LINE-scoped**, both deliberate. Lazily: only
+        when a refusal is actually due, so an allowed command never pays for a second lexer run
+        and never logs a bypass it did not need. Line-scoped, unlike every `SEG_*` fact: the
+        granting/denying rule exists because a flat fact cannot say which segment it came from,
+        and this is not that — the user typed it, it names the whole tool call, and a per-segment
+        reading would still refuse `WORKTREE_EXEMPT=x cd /repo && git switch main`. It is read as
+        a leading env-assignment off the command line (the route `classify-pr-command.py` already
+        uses, and the only one that works — a `PreToolUse` hook's environment is the session's,
+        not the command's), with an inherited value as the fallback the card describes.
+      - **`SEG_GROUPED` refuses inside the resolution rule, not line-wide.** The card's rationale
+        is that an index-ordered rule carries a subshell's `cd` to segments bash would not, so the
+        refusal belongs where a `cd` is actually being applied. Line-wide it would also deny
+        `( cd /tmp && ls ) && echo done`, which judges nothing and carries no risk. `D48`/`D49`
+        are unaffected — both carry a `git switch`.
+      - **`<repo-name>` comes from the common dir's parent, never `--show-toplevel`.** Measured on
+        git 2.50.1: from a linked worktree `--show-toplevel` is the *worktree*, so a store built on
+        it would be `~/.worktrees/feat-x`; `--path-format=absolute --git-common-dir` is
+        `<repo>/.git` from the primary checkout, from a subdirectory of it, and from a linked
+        worktree alike. `B14` is the case that discriminates them.
+      - **Arm B2 denies where Arm D allows, on the same fact — "this directory is in no git
+        repository".** Arm B2 has a store to place the worktree in either way and no `<repo-name>`
+        to place it under, so it fails closed (card, Arm B2 step 4); for Arm D a non-repository is
+        one of the four cases that are genuinely none of the guard's business (boundary 5). `B3`
+        reaches its deny by this route, not by the path test.
+      - ⚠️ **`hooks/worktree-guard.sh` is 1048 lines and EXCEEDS the 800-line maximum** in
+        `rules/core-conduct.md`. Measured, not estimated: **375 lines of code**, 310 comment, 305
+        continuation lines of deny-message text, 58 blank — 59% prose, and the deny messages are
+        the contract's own five elements, not padding. Splitting the Bash arms into `hooks/lib/`
+        is the obvious remedy and was **deliberately not taken here**: the card does not ask for
+        it, it adds a runtime dependency and a failure mode needing tests of its own, and it moves
+        the function GROUP S mutates. Raised for decision rather than taken unilaterally.
+      - **Not implemented, and not claimed:** the submodule exemption on the Bash arms. Arm A has
+        one (step A5) because a submodule's `--git-dir` and `--git-common-dir` are equal and it
+        would otherwise read as a primary checkout; Arm D's primary test is the same comparison,
+        so `git switch` inside a submodule is denied. The card's Arm D section says nothing about
+        submodules and no scenario covers it, so no probe was added — recorded as a known
+        over-block rather than left to be discovered.
 - [ ] 6a. Implement **layer 2**, `hooks/reference-transaction` — the lock rule, in this order:
       bail unless stage is `prepared`; bail unless the ref is `HEAD`; bail unless
       `--absolute-git-dir` equals `--path-format=absolute --git-common-dir` (so linked worktrees are
