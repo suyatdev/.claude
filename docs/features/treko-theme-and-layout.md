@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: low
-branch: feat/treko-theme-and-layout
+branch: none  # merged via PR #79 (82a9315), 2026-08-25
 ---
 
 # Treko: a Configuration drawer, a light theme, and a sidebar you can drag
