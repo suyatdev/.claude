@@ -1,0 +1,376 @@
+#!/usr/bin/env bash
+#
+# reference-transaction — layer 2 of the worktree location guard.
+#
+# NOT a Claude Code hook. Git invokes this itself, once per ref transaction, as a
+# `reference-transaction` hook (githooks(5)). The contract was measured live in a throwaway
+# repo rather than taken from memory — git 2.50.1 (Apple Git-155), ref-format `files`:
+#
+#   * argv is exactly one argument, the STAGE: `prepared`, `committed` or `aborted`.
+#   * stdin carries the transaction's ref updates, one per line, as
+#     `<old-value> SP <new-value> SP <ref-name> LF`. A single transaction may carry several.
+#     A HEAD move reads `0000…0000 ref:refs/heads/other HEAD`; a detach writes an OID in the
+#     same slot; an ordinary commit sends `<old> <new> refs/heads/<b>` and never HEAD at all.
+#
+# THE RULE, ENTIRE — four bails and one file test, in this order:
+#
+#   1. the stage is not `prepared`                        -> allow (git ignores a veto there)
+#   2. no ref in this transaction is exactly `HEAD`        -> allow (not a HEAD move)
+#   3. the ref backend is not `files`                      -> DENY (see "the backend" below)
+#   4. --absolute-git-dir != --path-format=absolute --git-common-dir  -> allow (linked worktree)
+#   5. <that common dir>/HEAD.lock exists                  -> DENY, else allow
+#
+# WHY THAT IS THE WHOLE RULE. `git worktree add` and `git switch` are byte-identical at the
+# gated HEAD write — same ref, same new value, GIT_DIR unset in both. They are not identical
+# in the FILESYSTEM: `switch`/`checkout`/`switch --detach` hold the primary's own HEAD.lock,
+# while `worktree add` holds `worktrees/<n>/HEAD.lock` and never moves the primary's HEAD at
+# all. So the lock is the discriminator, and the guard needs to recognise nothing about the
+# command. There is deliberately no token, no nonce, no expiry, no ledger, and no command
+# inspection here — an earlier design had all five and the lock rule deleted every one of
+# them. Do not reintroduce them; the card records what each one failed to close.
+#
+# DENY means exit non-zero at `prepared`. Git turns that into rc=128 with the ref unmoved.
+# There is no exit-2 convention here and no `worktree-guard:` prefix — those belong to
+# layer 1, which is a PreToolUse hook and a different protocol. The prefix below is this
+# hook's own, and is deliberately not a substring of layer 1's, so a refusal in a session's
+# scrollback says which layer produced it.
+#
+# ⚠️ A VETO LEAVES THE DESTINATION BRANCH'S CONTENT STAGED. Stopping the ref write does not
+# undo the checkout, and this hook cannot roll back from inside a veto. The full
+# state-describing message that fact requires — HEAD's unmoved branch, the staged
+# destination, any sequencer directory by name, and the two exits — is task 6d and is NOT in
+# this file yet. The messages below are minimal and factual on purpose; none of them
+# prescribes a destructive command, and none claims the tree is clean.
+#
+# Also deliberately absent, so nobody reads the absence as an oversight: WORKTREE_GUARD_MODE
+# and WORKTREE_EXEMPT. Layer 1 reads both from its own environment; whether they should
+# reach a hook running as a child of `git` is tasks 6d and 8, not this one.
+#
+# Design, boundaries (28-37) and scenarios: docs/features/worktree-location-guard.md.
+#
+# Fails CLOSED, like layer 1 and for the same reason: a guard that switches itself off
+# exactly when it cannot verify its own precondition is indistinguishable from the feature
+# being absent. Every "I could not evaluate this" below denies.
+
+set -u
+
+# Every probe below branches on a DIAGNOSTIC TEXT rather than an exit code, and `ls` renders
+# its diagnostics in the caller's locale. Under a non-English LC_MESSAGES "No such file or
+# directory" would never match, the absent-lock case would fall through to the unusable-probe
+# deny, and the guard would refuse every HEAD move in the repo. Pinned rather than trusted.
+export LC_ALL=C
+
+LF='
+'
+# Spelled as a literal tab. Bash 3.2 is the floor here and $'\t' is not available in every
+# position this value is used in; the test suite pins the separator the same way.
+TAB='	'
+
+# git rev-parse --path-format=absolute is what makes the scope test in step 4 discriminate at
+# all, and it landed in git 2.31 — the same floor layer 1 established. Below the floor this
+# hook denies rather than guessing.
+#
+# The floor check here is DIAGNOSTIC, not load-bearing, and that is worth saying plainly:
+# unlike layer 1, every probe failure in this file already denies (boundaries 28-30), so a
+# git too old to know the option lands on a deny either way. What the check buys is a message
+# that names the real cause instead of "a rev-parse printed nothing".
+FLOOR_MAJOR=2
+FLOOR_MINOR=31
+FLOOR='2.31'
+
+# The one ref this rule is about. Compared for EQUALITY, never as a prefix or a substring:
+# `refs/heads/HEAD` and `HEADS` both contain it and neither is it, and matching loosely would
+# gate ordinary branch work in every repository on the machine.
+GATED_REF='HEAD'
+
+# The only ref backend whose lock this rule is defined for. An ALLOWLIST of one and not a
+# denylist of `reftable`: a backend nobody has heard of yet must land on the same refusal.
+SUPPORTED_BACKEND='files'
+
+# The lockfile whose presence IS the rule, relative to the common git directory.
+LOCK_NAME='HEAD.lock'
+
+# Same override knob as layer 1's, so one setting moves both logs. Task 6c measured that an
+# inherited environment variable survives the git -> hook hop, which is what makes this
+# reachable at all from here. `${HOME:-}` and not `$HOME` — under `set -u` an unset HOME is an
+# unbound variable, and dying on it would turn a missing environment into a refused HEAD move
+# for a reason that has nothing to do with the rule.
+STATE_DIR="${WORKTREE_GUARD_STATE_DIR:-${HOME:-}/.claude/hooks/state}"
+LOG_FILE="$STATE_DIR/reference-transaction.log"
+
+# This hook's own prefix. NOT a superstring of layer 1's `worktree-guard:` — the two hooks
+# can both refuse in one session and a shared token would make the log unsplittable.
+PREFIX='worktree-location-guard (layer 2):'
+
+# --- the attribution log ------------------------------------------------------------------
+#
+# Unlike layer 1's refusal-only log, this one records ALLOWS too, and that is a requirement
+# rather than a preference: a run in which every case denied proves nothing about the allow
+# clause, so the clause that decided each HEAD transaction has to be recoverable afterwards.
+# The volume argument that made layer 1 refusal-only does not apply — nothing is written
+# until a transaction has passed BOTH the stage bail and the HEAD-ref bail, and a HEAD write
+# is a branch switch, not an every-command event.
+#
+# Format, tab-separated: <utc-timestamp> <DECISION clause> <detail>. Decision and clause share
+# one field so the pair reads as one token both to a human tailing the file and to a
+# `grep -xF` in the suite.
+append_log() { # $1 "DECISION clause", $2 detail
+  local ts detail
+  ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ') || return 1
+  # A ref name cannot contain a newline, but a diagnostic quoted back into the detail field
+  # can. A line-oriented log whose fields hold raw newlines is not parseable.
+  detail=${2//"$LF"/\\n}
+  mkdir -p "$STATE_DIR" 2>/dev/null
+  # The append runs in a subshell so bash's own "cannot create" diagnostic for a failed
+  # redirection lands there and not in the middle of git's output. A trailing `2>/dev/null`
+  # would not do it: redirections are applied left to right, so the failure is reported
+  # before the suppression is in place.
+  ( printf '%s%s%s%s%s\n' "$ts" "$TAB" "$1" "$TAB" "$detail" >>"$LOG_FILE" ) 2>/dev/null
+}
+
+# --- the two exits ------------------------------------------------------------------------
+#
+# A failed append never changes the verdict, in either direction. Turning an allow into a deny
+# because a disk filled up would refuse every HEAD move on the machine for a reason unrelated
+# to the rule; turning a deny into an allow would switch the guard off at exactly the moment
+# it could not record why. The lost line is announced on stderr instead, which is its only
+# trace — the same argument layer 1's MSG_BYPASS_WARN makes about its own one-way loss.
+MSG_LOG_WARN="$PREFIX this decision could not be appended to $LOG_FILE, so no record of it survives."
+
+allow() { # $1 clause, $2 detail
+  append_log "ALLOW $1" "$2" || printf '%s\n' "$MSG_LOG_WARN" 1>&2
+  exit 0
+}
+
+deny() { # $1 clause, $2 detail, $3 message ('' for the silent denies)
+  append_log "DENY $1" "$2" || printf '%s\n' "$MSG_LOG_WARN" 1>&2
+  [ -n "$3" ] && printf '%s\n' "$3" 1>&2
+  exit 1
+}
+
+# --- step 1: the stage --------------------------------------------------------------------
+#
+# ONLY `prepared` CAN VETO. A non-zero exit at `aborted` or `committed` is IGNORED by git —
+# rc=0 and the ref moves anyway, measured — so judging at those stages blocks nothing extra;
+# it prints a refusal for a move that then succeeded, a message contradicting the tree, which
+# is worse than silence. The stage guard is load-bearing, not defensive tidiness.
+#
+# An UNRECOGNISED stage is the different case and takes the policy default: it may be one that
+# CAN veto, so it denies. With no message — announcing a refusal that may be ineffective
+# teaches the reader to distrust the effective ones. Boundary 35. Nothing beyond the three
+# documented stages has ever been observed.
+case "${1-}" in
+  prepared) ;;
+  committed|aborted) exit 0 ;;
+  *) deny 'unrecognised-stage' "stage=[${1-<absent>}]" '' ;;
+esac
+
+# --- step 2: is this transaction about HEAD? ----------------------------------------------
+#
+# Boundary 32: the ref name is the only field that decides whether the transaction touches
+# HEAD, so a line that does not split into exactly three fields is an undecidable transaction
+# — and because one transaction may carry several lines (`git rebase` writes HEAD, then
+# refs/heads/<b>, then HEAD), ONE bad line makes the whole transaction unclassifiable rather
+# than just that ref. The loop therefore denies on the spot instead of skipping the line.
+#
+# Read STRAIGHT from stdin rather than through `stdin_text=$(cat)` first. Command substitution
+# strips every trailing newline, so a transaction ending in a blank line would arrive here
+# indistinguishable from one that did not — and that blank line is exactly the empty-line case
+# boundary 32 denies. Reading the descriptor directly also keeps the loop in THIS shell: a
+# `printf … | while` would put it in a subshell, where the `exit 1` inside deny() would end the
+# subshell and let the hook fall through to an allow (hooks/README.md records that trap).
+#
+# The `|| [ -n "$tx_line" ]` is what keeps a final line with no trailing newline from being
+# dropped: `read` returns non-zero at EOF while still having filled the variable.
+saw_gated_ref=0
+tx_count=0
+while IFS= read -r tx_line || [ -n "$tx_line" ]; do
+  tx_count=$((tx_count+1))
+  # Deliberate word splitting: the fields are separated by single spaces and none of the
+  # three can contain one. `set --` is what makes the arity checkable, as $#.
+  # shellcheck disable=SC2086
+  set -- $tx_line
+  if [ "$#" -ne 3 ]; then
+    deny 'unparseable-transaction-line' "fields=$# line=$tx_count" \
+      "$PREFIX blocked — line $tx_count of this ref transaction did not split into the three
+fields the reference-transaction contract specifies (<old-value> <new-value> <ref-name>); it
+had $#. The ref name is what decides whether this transaction touches HEAD, so a line that
+cannot be read makes the whole transaction undecidable."
+  fi
+  [ "$3" = "$GATED_REF" ] && saw_gated_ref=1
+done
+
+# Zero lines denies for the same reason (boundary 37): a descriptor that closed before any
+# line arrived is indistinguishable from a transaction whose contents were lost, and at
+# `prepared` a deny is still effective.
+if [ "$tx_count" -eq 0 ]; then
+  deny 'empty-transaction' 'no lines on stdin' \
+    "$PREFIX blocked — the ref transaction arrived with no lines at all, so which refs it
+touches is unknown. An unclassifiable transaction is not one this hook can permit."
+fi
+
+# Not a HEAD transaction. An ordinary commit lands here — it writes refs/heads/<b> and never
+# HEAD — and committing in a primary checkout is not what this guard exists to stop. Nothing
+# is logged: no clause was reached, and a line claiming otherwise would inflate the log with
+# every commit in every repository on the machine.
+[ "$saw_gated_ref" = 1 ] || exit 0
+
+# --- step 3: git, its version, and the ref backend ----------------------------------------
+#
+# Boundary 36: every probe below is a `git` call, so an uninvocable git leaves the backend,
+# the scope and the lock path all undetermined. Precedent: test-marker-guard's MSG_NO_PYTHON,
+# which blocks everywhere.
+if ! command -v git >/dev/null 2>&1; then
+  deny 'no-git' 'command -v git failed' \
+    "$PREFIX blocked — no git on PATH, so this hook could not read the ref backend, could not
+tell a primary checkout from a linked worktree, and could not locate the lock its rule is
+about. None of the three can be assumed."
+fi
+
+deny_version() { # $1 the raw --version output, quoted back so the failure is diagnosable
+  deny 'git-below-floor' "$1" \
+    "$PREFIX blocked — git is older than $FLOOR, or its version could not be read.
+
+The scope test uses \`git rev-parse --path-format=absolute --git-common-dir\`, which requires
+git >= $FLOOR. Without it that probe answers a path relative to the cwd, which never equals
+--absolute-git-dir, so this hook would bail on every invocation and allow every HEAD move.
+
+  git --version said: $1
+
+Install git >= $FLOOR."
+}
+
+git_version=$(git --version 2>/dev/null) || deny_version '<git --version failed>'
+version=${git_version#git version }
+major=${version%%.*}
+tail_version=${version#*.}
+minor=${tail_version%%.*}
+case "$major" in ''|*[!0-9]*) deny_version "$git_version" ;; esac
+case "$minor" in ''|*[!0-9]*) deny_version "$git_version" ;; esac
+if [ "$major" -lt "$FLOOR_MAJOR" ] ||
+   { [ "$major" -eq "$FLOOR_MAJOR" ] && [ "$minor" -lt "$FLOOR_MINOR" ]; }; then
+  deny_version "$git_version"
+fi
+
+# THE BACKEND, AND WHY IT IS CHECKED BEFORE THE RULE RATHER THAN NOT AT ALL. Boundary 28.
+# Under `--ref-format=reftable` there is no <common-dir>/HEAD.lock, so step 5's deny clause
+# can NEVER fire and the rule allows every HEAD write — a fail-open across an entire BACKEND
+# rather than a missed shape. Refusing to arm converts a silent total bypass into a loud
+# refusal to run, which is the trade this design takes everywhere else.
+#
+# ⬜ The git version at which --show-ref-format appeared is NOT measured — the only git
+# available to this work is 2.50.1, which has it. A git that rejects the option exits
+# non-zero and lands on this same deny, so the gap costs a worse message, not a wrong verdict.
+ref_format=$(git rev-parse --show-ref-format 2>/dev/null) || ref_format=''
+if [ "$ref_format" != "$SUPPORTED_BACKEND" ]; then
+  deny 'backend-not-files' "read=[$ref_format]" \
+    "$PREFIX refusing to run — this repository's ref backend reads as [${ref_format:-<no answer>}],
+which this guard does not implement. It implements only [$SUPPORTED_BACKEND].
+
+Its whole rule is the presence of <common-git-dir>/$LOCK_NAME. On any other backend that file
+does not exist, so the refusal clause could never fire and every HEAD write would be allowed
+— the guard would be silently off for this entire repository rather than for one command
+shape. It refuses to run instead.
+
+Nothing here is a judgement about the HEAD write you asked for. This guard cannot form one on
+this backend, and it says so rather than passing everything through in silence."
+fi
+
+# --- step 4: is this the primary context? -------------------------------------------------
+#
+# --path-format=absolute IS LOAD-BEARING, NOT TIDINESS, and the failure it prevents is total.
+# Measured: git chdirs a hook to the repository toplevel, so a bare `--git-common-dir` answers
+# `.git` there while `--absolute-git-dir` answers /…/repo/.git. Those are NEVER equal — in the
+# primary checkout or anywhere else — so a hook comparing the bare pair bails on every
+# invocation and allows every HEAD move, while a liveness check goes on reporting it armed.
+# That is precisely the failure this design names elsewhere: a guard whose absence is
+# indistinguishable from its success.
+#
+# Boundaries 29 and 30: either probe exiting non-zero or printing nothing DENIES. Allowing
+# would be the worse guess in both directions — the two paths would differ, which reads as
+# "linked worktree", and an empty common dir is additionally the BASE of step 5's lock path,
+# where it would test /HEAD.lock and silently stop the refusal clause from ever firing.
+deny_probe() { # $1 the probe, $2 what it did
+  deny 'probe-unusable' "$1 $2" \
+    "$PREFIX blocked — \`git rev-parse $1\` $2, so this hook cannot tell whether this HEAD
+write belongs to a shared primary checkout or to a linked worktree of its own.
+
+A missing answer makes the two paths differ, which reads as 'linked worktree' and would
+allow. An unusable probe refuses instead of guessing."
+}
+
+abs_git_dir=$(git rev-parse --absolute-git-dir 2>/dev/null) ||
+  deny_probe '--absolute-git-dir' 'exited non-zero'
+[ -n "$abs_git_dir" ] || deny_probe '--absolute-git-dir' 'exited 0 but printed nothing'
+
+# The common directory is read HERE and used for the lock path below. It is never taken from
+# $GIT_COMMON_DIR: GIT_DIR was measured UNSET in this hook's environment at the gated HEAD
+# write, so its sibling cannot be relied on either, and the `$GIT_COMMON_DIR/HEAD.lock`
+# notation in the design is a path expression, not an environment read (boundary 33).
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) ||
+  deny_probe '--path-format=absolute --git-common-dir' 'exited non-zero'
+[ -n "$common_dir" ] ||
+  deny_probe '--path-format=absolute --git-common-dir' 'exited 0 but printed nothing'
+
+# The scope bail. A linked worktree's HEAD is its own and nobody else shares it, so it is
+# none of this guard's business — and the hooks directory is shared with every linked
+# worktree ($GIT_COMMON_DIR/hooks, measured), so without this test the guard would judge
+# them all. Logged, because "the scope bail decided this" and "the allow clause decided this"
+# are different facts and the suite has to be able to tell them apart.
+[ "$abs_git_dir" = "$common_dir" ] || allow 'scope-not-primary' "$abs_git_dir"
+
+# --- step 5: the lock ---------------------------------------------------------------------
+#
+# `switch`, `checkout` and `switch --detach` hold this file; `git worktree add` holds
+# worktrees/<n>/HEAD.lock and leaves the primary's HEAD where it was. That single fact is the
+# whole discriminator, and it is why this hook inspects no command line.
+#
+# Boundary 31: "absent" is the rule's ALLOW answer, so every other outcome must be
+# distinguished from it. A bare `[ -e ]` collapses "the file is not there" and "the test could
+# not be performed" into the same false, which converts every EACCES, ELOOP or ENOTDIR into an
+# allowed HEAD move. `ls -ld` separates them, branching on the diagnostic TEXT the way layer 1
+# reads --show-toplevel — an exit code alone cannot, because `ls` reports every one of those
+# as 1. LC_ALL=C at the top of this file is what makes the text stable enough to match.
+lock_path="${common_dir%/}/$LOCK_NAME"
+lock_diag=$(ls -ld -- "$lock_path" 2>&1 >/dev/null)
+lock_rc=$?
+
+if [ "$lock_rc" -eq 0 ]; then
+  # THE REFUSAL. Deliberately minimal: the full state-describing message this moment requires
+  # — the branch HEAD is still on, the destination content now staged, any sequencer directory
+  # by name, and the two exits — is task 6d. What must stay true of whatever replaces it: it
+  # prescribes no destructive command (`git reset --hard HEAD` was tried and destroyed another
+  # session's staged work), and it never describes the tree as clean, unchanged or restored.
+  deny 'primary-HEAD-lock-held' "$lock_path" \
+    "$PREFIX HEAD write refused — this is the PRIMARY checkout of a shared repository.
+
+Primary checkouts are shared by parallel sessions, which share their single HEAD: a branch
+switch under another session's feet swaps the files it is editing, and nothing in the tree
+records that it happened. \`git worktree add\` is unaffected — it holds a lock of its own and
+never moves this HEAD — so creating a worktree and working there is not blocked.
+
+  git dir:   $common_dir
+  lock held: $lock_path
+
+HEAD did not move. The checkout itself was NOT undone: this hook stops the ref write only,
+so the index and working tree may now hold the destination's content."
+fi
+
+case "$lock_diag" in
+  # The one outcome that is an allow. `git worktree add` and every non-HEAD-moving operation
+  # in the primary checkout land here.
+  *'No such file or directory'*) allow 'no-primary-HEAD-lock' "$lock_path" ;;
+esac
+
+# Every other diagnostic: the existence test could not be performed. Denying is the only
+# answer that does not read a permission error as permission. The diagnostic is quoted back
+# because this branch refuses every HEAD move in the repository, and a deny that does not name
+# what it read is indistinguishable from a deny for any other reason.
+deny 'lock-probe-unusable' "$lock_diag" \
+  "$PREFIX blocked — the test for $lock_path could not be performed.
+
+  the system said: $lock_diag
+
+'The file is absent' is this guard's ALLOW answer, so an error that is not absence cannot be
+treated as one — doing so would turn every permission or symlink failure into an allowed HEAD
+move in a shared checkout."
