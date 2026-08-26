@@ -527,9 +527,14 @@ def test_enumerated_exclusions_are_at_their_recorded_counts(walk, theme):
 
 PIN, DEBT, EXEMPT = "pin", "debt", "exempt"
 
+# §D2: PIN is a floor, not a freeze. --ok may slide from 10.30 to 3.01 with the suite
+# green -- that is the honest limit of what a green PIN assertion means, and pinning six
+# healthy tokens to four decimal places would make every legitimate re-tint a failure.
+PIN_FLOOR = 3.0
+
 ALLOWLIST = [
     {
-     "token": "--color-accent", "klass": PIN, "floor": None,
+     "token": "--color-accent", "klass": PIN, "floor": PIN_FLOOR,
      "reason": None,
      "dark": {"colors": ["rgb(56, 196, 227)"],
                "kinds": None, "marks": 34, "min_ratio": None},
@@ -537,7 +542,7 @@ ALLOWLIST = [
                "kinds": None, "marks": 34, "min_ratio": None},
     },
     {
-     "token": "--color-accent-300", "klass": PIN, "floor": None,
+     "token": "--color-accent-300", "klass": PIN, "floor": PIN_FLOOR,
      "reason": None,
      "dark": {"colors": ["rgb(130, 216, 240)"],
                "kinds": None, "marks": 2, "min_ratio": None},
@@ -545,7 +550,7 @@ ALLOWLIST = [
                "kinds": None, "marks": 2, "min_ratio": None},
     },
     {
-     "token": "--ok", "klass": PIN, "floor": None,
+     "token": "--ok", "klass": PIN, "floor": PIN_FLOOR,
      "reason": None,
      "dark": {"colors": ["rgb(130, 223, 169)"],
                "kinds": None, "marks": 4, "min_ratio": None},
@@ -553,7 +558,7 @@ ALLOWLIST = [
                "kinds": None, "marks": 4, "min_ratio": None},
     },
     {
-     "token": "--warn", "klass": PIN, "floor": None,
+     "token": "--warn", "klass": PIN, "floor": PIN_FLOOR,
      "reason": None,
      "dark": {"colors": ["rgb(216, 176, 108)"],
                "kinds": None, "marks": 7, "min_ratio": None},
@@ -561,7 +566,7 @@ ALLOWLIST = [
                "kinds": None, "marks": 7, "min_ratio": None},
     },
     {
-     "token": "--bad", "klass": PIN, "floor": None,
+     "token": "--bad", "klass": PIN, "floor": PIN_FLOOR,
      "reason": None,
      "dark": {"colors": ["rgb(232, 150, 142)"],
                "kinds": None, "marks": 7, "min_ratio": None},
@@ -569,7 +574,7 @@ ALLOWLIST = [
                "kinds": None, "marks": 7, "min_ratio": None},
     },
     {
-     "token": "--info", "klass": PIN, "floor": None,
+     "token": "--info", "klass": PIN, "floor": PIN_FLOOR,
      "reason": None,
      "dark": {"colors": ["rgb(137, 180, 242)"],
                "kinds": None, "marks": 1, "min_ratio": None},
@@ -582,9 +587,9 @@ ALLOWLIST = [
      "defect recorded rather than fixed (§D5). The minimum comes from the shadow, not a "
      "border.",
      "dark": {"colors": ["rgb(34, 122, 147)"],
-               "kinds": None, "marks": 21, "min_ratio": None},
+               "kinds": None, "marks": 21, "min_ratio": 2.8791},
      "light": {"colors": ["rgb(164, 226, 243)"],
-               "kinds": None, "marks": 21, "min_ratio": None},
+               "kinds": None, "marks": 21, "min_ratio": 1.2718},
     },
     {
      "token": "--color-neutral-700", "klass": DEBT, "floor": None,
@@ -592,9 +597,9 @@ ALLOWLIST = [
      "inverted-ramp defect recorded rather than fixed (§D5). The minimum comes from an SVG "
      "stroke.",
      "dark": {"colors": ["rgb(89, 93, 108)"],
-               "kinds": None, "marks": 35, "min_ratio": None},
+               "kinds": None, "marks": 35, "min_ratio": 2.5253},
      "light": {"colors": ["rgb(110, 114, 126)"],
-               "kinds": None, "marks": 35, "min_ratio": None},
+               "kinds": None, "marks": 35, "min_ratio": 4.8042},
     },
     # CRITERION 13 -- the one live colour collision on this page. This token's dark value is
     # #3f424d, and --shadow-sm's dark value is the literal hex #3f424d too
@@ -610,9 +615,9 @@ ALLOWLIST = [
      "rather than fixed (§D5). This ratio is vs the surface: filled-vs-unfilled dot is "
      "4.85 dk / 4.30 lt and reads fine, so do not repaint a meter that is already legible.",
      "dark": {"colors": ["rgb(63, 66, 77)"],
-               "kinds": ['fill'], "marks": 22, "min_ratio": None},
+               "kinds": ['fill'], "marks": 22, "min_ratio": 1.6519},
      "light": {"colors": ["rgb(227, 230, 239)"],
-               "kinds": ['fill'], "marks": 22, "min_ratio": None},
+               "kinds": ['fill'], "marks": 22, "min_ratio": 1.2477},
     },
     {
      "token": "--hair", "klass": EXEMPT, "floor": None,
@@ -898,8 +903,6 @@ def test_every_entry_sits_at_its_recorded_mark_count(walk, theme):
 # assertions below fail: there is no recorded number for them to check against. Task 7 records
 # them. The assertions are written first on purpose -- a floor chosen after seeing the ratio it
 # has to clear is not a floor.
-
-PIN_FLOOR = 3.0
 
 # Absorbs float formatting and nothing else. The ratio is pure arithmetic over composited sRGB
 # triples and two byte-identical walks show there is no measurement noise to absorb. It is NOT
