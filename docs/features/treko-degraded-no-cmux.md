@@ -20,13 +20,21 @@ not been asked** and must be asked before any branch is cut.
 
 **This card almost certainly earns an ADR.** It converts a startup abort into a served page —
 a direction-pivoting change to the trust boundary, which is exactly the class
-`rules/gates.md` requires a decision record for. The number is **0036**, checked against
-`origin/main` @ `984e7ac6bf89f521c3cfd9fd69994564a515ff9a`, whose `docs/decisions/` tops out at
-`0035-model-aware-context-thresholds.md`; it was additionally confirmed absent from every remote
-ref and every local branch in this checkout. Note that "the next free number" is ambiguous here
+`rules/gates.md` requires a decision record for. The number is **0038**, checked against
+`origin/main` @ `2a0c45904f1f775a67e7bc2444e24f704f8ca544`, whose `docs/decisions/` tops out at
+`0037-a-named-token-allowlist-not-every-mark-and-not-what-passes-today.md`; `0038` was
+additionally confirmed absent from all 28 `refs/remotes/*` and `refs/heads/*` in this checkout,
+each ref queried separately. Note that "the next free number" is ambiguous here
 for the same reason card `treko-store-location` recorded: **`0026` is duplicated**
-(`…symbolic-ref…` and `…the-gate-does-no-json-parsing…`) and **`0028` is unused**. 0036 is
+(`…symbolic-ref…` and `…the-gate-does-no-json-parsing…`) and **`0028` is unused**. 0038 is
 max+1, matching the precedent 0034 set, not a gap-fill.
+
+> **This number was 0036 until 2026-08-26 and had to be corrected.** `0036` and `0037` both
+> landed on `main` in the 125 commits between this card's planning baseline (`984e7ac`) and
+> `2a0c459`. The correction matters more than a renumber usually would: two ADRs sharing a
+> number **merge cleanly** — different filenames, no conflict, no warning — so the collision
+> would never have surfaced. Re-run `git ls-tree origin/main docs/decisions/` at the moment
+> task 10 is written and use the number that check returns, not this one.
 
 ## Why
 
@@ -40,9 +48,9 @@ part of Treko that carries the stated value, and it needs no control channel at 
 channel drives two keystroke commands. Refusing to render the board because two buttons cannot
 work withholds the feature to protect a garnish.
 
-The page is already most of the way there. `Treko.dc.html:480` computes `hasChannel` from the
-presence of the injected token and `:483` already falls back to copyable text without one; the
-comment at `:434-436` calls that mode "a supported runtime mode, not a degradation". The
+The page is already most of the way there. `Treko.dc.html:571` computes `hasChannel` from the
+presence of the injected token and `:574` already falls back to copyable text without one; the
+comment at `:509-511` calls that mode "a supported runtime mode, not a degradation". The
 `file://` path exercises it every day. What is missing is the *server* half: over `http://` the
 server never gets far enough to serve the page it already knows how to degrade.
 
@@ -80,7 +88,7 @@ different fixes and a single "no channel" message would send the user looking in
 - Page-side: a second injected meta, a per-verb live/copy split, and a `no_channel` outcome row.
 - Flipping four existing tests that were written to be flipped, plus the two prose blocks that
   describe them.
-- **ADR 0036**, and the degraded-launch table in `skills/treko/SKILL.md`.
+- **ADR 0038**, and the degraded-launch table in `skills/treko/SKILL.md`.
 
 ### Out
 
@@ -159,10 +167,10 @@ only `confirm_failed` and `confirm_timeout`. `501` is explicitly excluded — `s
 one — the status table admits no 501."*
 
 **5. The page maps by error *code*, never by status.** `trackerOutcomeForBody`
-(`Treko.dc.html:382-392`) reads `body.error` and looks it up in `TRACKER_ERROR_OUTCOMES`
-(`:354-361`), which has no `no_channel` row — so a `503` resolves to `'unexpected'` → "Unexpected
-error." today. The lookup is `hasOwnProperty`-guarded (`:386`) and a code with no row is
-**never rendered back** (`:388-391`), which `test_ui_commands.py:290` falsifies.
+(`Treko.dc.html:456-466`) reads `body.error` and looks it up in `TRACKER_ERROR_OUTCOMES`
+(`:428-435`), which has no `no_channel` row — so a `503` resolves to `'unexpected'` → "Unexpected
+error." today. The lookup is `hasOwnProperty`-guarded (`:460`) and a code with no row is
+**never rendered back** (`:462-465`), which `test_ui_commands.py:290` falsifies.
 
 **6. The other places that assume a surface.** `build_config` (`server.py:694`) takes `surface` as
 its first positional and stores it at `:697`; the banner at `:786-787` prints `surface=%s`; the
@@ -345,13 +353,13 @@ routable. The page needs a second, independent signal.
 <meta name="tracker-channel" content="ok | surface_unset | probe_timeout | probe_failed | cmux_unrunnable">
 ```
 
-Injected by `_serve_index` at `server.py:494-495`, the same one-line `<head>` replacement that
+Injected by `_serve_index` at `server.py:495`, the same one-line `<head>` replacement that
 already carries the token, so `check_index_injectable` (`server.py:196-208`) already guards its
 precondition and no new startup check is needed.
 
 **The `config["channel"]` → meta-content mapping, stated explicitly because nothing else states
 it.** `_serve_index` appends a second `<meta>` line to the same `<head>` replacement that already
-injects the token (`server.py:493`), using the identical `%s`-interpolation idiom:
+injects the token (`server.py:495`), using the identical `%s`-interpolation idiom:
 `'<meta name="tracker-channel" content="%s">' % self.config["channel"]`. No conversion happens at
 this boundary, because none is needed — `config["channel"]` already holds the bare token by
 construction (D1's `.value` rule, applied at D2), so the meta's `content` is byte-identical to it.
@@ -372,7 +380,7 @@ style choice.** The human strings at `server.py:222-223`, `:230`, `:232` and `:2
 the surface UUID (also from the environment). Writing any of them into an HTML attribute is an
 injection gadget on an environment-controlled path. The closed enum makes that structurally
 impossible, and it is the *same* discipline the page already applies to error codes — fixed
-strings mapped page-side, the server's bytes never rendered (`Treko.dc.html:388-391`, falsified by
+strings mapped page-side, the server's bytes never rendered (`Treko.dc.html:462-465`, falsified by
 `test_ui_commands.py:290`). The page **must** treat an unrecognised `tracker-channel` value the
 way it treats an unrecognised error code: fall to a fixed generic string, render nothing from the
 attribute.
@@ -385,9 +393,9 @@ attribute.
 | **A `GET /channel` endpoint** | Adds a route to a deliberately closed surface, and makes the page's first render depend on a round-trip that can fail — a new state to design for, to answer a question the page could have been told at load. |
 | **Injecting the live id set** (`<meta name="tracker-commands" content="reanalyze">`) | Genuinely attractive: it makes the button set a projection of the server's authorization set instead of a rule the page re-derives. Rejected on two counts. It gives the page *what* but not *why*, so the reason meta comes back and we are at two metas again. And it requires the page to parse a list and intersect it against `TRACKER_COMMAND_IDS` — new boundary-validation code inside the node-loadable slice, to express a two-way split the page can hold as a constant. Worth revisiting only if a fourth verb ever exists, which §Out forbids. |
 
-**`componentDidMount` (`state` at `:432`, the method itself at `:433`) must read the new meta too,
+**`componentDidMount` (`state` at `:506`, the method itself at `:507`) must read the new meta too,
 and this is where the implement-list below most needs correcting, not just here.** Today it reads
-exactly one meta, at `:437-438`:
+exactly one meta, at `:512-513`:
 
 ```js
 const meta=document.querySelector('meta[name="tracker-token"]');
@@ -401,22 +409,22 @@ const chMeta=document.querySelector('meta[name="tracker-channel"]');
 if(chMeta&&chMeta.content)this.setState({cmdChannel:chMeta.content});
 ```
 
-and `state` (`:432`) gains the field it initialises: `cmdChannel:null` next to the existing
+and `state` (`:506`) gains the field it initialises: `cmdChannel:null` next to the existing
 `cmdToken:null,cmdView:null`. **Without both of these, `S.cmdChannel` is `undefined` forever,
 `channelOk` (below) is always `false`, and a perfectly healthy server renders as degraded** —
 Re-analyze live, `/clear` and `/handoff` demoted to copy chips, criterion 10 broken on the one path
 this card is not supposed to touch at all, with every test in task 8 passing, because none of them
 launch a healthy server and check what the *button* set looks like. Confirmed against the running
-text of this file at `984e7ac`: `state` (`:432`) declares `cmdToken` and `cmdView` and nothing
-else, and `componentDidMount`'s only `querySelector` (`:437`) is the token's. Task 9's
+text of this file as of `2a0c459`: `state` (`:506`) declares `cmdToken` and `cmdView` and nothing
+else, and `componentDidMount`'s only `querySelector` (`:512`) is the token's. Task 9's
 implement-list is corrected below to name `componentDidMount` explicitly, because it is the item
 in this card most likely to be implemented by analogy — get the token read right, assume the
 channel read is the same shape, and skip actually adding it.
 
 **The page-side split, and the one rule that generalises it.** `commandProps`
-(`Treko.dc.html:475-494`) is rewritten around three values instead of one — but the
+(`Treko.dc.html:566-585`) is rewritten around three values instead of one — but the
 value-*selection* does not live in `commandProps`. It moves **inside** the node-loadable fence
-(`:325-418`), as a new pure function, so it gets a real automated check rather than a promise:
+(`:399-492`), as a new pure function, so it gets a real automated check rather than a promise:
 
 ```js
 // inside the fence, beside TRACKER_COMMAND_IDS -- pure, no S, no document, no window
@@ -435,7 +443,7 @@ const liveIds = trackerLiveIds(hasToken, channelOk);
 ```
 
 `trackerLiveIds` takes two booleans and returns one of the two constants above, or `[]` — nothing
-else, which is what "dependency-free" (`:326-332`) requires of anything added to the fence. It is
+else, which is what "dependency-free" (`:400-406`) requires of anything added to the fence. It is
 also where this card's anti-injection guarantee actually lives on the button axis: `channelOk` is
 a strict `=== 'ok'` comparison, so *every* value the meta could ever carry other than the literal
 string `'ok'` — all four real reasons, and, if D1/D4's closure were ever broken by a later edit,
@@ -462,7 +470,7 @@ new branch:
 The last column is stated precisely, once, in D5 — this table only summarises it. Three of the
 four chip-rendering rows above render no reason text at all; only the fourth does.
 
-**`module.exports` (`:413-415`) grows to expose the new functions and the two constants above:**
+**`module.exports` (`:487-489`) grows to expose the new functions and the two constants above:**
 
 ```js
 if(typeof module!=='undefined'&&module.exports){
@@ -471,29 +479,47 @@ if(typeof module!=='undefined'&&module.exports){
                   applyCommand:trackerApplyCommand,
                   LOCAL_IDS:TRACKER_LOCAL_IDS,SEND_IDS:TRACKER_SEND_IDS,
                   liveIds:trackerLiveIds,
-                  channelReason:trackerChannelReason};
+                  channelReason:trackerChannelReason,
+                  CHANNEL_REASONS:TRACKER_CHANNEL_REASONS};
 }
 ```
 
+**`CHANNEL_REASONS` exports the table itself, not only the lookup function, and that is
+load-bearing.** Added 2026-08-26. Task 8's two-sided check has to compare *key sets*. With only
+`channelReason` exported, the strongest available test is "call it once per `Reason` member and
+see that each returns a mapped string" — which catches a **renamed** member and is blind to an
+**extra** key on the page side, the exact one-sided blindness the send/local partition check was
+written to avoid. Exporting the table makes the set comparison possible.
+
+`test_ui_commands.py`'s `NODE_BRIDGE` must grow to match: its `process.stdout.write` payload
+currently emits `before`, `after`, `messages`, `ids`, `copyText` and nothing else
+(`test_ui_commands.py:114-120`), so `localIds`, `sendIds` and `channelReasons` are added there
+alongside them. Without that the constants are exported into a bridge that never forwards them,
+and both set-equality assertions in task 8 are unimplementable as written.
 `TRACKER_LOCAL_IDS` / `TRACKER_SEND_IDS` are the page's mirror of `server.py`'s `LOCAL_COMMANDS` /
 `SEND_COMMANDS` — a duplication — and D7 already commits to a test that reads both sides rather
 than trusting either; exporting them from the node bridge is what makes that test possible without
 a third, hand-written copy of the partition living in the test file itself.
 
 **The fence grows by a few lines, and that is a deliberate cost of this design, not an
-oversight.** `Treko.dc.html` was 639 lines and the fence ran `:325-418` at this card's baseline
-(`984e7ac`, criterion 14's measurement). Both numbers move once the two constants, `trackerLiveIds`,
+oversight, but the budget it spends is far smaller than this card originally costed.**
+At this card's planning baseline (`984e7ac`) `Treko.dc.html` was **639 lines** with the fence at
+`:325-418`, leaving **161 lines** of headroom under criterion 14's 800-line ceiling. That baseline
+is gone: as of `2a0c459` the file is **740 lines** and the fence is at `:399-492`, so the real
+headroom is **60 lines**, not 161. The design is still affordable — the constants D5 adds are a
+handful of lines — but it is no longer comfortably so, and task 12's re-measurement is now a
+genuine gate rather than a formality. Both numbers move again once `trackerLiveIds`,
 `TRACKER_CHANNEL_REASONS` and `trackerChannelReason` land inside the marker pair (D5). `wc -l`
 under 800 still has to hold (criterion 14;
-task 12 re-measures it), and this document's own citations to `:325-418` must be re-derived after
+task 12 re-measures it), and this document's own citations to `:399-492` must be re-derived after
 implementation rather than assumed unchanged — the same discipline §Corrections already applies to
 every other line number in this document. Nothing about the *test* needs updating for this:
 `test_the_handler_slice_is_fenced_exactly_once_and_loads_standalone` re-derives the fence's
 boundaries from the marker text at run time (`test_ui_commands.py:68-78`), never from a stored byte
 count, so a longer fence is not a broken assumption anywhere except in this spec's own prose.
 
-`runCommand`'s guard (`Treko.dc.html:497`) becomes `if(!S.cmdToken || liveIds.indexOf(id)<0)
-return;` — the same belt-and-braces the existing comment at `:499-501` explains, extended to the
+`runCommand`'s guard (`Treko.dc.html:588`) becomes `if(!S.cmdToken || liveIds.indexOf(id)<0)
+return;` — the same belt-and-braces the existing comment at `:590-592` explains, extended to the
 new axis. It is **presentation only**: the authorization control is D3's server-side refusal.
 
 ### D5 — `no_channel` is a page outcome, and it is deliberately **not** terminal
@@ -506,7 +532,7 @@ TRACKER_ERROR_OUTCOMES.no_channel = 'no_channel'      // keyed by the server's e
 CMD_TONES.no_channel = 'var(--warn)'                  // presentation, outside the slice
 ```
 
-plus, **inside the marker-fenced region** (`:325-418`, beside `trackerLiveIds` — D4), the four-row
+plus, **inside the marker-fenced region** (`:399-492`, beside `trackerLiveIds` — D4), the four-row
 map from the meta's enum token to the standing explanation shown beside the copy chips, and the
 pure function that selects from it:
 
@@ -542,7 +568,7 @@ table lists three chip-rendering modes, and the gate is `true` in exactly one of
 
 - `file://` — no token — `hasToken` is `false` (there is no `<meta name="tracker-token">` at all,
   because the page was never served, so `_serve_index` never ran), so the gate is `false`
-  regardless of `channelOk`. No reason text. This is the mode `Treko.dc.html:434-436` calls "a
+  regardless of `channelOk`. No reason text. This is the mode `Treko.dc.html:509-511` calls "a
   supported runtime mode, not a degradation" — the gate must never fire here.
 - served, channel ok, terminal outcome — `hasToken` is `true` but `channelOk` is also `true`
   (`S.cmdChannel === 'ok'`), so the gate is `false`. Copy chips render, for D5's pre-existing
@@ -580,7 +606,7 @@ question about React's render output, not about the lookup.
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
 server is permanent for that process's lifetime. That is true, and it is still the wrong row,
-because `trackerViewFor` (`Treko.dc.html:370-381`) applies terminality **globally**:
+because `trackerViewFor` (`Treko.dc.html:444-455`) applies terminality **globally**:
 
 ```js
 var terminal=TRACKER_TERMINAL_OUTCOMES[outcome]===true;
@@ -589,7 +615,7 @@ offersButton:!terminal,
 offersCopyText:terminal,
 ```
 
-`offersButton:false` empties `cmdButtons` for *every* id (`:486`). So marking `no_channel`
+`offersButton:false` empties `cmdButtons` for *every* id (`:577`). So marking `no_channel`
 terminal would withdraw the **Re-analyze** button — in the exact mode where re-analyze is the one
 thing that still works. The card would defeat its own purpose on any stray 503.
 
@@ -610,6 +636,19 @@ So `bind_surface`, `SurfaceUnavailable`, the `Reason` enum and `CHANNEL_OK` move
 **`treko/channel.py`**, which is a *net removal* from `server.py`: lines 211-238 leave, an import
 arrives. It is the same shape D5 of `treko-store-location.md` used for `store_location.py`, and for
 the same reason.
+
+**`CMUX_BIN` and `CMUX_TIMEOUT_SECS` move with it, and `channel.py` is their single owner.**
+Added 2026-08-26. Both are declared at `server.py:53-54` and read by **three** functions, not one:
+`bind_surface` (`:226`, `:230`, `:232`, `:237`) which leaves, and `confirm_surface` (`:299`) and
+`send_keys` (`:321`) which stay. So the split cannot simply carry them along — if `channel.py`
+re-declares its own copy, the health probe and the send can resolve `CMUX_BIN` to two different
+binaries, and nothing in the suite would say so, because each module would be internally
+consistent.
+
+`channel.py` therefore declares both and `server.py` imports them, exactly as `server.py:37`
+already imports `StartupAbort` from `store_location.py` for the same "two modules, one definition"
+reason. `server_harness.py:256` injects `CMUX_BIN` into the environment and is unaffected — it sets
+the variable the declaration reads, not the declaration.
 
 `channel.py` imports `StartupAbort` from `store_location` (where card `treko-store-location`
 already moved it — `server.py:37`), so nothing is duplicated and the existing handler at
@@ -653,8 +692,15 @@ assert harness.refuses_connection(srv.port), "aborted server served anyway"
 ```
 
 — is precisely what degraded mode inverts. They move to `test_degraded.py` as serving assertions.
-`assert_aborted` itself **stays exactly as it is**: it is still correct for the five configuration
-aborts that remain in that file, and criterion 9 depends on it staying strict.
+`assert_aborted` itself **stays exactly as it is**: it is still correct for the **three**
+configuration aborts that remain in that file — `test_a_manifest_row_with_an_unmapped_extension_aborts_before_serving`
+(`test_server_lifetime.py:84`), `test_an_index_with_no_head_aborts_before_serving` (`:100`) and
+`test_a_disabled_timeout_is_refused_at_startup` (`:109`) — and criterion 9 depends on it staying
+strict. **Corrected 2026-08-26: this said "five".** Counted from the file, `assert_aborted` has six
+call sites (`:65`, `:70`, `:76`, `:97`, `:106`, `:112`); three of those belong to the surface tests
+being flipped, leaving three. The remaining abort test in the module,
+`test_a_second_server_on_the_same_port_aborts_and_leaves_the_first_intact` (`:120`), never calls
+`assert_aborted` at all, so no reading of the file yields five.
 
 Two prose blocks become false the moment those three tests move, and neither is asserted by
 anything:
@@ -682,6 +728,98 @@ new drift surface. It gets a test that reads **both** sides — `server.SEND_COM
 `server.LOCAL_COMMANDS` imported in Python, the slice's partition read out of the node bridge —
 and asserts they are the same partition. A hand-written expected list would pin the copy, not the
 agreement.
+
+#### The six modules that did not exist when this card was planned
+
+Added 2026-08-26. `test_guards.py`, `test_nontext_contrast.py`, `test_drawer_sections.py`,
+`test_theme.py`, `test_sidebar.py` and `test_drawer.py` — 89 tests — arrived in the 125 commits
+between `984e7ac` and `2a0c459`. **All six read `Treko.dc.html`**, the file D4/D5 edit. Everything
+above this heading was written against a 221-test suite that did not contain them.
+
+Five of the six assert on presentation — theme tokens, contrast ratios, drawer and sidebar
+structure — and this card adds no styling, so they should stay green untouched. Task 12's node-ID
+set diff is what proves that rather than assumes it.
+
+**`test_guards.py` is the exception, and it fails by construction.** Two of its assertions pin the
+fenced region by cryptographic digest:
+
+```python
+BASE_COMMIT = "a5a66a75204f334fff09462e931981431b39081a"
+BASE_FENCE_BYTES = 4851
+BASE_FENCE_SHA256 = "f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136"
+
+def test_criterion15_fence_region_byte_identical_to_base_commit():
+```
+
+`test_criterion15_fence_region_byte_identical_to_base_commit` (`test_guards.py:193`) and its
+sibling `test_criterion15_node_bridge_span_also_matches_base_commit_secondary` (`:208`) both
+assert the fence is **byte-identical** to its form at `a5a66a7`. D5 deliberately places
+`trackerLiveIds`, `TRACKER_CHANNEL_REASONS` and `trackerChannelReason` **inside the marker pair**.
+The moment task 9 lands, both digests differ and both tests go red.
+
+That is the guard working, not breaking: it exists to catch fence drift nobody intended, and this
+card intends it. The resolution is to **re-baseline the pins, never to weaken or skip the tests** —
+task 9a below. Two constraints on how:
+
+- The new digest must be measured **from the implemented file**, after task 9 is green, and
+  committed **separately** from the implementation itself. A digest computed in the same edit that
+  changes the bytes proves only that the edit is self-consistent.
+- `BASE_COMMIT` moves to the commit that lands task 9. Leaving it at `a5a66a7` while changing the
+  digests would make the constant lie about what the digests describe.
+
+**A third sealed door: `test_server.py` scrapes `server.py`'s source for refusal reasons.**
+Added 2026-08-26, after a third consecutive review round turned up a currently-green test this
+card invalidates with no task owning it. `reasons_emitted_in_source()` (`test_server.py:741-753`)
+reads every reason `server.py` can emit — string literals in `_fail(...)`, literals in
+`audit(...)`, and the computed `CONFIRM_REFUSAL_REASONS` values — and
+`test_the_enum_and_the_status_table_cover_each_other` (`:756`) asserts that set equals
+`REASON_STATUS`'s keys, **and** that `REASON_STATUS`'s values equal `CONTRACT_STATUSES`.
+
+D3 adds `no_channel` at `503`. Measured: the scrape returns 16 reasons today and 17 with D3's
+guard in place, against a 16-key table; and `CONTRACT_STATUSES` (`test_server.py:77`) is
+`{400, 403, 404, 405, 409, 413, 415, 500, 502}` — no `503`. Both assertions go red.
+
+Three repairs, all in `test_server.py`, owned by **task 7a**:
+
+1. `REASON_STATUS` (`:56-73`) gains `"no_channel": 503`.
+2. `CONTRACT_STATUSES` (`:77`) gains `503`.
+3. `test_zz_every_reason_value_was_driven_by_a_real_request` (`:766`) compares against
+   `OBSERVED_REASONS` (`:81`), a set filled in **by that module's own tests**. So the
+   `no_channel` refusal must be driven from inside `test_server.py`, not only from
+   `test_degraded.py`.
+
+Point 3 is a genuine tension with D6, which routes degraded tests to a new module precisely to
+keep `test_server.py` under its line ceiling. **The tension is resolved in favour of the guard:**
+one `no_channel` request driven from `test_server.py` is the price of keeping a
+coverage-from-what-actually-ran assertion honest, and a `zz` gate satisfied from another module's
+observations is not satisfied at all. Task 7a adds that single request there; every other degraded
+test still lives in `test_degraded.py`.
+
+⚠️ **Naming trap.** `test_guards.py`'s "criterion 15" is the fence-identity criterion of a
+*different* card. **This** card's criterion 15 is the `skills/treko/SKILL.md` table split (task 11).
+Same number, unrelated meaning — do not conflate them when reading either file.
+
+**A second sealed door: criterion 16's render-site guards also fail by construction.**
+Corrected 2026-08-26 — an earlier revision of this section claimed they would stay green, which is
+wrong. `test_guards.py` carries `test_criterion16_command_ids_unchanged` (`:320`) and
+`test_criterion16_cmdButtons_and_cmdCopies_map_the_same_three_ids` (`:329`). The first checks the
+id *array* and is genuinely safe — this card re-partitions which ids are live (`trackerLiveIds`),
+it does not add or rename one. The second does not check behaviour at all. It pins the **literal
+source text** of the function D4 rewrites:
+
+```python
+CMD_BUTTONS_RE = re.compile(r"cmdButtons:\(hasChannel&&view\.offersButton\)\?TRACKER_COMMAND_IDS\.map\(")
+CMD_COPIES_RE  = re.compile(r"cmdCopies:showCopies\?TRACKER_COMMAND_IDS\.map\(")
+```
+
+Measured, not reasoned: `CMD_BUTTONS_RE` matches the working tree exactly once today, and matches
+**zero** times after D4's `hasChannel` → `hasToken` rename is applied. The rename alone breaks it,
+before `liveIds` is even threaded through. Task 9b owns the repair.
+
+The repair must not be "loosen the regex until it passes." Nothing guards that: criterion 16's own
+falsifier (`test_criterion16_falsifiers_are_caught`, `:369`) mutates a *different* function, so a
+weakened `CMD_BUTTONS_RE` would still show a green falsifier row. The regex must be re-pinned to
+the new literal text, and the falsifier extended to prove the new pin can fail.
 
 ## Security
 
@@ -921,15 +1059,25 @@ Scenario: the handler slice is still extractable
 13. The full suite passes with **no test lost** — node-ID set diff against the pre-change set. A
     changed total is not a regression; a lost node is. The three flipped
     `test_server_lifetime.py` nodes are *renamed and relocated*, so the diff must show them
-    accounted for by name, not merely absorbed into a larger total.
+    accounted for by name, not merely absorbed into a larger total. **The three are named here
+    so the diff cannot be satisfied by hand-waving** (added 2026-08-26, read from the current
+    file): `test_an_unset_surface_id_aborts_before_serving` (`test_server_lifetime.py:61`),
+    `test_a_failing_read_screen_probe_aborts_before_serving` (`:68`), and
+    `test_a_hanging_read_screen_probe_aborts_before_serving` (`:73`). Each must appear in the
+    diff as a named disappearance paired with a named arrival, never as a bare count.
 14. `wc -l` is under 800 for `server.py`, `channel.py`, `test_degraded.py`, `test_server.py`,
+    `test_guards.py` (tasks 9a/9b edit it),
     `test_server_lifetime.py`, `test_ui_commands.py` and `Treko.dc.html` — measured, not assumed.
 15. `skills/treko/SKILL.md` splits its refusal table: the four surface rows move to a new
     "When it starts degraded" table, the rest stay under "When it refuses to start". Its live
     test (`test_autolaunch.py:400` — no `nohup`/`setsid`/`2>`/`&` on any `server.py` line) still
     passes.
-16. **ADR 0036** records the pivot: why a startup abort became a served page, why all four
-    conditions and not one, why `503`, and why no surface is deduced.
+16. **The ADR** records the pivot: why a startup abort became a served page, why all four
+    conditions and not one, why `503`, and why no surface is deduced. Its *number* is whatever
+    task 10's re-verification returns at the moment of writing — `0038` as of 2026-08-26, but
+    this criterion is met by the record existing and being correctly numbered then, not by the
+    literal string `0038`. Pinning the number here would contradict task 10, which forbids
+    trusting a number recorded in advance.
 17. A degraded launch is still bounded by the watchdog: it exits within `poll_secs` of its parent
     process dying, and within `idle_secs` of its last request — exactly as a healthy launch does
     (`server.py:676-691`, unchanged by this card).
@@ -955,6 +1103,22 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 - [ ] 1. Pre-change baseline in this tree: full node-ID set (`--collect-only -q`), per-module
       counts, and `wc -l` for every file in criterion 14. Record the set's `sha256`.
+- [ ] 1a. **Enumerate every currently-green assertion this card invalidates, before writing any
+      test.** Three separate review rounds each surfaced exactly one more such assertion — the
+      fence digests (`test_guards.py`), the `cmdButtons` source-text regex (`test_guards.py`), and
+      the reason-scrape (`test_server.py`) — which is the signal to stop finding them one at a
+      time. For **each** of D2, D3, D4, D5 and D6, list every existing assertion the decision
+      breaks, the file and node it lives in, and which task repairs it. An empty list for a
+      decision is a valid answer only if it is stated explicitly.
+      **The two shapes that do not announce themselves, and must be searched for by shape rather
+      than by reading test names:**
+      (a) **source-scraping guards** — a test that reads another file's *text* and asserts against
+      a hand-maintained table (`test_server.py:741-763` is the known one; search for
+      `read_text()` plus `re.findall` in the test modules);
+      (b) **digest and byte-identity pins** — a test that hashes a region and compares to a stored
+      constant (`test_guards.py:130-137`).
+      Both are invisible to "does this test mention the thing I changed", because neither mentions
+      it. Record the enumeration in §Verification; tasks 2 onward may not start until it exists.
 - [ ] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
@@ -964,6 +1128,11 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 - [ ] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
       banner carries `reason=<token>`, and — the other half — the nine fatal conditions in
       criterion 9 still exit 2 and still refuse a connection.
+      **Assert the served bytes, not only `config`** (added 2026-08-26): for each of the four
+      conditions, `GET /` and assert the injected `<meta name="tracker-channel">` carries *that
+      condition's own token*. Checking `config["channel"]` alone leaves the `config` → meta hop
+      untested, and asserting only "the value is one of the five legal tokens" would pass a
+      swapped mapping that renders a wrong-but-plausible sentence for every failure.
 - [ ] 5. Wire `main()`'s narrow `except SurfaceUnavailable`, `build_config`'s `channel` key and
       the banner variant. Task 4 goes green. **Then** flip `test_autolaunch.py:355` and move
       `test_server_lifetime.py`'s three surface tests, updating that module's docstring
@@ -973,6 +1142,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `no_channel`, audit `reason=no_channel`, and **zero** entries in the fake-cmux log;
       `reanalyze` → `200`; an unknown id → `403` (the allowlist check still runs first).
 - [ ] 7. Implement `_run_send`'s guard. Task 6 goes green.
+- [ ] 7a. **Repair `test_server.py`'s reason contract for `503 no_channel`** (D7, third sealed
+      door): add `"no_channel": 503` to `REASON_STATUS` (`test_server.py:56-73`), add `503` to
+      `CONTRACT_STATUSES` (`:77`), and drive one real `no_channel` refusal **from inside
+      `test_server.py`** so `OBSERVED_REASONS` (`:81`) records it and
+      `test_zz_every_reason_value_was_driven_by_a_real_request` (`:766`) stays honest. Confirm
+      `test_the_enum_and_the_status_table_cover_each_other` (`:756`) is red before the fix and
+      green after — it is currently green, so a run that is green both times means the guard never
+      saw the change. Check `test_server.py` against criterion 14's ceiling afterwards.
 - [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
       bridge: `trackerLiveIds(hasToken, channelOk)` resolves to `[]` / `LOCAL_IDS` / `IDS` for all
       four combinations, including the fail-closed case — `channelOk=false` for every value other
@@ -982,6 +1159,15 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `no_channel` row driven against a really-degraded server (so `ROW_OUTCOMES` grows and the
       `zz` gate is satisfied honestly); `no_channel` leaves `offersButton` true; the send/local
       partition (`LOCAL_IDS`/`SEND_IDS`) matches `server.py`'s, read from both sides;
+      **and — added 2026-08-26 — `TRACKER_CHANNEL_REASONS`' key set matches the `Reason` enum's
+      member values, read from both sides the same way the partition is**: the enum imported from
+      `channel.py` in Python, the keys read out of the node bridge, asserted equal as sets. Without
+      this the reason text degrades silently — rename a `Reason` member and every lookup falls
+      through to the fixed fallback string, which is a *legal, designed* outcome, so the whole
+      suite stays green while the feature quietly stops telling anyone which of the four things
+      broke. The card's §Risks flagged this; until now no task owned it.
+      Also assert `TRACKER_COMMAND_IDS` is unchanged, so `test_guards.py`'s two criterion-16
+      assertions (`:320`, `:329`) are pinned from this side too;
       `trackerChannelReason(token)` returns each of the four mapped strings for its own token, and
       — criterion 7's security clause — returns the fixed fallback string for a token outside the
       five-member set, with the input token's own text asserted absent from the returned string.
@@ -1003,13 +1189,52 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       rendering as degraded), `runCommand`'s guard, `CMD_TONES`, and `_serve_index`'s second meta.
       Task 8 goes green. Keep the fenced region dependency-free — `test_ui_commands.py:182` is the
       guard on the guard.
-- [ ] 10. **ADR 0036** — verified free against `origin/main` @ `984e7ac` and every other ref.
+- [ ] 9a. **Re-baseline `test_guards.py`'s fence digests, in a commit of its own, after task 9 is
+      green.** Recompute `BASE_FENCE_BYTES` / `BASE_FENCE_SHA256` and
+      `BASE_FENCE_NODE_BRIDGE_BYTES` / `BASE_FENCE_NODE_BRIDGE_SHA256` from the implemented
+      `Treko.dc.html`, and move `BASE_COMMIT` to the commit that landed task 9.
+      **Bound the edit to exactly five names — `BASE_COMMIT`, `BASE_FENCE_BYTES`,
+      `BASE_FENCE_SHA256`, `BASE_FENCE_NODE_BRIDGE_BYTES`, `BASE_FENCE_NODE_BRIDGE_SHA256` —
+      and change nothing else in the file.** In particular do not touch `extract_fence`,
+      `extract_fence_node_bridge`, or the `_locate_markers` helper (`test_guards.py:140`) they
+      share — that helper is the single best place to make the guard vacuous: collapsing an extractor's span still lets every falsifier
+      fire while quietly moving the marker comments outside the guarded region, which is a
+      vacuous guard that looks green. **Derive the digests with `git show <task-9-sha>:treko/Treko.dc.html`,
+      not from the working tree**, so the recorded bytes and the recorded commit are the same
+      artifact — `BASE_COMMIT` is used only in the failure message and nothing ever checks that
+      it describes the digests. Do not edit the assertions, the falsifiers, or the marker text.
+      **One exception to "change nothing else":** the module docstring (`test_guards.py:21-24`,
+      `:29`, `:35-36`) describes the digests as pinning the *base-commit* form and goes false the
+      moment they are re-baselined. Update it in this same commit — a whitelist that mandates
+      leaving a now-false docstring in a guard file trades one silent lie for another. Confirm
+      `test_criterion15_falsifiers_are_caught` and
+      `test_criterion15_marker_text_mutation_is_reported_honestly` still fail on a mutated fence
+      afterwards — a re-baseline that also disarms the falsifiers has replaced a guard with a
+      constant. Record the old and new digest pairs in the commit message.
+- [ ] 9b. **Re-pin `test_guards.py`'s criterion-16 render-site regexes** (`CMD_BUTTONS_RE` at
+      `test_guards.py:302`, `CMD_COPIES_RE` at `:303` — note `:301` is `COMMAND_IDS_RE`, which this
+      task must **not** touch) to D4's rewritten `commandProps` text, in the
+      same commit as task 9a and under the same discipline. Then add a **new** falsifier test with a
+      `CMD_BUTTONS_RE` oracle. Do **not** try to extend `test_criterion16_falsifiers_are_caught`
+      (`:369`): it judges through `extract_command_ids`, which reads only the ids array, so a
+      mutation of the `cmdButtons` render site leaves the ids unchanged and that test reports
+      *"falsifier NOT caught"*. It cannot be widened to cover a render site; it has to be joined
+      by one that owns that oracle. **This task, unlike 9a, is explicitly permitted to add tests
+      to `test_guards.py`** — 9a's "change nothing else" whitelist governs 9a only. Record in the
+      commit message which assertion caught which mutation, not just the count.
+- [ ] 10. **ADR 0038** — re-verify free against `origin/main` at the moment of writing, and
+      against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
+      trust the number recorded here: it was 0036 at planning time and 0036/0037 have since
+      been taken. A duplicate ADR number merges cleanly and is never reported.
 - [ ] 11. `skills/treko/SKILL.md`: split the table (criterion 15), and document that the board is
       always served.
 - [ ] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
-      by name; per-module counts; `wc -l` for criterion 14 — including `Treko.dc.html`, which is
+      by name — `test_an_unset_surface_id_aborts_before_serving`,
+      `test_a_failing_read_screen_probe_aborts_before_serving` and
+      `test_a_hanging_read_screen_probe_aborts_before_serving`, each an old name paired with its
+      new one (criterion 13); per-module counts; `wc -l` for criterion 14 — including `Treko.dc.html`, which is
       what re-captures the fence's grown byte range (D4); if its own end marker has moved from
-      `:418`, this document's citations to it must be corrected in the same pass.
+      `:492`, this document's citations to it must be corrected in the same pass.
 - [ ] 13. Launch for real **three times**. For the two that go through `server.py`, never with
       `nohup`/`setsid`/`&` (any of the three detaches the server from the parent whose death its
       watchdog is watching for via `getppid()`). Once outside cmux (`env -u CMUX_SURFACE_ID
@@ -1020,16 +1245,16 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       **`#dc-root`, the mounted subtree**, read as `document.getElementById('dc-root').innerHTML`
       after mount. **Scope the check to that subtree; never to whole-document view source.**
       A correct degraded launch carries the raw token in the served bytes **twice**, and neither
-      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4 `:355`, built
-      exactly as the `tracker-token` sibling at `server.py:494` is), and the
+      copy is a leak: the injected `<meta name="tracker-channel">` in `<head>` (D4 `:353`, built
+      exactly as the `tracker-token` sibling at `server.py:495` is), and the
       `TRACKER_CHANNEL_REASONS` **keys** (D5, above) — which *are* the token literals — riding
       inside the marker-fenced inline script that `_serve_index` serves verbatim
-      (`server.py:489`). A whole-page check therefore fails against correct code; three rounds of
+      (`server.py:490`). A whole-page check therefore fails against correct code; three rounds of
       carving out exceptions each missed one of these, which is why the scope moves instead.
       `#dc-root` excludes both **structurally, not by exception**: the DC runtime creates that div
       and *replaces* `<x-dc>` with it (`treko/support.js:165-168`), then mounts React into it
-      (`:197`), so the `<head>` meta and the `<script type="text/x-dc">` sibling at
-      `Treko.dc.html:304` are outside it by construction. Note `dc-root` appears **zero** times in
+      (`:195-198`), so the `<head>` meta and the `<script type="text/x-dc">` sibling at
+      `Treko.dc.html:371` are outside it by construction. Note `dc-root` appears **zero** times in
       `Treko.dc.html` — it exists only at runtime, so read it from the live DOM, never from the
       served text. Once with a live surface: confirm the banner
       carries no `reason=`, all three buttons render live, no copy chip renders, and `cmdChannel`
@@ -1089,7 +1314,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 ## Verification
 
-### What was measured for this card — 2026-08-23, worktree `treko-ui-update` @ `984e7ac`
+### What was measured for this card — re-measured 2026-08-26, worktree `treko-ui-update` @ `2a0c459`
 
 Planning-phase measurements only. No implementation has been done and no task above is started.
 
@@ -1097,21 +1322,34 @@ Planning-phase measurements only. No implementation has been done and no task ab
 python3 --version                                  # Python 3.9.6
 python3 -m pytest --version                        # pytest 8.4.2
 node --version                                     # v26.5.0
-cd treko && python3 -m pytest --collect-only -q    # 221 tests collected in 0.03s
+cd treko && python3 -m pytest --collect-only -q    # 310 tests collected in 0.04s
 ```
 
-| Module | Collected |
-|---|---|
-| `test_server.py` | 89 |
-| `test_store.py` | 30 |
-| `test_analyze.py` | 26 |
-| `test_store_location.py` | 21 |
-| `test_rename.py` | 19 |
-| `test_ui_commands.py` | 15 |
-| `test_autolaunch.py` | 10 |
-| `test_server_lifetime.py` | 10 |
-| `test_store_writer.py` | 1 |
-| **total** | **221** |
+No `addopts`, `testpaths` or `-m` selector exists in `pytest.ini`, `setup.cfg`, `pyproject.toml`,
+`tox.ini` or `conftest.py`, so nothing is deselected and the collected total is the whole suite.
+
+| Module | Collected | At `984e7ac` |
+|---|---|---|
+| `test_server.py` | 89 | 89 |
+| `test_store.py` | 30 | 30 |
+| `test_analyze.py` | 26 | 26 |
+| `test_guards.py` | **25** | — |
+| `test_store_location.py` | 21 | 21 |
+| `test_rename.py` | 19 | 19 |
+| `test_nontext_contrast.py` | **16** | — |
+| `test_ui_commands.py` | 15 | 15 |
+| `test_drawer_sections.py` | **15** | — |
+| `test_theme.py` | **14** | — |
+| `test_sidebar.py` | **10** | — |
+| `test_autolaunch.py` | 10 | 10 |
+| `test_server_lifetime.py` | 10 | 10 |
+| `test_drawer.py` | **9** | — |
+| `test_store_writer.py` | 1 | 1 |
+| **total** | **310** | **221** |
+
+**Six test modules and `cdp_harness.py` did not exist when this card was planned** — 89 tests
+arrived from the treko UI cards that merged in the intervening 125 commits. All six read
+`Treko.dc.html`, which is the file this card edits. §D7 and task 8 are scoped against them.
 
 Collection only — **the suite was not run for this card.** `test_server_lifetime.py` alone costs
 at least a minute by design (`test_server_lifetime.py:23-25`), and a planning card does not need
@@ -1120,28 +1358,36 @@ a green run; task 1 owes one, with the node-ID set and its `sha256`.
 Line counts, `wc -l`:
 
 ```
-treko/server.py             799     # 1 line of headroom against the 800 ceiling
-treko/analyze.py            797
-treko/test_server.py        774
-treko/Treko.dc.html         639
-treko/test_autolaunch.py    417
-treko/test_ui_commands.py   330
-treko/test_server_lifetime.py 270
-treko/store.py              212
-treko/store_location.py     146
-skills/treko/SKILL.md       194
+treko/server.py             799     # 1 line of headroom against the 800 ceiling (unchanged)
+treko/analyze.py            797     # unchanged
+treko/test_server.py        774     # unchanged
+treko/Treko.dc.html         740     # was 639 at 984e7ac -- only 60 lines of headroom now, not 161
+treko/test_autolaunch.py    417     # unchanged
+treko/test_ui_commands.py   330     # unchanged
+treko/test_server_lifetime.py 270   # unchanged
+treko/store.py              212     # unchanged
+treko/store_location.py     146     # unchanged
+skills/treko/SKILL.md       220     # was 194 at 984e7ac
 ```
+
+Only two of the ten moved. `server.py` at 799/800 is what D6's whole argument rests on, and it
+holds exactly.
 
 ADR number, checked against the deciding ref rather than the local tree:
 
 ```
-git ls-tree origin/main docs/decisions/ --name-only   # tops out at 0035-model-aware-context-thresholds.md
-git rev-parse origin/main                             # 984e7ac6bf89f521c3cfd9fd69994564a515ff9a
+git ls-tree origin/main docs/decisions/ --name-only   # tops out at 0037-a-named-token-allowlist-...
+git rev-parse origin/main                             # 2a0c45904f1f775a67e7bc2444e24f704f8ca544
 ```
 
-`0036` is additionally absent from every `refs/remotes/*` and `refs/heads/*` in this checkout, and
-from the working tree. `0028` is likewise absent everywhere — an unused gap, not a free slot this
-card should claim.
+`0038` is additionally absent from all 28 `refs/heads/*` and `refs/remotes/*` in this checkout —
+each ref queried separately, because extra refs passed to one `git ls-tree` are read as pathspecs
+and silently match nothing — and from the working tree. `0028` is likewise absent everywhere: an
+unused gap, not a free slot this card should claim.
+
+**`0036` was this card's number until 2026-08-26 and is now taken**, as is `0037`. Both landed
+between `984e7ac` and `2a0c459`. Task 10 re-verifies at the moment of writing rather than
+trusting `0038`.
 
 ### What each task owes
 
@@ -1176,9 +1422,17 @@ the case run against it is new.
 
 ## Corrections to the dispatch brief
 
-Every line number in the brief was re-derived against `984e7ac`. Reported because a copied
-citation is laundered, not verified — five of these would have been carried into the card
-unchecked.
+Every line number in the brief was re-derived against `984e7ac`, and **the whole table was
+refreshed against `2a0c459` on 2026-08-26** — so the "Actually" column below states where each
+symbol is *today*, not where it was at the planning baseline. Reported because a copied citation
+is laundered, not verified — five of these would have been carried into the card unchecked.
+
+The refresh was not cosmetic. `Treko.dc.html` grew 639 → 740 lines in the intervening 125
+commits, moving every page-side anchor by roughly +75; the `server.py` anchors did not move at
+all. Two `server.py` citations were additionally **wrong at `984e7ac` itself** and are corrected
+in D4: the `<head>` replacement that injects the token is `:495` (`:493` is the `errno_name=`
+kwarg on the 500 path), and the verbatim read `_serve_index` serves is `:490` (`:489` is a bare
+`try:`). That site is now cited one way, as `:495`, in all three places.
 
 | Brief said | Actually | Note |
 |---|---|---|
@@ -1195,13 +1449,13 @@ unchecked.
 | `server.py:322` (`send_keys`) | `:321` | |
 | `server.py:582-584` (dispatch tail) | `:579-581` | |
 | `server.py:66-75` (send/local split) | `:66-76`; comment at `:67-68`, `SEND_COMMANDS` at `:69` | `:66` is a blank line. |
-| `Treko.dc.html:353-360` (`TRACKER_ERROR_OUTCOMES`) | `:354-361` | |
-| `Treko.dc.html:363` (`TRACKER_TERMINAL_OUTCOMES`) | `:364` | |
-| `Treko.dc.html:386` (`trackerOutcomeForBody`) | def at `:382`; `:386` is its `hasOwnProperty` line | |
-| `Treko.dc.html:333-339` (`TRACKER_COPY_TEXT`) | `:334-339`; `:333` is `TRACKER_COMMAND_IDS` | |
-| `Treko.dc.html:325-333` (contract comment) | `:325-332`; `:333` is the first code line | |
-| `Treko.dc.html:494` (`runCommand`'s guard) | `:497`; `runCommand` starts at `:495` | |
-| `Treko.dc.html:475-483` (`hasChannel`) | `commandProps` at `:475`; `hasChannel` at `:480`, `showCopies` at `:483` | |
+| `Treko.dc.html:353-360` (`TRACKER_ERROR_OUTCOMES`) | `:428-435` | |
+| `Treko.dc.html:363` (`TRACKER_TERMINAL_OUTCOMES`) | `:438` | |
+| `Treko.dc.html:386` (`trackerOutcomeForBody`) | def at `:456`; `:460` is its `hasOwnProperty` line | |
+| `Treko.dc.html:333-339` (`TRACKER_COPY_TEXT`) | `:408-413`; `:407` is `TRACKER_COMMAND_IDS` | |
+| `Treko.dc.html:325-333` (contract comment) | `:399-406`; `:407` is the first code line | |
+| `Treko.dc.html:494` (`runCommand`'s guard) | `:588`; `runCommand` starts at `:586` | |
+| `Treko.dc.html:475-483` (`hasChannel`) | `commandProps` at `:566`; `hasChannel` at `:571`, `showCopies` at `:574` | |
 | `test_server_lifetime.py:62-65` | def at `:61`, body `:64-65` | |
 | two lifetime tests flip | **three** | `test_a_hanging_read_screen_probe_aborts_before_serving` (`:73`) is the third. |
 | `test_server.py` is 777 lines | **774** | |
@@ -1210,6 +1464,7 @@ unchecked.
 Everything else in the brief held: `SURFACE_ENV` at `server.py:55`; the abort handler at
 `:738-740`; the quoted `bind_surface` rationale; the `test_autolaunch.py:355` docstring, verbatim;
 `test_ui_commands.py:190`'s `"the allowlist drifted"` assertion; the marker-fence contract at
-`Treko.dc.html:325`; `componentDidMount`'s meta read at `:437-438` and its "supported runtime
-mode, not a degradation" comment; no `503` anywhere in the response vocabulary; and the suite
-baseline — 221 tests, every per-module count exact.
+`Treko.dc.html:399`; `componentDidMount`'s meta read at `:512-513` and its "supported runtime
+mode, not a degradation" comment; and no `503` anywhere in the response vocabulary. The suite
+baseline did **not** hold: it was 221 tests across 9 modules at `984e7ac` and is **310 across 15**
+at `2a0c459` — see §Verification.
