@@ -228,6 +228,7 @@ fail_case 'C3 per-repo dir widened (750)' "$(payload_create feat-x "$PRIMARY")" 
 # non-empty plain directory so git refuses it.
 reset_home
 fresh_primary
+mkdir -p -m 700 "$STORE_ROOT"
 mkdir -p -m 700 "$STORE_ROOT/proj"
 mkdir -p "$STORE_ROOT/proj/feat-x" && printf junk > "$STORE_ROOT/proj/feat-x/junk"
 fail_case 'C4 git worktree add fails' "$(payload_create feat-x "$PRIMARY")" 'git worktree add failed'
@@ -267,6 +268,7 @@ rm -f "$STORE_ROOT"
 # worktree add must never run — checked via git worktree list on the primary repo.
 reset_home
 fresh_primary
+mkdir -p -m 700 "$STORE_ROOT"
 mkdir -p -m 700 "$STORE_ROOT/proj"
 chmod 500 "$STORE_ROOT/proj"   # writable-by-owner bit off; still owner-only (0500 & 0o077 == 0)
 fail_case 'C9 marker cannot be written (dir read-only)' "$(payload_create feat-x "$PRIMARY")" '.repo-root marker'
@@ -279,6 +281,7 @@ fi
 
 reset_home
 fresh_primary
+mkdir -p -m 700 "$STORE_ROOT"
 mkdir -p -m 700 "$STORE_ROOT/proj"
 printf '%s\n' "$PRIMARY" > "$STORE_ROOT/proj/.repo-root"
 chmod 000 "$STORE_ROOT/proj/.repo-root"
