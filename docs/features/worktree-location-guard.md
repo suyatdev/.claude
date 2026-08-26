@@ -3609,6 +3609,24 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
          is still in `log`. Ship a tracked mode file beside the hook that layer 2 reads directly, and
          have `install-layer2.sh` refuse to arm while that file says `log` unless told otherwise.
          **No claim that the mode switch works end to end may be written until 6c has been run.**
+      5. **Case K6 (user decision, 2026-08-26): carve out a `git init` exemption, do not ship the
+         breakage.** Task 6a measured that an armed layer 2 breaks `git init` itself — the initial
+         `HEAD` write runs `reference-transaction` at `prepared` while `GIT_DIR` points at a
+         repository that does not exist yet, every `rev-parse` fails with
+         `fatal: not a git repository`, and boundary 28 denies on the unreadable backend, so
+         `git init` exits 128 with `.git/` created and no `HEAD` file written. Rejected
+         alternatives, both considered and declined: shipping the breakage as documented cost
+         (a recurring papercut on every `git init` on the machine once layer 2 is armed), and
+         pushing a workaround onto the user (a required `GIT_HOOKS_PATH` override or an
+         enable/disable dance around each `git init`) — both make the guard's presence the user's
+         problem to route around rather than the guard's own. The hook must detect this exact
+         shape — a `rev-parse` failure whose repository does not yet exist, not merely a
+         *readable* backend — and allow rather than deny. Needs its own pinned test case (K6
+         itself, already named in `hooks/reference-transaction.test.sh`'s red-first suite) turned
+         from "denies, as measured" into "allows, because this is `git init`'s own transaction" —
+         and a re-verification that the exemption is narrow enough not to also allow a real
+         primary-checkout HEAD move that merely fails a probe for an unrelated reason (boundary
+         28's existing "unusable probe denies" rule must still hold everywhere else).
 - [ ] 7. Implement `create-worktree.sh` (Arm B) including the 0700 store, the `.repo-root` marker,
       the branch/base contract, and failure boundaries 15–27. Three requirements the probes
       produced: create and report **atomically** (a create-then-misreport leaves an orphan in
