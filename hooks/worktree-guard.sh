@@ -13,6 +13,11 @@
 #           working tree wholesale. LAYER 1 ONLY: layer 2 (hooks/reference-transaction, card
 #           task 6a) is a separate git-side hook and is NOT part of this file.
 #
+# Layer 1 also CHECKS layer 2, in check_liveness() below: every refusal it prints carries a
+# report when the effective repo's core.hooksPath holds no armed `reference-transaction`.
+# All three of layer 2's absence modes were measured to fail open silently, so layer 2
+# cannot report any of them and only this file can.
+#
 # Design, boundaries and scenarios: docs/features/worktree-location-guard.md.
 #
 # Exit 0 = allow. Exit 2 = deny, reason on stderr. Nothing is ever written to stdout, on
@@ -91,6 +96,18 @@ MARKER_NAME='.repo-root'
 # env-assignment on the command line, exactly as classify-pr-command.py reads its own.
 EXEMPT_VAR='WORKTREE_EXEMPT'
 
+# Layer 2 — the git-side hook (card task 6a). This file never runs it and never reads it;
+# the liveness check needs only its NAME and the directory git would look for it in.
+LAYER2_HOOK='reference-transaction'
+
+# The path handed to `git rev-parse --git-path`, which is how the effective core.hooksPath
+# is resolved. Measured against a throwaway repo, all four shapes: --git-path honours the
+# whole config precedence (a repo-LOCAL core.hooksPath beats a global one, which is the
+# husky/lefthook case the check exists for), falls back to <git-dir>/hooks when it is unset,
+# resolves a relative value against the repository rather than the caller's cwd, and answers
+# the COMMON hooks directory from inside a linked worktree.
+HOOKS_GIT_PATH='hooks'
+
 # --- messages ---------------------------------------------------------------------------
 # Every message carries the `worktree-guard:` prefix. phase-guard.sh prefixes its own and
 # both hooks are PreToolUse on the same matchers, so a bare refusal does not say which one
@@ -143,6 +160,71 @@ append_log() { # $1 arm, $2 decision, $3 repo-root, $4 path-or-command, [$5 exem
   ( printf '%s\n' "$line" >>"$LOG_FILE" ) 2>/dev/null
 }
 
+# --- the liveness check: layer 1 checks layer 2 --------------------------------------------
+# Layer 2 (hooks/reference-transaction) is what refuses a HEAD move in a shared primary
+# checkout however the move is started — including from a terminal no PreToolUse hook ever
+# sees. All three ways it can be absent were measured to fail open SILENTLY (rc=0, HEAD
+# moved), so no layer-2 code runs and nothing on that side can report them; a guard whose
+# absence is indistinguishable from its success is the failure this card has already
+# recorded once (card, "The liveness check").
+#
+# CHANNEL — a judgement the card deliberately left open (":2490, this scenario asserts a
+# REPORT, not a verdict"). Settled here as: a paragraph APPENDED to a refusal this guard was
+# already printing, and nothing else. It does not deny on its own — a missing hook file in
+# one repo is not a reason to block every git command in every repo — and it does not warn
+# on an allow, which would put a paragraph on stderr for every Bash tool call and teach
+# sessions to skip the stream the real refusals arrive on. The cost is stated rather than
+# hidden: while this guard is quiet, and in `log` mode where it prints nothing at all,
+# layer 2's absence goes unreported.
+#
+# The repository is NOT re-derived here. It arrives as refuse()'s own repo-root argument,
+# which each arm filled in from the resolution it had already done — Arm A's $top, Arms B2
+# and D's $EFF_ROOT. An empty one means no repository was ever established (every
+# precondition refusal, including the one require_git raises), and there is no hooks path to
+# resolve without one. That is also why the --path-format=absolute below is safe: every
+# caller that passes a non-empty root has already been through require_git's version floor.
+LIVENESS_NOTE=''
+check_liveness() { # $1 the repository this refusal was judged against, '' when there is none
+  local hooks_path hook state
+  LIVENESS_NOTE=''
+  [ -n "$1" ] || return 0
+  hooks_path=$(git -C "$1" rev-parse --path-format=absolute --git-path "$HOOKS_GIT_PATH" \
+    2>/dev/null) || hooks_path=''
+  if [ -z "$hooks_path" ]; then
+    # Silence is what an ARMED layer 2 looks like, so an unanswerable probe may not be
+    # silent — that is the whole shape this check exists to break.
+    LIVENESS_NOTE="${LF}${LF}worktree-guard: layer 2 could not be checked — git would not report a hooks path for $1, so whether the \`$LAYER2_HOOK\` hook is armed for this repository is unknown."
+    return 0
+  fi
+  hook="$hooks_path/$LAYER2_HOOK"
+  # Armed means a REGULAR file that is executable, which is what git itself requires. A
+  # presence test alone would pass the mode that reads most like a working install.
+  if [ ! -d "$hooks_path" ]; then
+    state='that directory does not exist'
+  elif [ ! -e "$hook" ]; then
+    state="no \`$LAYER2_HOOK\` file is in it"
+  elif [ ! -f "$hook" ]; then
+    state="\`$LAYER2_HOOK\` is there but is not a regular file"
+  elif [ ! -x "$hook" ]; then
+    state="\`$LAYER2_HOOK\` is there but is not executable"
+  else
+    return 0
+  fi
+  LIVENESS_NOTE="${LF}${LF}worktree-guard: separately — LAYER 2 IS NOT ARMED for this repository: $state.
+
+  hooks path: $hooks_path
+  expected:   $hook, executable
+
+Layer 2 is the git-side \`$LAYER2_HOOK\` hook. It is what refuses a HEAD move in
+a shared primary checkout however the move is started, including from a terminal no
+PreToolUse hook ever sees, and every way it can be absent was measured to exit 0 and move
+HEAD without a word — so this paragraph is the only signal that it is off. The refusal
+above came from layer 1 and stands on its own; it is unaffected by layer 2's state.
+
+This check is not self-hosting: if this hook is itself unregistered, nothing checks either
+layer. That regress terminates at settings.json, which is tracked and reviewable."
+}
+
 # --- refusal ------------------------------------------------------------------------------
 # The single exit for every mode-subject deny. $REFUSE_MSG holds the full message; it is a
 # variable rather than an argument so the multi-line messages below stay readable.
@@ -150,9 +232,14 @@ REFUSE_MSG=''
 refuse() { # $1 arm, $2 repo-root, $3 path-or-command
   local decision=deny
   [ "$MODE" = log ] && decision=would-deny
+  # Only a refusal that will actually be PRINTED carries the report, so log mode pays for no
+  # extra git process and says nothing it was not already going to say. The log line is left
+  # alone for the same reason: the card fixes its field list, and a liveness field would be
+  # one the format does not specify.
+  if [ "$decision" = deny ]; then check_liveness "$2"; fi
   if append_log "$1" "$decision" "$2" "$3"; then
     [ "$MODE" = log ] && exit 0
-    printf '%s\n' "$REFUSE_MSG" 1>&2
+    printf '%s\n' "$REFUSE_MSG$LIVENESS_NOTE" 1>&2
     exit 2
   fi
   # Boundary 10, rules 1 and 2. Rule 1: log mode enforces nothing, and a guard that is not
@@ -165,7 +252,7 @@ refuse() { # $1 arm, $2 repo-root, $3 path-or-command
     printf '%s\n' "$MSG_LOG_WARN" 1>&2
     exit 0
   fi
-  printf '%s\n\n%s\n' "$REFUSE_MSG" "$MSG_NOT_RECORDED" 1>&2
+  printf '%s\n\n%s\n' "$REFUSE_MSG$LIVENESS_NOTE" "$MSG_NOT_RECORDED" 1>&2
   exit 2
 }
 
