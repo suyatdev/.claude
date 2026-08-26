@@ -470,7 +470,7 @@ new branch:
 The last column is stated precisely, once, in D5 — this table only summarises it. Three of the
 four chip-rendering rows above render no reason text at all; only the fourth does.
 
-**`module.exports` (`:487-489`) grows to expose the new functions and the two constants above:**
+**`module.exports` (`:487-491`) grows to expose the new functions and the two constants above:**
 
 ```js
 if(typeof module!=='undefined'&&module.exports){
@@ -523,6 +523,14 @@ return;` — the same belt-and-braces the existing comment at `:590-592` explain
 new axis. It is **presentation only**: the authorization control is D3's server-side refusal.
 
 ### D5 — `no_channel` is a page outcome, and it is deliberately **not** terminal
+
+> **The reason-line element carries no `id` attribute.** Settled here 2026-08-26 because it is
+> asserted elsewhere and was previously unstated: `test_drawer.py:571`
+> (`test_criterion14_the_page_has_exactly_seven_ids_all_sec_anchors`) pins the page's `id="…"`
+> count at exactly **7**, all `sec-*` scroll anchors, over the very file this decision edits.
+> Nothing in D5 needs an `id` — the reason text is rendered from state, reached by React, and
+> never by `getElementById`. Giving it one would turn a green structural guard red for no gain.
+> If a later change genuinely needs one, that change owns updating the count and its rationale.
 
 Three page-side additions:
 
@@ -736,9 +744,13 @@ Added 2026-08-26. `test_guards.py`, `test_nontext_contrast.py`, `test_drawer_sec
 between `984e7ac` and `2a0c459`. **All six read `Treko.dc.html`**, the file D4/D5 edit. Everything
 above this heading was written against a 221-test suite that did not contain them.
 
-Five of the six assert on presentation — theme tokens, contrast ratios, drawer and sidebar
-structure — and this card adds no styling, so they should stay green untouched. Task 12's node-ID
-set diff is what proves that rather than assumes it.
+Five of the six assert mostly on presentation — theme tokens, contrast ratios, drawer and sidebar
+structure — and this card adds no styling. **That is not the same as "they stay green", and an
+earlier revision of this paragraph wrongly said so.** Corrected 2026-08-26: at least one of them
+asserts *structure*, not style — `test_drawer.py:571` pins the page's `id="…"` count at exactly 7,
+over the very file D4/D5 edit. A reassurance is worse than silence here, because it tells the
+implementer not to look. Task 1a enumerates these properly; task 12's node-ID set diff is the
+backstop, not the proof.
 
 **`test_guards.py` is the exception, and it fails by construction.** Two of its assertions pin the
 fenced region by cryptographic digest:
@@ -1081,6 +1093,12 @@ Scenario: the handler slice is still extractable
 17. A degraded launch is still bounded by the watchdog: it exits within `poll_secs` of its parent
     process dying, and within `idle_secs` of its last request — exactly as a healthy launch does
     (`server.py:676-691`, unchanged by this card).
+18. **The enumeration exists and is honoured.** Task 1a's D2-D6 table is present in
+    §Verification with pasted command output, every row names an owning task, and no test in the
+    final suite is red for a reason the table does not predict. Added 2026-08-26: without this,
+    nothing in these criteria fails when task 1a is skipped, which would leave the card's central
+    anti-regression control unenforced — three review rounds each found one more currently-green
+    assertion this card breaks, and the table is what replaces finding them one at a time.
 
 ## Pinned versions
 
@@ -1112,13 +1130,40 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       decision is a valid answer only if it is stated explicitly.
       **The two shapes that do not announce themselves, and must be searched for by shape rather
       than by reading test names:**
-      (a) **source-scraping guards** — a test that reads another file's *text* and asserts against
-      a hand-maintained table (`test_server.py:741-763` is the known one; search for
-      `read_text()` plus `re.findall` in the test modules);
+      (a) **source-scraping guards** — a test that reads another file's *text* and asserts
+      against a hand-maintained table or a compiled pattern. Search for **`read_text()` plus any
+      regex applied to that text** — `re.findall`, `.search`, `.match`, `.fullmatch` — not
+      `re.findall` alone. Measured 2026-08-26: `CMD_BUTTONS_RE` is used via `.search()`
+      (`test_guards.py:340`), and `test_theme.py`, `test_drawer.py`, `test_sidebar.py` and
+      `test_autolaunch.py` contain **zero** `re.findall` between them while carrying 5, 2, 1 and 2
+      `re.compile` over `read_text()` respectively. A `re.findall` recipe finds two of the three
+      known doors and stops;
       (b) **digest and byte-identity pins** — a test that hashes a region and compares to a stored
       constant (`test_guards.py:130-137`).
       Both are invisible to "does this test mention the thing I changed", because neither mentions
-      it. Record the enumeration in §Verification; tasks 2 onward may not start until it exists.
+      it. **Before trusting the recipe on unknowns, run it and confirm it rediscovers all three
+      already-known doors** (`test_guards.py`'s digests, `test_guards.py`'s `CMD_BUTTONS_RE`,
+      `test_server.py`'s reason scrape). A recipe that cannot re-find what is already known is not
+      evidence about what is not.
+      **(c) A parallel sweep for counted prose claims.** Compliance rounds 5-8 kept finding a
+      second species that (a) and (b) do not cover: not a broken test, but a broken *sentence*
+      about a file this card already read — "the four surface rows", "the repo's only §Security
+      section", "shares no substring (verified)". Every "the N <things> in `<file>`" claim in this
+      document must be re-derived by a command whose **output is pasted into §Verification**
+      beside the claim. A count with no pasted output is treated as unverified.
+      Record the enumeration in §Verification; tasks 2 onward may not start until it exists.
+      **Known rows this enumeration must already contain** (found by review, not by the recipe —
+      they are the floor, not the ceiling):
+      D5 -> `test_drawer.py:571` `test_criterion14_the_page_has_exactly_seven_ids_all_sec_anchors`
+      asserts the page carries exactly **7** `id="…"` attributes. If D5's reason-line element
+      carries an `id`, it breaks. **D5 must state explicitly whether it does** — see §D5.
+      D6 -> `test_server.py:311` asserts `"env=" not in server.py`'s source. D6 moves the
+      `subprocess.run` at `server.py:225` into `channel.py`, so this guard stays green while
+      silently covering one fewer spawn site — and the one it loses is the cmux probe. Decide
+      whether it extends to `channel.py`; a shrinking security guard that stays green is worse
+      than a red one.
+      D6 -> `server_harness.py:45`'s comment "CMUX_TIMEOUT_SECS (5s, pinned in `server.py`)" goes
+      false once D6 moves that constant.
 - [ ] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
@@ -1148,8 +1193,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `test_server.py`** so `OBSERVED_REASONS` (`:81`) records it and
       `test_zz_every_reason_value_was_driven_by_a_real_request` (`:766`) stays honest. Confirm
       `test_the_enum_and_the_status_table_cover_each_other` (`:756`) is red before the fix and
-      green after — it is currently green, so a run that is green both times means the guard never
-      saw the change. Check `test_server.py` against criterion 14's ceiling afterwards.
+      green after — it is currently green (verified by running it), so a run that is green both
+      times means the guard never saw the change.
+      **`test_server.py` is at 774 of its 800-line ceiling** (measured 2026-08-26) and this task
+      adds to it. If the additions cross 800, the remedy is to move the single `no_channel`
+      request into `test_degraded.py` and accept that `OBSERVED_REASONS` cannot then see it —
+      which means `test_zz_every_reason_value_was_driven_by_a_real_request` must gain an explicit,
+      commented exemption for `no_channel` rather than being left quietly unsatisfiable. Do not
+      discover this at the ceiling; check the delta before writing.
 - [ ] 8. Red tests in `test_ui_commands.py` for D4/D5/D7, all callable directly off the grown node
       bridge: `trackerLiveIds(hasToken, channelOk)` resolves to `[]` / `LOCAL_IDS` / `IDS` for all
       four combinations, including the fail-closed case — `channelOk=false` for every value other
@@ -1172,9 +1223,14 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       — criterion 7's security clause — returns the fixed fallback string for a token outside the
       five-member set, with the input token's own text asserted absent from the returned string.
       **Use the probe token `zz_not_a_channel_token`, and pin it — do not let the test invent one.**
-      The assertion is a substring test against `No control channel.`, so a probe of `control` or
-      `No` is itself a substring of the fallback and would fail a *correct* implementation; the
-      pinned probe shares no substring with it (verified, not assumed).
+      The assertion is "the probe token does not appear in the returned string", so a probe of
+      `control` or `No` **is** itself a substring of the fallback and would fail a *correct*
+      implementation. `zz_not_a_channel_token` is safe because the **whole token** is not a
+      substring of `No control channel.` — which is what the assertion actually tests.
+      **Corrected 2026-08-26: this previously claimed the probe "shares no substring" with the
+      fallback, "(verified, not assumed)". That was false and had not been run.** The two share
+      `channel` (7 chars), among others. The test is still sound; the justification was not.
+      Assert whole-token absence, never substring-disjointness.
       This last case is what closes criterion 7's "unrecognised token" clause: a real server can
       only ever emit one of the five legal tokens (D1), so this is the only way that clause is
       exercised at all. What this task does **not** cover — the mapped or fallback text actually
@@ -1203,10 +1259,17 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       not from the working tree**, so the recorded bytes and the recorded commit are the same
       artifact — `BASE_COMMIT` is used only in the failure message and nothing ever checks that
       it describes the digests. Do not edit the assertions, the falsifiers, or the marker text.
-      **One exception to "change nothing else":** the module docstring (`test_guards.py:21-24`,
-      `:29`, `:35-36`) describes the digests as pinning the *base-commit* form and goes false the
-      moment they are re-baselined. Update it in this same commit — a whitelist that mandates
-      leaving a now-false docstring in a guard file trades one silent lie for another. Confirm
+      **One exception to "change nothing else":** the module docstring describes the digests as
+      pinning the *base-commit* form and goes false the moment they are re-baselined. Update it in
+      this same commit — a whitelist that mandates leaving a now-false docstring in a guard file
+      trades one silent lie for another. The exception covers `test_guards.py:21-24`, `:29`,
+      `:35-36`, **and `:41-45`** — the third figure (4727 bytes / `5409d62e…`) that no test
+      asserts against, together with the sentence calling it "one byte off from the other two".
+      Re-baselining two of three digests makes that arithmetic false, and omitting it from the
+      exception is exactly the trade this paragraph forbids.
+      Note also `test_guards.py:15-16` and `:196-197` state the fence is at `:348-441`; it is
+      really `:399-492`. That staleness is **pre-existing, not caused by this card** — but 9a is
+      the commit that locks those lines in, so correct them here too. Confirm
       `test_criterion15_falsifiers_are_caught` and
       `test_criterion15_marker_text_mutation_is_reported_honestly` still fail on a mutated fence
       afterwards — a re-baseline that also disarms the falsifiers has replaced a guard with a
@@ -1226,7 +1289,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
       trust the number recorded here: it was 0036 at planning time and 0036/0037 have since
       been taken. A duplicate ADR number merges cleanly and is never reported.
-- [ ] 11. `skills/treko/SKILL.md`: split the table (criterion 15), and document that the board is
+- [ ] 11. `skills/treko/SKILL.md`: split the table (criterion 15 — note it names **two** existing surface rows, `SKILL.md:190` and `:191`; there is no row for probe timeout or unrunnable cmux, so those are *added*, not moved), and document that the board is
       always served.
 - [ ] 12. Post-change suite: node-ID set diff vs task 1 with the three renamed nodes accounted for
       by name — `test_an_unset_surface_id_aborts_before_serving`,
@@ -1391,6 +1454,18 @@ trusting `0038`.
 
 ### What each task owes
 
+**Task 1a owes the enumeration itself** — the D2-D6 table of broken assertions with file, node
+and owning task; the pasted output of the widened search recipe; the proof it rediscovers all
+three known doors; and the pasted output of every re-derived counted prose claim. An enumeration
+with no pasted command output is not an enumeration.
+**Task 7a owes the red-then-green pair for `test_the_enum_and_the_status_table_cover_each_other`**
+(green today, so a both-green run is a null result), plus `test_server.py`'s line count against
+its 800 ceiling.
+**Task 9a owes the old and new digest pairs, the `git show <sha>:` command that produced the new
+ones, and a re-run of the criterion-15 falsifiers proving they still fire.**
+**Task 9b owes the new falsifier's name and which assertion caught which mutation** — a count is
+not a receipt.
+
 Task 1 owes the node-ID set and its `sha256`. Tasks 2, 4, 6 and 8 each owe a **red-for-the-right-
 reason** record: a collection error cannot distinguish "N tests red" from "one broken file", so
 each red round is confirmed test-by-test against a throwaway stub, as
@@ -1459,7 +1534,7 @@ kwarg on the 500 path), and the verbatim read `_serve_index` serves is `:490` (`
 | `test_server_lifetime.py:62-65` | def at `:61`, body `:64-65` | |
 | two lifetime tests flip | **three** | `test_a_hanging_read_screen_probe_aborts_before_serving` (`:73`) is the third. |
 | `test_server.py` is 777 lines | **774** | |
-| the store-location card has a §Security section | it has **no** `## Security` heading | Its trust-boundary reasoning is distributed across D2, D3, §Risks and §"The one thing that must be settled". The §Security section here is modelled on `docs/features/tracking-feature-state.spec.md:675`, the repo's only one, and on that card's tone. |
+| the store-location card has a §Security section | it has **no** `## Security` heading | Its trust-boundary reasoning is distributed across D2, D3, §Risks and §"The one thing that must be settled". The §Security section here is modelled on `docs/features/tracking-feature-state.spec.md:675` and on that card's tone. **Corrected 2026-08-26: that file was called "the repo's only one"; it is not.** `git grep -ln '^## Security' origin/main -- docs/features/` returns three cards — `tracking-feature-state.spec.md`, `treko-branch-graph-traversal.md` (`:741`) and this one. |
 
 Everything else in the brief held: `SURFACE_ENV` at `server.py:55`; the abort handler at
 `:738-740`; the quoted `bind_surface` rationale; the `test_autolaunch.py:355` docstring, verbatim;
