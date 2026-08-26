@@ -645,22 +645,29 @@ slot. Measured in headless Chrome: the healthy/idle header's existing gap is `28
 unconditionally-rendered empty `cmdReason` div widens it to `42.00px` — on the exact path
 criterion 10 calls "byte-identical to today." **The element is instead gated with `sc-if`**, the
 same mechanism this file already uses 17 times elsewhere (`Treko.dc.html:44,47,56,58,…`), so a
-`false` gate emits **no node at all** — consistent with `:600-601`'s "not an empty string standing
-in for it, nothing":
+`false` gate emits **no node at all** — consistent with the render-condition paragraph above
+("not an empty string standing in for it, nothing"):
 
 ```html
 <div style="flex:none;font-size:11.5px;line-height:1.35;max-width:300px;text-align:right;color:{{ cmdMsgC }}">{{ cmdMsg }}</div>
-<sc-if value="{{ !!cmdReason }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ cmdReason }}">
   <div style="flex:none;font-size:11.5px;line-height:1.35;max-width:220px;text-align:right;color:{{ cmdReasonC }}">{{ cmdReason }}</div>
 </sc-if>
 <sc-for list="{{ cmdButtons }}" as="c">
 ```
 
 No `id`, matching task 1a's floor row on `test_drawer.py:571`'s exact-7 count — the element is
-reached by React state, never `getElementById`, so it needs none. Criterion 7 and task 13's
-"the reason line matches the table" receipt (§Verification) now name what they check: this
-element's rendered text, read from `#dc-root`'s mounted subtree — and criterion 10's
-byte-identical claim now holds structurally (no node emitted), not just visually.
+reached by React state, never `getElementById`, so it needs none. `value="{{ cmdReason }}"` takes
+a plain name, matching this file's other 17 `sc-if` usages (`Treko.dc.html:44,47,56,58,…`) rather
+than an explicit `!!`, since the engine's own truthiness test already does that work; no
+`hint-placeholder-val` either — that attribute is only consulted when the value resolves
+`undefined`, which a boolean/string coercion never does, so on the other 17 usages it does real
+work and on this one it would have been inert. Criterion 7 and task 13's "the reason line matches
+the table" receipt (§Verification) now name what they check: this element's rendered text, read
+from `#dc-root`'s mounted subtree. **No flex item is emitted when the gate is `false`, so the
+healthy-board header's geometry is unchanged** — stated this way, not as "byte-identical", because
+observability round 9 measured that every `data-dc-tpl` index after the insertion point shifts by
+2; nothing reads those indices today, but the claim is scoped to what was actually verified.
 
 **`no_channel` must not go into `TRACKER_TERMINAL_OUTCOMES`, and the reasoning matters more than
 the answer.** The dispatch brief suggested it should, on the ground that a 503 from a channel-less
@@ -1457,6 +1464,12 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       by one that owns that oracle. **This task, unlike 9a, is explicitly permitted to add tests
       to `test_guards.py`** — 9a's "change nothing else" whitelist governs 9a only. Record in the
       commit message which assertion caught which mutation, not just the count.
+      **Also add the header-child-count assertion observability round 9 built and verified catches
+      the D5 `sc-if` gate being silently deleted:** render the healthy/idle path and assert the
+      command cluster's flex-child count (or the equivalent gap measurement) matches today's,
+      **and** render the degraded path and assert it grows by exactly one. Without this, nothing
+      in the suite notices if a later edit removes the `sc-if` wrapper — the suite stays green and
+      the regression this card spent two rounds finding and fixing comes back invisibly.
 - [ ] 10. **ADR 0038** — re-verify free against `origin/main` at the moment of writing, and
       against every `refs/heads/*` and `refs/remotes/*`, each ref queried separately. Do NOT
       trust the number recorded here: it was 0036 at planning time and 0036/0037 have since
@@ -1731,7 +1744,16 @@ the file — invisible to clause (a)'s previous "read_text() plus a regex" recip
 door found by review rather than by the recipe. Clause (a) is now keyed on the **read**, not the
 matcher. Found by observability round 5.
 
-### Clause (d) applied to this revision
+### Clause (d) applied to round 9 (this section is scoped to that round, not renewed since)
+
+**Round 13 finding: this section's own heading claimed present tense ("applied to this
+revision") while the document moved three revisions past it** — rounds 10, 11 and 12 each minted
+new citations (`Treko.dc.html:500`, `:44`, `:47`, `:56`, `:58`, `:566`, `:576`, `:112`,
+`support.js:165-168`, `:195-198`, `server.py:53-55`, among others) with no audit receipt here,
+even though clause (d) requires exactly that. Retitled to say what it actually covers. Each
+later round's commit message carries its own citation self-audit inline instead (see `git log`
+on this file) — that is where clause (d)'s discipline for rounds 10-13 actually lives; it is not
+consolidated into this section, which is retained only as the round-9 record it always was.
 
 Every `file:line` written or edited in round 9 was re-opened **before** the commit, by a script
 that asserts the named line contains what the card says it does — the discipline that `:590-592`
