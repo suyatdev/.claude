@@ -994,16 +994,182 @@ outright, and 2 it accepts under a different rule** — a materially different s
 `sh -c "sh -c 'git switch main'"`; `env -C /tmp/other git switch main`;
 `timeout 5 git commit -m x`; `if cd /tmp/other; then git commit -m x; fi`.
 
-**Population 3 — the command-position form, 21 shapes that must allow: 0 false denials.**
+**Population 3 — the command-position form, 22 shapes that must allow: 0 false denials.**
 Rows 5–19 of population 1 above (15 shapes), plus `git switch main`, `echo hello`, `ls -la /tmp`,
 `npm test`, `cat README.md`, and `gh pr create --title "fix git guard" --body "closes the hole"` /
 `gh issue comment 12 --body "the git switch case is covered"` — the two rows the wider form broke.
-That accounts for 21. **`git switch main` allows in this harness on purpose**: the harness measures
+15 + 5 + 2 = **22**. **`git switch main` allows in this harness on purpose**: the harness measures
 only the collapsed-token clause, not the branch-move classification, so a bare `git` in command
 position is not its subject. Reading that row as "Arm D allows `git switch`" is a misreading.
 
+⚠️ **This count read 21 until 2026-08-25, and 21 was wrong.** Round 8's compliance judge caught the
+arithmetic; re-running the harness settled the cause, which is an **overlap, not a miscount**. Row 8
+of population 1 (`python3 -c 'import subprocess; subprocess.run(["git","log"])'`) is a member of
+population 3 *and* of the fourth group below, so 24 rows run over 23 distinct shapes. The reading
+that reconciled to 21 excluded row 8 from "rows 5–19", which contradicts the "(15 shapes)"
+parenthetical written on the same line. The harness now prints the overlap on its own line, so the
+number cannot be quietly reconciled again.
+
 A fourth group of 2 ran alongside them, asserting an **allow** deliberately — `./myscript.sh` and
-`python3 -c 'import subprocess; subprocess.run(["git","log"])'`, the two Non-goals residuals.
+`python3 -c 'import subprocess; subprocess.run(["git","log"])'`, the two Non-goals residuals. The
+second of those is population 1 row 8; that shared membership is the overlap named above.
+
+**The harness, inlined — because it has now gone missing twice.** Round 7 and round 8 each had to
+reconstruct a vanished probe script to re-derive these numbers, and round 8 found the count wrong
+when it did. It lives here so the next round re-runs it instead of rebuilding it. It imports the
+live `hooks/lib/shell_segments.py` rather than reimplementing the lexer — the card forbids a second
+parser — and it **builds population 3 from this card's own words in code** (`P1[4:]` *is* "rows 5–19
+of population 1"), so the arithmetic cannot drift from the prose again.
+
+```python
+#!/usr/bin/env python3
+"""Derivation-3 population harness. Run from the repo root: python3 population-harness.py
+
+Imports the live lexer (hooks/lib/shell_segments.py); a second lexer is forbidden.
+WIDER  = clause 3a + "git/cd ANYWHERE in the re-lexed tokens" -- the rejected variant.
+CMDPOS = clause 3a + clause 3b as specified: git/cd at an inner segment's argv[0],
+         with clause 3c's split at the depth bound (2026-08-25).
+"""
+import os
+import shlex
+import sys
+
+sys.path.insert(0, os.path.join(os.getcwd(), "hooks", "lib"))
+from shell_segments import segments  # noqa: E402
+
+TARGETS = ("git", "cd")
+BOUND = 3
+
+
+def relex_hit(argv, wider, depth=0):
+    """Clause 3b: re-lex every whitespace-bearing token. Clause 3c splits the two
+    unresolvable cases: past the bound ALLOWS, an unparseable token still DENIES."""
+    for tok in argv:
+        if not any(c.isspace() for c in tok):
+            continue
+        if depth >= BOUND:
+            return False                         # clause 3c: bound reached -> ALLOW at layer 1
+        inner = segments(tok)
+        if not inner:
+            return True                          # unparseable: deny, like SEG_UNPARSED
+        for _a, iargv in inner:
+            hit = any(t in TARGETS for t in iargv) if wider else bool(iargv) and iargv[0] in TARGETS
+            if hit or relex_hit(iargv, wider, depth + 1):
+                return True
+    return False
+
+
+def verdict(src, wider):
+    """Line-scoped: the first clause that fires on any segment, else 'allow'."""
+    for _assigns, argv in segments(src):
+        if not argv or argv[0] in TARGETS:
+            continue
+        if any(t in TARGETS for t in argv[1:]):  # clause 3a -- bare token
+            return "3a"
+        if relex_hit(argv, wider):               # clause 3b -- collapsed token
+            return "3b"
+    return "allow"
+
+
+P1 = [  # population 1, card row order. Wider form; rows 1-4 are the false denials.
+    ('gh pr create --title "fix git guard" --body "closes the hole"', "deny"),
+    ('gh issue comment 12 --body "the git switch case is covered"', "deny"),
+    ("rg 'git switch' hooks/", "deny"),
+    ('ssh host "git pull"', "deny"),
+    ("git commit -m 'fix: git switch is now denied'", "allow"),
+    ('echo "Co-Authored-By: Claude"', "allow"),
+    ("python3 -c 'print(1)'", "allow"),
+    ("""python3 -c 'import subprocess; subprocess.run(["git","log"])'""", "allow"),
+    ('jq -r ".git"', "allow"),
+    ('sed -i "" "s/git/hg/" f.txt', "allow"),
+    ('find . -name "*.py"', "allow"),
+    ('curl -s "https://github.com/o/r.git"', "allow"),
+    ('echo "see docs/features/worktree-location-guard.md"', "allow"),
+    ('test -d "$HOME/.claude"', "allow"),
+    ('make test ARGS="-v"', "allow"),
+    ('docker run -e MSG="hello" img', "allow"),
+    ('ssh host "uptime"', "allow"),
+    ("gh pr create --body-file /tmp/body.md", "allow"),
+    ("npm run build -- --watch", "allow"),
+]
+P2 = [  # population 2 -- command-position form, all must deny
+    "sh -c 'git switch main'", 'bash -c "git switch main"', "zsh -c 'git switch main'",
+    'eval "git switch main"', "sh -c 'cd /tmp/other && git switch main'",
+    'sh -c "sh -c \'git switch main\'"', "env -C /tmp/other git switch main",
+    "timeout 5 git commit -m x", "if cd /tmp/other; then git commit -m x; fi",
+]
+# Population 3 is BUILT from the card's own words so the arithmetic is mechanical, not
+# transcribed: "Rows 5-19 of population 1 above (15 shapes), plus <5 literals>, and <2 gh rows>".
+P3 = [s for s, _ in P1[4:]] + [
+    "git switch main", "echo hello", "ls -la /tmp", "npm test", "cat README.md",
+] + [P1[0][0], P1[1][0]]
+P4 = ["./myscript.sh", P1[7][0]]  # "a fourth group of 2 ran alongside them", asserting allow
+def nest(payload, levels):                           # shlex.quote, not hand-escaping
+    for _ in range(levels):
+        payload = "sh -c " + shlex.quote(payload)
+    return payload
+# The clause-3c discriminating PAIR: same payload, one level apart, opposite verdicts.
+# An allow here proves the BOUND branch fired -- the payload does hold git in command
+# position, so nothing else in the rule could have let it through.
+AT_BOUND = nest("git switch main", 3)                # 3 levels: still resolvable -> deny
+PAST_BOUND = nest("git switch main", 4)              # 4 levels: past BOUND=3   -> allow
+PF = ["echo git switch main",                        # must deny via 3a, bare token
+      "sh -c 'git switch main'",                     # must deny via 3b, command position
+      """sh -c 'echo "unclosed'""",                  # must deny via 3b, inner segments() == []
+      AT_BOUND]                                      # must deny via 3b at exactly the bound
+W = max(len(s) for s in [r[0] for r in P1] + P2 + P3 + P4) + 2
+
+
+def run(name, rows, wider):
+    fails = ndeny = 0
+    print("\n== %s (%d shapes, %s form) ==" % (name, len(rows), "wider" if wider else "cmdpos"))
+    for shape, expected in rows:
+        clause = verdict(shape, wider)
+        actual = "allow" if clause == "allow" else "deny"
+        ndeny += actual == "deny"
+        fails += actual != expected
+        show = shape if len(shape) < W else shape[:W - 4] + "..."
+        print("%-*s %-6s %-6s %-6s %s" % (W, show, expected, actual, clause,
+                                          "PASS" if actual == expected else "FAIL"))
+    print("-- %s: %d shapes, %d deny, %d allow, %d FAIL"
+          % (name, len(rows), ndeny, len(rows) - ndeny, fails))
+    return fails
+
+
+t = run("population 1", P1, True)
+t += run("population 2", [(s, "deny") for s in P2], False)
+t += run("population 3", [(s, "allow") for s in P3], False)
+t += run("group 4 (residuals)", [(s, "allow") for s in P4], False)
+CTRL = [PAST_BOUND, "sh -c \"sh -c 'echo hi'\""]  # past-bound allows; benign 2-level allows
+t += run("falsifiers", [(s, "deny") for s in PF], False)
+t += run("clause 3c controls", [(s, "allow") for s in CTRL], False)
+print("\nTOTAL FAIL: %d  |  population 3 as enumerated = %d shapes, of which %d also in group 4"
+      % (t, len(P3), len(set(P3) & set(P4))))
+sys.exit(1 if t else 0)
+```
+
+**Re-run it:** `cd ~/.claude && python3 <this file>` — `sys.path` resolves from the working
+directory, so the repo root is required; the file itself can live anywhere. It exits 1 on any FAIL,
+so it is usable as-is in task 3's suite, which is where it should land.
+
+**Measured 2026-08-25 on `/usr/bin/python3` 3.9.6, `TOTAL FAIL: 0`:** population 1 **4 deny of 19**
+(the wider form's four false denials, rows 1–4); population 2 **9 of 9 deny**; population 3
+**0 false denials of 22**; group 4 **2 of 2 allow**. Both the run above and an independent re-run
+reproduced identical totals.
+
+⚠️ **The falsifiers are the point, not the PASSes.** An all-green run proves nothing unless the
+checker can go red, so four falsifiers ride along and **each exercises a different branch** —
+clause 3a's bare token, clause 3b's command position, clause 3b's empty inner lex, and clause 3b at
+exactly the depth bound. The clause column in the output names which one caught each, so a falsifier
+silently absorbed by the wrong branch is visible rather than counted as a pass.
+
+**The clause-3c pair is the discriminator, and it is built to be one.** `AT_BOUND` and `PAST_BOUND`
+carry the *same* payload — `git switch main`, a command that clause 3b denies at every shallower
+depth — and differ only by one level of quoting: **3 levels deny, 4 levels allow** (measured; 1 and
+2 also deny, 5 also allows). Because the payload is a real `git` in command position, the allow at 4
+can only have come from the bound branch. A control whose payload contained no `git` would have
+allowed for the trivial reason and proved nothing, which is how the first version of this control
+was written and why it was replaced.
 
 What both clauses still deny, unchanged from round 5 and still accepted: `echo git switch main`
 (3a) and `grep -r 'git switch' .` / `rg 'git switch' hooks/` (3b) — commands that merely *mention*
@@ -2732,9 +2898,10 @@ position for the text classifier; it survives the pivot unchanged and must be sa
 ### Round 7's second violation — `core-conduct/metric-must-be-sourceable` — CLOSED 2026-08-25
 
 Independent of the Arm D pivot, and now fixed at the derivation-3 section rather than here. All
-three populations behind the 19/21/9 figures are written out in full, and both harnesses were
-**re-run against the live `shell_segments.py`** rather than restated: 4/19, 9/9, 21/21, 0 failures,
-each reproducing its original result. The 9-vs-8 contradiction in task 3 is resolved — the two lists
+three populations behind the 19/22/9 figures are written out in full, and both harnesses were
+**re-run against the live `shell_segments.py`** rather than restated: 4/19, 9/9, 22/22, 0 failures,
+each reproducing its original result. ⚠️ **This line read `19/21/9` and `21/21` until 2026-08-25** —
+population 3 is 22 shapes, not 21; see the overlap note in the derivation-3 section. The 9-vs-8 contradiction in task 3 is resolved — the two lists
 were differently composed (6 shared literals, +3 measured carryovers vs. +2 abstract cases), and
 task 3 carried the 11-item union with the arithmetic shown. **That union is now 10** — clause 3c
 (2026-08-25) moved the depth-bound abstract case from must-deny to must-allow; the count in task 3
