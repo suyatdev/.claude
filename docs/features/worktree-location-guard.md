@@ -3903,8 +3903,22 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       `hooks/worktree-guard.test.sh` **189 passed, 0 failed, 1 skipped**;
       `hooks/reference-transaction.test.sh` **182 passed, 0 failed, 1 skipped** (both suites
       unchanged in outcome from before this task, as expected).
-- [ ] 9. Register in `settings.json`. **Do this last** — an armed guard blocks edits to its own
+- [x] 9. Register in `settings.json`. **Do this last** — an armed guard blocks edits to its own
       source from the primary checkout, since `hooks/*` is not on the exemption list.
+      **DONE.** `hooks/worktree-guard.sh` added to both the existing `Bash` matcher's hooks array
+      and the existing `Edit|Write|NotebookEdit` matcher's hooks array (it is one script serving
+      both — Arm A on the latter, Arms B2/D on the former), rather than creating a duplicate
+      matcher entry. New top-level `WorktreeCreate` and `WorktreeRemove` keys added, each
+      registered with no `matcher` (per the design section's confirmed shape), both pointing at
+      `hooks/create-worktree.sh`. Layer 2 (`reference-transaction`) is **not** registered here —
+      it arms via `git config --global core.hooksPath` through `install-layer2.sh` (task 6e),
+      a separate, deliberate, not-yet-run step; this task is `settings.json` only.
+      Verified before committing: `python3 -m json.tool settings.json` parses; `hooks/verify-hook-wiring.sh`
+      exits 0; every existing suite re-run clean — `worktree-guard` 189/0/1, `reference-transaction`
+      182/0/1, `install-layer2` 40/0/0, `create-worktree` 89/0/0, `phase-guard` 147/0, `git-guard`
+      152/0, `doc-guard` 26/0, `judge-guard` 101/0, `merge-guard` 10/0, `test-marker-guard` 248/0.
+      `WORKTREE_GUARD_MODE` stays `log` (task 8), so this registration only starts logging
+      would-denies — it does not yet block anything.
 - [ ] 10. Run in `log` mode, then flip to `deny` in a separate, deliberate commit. **Flip criteria,
       all three required** — without them "review the log" is not a decision procedure:
       1. At least 7 days of ordinary use have elapsed.
