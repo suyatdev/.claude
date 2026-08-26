@@ -158,9 +158,10 @@ server-side reads or writes them, so they never travel with a survey: `reanalyze
 **Both themes are contrast-guarded, and the two guards cover different halves of the page.**
 `treko/test_theme.py`'s criterion 5 scores every element that paints **text** in its own `color`,
 in **light** only. `treko/test_nontext_contrast.py` scores **non-text marks** — fills, border
-sides, outset shadows, SVG fills and strokes: 334 in dark and 347 in light — against a named
-23-token allowlist, in **both**. A palette edit that dulls one of those tokens fails the suite
-rather than shipping quietly.
+sides, outset shadows, SVG fills and strokes — against a named 23-token allowlist, in **both**. A
+palette edit that dulls one of those tokens fails the suite rather than shipping quietly. (The
+exact per-theme mark counts live in that module's own constants and in the card, where an
+assertion catches them going stale; repeating them here would be a copy nothing checks.)
 
 **A green run there means those 23 tokens have not regressed. It does not mean the board is
 accessible** — marks that appear only after an interaction (the settings drawer and its scrim,

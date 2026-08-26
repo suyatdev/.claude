@@ -490,22 +490,22 @@ The rule the implementation inherits:
    be audited against; an un-enumerated one is a silent skip wearing the same clothes.
 3. An allowlist token that matched **zero** marks in a theme → **fail**. A token that stopped
    painting is either a regression or a stale list; both need a human.
-   **What this rule does *not* cover, stated because a reader will assume it does:** a mark that is
-   a **descendant** of a `backdrop-filter` element is still scored, against that element's declared
-   background colour rather than against the blurred paint the viewer actually sees. That is a real
-   approximation, and it is not asserted away: the header's fill composites to `--color-bg` at 90%
-   over the page ground, so today the error is negligible — but "negligible today" is a
-   measurement, not a design, and a heavier blur or a translucent header over busy content would
-   make it wrong without anything going red. Widening the exclusion to descendants was rejected
-   because it would silently remove marks from the scored population, which is the failure this
-   card exists to argue against; disclosing it is the honest half-measure.
-
 4. The one instance of rule 2's *blurred-fill* half today is the sticky header at
    `Treko.dc.html:102`, whose `backdrop-filter: blur(10px)` leaves its fill nothing flat to be
    scored against. It is enumerated, excluded, and its count asserted at 1 per theme — it is
    **not** scored, and it is **not** an abort, because this card has classified it. **Its
    `border-bottom: 1px solid var(--hair)` is scored**, and must be: §D2 records `--hair` at 42
    marks, and excluding the border would give 41.
+
+   **What rule 2 does *not* cover, stated because a reader will assume it does:** a mark that is a
+   **descendant** of a `backdrop-filter` element is still scored, against that element's declared
+   background colour rather than against the blurred paint the viewer actually sees. That is a real
+   approximation and it is not asserted away — the header's fill composites to `--color-bg` at 90%
+   over the page ground, so today the error is negligible, but "negligible today" is a measurement
+   rather than a design, and a heavier blur or a translucent header over busy content would make it
+   wrong with nothing going red. Widening the exclusion to descendants was rejected: it would
+   silently remove marks from the scored population, which is the failure this card exists to argue
+   against. Disclosing it is the honest half-measure.
 
 The whole pipeline, from a rendered element to a verdict — every path either asserts or aborts, and
 none of them silently drops a mark:
@@ -976,8 +976,8 @@ Red half and green half are separate commits throughout; never the same commit
 
 ### Findings made during implementation, 2026-08-26
 
-Five subsections follow: the suite against its baseline, the palette diff, the thirteen
-falsifier cases, the one spec defect the implementation found, and the Chrome re-pin.
+Five subsections follow, in this order: the suite against its baseline, the palette diff, the
+Chrome re-pin, the thirteen falsifier cases, and the one spec defect the implementation found.
 
 ### Criterion 12 — the full suite, against the task-1 baseline
 
@@ -1022,6 +1022,39 @@ disagree and the card's explicit, specific requirement wins. About 220 lines are
 and about 230 are the browser-side walk; the rest is assertions and the docstrings criterion 11
 requires. If a later card relaxes criterion 10, the data and the walk are the two clean seams.
 
+### The Chrome pin moved mid-implementation, and every figure was re-measured
+
+Chrome
+auto-updated `152.0.7977.54` → `152.0.7977.65` between planning and implementation — a patch bump
+inside the same build — and `cdp_harness.Chrome.__init__` asserts the pin before launch, so the
+task-1 baseline was **259 passed / 35 failed / 0 deselected**, every one of the 35 failing at
+construction without reaching a page. The user approved re-pinning to `.65` in preference to
+downgrading Chrome. §Pinned versions obliges a re-measurement of the allowlist on a re-pin, and it
+was done. The scored population came back at **334 dark / 347 light**, and **all six** DEBT minima
+reproduced to 4 dp, each over the mark count §D2 records for it:
+
+| token | theme | recorded | measured on `.65` | marks |
+|---|---|---|---|---|
+| `--color-accent-700` | dark | 2.8791 | 2.8791 | 21 |
+| `--color-neutral-700` | dark | 2.5253 | 2.5253 | 35 |
+| `--color-neutral-800` | dark | 1.6519 | 1.6519 | 22 |
+| `--color-accent-700` | light | 1.2718 | 1.2718 | 21 |
+| `--color-neutral-700` | light | 4.8042 | 4.8042 | 35 |
+| `--color-neutral-800` | light | 1.2477 | 1.2477 | 22 |
+
+Two consecutive walks in one session produced **byte-identical dumps** in both themes, which is
+what task 3 owed and what §D8's exact counts rest on. **That is evidence the patch bump moved
+nothing this card measures — it is not evidence that no Chrome bump ever could**, which is why
+§Pinned versions keeps demanding the re-measurement rather than reasoning from this one.
+
+**Criterion 10 is amended by §Pinned versions, and the amendment is this paragraph.** Criterion 10
+says exactly one file changes under `treko/`. The re-pin changes a second, `treko/cdp_harness.py`.
+The two clauses of this card disagree and §Pinned versions is the specific one, so it wins; the
+criterion-10 diff is therefore run over the palette files it names, and `cdp_harness.py`'s one-line
+pin change is the single declared exception. Card A's re-pin comment justified moving the pin on
+the grounds that "nothing stores a Chrome-derived constant" — **that stops being true with this
+card**, and the comment now says so in place.
+
 ### The thirteen falsifier cases, run 2026-08-26 — 13 of 13 caught
 
 Each defect was introduced into a private copy of the tree (`server_harness.build_tree`) or into a
@@ -1065,37 +1098,6 @@ miss is the useful part.**
 
 Recorded here rather than fixed silently: each changed something this card had asserted, and the
 way each was wrong is more useful than the fact of it.
-
-**The Chrome pin moved, and the figures were re-measured rather than carried over.** Chrome
-auto-updated `152.0.7977.54` → `152.0.7977.65` between planning and implementation — a patch bump
-inside the same build — and `cdp_harness.Chrome.__init__` asserts the pin before launch, so the
-task-1 baseline was **259 passed / 35 failed / 0 deselected**, every one of the 35 failing at
-construction without reaching a page. The user approved re-pinning to `.65` in preference to
-downgrading Chrome. §Pinned versions obliges a re-measurement of the allowlist on a re-pin, and it
-was done. The scored population came back at **334 dark / 347 light**, and **all six** DEBT minima
-reproduced to 4 dp, each over the mark count §D2 records for it:
-
-| token | theme | recorded | measured on `.65` | marks |
-|---|---|---|---|---|
-| `--color-accent-700` | dark | 2.8791 | 2.8791 | 21 |
-| `--color-neutral-700` | dark | 2.5253 | 2.5253 | 35 |
-| `--color-neutral-800` | dark | 1.6519 | 1.6519 | 22 |
-| `--color-accent-700` | light | 1.2718 | 1.2718 | 21 |
-| `--color-neutral-700` | light | 4.8042 | 4.8042 | 35 |
-| `--color-neutral-800` | light | 1.2477 | 1.2477 | 22 |
-
-Two consecutive walks in one session produced **byte-identical dumps** in both themes, which is
-what task 3 owed and what §D8's exact counts rest on. **That is evidence the patch bump moved
-nothing this card measures — it is not evidence that no Chrome bump ever could**, which is why
-§Pinned versions keeps demanding the re-measurement rather than reasoning from this one.
-
-**Criterion 10 is amended by §Pinned versions, and the amendment is this paragraph.** Criterion 10
-says exactly one file changes under `treko/`. The re-pin changes a second, `treko/cdp_harness.py`.
-The two clauses of this card disagree and §Pinned versions is the specific one, so it wins; the
-criterion-10 diff is therefore run over the palette files it names, and `cdp_harness.py`'s one-line
-pin change is the single declared exception. Card A's re-pin comment justified moving the pin on
-the grounds that "nothing stores a Chrome-derived constant" — **that stops being true with this
-card**, and the comment now says so in place.
 
 ### The §D7 exclusion rule named the wrong mechanism
 
