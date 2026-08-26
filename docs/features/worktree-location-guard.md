@@ -560,12 +560,23 @@ defeat layer 2 and `WORKTREE_EXEMPT` clears layer 1, all measured. Layering rais
 *accidents*, which is the entire threat model here — the logged incident was a stray
 `git merge --ff-only`, not an attack.
 
-**Consequences for the sections above.** Layer 1 keeps the classifier contract, the seven indexed
-facts, the shared effective-repo rule, and derivations 1–4 exactly as specified — none of that
-changes. What changes is the *claim* attached to it: those derivations no longer have to be
-exhaustive, and the card must stop describing them as though a gap were a hole. The two residuals
-in Non-goals (`./myscript.sh`, an interpreter-built git call) are now **caught by layer 2**, and
-must be re-described as "layer 1 does not reach these; layer 2 does" rather than as accepted holes.
+**Consequences for the sections above — stated once, here, and nowhere else.** Layer 1 keeps the
+classifier contract, the seven indexed facts, the shared effective-repo rule, and derivations 1–4
+**as its rule**, with exactly one amendment: the unresolvable-token relaxation recorded in
+"Layer 1's unresolvable-token deny is relaxed" below. Nothing else about them changes, and
+derivation 3 in particular is **not** superseded — it is what layer 1 does, and layer 1 still ships
+and still fires first.
+
+What the pivot changed is the *claim* attached to those derivations, not the derivations: they no
+longer have to be exhaustive, and the card must stop describing a gap in them as a hole in the
+feature. The two residuals in Non-goals (`./myscript.sh`, an interpreter-built git call) are
+**caught by layer 2 when and only when they move `HEAD`**, and must be re-described that way —
+never as "layer 2 covers them", which is false for the six working-tree commands in the table above.
+
+⚠️ **Round 8's own section below said the opposite** — that "the derivation-3 text above is now
+superseded for Arm D and must not be treated as the design". That sentence was written before the
+design was written into this body, and it is **withdrawn**; this paragraph governs. Task 5 builds
+derivation 3's `SEG_OPAQUE` as specified.
 
 #### Layer 2 — the `reference-transaction` hook
 
@@ -584,16 +595,31 @@ both clauses shown firing — table in the second measurement pass below.
 (rc=0, ref moves anyway), so the stage guard is load-bearing, not defensive tidiness.
 
 **Installation — global `core.hooksPath`, with a liveness check** (user decision, 2026-08-25).
-Global reaches every repo including ones cloned later, with no per-repo setup. Two costs are
-accepted with eyes open:
 
-- It **replaces** `.git/hooks` rather than adding to it. Measured today: 12 `.git/hooks` directories
-  under `$HOME`, **0** holding a non-sample executable hook, **0** setting `core.hooksPath` locally.
-  Nothing on this machine breaks; the cost is latent.
-- The sharper risk is reciprocal. `husky` and `lefthook` install by setting `core.hooksPath`
+⚠️ **Every claim in this subsection is ⬜ — probe-reported, not independently re-run.** The card's
+convention: ✅ means re-run and reproduced, ⬜ means it came back from a probe and has not been
+re-derived since. The four claims below were reported by the second measurement pass and are
+restated here **at that strength, not upgraded**. They are load-bearing for the installation
+decision, so each carries the probe that would settle it.
+
+- Global reaches every repo including ones cloned later, with no per-repo setup ⬜, and there is no
+  per-repo alternative that does not mean shimming every hook name in every repo ⬜.
+  *Settles it:* clone a fresh repo after arming and assert the hook fires there.
+- It **replaces** `.git/hooks` rather than adding to it ⬜. Blast radius reported as 12 `.git/hooks`
+  directories under `$HOME`, **0** holding a non-sample executable hook, **0** setting
+  `core.hooksPath` locally ⬜. Nothing on this machine breaks; the cost is latent.
+  ⚠️ **The 12 is a floor, not a measurement.** Round 8's compliance judge could not reproduce it —
+  a depth-6 scan found 11 and an unbounded scan timed out. Nothing turns on 11 vs 12; both zeroes
+  are what the decision rests on, and those are the numbers to re-run.
+  *Settles it:* an unbounded `find $HOME -type d -name hooks -path '*/.git/*'` run to completion,
+  with the executable-hook and local-`core.hooksPath` counts derived from its output.
+- The sharper risk is reciprocal ⬜. `husky` and `lefthook` install by setting `core.hooksPath`
   **locally**, and local beats global — so the first repo to run `husky install` does not get broken
   by the guard, it **silently removes** the guard from the one repo where work is happening. This
   is why the liveness check below is a requirement and not a nicety.
+  *Settles it:* `git config --local core.hooksPath .husky` in a throwaway repo, then assert a HEAD
+  move there is no longer refused. This one is the reason the liveness check exists, so it should be
+  run before task 8 rather than left ⬜.
 
 **The liveness check — layer 1 checks layer 2.** Every arm of `worktree-guard.sh` already runs on
 the relevant tool calls, so it is the natural place to assert layer 2 is actually armed: resolve the
@@ -618,10 +644,51 @@ measured, and required before task 8 can claim the mode switch works end to end:
 the time the hook runs. It should be — env is inherited — but the card asserts nothing it has not
 run, and this is the switch that arms a machine-wide deny.
 
-**The deny message must carry recovery, not just refusal.** Because a veto leaves the destination
-branch's content staged (below), the message is the only thing standing between the user and a
-commit that mixes two branches. It must name the state and the way out — `git reset --hard HEAD`
-restores the source branch's content — and must do so without claiming the tree is clean.
+**The deny message describes the state and prescribes no destructive command** (revised 2026-08-25,
+after the observability judge ran the remedy this card used to name). Because a veto leaves the
+destination branch's content staged (below), the message is the only thing standing between the user
+and a commit that mixes two branches — but the remedy this card previously named,
+`git reset --hard HEAD`, is **withdrawn**. It was run: another session's staged
+`other-session-work.txt` was **destroyed**. Three separate reasons, any one of which is
+disqualifying:
+
+1. **Arm D denies it.** `git reset` in every form except one carrying a `--` pathspec is on Arm D's
+   own in-scope list (`git reset --hard HEAD` has no pathspec). The card would be prescribing a
+   command it also blocks.
+2. **Nothing can tell the residue from real work.** After the veto, the destination content and any
+   pre-existing staged work carry identical `git status` markers — the measured table below shows
+   `A featonly.txt / M marker.txt / M shared.txt` with no field distinguishing origin. A blanket
+   recovery command therefore cannot be safe, because it cannot see what it is discarding.
+3. **It reports success on a state it did not clean.** After a vetoed `git rebase` the reset exits 0
+   while `$GIT_COMMON_DIR/rebase-merge` survives ⬜, so the user is told they recovered and has not.
+
+**What the message says instead** — state, then the two exits, each with its precondition, and the
+choice left to the human:
+
+- HEAD did not move; name the branch it is still on.
+- The index and working tree now hold the destination's content, **staged** — name the destination.
+- If `$GIT_COMMON_DIR/rebase-merge`, `rebase-apply`, `CHERRY_PICK_HEAD`, `REVERT_HEAD` or
+  `MERGE_HEAD` exists, name it: a sequencer operation is in progress and its own `--abort` is the
+  only thing that ends it.
+- **Exit A — complete forward:** re-run with `WORKTREE_EXEMPT=<reason>`. The tree already holds the
+  destination's content, so letting the switch finish makes the checkout self-consistent instead of
+  mixed. The honest cost is stated in the message: this is the guard being overridden, not the guard
+  being satisfied.
+- **Exit B — roll back:** offered **only** when the tree was clean before the command ran, and the
+  message says which case it is in. Nothing else may claim rollback is safe.
+
+**Why exit B is conditional, and what would make it unconditional.** Layer 2 sees only the ref
+update, never the prior tree, so from inside the veto the two cases are indistinguishable — that is
+reason 2 above. Layer 1 *can* distinguish them, because it runs **before** git touches anything, and
+a pre-command `git status --porcelain` there is the whole discriminator. Carrying that fact into
+layer 2 means a cross-process handoff, which is exactly the token/ledger machinery the second
+measurement pass deleted, so it is **declined for v1** and recorded here as the known way to close
+this rather than left to be rediscovered. Until it exists, layer 2's message states the precondition
+it cannot check and names no rollback command.
+
+**A `PostToolUse` restore is rejected, not deferred.** It runs into reason 2 unchanged, and makes it
+worse: it would execute the destructive command automatically instead of putting the choice in front
+of a human who can see the tree.
 
 **Backend caveat.** Under `--ref-format=reftable` there is no `.git/HEAD.lock`, so the rule allows
 everything: it **fails open on an entire backend**. This repo is `files` (verified with
@@ -822,10 +889,40 @@ token and the index. Derived from `:62-63` rather than from a list of wrapper wo
 **Clause 3b — collapsed tokens. Rule: for a segment whose `argv[0]` is neither `git` nor `cd`,
 re-lex every whitespace-bearing token through `segments()`; if any resulting inner segment holds
 `git` or `cd` in *command position* (`argv[0]`), emit `SEG_OPAQUE` and deny**, naming the token and
-the index. Recurse to a bound of **3**; a token still collapsed at the bound, or one `segments()`
-returns `[]` for, is unresolvable and **denies** — the same fail-closed direction as `SEG_UNPARSED`.
-`eval` needs no special case: `WRAPPERS` strips it, leaving the whole command as `argv[0]`, which
-clause 3b re-lexes like any other collapsed token.
+the index. Recurse to a bound of **3**. `eval` needs no special case: `WRAPPERS` strips it, leaving
+the whole command as `argv[0]`, which clause 3b re-lexes like any other collapsed token.
+
+**Clause 3c — the two unresolvable cases split, one relaxed** (user decision, 2026-08-25). Round 8's
+observability judge measured layer 1 against a fresh corpus of **37,078 unique real commands**:
+**2,832 fires (7.64%)**, of which **81.6% carried no HEAD-moving git at all**. The user's direction
+was to relax the unresolvable-token deny, because layer 2 now refuses every HEAD move regardless of
+quoting. The two cases this rule used to treat identically are **not** equivalent, so only one
+relaxes:
+
+| Case | What the guard has seen | Disposition |
+|---|---|---|
+| A collapsed token `segments()` returns `[]` for | **nothing** — no view at any depth | **denies**, both arms. Same fail-closed direction as `SEG_UNPARSED`, and the same reason: an absent fact reads as "nothing here". |
+| A token still collapsed at the depth bound of 3 | three levels, no `git` or `cd` in command position at any of them | **allows at layer 1.** Three levels of evidence is evidence, not blindness. |
+
+**Why the split, and not a wholesale relaxation.** Layer 2 backstops a **`HEAD` move**; it does
+**not** judge where a worktree lands. `git worktree add` writes `worktrees/<name>/HEAD`, not the
+primary's, so layer 2 allows it by design (measured table in "Arm D is two layers"). Arm B2 has no
+git-layer backstop of any kind, so relaxing the whole class would open it silently — which is why
+the case where the guard sees nothing keeps denying for **both** arms, and the relaxation is stated
+as a rule about evidence rather than about which arm is asking.
+
+**The residual this creates, named rather than left to be found.** A `git worktree add` to a
+non-conforming location, typed through `Bash`, nested **more than three quoting levels deep** is
+allowed by layer 1 and unjudged by layer 2. It joins the two Non-goals residuals and is pinned by
+task 3 as a **measured allow**, so a later revision cannot turn it into a deny without deciding to.
+`git worktree add` at three levels or shallower is still denied, and the harness creation surface
+(Arm B / `WorktreeCreate`) is not reachable from Bash text at all.
+
+⚠️ **The false-fire reduction this buys is NOT measured.** The 7.64%/81.6% figures are layer 1's
+total fire rate across all clauses, not the depth-bound class's share of it, and no run has
+attributed fires to clauses. **Owed before task 10's flip:** re-run the corpus with per-clause
+attribution and record what fraction of the 2,832 the depth-bound case actually accounted for. Until
+then the card claims the relaxation is *correct*, not that it is *large*.
 
 This is the direct answer to `:60-62`. That comment says a quoted command *"can never reach a
 command position"* — so the rule re-lexes until it can, then applies the ordinary command-position
@@ -1546,12 +1643,29 @@ Feature: Arm D — moving a primary checkout's HEAD
       | git status                     |
       | git log --oneline              |
 
-  Scenario: An unrecognized git subcommand is allowed
+  Scenario: An unrecognized git subcommand passes layer 1 and is refused by layer 2
     Given the session cwd is a primary checkout
+    And layer 2 is armed on a "files"-backend repository
     When Bash runs "git bisect start"
-    Then the hook allows
-    # Deliberate under-block, recorded in Non-goals. Denying every subcommand the
-    # classifier has not been taught would make the guard unusable.
+    Then layer 1 allows
+    And layer 2 denies with rc=128
+    # Layer 1's under-block is deliberate and recorded in Non-goals: denying every
+    # subcommand the classifier has not been taught would make the guard unusable.
+    # `git bisect start` moves HEAD, so it reaches layer 2's lock rule and is refused
+    # there. This scenario asserts BOTH halves — asserting only the layer-1 allow
+    # understates the design, asserting only the layer-2 deny hides which layer acted.
+    # Behavior change with a real usability cost: bisecting in the primary checkout
+    # stops working. The remedy is to bisect in a worktree (Non-goals).
+
+  Scenario: An unrecognized git subcommand that moves no ref is allowed by both layers
+    Given the session cwd is a primary checkout
+    And layer 2 is armed on a "files"-backend repository
+    When Bash runs "git bisect log"
+    Then layer 1 allows
+    And layer 2 allows
+    # The companion to the case above, and the reason it is not a blanket subcommand
+    # deny: an unrecognized subcommand that writes no HEAD transaction is seen by
+    # neither layer and is correctly untouched.
 
   Scenario: Switching inside a linked worktree
     Given the session cwd is ~/.worktrees/.claude/feat-x
@@ -1677,14 +1791,39 @@ Feature: Arm D — moving a primary checkout's HEAD
     # Clause 3b tests both git and cd, so a redirect hidden one quoting level
     # deeper is caught by the same rule that catches the git call.
 
-  Scenario: A collapsed token still collapsed at the depth bound
+  Scenario: A collapsed token still collapsed at the depth bound — layer 1 allows
     Given the session cwd is a primary checkout
-    When Bash runs a command nesting quoted shells more than 3 deep
-    Then the hook denies
+    And layer 2 is armed on a "files"-backend repository
+    When Bash runs "git switch main" nested more than 3 quoting levels deep
+    Then layer 1 allows
+    And layer 2 denies with rc=128
+    # Clause 3c, relaxed 2026-08-25. Three levels re-lexed with no git or cd in
+    # command position is evidence, not blindness. The HEAD move it hides is
+    # refused by layer 2, which does not care how deeply the command was quoted.
+    # The bound itself is still required — unbounded recursion is a DoS surface
+    # on a PreToolUse hook — it just no longer denies at the bound.
+
+  Scenario: A collapsed token segments() cannot parse — layer 1 still denies
+    Given the session cwd is a primary checkout
+    When Bash runs "sh -c 'git worktree add \"unclosed"
+    Then layer 1 denies
     And the message names the unresolved token
-    # Fail closed, same direction as SEG_UNPARSED. An unbounded recursion is a
-    # denial-of-service surface on a PreToolUse hook, so the bound is required;
-    # denying at the bound is what keeps the bound from becoming a bypass.
+    # The other half of clause 3c, and the half that does NOT relax. Here the
+    # guard has no view at any depth, so an absent fact would read as "nothing
+    # here" — the exact failure SEG_UNPARSED exists to stop. Arm B2 has no
+    # layer-2 backstop (layer 2 allows worktree add by design), so this one
+    # must keep denying for both arms.
+
+  Scenario: A worktree add nested past the depth bound — the named residual
+    Given the session cwd is a primary checkout
+    And layer 2 is armed on a "files"-backend repository
+    When Bash runs "git worktree add /wrong/place" nested more than 3 quoting levels deep
+    Then layer 1 allows
+    And layer 2 allows
+    # ASSERTS THE GAP ON PURPOSE, like the two Non-goals residuals. Layer 2 judges
+    # HEAD moves, not worktree locations, so nothing catches this. If a later
+    # change makes it deny, that is a decision to take deliberately, not a bug
+    # fix to land quietly. Recorded in Non-goals.
 
   Scenario: A PR title that mentions git — must NOT deny
     Given the session cwd is a primary checkout
@@ -2034,6 +2173,15 @@ Feature: create-worktree.sh
 
   The bounding statement is unchanged and still holds: a session that wants to defeat this can, and
   it was never a security boundary.
+- **A third residual, created deliberately on 2026-08-25 by clause 3c's relaxation.** A
+  `git worktree add` to a non-conforming location, typed through `Bash`, nested **more than three
+  quoting levels deep**, is allowed by layer 1 and unjudged by layer 2 — layer 2 refuses `HEAD`
+  moves and `worktree add` writes `worktrees/<name>/HEAD`, not the primary's. This is the one place
+  the relaxation opens something with **no backstop at either layer**, which is why it is written
+  here rather than absorbed into the sentence above. Its siblings are narrower than they look:
+  the same shape carrying `git switch` **is** refused, by layer 2; the same shape at three levels or
+  shallower **is** refused, by layer 1; and the harness worktree-creation surface (Arm B /
+  `WorktreeCreate`) is not reachable from `Bash` text at all. Pinned as a measured allow by task 3.
 - Not a security boundary. A momentum guardrail, like every Tier 1 guard here.
 - Does not migrate the 4 existing worktrees. Two conventions therefore live at once until they are
   retired by hand.
@@ -2116,18 +2264,22 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       **(c) Clause 3b — the round-6 cases, three groups, all three required.** Every command below
       was measured against the live `segments()` on 2026-08-25; the suite pins the measurement, it
       does not restate the prose.
-      - **Must deny** (11 = the 9 measured, plus 2 that no shape can express). Rounds 3–7 read a
+      - **Must deny** (10 = the 9 measured, plus 1 that no shape can express). Rounds 3–7 read a
         contradiction here — the prose said 9 and this list said 8 — because the two lists are
         *differently composed*, not one short. They share 6 literal shapes; the measured population
-        adds 3 carried over from round 5, and this list adds 2 abstract cases a literal command
-        cannot stand for. 6 + 3 = 9 measured; 6 + 2 = 8 as previously written; the union is 11.
+        adds 3 carried over from round 5, and this list adds abstract cases a literal command
+        cannot stand for. 6 + 3 = 9 measured; the union with the abstract case is 10.
         - The 6 shared: `sh -c 'git switch main'`, `bash -c "git switch main"`,
           `zsh -c 'git switch main'`, `eval "git switch main"`,
           `sh -c 'cd /tmp/other && git switch main'`, `sh -c "sh -c 'git switch main'"`.
         - The 3 round-5 carryovers, also measured: `env -C /tmp/other git switch main`,
           `timeout 5 git commit -m x`, `if cd /tmp/other; then git commit -m x; fi`.
-        - The 2 abstract cases, which the suite must construct rather than quote: a token still
-          collapsed at the depth bound of 3, and a collapsed token `segments()` returns `[]` for.
+        - The 1 abstract case, which the suite must construct rather than quote: a collapsed token
+          `segments()` returns `[]` for.
+
+        ⚠️ **This list was 11 until 2026-08-25.** Clause 3c relaxed the second abstract case — a
+        token still collapsed at the depth bound of 3 — from deny to allow, per the user's round-8
+        decision. It moves to the must-allow group below; it is not dropped from the suite.
 
         **`zsh` must be in the suite and must not be in the rule** — it is the case that fails if
         anyone reintroduces a shell-name list.
@@ -2137,9 +2289,13 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         `git commit -m 'fix: git switch is now denied'`, `curl -s "https://github.com/o/r.git"`.
         This group is why clause 3b tests command position rather than mere presence; without it
         the next revision silently widens the rule and breaks the PR workflow.
-      - **Must allow — the stated residuals** (2, asserting the *gap*, per Non-goals):
-        `./myscript.sh` and `python3 -c 'import subprocess; subprocess.run(["git","log"])'`.
-        These assert an allow **on purpose**. If a later change makes either deny, that is a
+      - **Must allow — the stated residuals** (4, asserting the *gap*, per Non-goals):
+        `./myscript.sh`; `python3 -c 'import subprocess; subprocess.run(["git","log"])'`; a
+        `git switch` nested more than 3 quoting levels deep (clause 3c — **and the same case must
+        assert layer 2 denies it**, so the pair records that the gap is at layer 1 only); a
+        `git worktree add /wrong/place` nested more than 3 quoting levels deep (clause 3c — **both
+        layers allow**, the one genuinely unbackstopped residual the relaxation creates).
+        These assert an allow **on purpose**. If a later change makes any of them deny, that is a
         behavior change to decide deliberately, not a bug fix to land quietly.
 - [ ] 4. Implement Arm A.
 - [ ] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
@@ -2183,12 +2339,57 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       from the one task 8 measures — layer 2 is a child of `git`, not of the hook. Assignment
       prefixes on the git command line were measured to reach it; inherited environment was not.
       Until this is run, no claim that `WORKTREE_GUARD_MODE` arms layer 2 may be written down.
-- [ ] 6d. **The refusal-remediation contract.** A layer-2 veto leaves the destination branch's
-      content staged in the shared tree (measured). Decide and implement one of: a `PostToolUse`
-      restore, or a deny message that names the state and the recovery (`git reset --hard HEAD`).
-      Whichever ships, add a test asserting the post-refusal tree state is what the card claims —
-      this is the one place where "the guard fired correctly" and "the repo is in a good state" come
-      apart, and only a test keeps them from being conflated again.
+- [ ] 6d. **The refusal-remediation contract — decided 2026-08-25, implement as decided.** A layer-2
+      veto leaves the destination branch's content staged in the shared tree (measured). Both options
+      this task used to offer are **rejected**, each for a measured reason: `git reset --hard HEAD`
+      destroyed another session's staged work when the observability judge ran it, is itself on Arm
+      D's in-scope deny list, and exits 0 on a vetoed `rebase` while leaving `rebase-merge` behind
+      ⬜; a `PostToolUse` restore hits the same indistinguishability and runs the destructive command
+      without asking. What ships is the **state-describing message** specified in "Layer 2 — the
+      `reference-transaction` hook": HEAD's unmoved branch, the staged destination, any sequencer
+      directory by name, and two exits — `WORKTREE_EXEMPT` to complete forward (always), rollback
+      **only** when layer 1 recorded a clean pre-command tree.
+      Three tests, not one:
+      (a) the post-refusal tree state is exactly what the card claims — this is the one place where
+      "the guard fired correctly" and "the repo is in a good state" come apart, and only a test keeps
+      them from being conflated again;
+      (b) the message contains **no** destructive command — assert on the absence, so a later
+      revision cannot quietly reintroduce one;
+      (c) with a **dirty** pre-command tree, the message offers exit A only, and the pre-existing
+      staged file still exists afterwards. That third case is the regression test for the exact
+      failure that retired the old remedy.
+- [ ] 6e. **Install and identify layer 2 — without this it is built and never armed.** Round 8's
+      observability judge found no task setting `core.hooksPath`, no log line, no `<arm>` value and
+      no deny-message prefix for layer 2. Four pieces:
+      1. **`hooks/install-layer2.sh`** — tracked, idempotent, and reviewable: refuse on a non-`files`
+         ref backend (task 6a's arming rule), refuse if `core.hooksPath` is already set to something
+         else rather than overwriting it, place `reference-transaction` and `chmod +x` it, set the
+         global `core.hooksPath`, then re-run the liveness check and report. Running it is one
+         command; reading what it will do is one file.
+      2. **Own the tracked/untracked tension, do not hide it.** Arming is a
+         `git config --global core.hooksPath` write, which is **not** in the repo — and that is
+         precisely the reason the layer-1 mode switch lives in tracked `settings.json`. The
+         resolution is not to make the write tracked (it cannot be); it is that **its absence is
+         detected**: task 6b's liveness check runs on every relevant tool call and reports an unarmed
+         layer 2. Tracked *detection* substituting for tracked *state* is the trade being made, and
+         it must be stated in the ADR (task 11), not left as an inconsistency for a reader to find.
+      3. **Layer 2 gets its own `<arm>` value and message prefix** — the log's `<arm>` field takes a
+         distinct value for layer 2, and every deny message it emits is prefixed so a refusal names
+         which layer refused. Today the two layers are indistinguishable in both the log and the
+         session, which makes "did layer 1 miss this?" unanswerable — the exact question the whole
+         layering exists to let you ask.
+         ⚠️ **`session_id` is not available to layer 2.** It arrives on the `PreToolUse` payload,
+         and layer 2 is a child of `git` with no payload at all. Write the field empty and say so in
+         the log's format note; **do not synthesize one**, which would be a field the payload cannot
+         source — the failure this card already refuses by name in "The log records refusals". The
+         cost is real and bounded: a layer-2 line cannot be attributed to a session, so a layer-2
+         refusal answers "was this shape missed by layer 1" but not "which session typed it".
+      4. **Layer 2 needs a mode source that does not depend on task 6c's answer.** If `settings.json`
+         `env` does not reach a child of `git` (6c measures this; it is unmeasured today), layer 2
+         cannot read `WORKTREE_GUARD_MODE` at all and would arm in `deny` from day one while layer 1
+         is still in `log`. Ship a tracked mode file beside the hook that layer 2 reads directly, and
+         have `install-layer2.sh` refuse to arm while that file says `log` unless told otherwise.
+         **No claim that the mode switch works end to end may be written until 6c has been run.**
 - [ ] 7. Implement `create-worktree.sh` (Arm B) including the 0700 store, the `.repo-root` marker,
       the branch/base contract, and failure boundaries 15–27. Three requirements the probes
       produced: create and report **atomically** (a create-then-misreport leaves an orphan in
@@ -2253,13 +2454,20 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 - `cmux-layout` warns that cmux 0.64.22 is not the verified 0.64.20; pane placement rides an
   unverified heuristic. Not blocking, but `panes/cmux-layout-probe.sh` is stale.
 
-## Round 8 — Arm D moves off text (user decision, 2026-08-25). Measured, not yet designed.
+## Round 8 — the measurement record behind Arm D's second layer (2026-08-25)
+
+⚠️ **This section is a measurement log, not the design.** The design it fed was written into the
+body above — "Arm D is two layers, not one" and "Layer 2 — the `reference-transaction` hook". Where
+this section and the body disagree, **the body governs**; read this one for what was run and what it
+showed, not for what to build.
 
 Compliance round 7 cited `writing-specs/scope-unknown-contradiction` for the **fifth consecutive
-round** (3, 4, 5, 6, 7). The user's direction: stop classifying shell text for Arm D and detect the
-HEAD move at the git layer instead. This section records what was **measured** before any of it is
-written into the design above. The derivation-3 text above is now superseded for Arm D and must not
-be treated as the design.
+round** (3, 4, 5, 6, 7). The user's direction: stop relying on shell text alone for Arm D and detect
+the HEAD move at the git layer as well. Two sentences written here during that round have since been
+**withdrawn** by the body above, and are marked in place below so a reader arriving here first is not
+misled: that Arm D "moves off text" (it does not — layer 1 keeps the text classifier and fires
+first), and that the derivation-3 text is "superseded for Arm D" (it is not — it is layer 1's rule,
+amended once for the unresolvable-token relaxation).
 
 **Instrument:** throwaway repos under the session scratchpad, `git 2.50.1 (Apple Git-155)`,
 macOS 25.5.0, probes `probe_reftx{1..6}.sh` (disposable — the findings below are the durable part).
@@ -2528,7 +2736,9 @@ three populations behind the 19/21/9 figures are written out in full, and both h
 **re-run against the live `shell_segments.py`** rather than restated: 4/19, 9/9, 21/21, 0 failures,
 each reproducing its original result. The 9-vs-8 contradiction in task 3 is resolved — the two lists
 were differently composed (6 shared literals, +3 measured carryovers vs. +2 abstract cases), and
-task 3 now carries the 11-item union with the arithmetic shown.
+task 3 carried the 11-item union with the arithmetic shown. **That union is now 10** — clause 3c
+(2026-08-25) moved the depth-bound abstract case from must-deny to must-allow; the count in task 3
+is the live one.
 
 Two things the fix deliberately did **not** do, so neither reads as settled:
 
@@ -2536,6 +2746,15 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
   measured a different question — how often the *deny* rule fires on real traffic — and the pivot
   below may remove the deny rule this population was chosen to calibrate. Re-running it before the
   Arm D design settles would produce a number measuring a superseded mechanism.
+
+  ⚠️ **Superseded within the same session, 2026-08-25.** The reasoning above was true when written
+  and stale by the end of the round: the Arm D design *did* settle (two layers, layer 1 kept), and
+  round 8's observability judge then re-ran the corpus. It re-derived it fresh at **37,078** unique
+  commands rather than 36,187 — the corpus is rebuilt from live transcripts, so it grows between
+  rounds; the two numbers are two draws, not a contradiction, and neither is a re-run of the other.
+  Result: **2,832 fires (7.64%)**, **81.6% carrying no HEAD-moving git**. That measurement is what
+  clause 3c's relaxation answers. What is still **not** measured is per-clause attribution — see
+  the ⚠️ under clause 3c.
 - It did not claim the populations are representative. They are shapes chosen by hand from this
   repo's workflow, not a sample; they establish that the wider form breaks 2 shapes this workflow
   types constantly, and nothing about the rate at which it would break others.
