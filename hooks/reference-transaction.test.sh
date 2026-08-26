@@ -736,6 +736,257 @@ e_allow 'R12 git commit --allow-empty is not gated' \
   "$PRIMARY" "$GIT_REAL" -c user.email=t@t -c user.name=t commit -q --allow-empty -m x
 assert_log_empty 'R12 …and nothing is attributed, because no clause was reached'
 
+# ================================================================= GROUP M ===
+# Feature: the refusal-remediation contract (card task 6d). A layer-2 veto stops
+# the ref write and does NOT undo the checkout, so the destination branch's
+# content is left STAGED in a tree that is still on the old branch. The message
+# is the only thing between the user and a commit that mixes two branches.
+#
+# The card decided this contract on 2026-08-25 after the remedy it used to name
+# was run: `git reset --hard HEAD` destroyed another session's staged
+# `other-session-work.txt`. What ships is a STATE-DESCRIBING message — the branch
+# HEAD is still on, the staged destination, any sequencer directory by name, and
+# one exit this hook can actually offer.
+#
+# Three tests, per the card: (a) the post-refusal tree state, (b) the absence of
+# any destructive command from the message, (c) the dirty pre-command tree.
+#
+# ⚠️ WHAT THIS GROUP CANNOT TEST, AND WHY IT IS A COUNTED SKIP RATHER THAN AN
+# OMISSION. Task 6d's contract reads "rollback ONLY when layer 1 recorded a clean
+# pre-command tree". Layer 1 records no such thing: `hooks/worktree-guard.sh`
+# never runs `git status --porcelain` and writes no tree-state fact anywhere
+# (grepped), and the design section states the cross-process handoff that would
+# carry it is "declined for v1". So in v1 the precondition is never satisfied,
+# the rollback exit is never offered, and the CLEAN case and the DIRTY case
+# produce the SAME message. M9 records that as a skip and M10 pins the sameness,
+# so a later revision that quietly adds the handoff fails a test instead of
+# passing one.
+
+MREPO="$TMP/repos/remedy"
+mkdir -p "$MREPO"
+git_q -C "$MREPO" init -q
+printf 'ON-MAIN\n'   > "$MREPO/marker.txt"
+printf 'shared-v1\n' > "$MREPO/shared.txt"
+git_q -C "$MREPO" add . >/dev/null 2>&1
+git_q -C "$MREPO" commit -q -m init
+git_q -C "$MREPO" switch -q -c feature
+printf 'ON-FEATURE\n' > "$MREPO/marker.txt"
+printf 'shared-v2\n'  > "$MREPO/shared.txt"
+printf 'only\n'       > "$MREPO/featonly.txt"
+git_q -C "$MREPO" add . >/dev/null 2>&1
+git_q -C "$MREPO" commit -q -m feat
+git_q -C "$MREPO" switch -q main
+git_q -C "$MREPO" config core.hooksPath "$HOOKS_DIR"
+
+# The message assertions read a SNAPSHOT rather than $err: several cases below
+# run housekeeping git between the refusal and the assertions, and a helper that
+# read "the last stderr" would silently start reading the housekeeping's.
+m_snap() { cp "$err" "$1"; }
+
+m_has() { # $1 snapshot, $2 desc, $3 required substring
+  if grep -qF -- "$3" "$1"; then ok "$2"; else
+    printf 'FAIL — %s\n  want (substring): %s\n  message:\n%s\n' "$2" "$3" "$(cat "$1")"
+    fail=$((fail+1))
+  fi
+}
+
+m_lacks() { # $1 snapshot, $2 desc, $3 forbidden substring (case-insensitive)
+  if [ "$HOOK_PRESENT" != 1 ]; then
+    printf 'FAIL — %s (VACUOUS: the hook is not on disk, so nothing wrote a message)\n' "$2"
+    fail=$((fail+1)); return
+  fi
+  if grep -qiF -- "$3" "$1"; then
+    printf 'FAIL — %s (found: %s)\n  message:\n%s\n' "$2" "$3" "$(cat "$1")"
+    fail=$((fail+1))
+  else ok "$2"; fi
+}
+
+assert_porcelain() { # $1 desc, $2 repo, $3 expected `git status --porcelain` text
+  local got_p
+  got_p="$(git_bare_hooks -C "$2" status --porcelain 2>&1)"
+  if [ "$got_p" = "$3" ]; then ok "$1"; else
+    printf 'FAIL — %s\n  want:\n%s\n  got:\n%s\n' "$1" "$3" "$got_p"; fail=$((fail+1))
+  fi
+}
+
+# --- (a) the post-refusal tree state ------------------------------------------
+#
+# This is the one place where "the guard fired correctly" and "the repo is in a
+# good state" come apart, and only a test keeps them from being conflated again.
+# The expected values are MEASURED, not assumed — probed 2026-08-26 in a
+# throwaway repo, git 2.50.1, ref-format `files`, an unconditional-deny hook
+# armed: rc=128, HEAD refs/heads/main, and `git status --porcelain` answering
+# exactly the three lines below. An implementation that "fixes" this case by
+# asserting an empty status is asserting a rollback no measurement supports.
+
+M_CLEAN_ERR="$TMP/m.err.clean"
+e_deny 'M1 a refused switch: git exits 128' "$MREPO" "$GIT_REAL" switch feature
+m_snap "$M_CLEAN_ERR"
+assert_head    'M1a …and HEAD still names main' "$MREPO" 'refs/heads/main'
+assert_log_has 'M1b …attributed to the lock clause' 'DENY primary-HEAD-lock-held'
+
+M_STATUS='A  featonly.txt
+M  marker.txt
+M  shared.txt'
+assert_porcelain 'M1c …and the destination content is STAGED, not rolled back' "$MREPO" "$M_STATUS"
+
+if [ "$(cat "$MREPO/marker.txt" 2>/dev/null)" = 'ON-FEATURE' ]; then
+  ok 'M1d …marker.txt holds the destination content'
+else
+  printf 'FAIL — M1d marker.txt holds the destination content (got %s)\n' \
+    "$(cat "$MREPO/marker.txt" 2>/dev/null)"; fail=$((fail+1))
+fi
+if [ "$(cat "$MREPO/shared.txt" 2>/dev/null)" = 'shared-v2' ]; then
+  ok 'M1e …shared.txt holds the destination content'
+else
+  printf 'FAIL — M1e shared.txt holds the destination content (got %s)\n' \
+    "$(cat "$MREPO/shared.txt" 2>/dev/null)"; fail=$((fail+1))
+fi
+if [ -f "$MREPO/featonly.txt" ]; then ok 'M1f …featonly.txt is present'; else
+  printf 'FAIL — M1f featonly.txt is present\n'; fail=$((fail+1)); fi
+
+# --- the message describes that state -----------------------------------------
+#
+# Every element the card lists, asserted separately so a message that drops one
+# fails on that one rather than on a whole-message comparison nobody can read.
+
+m_has "$M_CLEAN_ERR" 'M2a the message names the branch HEAD is still on' 'refs/heads/main'
+m_has "$M_CLEAN_ERR" 'M2b the message names the destination' 'refs/heads/feature'
+m_has "$M_CLEAN_ERR" 'M2c the message says the content is staged' 'staged'
+m_has "$M_CLEAN_ERR" 'M2d the message says HEAD did not move' 'HEAD did not move'
+m_has "$M_CLEAN_ERR" 'M2e the message carries the layer-2 prefix' \
+  'worktree-location-guard (layer 2):'
+
+# --- (b) the message contains NO destructive command --------------------------
+#
+# Asserted on the ABSENCE, so a later revision cannot quietly reintroduce one.
+# `git reset --hard HEAD` is first because it is the one that was actually run
+# and actually destroyed another session's staged work; the rest are the same
+# species. The bare words are here too: a message that calls this tree clean,
+# unchanged or restored is making the same false promise without a command.
+
+m_lacks "$M_CLEAN_ERR" 'M3a no `git reset`'            'git reset'
+m_lacks "$M_CLEAN_ERR" 'M3b no `--hard`'               '--hard'
+m_lacks "$M_CLEAN_ERR" 'M3c no `git checkout`'         'git checkout'
+m_lacks "$M_CLEAN_ERR" 'M3d no `git restore`'          'git restore'
+m_lacks "$M_CLEAN_ERR" 'M3e no `git clean`'            'git clean'
+m_lacks "$M_CLEAN_ERR" 'M3f no `git stash`'            'git stash'
+m_lacks "$M_CLEAN_ERR" 'M3g no `rm -rf`'               'rm -rf'
+m_lacks "$M_CLEAN_ERR" 'M3h no `--force`'              '--force'
+m_lacks "$M_CLEAN_ERR" "M3i the tree is never called clean" 'clean'
+m_lacks "$M_CLEAN_ERR" "M3j …nor unchanged"                 'unchanged'
+m_lacks "$M_CLEAN_ERR" "M3k …nor restored"                  'restored'
+
+# --- exit A, the one this hook can offer --------------------------------------
+
+m_has "$M_CLEAN_ERR" 'M4a the message offers WORKTREE_EXEMPT as the forward exit' \
+  'WORKTREE_EXEMPT'
+m_has "$M_CLEAN_ERR" 'M4b …and states the cost: this is the guard overridden' \
+  'guard overridden'
+
+# M5 — exit A is a real exit, not a sentence. A message naming an escape hatch
+# the hook does not honour would be prescribing a command that fails, which is
+# the same species of fault as prescribing one that destroys. Task 6c measured
+# that an inherited environment variable survives the git → hook hop, which is
+# what makes this reachable from a child of git at all.
+reset_fixture "$MREPO"
+e_allow 'M5 re-running under WORKTREE_EXEMPT completes the switch' \
+  "$MREPO" env WORKTREE_EXEMPT=hotfix "$GIT_REAL" switch feature
+assert_head    'M5a …and HEAD moved to the destination' "$MREPO" 'refs/heads/feature'
+assert_log_has 'M5b …attributed to the bypass clause' 'ALLOW bypass-worktree-exempt'
+git_bare_hooks -C "$MREPO" switch -q main >/dev/null 2>&1
+reset_fixture "$MREPO"
+
+# M6 — an EMPTY value is not a bypass. `WORKTREE_EXEMPT= git switch main` reaches
+# the hook set-but-empty, and treating that as a reason would make an accidental
+# assignment a silent machine-wide off switch. Same rule as layer 1's.
+e_deny 'M6 an empty WORKTREE_EXEMPT is not a bypass' \
+  "$MREPO" env WORKTREE_EXEMPT= "$GIT_REAL" switch feature
+assert_head      'M6a …and HEAD did not move' "$MREPO" 'refs/heads/main'
+assert_log_has   'M6b …attributed to the lock clause' 'DENY primary-HEAD-lock-held'
+assert_log_lacks 'M6c …not to the bypass clause' 'ALLOW bypass-worktree-exempt'
+reset_fixture "$MREPO"
+
+# M7 — the sequencer directory is named. Measured 2026-08-26: a `git rebase`
+# whose ref transaction is vetoed leaves `rebase-merge` under the common git dir,
+# and it is already present at the FIRST transaction of the rebase. Its own
+# `--abort` is the only thing that ends it, so a message describing the tree
+# without naming it describes half the state.
+e_deny 'M7 a refused rebase: git exits 128' "$MREPO" "$GIT_REAL" rebase feature
+m_snap "$TMP/m.err.rebase"
+m_has "$TMP/m.err.rebase" 'M7a …and the message names the sequencer directory' 'rebase-merge'
+git_bare_hooks -C "$MREPO" rebase --abort >/dev/null 2>&1
+reset_fixture "$MREPO"
+
+# --- (c) the dirty pre-command tree -------------------------------------------
+#
+# The regression test for the exact failure that retired the old remedy: the
+# observability judge ran `git reset --hard HEAD` on this state and destroyed a
+# pre-existing staged `other-session-work.txt`. The file name is the incident's.
+#
+# What this case CAN pin: the refusal leaves that file alone, the message offers
+# the forward exit, and it still names no destructive command. What it CANNOT
+# pin is in M9/M10 below.
+
+printf 'other-session\n' > "$MREPO/other-session-work.txt"
+git_bare_hooks -C "$MREPO" add other-session-work.txt >/dev/null 2>&1
+
+M_DIRTY_ERR="$TMP/m.err.dirty"
+e_deny 'M8 a refused switch over a DIRTY tree: git exits 128' \
+  "$MREPO" "$GIT_REAL" switch feature
+m_snap "$M_DIRTY_ERR"
+assert_head 'M8a …and HEAD still names main' "$MREPO" 'refs/heads/main'
+
+if [ -f "$MREPO/other-session-work.txt" ]; then
+  ok 'M8b …and the pre-existing staged file still EXISTS'
+else
+  printf 'FAIL — M8b the pre-existing staged file still EXISTS (it is gone)\n'
+  fail=$((fail+1))
+fi
+
+# Existing is not enough: the old remedy would have left it deleted AND unstaged.
+# Measured 2026-08-26 in a throwaway repo: the veto leaves it staged, alongside
+# the destination's three entries.
+M_DIRTY_STATUS='A  featonly.txt
+M  marker.txt
+A  other-session-work.txt
+M  shared.txt'
+assert_porcelain 'M8c …and it is still STAGED, beside the destination content' \
+  "$MREPO" "$M_DIRTY_STATUS"
+
+m_has   "$M_DIRTY_ERR" 'M8d the dirty-tree message offers the forward exit' 'WORKTREE_EXEMPT'
+m_lacks "$M_DIRTY_ERR" 'M8e …and still names no `git reset`' 'git reset'
+m_lacks "$M_DIRTY_ERR" 'M8f …and no `--hard`'                '--hard'
+m_has   "$M_DIRTY_ERR" 'M8g …and says outright that it names no rollback command' \
+  'NAMES NO COMMAND'
+
+# M9 — THE SKIP, COUNTED. Task 6d's contract offers rollback "only when layer 1
+# recorded a clean pre-command tree". No such record exists: layer 1 runs no
+# pre-command `git status --porcelain` and writes no tree-state fact, and the
+# design section declines the cross-process handoff that would carry one for v1.
+# So the discriminating half of test (c) — a CLEAN pre-command tree in which the
+# message offers something the dirty one does not — cannot be constructed. This
+# is a gap in coverage, and it is counted as one rather than left out of the
+# totals, where "0 failed" would read as "every scenario is pinned".
+skipped 'M9 clean pre-command tree offers a rollback exit — NOT CONSTRUCTIBLE: layer 1 records no pre-command tree state and the handoff is declined for v1 (card, "Why exit B is conditional")'
+
+# M10 — the pin that makes M9 falsifiable instead of merely asserted. If layer 2
+# genuinely cannot see the prior tree, then the clean-tree refusal (M1) and the
+# dirty-tree refusal (M8) must produce the SAME bytes. This case is the tripwire:
+# a later revision that adds the handoff, or that guesses at the prior tree from
+# inside the veto, fails here and forces the card's decision to be reopened
+# rather than silently reversed.
+if cmp -s "$M_CLEAN_ERR" "$M_DIRTY_ERR"; then
+  ok 'M10 the refusal message is byte-identical over a clean and a dirty pre-command tree (layer 2 cannot see the prior tree, and does not pretend to)'
+else
+  printf 'FAIL — M10 the refusal message differs between a clean and a dirty pre-command tree\n%s\n' \
+    "$(diff "$M_CLEAN_ERR" "$M_DIRTY_ERR" 2>&1)"; fail=$((fail+1))
+fi
+
+git_bare_hooks -C "$MREPO" reset -q HEAD -- other-session-work.txt >/dev/null 2>&1
+rm -f "$MREPO/other-session-work.txt"
+reset_fixture "$MREPO"
+
 # ================================================================= GROUP Z ===
 # Feature: attribution. "Its test suite must show BOTH CLAUSES FIRING SEPARATELY
 # in an attribution log: a run where every case is denied proves nothing about the
@@ -765,18 +1016,20 @@ z_at_least_one 'Z3 the scope bail fired:   ALLOW scope-not-primary' \
   'ALLOW scope-not-primary'
 z_at_least_one 'Z4 the backend refusal fired: DENY backend-not-files' \
   'DENY backend-not-files'
+z_at_least_one 'Z5 the bypass clause fired: ALLOW bypass-worktree-exempt' \
+  'ALLOW bypass-worktree-exempt'
 
-# Z5 — the assertion the card actually asks for, stated as one verdict rather than
+# Z6 — the assertion the card actually asks for, stated as one verdict rather than
 # left implicit in Z1–Z4. A suite in which every case denied would satisfy Z2 and
 # Z4 and fail here; one in which every case allowed would satisfy Z1 and Z3 and
 # fail here too.
 Z_ALLOW="$(clause_count 'ALLOW no-primary-HEAD-lock')"
 Z_DENY="$(clause_count 'DENY primary-HEAD-lock-held')"
 if [ "${Z_ALLOW:-0}" -ge 1 ] && [ "${Z_DENY:-0}" -ge 1 ]; then
-  printf 'ok   — Z5 both lock-rule clauses fired independently in this run (allow=%s deny=%s)\n' \
+  printf 'ok   — Z6 both lock-rule clauses fired independently in this run (allow=%s deny=%s)\n' \
     "$Z_ALLOW" "$Z_DENY"; pass=$((pass+1))
 else
-  printf 'FAIL — Z5 both lock-rule clauses fired independently (allow=%s deny=%s)\n' \
+  printf 'FAIL — Z6 both lock-rule clauses fired independently (allow=%s deny=%s)\n' \
     "${Z_ALLOW:-0}" "${Z_DENY:-0}"; fail=$((fail+1))
 fi
 
