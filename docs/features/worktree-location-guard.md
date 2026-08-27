@@ -4038,7 +4038,10 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       stub said "four of the twelve scripts in `hooks/`", and this branch adds four more scripts.
       Rather than substitute a new count that would go stale the same way, the denominator is
       dropped — it now reads "four hook scripts", which is the claim that was actually load-bearing.
-- [ ] 13. Observability judge, then PR.
+- [x] 13. Observability judge, then PR.
+      **DONE 2026-08-27** — five judge rounds, draft PR **#83** opened at `23ab8d0` on round 5's
+      verdict (risk=**low**, confidence=high, no failing dimension). Rounds 1–4 each found something
+      real; round 5 found only documentation faults and stated plainly that none of them gate.
       **Round 1 run 2026-08-26 at `a46bf91`** (pane, Opus 5 / xhigh per model-switch checkpoint #3):
       risk=medium, confidence=high. It re-derived the suite counts independently and reproduced
       500/0/2, and confirmed every ADR line count and `file:line` citation still holds at `a46bf91`.
@@ -4141,6 +4144,55 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
          which the wrong label hid by making it look already-tracked. It is small (the two cases
          are a missing payload and no `python3`, neither of which the mode can affect) but it is
          now named rather than mislabelled. Corrected rather than rewritten, per this note's rule.
+
+      **Round 4 run 2026-08-27 at `f0cbc92`** (pane, Opus 5 / xhigh): risk=medium, confidence=high,
+      no failing dimension. It **verified the round-3 fix behaviourally** rather than by reading the
+      diff — probed the guard seven ways with controls firing both directions, ran G7a/G7b against
+      the *pre-fix* hook (G7a green, G7b red, exactly as `6ebc425` claimed) and against three
+      separate sabotages of the fixed hook, each turning red the case that names it, and confirmed
+      the `TEST_EXEMPT` red commit hid nothing (the marker names the exact committed bytes). It also
+      independently re-ran the recurrence question and agreed no sibling site was missed.
+      **Two findings, both about the written record, both fixed in `23ab8d0`:** the false
+      `hard_deny()` label (corrected in place above) and four *present-tense* stale anchors caused
+      by `f0cbc92`'s own insertion (`worktree-guard.sh:311-333` in `rules/gates.md`, ADR 0038 and
+      this card; `:266-293` in `hooks/create-worktree.sh`). Rather than repoint them to numbers the
+      next commit would shift again, all four now **quote code text** — verified to resolve uniquely
+      with fixed-string grep. The same commit narrowed a universal: "names the bad value in every
+      refusal" became "every refusal the mode governs".
+
+      **Round 5 run 2026-08-27 at `23ab8d0`** (pane, Opus 5 / xhigh): **risk=low**, confidence=high,
+      no failing dimension, and it stated explicitly that nothing found gates the PR. It forced the
+      guard into all four failure states and measured which name a mistyped value (three do, one
+      does not — exactly what round 4's correction claims), re-derived all seven suite counts, and
+      broke the hook on purpose to confirm G7b still notices. **Three findings, all documentation,
+      all caused by `23ab8d0` itself — deferred by explicit user decision into the anchor-cleanup
+      task below, because rounds 3, 4 and 5 each found drift created by the previous round's own
+      fix, and another piecemeal doc commit re-runs that loop rather than ending it:**
+      1. **A miscount, mine.** `rules/gates.md` and ADR 0038 say "the **two** `hard_deny()` calls".
+         There are **three** call sites (`:266`, `:269`, `:300`) carrying two distinct messages.
+         Confirmed. The substance holds; the number does not — and it sits in an always-loaded file.
+      2. **The anchor-fixing commit broke its own anchors.** Its one-line insertion pushed the card
+         down by one, so the paragraph *about* stale line numbers cites four numbers now off by one.
+         They were exact one commit earlier. Third commit running — the strongest argument yet that
+         quoting text is the right answer and that it must be finished in one pass.
+      3. **The deferred item's receipt points at the wrong thing.** "Shadow `python3`, then a `Write`
+         to `settings.json` is refused" never reaches `require_home`/`deny_version`/the lib-dir
+         refusal — it hits `hard_deny "$MSG_NO_PYTHON"` first. Round 5 re-measured each separately
+         and reports two hold while the **missing-lib-dir case actually allows the write**. ⚠️ **Not
+         independently re-measured in this session** — recorded as round 5's measurement, to be
+         confirmed when the deferred item is picked up. The decision to defer is unaffected; its
+         evidence line is.
+      ⚠️ Round 5 also measured, as a sharpening of known-open item 1 rather than a new finding, that
+      **`WORKTREE_EXEMPT` does not rescue you with `$HOME` unset or the lib dir missing** — still
+      refused. `rules/gates.md` calls it "one escape hatch that clears both layers"; in those two
+      states it clears neither. Also flagged as a standing cost, not a defect: `rules/gates.md` is
+      loaded every turn and grew 36% on this branch, this feature's bullet being ~28% of the file.
+
+      **Open follow-up task, carrying round 3 findings 3–4 and round 5 findings 1–3 as one unit:**
+      finish converting `file:line` citations on this branch to quoted code text, fix the
+      `two`→`three` `hard_deny()` count, correct the deferred item's evidence line (re-measuring it
+      first), and either commit `scratchpad/probe-badmode-exempt.sh` or drop the citations to it.
+      One pass, not piecemeal — that is the whole lesson of rounds 3–5.
       2. **No test crossed a bad mode with a failed append.** G7 is a good `deny` with a broken log,
          G2b is a bad value with a healthy log; the corner where both hold was unasserted, so 193
          green tests were blind to finding 1 — the third time on this branch that a suite passing on
