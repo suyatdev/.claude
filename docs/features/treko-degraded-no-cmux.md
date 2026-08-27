@@ -1329,9 +1329,20 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       running to find one more door by hand, which is the whole argument for clause (a)'s rewrite.
       **Round 11: naming this row on the floor did not widen the test — task 3 now says so
       explicitly, closing the gap between enumerating a risk and remediating it.**
-- [ ] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
+- [x] 2. Red tests (`test_degraded.py`) for D1: `bind_surface` raises `SurfaceUnavailable` with
       each of the four reason tokens, and the reason set is closed. Drive `cmux_unrunnable` by
       pointing `CMUX_BIN` at a non-existent path.
+      **Done (commit `dd83e86`):** `treko/test_degraded.py`, 17 tests, imports flat as `channel`
+      (no `__init__.py` in `treko/`, matching every sibling test's pattern) rather than
+      `treko.channel`. Confirmed red for the right reason: `ModuleNotFoundError: No module named
+      'channel'` at collection, not a syntax/assertion error (re-run independently, not just
+      trusted from the report). Falsified against a throwaway D1 implementation outside the repo
+      before committing (17 passed; 4 mutations — str-mixin enum, swapped token, 5th member,
+      reworded message — each caught). Notes for task 3: `bind_surface` must read `CMUX_BIN` as a
+      module global at call time, not a captured default arg (tests monkeypatch
+      `channel.CMUX_BIN`); `SurfaceUnavailable` needs both `.message` and `str(exc) == message`;
+      watch for a circular import if `channel.py` imports `StartupAbort` from `server` while
+      `server` imports from `channel`.
 - [ ] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable`, the `Reason`
       enum (a plain `Enum`, D1), `CHANNEL_OK = "ok"`, and — per D6 — `CMUX_BIN`,
       `CMUX_TIMEOUT_SECS` **and `SURFACE_ENV`**, moved from `server.py:53-55`, with `channel.py`
