@@ -1,7 +1,7 @@
 ---
-phase: planning
-model_tier: high
-branch: none
+phase: implementation
+model_tier: low
+branch: feat/treko-degraded-no-cmux
 ---
 
 # Treko: serve a degraded, no-control-channel board instead of refusing to start
