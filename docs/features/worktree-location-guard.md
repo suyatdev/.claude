@@ -3980,11 +3980,45 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       recorded, were they right — and must never be reported as evidence of coverage. Coverage is
       what task 3's suite asserts, against shapes chosen deliberately rather than shapes that
       happened to be typed during the window.
-- [ ] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
+- [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
-- [ ] 12. Update `rules/gates.md` with a stub carrying the Non-goals wording, and `CLAUDE.md` if a
+      **DONE 2026-08-26 — `docs/decisions/0038-the-worktree-rule-gets-a-computational-home-in-two-layers.md`.**
+      `0038` confirmed free by a per-ref `git ls-tree` loop over every `refs/heads/` and
+      `refs/remotes/` ref (count of `/0038` matches: `0` for all of them), not by a local `ls` and
+      not against local `main`. `origin/main` tops out at `0037`. `0028` remains an unused gap and
+      is left alone; `0026` is still duplicated on `origin/main`.
+      Nine decisions recorded, plus a **limits** section carrying the Non-goals verbatim in
+      substance: the six no-`HEAD`-transaction commands with no backstop, the uncovered Bash write
+      surface, the two lexer residuals, the >3-quoting-level `worktree add` residual with no
+      backstop at either layer, the `git bisect start` inversion, and "not a security boundary".
+      Also records decision 9, which the card states only in passing: the shared lexer keeps its
+      fail-open default, `classify-git-command.py` overrides it via `SEG_UNPARSED`, and
+      `has_grouping()` is a second *view* over the same token list rather than a second parser.
+      Verified before writing, not copied: the four suites re-run at `37222ad` reproduced task 9's
+      counts exactly — `worktree-guard` 189/0/1, `reference-transaction` 182/0/1, `install-layer2`
+      40/0/0, `create-worktree` 89/0/0 (500 passed, 0 failed, 2 skipped); `phase-guard.sh:248` is
+      `[ -d "$root/docs/features" ] || exit 0`; `.gitignore:17` is `/hooks/state/`; the four
+      `settings.json` registrations and `env.WORKTREE_GUARD_MODE=log` read back from the file;
+      the `doc-guard.sh` reader port is present at `:136-142`; file line counts re-run by `wc -l`.
+- [x] 12. Update `rules/gates.md` with a stub carrying the Non-goals wording, and `CLAUDE.md` if a
       skill is warranted.
+      **DONE 2026-08-26.** New **Worktree-location safety** stub, placed with the other Tier 1 hook
+      guards (after test-marker safety). It names both layers and the direction each fails, the
+      separate `core.hooksPath` arming of layer 2, the written-out exemption list, the no-opt-in
+      blast radius, `WORKTREE_EXEMPT`, the `log`-mode status with all three flip criteria, and the
+      precision-not-coverage warning — then a second ⚠️ paragraph carrying the Non-goals: the
+      uncovered Bash surface, the six working-tree commands by name, the explicit
+      "**'the two-layer design fixed the fail-open' is false as a general claim**", the script-file
+      and interpreter residuals, the `git bisect` inversion, the 4 unmigrated worktrees, and
+      "not a security boundary".
+      **No skill is warranted, so `CLAUDE.md` is unchanged.** A skill exists to carry a *procedure*
+      a session must follow; here the rule is enforced computationally and the only procedures are
+      two one-time operations (arming layer 2, flipping to `deny`) already written in this card.
+      One adjacent correction, caused by this change rather than a drive-by: the **Dormant hooks**
+      stub said "four of the twelve scripts in `hooks/`", and this branch adds four more scripts.
+      Rather than substitute a new count that would go stale the same way, the denominator is
+      dropped — it now reads "four hook scripts", which is the claim that was actually load-bearing.
 - [ ] 13. Observability judge, then PR.
 
 ## Notes
