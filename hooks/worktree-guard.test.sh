@@ -1673,7 +1673,7 @@ assert_log_has   'G5 …with the newline escaped as \n in the command field' \
 # every append below would succeed, turning four cases green while measuring
 # nothing. That is announced as a skip rather than passed silently.
 if [ "$(id -u)" = 0 ]; then
-  for _g in G6 G7 G8 G9; do
+  for _g in G6 G7 G7a G7b G8 G9; do
     skipped "$_g boundary 10 (running as root: chmod 500 does not deny writes)"
   done
 else
@@ -1700,6 +1700,36 @@ else
   deny 'G7 deny mode, failed append while recording a refusal: deny and say so' "$PRIMARY" \
     "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-g7)" \
     "could not be recorded"
+  chmod 700 "$STATE_DIR"
+
+  # G7a/G7b — Scenario: an unrecognized mode AND a failed append, together.
+  #
+  # The cross G7 and G2b never made, and the same shape as the G2/G3 gap that let
+  # the original bad-mode defect through: G7 is a good `deny` with a healthy value
+  # and a broken log, G2b is a bad value with a working log, so 193 green tests
+  # said nothing about the corner where both hold. refuse() has TWO exits — the
+  # append-succeeded arm and the append-failed arm — and the bad-value note was
+  # glued onto the first only. Found by observability-judge round 3 at 6bf830c.
+  #
+  # Two cases, not one assertion with two substrings, because they fail for
+  # different reasons and a single case would report only the first: G7a is the
+  # control that pins this as the boundary-10 rule-2 path (and passes against the
+  # unfixed hook), G7b is the one the defect makes red. If G7a ever goes red the
+  # fixture stopped reaching the failed-append arm and G7b proves nothing.
+  log_reset
+  chmod 500 "$STATE_DIR"
+  RUN_ENV=(WORKTREE_GUARD_MODE=DENY)
+  deny 'G7a bad mode + failed append: still says the decision was not recorded' "$PRIMARY" \
+    "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-g7a)" \
+    "could not be recorded"
+  chmod 700 "$STATE_DIR"
+
+  log_reset
+  chmod 500 "$STATE_DIR"
+  RUN_ENV=(WORKTREE_GUARD_MODE=DENY)
+  deny 'G7b …and still names the bad value, which is the only fix instruction' "$PRIMARY" \
+    "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-g7b)" \
+    "DENY"
   chmod 700 "$STATE_DIR"
 
   # G8 — Scenario: The log cannot be written while recording a bypass. Boundary 10
