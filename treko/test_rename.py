@@ -24,6 +24,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import channel  # noqa: E402  (D6 moved part of server.py here; the source guard below reads both)
 import server  # noqa: E402  (path shim above must run first)
 import server_harness as harness  # noqa: E402
 
@@ -84,6 +85,9 @@ def test_no_retired_variable_name_survives_in_server_source(retired):
     """
     source = (Path(server.__file__)).read_text()
     assert retired not in source
+    # D6 moved constants and `bind_surface` out of server.py; without this the guard would
+    # stop seeing the code it moved.
+    assert retired not in (Path(channel.__file__)).read_text()
 
 
 # --------------------------------------------------------------------------

@@ -309,6 +309,10 @@ def test_the_token_never_leaves_the_served_page(srv, tmp_path):
     # subprocess, so a child's environment is the server's verbatim — asserted, not assumed.
     source = (srv.tree / "server.py").read_text()
     assert "env=" not in source, "server.py now passes env= somewhere; widen this check"
+    # D6 moved the cmux probe into channel.py, so the same claim has to be asserted there
+    # too -- otherwise this check silently stops covering the subprocess it was written for.
+    channel_source = (srv.tree / "channel.py").read_text()
+    assert "env=" not in channel_source, "channel.py now passes env= somewhere; widen this check"
     children = srv.cmux_calls()
     assert children, "no child was spawned, so this clause proved nothing"
     for call in children:

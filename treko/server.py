@@ -35,6 +35,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import store  # noqa: E402  (sibling module; the path insert above is what makes it importable)
 import store_location  # noqa: E402  (D1, D2 and D4 live there; see D5 for why)
 from store_location import StartupAbort  # noqa: E402  (moved out per D5, both modules import it)
+from channel import (  # noqa: E402  (D6: the cmux control channel and its closed reason set)
+    CHANNEL_OK,
+    CMUX_BIN,
+    CMUX_TIMEOUT_SECS,
+    SURFACE_ENV,
+    Reason,
+    SurfaceUnavailable,
+    bind_surface,
+)
 
 # ----------------------------------------------------------------- pinned constants
 
@@ -47,12 +56,6 @@ PORT_ENV = "TREKO_PORT"
 IDLE_SECS = (1800, 60, "TREKO_IDLE_SECS")
 POLL_SECS = (5, 1, "TREKO_POLL_SECS")
 ANALYZE_SECS = (60, 5, "TREKO_ANALYZE_SECS")
-
-# The cmux probe and the send share one bound: 5s. An unbounded probe is a server that
-# neither starts nor reports why (§Security); an unbounded send is a request that hangs.
-CMUX_TIMEOUT_SECS = 5
-CMUX_BIN = os.environ.get("CMUX_BIN", "cmux")
-SURFACE_ENV = "CMUX_SURFACE_ID"
 
 # Repo resolution and the busy-port probe are both startup-time, unattended subprocess/network
 # calls on an attacker-controllable path (§"Auto-launch"); each gets its own bound rather than
@@ -206,36 +209,6 @@ def check_index_injectable(root=SERVE_ROOT):
         raise StartupAbort("cannot read %s: %s" % (INDEX_FILE, exc.strerror))
     if "<head>" not in text:
         raise StartupAbort("%s has no <head> to inject the token into" % INDEX_FILE)
-
-
-def bind_surface(environ=None, timeout=CMUX_TIMEOUT_SECS):
-    """Capture the session's own surface UUID once, and prove it is a terminal.
-
-    The UUID is inherited, never deduced. A send targeted at a *deduced* surface was
-    delivered to a different live Claude session at exit 0 during task 1's spike
-    (§"Injection route"); the fix is to delete the inference, not to check it harder.
-    """
-    env = environ if environ is not None else os.environ
-    surface = (env.get(SURFACE_ENV) or "").strip()
-    if not surface:
-        raise StartupAbort(
-            "%s is unset or empty -- the server was detached or launched outside cmux, and "
-            "a send with no target defaults to whatever surface it inherits" % SURFACE_ENV)
-    try:
-        probe = subprocess.run(
-            [CMUX_BIN, "read-screen", "--surface", surface],
-            capture_output=True, text=True, timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        raise StartupAbort("`%s read-screen` exceeded %ds probing the surface" % (CMUX_BIN, timeout))
-    except OSError as exc:
-        raise StartupAbort("cannot run `%s`: %s" % (CMUX_BIN, exc.strerror))
-    if probe.returncode != 0:
-        raise StartupAbort(
-            "`%s read-screen --surface %s` exited %d -- the control channel does not exist "
-            "for this target (an agent-session surface is not a terminal)"
-            % (CMUX_BIN, surface, probe.returncode))
-    return surface
 
 
 def resolve_repo(explicit_repo, timeout=GIT_TIMEOUT_SECS):
