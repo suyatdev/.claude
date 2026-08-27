@@ -1374,7 +1374,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       commit `64a6a92` in a throwaway detached worktree (known macOS
       `com.apple.bird`/iCloud CDP hang). 279 + 34 + 14 = 327 = the 310-test baseline
       (task 1) plus these 17, so nothing was silently dropped from collection.
-- [ ] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
+- [x] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
       banner carries `reason=<token>`, and — the other half — the nine fatal conditions in
       criterion 9 still exit 2 and still refuse a connection.
       **Assert the served bytes, not only `config`** (added 2026-08-26): for each of the four
