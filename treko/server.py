@@ -464,7 +464,11 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
         except OSError as exc:
             return self._fail(500, "asset_unreadable", "asset_unreadable", path=INDEX_FILE,
                               errno_name=errno.errorcode.get(exc.errno, "-"), outcome="failed")
-        meta = '<meta name="tracker-token" content="%s">' % self.config["token"]
+        meta = (
+            '<meta name="tracker-token" content="%s">\n'
+            '<meta name="tracker-channel" content="%s">'
+            % (self.config["token"], self.config["channel"])
+        )
         body = text.replace("<head>", "<head>\n" + meta, 1).encode()
         self._respond(200, body, EXTENSION_TYPES[".html"], extra_headers=(
             ("Cache-Control", "no-store"),
@@ -664,7 +668,7 @@ def watchdog(httpd, idle_secs, poll_secs, parent_pid, stop):
     threading.Thread(target=httpd.shutdown, daemon=True).start()
 
 
-def build_config(surface, token, repo_root, port, analyze_secs, store_dir):
+def build_config(surface, token, repo_root, port, analyze_secs, store_dir, channel):
     origin = "http://%s:%d" % (HOST, port)
     return {
         "surface": surface,
@@ -676,6 +680,7 @@ def build_config(surface, token, repo_root, port, analyze_secs, store_dir):
         "origin": origin,
         "origin_host": "%s:%d" % (HOST, port),
         "analyze_secs": analyze_secs,
+        "channel": channel,
     }
 
 
@@ -698,13 +703,19 @@ def main(argv=None):
         check_manifest_types()
         check_index_injectable()
         repo_root = resolve_repo(args.repo)
-        surface = bind_surface()
+        try:
+            surface, channel = bind_surface(), CHANNEL_OK
+        except SurfaceUnavailable as exc:
+            sys.stderr.write("server: %s\n" % exc)              # unchanged text, same stream
+            sys.stderr.write(
+                "server: degraded -- no control channel (%s)\n" % exc.reason.value)
+            surface, channel = None, exc.reason.value            # .value: see D1's wire format
         store_dir = store_location.ensure_store_dir(store_location.read_store_dir())
         # Generated at startup, held in memory only, never written to disk, never passed
         # as a command-line argument (which would expose it to ps). Dying process, dead
         # token. Built here so the copy below can take the path from `config`.
         token = secrets.token_urlsafe(32)
-        config = build_config(surface, token, repo_root, port, analyze_secs, store_dir)
+        config = build_config(surface, token, repo_root, port, analyze_secs, store_dir, channel)
         # D4, on this same abort path: a corrupt legacy store stops the launch (decision 4).
         store_location.adopt_legacy_store(config["store_path"],
                                           SERVE_ROOT / FIRST_RUN_OPTIONAL)
@@ -756,8 +767,13 @@ def main(argv=None):
         target=watchdog, args=(httpd, idle_secs, poll_secs, os.getppid(), stop), daemon=True)
     watcher.start()
 
-    sys.stderr.write("server: http://%s:%d/ surface=%s idle=%ds poll=%ds store=%s\n"
-                     % (HOST, port, surface, idle_secs, poll_secs, config["store_dir"]))
+    if channel == CHANNEL_OK:
+        sys.stderr.write("server: http://%s:%d/ surface=%s idle=%ds poll=%ds store=%s\n"
+                         % (HOST, port, surface, idle_secs, poll_secs, config["store_dir"]))
+    else:
+        sys.stderr.write(
+            "server: http://%s:%d/ surface=none reason=%s idle=%ds poll=%ds store=%s\n"
+            % (HOST, port, channel, idle_secs, poll_secs, config["store_dir"]))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
