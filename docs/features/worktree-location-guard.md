@@ -4269,7 +4269,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             `hard_deny "$MSG_NO_PYTHON"` once — three sites, two distinct messages.
       - [x] **`WORKTREE_EXEMPT` is not one hatch clearing everything.** It clears both *layers*, and
             neither of layer 1's precondition refusals. Narrowed in `rules/gates.md` and ADR 0038.
-      - [ ] **Finish converting `file:line` citations to quoted code text.** `rules/gates.md` (2)
+      - [x] **Finish converting `file:line` citations to quoted code text.** `rules/gates.md` (2)
             and ADR 0038 (5) are done. **49 remain in this card's body** (everything before the
             task-13 note). The note's *own* citations are deliberately excluded: they record what
             the numbers were when rounds 1–5 ran, and rewriting them would corrupt the audit trail
@@ -4277,6 +4277,36 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             Every anchor must be re-opened before it is quoted — a copied citation is laundered,
             not verified — and any that no longer resolves is a finding, not a thing to silently
             repoint.
+            **DONE in `64c21ae`, and the exclusion held — but only 32 of 50 converted.** (The
+            in-scope count is 50, not the 49 written above: my regex missed one and the sweep's
+            found it.) The other **18 were deliberately left in place**, because repointing a stale
+            number silently is the failure this whole sub-item exists to stop. They are task 15.
+
+- [ ] 15. The 18 citations the sweep could not convert. Three groups, needing different answers.
+      - **Fourteen are anchor rot, all from one event.** `classify-git-command.py` grew from
+            ~250 lines to 601 when task 5's seven segment-indexed facts landed, and
+            `shell_segments.py` shifted with it — so every anchor written into the *design* section
+            before that implementation now points at unrelated code. Affected card lines **as of
+            `64c21ae`** — they will drift, so re-run the sweep's grep rather than trusting them:
+            `:768`,
+            `:773`, `:788`, `:795`, `:805`, `:825`, `:879`, `:880`, `:894` (two citations on that
+            one line), `:907`, `:909`, `:1236`, `:3256`. In every case the *quoted claim* was
+            found still to exist in the
+            file, just at a different line — so this is anchor rot, not a wrong statement, and the
+            fix is the same quoting conversion applied to the real location.
+      - 🔴 **Two are not anchor rot — they are one false claim, stated twice.** The card says at
+            `:1292` and `:3245`
+            that `doc-guard.sh` "still uses the unquoted `for f in $facts` form". It does not, and
+            has not for some time: `doc-guard.sh` reads `while IFS= read -r f`, and the comment
+            above it records the port — "the same reader git-guard.sh already uses, ported here".
+            Independently confirmed. **A statement about another hook's current behaviour went
+            stale inside this card and no round caught it**, which is a stronger argument for
+            quoting text than any of the anchor cases: a quoted fragment that no longer exists
+            fails loudly, a line number that no longer exists reads fine.
+      - **Two are correct and were left by judgment, not by failure:** `phase-guard.sh:248` and
+            `.gitignore:17` in task 11's dated verification note. There the sentence *is* the
+            anchor→content mapping, so quoting the content makes it tautological — the same species
+            of audit record as the task-13 note. Confirm that reading before converting them.
 
 ## Notes
 
