@@ -1202,7 +1202,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
 
 ## Tasks
 
-- [ ] 1. Pre-change baseline in this tree: full node-ID set (`--collect-only -q`), per-module
+- [x] 1. Pre-change baseline in this tree: full node-ID set (`--collect-only -q`), per-module
       counts, and `wc -l` for every file in criterion 14. Record the set's `sha256`.
       **Export `TREKO_CHROME_DENY_BIRD=1` for every run that executes tests** (collection alone
       does not need it). Without it the 64 nodes that route through `cdp_harness.py` fail on this
@@ -1219,7 +1219,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       message names the diagnosis and the remedy — but the card previously asserted a green
       baseline without naming the precondition that makes it green. Found by observability
       round 5.
-- [ ] 1a. **Enumerate every currently-green assertion this card invalidates, before writing any
+- [x] 1a. **Enumerate every currently-green assertion this card invalidates, before writing any
       test.** Three separate review rounds each surfaced exactly one more such assertion — the
       fence digests (`test_guards.py`), the `cmdButtons` source-text regex (`test_guards.py`), and
       the reason-scrape (`test_server.py`) — which is the signal to stop finding them one at a
@@ -1800,6 +1800,359 @@ tautology. Two entries reported `BAD` on the first pass; both were wrong *expect
 the probe*, not wrong citations in the card — `test_guards.py:340` is the `.search()` assert
 itself and `cdp_harness.py:235` is the `raise AssertionError(` that pytest names in its own
 traceback. The mismatch was chased to a cause rather than edited away.
+
+### Task 1 — pre-change baseline, measured 2026-08-27 in worktree `treko-ui-update` @ `76348c4`
+
+Working directory for every command below is `treko/`. `git status --short` was empty before and
+after; nothing in this task modifies the tree.
+
+**Collection (no `TREKO_CHROME_DENY_BIRD` needed — collection imports, it does not render):**
+
+```
+$ python3 -m pytest --collect-only -q | tail -3
+test_ui_commands.py::test_an_error_code_borrowed_from_the_prototype_is_still_unknown[__proto__]
+test_ui_commands.py::test_zz_every_table_row_was_driven_by_a_real_response
+
+310 tests collected in 0.05s
+```
+
+**Per-module collected counts** (node IDs, not test-function counts — parametrised nodes count
+once each):
+
+```
+$ python3 -m pytest --collect-only -q | grep '::' | cut -d: -f1 | sort | uniq -c | sort -rn
+  89 test_server.py
+  30 test_store.py
+  26 test_analyze.py
+  25 test_guards.py
+  21 test_store_location.py
+  19 test_rename.py
+  16 test_nontext_contrast.py
+  15 test_ui_commands.py
+  15 test_drawer_sections.py
+  14 test_theme.py
+  10 test_sidebar.py
+  10 test_server_lifetime.py
+  10 test_autolaunch.py
+   9 test_drawer.py
+   1 test_store_writer.py
+```
+
+Total 310, matching the collection summary and the round-9 table above unchanged.
+
+**Node-ID set `sha256`. The exact recipe, stated so it can be re-run byte-for-byte at task 12:**
+
+```
+$ python3 -m pytest --collect-only -q | grep '::' | sort | shasum -a 256
+c1c4d1d945b66c9f74d9bb56d781930dcaad0761a3854c228c48410c947d539e  -
+```
+
+`grep '::'` is load-bearing and not cosmetic: `--collect-only -q` ends with a blank line and
+`310 tests collected in 0.05s`, and that timing figure changes on every run, so hashing the raw
+output would produce a different digest each time and could never match at task 12. The filter
+keeps exactly the 310 node-ID lines. Confirmed reproducible — the same recipe run a second time
+against a file written from the first run gave the identical digest:
+
+```
+$ python3 -m pytest --collect-only -q | grep '::' | sort > /tmp/treko_nodeids_sorted.txt
+$ wc -l < /tmp/treko_nodeids_sorted.txt
+     310
+$ shasum -a 256 /tmp/treko_nodeids_sorted.txt
+c1c4d1d945b66c9f74d9bb56d781930dcaad0761a3854c228c48410c947d539e  /tmp/treko_nodeids_sorted.txt
+```
+
+**`wc -l` for criterion 14's eight files.** Criterion 14 names `server.py`, `channel.py`,
+`test_degraded.py`, `test_server.py`, `test_guards.py`, `test_server_lifetime.py`,
+`test_ui_commands.py` and `Treko.dc.html` — found by grepping this file for the phrase.
+Measured against `76348c4`, i.e. this file *before* the present section was appended, so the
+anchors are stable:
+
+```
+$ git show 76348c4:docs/features/treko-degraded-no-cmux.md \
+    | grep -n 'criterion 14\|criterion14' | cut -d: -f1 | tr '\n' ' '
+516 522 538 1206 1305 1501 1655
+```
+
+None of those seven hits is the criterion itself: the acceptance criteria number their rows
+(`14.`) rather than spelling the phrase, so the file list is found by its own text and lives at
+line **1154** of that revision:
+
+```
+$ git show 76348c4:docs/features/treko-degraded-no-cmux.md | grep -n 'is under 800 for'
+1154:14. `wc -l` is under 800 for `server.py`, `channel.py`, `test_degraded.py`, `test_server.py`,
+```
+
+This is itself a clause-(d) catch: a phrase-grep alone would have returned seven cross-references
+and missed the one line that defines the list. Two of the eight do not exist yet and this task records that rather
+than silently listing six:
+
+```
+$ wc -l server.py channel.py test_degraded.py test_server.py test_guards.py \
+        test_server_lifetime.py test_ui_commands.py Treko.dc.html
+wc: channel.py: open: No such file or directory
+wc: test_degraded.py: open: No such file or directory
+     799 server.py
+     774 test_server.py
+     540 test_guards.py
+     270 test_server_lifetime.py
+     330 test_ui_commands.py
+     740 Treko.dc.html
+    3453 total
+```
+
+`channel.py` (task 3) and `test_degraded.py` (task 2) are **absent at the baseline** — their
+baseline line count is not zero, it is undefined, and task 12 compares only the six that exist.
+`server.py` at 799/800 is unchanged from the round-9 measurement, so D6's one-line-of-headroom
+argument still holds at the moment implementation starts.
+
+**Full green run — the one task 1 owes.** Every executing run exports
+`TREKO_CHROME_DENY_BIRD=1` (spec lines 1207-1220):
+
+```
+$ TREKO_CHROME_DENY_BIRD=1 python3 -m pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0
+rootdir: /Users/marksuyat/.claude/.claude/worktrees/treko-ui-update/treko
+collected 310 items
+
+test_analyze.py ..........................                               [  8%]
+test_autolaunch.py ..........                                            [ 11%]
+test_drawer.py .........                                                 [ 14%]
+test_drawer_sections.py ...............                                  [ 19%]
+test_guards.py .........................                                 [ 27%]
+test_nontext_contrast.py ................                                [ 32%]
+test_rename.py ...................                                       [ 38%]
+test_server.py ......................................................... [ 57%]
+................................                                         [ 67%]
+test_server_lifetime.py ..........                                       [ 70%]
+test_sidebar.py ..........                                               [ 73%]
+test_store.py ..............................                             [ 83%]
+test_store_location.py .....................                             [ 90%]
+test_store_writer.py .                                                   [ 90%]
+test_theme.py ..............                                             [ 95%]
+test_ui_commands.py ...............                                      [100%]
+
+======================= 310 passed in 172.01s (0:02:52) ========================
+$ echo $?
+0
+```
+
+**310 passed, 0 failed, 0 skipped, 172.01s, exit 0.** Node is installed, so none of
+`test_ui_commands.py`'s `skipif(NODE is None)` tests were skipped — the 15 collected there all
+ran. This is the green baseline criterion 13's diff is taken against.
+
+### Task 1a — the enumeration: every currently-green assertion D2-D6 invalidates
+
+#### The recipe, and the proof it re-finds what is already known
+
+Keyed on the **read**, never on the matcher (clause (a)), and swept over five legs. Run verbatim
+from `treko/`:
+
+```python
+$ python3 - <<'EOF'
+import ast, pathlib, re
+EDITED = ["Treko.dc.html", "server.py"]                                   # the files D2-D6 edit
+MOVED  = ["bind_surface", "CMUX_BIN", "CMUX_TIMEOUT_SECS", "SURFACE_ENV"]  # D6 relocates these
+tests = sorted(p.name for p in pathlib.Path(".").glob("test_*.py")) + \
+        ["server_harness.py", "cdp_harness.py"]
+# leg a1: Python reads (read_text/read_bytes) whose path expression resolves to an edited file
+# leg a2: non-Python reads of an edited file (fs.readFileSync inside an embedded node harness)
+# leg a3: rendered reads -- modules that render an edited file in headless Chrome
+# leg b : digest / byte-identity pins
+# leg c : prose claims naming a symbol D6 relocates
+EOF
+```
+
+The script is a one-off measurement and is **not** committed — what is durable is the leg
+predicates above plus the real output below, which is what a later round would re-derive:
+
+```
+LEG a1 -- Python reads resolving to a file this card edits
+test_drawer.py               70  PAGE = PAGE_PATH.read_text()
+test_drawer_sections.py      75  PAGE = PAGE_PATH.read_text()
+test_guards.py              201  current_bytes, current_digest = _fence_measurements(HTML_PATH.read_bytes())
+test_guards.py              214  current_bytes, current_digest = _fence_measurements_node_bridge(HTML_PATH.read_bytes())
+test_guards.py              257  base = HTML_PATH.read_bytes()
+test_guards.py              286  base = HTML_PATH.read_bytes()
+test_guards.py              324  ids = extract_command_ids(HTML_PATH.read_text())
+test_guards.py              339  text = HTML_PATH.read_text()
+test_guards.py              370  text = HTML_PATH.read_text()
+test_guards.py              438  hits = find_external_fetches(HTML_PATH.read_text())
+test_rename.py               85  source = (Path(server.__file__)).read_text()
+test_rename.py              147  page = (harness.REAL_TREE / server.INDEX_FILE).read_text()
+test_server.py              310  source = (srv.tree / "server.py").read_text()
+test_server.py              750  source = (harness.REAL_TREE / "server.py").read_text()
+test_sidebar.py              56  PAGE = PAGE_PATH.read_text()
+test_theme.py                42  PAGE = PAGE_PATH.read_text()
+
+LEG a2 -- non-Python reads of an edited file
+test_store.py                77  const src = fs.readFileSync(process.argv[1], 'utf8');   # reads the STORE, not an edited file
+test_ui_commands.py          72  const html = fs.readFileSync(htmlPath, 'utf8');         # reads Treko.dc.html
+
+LEG a3 -- modules that render an edited file in headless Chrome
+test_drawer.py             imports cdp_harness; 46 assert statements
+test_drawer_sections.py    imports cdp_harness; 34 assert statements
+test_nontext_contrast.py   imports cdp_harness; 28 assert statements
+test_sidebar.py            imports cdp_harness; 27 assert statements
+test_theme.py              imports cdp_harness; 23 assert statements
+
+LEG b -- digest / byte-identity pins (edited-file rows only)
+test_guards.py              130  BASE_FENCE_BYTES = 4851
+test_guards.py              131  BASE_FENCE_SHA256 = "f0a37389f08f31dfdf18a0a1676657919a01272746d5ab28dbd65a53dae7c136"
+test_guards.py              136  BASE_FENCE_NODE_BRIDGE_BYTES = 4728
+test_guards.py              137  BASE_FENCE_NODE_BRIDGE_SHA256 = "1aa22b5f01d1d4a5e42d328496c08bc46fa260fe35c5b40cdb0a9d77cdb2139b"
+test_guards.py          185/190  return len(region), sha256(region).hexdigest()
+test_guards.py      202/216/261  assert (current_bytes, current_digest) == (BASE_FENCE_*, ...)
+
+LEG c -- prose claims naming a symbol D6 relocates
+server_harness.py            45  # Longer than CMUX_TIMEOUT_SECS (5s, pinned in server.py) and than any analyzer override,
+```
+
+Leg a1 returns modules, not assertions, so a refinement pass resolves each module-level page read
+to the `test_*` functions that reach it — directly or through one helper hop — by AST, not by
+eye:
+
+```
+$ python3 - <<'EOF'   # transitive closure over top-level defs touching the page variable
+--- test_drawer.py (via PAGE): 4 test functions reach the page text
+       438  test_criterion12_the_esc_arm_is_prepended_and_the_others_are_undisturbed
+       540  test_d7_the_gear_is_static_and_not_inside_any_sc_for
+       571  test_criterion14_the_page_has_exactly_seven_ids_all_sec_anchors
+       586  test_criterion14_id_check_is_falsifiable
+--- test_drawer_sections.py (via PAGE): 2 test functions reach the page text
+       637  test_criterion2_dark_literals_live_only_in_root_and_the_preview_cards
+       710  test_d9_no_artifacts_section_was_ported
+--- test_sidebar.py (via PAGE): 1 test functions reach the page text
+       600  test_criterion11_pre_data_return_still_yields_mainml_0px
+--- test_theme.py (via PAGE): 2 test functions reach the page text
+       135  test_criterion4_light_block_covers_every_reachable_custom_property
+       175  test_criterion6_shadow_sm_and_shadow_lg_overridden_but_not_shadow_md
+--- test_guards.py (via HTML_PATH): 8 test functions reach the page text
+       193  test_criterion15_fence_region_byte_identical_to_base_commit
+       208  test_criterion15_node_bridge_span_also_matches_base_commit_secondary
+       252  test_criterion15_falsifiers_are_caught
+       272  test_criterion15_marker_text_mutation_is_reported_honestly
+       320  test_criterion16_command_ids_unchanged
+       329  test_criterion16_cmdButtons_and_cmdCopies_map_the_same_three_ids
+       369  test_criterion16_falsifiers_are_caught
+       437  test_criterion17_no_external_fetch_in_treko_html
+EOF
+```
+
+**Rediscovery check — the three known doors and the five known floor rows, none manually added:**
+
+| Known item | Rediscovered by | Row in the output above |
+|---|---|---|
+| door 1 — `test_guards.py`'s fence digests | leg b, and leg a1 (`:201`, `:214`) | yes |
+| door 2 — `test_guards.py`'s `CMD_BUTTONS_RE` | leg a1 (`:339`) → refinement (`:329`) | yes |
+| door 3 — `test_server.py`'s reason scrape | leg a1 (`:750`) | yes |
+| floor — D5 → `test_drawer.py:571` | leg a1 (`:70`) → refinement (`:571`) | yes |
+| floor — D6 → `test_server.py:311` | leg a1 (`:310`) | yes |
+| floor — D6 → `server_harness.py:45` | leg c | yes |
+| floor — D4/D5 → `test_nontext_contrast.py:432-442` | leg a3 | yes |
+| floor — D6 → `test_rename.py:85-86` | leg a1 (`:85`) | yes |
+
+All eight are reached by the recipe, so it was not patched by hand to reproduce them. Leg a2's
+`test_store.py:77` is a true positive of the *search* and a false positive of the *card*: it reads
+the store envelope handed to it on `argv`, not an edited file, and is listed rather than filtered
+so the leg's raw output can be checked.
+
+**Citation correction, clause (d).** The spec's floor row cites the mark-count pins at
+`test_nontext_contrast.py:432-442`. Re-opened: `:432` is the `@pytest.mark.parametrize` /
+`def test_scored_mark_count_is_exact` line and `:433-442` is its docstring; the **numbers**
+live at `:42` (`SCORED_MARKS = {"dark": 334, "light": 347}`) and the assertion that reads them is
+at `:443`. The row names the right test; its line span points at the docstring, not the pin. Both
+anchors are given below so no later reader has to re-derive it.
+
+#### D2 — startup serves instead of aborting
+
+| # | File:line | Node | Effect | Repaired by |
+|---|---|---|---|---|
+| 1 | `test_server_lifetime.py:61` | `test_an_unset_surface_id_aborts_before_serving` | **BREAKS.** `assert_aborted` (`:47-53`) asserts `code != 0` and `refuses_connection(port)`; a degraded launch exits 0 and serves. | **task 5** |
+| 2 | `test_server_lifetime.py:68` | `test_a_failing_read_screen_probe_aborts_before_serving` | **BREAKS**, same three clauses. | **task 5** |
+| 3 | `test_server_lifetime.py:73` | `test_a_hanging_read_screen_probe_aborts_before_serving` | **BREAKS**, same three clauses. | **task 5** |
+| 4 | `test_autolaunch.py:355` | `test_without_a_cmux_surface_the_server_still_refuses` | **BREAKS.** Two of its three asserts invert (`run.wait() == EXIT_ABORT`, `browser_log.opens == []`); `"CMUX_SURFACE_ID" in run.stderr` survives, because D1 keeps the message. | **task 5** |
+| 5 | `test_server_lifetime.py:14` and `:56-58` | — (prose, asserted by nothing) | Both say *"the three surface-binding \[startup\] aborts"*; after the move that module has none. Verified present verbatim at both anchors. | **task 5** (named in the task text) |
+
+Verified not broken, having been swept: `server_harness.AUDIT_RE` (`server_harness.py:238-242`)
+requires `surface=\S+`, so a degraded audit line still parses whatever non-empty token the server
+prints; `build_config`'s new `channel` key is asserted by no test (`grep -rn build_config test_*.py`
+returns one *comment*, `test_store_writer.py:25`); and no test asserts on the startup banner's
+text — the harness parses the port, not the banner shape.
+
+#### D3 — `503 no_channel`
+
+| # | File:line | Node | Effect | Repaired by |
+|---|---|---|---|---|
+| 1 | `test_server.py:756` | `test_the_enum_and_the_status_table_cover_each_other` | **BREAKS, both assertions.** Measured today: `reasons_emitted_in_source()` returns **16**, `REASON_STATUS` has **16** keys, `CONTRACT_STATUSES` is `{400, 403, 404, 405, 409, 413, 415, 500, 502}` — no `503`. D3's `_fail(503, "no_channel", "no_channel", …)` makes the scrape 17 against a 16-key table, and `set(REASON_STATUS.values()) == CONTRACT_STATUSES` fails the moment the row is added. | **task 7a** |
+| 2 | `test_server.py:766` | `test_zz_every_reason_value_was_driven_by_a_real_request` | Goes red as a *consequence of its own repair*: adding `"no_channel": 503` to `REASON_STATUS` puts a key in `REASON_STATUS - OBSERVED_REASONS` until a real `no_channel` refusal is driven **from inside `test_server.py`**. Not broken by D3's server change alone — recorded because skipping it turns 7a's fix red for a reason 7a must expect. | **task 7a** |
+| 3 | `test_ui_commands.py:322` | `test_zz_every_table_row_was_driven_by_a_real_response` | Same shape one layer up: `ROW_OUTCOMES - OBSERVED_OUTCOMES == []` breaks when `no_channel` joins `ROW_OUTCOMES` (`:41-50`) unless a really-degraded server drives it. | **task 8** |
+
+Verified not broken: `test_server.py:104`/`:118` are parametrised over `server.STATIC_MANIFEST`,
+which D3/D6 do not change, so no manifest node ID moves; `test_ui_commands.py:54`'s
+`TERMINAL_OUTCOMES` is a module constant with **no reader** in that file (`grep -n TERMINAL_OUTCOMES
+test_ui_commands.py` returns only its definition), so D5's decision to keep `no_channel` out of the
+page's terminal set is not asserted there today.
+
+#### D4 — the second meta, `trackerLiveIds`, and `hasChannel` → `hasToken`
+
+| # | File:line | Node | Effect | Repaired by |
+|---|---|---|---|---|
+| 1 | `test_guards.py:193` | `test_criterion15_fence_region_byte_identical_to_base_commit` | **BREAKS by construction.** D4 puts `TRACKER_LOCAL_IDS`, `TRACKER_SEND_IDS` and `trackerLiveIds` inside the marker pair (`Treko.dc.html:399-492`, re-derived by `grep -n`), so the 4851-byte / `f0a37389…` pin cannot hold. | **task 9a** |
+| 2 | `test_guards.py:208` | `test_criterion15_node_bridge_span_also_matches_base_commit_secondary` | **BREAKS**, same cause, against the 4728-byte / `1aa22b5f…` pin. | **task 9a** |
+| 3 | `test_guards.py:329` | `test_criterion16_cmdButtons_and_cmdCopies_map_the_same_three_ids` | **BREAKS.** Re-measured, not copied: `CMD_BUTTONS_RE` matches the working tree **1** time today and **0** times after `hasChannel` → `hasToken` alone (3 `hasChannel` occurrences in the file); `CMD_COPIES_RE` still matches **1** after the rename, so only the first half breaks. | **task 9b** |
+| 4 | `test_guards.py:252`, `:272` | `test_criterion15_falsifiers_are_caught`, `test_criterion15_marker_text_mutation_is_reported_honestly` | Does **not** break — but both assert a *mutated* measurement differs from `BASE_FENCE_*`, and once task 9 lands the unmutated fence already differs, so between task 9 and task 9a they pass without discriminating anything. This is the vacuous-guard shape 9a's re-confirmation step exists for. | **task 9a** (confirm they still fire) |
+
+Verified not broken: `test_guards.py:320` (`test_criterion16_command_ids_unchanged`) reads the id
+*array*, which D4 re-partitions but does not edit; `test_guards.py:369`
+(`test_criterion16_falsifiers_are_caught`) judges through `extract_command_ids`, so a render-site
+mutation leaves it green — which is exactly why task 9b must add a **new** falsifier rather than
+widen it; `test_guards.py:437` scans for external fetch targets and D4 adds none;
+`test_ui_commands.py:184` (`test_the_handler_slice_is_fenced_exactly_once_and_loads_standalone`)
+asserts `result["ids"] == ["clear","handoff","reanalyze"]` and that the slice loads in bare node —
+both survive a *grown* export map, provided task 9 keeps the fence dependency-free.
+
+#### D5 — the reason table, `cmdReason`/`cmdReasonC`, and the new `sc-if` element
+
+| # | File:line | Node | Effect | Repaired by |
+|---|---|---|---|---|
+| 1 | `test_guards.py:193`, `:208` | the two criterion-15 digests | **BREAKS** — same two nodes as D4 row 1-2, listed here too because D5 independently adds `TRACKER_CHANNEL_REASONS`, `TRACKER_CHANNEL_REASON_FALLBACK` and `trackerChannelReason` inside the same fence. Reverting D4 alone would not save them. | **task 9a** |
+| 2 | `test_drawer.py:571` | `test_criterion14_the_page_has_exactly_seven_ids_all_sec_anchors` | **Does not break** — verified, not assumed. Re-measured today: `re.compile(r'\bid="([^"]*)"').findall(PAGE)` returns exactly 7, all `sec-*` (`sec-overview`, `sec-tasks`, `sec-merge`, `sec-constraints`, `sec-branches`, `sec-left`, `sec-questions`). D5 states the reason-line element carries no `id`, so the count is unmoved. It stays on this table because it is the assertion that goes red the instant that decision is deviated from. | no repair needed; **task 9c** is what asserts the element is nonetheless emitted |
+| 3 | `test_drawer.py:586` | `test_criterion14_id_check_is_falsifiable` | **Does not break.** Its fixture anchors on the literal `<sc-if value="{{ agentOpen }}"`, which D5 does not remove or rewrite (D5 adds a *different* `sc-if`; the file carries 17 today). The `"the mutation matched nothing -- the fixture is stale"` guard would catch it if that ever changed. | — |
+| 4 | `test_nontext_contrast.py:443` (pins at `:42`, test at `:432`) | `test_scored_mark_count_is_exact[dark]`, `[light]` | **Does not break** — and the reason is structural, not a hope. The walk renders a **served** board: `server_harness.launch(root, tree=tree)` (`test_nontext_contrast.py:400-401`) with the default `surface=FAKE_SURFACE` (`server_harness.py:280`, `:252-257`), so `config["channel"]` is `ok`, `channelOk` is `true`, D5's gate `hasToken && !channelOk` is `false`, and the `sc-if` emits **no node at all** (D5's round-12 correction is precisely that an `sc-if` false gate emits nothing, not an empty flex item). The scored population is therefore unchanged and `SCORED_MARKS = {"dark": 334, "light": 347}` still holds. §D8's exclusion list needs no extension. **Still unowned by any task** — task 12's full green run and node-ID diff is the only thing that would catch it if this reasoning is wrong. | no repair needed; backstop is **task 12** |
+| 5 | `test_theme.py:135` | `test_criterion4_light_block_covers_every_reachable_custom_property` | **Does not break.** `cmdReasonC: 'var(--warn)'` introduces no new token: `var(--warn)` already appears 8 times in `Treko.dc.html` and `--warn` is declared in both the `:root` block (`:21`) and the `body[data-theme="light"]` block (`:38`). | — |
+| 6 | `test_drawer_sections.py:637` | `test_criterion2_dark_literals_live_only_in_root_and_the_preview_cards` | **Does not break.** `DARK_LITERALS` is `("#12131e", "rgba(255,255,255,")` (`:566`); D5's inline style is `flex/font-size/line-height/max-width/text-align` plus a templated `color:{{ cmdReasonC }}` — neither literal. | — |
+| 7 | `test_drawer.py:540` | `test_d7_the_gear_is_static_and_not_inside_any_sc_for` | **Does not break.** It counts `onClick="{{ openSettings }}"` (still exactly 1) and scans `<sc-for>` bodies; D5 adds an `<sc-if>`, which `_SC_FOR_RE` does not match. | — |
+| 8 | `test_drawer.py:438`, `test_sidebar.py:600`, `test_drawer_sections.py:710`, `test_theme.py:175` | Esc-arm chain, `renderVals`' pre-data early return, the absent Artifacts section, the shadow overrides | **Do not break.** Swept and read: D4/D5 add no Escape arm, do not touch `renderVals`, add none of `NESTED_ROW_IDENTIFIERS`/Artifacts markup, and change no shadow token. | — |
+
+#### D6 — `treko/channel.py` and the seven moved symbols
+
+| # | File:line | Node | Effect | Repaired by |
+|---|---|---|---|---|
+| 1 | `test_server.py:311` (test at `:279`) | `test_the_token_never_leaves_the_served_page` | **Stays green while silently covering less** — the shrinking-guard failure. `source = (srv.tree / "server.py").read_text(); assert "env=" not in source`. Measured today: `grep -c 'env=' server.py` → **0**. After D6, `bind_surface`'s `subprocess.run` lives in `channel.py`, which this guard never reads, so the clause "server.py passes no `env=` to any subprocess" covers one fewer spawn site — and the one it loses is the cmux probe. | **task 3** (named there explicitly) |
+| 2 | `test_rename.py:85-86` | `test_no_retired_variable_name_survives_in_server_source[×4]` — `TASK_TRACKER_PORT`, `TASK_TRACKER_IDLE_SECS`, `TASK_TRACKER_POLL_SECS`, `TASK_TRACKER_ANALYZE_SECS` (four collected nodes) | **Stays green while silently covering less**, same shape: `source = Path(server.__file__).read_text(); assert retired not in source` scans `server.py` only. | **task 3** (named there explicitly) |
+| 3 | `server_harness.py:45` | — (comment, asserted by nothing) | **Goes false.** Verified verbatim at that line: `# Longer than CMUX_TIMEOUT_SECS (5s, pinned in server.py) and than any analyzer override,`. D6 makes `channel.py` that constant's single owner. | **NO TASK OWNS THIS.** Nearest owner is **task 3**, which performs the move; task 3's text names the two guards above but not this comment. Flagged rather than silently attached. |
+
+Verified not broken by D6: `server_harness.build_tree` (`:85-106`) is a whole-directory
+`shutil.copytree`, so a new `treko/channel.py` reaches every harness tree with no harness edit;
+`test_server.py:125` (`test_manifest_is_covered_by_the_extension_map`) reads suffixes off
+`server.STATIC_MANIFEST`, which gains no row, and `.py` is already present in the served tree via
+`server.py`/`test_*.py`; `test_server.py:298`'s `rglob` token sweep will simply include one more
+file, which contains no token; `test_rename.py:147` scans the *page* for
+`NESTED_ROW_IDENTIFIERS`, unaffected by a Python move.
+
+#### Summary
+
+Non-empty break-lists: **D2 (5 rows), D3 (3 rows), D4 (4 rows), D5 (8 rows), D6 (3 rows)** — all
+five decisions have a non-empty list, so there is no "D_ breaks nothing found" row to state. Of
+those 23 rows, **9 are hard breaks** (D2 ×4 including one prose pair, D3 ×1 plus 2 self-inflicted
+by their own repair, D4 ×3), **2 are shrinking guards that stay green** (D6 ×2), **1 is a comment
+that goes false with no owning task** (`server_harness.py:45`), and the remainder are verified
+survivals recorded so a later round does not have to re-derive them.
+
+**One gap this enumeration cannot close on its own:** the `server_harness.py:45` row has no
+owning task, and task 1a may not edit the task list. It is raised here for the implementer of
+task 3 and for the next review round.
 
 ## Corrections to the dispatch brief
 
