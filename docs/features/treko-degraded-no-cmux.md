@@ -1343,7 +1343,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `channel.CMUX_BIN`); `SurfaceUnavailable` needs both `.message` and `str(exc) == message`;
       watch for a circular import if `channel.py` imports `StartupAbort` from `server` while
       `server` imports from `channel`.
-- [ ] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable`, the `Reason`
+- [x] 3. Create `treko/channel.py`; move `bind_surface`, add `SurfaceUnavailable`, the `Reason`
       enum (a plain `Enum`, D1), `CHANNEL_OK = "ok"`, and — per D6 — `CMUX_BIN`,
       `CMUX_TIMEOUT_SECS` **and `SURFACE_ENV`**, moved from `server.py:53-55`, with `channel.py`
       as their single owner. `server.py` imports all **seven**. Task 2 goes green. Confirm
@@ -1359,6 +1359,21 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       needs and was never named; and the two known-shrinking-guard rows on task 1a's floor had no
       task actually widening them -- naming a gap on the floor is not the same as closing it, and
       nothing enforced that distinction until this task said so explicitly.*
+      **Done (commit `cf933d6`):** `treko/channel.py` created with all seven symbols
+      (`bind_surface`, `SurfaceUnavailable`, `Reason`, `CHANNEL_OK`, `CMUX_BIN`,
+      `CMUX_TIMEOUT_SECS`, `SURFACE_ENV`); `server.py` imports all seven and dropped to
+      772 lines (was 799). Verified directly (not trusted from a subagent report): all
+      17 `test_degraded.py` tests pass; `grep -n "^CMUX_BIN\|^CMUX_TIMEOUT_SECS\|^SURFACE_ENV"`
+      shows `channel.py` as the sole declaration site. Both D6 guards widened to scan
+      `channel.py` too (`test_server.py`'s `"env=" not in source`,
+      `test_rename.py`'s `retired not in source`). Full suite: 279 passed, 34 failed +
+      14 errored -- every failure/error is `"chrome never reported a page target on the
+      devtools endpoint"` in Chrome/CDP-driven files this task never touched
+      (`test_sidebar.py`, `test_theme.py`, `test_nontext_contrast.py`); confirmed
+      pre-existing, not a regression, by reproducing one of them against the pre-task-3
+      commit `64a6a92` in a throwaway detached worktree (known macOS
+      `com.apple.bird`/iCloud CDP hang). 279 + 34 + 14 = 327 = the 310-test baseline
+      (task 1) plus these 17, so nothing was silently dropped from collection.
 - [ ] 4. Red tests for D2: each of the four conditions serves, `config["surface"] is None`, the
       banner carries `reason=<token>`, and — the other half — the nine fatal conditions in
       criterion 9 still exit 2 and still refuse a connection.
