@@ -146,6 +146,32 @@ hold snapshots the analyzer cannot regenerate, since it reports the present.
 `tracker-data-fallback.js` stay tracked: they are vendored assets the page loads, not artifacts the
 tool writes.
 
+**Two view preferences live in the browser instead — `localStorage`, not the store.** Nothing
+server-side reads or writes them, so they never travel with a survey: `reanalyze`, a new
+`TREKO_STORE_DIR`, and a different repo all leave them alone.
+
+| Key | Holds | Absent, or not usable |
+|---|---|---|
+| `taskTracker.theme` | `dark` or `light` — written only by the drawer's two Appearance cards | **`dark`.** Anything but the literal `light` falls back, so a hand-edited value cannot leave both cards unselected |
+| `taskTracker.sideW` | sidebar width in px — written on drag mouseup, and by Layout → Reset | **`236`**, and any stored number is clamped to `190`–`440` at mount, not only while dragging |
+
+**Both themes are contrast-guarded, and the two guards cover different halves of the page.**
+`treko/test_theme.py`'s criterion 5 scores every element that paints **text** in its own `color`,
+in **light** only. `treko/test_nontext_contrast.py` scores **non-text marks** — fills, border
+sides, outset shadows, SVG fills and strokes — against a named 23-token allowlist, in **both**. A
+palette edit that dulls one of those tokens fails the suite rather than shipping quietly. (The
+exact per-theme mark counts live in that module's own constants and in the card, where an
+assertion catches them going stale; repeating them here would be a copy nothing checks.)
+
+**A green run there means those 23 tokens have not regressed. It does not mean the board is
+accessible** — marks that appear only after an interaction (the settings drawer and its scrim,
+the agent panel, hover and focus states) are outside both populations, and three tokens are
+recorded as known defects rather than fixed. `docs/decisions/0037-*` has the reasoning;
+`docs/features/treko-non-text-contrast.md` has the table.
+
+Both are keyed to the served origin, port included, so a changed `TREKO_PORT` — or the `file://`
+mode above — starts again from those defaults.
+
 ## Stopping it
 
 `Ctrl-C` in the foreground. Otherwise it stops itself: a 30-minute idle timeout
