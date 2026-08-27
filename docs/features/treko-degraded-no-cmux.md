@@ -1387,9 +1387,13 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `test_server_lifetime.py`'s three surface tests, updating that module's docstring
       inventory (`:14`) and section header (`:56-58`). Flip in a commit separate from the
       implementation — the tests are the baseline, per `rules/core-conduct.md`.
-- [ ] 6. Red tests for D3: `clear`/`handoff` with a valid token on a degraded server → `503`
+- [x] 6. Red tests for D3: `clear`/`handoff` with a valid token on a degraded server → `503`
       `no_channel`, audit `reason=no_channel`, and **zero** entries in the fake-cmux log;
       `reanalyze` → `200`; an unknown id → `403` (the allowlist check still runs first).
+      `2fba70f`: 6 of 8 new tests red on today's unguarded `_run_send`, which crashes with a
+      `TypeError` (`confirm_surface(None)`) after spawning one real `cmux tree` call --
+      confirmed by hand, not assumed. The other two (`reanalyze`, unknown id) are green
+      already, by design. Full module: 6 red / 32 green, no regression.
 - [ ] 7. Implement `_run_send`'s guard. Task 6 goes green.
 - [ ] 7a. **Repair `test_server.py`'s reason contract for `503 no_channel`** (D7, third sealed
       door): add `"no_channel": 503` to `REASON_STATUS` (`test_server.py:56-73`), add `503` to
