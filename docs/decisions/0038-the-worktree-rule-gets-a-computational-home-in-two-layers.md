@@ -109,7 +109,7 @@ sits there, and says so when it does not.
 
 ⚠️ **In the configuration being merged that sentence is inoperative, and this is the sharpest thing
 to know about the branch.** The liveness report rides on a refusal that is actually printed
-(`worktree-guard.sh:236`: `if [ "$decision" = deny ]; then check_liveness …`), and `log` mode never
+(`worktree-guard.sh`: `if [ "$decision" = deny ]; then check_liveness …`), and `log` mode never
 produces one — its decision is `would-deny` and it exits 0 silently. Layer 2 is also not yet armed
 (`core.hooksPath` unset). So as shipped, **the guard is behaviorally indistinguishable from not
 being installed**, and its only trace is a gitignored log. That is the exact failure mode this card
@@ -126,7 +126,7 @@ guard from the one repo where work is happening. The check is not self-hosting: 
 `worktree-guard.sh` is itself unregistered nothing checks either layer, and that regress terminates
 at `settings.json`, which is tracked and reviewable.
 
-**4. No repo opt-in.** `phase-guard.sh:248` exits silently unless the repo has a `docs/features/`
+**4. No repo opt-in.** `phase-guard.sh`'s `[ -d "$root/docs/features" ] || exit 0` exits silently unless the repo has a `docs/features/`
 directory, so a repo that never heard of the phase workflow is never blocked by it. This guard has
 no such signal, by explicit user decision, with the cost stated before the choice: **every fresh
 `git clone` on this machine will deny guarded writes from its primary checkout until a worktree
@@ -144,7 +144,8 @@ checkout would be denied permission to write its own verdict — this feature's 
 `settings.json`, holding `log` or `deny`. **Absent** means `log`. **Any other value runs the guard
 in `deny` mode**, and every refusal the mode governs then names the bad value
 (`worktree-guard.sh`, the `case "$WORKTREE_GUARD_MODE" in` block and both exits of `refuse()`; the
-two `hard_deny()` calls that fire before the mode is read cannot name it). A present-but-wrong
+three `hard_deny()` call sites — two distinct messages — fire before the mode is read and cannot
+name it). A present-but-wrong
 value means someone tried to arm the guard and
 mistyped, and reading a failed configuration attempt as "off" is the silent disarm this design
 refuses everywhere else; absence and a typo are deliberately not the same case.
@@ -155,22 +156,30 @@ third reading distinct from both "arms in `deny`" and "treats as `log`". Measure
 `WORKTREE_GUARD_MODE=DENY` refused a `Write` to `settings.json`, the file whose exemption exists so
 that "the hook registration and its `WORKTREE_GUARD_MODE` switch stay editable", while the refusal's
 own text claimed this guard never blocks it. `git status` was refused too, so there was no route
-back through `Bash` either. That recreated the footgun `phase-guard.sh:280-283` names, in the one
+back through `Bash` either. That recreated the footgun `phase-guard.sh` names in its own exemption
+comment — "a guard that can block edits to its own off switch is a footgun" — in the one
 state where the switch most needs editing. Boundary 9 had always read "**`deny`**, and the message
 names the bad value", so the code — not the spec — was the thing out of line. Fixed by selecting
 `deny` and deferring the message to the refusal path: everything the guard would have judged is
 still refused under the strictest real mode, while an exempt path and a write already inside a
 worktree pass. Pinned by tests G2a/G2b/G2c, which were committed red first.
 
-**The recoverability claim is scoped to that case and no further.** Three sibling refusals —
-`$HOME` unset, git below the version floor, the lib dir missing — still `refuse()` from an arm's
-entry point *before* the exemption list is consulted, while their text makes the same "settings.json
-stays editable" claim. Measured false, and left open deliberately: unlike the mode typo, those are
-states where the guard may be genuinely unable to resolve the repo root the exemption list is
-relative to, so each needs its own decision rather than a copied answer. Tracked in the card's
-task-13 note. It is
-**not** at `hooks/state/worktree-guard.mode`, which cannot work: `.gitignore:17` ignores
-`/hooks/state/`, so arming a hard deny across every repo on this machine would have left no record
+**The recoverability claim is scoped to that case and no further.** **Two** sibling refusals —
+`$HOME` unset and git below the version floor — still `refuse()` from an arm's entry point *before*
+the exemption list is consulted, while their text makes the same "settings.json stays editable"
+claim. Measured false (`hooks/worktree-guard.probe.sh`, E1 and E2: a `Write` to `settings.json`
+returns rc=2 with that sentence in the refusal), and left open deliberately: unlike the mode typo,
+those are states where the guard may be genuinely unable to resolve the repo root the exemption
+list is relative to, so each needs its own decision rather than a copied answer.
+
+Two neighbours that look like the same fault are not, and the distinction is what the probe
+settled. The **missing-lib-dir** refusal governs only the Bash arms — a `Write` never sources them —
+so `settings.json` stays writable there (probe E3, rc=0) and its message is **true**. `hard_deny
+"$MSG_NO_PYTHON"` *does* refuse a `Write` to `settings.json` (probe E4, rc=2), but it makes no
+recoverability claim, so it is a fourth and separate gap: the switch is unreachable and nothing
+says so. Tracked in the card's task-13 note. The switch is
+**not** at `hooks/state/worktree-guard.mode`, which cannot work: `.gitignore` carries a
+`/hooks/state/` entry, so arming a hard deny across every repo on this machine would have left no record
 in git at all. In `settings.json` it is a one-line reviewable diff sitting next to the registration
 it arms. That `settings.json` `env` entries actually reach a `PreToolUse` hook's Bash subprocess was
 measured, not assumed.
@@ -240,8 +249,11 @@ remedy is to bisect in a worktree, which is what this ADR asks for anyway.
 
 **Not a security boundary.** Four one-flag bypasses defeat layer 2, all measured. And
 `WORKTREE_EXEMPT` is **one escape hatch clearing both layers, not one per layer** — layer 2 honours
-it too (`reference-transaction:593-594`, allowing with a `bypass-worktree-exempt` record). Anyone
-reading the two arms as needing two different bypasses would overestimate what this stops.
+it too (`reference-transaction`, `allow 'bypass-worktree-exempt'`). Anyone
+reading the two arms as needing two different bypasses would overestimate what this stops. It does
+**not** clear layer 1's precondition refusals, though: with `$HOME` unset, git below the version
+floor, or the lib dir missing, a command carrying `WORKTREE_EXEMPT` is still refused (measured —
+`hooks/worktree-guard.probe.sh`, the `Bash + WORKTREE_EXEMPT` row of E1, E2 and E3).
 Layering raises the floor on accidents. A session that wants to defeat this can.
 
 ## Alternatives considered

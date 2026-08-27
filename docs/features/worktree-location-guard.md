@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: feat/worktree-location-guard
+branch: docs/worktree-guard-doc-cleanup
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
@@ -4118,6 +4118,33 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       message where it is not. Not attempted in this session because it is a design decision, not a
       wording fix, and expanding scope on my own initiative is what the user's gate exists to stop.
 
+      ⚠️ **Re-measured 2026-08-27 (task 14), and the population above is wrong in both directions.**
+      The evidence line was the first thing to go: shadowing `python3`/`python` never reaches any of
+      the three, because `hard_deny "$MSG_NO_PYTHON"` fires in step 1. Each state was therefore
+      built on its own, in a throwaway primary checkout, with the *healthy* guard as a control —
+      `hooks/worktree-guard.probe.sh`, committed alongside this note so the receipt exists.
+      Measured, `WORKTREE_GUARD_MODE=deny`, a `Write` to `settings.json`:
+      - **`$HOME` unset (E1) → rc=2**, and the refusal prints "settings.json is exempt from this
+        guard". Claim false. Open, as recorded above.
+      - **git below the version floor (E2) → rc=2**, same claim printed. Claim false. Open.
+      - **the lib dir missing (E3) → rc=0, ALLOWED.** `deny_arms()` is reached only from the
+        `[ "$ARM" = B2D ]` branch, and a `Write` never sources the Bash arms — so `settings.json`
+        stays writable and that message's claim is **true**. It does not belong in this item and is
+        removed from it. This is round 5's reading, now independently confirmed.
+      - **`python3`/`python` shadowed (E4) → rc=2**, and the message makes **no** recoverability
+        claim. So it is not a false statement — it is a **fourth, separate** gap: the switch is
+        genuinely unreachable and nothing tells you so. Newly named here.
+      The open item is therefore **two** false claims, not three, plus one unstated unreachability.
+      ⚠️ The first two runs of the probe were themselves wrong and are worth recording: `env -u HOME
+      HOME=/fix` re-sets what `-u` removed, so every `$HOME`-unset row silently measured a healthy
+      guard; and a raw `grep -F` for the claim missed it in `require_home()` alone, because the
+      sentence wraps across a line break there and nowhere else. Both would have read as substantive
+      findings. The controls are what surfaced them — E0 refuses a guarded write and allows an
+      exempt one, so a row that agrees with E0 is a row that measured nothing.
+      ⚠️ Also measured: `WORKTREE_EXEMPT` **does not rescue** any of E1, E2 or E3. `rules/gates.md`
+      called it "one escape hatch that clears both layers"; that is true of layer 2 and false of
+      layer 1's preconditions. Corrected there and in ADR 0038.
+
       **Round 3 run 2026-08-27 at `6bf830c`** (pane, Opus 5 / xhigh): risk=medium, confidence=high,
       no dimension `fail` — so the verdict did **not** block the PR. It re-derived all seven suite
       counts exactly, probed the round-2 fix seven ways rather than reading the diff, and
@@ -4192,7 +4219,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       finish converting `file:line` citations on this branch to quoted code text, fix the
       `two`→`three` `hard_deny()` count, correct the deferred item's evidence line (re-measuring it
       first), and either commit `scratchpad/probe-badmode-exempt.sh` or drop the citations to it.
-      One pass, not piecemeal — that is the whole lesson of rounds 3–5.
+      One pass, not piecemeal — that is the whole lesson of rounds 3–5. **Opened as task 14.**
       2. **No test crossed a bad mode with a failed append.** G7 is a good `deny` with a broken log,
          G2b is a bad value with a healthy log; the corner where both hold was unasserted, so 193
          green tests were blind to finding 1 — the third time on this branch that a suite passing on
@@ -4219,6 +4246,34 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       and cannot gate the PR — `judge-guard.sh` compares `head_sha` exactly. **Round 4 is required
       before `gh pr create`,** and rounds 1, 2 and 3 each found something real, so it is not a
       formality either.
+
+- [ ] 14. The doc-cleanup pass, in one commit rather than five — round 3 findings 3–4 and round 5
+      findings 1–3, deferred together because rounds 3, 4 and 5 each found drift created by the
+      previous round's own fix. Branch `docs/worktree-guard-doc-cleanup`, opened 2026-08-27 after
+      PR #83 merged.
+      - [x] **Re-measure the deferred item before correcting its evidence line.** Done, and it
+            changed the item: two false claims, not three, plus a fourth unstated gap. Full table
+            in the ⚠️ block under round 2's findings above. `rules/gates.md` and ADR 0038 both
+            corrected.
+      - [x] **The receipt exists now.** `scratchpad/probe-badmode-exempt.sh` was cited by commit
+            `6bf830c` and by this note and is not on disk — a session scratchpad, never committed.
+            Replaced by `hooks/worktree-guard.probe.sh`, which is tracked, covers the bad-mode ×
+            exempt-path cross the original probed (E5) *and* the four precondition states, and
+            carries its own controls. The citation in `6bf830c`'s message cannot be edited — it is
+            merged — so it stands as a dead reference and this line is the redirect.
+      - [x] **`two` → `three` `hard_deny()` call sites** in `rules/gates.md` and ADR 0038.
+            Re-counted rather than copied: `hard_deny "$MSG_NO_PAYLOAD"` twice and
+            `hard_deny "$MSG_NO_PYTHON"` once — three sites, two distinct messages.
+      - [x] **`WORKTREE_EXEMPT` is not one hatch clearing everything.** It clears both *layers*, and
+            neither of layer 1's precondition refusals. Narrowed in `rules/gates.md` and ADR 0038.
+      - [ ] **Finish converting `file:line` citations to quoted code text.** `rules/gates.md` (2)
+            and ADR 0038 (5) are done. **49 remain in this card's body** (everything before the
+            task-13 note). The note's *own* citations are deliberately excluded: they record what
+            the numbers were when rounds 1–5 ran, and rewriting them would corrupt the audit trail
+            to fix a footnote (`feedback_a_blanket_rewrite_corrupts_historical_claims`).
+            Every anchor must be re-opened before it is quoted — a copied citation is laundered,
+            not verified — and any that no longer resolves is a finding, not a thing to silently
+            repoint.
 
 ## Notes
 
