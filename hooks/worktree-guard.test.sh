@@ -1566,6 +1566,43 @@ deny 'G2 an unrecognized mode denies and names the value' "$PRIMARY" \
   "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-g2)" \
   "denyy"
 
+# G2a — Scenario: a mistyped mode must not block the edit that FIXES it.
+#
+# The cross G2 and G3 never made: G2 is bad-mode + non-exempt, G3 is exempt +
+# good mode, so 189 green tests said nothing about bad-mode + EXEMPT. Measured
+# 2026-08-27, before this case existed: `WORKTREE_GUARD_MODE=DENY` refused a
+# Write to settings.json (rc=2), and the refusal's own text said "fix the value
+# in settings.json (which this guard never blocks)". It does block it.
+#
+# Boundary 9 reads "**deny**, and the message names the bad value" — deny MODE,
+# with that message, which is also what the card says at :1481. Denying every
+# call unconditionally was a third, stricter thing that no line of the card asks
+# for, and it recreates precisely the footgun settings.json is exempt to avoid
+# (phase-guard.sh:280-283: "a guard that can block edits to its own off switch").
+# An exempt path is never guarded, so refusing it protects nothing.
+log_reset
+RUN_ENV=(WORKTREE_GUARD_MODE=DENY)
+allow_silent 'G2a a mistyped mode still allows an exempt-path write' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/settings.json" s-g2a)"
+assert_log_empty 'G2a …and the allow is not logged'
+
+# G2b — the other half of the same rule, and the one that keeps G2a honest: a
+# mistyped mode must still deny a NON-exempt write in a primary checkout, and
+# still name the value. Without this, "treat a bad value as deny mode" would be
+# indistinguishable from treating it as `log`, which is the silent disarm.
+log_reset
+RUN_ENV=(WORKTREE_GUARD_MODE=DENY)
+deny 'G2b …and still denies a non-exempt write, naming the value' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-g2b)" \
+  "DENY"
+
+# G2c — a mistyped mode must not block a write that is already IN a worktree.
+# That write is what this whole feature is asking for; refusing it punishes the
+# correct behaviour for a typo elsewhere in the config.
+RUN_ENV=(WORKTREE_GUARD_MODE=DENY)
+allow_silent 'G2c a mistyped mode still allows a write inside a linked worktree' "$LINKED" \
+  "$(payload_write Write file_path "$LINKED/hooks/git-guard.sh" s-g2c)"
+
 # G3 — Scenario: Allows are never logged. One line per refusal or bypass, never
 # per evaluation: the round-2 volume measurement put one-line-per-evaluation at
 # 10–20 MB per three days, at which size "review the log before flipping" is not
