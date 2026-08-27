@@ -448,3 +448,79 @@ def test_a_corrupt_legacy_store_aborts_before_serving(launcher, tree, tmp_path):
 
     srv = launcher(tree=tree, overrides={"TREKO_STORE_DIR": str(fresh_store)}, wait=False)
     assert_aborted(srv, expect="is not a valid legacy store")
+
+
+# ==========================================================================
+# Task 6 / §D3 — `clear` and `handoff` are refused at `503 no_channel`
+# ==========================================================================
+
+# Off `server.SEND_COMMANDS` rather than hardcoded, so a third send command added later is
+# covered here automatically instead of silently passing this module by.
+SEND_COMMAND_IDS = tuple(server.SEND_COMMANDS)
+
+# `surface=""` (`surface_unset`) is the one degraded condition that also makes zero cmux
+# calls at *startup* -- `channel.py:74` returns before the `subprocess.run` at `:78` ever
+# runs. Every other degraded condition (`probe_timeout`, `probe_failed`) already burned one
+# real cmux invocation before the server finished booting, so a non-empty log after a
+# `/command` POST would be ambiguous between "the guard didn't fire" and "the boot probe
+# ran". Only `surface_unset` isolates the claim this task is actually testing.
+DEGRADED_KWARGS = {"surface": ""}
+
+
+@pytest.mark.parametrize("command_id", SEND_COMMAND_IDS)
+def test_a_send_command_on_a_degraded_server_is_refused_503_no_channel(launcher, command_id):
+    """Criterion: `503`, `{"ok": false, "error": "no_channel"}`, for both send commands."""
+    srv = launcher(**DEGRADED_KWARGS)
+
+    response = srv.command(command_id)
+
+    assert response.status == 503
+    assert response.json() == {"ok": False, "error": "no_channel"}
+
+
+@pytest.mark.parametrize("command_id", SEND_COMMAND_IDS)
+def test_the_refusal_audits_reason_no_channel(launcher, command_id):
+    srv = launcher(**DEGRADED_KWARGS)
+
+    srv.command(command_id)
+
+    line = srv.last_audit(command_id=command_id)
+    assert line["outcome"] == "refused"
+    assert line["status"] == "503"
+    assert line["reason"] == "no_channel"
+
+
+@pytest.mark.parametrize("command_id", SEND_COMMAND_IDS)
+def test_the_refusal_spawns_no_cmux_subprocess_at_all(launcher, command_id):
+    """The guard precedes **every** `cmux` invocation, proved by the fake's own invocation
+    log -- not by reading the code (§D3, second bullet)."""
+    srv = launcher(**DEGRADED_KWARGS)
+
+    srv.command(command_id)
+
+    assert srv.cmux_calls() == []
+
+
+def test_reanalyze_still_succeeds_on_a_degraded_server(launcher):
+    """`reanalyze` is local (`server.py:556`) and never reaches the guard at all."""
+    srv = launcher(**DEGRADED_KWARGS)
+
+    response = srv.command("reanalyze", timeout=120)
+
+    assert response.status == 200, "reanalyze precondition failed: %s\n%s" % (
+        response.body, srv.stderr)
+    assert response.json() == {"ok": True, "id": "reanalyze"}
+
+
+def test_an_unknown_command_id_is_still_403_before_the_channel_guard_runs(launcher):
+    """The allowlist check (`server.py:553`) runs before `_run_send`, so a degraded server
+    still answers an unknown id with the same `bad_token`/`unknown_id`/`host_mismatch`
+    collapse everyone else gets -- never a `503` that would tell an unauthenticated caller
+    the id was at least real (§D3's third property, read together with `_handle_command`'s
+    own docstring)."""
+    srv = launcher(**DEGRADED_KWARGS)
+
+    response = srv.command("not-a-real-command-id")
+
+    assert response.status == 403
+    assert response.json() == {"ok": False, "error": "forbidden"}
