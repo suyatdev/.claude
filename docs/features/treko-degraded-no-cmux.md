@@ -1382,7 +1382,7 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       condition's own token*. Checking `config["channel"]` alone leaves the `config` → meta hop
       untested, and asserting only "the value is one of the five legal tokens" would pass a
       swapped mapping that renders a wrong-but-plausible sentence for every failure.
-- [ ] 5. Wire `main()`'s narrow `except SurfaceUnavailable`, `build_config`'s `channel` key and
+- [x] 5. Wire `main()`'s narrow `except SurfaceUnavailable`, `build_config`'s `channel` key and
       the banner variant. Task 4 goes green. **Then** flip `test_autolaunch.py:355` and move
       `test_server_lifetime.py`'s three surface tests, updating that module's docstring
       inventory (`:14`) and section header (`:56-58`). Flip in a commit separate from the
