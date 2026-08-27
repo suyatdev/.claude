@@ -249,7 +249,12 @@ refuse() { # $1 arm, $2 repo-root, $3 path-or-command
     printf '%s\n' "$MSG_LOG_WARN" 1>&2
     exit 0
   fi
-  printf '%s\n\n%s\n' "$REFUSE_MSG$LIVENESS_NOTE" "$MSG_NOT_RECORDED" 1>&2
+  # $BAD_MODE_NOTE rides both refusal exits, not just the one above. This arm is where the
+  # log is unwritable, so the note is the ONLY surviving record of which value was mistyped —
+  # dropping it here loses the fix instruction at the exact moment nothing else is keeping it.
+  # It sits inside the first argument so "could not be recorded" stays its own trailing
+  # paragraph; the grouping matches :239 deliberately.
+  printf '%s\n\n%s\n' "$REFUSE_MSG$LIVENESS_NOTE$BAD_MODE_NOTE" "$MSG_NOT_RECORDED" 1>&2
   exit 2
 }
 

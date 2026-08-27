@@ -4114,6 +4114,48 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       message where it is not. Not attempted in this session because it is a design decision, not a
       wording fix, and expanding scope on my own initiative is what the user's gate exists to stop.
 
+      **Round 3 run 2026-08-27 at `6bf830c`** (pane, Opus 5 / xhigh): risk=medium, confidence=high,
+      no dimension `fail` — so the verdict did **not** block the PR. It re-derived all seven suite
+      counts exactly, probed the round-2 fix seven ways rather than reading the diff, and
+      established that G2a/G2b/G2c discriminate by running them against the unfixed hook and two
+      deliberately-sabotaged ones. **Four findings, all four re-confirmed here independently before
+      acting on any of them:**
+      1. 🔴 **The round-2 fix patched one of `refuse()`'s two exits.** `$BAD_MODE_NOTE` rides the
+         append-succeeded arm (`worktree-guard.sh:239`) and was absent from the append-failed arm
+         (`:252`) — so when the guard refuses *and* its log is unwritable, the refusal drops the one
+         thing naming the mistyped value, at the exact moment the log that would otherwise record it
+         is also gone. **The same failure shape as the defect round 2 repaired: patch one site, miss
+         its twin.** Enumerated all three refusal exits before fixing, rather than trusting the
+         finding's count: `hard_deny` (`:137`) is the third, and it fires in step 1/2 *before*
+         `BAD_MODE_NOTE` exists at `:323`, so it is structurally out of reach — it is the
+         already-OPEN item above, not a fourth site. Fixed at `:252`, one line.
+      2. **No test crossed a bad mode with a failed append.** G7 is a good `deny` with a broken log,
+         G2b is a bad value with a healthy log; the corner where both hold was unasserted, so 193
+         green tests were blind to finding 1 — the third time on this branch that a suite passing on
+         each axis separately said nothing about the cross. Closed by **G7a/G7b**, two cases rather
+         than one two-substring assertion because they fail for different reasons and a single case
+         reports only the first. Committed **red first** (`6ebc425`, `TEST_EXEMPT` — a red commit is
+         precisely what `test-marker-guard` exists to stop, so the bypass is the honest route): G7a
+         **passed** and G7b **failed**, which is what proves the pair discriminates rather than
+         failing as a block. Suite now **195/0/1**.
+      3. **Anchor drift caused by the round-2 commit itself.** Its own five-line insertion pushed
+         card `:1481` → `:1486` and `:1330` → `:1335`, and it then wrote the now-stale numbers into
+         further places. Confirmed: `:1481` currently points at an unrelated sentence about task 9.
+         **Deliberately not fixed here (user decision, 2026-08-27).** Five of the seven citing sites
+         sit in *this note* at `:4049`, `:4050`, `:4090`, `:4092` and record what the numbers were
+         when rounds 1 and 2 ran — rewriting those would corrupt the audit trail to fix a footnote,
+         which is the `feedback_a_blanket_rewrite_corrupts_historical_claims` shape. The durable fix
+         is to quote the text instead of the line, and that is its own task.
+      4. **A cited proof is not on disk.** `scratchpad/probe-badmode-exempt.sh`, cited by the round-2
+         commit message and by finding 1 above, is absent, untracked and not gitignored. The *claim*
+         it backs is true — reproduced independently in this session and again by round 3 — but the
+         receipt is missing, which is exactly `feedback_a_hash_without_its_recipe_is_not_a_receipt`.
+         **Deferred with 3, same user decision.**
+      ⚠️ Findings 1 and 2 are fixed, so **the round-3 verdict at `6bf830c` no longer matches HEAD**
+      and cannot gate the PR — `judge-guard.sh` compares `head_sha` exactly. **Round 4 is required
+      before `gh pr create`,** and rounds 1, 2 and 3 each found something real, so it is not a
+      formality either.
+
 ## Notes
 
 - Live demonstration of the blast radius, this session: writing to root-level `session-state.md`
