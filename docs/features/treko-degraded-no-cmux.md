@@ -668,8 +668,8 @@ from `#dc-root`'s mounted subtree. **No flex item is emitted when the gate is `f
 healthy-board header's geometry is unchanged** — stated this way, not as "byte-identical", because
 observability round 9 measured that every `data-dc-tpl` index after the insertion point shifts by
 2. **Round 14 correction: this document previously claimed "nothing reads those indices today" —
-false.** `support.js` reads `data-dc-tpl` at four sites (`:665`, `:701`, `:789`, `:1038`) and
-re-emits it onto every rendered node (`:729`, `:799`); it is the mechanism `__dcAnnotatedTemplate`
+false.** `support.js` reads `data-dc-tpl` at three sites (`:665`, `:701`, `:789`) and re-emits it
+onto every rendered node at three sites (`:729`, `:799`, `:1038`); it is the mechanism `__dcAnnotatedTemplate`
 (`:1887`) uses to map a rendered node back to its source template location for the host editor.
 That bridge maps by re-reading each render's own live attribute values, not against a stored
 baseline, so a shift in what number a given node carries is not itself a defect — but the earlier
@@ -1654,6 +1654,7 @@ treko/analyze.py            797     # unchanged
 treko/test_server.py        774     # unchanged
 treko/test_guards.py        540     # added round 9 -- criterion 14 requires it and 9a/9b edit it
 treko/Treko.dc.html         740     # was 639 at 984e7ac -- only 60 lines of headroom now, not 161
+treko/test_drawer.py        595     # added round 15 -- task 9c (relocated from 9b) will edit it
 treko/test_autolaunch.py    417     # unchanged
 treko/test_ui_commands.py   330     # unchanged
 treko/test_server_lifetime.py 270   # unchanged
@@ -1662,7 +1663,7 @@ treko/store_location.py     146     # unchanged
 skills/treko/SKILL.md       220     # was 194 at 984e7ac
 ```
 
-Only two of the ten moved. `server.py` at 799/800 is what D6's whole argument rests on, and it
+Only two of the eleven moved. `server.py` at 799/800 is what D6's whole argument rests on, and it
 holds exactly.
 
 ADR number, checked against the deciding ref rather than the local tree:
