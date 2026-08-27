@@ -105,7 +105,20 @@ corrected form was measured discriminating in **both** directions, primary and l
 is the failure mode this design keeps meeting.** Layer 2 arms via global `core.hooksPath`, not
 `settings.json`, so nothing in the tracked record proves it is live. `worktree-guard.sh` therefore
 resolves the effective repo's `core.hooksPath` and confirms an executable `reference-transaction`
-sits there, and says so when it does not. Three measured failure modes make this non-optional, all
+sits there, and says so when it does not.
+
+⚠️ **In the configuration being merged that sentence is inoperative, and this is the sharpest thing
+to know about the branch.** The liveness report rides on a refusal that is actually printed
+(`worktree-guard.sh:236`: `if [ "$decision" = deny ]; then check_liveness …`), and `log` mode never
+produces one — its decision is `would-deny` and it exits 0 silently. Layer 2 is also not yet armed
+(`core.hooksPath` unset). So as shipped, **the guard is behaviorally indistinguishable from not
+being installed**, and its only trace is a gitignored log. That is the exact failure mode this card
+names repeatedly, entered here deliberately rather than by accident: the log window is the whole
+point of `log` mode, and paying for a `git config` read on every allowed call is what the
+refusal-only design exists to avoid. It resolves itself the moment mode flips to `deny` (task 10) —
+but until then, nothing in the running system will tell you layer 2 is missing.
+
+Three measured failure modes make the check non-optional once armed, all
 silent, all rc=0 with HEAD moved: hook file missing, hook present but not executable, `hooksPath`
 directory missing. The sharper risk is reciprocal — `husky` and `lefthook` set `core.hooksPath`
 **locally**, and local beats global, so the first repo to run `husky install` silently removes the
@@ -128,7 +141,14 @@ holds both judges' `verdicts.jsonl`, so under the short list a judge with its cw
 checkout would be denied permission to write its own verdict — this feature's own gate would jam.
 
 **6. Arming is a separate decision from building.** The switch is `env.WORKTREE_GUARD_MODE` in
-`settings.json`, holding `log` or `deny`; absent means `log`, any other value means `deny`. It is
+`settings.json`, holding `log` or `deny`. **Absent** means `log`. **Any other value refuses every
+guarded call**, with a message naming the bad value (`worktree-guard.sh:314-316`) — it does *not*
+arm the guard in `deny` mode, and the difference matters: `WORKTREE_GUARD_MODE=DENY` in capitals
+blocks every guarded call in every repo on this machine until the value is fixed. That is boundary
+9 working as specified. A present-but-wrong value means someone tried to arm the guard and
+mistyped, and reading a failed configuration attempt as "off" is the silent disarm this design
+refuses everywhere else; absence and a typo are deliberately not the same case. `settings.json` is
+on the exemption list, so the guard never blocks the edit that fixes it. It is
 **not** at `hooks/state/worktree-guard.mode`, which cannot work: `.gitignore:17` ignores
 `/hooks/state/`, so arming a hard deny across every repo on this machine would have left no record
 in git at all. In `settings.json` it is a one-line reviewable diff sitting next to the registration
@@ -198,9 +218,11 @@ measured allow.
 the original Arm D allowed it as an accepted under-block. A real usability cost, accepted; the
 remedy is to bisect in a worktree, which is what this ADR asks for anyway.
 
-**Not a security boundary.** Four one-flag bypasses defeat layer 2 and `WORKTREE_EXEMPT` clears
-layer 1, all measured. Layering raises the floor on accidents. A session that wants to defeat this
-can.
+**Not a security boundary.** Four one-flag bypasses defeat layer 2, all measured. And
+`WORKTREE_EXEMPT` is **one escape hatch clearing both layers, not one per layer** — layer 2 honours
+it too (`reference-transaction:593-594`, allowing with a `bypass-worktree-exempt` record). Anyone
+reading the two arms as needing two different bypasses would overestimate what this stops.
+Layering raises the floor on accidents. A session that wants to defeat this can.
 
 ## Alternatives considered
 

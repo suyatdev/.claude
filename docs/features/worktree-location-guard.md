@@ -4020,6 +4020,35 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       Rather than substitute a new count that would go stale the same way, the denominator is
       dropped — it now reads "four hook scripts", which is the claim that was actually load-bearing.
 - [ ] 13. Observability judge, then PR.
+      **Round 1 run 2026-08-26 at `a46bf91`** (pane, Opus 5 / xhigh per model-switch checkpoint #3):
+      risk=medium, confidence=high. It re-derived the suite counts independently and reproduced
+      500/0/2, and confirmed every ADR line count and `file:line` citation still holds at `a46bf91`.
+      **Three findings, all confirmed against the code before acting on them, all in the two
+      documents written that session — the card itself was correct in every case:**
+      1. Both documents said "any other value means `deny`". False. `worktree-guard.sh:314-316`
+         `hard_deny`s *every guarded call* on an unrecognised value; it does not arm the guard.
+         `WORKTREE_GUARD_MODE=DENY` in capitals blocks everything machine-wide until fixed. The
+         card's boundary 9 (`:1330`) states this correctly and was **not** the source of the drift —
+         the ADR and the gate stub inherited the card's one-line shorthand at `:1481` and lost the
+         distinction. This was the finding worth the whole round: `rules/gates.md` loads into every
+         session, so a wrong sentence there travels further than one anywhere else on the branch.
+      2. **As shipped, the guard is behaviorally indistinguishable from not being installed** — the
+         exact failure this card names repeatedly. The liveness report rides on a refusal that is
+         actually printed (`worktree-guard.sh:236`, `if [ "$decision" = deny ]`), and `log` mode
+         never prints one; layer 2 is also unarmed (`core.hooksPath` unset). ADR clause 3's "says so
+         when it does not" was therefore inoperative in the config being merged. Not a code defect —
+         it follows from the refusal-only design and resolves itself at task 10's flip — but it was
+         being claimed as working, so both documents now state it as a ⚠️ rather than implying the
+         check is live.
+      3. `WORKTREE_EXEMPT` clears **layer 2 as well** (`reference-transaction:593-594`, allowing
+         with a `bypass-worktree-exempt` record). Both documents attributed it to layer 1 only,
+         which implies two hatches where there is one — an overestimate of what the feature stops.
+      All three fixed in `docs/decisions/0038-…md` and `rules/gates.md`; no spec edit was needed, so
+      no `GATE: Spec change needed`. Finding 3's wording had drifted into **two** places in
+      `rules/gates.md`; the second copy was caught by grepping for the stale phrasing after the
+      first fix, and the limits paragraph now points at the single statement instead of restating it.
+      Round 2 must re-run at the new HEAD — `judge-guard.sh` matches `head_sha` exactly, so the
+      `a46bf91` verdict cannot gate a PR built on top of these fixes.
 
 ## Notes
 
