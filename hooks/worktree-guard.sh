@@ -236,7 +236,7 @@ refuse() { # $1 arm, $2 repo-root, $3 path-or-command
   if [ "$decision" = deny ]; then check_liveness "$2"; fi
   if append_log "$1" "$decision" "$2" "$3"; then
     [ "$MODE" = log ] && exit 0
-    printf '%s\n' "$REFUSE_MSG$LIVENESS_NOTE" 1>&2
+    printf '%s\n' "$REFUSE_MSG$LIVENESS_NOTE$BAD_MODE_NOTE" 1>&2
     exit 2
   fi
   # Boundary 10, rules 1 and 2. Rule 1: log mode enforces nothing, and a guard that is not
@@ -308,12 +308,32 @@ operand=${rest%"$LF"}
 # and means `log`; a present-but-wrong value means someone tried to arm the guard and
 # mistyped, and reading a failed configuration attempt as "off" is the silent disarm the
 # version floor argues against.
+#
+# A bad value selects `deny` MODE and records why; it does NOT refuse here. That
+# distinction is the whole of boundary 9 ("**deny**, and the message names the bad
+# value") and of the card at :1481, and refusing here instead was a third, stricter
+# reading no line of the card asks for. Measured 2026-08-27: refusing here blocked a
+# Write to settings.json — the file whose exemption exists so "the hook registration
+# and its WORKTREE_GUARD_MODE switch stay editable" — while the refusal's own text
+# claimed this guard never blocks it. That is the footgun phase-guard.sh:280-283 names,
+# recreated in the one state where you most need the switch. An exempt path, and a write
+# already inside a worktree, are never guarded, so refusing them protects nothing and
+# only removes the way out. Everything the guard WOULD have judged is still refused,
+# under the strictest real mode, with the bad value named — see BAD_MODE_NOTE in refuse().
+BAD_MODE_NOTE=''
 if [ -z "${WORKTREE_GUARD_MODE+set}" ]; then
   MODE=log
 else
   case "$WORKTREE_GUARD_MODE" in
     log|deny) MODE=$WORKTREE_GUARD_MODE ;;
-    *) hard_deny "worktree-guard: blocked — WORKTREE_GUARD_MODE is set to '$WORKTREE_GUARD_MODE', which is neither 'log' nor 'deny'. A mistyped switch is a failed attempt to arm the guard, not permission to run unguarded; fix the value in settings.json (which this guard never blocks)." ;;
+    *) MODE=deny
+       BAD_MODE_NOTE="
+
+worktree-guard: also — WORKTREE_GUARD_MODE is set to '$WORKTREE_GUARD_MODE', which is
+neither 'log' nor 'deny', so the guard is running in 'deny'. A mistyped switch is a failed
+attempt to arm the guard, not permission to run unguarded; absence and a typo are
+deliberately not the same case. Fix the value in settings.json, which is exempt from this
+guard and therefore still editable — as is any path already inside a worktree." ;;
   esac
 fi
 

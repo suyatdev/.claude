@@ -570,7 +570,12 @@ undiminished. Any statement that "the pivot fixed the fail-open" is false as a g
 must not be written anywhere in this card.
 
 **What it does not buy.** It is not defence in depth against an adversary. Four one-flag bypasses
-defeat layer 2 and `WORKTREE_EXEMPT` clears layer 1, all measured. Layering raises the floor on
+defeat layer 2, all measured — and `WORKTREE_EXEMPT` is **one hatch clearing both layers, not one
+per layer**: layer 2 honours it too, at `reference-transaction:593-594`, allowing with a
+`bypass-worktree-exempt` record. (Corrected 2026-08-27, user-approved spec fix. This line previously
+read "clears layer 1", which implied two hatches where there is one and so overstated what the
+feature stops. It was the third copy of that error; the other two were in ADR 0038 and
+`rules/gates.md`.) Layering raises the floor on
 *accidents*, which is the entire threat model here — the logged incident was a stray
 `git merge --ff-only`, not an attack.
 
@@ -1478,7 +1483,20 @@ one hook entry — see task 8's line); the `hooks` array entry that would actual
 **Measured, task 8:** Claude Code does export `settings.json` `env` entries into a `PreToolUse`
 hook's Bash subprocess. See task 8's line for the probe and its two runs.
 
-Absent → `log`. Any other value → `deny` (boundary 9).
+Absent → `log`. Any other value → the guard runs in **`deny` mode**, and every refusal it issues
+names the bad value (boundary 9). It does **not** refuse unconditionally: an exempt path, and a
+write already inside a worktree, are allowed exactly as they would be under a correctly-typed
+`deny`, because neither is guarded and refusing them protects nothing while removing the way out.
+
+(Sharpened 2026-08-27, user-approved spec fix. The bare shorthand "Any other value → `deny`" was
+read by two downstream documents as "arms in `deny` mode" and by the implementation as "refuse every
+call", and those are three different behaviours. The implementation took the third: measured, a
+mistyped `WORKTREE_GUARD_MODE=DENY` refused a `Write` to `settings.json` — the file whose exemption
+exists so the switch stays editable — while the refusal's own text said this guard never blocks it.
+That is the footgun `phase-guard.sh:280-283` names, recreated in the one state where the switch most
+needs editing. Boundary 9's table at `:1330` already said "**`deny`**, and the message names the bad
+value", so the code was the thing out of line with the card, not the reverse. Fixed at
+`worktree-guard.sh:311-333` with `BAD_MODE_NOTE`; pinned by G2a/G2b/G2c.)
 
 ### The log records refusals, never allows
 
@@ -4049,6 +4067,52 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       first fix, and the limits paragraph now points at the single statement instead of restating it.
       Round 2 must re-run at the new HEAD — `judge-guard.sh` matches `head_sha` exactly, so the
       `a46bf91` verdict cannot gate a PR built on top of these fixes.
+      ⚠️ **The sentence above claiming "the card itself was correct in every case" was wrong, and
+      round 2 caught it** — see below. It is left standing rather than rewritten, because a wrong
+      claim inside an audit trail should be visibly corrected, not made to have never happened.
+
+      **Round 2 run 2026-08-27 at `f2b45a5`** (pane, Opus 5 / xhigh): risk=medium, confidence=high.
+      It re-derived 500/0/2 on the four new suites plus 203/37/26 green on the modified ones, and
+      confirmed every new `file:line` citation resolves. **Three findings, and the first is a code
+      defect, not a documentation one:**
+      1. 🔴 **`worktree-guard.sh` blocked the edit that fixes its own switch.** The round-1 fix
+         introduced the sentence "settings.json is exempt, so the guard never blocks the edit that
+         fixes it" into ADR 0038, `rules/gates.md`, *and* the hook's own deny message — and the
+         judge measured it false. Reproduced independently here with controls firing both ways
+         (`scratchpad/probe-badmode-exempt.sh`): mode absent → `settings.json` rc=0 and a non-exempt
+         path rc=0; a correctly-typed `deny` → `settings.json` rc=0, so the exemption *does* work
+         when the mode parses; mistyped `DENY` → **every** call rc=2, `settings.json` and
+         `git status` included. Cause: the mode check ran at step 2, before the exemption list at
+         `:578`. **User-approved fix (2026-08-27):** a bad value now selects `deny` MODE and defers
+         its message to `refuse()` via `BAD_MODE_NOTE`, so everything the guard would have judged is
+         still refused under the strictest real mode with the bad value named, while an exempt path
+         and a write already inside a worktree pass. This also makes the code agree with boundary 9
+         and `:1481` for the first time. Re-probed after the fix: `DENY` + `settings.json` rc=0,
+         `DENY` + `panes/run-pane-agent.sh` rc=2, `DENY` + `git status` rc=0.
+      2. The card's own `:573` and `:1481` still carried the two sentences round 1 had corrected
+         downstream — the third copy of finding 3 and the source of finding 1. Both fixed above
+         under an explicit user gate decision, since `phase: implementation` forbids spec edits.
+      3. **No test crossed a bad mode with an exempt path** — G2 was bad-mode + non-exempt, G3 was
+         exempt + good mode — so 189 green tests were blind to exactly the defect in 1. This is the
+         `feedback_fixture_must_not_pre_create_state` failure shape again: a suite that passes on
+         each axis separately says nothing about the corner. Closed by G2a/G2b/G2c, committed **red
+         first** (`ce318b7`: G2a and G2c failing, G2b passing, which is what proved the three cases
+         discriminate rather than failing as a block), fix in the following commit. Suite now
+         193/0/1.
+
+      ⚠️ **OPEN, found by the same probe and deliberately not fixed here — three sibling messages
+      make the same false recoverability claim.** `require_home()` (`:363-364`), `deny_version()`
+      (`:378-379`) and the missing-lib-dir refusal (`:415-416`) all `refuse()` from an arm's entry
+      point, *before* the exemption list is consulted, while their text says "settings.json is
+      exempt from this guard, so the hook registration and its `WORKTREE_GUARD_MODE` switch stay
+      editable." Measured 2026-08-27: with `python3`/`python` shadowed, a `Write` to
+      `settings.json` is refused rc=2. This is **not** the same case as finding 1 and must not be
+      fixed by copying its answer: there the guard could have known the path was exempt and chose
+      not to look, whereas with no `$HOME`, no usable git, or no lib dir it may be genuinely unable
+      to resolve the repo root the exemption list is relative to. Each of the three needs deciding
+      separately — consult the exemption first where it is reachable, or tell the truth in the
+      message where it is not. Not attempted in this session because it is a design decision, not a
+      wording fix, and expanding scope on my own initiative is what the user's gate exists to stop.
 
 ## Notes
 

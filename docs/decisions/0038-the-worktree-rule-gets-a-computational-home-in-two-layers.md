@@ -141,14 +141,32 @@ holds both judges' `verdicts.jsonl`, so under the short list a judge with its cw
 checkout would be denied permission to write its own verdict — this feature's own gate would jam.
 
 **6. Arming is a separate decision from building.** The switch is `env.WORKTREE_GUARD_MODE` in
-`settings.json`, holding `log` or `deny`. **Absent** means `log`. **Any other value refuses every
-guarded call**, with a message naming the bad value (`worktree-guard.sh:314-316`) — it does *not*
-arm the guard in `deny` mode, and the difference matters: `WORKTREE_GUARD_MODE=DENY` in capitals
-blocks every guarded call in every repo on this machine until the value is fixed. That is boundary
-9 working as specified. A present-but-wrong value means someone tried to arm the guard and
+`settings.json`, holding `log` or `deny`. **Absent** means `log`. **Any other value runs the guard
+in `deny` mode**, and every refusal it issues then names the bad value
+(`worktree-guard.sh:311-333`). A present-but-wrong value means someone tried to arm the guard and
 mistyped, and reading a failed configuration attempt as "off" is the silent disarm this design
-refuses everywhere else; absence and a typo are deliberately not the same case. `settings.json` is
-on the exemption list, so the guard never blocks the edit that fixes it. It is
+refuses everywhere else; absence and a typo are deliberately not the same case.
+
+⚠️ **This is the one place the implementation was wrong, and the correction is worth recording
+rather than smoothing over.** The first version refused *every* guarded call on a bad value — a
+third reading distinct from both "arms in `deny`" and "treats as `log`". Measured: a mistyped
+`WORKTREE_GUARD_MODE=DENY` refused a `Write` to `settings.json`, the file whose exemption exists so
+that "the hook registration and its `WORKTREE_GUARD_MODE` switch stay editable", while the refusal's
+own text claimed this guard never blocks it. `git status` was refused too, so there was no route
+back through `Bash` either. That recreated the footgun `phase-guard.sh:280-283` names, in the one
+state where the switch most needs editing. Boundary 9 had always read "**`deny`**, and the message
+names the bad value", so the code — not the spec — was the thing out of line. Fixed by selecting
+`deny` and deferring the message to the refusal path: everything the guard would have judged is
+still refused under the strictest real mode, while an exempt path and a write already inside a
+worktree pass. Pinned by tests G2a/G2b/G2c, which were committed red first.
+
+**The recoverability claim is scoped to that case and no further.** Three sibling refusals —
+`$HOME` unset, git below the version floor, the lib dir missing — still `refuse()` from an arm's
+entry point *before* the exemption list is consulted, while their text makes the same "settings.json
+stays editable" claim. Measured false, and left open deliberately: unlike the mode typo, those are
+states where the guard may be genuinely unable to resolve the repo root the exemption list is
+relative to, so each needs its own decision rather than a copied answer. Tracked in the card's
+task-13 note. It is
 **not** at `hooks/state/worktree-guard.mode`, which cannot work: `.gitignore:17` ignores
 `/hooks/state/`, so arming a hard deny across every repo on this machine would have left no record
 in git at all. In `settings.json` it is a one-line reviewable diff sitting next to the registration
