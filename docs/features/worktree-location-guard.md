@@ -2491,12 +2491,13 @@ Feature: Arm D layer 2 — the liveness check (layer 1 checks layer 2)
     # The falsifier is a check that tests presence only: "present but not
     # executable" is the mode that reads most like a working install, and it is the
     # one a file-existence test passes.
-    # ⚠️ OPEN — this scenario asserts a REPORT, not a verdict. The design says
-    # "say so"; it does not say whether layer 1 denies the command, allows it with
-    # a warning, or only logs. Task 6b must decide before this scenario can assert
-    # an outcome, and the decision is not obvious: denying every Bash git command
-    # because a hook file is missing is a large blast radius, while warning on
-    # stderr inherits git-guard.sh:409's unverified reachability.
+    # ✅ CLOSED by task 6b, user-endorsed 2026-08-26. This scenario asserts a
+    # REPORT and that is now deliberate, not a gap: the channel chosen is a
+    # paragraph appended to a refusal layer 1 was already printing — no deny of
+    # its own, no warning on an allow. The decision, the two rejected candidates
+    # and the cost it accepts are recorded ONCE, in task 6b; do not restate them
+    # here. The three Examples rows are pinned as L1..L3, and the armed control
+    # that keeps them honest is L4.
 
   Scenario: A repo-local core.hooksPath silently removes layer 2
     Given the global core.hooksPath names the guard's directory
@@ -3484,11 +3485,40 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       1's — layer 1's line format requires a `session_id` that a hook running as a child of `git`
       does not have. It is read through the same `WORKTREE_GUARD_STATE_DIR` knob, which task 6c
       measured survives the `git → hook` hop.
-- [ ] 6b. Implement the **liveness check** in `worktree-guard.sh` — resolve the effective repo's
+- [x] 6b. Implement the **liveness check** in `worktree-guard.sh` — resolve the effective repo's
       `core.hooksPath`, assert a `reference-transaction` file is present *and executable*, and
       report when it is not. All three absence modes were measured to fail open **silently**
       (rc=0, HEAD moved), so an unreported absence is indistinguishable from a working guard. Pin a
       test per mode: missing file, missing directory, present-but-not-executable.
+      **DONE 2026-08-26.** The verdict lives in `hooks/lib/worktree_guard_liveness.sh` (80 lines,
+      sourced never executed) and is called from `worktree-guard.sh:190` `check_liveness()`, which
+      `refuse()` reaches from every arm. Shared with task 6e's installer on purpose — two copies of
+      "is layer 2 armed" would drift invisibly, the same argument round 4 made about
+      `resolve_effective_repo()`. Resolution is `git -C <repo> rev-parse --path-format=absolute
+      --git-path hooks`, which honours the whole config precedence, so a repo-**local**
+      `core.hooksPath` (how husky and lefthook install) is what gets read.
+      **The ⚠️ OPEN channel question at :2494 is now CLOSED — user-endorsed 2026-08-26.** Of the
+      three candidates the card named, what ships is *append a paragraph to a refusal layer 1 was
+      already printing*: it does **not** deny on its own, and it does **not** warn on an allow. The
+      reasoning and its cost are at `worktree-guard.sh:174-181` — denying every git command because
+      one repo lacks a hook file is too large a blast radius, and warning on every allow puts a
+      paragraph on stderr often enough to teach sessions to skip the stream real refusals arrive
+      on. **The cost is real and is not hidden:** while layer 1 is quiet, and in `log` mode where it
+      prints nothing at all, layer 2's absence goes unreported. Task 10's flip to `deny` is what
+      closes that half.
+      **Measured, not reasoned** — `bash hooks/worktree-guard.test.sh`, run 2026-08-26 against
+      `worktree-guard.sh` at 644 lines: **189 passed, 0 failed, 1 skipped** overall. Group L is 10
+      `ok` and the 1 skip: L1 missing file, L2 present-but-not-executable, L3 missing directory
+      (the three Examples rows); L4 the armed control **plus its lacks-assertion** — an armed
+      layer 2 must produce no report, which is what tells a real check apart from one that reports
+      unconditionally; L5 the repo-local `.husky` case, whose falsifier is any check reading
+      `git config --global`; L9 an **Arm A write** refusal carrying the same report, which is the
+      only case proving the report is not wired into Arm D alone; L10 a missing lib still refusing
+      and saying the check could not *run* rather than saying nothing. L6 is the counted skip and
+      stays one: its Given is "settings.json does not register worktree-guard.sh", and this suite
+      reaches the guard by invoking it directly, so no payload can construct that world — a case
+      there would pass without evaluating anything. **Not asserted here:** whether the report's
+      wording is read or acted on by a session, which no unit test can reach.
 - [x] 6c. **Measure whether `settings.json` `env` reaches layer 2**, which is a *different process*
       from the one task 8 measures — layer 2 is a child of `git`, not of the hook. Assignment
       prefixes on the git command line were measured to reach it; inherited environment was not.
