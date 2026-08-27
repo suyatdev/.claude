@@ -1494,9 +1494,10 @@ call", and those are three different behaviours. The implementation took the thi
 mistyped `WORKTREE_GUARD_MODE=DENY` refused a `Write` to `settings.json` — the file whose exemption
 exists so the switch stays editable — while the refusal's own text said this guard never blocks it.
 That is the footgun `phase-guard.sh:280-283` names, recreated in the one state where the switch most
-needs editing. Boundary 9's table at `:1330` already said "**`deny`**, and the message names the bad
-value", so the code was the thing out of line with the card, not the reverse. Fixed at
-`worktree-guard.sh:311-333` with `BAD_MODE_NOTE`; pinned by G2a/G2b/G2c.)
+needs editing. Boundary 9's table already said "**`deny`**, and the message names the bad
+value", so the code was the thing out of line with the card, not the reverse. Fixed in
+`worktree-guard.sh`'s `case "$WORKTREE_GUARD_MODE" in` block with `BAD_MODE_NOTE`; pinned by
+G2a/G2b/G2c, and by G7a/G7b for the failed-append arm.)
 
 ### The log records refusals, never allows
 
@@ -4126,9 +4127,20 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
          thing naming the mistyped value, at the exact moment the log that would otherwise record it
          is also gone. **The same failure shape as the defect round 2 repaired: patch one site, miss
          its twin.** Enumerated all three refusal exits before fixing, rather than trusting the
-         finding's count: `hard_deny` (`:137`) is the third, and it fires in step 1/2 *before*
-         `BAD_MODE_NOTE` exists at `:323`, so it is structurally out of reach — it is the
-         already-OPEN item above, not a fourth site. Fixed at `:252`, one line.
+         finding's count: `hard_deny()` is the third, and it is structurally out of reach, because
+         its only callers (`MSG_NO_PAYLOAD`, `MSG_NO_PYTHON`) run in steps 1–2, *before* the `case
+         "$WORKTREE_GUARD_MODE" in` block sets `BAD_MODE_NOTE`. Fixed at the append-failed arm of
+         `refuse()`, one line.
+         ⚠️ **The sentence that stood here called `hard_deny()` "the already-OPEN item above". That
+         was false, and observability-judge round 4 caught it** — measured: `require_home()`,
+         `deny_version()` and the missing-lib-dir refusal all call `refuse()`, not `hard_deny()`,
+         and all three sit *after* `BAD_MODE_NOTE` is set, so they do now name the bad value
+         (`HOME` unset + a mistyped mode names the value). Their open defect is the different one
+         stated above — they refuse *before the exemption list is consulted*. `hard_deny()`'s own
+         inability to name a bad value is a **fourth, separate and previously untracked** gap,
+         which the wrong label hid by making it look already-tracked. It is small (the two cases
+         are a missing payload and no `python3`, neither of which the mode can affect) but it is
+         now named rather than mislabelled. Corrected rather than rewritten, per this note's rule.
       2. **No test crossed a bad mode with a failed append.** G7 is a good `deny` with a broken log,
          G2b is a bad value with a healthy log; the corner where both hold was unasserted, so 193
          green tests were blind to finding 1 — the third time on this branch that a suite passing on

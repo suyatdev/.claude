@@ -74,7 +74,7 @@ py=$(command -v python3 || command -v python) || py=""
 
 # Emitted as `<event>\n<cwd>\n<name>\n<worktree_path>\nEND`. The END sentinel keeps a value
 # whose last character is itself a newline from being eaten by command substitution's
-# trailing-newline strip (same idiom as worktree-guard.sh:266-293).
+# trailing-newline strip (same idiom as the `parsed=$(...)` payload read in worktree-guard.sh).
 parsed=$(printf '%s' "$payload" | "$py" -c '
 import json, sys
 try:

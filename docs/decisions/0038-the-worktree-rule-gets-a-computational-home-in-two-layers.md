@@ -142,8 +142,10 @@ checkout would be denied permission to write its own verdict — this feature's 
 
 **6. Arming is a separate decision from building.** The switch is `env.WORKTREE_GUARD_MODE` in
 `settings.json`, holding `log` or `deny`. **Absent** means `log`. **Any other value runs the guard
-in `deny` mode**, and every refusal it issues then names the bad value
-(`worktree-guard.sh:311-333`). A present-but-wrong value means someone tried to arm the guard and
+in `deny` mode**, and every refusal the mode governs then names the bad value
+(`worktree-guard.sh`, the `case "$WORKTREE_GUARD_MODE" in` block and both exits of `refuse()`; the
+two `hard_deny()` calls that fire before the mode is read cannot name it). A present-but-wrong
+value means someone tried to arm the guard and
 mistyped, and reading a failed configuration attempt as "off" is the silent disarm this design
 refuses everywhere else; absence and a typo are deliberately not the same case.
 
