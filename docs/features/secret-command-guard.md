@@ -115,9 +115,9 @@ security boundary**. `SECRET_EXEMPT` clears it in one flag.
 - [x] 5. Correct the "Dormant hooks" bullet and add the new gate bullet in `rules/gates.md`.
 - [x] 6. Observability judge round 1 — `risk=medium`, `success_masking=fail`; findings reproduced by the main agent.
 - [x] 7. Amend the spec: drop the carve-out, add the `.env` exemptions, add `SECRET_EXEMPT`, record the known gaps (this commit).
-- [ ] 8. Red tests for the amended contract, including the ALLOW-pinning gap tests.
-- [ ] 9. Implement the amendment in the classifier and the hook wrapper; fix the deny message, which currently recommends the leaking `grep -o` shape.
-- [ ] 10. ADR 0039 for the carve-out removal and the fail-open inversion.
-- [ ] 11. Update `rules/gates.md` and the README Roadmap for the amended behaviour.
+- [x] 8. Red tests for the amended contract, including the ALLOW-pinning gap tests — `c6842c4`, 34 passed / 14 failed.
+- [x] 9. Implement the amendment in the classifier and the hook wrapper; fix the deny message, which recommended the leaking `grep -o` shape — `f1b12e0`, 48 passed / 0 failed.
+- [x] 10. ADR 0039 for the carve-out removal and the fail-open inversion — number confirmed free across all 34 local and remote refs, with a control proving the check finds 0038.
+- [x] 11. Update `rules/gates.md` and the README Roadmap for the amended behaviour.
 - [ ] 12. Re-run both suites; observability judge round 2 against final HEAD.
 - [ ] 13. Open the PR as a draft, push the audit trail, mark ready.
