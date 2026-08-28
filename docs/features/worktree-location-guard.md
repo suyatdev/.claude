@@ -4410,8 +4410,11 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             `blocking_option is not None` finds the `SCOPE_UNKNOWN` gate and misleads. The design
             section's `SEG_SCOPE_OPT` bullet needs no further change: it already names
             `residual_option`. **Dead reference:** commit `e304436`'s own message and this bullet's
-            first version both stated the wrong surviving site; that commit is merged and cannot be
-            edited, so it stands as a dead reference and this corrected bullet is the redirect — the
+            first version both stated the wrong surviving site. `e304436` is **not** merged — it is
+            unpushed on this branch and could be amended — but rewriting a commit message to erase a
+            wrong claim would delete the record that the claim was made and caught, which is the one
+            thing this card exists to preserve. It therefore stands as a dead reference by choice,
+            not by necessity, and this corrected bullet is the redirect — the
             same pattern task 14 used for `6bf830c`'s dead `scratchpad/probe-badmode-exempt.sh`
             citation.
       - 🔴 **The second citation in the `_assigns` discard paragraph (design section) describes a
