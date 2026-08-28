@@ -52,18 +52,23 @@ script file, a secrets file not named .env (`config/prod.env`), and the
 full-environment dumps that are not bare env/printenv (`export -p`,
 `declare -p`, `set`, `env -0`, `ps eww`).
 
-One boundary matters when reading "a token in any segment matches" above. The
-patterns are anchored at BOTH ends -- `(^|/)` before the name and `$` after --
-so the rule is "the path is a WHOLE TRAILING COMPONENT of a lexed token", which
-is narrower than "a suffix" in one direction and than "any mention" in the
-other. Both of these allow, measured:
+One boundary matters when reading "a token in any segment matches" above.
+SEVEN of the eight patterns are anchored at BOTH ends -- `(^|/)` before the
+name and `$` after -- so for those the rule is "the path is a WHOLE TRAILING
+COMPONENT of a lexed token", which is narrower than "a suffix" in one direction
+and than "any mention" in the other. Both of these allow, measured:
 
     cat foo.zshrc                      no `/` before the name -> not a component
     bash -c "cat ~/.zshrc | head -5"   token does not END at the name
 
-while `cat ./foo/.zshrc` and `bash -c "cat ~/.zshrc"` both block. Pre-existing and deliberate -- widening it would mean matching paths
-inside arbitrary quoted program text, which is a different and much noisier
-problem. This is a momentum guardrail, not a security boundary.
+while `cat ./foo/.zshrc` and `bash -c "cat ~/.zshrc"` both block. Pre-existing
+and deliberate -- widening it would mean matching paths inside arbitrary quoted
+program text, which is a different and much noisier problem.
+
+The EIGHTH -- `Application Support/[^/]*/credentials` -- is deliberately an
+unanchored substring match, so it is WIDER: it blocks a `.bak` suffix and a
+mid-string mention, both of which the anchored seven allow. Measured, and
+pinned by assertions. This is a momentum guardrail, not a security boundary.
 
 Segments come from shell_segments.segments(), the same lexer git-guard and
 doc-guard use, so a chained or piped command is judged per segment rather

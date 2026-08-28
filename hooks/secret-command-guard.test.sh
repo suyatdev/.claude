@@ -170,19 +170,35 @@ run_case "GAP: ps eww shows another process's environment"             0 'ps eww
 run_case "GAP: a secret read inside a script file is invisible"         0 'bash diagnose.sh'
 
 # ---------------------------------------------------------------------------
-# GAP: the real rule is "the path is the SUFFIX of a lexed token", not "any
-# mention". A path inside an interpreter/remote string is one token WITH the
-# path at its end, so it blocks -- add anything after it and the token no
-# longer ends there, so it allows. Found by the observability judge (round 2)
-# and reproduced; pre-existing, not introduced by the carve-out removal.
-# These pin the boundary so the strong wording elsewhere cannot drift away
-# from it silently.
+# GAP: the real rule is "the path is a WHOLE TRAILING COMPONENT of a lexed
+# token", not "any mention" -- the seven dotfile patterns anchor at both ends,
+# `(^|/)` before the name and `$` after. A path inside an interpreter/remote
+# string is one token WITH the path at its end, so it blocks; add anything
+# after it and the token no longer ends there, so it allows. Found by the
+# observability judge (round 2) and reproduced; pre-existing, not introduced by
+# the carve-out removal.
+#
+# This comment is the anchor the six prose surfaces are supposed to agree with,
+# so it is the one that must not go stale. It said "SUFFIX" for two commits
+# after that word was corrected everywhere else -- caught in round 4.
+#
+# The EIGHTH pattern is deliberately different: `Application Support/[^/]*/
+# credentials` is an unanchored substring match, so it is WIDER than this
+# paragraph describes and blocks shapes the others allow. Pinned below.
 # ---------------------------------------------------------------------------
 run_case_msg "control: path at the END of a -c string -> blocks"        2 '.zshrc' 'bash -c "cat ~/.zshrc"'
 run_case "GAP: anything after the path in a -c string -> allows"        0 'bash -c "cat ~/.zshrc | head -5"'
 run_case "GAP: a path mid-string in a remote command -> allows"         0 'ssh host "cat ~/.zshrc; true"'
 run_case "GAP: a path inside a python -c open() call -> allows"         0 "python3 -c \"print(open('/Users/m/.zshrc').read())\""
 run_case "GAP: a non-dotfile secrets file (prod.env) is out of scope"   0 'cat config/prod.env'
+
+# The 8th pattern is an unanchored substring match, so it is WIDER than the
+# seven: both of these are shapes the anchored patterns let through.
+run_case_msg "the Application Support pattern blocks a .bak suffix"     2 'credentials' \
+  'cat "/x/Application Support/gh/credentials.json.bak"'
+run_case_msg "...and blocks mid-string, unlike the anchored seven"      2 'credentials' \
+  'bash -c "cat /x/Application Support/gh/credentials | head -5"'
+run_case "control: an anchored pattern does NOT block a .bak suffix"    0 'cat ~/.zshrc.bak'
 
 # =============================================================================
 # Trigger scoping

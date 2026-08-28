@@ -115,8 +115,8 @@ the environment-dump check was offered and declined (user, 2026-08-28): bare `se
 that blocking it was judged worse than the residual risk.
 
 One boundary deserves naming in full, because this ADR's own wording above ("every mention blocks",
-"no permitted read shape") is stronger than the mechanism. The patterns anchor at **both** ends —
-`(^|/)` before the name, `$` after — so the operative rule is **"the path is a whole *trailing
+"no permitted read shape") is stronger than the mechanism. **Seven of the eight** patterns anchor at **both** ends —
+`(^|/)` before the name, `$` after — so for those the operative rule is **"the path is a whole *trailing
 component* of a lexed token"**. An interpreter or remote string is one token, so `bash -c "cat
 ~/.zshrc"` blocks, and it fails in both directions:
 

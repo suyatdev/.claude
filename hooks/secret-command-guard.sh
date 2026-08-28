@@ -39,7 +39,9 @@
 # NOT a security boundary, and this file must not imply otherwise: the card's
 # Known-gaps table lists seven measured ALLOW shapes, incl. variable indirection
 # and any read performed inside a script file. Note especially that "any
-# mention" means "the path is a WHOLE TRAILING COMPONENT of a lexed token":
+# mention" means, for 7 of the 8 patterns, "the path is a WHOLE TRAILING
+# COMPONENT of a lexed token" (the Application Support pattern is an unanchored
+# substring match, and so is wider):
 # `bash -c "cat ~/.zshrc"` blocks but `bash -c "cat ~/.zshrc | head -5"` does
 # not (the token no longer ends there), and `cat foo.zshrc` does not either
 # (no `/` before the name).

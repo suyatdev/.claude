@@ -95,6 +95,12 @@ Nothing in the hook, `rules/gates.md`, or the deny message may claim otherwise.
 | `cat foo.zshrc`, `cat my.env` | the same rule in the other direction: the patterns require the start of the token or a `/` before the name, so a basename that merely *ends* in a listed one is out of scope. `cat ./foo/.zshrc` blocks. |
 | `cat config/prod.env` | the dotenv pattern is anchored on a `.env` *basename*, so a secrets file named `prod.env` is out of scope by construction. |
 
+**Seven of the eight patterns** behave as described above. The eighth,
+`Application Support/[^/]*/credentials`, is deliberately an unanchored substring
+match and is therefore **wider**: it blocks `credentials.json.bak` and a
+mid-string mention, both of which the anchored seven allow. Measured and pinned
+by assertions, so the asymmetry is visible rather than surprising.
+
 Where any document here says "any mention" blocks, read it against the three
 rows above: the guard sees the path as a whole path component ending a lexed
 argument. "Suffix" is the wrong word for it — that was an earlier revision's
@@ -129,7 +135,7 @@ security boundary**. `SECRET_EXEMPT` clears it in one flag.
 - [x] 10. ADR 0039 for the carve-out removal and the fail-open inversion — number confirmed free across all 34 local and remote refs, with a control proving the check finds 0038.
 - [x] 11. Update `rules/gates.md` and the README Roadmap for the amended behaviour.
 - [x] 12. Re-run both suites; observability judge rounds 2 and 3 against final HEAD — 62/0 and 17/0; round 3 `risk=low`, no dimension failed.
-- [ ] 13. Open the PR as a draft, push the audit trail, mark ready.
+- [x] 13. Open the PR as a draft (#85), push the audit trail, mark ready.
 
 ### Judge rounds
 
@@ -154,3 +160,10 @@ by sha256.
   nor the registration, so the registration self-test passing in this worktree
   proves nothing about the merged state. Confirm post-merge.
 - `printenv -0` behaviour is measured on this machine's BSD `printenv` only.
+- **The guard has never run outside its test suite.** Every measurement here
+  drives the classifier or the hook directly with a synthetic payload; none
+  observes Claude Code actually invoking it on a real tool call.
+- **"Logged" means one `printf` to stderr on an allow path.** There is no
+  durable sink for a `SECRET_EXEMPT` bypass — it appears in the session
+  transcript and nowhere else. That matches the house convention for the other
+  `*_EXEMPT` hatches; it is stated here so nobody reads "logged" as "audited".
