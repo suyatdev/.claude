@@ -7,6 +7,11 @@ branch: docs/worktree-guard-doc-cleanup
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
 
 > Closes the TODO recorded at `session-state.md:79-82`: the standing worktree rule (memory
+> ⚠️ **Anchor does not resolve, found during task 15's population sweep (2026-08-28).**
+> `session-state.md` was untracked from this repo before `64c21ae`'s citation sweep even ran, so
+> the line range cites a file no longer on disk. Neither the sweep nor task 15's own accounting
+> caught it — outside the scope of all three of task 15's named groups. Left in place as the
+> record of what motivated this card; not repointed, since there is nothing left to quote.
 > `feedback_always_work_in_a_worktree`, 2026-08-23) has lived only in memory and prose. Memory is
 > advisory and does not survive into every session's attention; this feature gives the rule a
 > computational home.
@@ -490,6 +495,7 @@ the shared working tree being overwritten wholesale.
   has not been taught. Recorded in Non-goals rather than left to be discovered.
 - **`git merge` matters specifically:** the incident logged at `session-state.md:85` was a stray
   `git merge --ff-only`, which the round-1 design and the first version of this arm both missed.
+  ⚠️ **Anchor does not resolve** — same `session-state.md` gap noted above; left in place.
 
 **Which repository Arm D judges.** Unlike Arm A — which resolves from the *write target* — Arm D
 has no target path, so for each `SEG_BRANCH_MOVE<tab><i><tab><subcommand>` it computes **the
@@ -765,12 +771,12 @@ one exposed a new successor defect: round 3 fixed `-C` for Arm B2; round 4 found
 reachable through `cd` for Arm B2, and through `-C` for Arm D. Four rounds of the same shape is a
 structural signal, so this section stops patching and states the cause.
 
-**`classify-git-command.py:37-41` says it outright: "The caller gets a flat SET with no segment
-identity."** Every workaround above it exists because of that one property — the granting/denying
+**`classify-git-command.py`, `The caller gets a flat SET with no segment identity` says it
+outright.** Every workaround above it exists because of that one property — the granting/denying
 rule, the `SCOPE_UNKNOWN` suppression, the round-3 paired token. The round-3 draft called inventing
 segment identity impossible ("the interface does not have it"). That was wrong: `segments()` already
 returns an **ordered list**, and `classify()` already iterates it left to right
-(`classify-git-command.py:224`). The index exists; it is simply discarded before the facts are
+(`classify-git-command.py`, `for index, (assigns, argv) in enumerate(segs):`). The index exists; it is simply discarded before the facts are
 emitted. **This design carries it through.**
 
 **Existing facts are not touched.** `COMMIT*`, `PUSH*`, and `SCOPE_UNKNOWN` keep their exact current
@@ -785,14 +791,15 @@ file's documented token style, tab-separated:
 - `SEG_CD<tab><i><tab><operand>` — segment `i` is a `cd`. `<operand>` is its literal operand, or the
   sentinel `UNRESOLVABLE` when it is a variable, a subshell, or absent.
 
-  **This requires the classifier to stop skipping non-git segments.** `classify-git-command.py:225`
-  (`if len(argv) < 2 or argv[0] != "git": continue`) means a `cd` segment is never seen today —
+  **This requires the classifier to stop skipping non-git segments.** `classify-git-command.py`,
+  `if len(argv) < 2 or argv[0] != "git":` means a `cd` segment is never seen today —
   measured: `cd /tmp/other && git worktree add /tmp/x` currently emits **nothing at all**. The
   indexed facts are collected for every segment; the existing `COMMIT*`/`PUSH*` logic stays behind
   its git-only guard, unchanged.
 - `SEG_GIT_C<tab><i><tab><operand>` — segment `i`'s git command carries `-C <operand>`.
 
-  **This must be collected before the `SCOPE_UNKNOWN` `continue`** at `classify-git-command.py:229-232`,
+  **This must be collected before the `SCOPE_UNKNOWN` `continue`** at `classify-git-command.py`,
+  `continue  # denying: no COMMIT*/PUSH* fact for THIS segment`,
   which today abandons a `-C` segment before it can emit anything. An indexed fact carries its own
   scope, so it does not need the suppression that unindexed facts do.
 - `SEG_WORKTREE_ADD<tab><i><tab><path-operand>` — segment `i` runs `git worktree add`.
@@ -804,6 +811,13 @@ file's documented token style, tab-separated:
   `resolve_subcommand` refused to walk past, **other than `-C`**. Emitted from the existing
   `blocking_option` return value (`classify-git-command.py:226-231`) by the two-clause test
   `blocking_option is not None and blocking_option != "-C"` — never from a list of option names.
+  ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test quoted
+  above no longer exists as one expression: `resolve_git_segment()` now filters `-C` out of
+  `blocking` internally (`if blocking != "-C":`) before `classify()` ever sees it, so `classify()`'s
+  own test is the single-clause `if residual_option is not None:`. The resulting fact emission is
+  believed unchanged — `SEG_SCOPE_OPT` still fires only for a genuine non-`-C` blocker — but that
+  was not re-derived here, and the quoted test is no longer real code. Left in place rather than
+  repointed; a citation to a location, not a mechanism, is owed here instead.
 - `SEG_ENV<tab><i><tab><name>` — one per entry in segment `i`'s `assignments` dict whose name begins
   `GIT_`. A **prefix** test over the namespace git owns, so a variable added upstream is covered the
   day it ships.
@@ -822,7 +836,7 @@ file's documented token style, tab-separated:
 
 **The granting/denying distinction does not apply to these seven.** That rule exists *because* a flat
 fact cannot say which segment it came from, so a permission granted by one segment could excuse
-another (`classify-git-command.py:37-45`). An indexed fact names its own segment, so each is judged
+another (`classify-git-command.py`, `THE GRANTING/DENYING DISTINCTION DOES NOT APPLY TO THE INDEXED FACTS`). An indexed fact names its own segment, so each is judged
 on its own and no fact can vouch for a segment it did not come from.
 
 #### The shared resolution rule — stated once, used by every arm
@@ -876,8 +890,8 @@ interpreter the hooks actually use; the round-6 additions in clause 3b were meas
 
 **1 — Global options: read `blocking_option`, not a list of names.**
 `resolve_subcommand` returns its third element non-`None` for *both* bucket 2 (`GLOBAL_REDIRECT`,
-`classify-git-command.py:145-149`, 11 members) and bucket 3 (any unrecognised option) —
-`classify-git-command.py:171-173` returns the identical shape for each. That asymmetry is the
+`classify-git-command.py`, `GLOBAL_REDIRECT = (`, 11 members) and bucket 3 (any unrecognised option) —
+`classify-git-command.py`, `# bucket 3: unrecognised -- cannot tell, so cannot allow`, returns the identical shape for each. That asymmetry is the
 existing design's own safeguard: an option git adds in future lands in "cannot tell", never in
 "allow". **So the guard tests the return value, not the tuple.** `-C` is the single member it
 resolves (via `SEG_GIT_C`); every other non-`None` `blocking_option` emits `SEG_SCOPE_OPT` and
@@ -891,8 +905,15 @@ class denies rather than joining the `cd`/`-C` resolution path.
 
 **2 — Environment prefixes: a prefix test over the `assignments` dict.**
 `segments()` already returns each segment's leading `VAR=value` prefixes, bound to the right
-segment (`shell_segments.py:150-153`). `classify-git-command.py:224` unpacks that dict as
-`_assigns` and discards it. Measured: `GIT_DIR=/tmp/o/.git git commit -m x` emits exactly
+segment (`shell_segments.py`, `` `assignments` maps the leading `VAR=value` prefixes of that segment to their values ``).
+⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** This sentence went on to say
+`classify-git-command.py:224` "unpacks that dict as `_assigns` and discards it" — describing the
+pre-task-5 state, same as the `SEG_CD` item above. But unlike that item, the literal discard is
+gone, not just moved: `classify()`'s loop now binds the tuple as `assigns` (not `_assigns`) and
+passes it straight to `segment_facts()`, which is exactly what this paragraph's own design goes on
+to require. No current line still discards it, so there is nothing left to quote as "the code this
+design must change" — the design's own outcome is what stands there now. Measured:
+`GIT_DIR=/tmp/o/.git git commit -m x` emits exactly
 `COMMIT` — **byte-identical to a purely local commit**, with the redirect nowhere in the output.
 The rule is a prefix test, not an enumeration: **any assignment on segment `i` whose name begins
 `GIT_` emits `SEG_ENV` and denies.** `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`,
@@ -904,9 +925,10 @@ values; they are named here as evidence the dict works, **not** as the set being
 this derivation must answer both. Verified line numbers 2026-08-25 — the round-6 verdict cites
 `:59-61` for the second sentence; the measured range is `:60-62`.
 
-- **`shell_segments.py:62-63`** — *"This is a denylist: `env`, `timeout` and loop keywords are not
+- **`shell_segments.py`, ``This is a denylist: `env`, `timeout` and loop keywords are not in``** —
+  *"This is a denylist: `env`, `timeout` and loop keywords are not
   in it, so those shapes stay open. Recorded in ADR 0012 as accepted, not fixed."* → **clause 3a.**
-- **`shell_segments.py:60-62`** — *"`eval` covers only the unquoted form — `eval "gh pr create"`
+- **`shell_segments.py`, `` `eval` covers only the unquoted form ``** — *"`eval` covers only the unquoted form — `eval "gh pr create"`
   keeps the whole command as one quoted token, which by design can never reach a command position.
   That limit is inherent to lexing, not an oversight."* → **clause 3b.**
 
@@ -1233,7 +1255,7 @@ Both were verified allowed on 2026-08-25. Widening to catch them means reading a
 parsing arbitrary languages, which is not lexing at all.
 
 **4 — Grouping: `segments()` is flat, so a grouped `cd` is unresolvable by construction.**
-`shell_segments.py:139-140` appends a fresh segment for every control operator and **throws the
+`shell_segments.py`, `segments() appends a fresh segment for every control operator and throws the operator` — it **throws the
 operator away**, so `(`, `)`, `{` and `}` are indistinguishable in the return value. The distinction
 is load-bearing and unrecoverable: bash discards a `cd` at `)` but keeps it past `}`. Measured,
 `( cd /tmp/other && git log ) && git switch main` lexes to indices 0..4, so an index-ordered rule
@@ -1289,11 +1311,12 @@ recognize:
   bash's default IFS, which includes the TAB that carries a path in `COMMIT_PATH<tab><path>` — so
   committing a file named PUSH_FORCE produced the token PUSH_FORCE and blocked the push in the very
   same command line." `git-guard` is therefore safe.
-- **`doc-guard.sh:133` still uses the unquoted `for f in $facts` form.** It is exposed to the same
-  defect today via the existing `COMMIT_PATH<tab><path>`, and every tab-bearing fact added here
-  widens that exposure. **Task 5 must port `git-guard`'s reader into `doc-guard` first**, before any
-  new fact is emitted. The regression test then asserts `doc-guard`'s **behavior** is unchanged —
-  asserting an unchanged *fact set* is impossible, since the whole point is to add facts.
+- **`doc-guard.sh` used the unquoted `for f in $facts` form.** It was exposed to the same
+  defect via the existing `COMMIT_PATH<tab><path>`, and every tab-bearing fact this design adds
+  would have widened that exposure. **Task 5 ported `git-guard`'s reader into `doc-guard` first**
+  — now `doc-guard.sh`'s `while IFS= read -r f` — before any new fact was emitted. The regression
+  test then asserted `doc-guard`'s **behavior** is unchanged — asserting an unchanged *fact set*
+  would have been impossible, since the whole point was to add facts.
 
 ### Failure boundaries — every external call, enumerated
 
@@ -3242,8 +3265,9 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         list them, so the five belongs to this card's Deny message contract (`:1438`). The
         comment was corrected to attribute each to its real source and to claim no mapping
         between them, since none is determinable from `phase-guard.sh`.
-- [x] 5. **First port `git-guard.sh`'s `has_fact() {` / `while IFS= read -r` reader into `doc-guard.sh:133`**,
-      which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
+- [x] 5. **First port `git-guard.sh`'s `has_fact() {` / `while IFS= read -r` reader into `doc-guard.sh`**,
+      which used the unquoted `for f in $facts` form and word-split on the tab until this task
+      ported the reader — now `doc-guard.sh`'s `while IFS= read -r f`. Do this
       before emitting any new tab-bearing fact. Then extend `classify-git-command.py` with
       the seven **segment-indexed** facts — `SEG_CD`, `SEG_GIT_C`, `SEG_WORKTREE_ADD`,
       `SEG_BRANCH_MOVE`, `SEG_SCOPE_OPT`, `SEG_ENV`, `SEG_OPAQUE` — plus the two line-scoped
@@ -3253,7 +3277,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       lexer, two views**, never a second parser. `segments()`'s own return value and every existing
       caller stay unchanged; assert that with the existing sibling suites before touching anything
       else, since `classify-pr-command.py` and `decide-commit-gate.py` both depend on it. This means the segment loop must
-      stop skipping non-git segments (`classify-git-command.py:225`) and must collect the indexed
+      stop skipping non-git segments (`classify-git-command.py`, `if len(argv) < 2 or argv[0] != "git":`) and must collect the indexed
       facts *before* the `SCOPE_UNKNOWN` `continue` (`:229-232`). Must include the discriminating
       `-C` case, the matching `cd` case, the `-C`-does-not-carry-forward case, and the
       two-adds-one-line case. The regression test asserts `doc-guard`'s **behavior** is unchanged —
@@ -3945,8 +3969,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 
       **Mode read and the refusals-only log — already built, not new work here.**
       `hooks/worktree-guard.sh`'s `# --- step 2: the mode` block already reads `$WORKTREE_GUARD_MODE` from the hook's own
-      environment (absent → `log`; `log`/`deny` accepted; anything else is a hard deny naming the
-      bad value) — this predates task 8 and was not touched. `append_log()`
+      environment (absent → `log`; `log`/`deny` accepted; anything else selects `deny` MODE and
+      defers the message to `refuse()` via `BAD_MODE_NOTE`) — this predates task 8 and was not touched.
+      ⚠️ **This clause said "anything else is a hard deny naming the bad value" until 2026-08-28 —
+      false.** `6bf830c` ("fix(worktree-guard): a mistyped mode selects deny, it does not refuse
+      everything") landed after this note was written and falsified it underneath; corrected in
+      place per this note's own rule. `append_log()`
       (`hooks/worktree-guard.sh`, `append_log() { # $1 arm, $2 decision`) is called only from `refuse()` (a `deny`/`would-deny`
       decision) and from Arm D's `WORKTREE_EXEMPT` bypass path
       (`hooks/lib/worktree_guard_bash_arms.sh`, `if append_log "$1" bypass "$2" "$command_line" "$reason"; then`) — grepped, there is no call on an allow path.
@@ -4250,10 +4278,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       before `gh pr create`,** and rounds 1, 2 and 3 each found something real, so it is not a
       formality either.
 
-- [ ] 14. The doc-cleanup pass, in one commit rather than five — round 3 findings 3–4 and round 5
+- [x] 14. The doc-cleanup pass, in one commit rather than five — round 3 findings 3–4 and round 5
       findings 1–3, deferred together because rounds 3, 4 and 5 each found drift created by the
       previous round's own fix. Branch `docs/worktree-guard-doc-cleanup`, opened 2026-08-27 after
       PR #83 merged.
+      **DONE 2026-08-28 — closed by task 15**, the last of its five children, which finished the
+      citation-conversion sub-item this task was held open for.
       - [x] **Re-measure the deferred item before correcting its evidence line.** Done, and it
             changed the item: two false claims, not three, plus a fourth unstated gap. Full table
             in the ⚠️ block under round 2's findings above. `rules/gates.md` and ADR 0038 both
@@ -4282,7 +4312,8 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             found it.) The other **18 were deliberately left in place**, because repointing a stale
             number silently is the failure this whole sub-item exists to stop. They are task 15.
 
-- [ ] 15. The 18 citations the sweep could not convert. Three groups, needing different answers.
+- [x] 15. The 18 citations the sweep could not convert. Three groups, needing different answers.
+      **DONE 2026-08-28.**
       - **Fourteen are anchor rot, all from one event.** `classify-git-command.py` grew from
             ~250 lines to 601 when task 5's seven segment-indexed facts landed, and
             `shell_segments.py` shifted with it — so every anchor written into the *design* section
@@ -4303,10 +4334,51 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             stale inside this card and no round caught it**, which is a stronger argument for
             quoting text than any of the anchor cases: a quoted fragment that no longer exists
             fails loudly, a line number that no longer exists reads fine.
+            ⚠️ **Correction, task 15 (2026-08-28).** "One false claim, stated twice" overstates it.
+            Neither sentence was wrong when written — both describe the pre-port state, correctly,
+            and simply stayed in present tense after task 5 ported the reader out from under them.
+            Re-tensed to past tense under an explicit user gate decision (`phase: implementation`
+            forbids spec edits otherwise); both sites now also cite the current reader as a quoted
+            fragment, `doc-guard.sh`'s `while IFS= read -r f`, rather than the stale `:133`.
       - **Two are correct and were left by judgment, not by failure:** `phase-guard.sh:248` and
             `.gitignore:17` in task 11's dated verification note. There the sentence *is* the
             anchor→content mapping, so quoting the content makes it tautological — the same species
             of audit record as the task-13 note. Confirm that reading before converting them.
+            ⚠️ **Confirmed, task 15 (2026-08-28).** Both anchors still resolve exactly as the note
+            states: `phase-guard.sh:248` is `[ -d "$root/docs/features" ] || exit 0`, and
+            `.gitignore:17` is `/hooks/state/`. Left as line numbers, unchanged.
+
+      **Measurement note, task 15 (2026-08-28).** Population re-derived from a fresh grep rather
+      than trusted from the prediction above, per the task's own instruction.
+      - **Count: 20 surviving `` `file:line` `` citations before the task-13 note, not 18.** The
+        14 anchor-rot citations were found at the *exact same* card line numbers listed above — no
+        further drift since `12f5f79` opened this task — and the 2 doc-guard.sh and 2
+        phase-guard.sh/`.gitignore` citations also matched. The **delta is 2**, both citing
+        `session-state.md` (card lines 9 and 496 as of this commit): `session-state.md` was
+        untracked from the repo (`9ceab68`) *before* `64c21ae`'s sweep ever ran, so both anchors
+        cite a file that is not on disk. Neither was counted in any of task 15's three groups, and
+        neither was counted or logged as unresolved by `64c21ae` itself (confirmed against that
+        commit's diff — it never touches either line). A gap in the original sweep's own
+        accounting, not a new regression. Left in place with a dated marker each; there is nothing
+        left on disk to quote.
+      - **A fourth, uncatalogued citation species exists and was deliberately left untouched.**
+        Bare `` `:NNN` `` shorthand — no filename, either an anaphoric reference to a file named
+        earlier in the same sentence (e.g. `` `:62-63` `` two sentences after `shell_segments.py`
+        is named) or a self-reference to this card's *own* line numbers (e.g. `` `:778` against
+        `:1832` `` in task 6's checklist, `` `:1438` `` in task 9's) — was never part of `64c21ae`'s
+        50-citation count: every citation in that commit's diff, converted or logged unresolved,
+        carried a filename prefix. Roughly a dozen instances found across the in-scope range. Not
+        converted here: the user's 2026-08-28 gate decision authorized exactly two spec-text
+        rewrites (the doc-guard.sh re-tense and the `:3948` clause) plus the population re-measure,
+        not a new, undiscussed class of edits. Recommend a follow-up task if these are to be
+        addressed; they carry the same rot risk as the filename-prefixed form.
+      - **Groups A/B/C outcome:** Group A converted 12 of 14 cleanly (anchor rot, quoted claim
+        verified still true at the new location). 2 of 14 (the `SEG_SCOPE_OPT` two-clause-test
+        citation and the second `:894` citation) were found to be more than anchor rot on
+        independent re-verification — the described mechanism was refactored, not merely moved —
+        and were left in place with dated markers rather than repointed. Group B: both sites
+        re-tensed per the user's gate decision. Group C: both anchors confirmed still correct,
+        left unchanged.
 
 ## Notes
 
