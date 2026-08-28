@@ -4458,13 +4458,35 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             ⚠️ **Measured population, round 3 (2026-08-28) — inherit this, do not rediscover it.**
             `:62-63` is stale in **two** live places, not one: the Gherkin comment above *and* the
             design section's clause-3a paragraph ("Derived from `:62-63` rather than from a list of
-            wrapper words"). And **this branch moved every self-reference in the card.** Seven cite
-            the card's own line numbers; the branch's +204 lines shifted them 7–31 each, measured
-            against `origin/main` @ `21771d1`: `:778`→785, `:848`→870, `:1261`→1291, `:1438`→1469,
-            `:1832`→1863, and **`:788` no longer exists at all**. `:1832` was exactly
-            `Scenario: -C in an earlier segment does not carry to a later one` at base; at HEAD that
-            line is blank. That measurement changes this task's options — "leave them as anaphora"
-            was defensible while they were stable, and they are no longer stable.
+            wrapper words"). And **this branch moved every card self-reference outside the excluded
+            notes, and all of them now point at the wrong line.**
+
+            **Recorded without new digits, deliberately.** The first version of this note listed
+            `old`→`new` pairs measured against its own parent; the commit that wrote them then
+            inserted two lines above four of the five targets, and observability-judge round 4 found
+            the whole list stale *inside the commit that recorded it* — the failure recurring inside
+            the paragraph written to stop it. A re-derived list would buy the same finding again next
+            round, so no new numbers are written here. Grep the quoted text instead.
+
+            **Measured set: five, not the seven a round-3 report suggested.** The citing sites are in
+            the task checklists (the `SEG_CD` sentinel item, the Deny message contract item, and the
+            two derivation items); the cited targets, quoted at `origin/main` @ `21771d1`:
+            `:1832` = `Scenario: -C in an earlier segment does not carry to a later one`;
+            `:778` = `next section measures.`; `:848` = `> never carries its own list of them.`;
+            `:1261` = `extends that shape; it does not invent it.`;
+            `:1438` = `specified in task 6d is therefore required on the boundary paths too`.
+
+            ⚠️ **`:788` is NOT one of them** — an earlier version of this note said it was, and that
+            it "no longer exists". Both wrong: `:788` appears only inside task 15's historical list
+            of anchor-rot card lines, which is a record of what the numbers *were*, not a live
+            citation; and the text at base `:788` is alive and well at HEAD.
+
+            🔴 **Four of the five cite a mid-sentence continuation line, not an anchor** — see the
+            quotes above. So "convert them to quoted text" is not even well-defined for those four:
+            there is no claim at the target to quote. Whoever takes this task decides what each
+            citation was *trying* to point at before deciding how to write it, which is why this is
+            a task and not a sweep. That also settles the pending option: "leave them as anaphora"
+            was defensible while they were stable, and they are not stable.
       Two of the three are false statements about current code, carrying dated markers in place.
       The markers stop a reader believing the text; they do not make the card true.
 
