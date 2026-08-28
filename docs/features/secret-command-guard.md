@@ -1,5 +1,5 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
 branch: feat/secret-command-guard
 ---

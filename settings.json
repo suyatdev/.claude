@@ -38,6 +38,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/worktree-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/secret-command-guard.sh"
           }
         ]
       },
@@ -60,6 +64,10 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/worktree-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/scan-secrets.sh"
           }
         ]
       },
