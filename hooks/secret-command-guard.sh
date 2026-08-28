@@ -15,10 +15,15 @@
 # to happen at PreToolUse, on the command text, before it runs.
 #
 # See docs/features/secret-command-guard.md for the full scope and the two
-# shapes this blocks: a named secret-bearing dotfile/path outside a grep -o
-# call, and a full-environment dump (os.environ/process.env, or a bare
-# env/printenv). hooks/lib/classify-secret-command.py does the analysis;
-# this wrapper only reads the PreToolUse payload and reports its verdict.
+# shapes this blocks: ANY mention of a named secret-bearing dotfile/path, and
+# a full-environment dump (os.environ/process.env, or a bare env/printenv).
+# hooks/lib/classify-secret-command.py does the analysis; this wrapper only
+# reads the PreToolUse payload and reports its verdict.
+#
+# There is no permitted read shape. v1 allowed a grep -o call on the theory
+# that -o echoes only the matched substring; the caller picks the pattern, so
+# `grep -o 'export .*'` reproduced the incident verbatim. Carve-out removed
+# 2026-08-28 -- ADR 0039.
 #
 # FAILS OPEN on a missing python3, an unparseable payload, or any internal
 # error in the classifier -- the opposite direction from scan-secrets.sh, a
@@ -26,9 +31,14 @@
 # session, so a broken classifier must never become a de facto ban on using
 # the shell the way a broken write-scanner blocking one file would not.
 #
-# No bypass environment variable, by design (matches the spec) -- this hook
-# only fires on the two narrow, already-incident shapes below, not on
-# ordinary work, so there is no legitimate case that needs an escape hatch.
+# Bypass: `SECRET_EXEMPT=<reason> <command>` (logged), matching this repo's
+# other Tier 1 guards. v1 shipped none, on the reasoning that the hook fires
+# only on narrow incident shapes and never on ordinary work -- measurement
+# refuted that (it blocked `git add .env.example`), so the hatch exists.
+#
+# NOT a security boundary, and this file must not imply otherwise: the card's
+# Known-gaps table lists five measured ALLOW shapes, incl. variable
+# indirection and any read performed inside a script file.
 #
 # Exit 0 = allow / silent. Exit 2 = blocked, reason on stderr.
 
@@ -74,9 +84,22 @@ if isinstance(ti, dict):
 
 reason=$("$py" "$CLASSIFIER" "$command_line" 2>&1 >/dev/null)
 status=$?
+
+# Exit 3 = the classifier found a non-empty SECRET_EXEMPT assignment. Allow,
+# but say so on stderr so the bypass leaves a trace rather than passing silently.
+if [ "$status" -eq 3 ]; then
+  printf 'secret-command-guard: %s; allowing.\n' "$reason" >&2
+  exit 0
+fi
+
 [ "$status" -eq 2 ] || exit 0
 
 printf 'secret-command-guard: blocked -- %s.\n' "$reason" >&2
 printf 'This command was refused because it could surface credential material in the transcript.\n' >&2
-printf 'Read the specific value with a narrower tool (e.g. grep -o capturing only the value, never the whole line), or ask the user to share it out of band.\n' >&2
+# Deliberately prescribes no read shape. The previous wording recommended
+# `grep -o capturing only the value` -- the exact command that leaked, since
+# `grep -o "export .*"` prints the whole assignment. There is no safe way to
+# echo a secret file into the transcript, so do not offer one.
+printf 'There is no permitted way to read this file into the transcript. Ask the user to share the value out of band,\n' >&2
+printf 'or, if you are certain this command cannot surface a secret, re-run it as: SECRET_EXEMPT=<reason> <command>\n' >&2
 exit 2
