@@ -91,12 +91,15 @@ Nothing in the hook, `rules/gates.md`, or the deny message may claim otherwise.
 | a `git`/`cat` inside a script file (`bash diag.sh`) | the hook sees command *text*, never the file's contents — by construction. Leak #1 was of this shape, so **the hook does not block leak #1's original form**, only the bare `env`/`printenv` and `os.environ`/`process.env` shapes. |
 | backticks, `$(…)`, globs building the path | same reason: the path is not a literal token. |
 | `export -p`, `declare -p`, `set`, `env -0`, `ps eww` | full-environment dumps that are not `env`/`printenv` with zero arguments. Widening was offered and **declined** (user, 2026-08-28) — `set` with no arguments is common enough that blocking it was judged worse than the residual risk. (`printenv -0` is *not* in this list: BSD `printenv` on this machine rejects `-0`, so it dumps nothing. GNU `printenv -0` would.) |
-| `bash -c "cat ~/.zshrc \| head -5"`, `ssh host "cat ~/.zshrc; true"`, `python3 -c "print(open('…/.zshrc').read())"` | **the operative rule is "the path is the *suffix* of a lexed token", not "any mention".** An interpreter or remote string is a single token; if the path sits at its end it blocks (`bash -c "cat ~/.zshrc"` does), and appending anything at all flips it to allow. Found by the observability judge in round 2, reproduced, and pre-existing — the carve-out removal neither caused nor widened it. |
+| `bash -c "cat ~/.zshrc \| head -5"`, `ssh host "cat ~/.zshrc; true"`, `python3 -c "print(open('…/.zshrc').read())"` | **the operative rule is "the path is a whole *trailing component* of a lexed token", not "any mention".** An interpreter or remote string is a single token; if the path sits at its end it blocks (`bash -c "cat ~/.zshrc"` does), and appending anything at all flips it to allow. Found by the observability judge in round 2, reproduced, and pre-existing — the carve-out removal neither caused nor widened it. |
+| `cat foo.zshrc`, `cat my.env` | the same rule in the other direction: the patterns require the start of the token or a `/` before the name, so a basename that merely *ends* in a listed one is out of scope. `cat ./foo/.zshrc` blocks. |
 | `cat config/prod.env` | the dotenv pattern is anchored on a `.env` *basename*, so a secrets file named `prod.env` is out of scope by construction. |
 
-Where any document here says "any mention" blocks, read it against the two rows
-above: the guard sees the path as a whole argument. That is the boundary, and it
-is stated next to the strong wording deliberately, so the two cannot drift apart.
+Where any document here says "any mention" blocks, read it against the three
+rows above: the guard sees the path as a whole path component ending a lexed
+argument. "Suffix" is the wrong word for it — that was an earlier revision's
+phrasing and described a wider guard than exists. The boundary is stated next
+to the strong wording deliberately, so the two cannot drift apart.
 
 This is a momentum guardrail against the two shapes that actually fired, **not a
 security boundary**. `SECRET_EXEMPT` clears it in one flag.
@@ -125,5 +128,29 @@ security boundary**. `SECRET_EXEMPT` clears it in one flag.
 - [x] 9. Implement the amendment in the classifier and the hook wrapper; fix the deny message, which recommended the leaking `grep -o` shape — `f1b12e0`, 48 passed / 0 failed.
 - [x] 10. ADR 0039 for the carve-out removal and the fail-open inversion — number confirmed free across all 34 local and remote refs, with a control proving the check finds 0038.
 - [x] 11. Update `rules/gates.md` and the README Roadmap for the amended behaviour.
-- [ ] 12. Re-run both suites; observability judge round 2 against final HEAD.
+- [x] 12. Re-run both suites; observability judge rounds 2 and 3 against final HEAD — 62/0 and 17/0; round 3 `risk=low`, no dimension failed.
 - [ ] 13. Open the PR as a draft, push the audit trail, mark ready.
+
+### Judge rounds
+
+| Round | HEAD | Verdict | What it found |
+| --- | --- | --- | --- |
+| 1 | `31dd6cb` | `risk=medium`, `success_masking=fail` | The `grep -o` carve-out reproduced the incident verbatim; `.env.example` blocked; the card repeated the false scan-secrets claim. All reproduced before acting; the carve-out was a *spec* defect, so it went to the user rather than being worked around. |
+| 2 | `53c0a9f` | `risk=medium`, no fail | Carve-out confirmed closed. Four documents said "any mention" while the mechanism is narrower; the "five ALLOW shapes" count matched nothing; `printenv -0` is rejected by BSD `printenv`. |
+| 3 | `144e166` | `risk=low`, no fail | `.zshenv`/`.zprofile`/`.bash_profile` had no assertions (deleting a pattern left the suite green); the `SECRET_EXEMPT` audit line was unasserted; "suffix" overclaimed — `cat foo.zshrc` allows. |
+
+Round 3's two silent-regression gaps were closed in this branch rather than
+deferred. Four mutations were then run against the classifier — deleting the
+`.zshenv` pattern, turning the exempt `return 3` into `return 0`, dropping the
+`$` anchor, and emptying the dotenv suffix exemption. All four are now caught
+(1, 3, 3 and 5 failing assertions); the first two left the pre-round-3 suite
+fully green. The classifier was restored byte-identically afterwards, verified
+by sha256.
+
+### Not verified
+
+- Whether the hook is armed **after merge**. `settings.json` points at
+  `$HOME/.claude/hooks/...`, and the primary checkout has neither the hook files
+  nor the registration, so the registration self-test passing in this worktree
+  proves nothing about the merged state. Confirm post-merge.
+- `printenv -0` behaviour is measured on this machine's BSD `printenv` only.

@@ -52,11 +52,16 @@ script file, a secrets file not named .env (`config/prod.env`), and the
 full-environment dumps that are not bare env/printenv (`export -p`,
 `declare -p`, `set`, `env -0`, `ps eww`).
 
-One boundary matters when reading "a token in any segment matches" above: the
-patterns are `$`-ANCHORED, so the rule is really "the path is the SUFFIX of a
-lexed token". An interpreter or remote string is a single token, so
-`bash -c "cat ~/.zshrc"` blocks and `bash -c "cat ~/.zshrc | head -5"` does
-not. Pre-existing and deliberate -- widening it would mean matching paths
+One boundary matters when reading "a token in any segment matches" above. The
+patterns are anchored at BOTH ends -- `(^|/)` before the name and `$` after --
+so the rule is "the path is a WHOLE TRAILING COMPONENT of a lexed token", which
+is narrower than "a suffix" in one direction and than "any mention" in the
+other. Both of these allow, measured:
+
+    cat foo.zshrc                      no `/` before the name -> not a component
+    bash -c "cat ~/.zshrc | head -5"   token does not END at the name
+
+while `cat ./foo/.zshrc` and `bash -c "cat ~/.zshrc"` both block. Pre-existing and deliberate -- widening it would mean matching paths
 inside arbitrary quoted program text, which is a different and much noisier
 problem. This is a momentum guardrail, not a security boundary.
 

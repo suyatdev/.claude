@@ -37,10 +37,12 @@
 # refuted that (it blocked `git add .env.example`), so the hatch exists.
 #
 # NOT a security boundary, and this file must not imply otherwise: the card's
-# Known-gaps table lists six measured ALLOW shapes, incl. variable indirection
+# Known-gaps table lists seven measured ALLOW shapes, incl. variable indirection
 # and any read performed inside a script file. Note especially that "any
-# mention" means "the path is the SUFFIX of a lexed token" -- `bash -c "cat
-# ~/.zshrc"` blocks, `bash -c "cat ~/.zshrc | head -5"` does not.
+# mention" means "the path is a WHOLE TRAILING COMPONENT of a lexed token":
+# `bash -c "cat ~/.zshrc"` blocks but `bash -c "cat ~/.zshrc | head -5"` does
+# not (the token no longer ends there), and `cat foo.zshrc` does not either
+# (no `/` before the name).
 #
 # Exit 0 = allow / silent. Exit 2 = blocked, reason on stderr.
 

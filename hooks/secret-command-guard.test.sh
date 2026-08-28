@@ -76,6 +76,21 @@ run_case_msg "Application Support credentials path -> block"            2 'crede
 run_case "unrelated .envrc file -> allow (not .env or .env.*)"          0 'cat .envrc'
 run_case "unrelated file -> allow"                                      0 'cat README.md'
 
+# One assertion per listed dotfile. rules/gates.md advertises five; before
+# round 3 the suite pinned two, so deleting the .zshenv pattern outright left
+# the suite fully green. A silent regression on an advertised path is exactly
+# what this block exists to stop.
+run_case_msg ".zshenv -> block"                                         2 '.zshenv' 'cat ~/.zshenv'
+run_case_msg ".zprofile -> block"                                       2 '.zprofile' 'cat ~/.zprofile'
+run_case_msg ".bash_profile -> block"                                   2 '.bash_profile' 'cat ~/.bash_profile'
+
+# The patterns match a PATH COMPONENT, not any trailing text: they require the
+# start of the token or a `/` before the dot. Pins the exact width claimed in
+# the docs -- neither wider nor narrower.
+run_case "a basename merely ENDING in a listed name -> allow"           0 'cat foo.zshrc'
+run_case "likewise for the dotenv pattern"                              0 'cat my.env'
+run_case_msg "control: the same name as a real path component -> block" 2 '.zshrc' 'cat ./foo/.zshrc'
+
 # -----------------------------------------------------------------------------
 # The carve-out that reproduced the incident. These three ALLOWed before the
 # 2026-08-28 amendment; `grep -o 'export .*'` printed the whole secret line.
@@ -113,6 +128,16 @@ run_case "docker --env-file .env.example -> allow"                      0 'docke
 # =============================================================================
 run_case "SECRET_EXEMPT with a reason -> allow"                         0 'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
 run_case "SECRET_EXEMPT also clears an env dump"                        0 'SECRET_EXEMPT=debugging-a-hook env'
+run_case_msg "SECRET_EXEMPT clears os.environ, not just bare env"       0 'exempted' \
+  'SECRET_EXEMPT=inspecting-a-payload python3 -c "print(os.environ)"'
+
+# A bypass that leaves no trace is not an audited bypass. Without this, turning
+# the classifier's `return 3` into `return 0` keeps the suite fully green while
+# silently deleting the only record that the guard was overridden.
+run_case_msg "the bypass is LOGGED, naming the reason"                  0 'SECRET_EXEMPT=rotating-the-key' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_msg "the bypass log says it is allowing"                       0 'allowing' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
 run_case_msg "SECRET_EXEMPT with an EMPTY reason -> still blocks"       2 '.zshrc' 'SECRET_EXEMPT= cat ~/.zshrc'
 run_case_msg "an unrelated assignment does not exempt"                  2 '.zshrc' 'FOO=bar cat ~/.zshrc'
 

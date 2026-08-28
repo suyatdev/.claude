@@ -105,7 +105,7 @@ costs one blocked edit. A guard's failure direction should follow what its failu
 house style.
 
 The honest consequence, written here because the deny message must not imply otherwise: this is a
-**momentum guardrail, not a security boundary.** The card's Known-gaps table records six measured
+**momentum guardrail, not a security boundary.** The card's Known-gaps table records seven measured
 `ALLOW` shapes — variable indirection (`F=~/.zshrc; cat "$F"`), a path built by expansion,
 `export -p` / `declare -p` / `set` / `env -0` / `ps eww`, a secrets file not named `.env`
 (`config/prod.env`), the compound-token boundary described below, and any read performed inside a
@@ -115,16 +115,22 @@ the environment-dump check was offered and declined (user, 2026-08-28): bare `se
 that blocking it was judged worse than the residual risk.
 
 One boundary deserves naming in full, because this ADR's own wording above ("every mention blocks",
-"no permitted read shape") is stronger than the mechanism. The operative rule is **"the path is the
-*suffix* of a lexed token"**. An interpreter or remote string is one token, so `bash -c "cat
-~/.zshrc"` blocks — and appending anything at all flips it:
+"no permitted read shape") is stronger than the mechanism. The patterns anchor at **both** ends —
+`(^|/)` before the name, `$` after — so the operative rule is **"the path is a whole *trailing
+component* of a lexed token"**. An interpreter or remote string is one token, so `bash -c "cat
+~/.zshrc"` blocks, and it fails in both directions:
 
 ```
 2  bash -c "cat ~/.zshrc"                              blocks
-0  bash -c "cat ~/.zshrc | head -5"                    ALLOWS
-0  ssh host "cat ~/.zshrc; true"                       ALLOWS
-0  python3 -c "print(open('/Users/m/.zshrc').read())"  ALLOWS
+0  bash -c "cat ~/.zshrc | head -5"                    ALLOWS — token no longer ends at the name
+0  ssh host "cat ~/.zshrc; true"                       ALLOWS — same
+0  python3 -c "print(open('/Users/m/.zshrc').read())"  ALLOWS — same
+0  cat foo.zshrc                                       ALLOWS — no `/` before the name
+2  cat ./foo/.zshrc                                    blocks — a real component
 ```
+
+The last two are why "suffix" is the wrong word and is not used here: an earlier revision of this
+paragraph said suffix, which described a guard wider than the one that exists.
 
 Found by the observability judge in round 2 and reproduced. It is **pre-existing** — the carve-out
 removal neither caused nor widened it — and it is now pinned by `ALLOW` assertions beside the
