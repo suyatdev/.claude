@@ -4380,6 +4380,30 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         re-tensed per the user's gate decision. Group C: both anchors confirmed still correct,
         left unchanged.
 
+- [ ] 16. The three things task 15 found but was not authorized to change. Opened 2026-08-28 under
+      an explicit user gate decision, after task 15's commit `ae8cb27`. Each needs its own reading;
+      none is a citation swap, which is why none was done in that commit.
+      - 🔴 **`:805` describes a two-clause test that no longer exists anywhere.** The card claims
+            `classify-git-command.py` tests
+            `blocking_option is not None and blocking_option != "-C"`. Independently re-measured:
+            the only surviving site is a **single**-clause `if blocking_option is not None:`, and
+            the `-C` half moved inside `resolve_git_segment()`, which now filters it before
+            `classify()` ever sees it. So this is not anchor rot and cannot be repointed — the
+            described mechanism was refactored. The fix is to work out what the design section
+            should now say about where `-C` is filtered, and say that.
+      - 🔴 **`:894`'s second citation describes a discard that is gone, not moved.** The card says
+            `classify()` "unpacks that dict as `_assigns` and discards it". Independently
+            re-measured: `classify()` binds `assigns` and passes it to `segment_facts()`. The one
+            remaining `for _assigns, iargv in inner:` is a **different, inner** loop, so a grep for
+            `_assigns` finds a hit that does not support the sentence — the failure mode that makes
+            this worth a real read rather than a repoint.
+      - **The bare `` `:NNN` `` citation species** catalogued in task 15's measurement note above
+            (roughly a dozen, no filename prefix, never part of `64c21ae`'s 50). Decide whether
+            they are converted, left as anaphora, or ruled out of scope — and record the decision,
+            so a later sweep does not rediscover them as new.
+      Two of the three are false statements about current code, carrying dated markers in place.
+      The markers stop a reader believing the text; they do not make the card true.
+
 ## Notes
 
 - Live demonstration of the blast radius, this session: writing to root-level `session-state.md`
