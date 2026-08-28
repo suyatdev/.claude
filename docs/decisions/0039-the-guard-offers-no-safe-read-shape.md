@@ -105,13 +105,30 @@ costs one blocked edit. A guard's failure direction should follow what its failu
 house style.
 
 The honest consequence, written here because the deny message must not imply otherwise: this is a
-**momentum guardrail, not a security boundary.** The card's Known-gaps table records five measured
+**momentum guardrail, not a security boundary.** The card's Known-gaps table records six measured
 `ALLOW` shapes — variable indirection (`F=~/.zshrc; cat "$F"`), a path built by expansion,
-`export -p` / `declare -p` / `set` / `env -0` / `ps eww`, and any read performed inside a script
-file. That last one matters most: **leak #1's original form was a script, so the hook does not
-block the shape of the first incident** — only its bare `env` / `os.environ` cousins. Widening the
-environment-dump check was offered and declined (user, 2026-08-28): bare `set` is common enough
+`export -p` / `declare -p` / `set` / `env -0` / `ps eww`, a secrets file not named `.env`
+(`config/prod.env`), the compound-token boundary described below, and any read performed inside a
+script file. That last one matters most: **leak #1's original form was a script, so the hook does
+not block the shape of the first incident** — only its bare `env` / `os.environ` cousins. Widening
+the environment-dump check was offered and declined (user, 2026-08-28): bare `set` is common enough
 that blocking it was judged worse than the residual risk.
+
+One boundary deserves naming in full, because this ADR's own wording above ("every mention blocks",
+"no permitted read shape") is stronger than the mechanism. The operative rule is **"the path is the
+*suffix* of a lexed token"**. An interpreter or remote string is one token, so `bash -c "cat
+~/.zshrc"` blocks — and appending anything at all flips it:
+
+```
+2  bash -c "cat ~/.zshrc"                              blocks
+0  bash -c "cat ~/.zshrc | head -5"                    ALLOWS
+0  ssh host "cat ~/.zshrc; true"                       ALLOWS
+0  python3 -c "print(open('/Users/m/.zshrc').read())"  ALLOWS
+```
+
+Found by the observability judge in round 2 and reproduced. It is **pre-existing** — the carve-out
+removal neither caused nor widened it — and it is now pinned by `ALLOW` assertions beside the
+others, so the strong wording and its boundary travel together.
 
 Each gap is pinned by an `ALLOW` assertion in the suite. They are not endorsements — they make
 widening the guard a deliberate edit to a named block, so the card's promises cannot drift away

@@ -90,7 +90,13 @@ Nothing in the hook, `rules/gates.md`, or the deny message may claim otherwise.
 | `F=~/.zshrc; cat "$F"` | `shell_segments.segments()` hands the assignment back separately and the classifier discards it; the path never appears as a token in the `cat` segment. |
 | a `git`/`cat` inside a script file (`bash diag.sh`) | the hook sees command *text*, never the file's contents — by construction. Leak #1 was of this shape, so **the hook does not block leak #1's original form**, only the bare `env`/`printenv` and `os.environ`/`process.env` shapes. |
 | backticks, `$(…)`, globs building the path | same reason: the path is not a literal token. |
-| `export -p`, `declare -p`, `set`, `env -0`, `printenv -0`, `ps eww` | full-environment dumps that are not `env`/`printenv` with zero arguments. Widening was offered and **declined** (user, 2026-08-28) — `set` with no arguments is common enough that blocking it was judged worse than the residual risk. |
+| `export -p`, `declare -p`, `set`, `env -0`, `ps eww` | full-environment dumps that are not `env`/`printenv` with zero arguments. Widening was offered and **declined** (user, 2026-08-28) — `set` with no arguments is common enough that blocking it was judged worse than the residual risk. (`printenv -0` is *not* in this list: BSD `printenv` on this machine rejects `-0`, so it dumps nothing. GNU `printenv -0` would.) |
+| `bash -c "cat ~/.zshrc \| head -5"`, `ssh host "cat ~/.zshrc; true"`, `python3 -c "print(open('…/.zshrc').read())"` | **the operative rule is "the path is the *suffix* of a lexed token", not "any mention".** An interpreter or remote string is a single token; if the path sits at its end it blocks (`bash -c "cat ~/.zshrc"` does), and appending anything at all flips it to allow. Found by the observability judge in round 2, reproduced, and pre-existing — the carve-out removal neither caused nor widened it. |
+| `cat config/prod.env` | the dotenv pattern is anchored on a `.env` *basename*, so a secrets file named `prod.env` is out of scope by construction. |
+
+Where any document here says "any mention" blocks, read it against the two rows
+above: the guard sees the path as a whole argument. That is the boundary, and it
+is stated next to the strong wording deliberately, so the two cannot drift apart.
 
 This is a momentum guardrail against the two shapes that actually fired, **not a
 security boundary**. `SECRET_EXEMPT` clears it in one flag.

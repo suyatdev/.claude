@@ -48,9 +48,17 @@ that the hook "only fires on two narrow shapes, not ordinary work"; the
 What this does NOT decide is written down in the card's Known-gaps table and
 pinned by ALLOW assertions in the test suite: variable indirection
 (`F=~/.zshrc; cat "$F"`), a path built by expansion, a read performed inside a
-script file, and the full-environment dumps that are not bare env/printenv
-(`export -p`, `declare -p`, `set`, `env -0`, `ps eww`). This is a momentum
-guardrail, not a security boundary.
+script file, a secrets file not named .env (`config/prod.env`), and the
+full-environment dumps that are not bare env/printenv (`export -p`,
+`declare -p`, `set`, `env -0`, `ps eww`).
+
+One boundary matters when reading "a token in any segment matches" above: the
+patterns are `$`-ANCHORED, so the rule is really "the path is the SUFFIX of a
+lexed token". An interpreter or remote string is a single token, so
+`bash -c "cat ~/.zshrc"` blocks and `bash -c "cat ~/.zshrc | head -5"` does
+not. Pre-existing and deliberate -- widening it would mean matching paths
+inside arbitrary quoted program text, which is a different and much noisier
+problem. This is a momentum guardrail, not a security boundary.
 
 Segments come from shell_segments.segments(), the same lexer git-guard and
 doc-guard use, so a chained or piped command is judged per segment rather
