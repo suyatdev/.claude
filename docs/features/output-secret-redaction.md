@@ -216,14 +216,20 @@ log₂(length):
 Secrets span **2.25–3.82**; innocent values span **2.73–4.08**. The two ranges overlap
 across [2.73, 3.82], so no single threshold separates them: any cut high enough to exclude
 `localhost` also excludes `s3cr3t`, and any cut low enough to keep the hex token also keeps
-the URL. At H≥4.0 you keep 9/19 secrets; at H≥2.5 you wrongly blank 19/23 innocent values.
+the URL. The overlap alone settles it; no sweep is needed, and none is quoted.
 
-⚠️ **Correction, and the reason it is left visible.** An earlier revision of this table
-recorded the hex token at 2.43 and argued it "scores lower than `localhost` because hex has
-only 16 symbols". Both were wrong — a 16-symbol alphabet caps entropy at log₂(16) = 4.0, and
-a random hex string lands just under it. The compliance judge caught the figure and it was
-re-measured here (`cache/spike/ent.py`). The conclusion is unchanged, but it now rests on an
-overlap rather than on an inversion that does not exist. Use a **character-class count** (how many of
+⚠️ **Correction record, left visible on purpose.** An earlier revision of this table
+(`9208751`) recorded the hex token at **2.43**. That single figure was wrong: hex uses a
+16-symbol alphabet, so entropy is capped at log₂(16) = 4.0 and a random hex string lands just
+under it. Re-measured at **3.82** (`cache/spike/ent.py`) after the compliance judge flagged
+it. Two things this correction does *not* claim: the earlier revision's surrounding sentence
+("the lowest real secret scores below the highest innocent value") was **correct** and is
+still true under the new numbers; and an intermediate revision of this paragraph attributed a
+"hex has only 16 symbols" argument to `9208751` which that blob does not contain — the
+argument came from the underlying research note, not from this card. The four cells now here
+are the only entropy figures in this card that have been independently reproduced; an earlier
+threshold sweep ("9/19", "19/23") was removed because it cannot have come from the 41-entry
+corpus described below (17 secrets, 24 innocent) and no other corpus was ever specified. Use a **character-class count** (how many of
 lower/upper/digit/other appear) instead — cheap, and it does not pretend to measure
 randomness.
 
@@ -347,18 +353,51 @@ what it has — it does **not** abort, because an abort would mean no redaction 
   | Needle | Form |
   | --- | --- |
   | 1 | the raw value |
-  | 2–4 | RFC 4648 **standard** alphabet (`+/`), padded, at byte offsets 0, 1 and 2 — a value embedded mid-stream encodes differently per alignment, and only one of three would otherwise match |
-  | 5–7 | RFC 4648 **url-safe** alphabet (`-_`), padded, same three offsets |
+  | 2–4 | RFC 4648 **standard** alphabet (`+/`), at byte offsets 0, 1 and 2 — a value embedded mid-stream encodes differently per alignment, and only one of three would otherwise match |
+  | 5–7 | RFC 4648 **url-safe** alphabet (`-_`), same three offsets |
   | 8 | standard alphabet, **unpadded** (trailing `=` stripped) |
   | 9 | `%`-encoding per RFC 3986, encoding every character outside `A-Za-z0-9-._~` |
 
-  For offsets 1 and 2, match only the **interior** run of the encoded form — the first and
-  last encoded character are contaminated by neighbouring bytes and must be dropped. If an
-  offset variant falls below the 20-character floor after that trim, discard it rather than
-  lowering the floor. Nine needles at ~0.011 ms each keeps the scan near the measured
-  0.102 ms for 40 secrets.
-- **Minimum match length 20 characters**, including for partial matches. Allow any ≥20-char
-  contiguous substring of a harvested secret, which covers line wrapping and mid-truncation.
+  **The trim rule, stated as arithmetic rather than prose — this is the part that is easy to
+  get wrong, and the first attempt was wrong.** For a value `v` at byte offset
+  `r = k mod 3`, encode `(r filler bytes) + v`, strip padding, then keep
+
+  ```
+  lead = ceil(8 * r / 6)                      # 0, 2, 3 for r = 0, 1, 2
+  full = (8 * (r + len(v)) - 6 * lead) // 6   # whole 6-bit chars fully determined by v
+  needle = encoded[lead : lead + full]
+  ```
+
+  Dropping the leading `lead` characters removes every character contaminated by the
+  preceding bytes; taking only `full` characters drops the trailing partial group, which is
+  contaminated by whatever follows. **Measured over 3,150 randomized embeddings** (`v` 24–48
+  random bytes, random prefix and suffix, 350 trials per offset per rule):
+
+  | Rule | offset 0 | offset 1 | offset 2 | total |
+  | --- | --- | --- | --- | --- |
+  | "drop first and last character" (the first attempt) | 171/350 | 37/350 | **0/350** | 208/1050 |
+  | **the arithmetic above** | 350/350 | 350/350 | 350/350 | **1050/1050** |
+
+  Script: `cache/spike/b64.py`. The failed rule is recorded because it *looked* correct and
+  silently produced a needle that could never match at offset 2.
+
+  If a needle falls below the partial-match floor after trimming, it is still emitted — it is
+  simply matched only in full, per the floor rule below. Nine needles at ~0.011 ms each keeps
+  the scan near the measured 0.102 ms for 40 secrets.
+- **Two different floors, and they are not in conflict — but only if this is read exactly.**
+  The strong arm's **6** is a *harvest* floor: it decides whether a value becomes a needle at
+  all. The **20** here is a *partial-match* floor: it decides whether a needle may match a
+  fragment. They compose as one rule:
+
+  | Needle length | How it may match |
+  | --- | --- |
+  | < 20 characters | **whole-needle only** — the complete value must appear contiguously |
+  | ≥ 20 characters | whole needle, **or** any ≥20-character contiguous substring of it |
+
+  So `DB_PASSWORD=hunter2` (7 chars, harvested by the strong arm) is redacted wherever
+  `hunter2` appears in full, and never on a fragment. Partial matching covers line wrapping
+  and mid-truncation for long needles without opening the short-needle false-blank rate that
+  the table below measures.
   False-blank rates at 2,000 Bash calls/day and ~102,400 windows per scan:
 
   | Match length | with a 4-char vendor prefix (`ghp_`) | with a 13-char prefix (`sk-ant-api03-`) |
@@ -400,6 +439,24 @@ every failure case:
 catch-all that, on any internal exception, emits a **well-formed envelope with every field
 present** whose `stdout`/`stderr` read `[redaction hook failed — output withheld]`. That
 turns an internal error from a silent leak into a visible, self-describing blank.
+
+**But the catch-all must not sit over the whole harvest, or one bad file blanks everything.**
+The Sources table names ~40 files in nine formats, most of them third-party and none of them
+under this hook's control. Under a single outer catch-all, one malformed `~/.kube/config` —
+or an `.env` mid-write, or a truncated JSON config — would raise once and then blank **every
+Bash output in every session** until someone noticed. That is a worse outage than the leak.
+
+Two error boundaries, not one:
+
+| Stage | On error | Why |
+| --- | --- | --- |
+| **Per source file** (open, read, parse) | skip that source, count it, continue | a third-party file we do not control must never be able to disable the session; a missing source degrades coverage, which is the failure this design already accepts |
+| **Scan and emit** (filter, needle build, replace, serialise) | withheld-output envelope | this is our own code operating on a payload we *know* may contain a secret; failing open here is exactly the leak |
+
+The hook reports the skipped-source count in its stderr log so a systematically unreadable
+source is visible rather than silent. **Zero harvested values is a valid outcome** — the hook
+emits no replacement at all and the output passes through unchanged, because there is nothing
+to redact and withholding would be pure damage.
 
 Outside that band — `python3` missing, hook timeout, process killed, the harness's own
 schema rejection — the platform falls back to the original output and the secret is printed.
@@ -558,8 +615,9 @@ may claim otherwise.
       and visited-inode set, per-format parsers, 2 MB budget.
 - [ ] 5. Implement the filter exactly as specified, including both URL rules and the weak-arm
       SHA/UUID denials.
-- [ ] 6. Implement the scanner: 3 needles, longest-first, `str.replace` loop, both streams,
-      `isImage` passthrough.
+- [ ] 6. Implement the scanner: the **nine** needles defined in Matching mechanics (with the
+      `lead`/`full` trim arithmetic and its 3,150-trial check), longest-first, `str.replace`
+      loop, both streams, `isImage` passthrough, and the two-floor composition rule.
 - [ ] 7. Implement the wrapper and the catch-all that emits a withheld-output envelope.
 - [ ] 8. Register in `settings.json` under `PostToolUse` / matcher `Bash`.
 - [ ] 9. Correct the false premise in all four sites in one commit; make this card the single
@@ -594,10 +652,10 @@ may claim otherwise.
   before the hook sees it, which suggests the spill happens elsewhere, but the interaction
   was not tested directly.
 - **Provenance of every number in this card, stated once so no table reads as first-hand.**
-  Reproduced independently by me: the entropy figures only (`cache/spike/ent.py`, after the
-  compliance judge caught an error in them). Measured by me directly: the `updatedToolOutput`
-  replacement, its absence from the transcript JSONL, and the parallel/last-write-wins
-  clobber. **Everything else — the runtime table, the hashing costs, the false-blank rates,
+  Reproduced independently by me, after a compliance judge flagged each: the four entropy
+  cells (`cache/spike/ent.py`) and the base64 trim arithmetic (`cache/spike/b64.py`, 3,150
+  trials). Measured by me directly: the `updatedToolOutput` replacement, its absence from the
+  transcript JSONL, and the parallel/last-write-wins clobber. **Everything else — the runtime table, the hashing costs, the false-blank rates,
   the 30,000-char truncation, the failure-direction matrix, and all filter figures — comes
   from subagent measurement that I have not reproduced.** The filter figures additionally
   come from a corpus the same agent tuned against.
