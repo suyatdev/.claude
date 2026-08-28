@@ -810,7 +810,8 @@ file's documented token style, tab-separated:
   HEAD or overwrites its working tree, per the in/out lists above.
 - `SEG_SCOPE_OPT<tab><i><tab><option>` — segment `i`'s git command carries a global option that
   `resolve_subcommand` refused to walk past, **other than `-C`**. Emitted from the existing
-  `blocking_option` return value (`classify-git-command.py:226-231`) by the two-clause test
+  `blocking_option` return value (`classify-git-command.py`, `resolve_git_segment()`'s
+  `return subcommand, rest, first, blocking, c_operands`) by the two-clause test
   `blocking_option is not None and blocking_option != "-C"` — never from a list of option names.
   ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test quoted
   above no longer exists as one expression: `resolve_git_segment()` now filters `-C` out of
@@ -819,6 +820,12 @@ file's documented token style, tab-separated:
   believed unchanged — `SEG_SCOPE_OPT` still fires only for a genuine non-`-C` blocker — but that
   was not re-derived here, and the quoted test is no longer real code. Left in place rather than
   repointed; a citation to a location, not a mechanism, is owed here instead.
+  ⚠️ **That owed citation is now paid — observability-judge round 2 (2026-08-28).** The anchor above
+  read `classify-git-command.py:226-231`, which is `BRANCH_MOVE_ALWAYS` — unrelated code, not a
+  return value of anything. `blocking_option` comes from `resolve_git_segment()`'s
+  `return subcommand, rest, first, blocking, c_operands`, now quoted in place of the number. The
+  *mechanism* sentence above still describes a two-clause test that no longer exists; that half
+  remains task 16's, and is unchanged.
 - `SEG_ENV<tab><i><tab><name>` — one per entry in segment `i`'s `assignments` dict whose name begins
   `GIT_`. A **prefix** test over the namespace git owns, so a variable added upstream is covered the
   day it ships.
@@ -4408,8 +4415,15 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             `-C`, i.e. the one that denies" (`blocking_option`, by contrast, is what "`SCOPE_UNKNOWN`
             has always named, and it is unchanged"). One variable name, two gates — grepping
             `blocking_option is not None` finds the `SCOPE_UNKNOWN` gate and misleads. The design
-            section's `SEG_SCOPE_OPT` bullet needs no further change: it already names
-            `residual_option`. **Dead reference:** commit `e304436`'s own message and this bullet's
+            section's `SEG_SCOPE_OPT` bullet already names `residual_option` correctly in its
+            marker. ⚠️ **But "needs no further change", as this line first read, was wrong —
+            observability-judge round 2 caught it.** That bullet still carried a dead anchor,
+            `classify-git-command.py:226-231`, pointing at `BRANCH_MOVE_ALWAYS`; its own marker said
+            a citation was owed while this status line said nothing was. Paid in place (see that
+            bullet's round-2 marker). The wrong-*status* claim is the same failure shape as this
+            bullet's original wrong-*mechanism* claim: the account the next agent reads is the one
+            that is wrong, and it would have let someone tick the item with a dead anchor still
+            live. **Dead reference:** commit `e304436`'s own message and this bullet's
             first version both stated the wrong surviving site. `e304436` is **not** merged — it is
             unpushed on this branch and could be amended — but rewriting a commit message to erase a
             wrong claim would delete the record that the claim was made and caught, which is the one
@@ -4428,6 +4442,14 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             (roughly a dozen, no filename prefix, never part of `64c21ae`'s 50). Decide whether
             they are converted, left as anaphora, or ruled out of scope — and record the decision,
             so a later sweep does not rediscover them as new.
+            ⚠️ **At least one of them is stale right now — observability-judge round 2 (2026-08-28).**
+            The Gherkin comment for clause 3b says "clause 3a derived from `:62-63`", anaphoric to
+            `shell_segments.py` named in the preceding clause. Measured: the denylist it refers to is
+            at **68-69**. `de136f3` converted that same sentence's *first* citation to a quoted
+            fragment and left this one, one clause later, untouched — so a single sentence now cites
+            the same file both ways. Recorded, deliberately not fixed here: this species is task 16's
+            subject, and converting one instance ad hoc is what leaves the next sweep rediscovering
+            the rest as new. Whoever takes this task starts here.
       Two of the three are false statements about current code, carrying dated markers in place.
       The markers stop a reader believing the text; they do not make the card true.
 
