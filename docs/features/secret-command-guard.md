@@ -28,33 +28,96 @@ happen at `PreToolUse`, on the command text, before it runs.
    registered in `settings.json` alongside git-guard/doc-guard/etc. Blocks (exit 2):
    - a command naming a known secret-bearing dotfile/path (`~/.terminal_aliases`,
      `~/.bash_profile`, `~/.zshrc`, `~/.zprofile`, `~/.zshenv`, `.env`/`.env.*`,
-     `credentials.json`, `*/Application Support/*/credentials*`) unless every
-     mention sits inside a `grep`/`egrep`/`fgrep` call carrying an `-o` family flag;
+     `credentials.json`, `*/Application Support/*/credentials*`) — **with no
+     permitted read shape**. There is no `grep -o` carve-out; see the amendment
+     below and ADR 0039.
+   - **Exempt from the `.env` family**, because they are conventionally committed
+     and never carry a real value: `.env.example`, `.env.template`, `.env.sample`.
    - a full-environment dump: `os.environ`/`process.env` anywhere in the raw command
      text, or a bare `env`/`printenv` with no argument as a segment's own command.
    - Fails OPEN on missing python3/unparseable payload/internal error — explicit
      judgment call, opposite of `scan-secrets.sh`'s fail-closed, because this hook's
      blast radius (nearly every Bash call, every session) is much larger than a
      single write.
+   - Bypass: `SECRET_EXEMPT=<reason> <command>` (logged), matching this repo's
+     other Tier 1 guards.
 2. Register the existing dormant `hooks/scan-secrets.sh` under
-   `PreToolUse`/`Edit|Write|NotebookEdit` in `settings.json` — it already has a
-   passing test suite and blocks writes that introduce credential material; it was
-   simply never wired in. Pure wiring change, no script edits.
-3. Update `rules/gates.md`: remove `scan-secrets.sh` from the "Dormant hooks" bullet
-   (now three scripts, not four) and add one new gate bullet for
-   `secret-command-guard.sh`.
+   `PreToolUse`/`Edit|Write|NotebookEdit` in `settings.json`. It blocks writes that
+   introduce credential material and was never wired in. It had **no test suite
+   anywhere in the repo** — `rules/gates.md`'s claim that it "passed its tests" was
+   false — so `hooks/scan-secrets.test.sh` (17 cases) was written *before* the hook
+   was registered, rather than arming an untested fail-closed hook on the stale claim.
+3. Update `rules/gates.md`: correct the "Dormant hooks" bullet (`scan-secrets.sh`
+   removed from it, and the false "passes its tests" claim retracted) and add one
+   new gate bullet for `secret-command-guard.sh`.
+
+## Amendment (2026-08-28) — the `grep -o` carve-out is removed
+
+v1 shipped a carve-out: a command naming a secret-bearing path was **allowed** if
+every mention sat inside a `grep`/`egrep`/`fgrep` call carrying an `-o`-family flag,
+on the theory that `-o` prints only the matched substring, so a value could not ride
+along. The observability judge falsified that theory and the main agent reproduced it:
+
+    $ grep -o 'export .*' <dotfile>
+    export AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMIK7MDENG"     ← classifier said ALLOW
+
+The caller picks the pattern, so `-o` constrains nothing. The carve-out reproduced
+the exact leak the hook was built to stop, and 23 green tests never asked. A second
+defect rode along: `is_only_matching_flag` accepted **any** single-dash token
+containing an `o`, so `grep -e -notes .env` satisfied the check with no `-o` present
+— `-notes` there is grep's *pattern*, not a flag.
+
+Decision (user, 2026-08-28): **drop the carve-out entirely.** Every mention of a
+secret-bearing path blocks; there is no permitted read shape through Bash. A bounded-
+pattern variant was considered and rejected — `grep -o '[A-Za-z0-9/+=]\{20,\}'`
+still extracts the secret, so it narrows the hole rather than closing it, at the cost
+of a new mini-language to get right. Rationale: `docs/decisions/0039-*.md`.
 
 ## Non-goals
 
 - No output-scanning/redaction of Bash results (rejected: a pipe wrapper risks
   swallowing exit codes, a known failure mode already in this session's memory).
-- No attempt to catch every possible env-leak shape (e.g. a test harness's own
-  invocation log nesting an inherited environment under an arbitrary name) — v1
-  covers the two shapes that actually fired.
+- No attempt to catch every possible env-leak shape — v1 covers the two shapes that
+  actually fired.
+
+## Known gaps — measured, disclosed, not fixed
+
+Each of these was **probed against the classifier** on 2026-08-28 and returns ALLOW.
+Nothing in the hook, `rules/gates.md`, or the deny message may claim otherwise.
+
+| Shape | Why it is not covered |
+| --- | --- |
+| `F=~/.zshrc; cat "$F"` | `shell_segments.segments()` hands the assignment back separately and the classifier discards it; the path never appears as a token in the `cat` segment. |
+| a `git`/`cat` inside a script file (`bash diag.sh`) | the hook sees command *text*, never the file's contents — by construction. Leak #1 was of this shape, so **the hook does not block leak #1's original form**, only the bare `env`/`printenv` and `os.environ`/`process.env` shapes. |
+| backticks, `$(…)`, globs building the path | same reason: the path is not a literal token. |
+| `export -p`, `declare -p`, `set`, `env -0`, `printenv -0`, `ps eww` | full-environment dumps that are not `env`/`printenv` with zero arguments. Widening was offered and **declined** (user, 2026-08-28) — `set` with no arguments is common enough that blocking it was judged worse than the residual risk. |
+
+This is a momentum guardrail against the two shapes that actually fired, **not a
+security boundary**. `SECRET_EXEMPT` clears it in one flag.
 
 ## Verification plan
 
-- New `hooks/secret-command-guard.test.sh` matching this repo's existing
+- `hooks/secret-command-guard.test.sh` matching this repo's existing
   `run_case`/`run_case_msg` hook-test convention (see `feature-sync-guard.test.sh`),
   including a registration self-test with a mutation control.
-- Confirm `scan-secrets.sh`'s existing test suite still passes before registering it.
+- `hooks/scan-secrets.test.sh` (new, 17 cases) passes before `scan-secrets.sh` is
+  registered.
+- Every row of the Known-gaps table above is pinned by a test asserting ALLOW, so a
+  later widening cannot silently change the disclosed contract without turning the
+  suite red.
+
+## Tasks
+
+- [x] 1. Write `hooks/lib/classify-secret-command.py` and `hooks/secret-command-guard.sh`.
+- [x] 2. Write `hooks/secret-command-guard.test.sh` (23 cases) with a registration self-test.
+- [x] 3. Write `hooks/scan-secrets.test.sh` (17 cases) before registering `scan-secrets.sh`.
+- [x] 4. Register both hooks in `settings.json`.
+- [x] 5. Correct the "Dormant hooks" bullet and add the new gate bullet in `rules/gates.md`.
+- [x] 6. Observability judge round 1 — `risk=medium`, `success_masking=fail`; findings reproduced by the main agent.
+- [x] 7. Amend the spec: drop the carve-out, add the `.env` exemptions, add `SECRET_EXEMPT`, record the known gaps (this commit).
+- [ ] 8. Red tests for the amended contract, including the ALLOW-pinning gap tests.
+- [ ] 9. Implement the amendment in the classifier and the hook wrapper; fix the deny message, which currently recommends the leaking `grep -o` shape.
+- [ ] 10. ADR 0039 for the carve-out removal and the fail-open inversion.
+- [ ] 11. Update `rules/gates.md` and the README Roadmap for the amended behaviour.
+- [ ] 12. Re-run both suites; observability judge round 2 against final HEAD.
+- [ ] 13. Open the PR as a draft, push the audit trail, mark ready.
