@@ -811,7 +811,9 @@ file's documented token style, tab-separated:
 - `SEG_SCOPE_OPT<tab><i><tab><option>` — segment `i`'s git command carries a global option that
   `resolve_subcommand` refused to walk past, **other than `-C`**. Emitted from the existing
   `blocking_option` return value (`classify-git-command.py`, `resolve_git_segment()`'s
-  `return subcommand, rest, first, blocking, c_operands`) by the two-clause test
+  `return subcommand, rest, first, blocking, c_operands` — **its third element, the local `first`;
+  the element spelled `blocking` is position 4, which `classify()` binds as `residual_option`**) by
+  the two-clause test
   `blocking_option is not None and blocking_option != "-C"` — never from a list of option names.
   ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test quoted
   above no longer exists as one expression: `resolve_git_segment()` now filters `-C` out of
@@ -4369,7 +4371,10 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         14 anchor-rot citations were found at the *exact same* card line numbers listed above — no
         further drift since `12f5f79` opened this task — and the 2 doc-guard.sh and 2
         phase-guard.sh/`.gitignore` citations also matched. The **delta is 2**, both citing
-        `session-state.md` (card lines 9 and 496 as of this commit): `session-state.md` was
+        `session-state.md` (the opening blockquote's `Closes the TODO recorded at` line, and the
+        `git merge` matters specifically bullet — named rather than numbered, since the digits
+        written here were already 9 and 497, not 9 and 496, by the end of this branch):
+        `session-state.md` was
         untracked from the repo (`9ceab68`) *before* `64c21ae`'s sweep ever ran, so both anchors
         cite a file that is not on disk. Neither was counted in any of task 15's three groups, and
         neither was counted or logged as unresolved by `64c21ae` itself (confirmed against that
@@ -4450,6 +4455,16 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             the same file both ways. Recorded, deliberately not fixed here: this species is task 16's
             subject, and converting one instance ad hoc is what leaves the next sweep rediscovering
             the rest as new. Whoever takes this task starts here.
+            ⚠️ **Measured population, round 3 (2026-08-28) — inherit this, do not rediscover it.**
+            `:62-63` is stale in **two** live places, not one: the Gherkin comment above *and* the
+            design section's clause-3a paragraph ("Derived from `:62-63` rather than from a list of
+            wrapper words"). And **this branch moved every self-reference in the card.** Seven cite
+            the card's own line numbers; the branch's +204 lines shifted them 7–31 each, measured
+            against `origin/main` @ `21771d1`: `:778`→785, `:848`→870, `:1261`→1291, `:1438`→1469,
+            `:1832`→1863, and **`:788` no longer exists at all**. `:1832` was exactly
+            `Scenario: -C in an earlier segment does not carry to a later one` at base; at HEAD that
+            line is blank. That measurement changes this task's options — "leave them as anaphora"
+            was defensible while they were stable, and they are no longer stable.
       Two of the three are false statements about current code, carrying dated markers in place.
       The markers stop a reader believing the text; they do not make the card true.
 
