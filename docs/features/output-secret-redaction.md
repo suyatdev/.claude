@@ -17,19 +17,25 @@ classifier has nothing to match on. Widening the pattern list cannot close a gap
 root cause is that the guard is looking at the wrong artefact.
 
 This card looks at the other artefact. A `PostToolUse` hook receives the command's output
-and can replace it before the model ever reads it — which closes all seven shapes at once,
-because it does not care how the file was reached.
+and can replace it before the model ever reads it. That closes the shapes whose defect is
+*how the file was reached* — script file, variable, glob, `$(…)` — because output redaction
+does not care about the route. It does **not** close the two whose defect is *which file*:
+`cat foo.zshrc` / `cat my.env` and `cat config/prod.env` name files that are absent from the
+Sources table below, so a known-values design never harvests them either. Five of seven, not
+seven; the Known-gaps table records the remainder.
 
-**The premise that said this was impossible is false, and it is written down in four
-places.** `docs/features/secret-command-guard.md:20-23` claims "a `PostToolUse` hook cannot
+**The premise that said this was impossible is false. It is written in three places, and a
+fourth site rests on a separate objection that is also obsolete.**
+`docs/features/secret-command-guard.md:20-23` claims "a `PostToolUse` hook cannot
 retroactively redact output already returned to the model", citing a survey of this repo's
 own two `PostToolUse` hooks. The observation was right — both only ever add context — but
 the inference generalised two local hooks to the whole platform. Measured false on CLI
-2.1.251 (evidence in Verification below). The same claim is repeated at
-`docs/decisions/0039-…:24-26` and `hooks/secret-command-guard.sh:10-15`, and
-`docs/features/secret-command-guard.md:78-79` rejects output scanning for a reason that
-does not apply to this design at all ("a pipe wrapper risks swallowing exit codes" — a
-`PostToolUse` rewrite is not a pipe wrapper and touches no exit code).
+2.1.251 (evidence in Verification below). The same claim is repeated verbatim at
+`docs/decisions/0039-…:24-26` and `hooks/secret-command-guard.sh:10-15` — three sites for one
+premise. Separately, `docs/features/secret-command-guard.md:78-79` rejects output scanning on
+different grounds ("a pipe wrapper risks swallowing exit codes"), which is equally obsolete
+here for its own reason: a `PostToolUse` rewrite is not a pipe wrapper and touches no exit
+code. Four edits, three of them the same sentence.
 
 ## Shape
 
@@ -61,8 +67,9 @@ command text, and the existing guard never touches the output. Neither replaces 
    placeholder.
 5. **Emit** `hookSpecificOutput.updatedToolOutput` containing a mutated copy of the received
    `tool_response`.
-6. **Correct the false premise** in all four sites named above, in one commit, making this
-   card the single authority the other three point at.
+6. **Correct the false premise** in the three sites that state it, plus the fourth site whose
+   separate objection is also obsolete — one commit, with this card as the single authority
+   the other three point at.
 
 ### Pinned versions
 
@@ -70,7 +77,12 @@ command text, and the existing guard never touches the output. Neither replaces 
 | --- | --- | --- |
 | Claude Code CLI | `2.1.251` | every platform behaviour below was measured against this build; `updatedToolOutput` is not documented publicly and its contract may move |
 | python3 | `3.9.6` (macOS system, `/usr/bin/python3`) | the sibling guard resolves `python3` then `python` from PATH; 3.9 is the floor — no `match`, no `str.removeprefix` in hot paths |
+| `sqlite3` | `3.51.0` (`/usr/bin/sqlite3`, 2025-06-12) | required to read gcloud's `credentials.db` / `access_tokens.db`; a line-oriented parser on those produces binary garbage |
+| `jq` | `1.7.1-apple` | used by the registration self-test, per house convention |
 | No third-party libraries | — | the hook runs on every Bash call; an import outside the stdlib is a supply-chain surface and a startup cost |
+
+If `sqlite3` is absent the harvester **skips those two sources and records the skip** — it
+must not fall back to a text parser, and it must not abort the whole harvest.
 
 ## Contracts
 
@@ -122,7 +134,25 @@ Mutating a copy is correct under both readings.
 
 ### Placeholder format
 
-`[REDACTED:<KEY_NAME>]` — e.g. `[REDACTED:GITHUB_TOKEN]`.
+`[REDACTED:<LABEL>]` — e.g. `[REDACTED:GITHUB_TOKEN]`.
+
+`<LABEL>` is `[A-Z0-9_]+`, uppercased, with any other character replaced by `_`. Where a
+harvested value has a key name, the label **is** that key name. Many mandated sources are
+keyless, so each gets a fixed symbolic label — never a filename or path, which would leak
+the source location (and, for the gcloud path, an email address):
+
+| Source | Label |
+| --- | --- |
+| `~/.ssh/id_*` (PEM body) | `SSH_PRIVATE_KEY` |
+| `~/.vault-token`, `*.token` | `VAULT_TOKEN`, `SERVICE_TOKEN` |
+| `~/.pgpass` field 5 | `PGPASS_PASSWORD` |
+| `~/.netrc` / `~/.authinfo` password token | `NETRC_PASSWORD` |
+| `~/.git-credentials` line, and its URL password component | `GIT_CREDENTIAL` |
+| a URL password slot inside any keyed value | the enclosing key name, suffixed `_URL_PASSWORD` |
+| a base64-decoded `auths.*.auth` from `~/.docker/config.json` | `DOCKER_REGISTRY_AUTH` |
+| anything else keyless | `UNNAMED_SECRET` |
+
+Two labels colliding is harmless; a label revealing where the value lives is not.
 
 Named, not opaque. An opaque `[REDACTED]` produces exactly the undiagnosable failure this
 work exists to avoid: the model cannot tell a redaction from a broken command and retries in
@@ -178,14 +208,22 @@ log₂(length):
 
 | Value | Entropy (bits/char) | Actually |
 | --- | --- | --- |
-| 64-char hex token | 2.43 | a real secret |
+| 64-char hex token | 3.82 (mean of 500 sha256 digests; min 3.54, max 3.96) | a real secret |
 | `s3cr3t` | 2.25 | a real secret |
 | `localhost` | 2.73 | innocent |
-| a real URL (35 chars) | 4.06 | innocent |
+| a real URL (35 chars) | 4.08 | innocent |
 
-The lowest real secret scores *below* the highest innocent value; the ranges overlap
-completely, so no threshold separates them. At H≥4.0 you keep 9/19 secrets; at H≥2.5 you
-wrongly blank 19/23 innocent values. Use a **character-class count** (how many of
+Secrets span **2.25–3.82**; innocent values span **2.73–4.08**. The two ranges overlap
+across [2.73, 3.82], so no single threshold separates them: any cut high enough to exclude
+`localhost` also excludes `s3cr3t`, and any cut low enough to keep the hex token also keeps
+the URL. At H≥4.0 you keep 9/19 secrets; at H≥2.5 you wrongly blank 19/23 innocent values.
+
+⚠️ **Correction, and the reason it is left visible.** An earlier revision of this table
+recorded the hex token at 2.43 and argued it "scores lower than `localhost` because hex has
+only 16 symbols". Both were wrong — a 16-symbol alphabet caps entropy at log₂(16) = 4.0, and
+a random hex string lands just under it. The compliance judge caught the figure and it was
+re-measured here (`cache/spike/ent.py`). The conclusion is unchanged, but it now rests on an
+overlap rather than on an inversion that does not exist. Use a **character-class count** (how many of
 lower/upper/digit/other appear) instead — cheap, and it does not pretend to measure
 randomness.
 
@@ -206,13 +244,17 @@ LICENSE | WEBHOOK`
 
 Measured on a 41-entry corpus:
 
-| Rule | Secrets caught | Innocent wrongly blanked |
+**Every row below is in-sample.** All five were scored on the same 41-entry corpus the
+winning rule was tuned against, so the table ranks the candidates but predicts nothing about
+unseen input.
+
+| Rule | Secrets caught (in-sample) | Innocent wrongly blanked (in-sample) |
 | --- | --- | --- |
 | key name only | 15/17 | 3/24 |
 | length floor only | 14/17 | 7/24 |
 | AND | 12/17 | 1/24 |
 | OR, symmetric thresholds | 17/17 | 9/24 |
-| **OR, asymmetric (this rule)** | **17/17** | **0/24** |
+| **OR, asymmetric (this rule)** | **17/17 — fitted** | **0/24 — fitted** |
 
 AND is disqualified by two shapes it structurally cannot see: `MY_THING=ghp_…` (a real
 token under an innocent key name) and `DB_PASSWORD=hunter2` (7 characters, below any useful
@@ -282,17 +324,39 @@ therefore trades a measurable security regression for an unmeasurable speedup:
   readable by any local process, and a liveness failure that fails open. Disproportionate to
   a 0.16 ms problem.
 
-**Growth is bounded by a budget, not a cache:** cap total bytes read at 2 MB and skip files
-above a size ceiling. `~/.claude.json` alone is 92,847 bytes, so the ceiling is not
-theoretical.
+**Growth is bounded by a budget, not a cache**, with three named constants:
+
+| Constant | Value | Why this value |
+| --- | --- | --- |
+| `MAX_TOTAL_BYTES` | 2 MB | ~95× the measured real corpus (21,846 bytes); at 1 MB parsing still costs 6.35 ms, so 2 MB stays inside one interpreter startup |
+| `MAX_FILE_BYTES` | 256 KB | `~/.claude.json` is 92,847 bytes — the largest real source — so 256 KB clears it with headroom while excluding runaway logs |
+| `MAX_SOURCE_DEPTH` | 8 | `~/.zshrc` → oh-my-zsh → `lib/*.zsh` → a custom fragment is 4 levels; 8 doubles it. Enforced together with a visited-inode set, since dotfile repos contain `source` cycles |
+
+On exceeding `MAX_TOTAL_BYTES` the harvester stops reading further sources and proceeds with
+what it has — it does **not** abort, because an abort would mean no redaction at all.
 
 ## Matching mechanics
 
-- **Exact substring, case-sensitive, on raw bytes**, plus exactly two encoded forms:
-  **base64 and URL-encoded** (three needles per secret). Exact matching already survives
-  shell quoting and JSON escaping for free. Hex is skipped as rare for credential echo.
-  **Never case-fold** — folding breaks base64 matching, where case is data, and blanks far
-  more innocent text.
+- **Exact substring, case-sensitive, on raw bytes**, plus a defined set of encoded forms.
+  Exact matching already survives shell quoting and JSON escaping for free. Hex is skipped as
+  rare for credential echo. **Never case-fold** — folding breaks base64 matching, where case
+  is data, and blanks far more innocent text.
+
+  "base64" is not one string, and leaving it unspecified is a silent coverage hole. Generate:
+
+  | Needle | Form |
+  | --- | --- |
+  | 1 | the raw value |
+  | 2–4 | RFC 4648 **standard** alphabet (`+/`), padded, at byte offsets 0, 1 and 2 — a value embedded mid-stream encodes differently per alignment, and only one of three would otherwise match |
+  | 5–7 | RFC 4648 **url-safe** alphabet (`-_`), padded, same three offsets |
+  | 8 | standard alphabet, **unpadded** (trailing `=` stripped) |
+  | 9 | `%`-encoding per RFC 3986, encoding every character outside `A-Za-z0-9-._~` |
+
+  For offsets 1 and 2, match only the **interior** run of the encoded form — the first and
+  last encoded character are contaminated by neighbouring bytes and must be dropped. If an
+  offset variant falls below the 20-character floor after that trim, discard it rather than
+  lowering the floor. Nine needles at ~0.011 ms each keeps the scan near the measured
+  0.102 ms for 40 secrets.
 - **Minimum match length 20 characters**, including for partial matches. Allow any ≥20-char
   contiguous substring of a harvested secret, which covers line wrapping and mid-truncation.
   False-blank rates at 2,000 Bash calls/day and ~102,400 windows per scan:
@@ -385,6 +449,7 @@ Feature: Redact known secret values from Bash output
     Given .env.example contains API_KEY=your-api-key-here
     When any command prints the words "your-api-key-here"
     Then the text is unchanged
+    And .env.example contributed no needle to the scan
 
   Scenario: A short innocent value under a secret-sounding key is still blanked
     Given a shell profile assigns AUTH_MODE the value "oauth2"
@@ -402,14 +467,21 @@ Feature: Redact known secret values from Bash output
     Given a tool_response carrying backgroundTaskId and persistedOutputPath
     When the hook redacts stdout
     Then the emitted updatedToolOutput still carries both fields
+    And the harness does not log an output-shape mismatch
     # The single most likely implementation bug; leaks with no error surfaced
 
   Scenario: Image output is passed through untouched
     Given tool_response.isImage is true
+    When the hook runs
     Then the hook returns no replacement at all
 
+  # NOT YET A REQUIREMENT — blocked on Open Question 1. Written here so the shape is
+  # reviewable, but it must not be implemented until the question is answered, and the
+  # mechanism is deliberately absent from Scope, Contracts and Runtime until then.
+  @pending-open-question-1
   Scenario: An exempted command is not scanned
     Given a command prefixed with SECRET_EXEMPT=<reason>
+    When the command runs and prints a harvested value
     Then the output is returned unmodified
     And the exemption is logged
 ```
@@ -454,10 +526,15 @@ may claim otherwise.
 2. **Falsify each failure row.** Build a deliberately broken hook for each row of the
    failure-direction table and confirm the canary leaks — a fail-open you have not seen fail
    is a fail-open you have not measured.
-3. **Synthetic fixtures are mandatory, not optional.** This machine has **zero** `.env` files
-   anywhere and most conventional credential paths are absent, so a suite run only against
-   the real home directory would report a perfect score with most parsers never executed.
-   Every format in the sources table needs a fixture.
+3. **Synthetic fixtures are mandatory, not optional.** A bounded search — `find` for `.env*`
+   across `~/.worktrees` and `~/Documents`, `-maxdepth 5`, `node_modules` excluded — returned
+   **zero files**, and most conventional credential paths listed in Sources were measured
+   absent. That is the scope of the claim: **no `.env` file was found within those two trees
+   at that depth.** A separate unbounded `find` over `$HOME` at depth 4 was killed at two
+   minutes without completing, so "zero anywhere on this machine" is *not* established and
+   must not be written down. Either way the consequence holds: a suite run only against the
+   real home directory would report a perfect score with most parsers never executed. Every
+   format in the sources table needs a fixture.
 4. **Re-measure the filter against a held-out corpus** built after the rule is frozen. The
    17/17 · 0/24 figure is fitted and must not be quoted as a generalization estimate.
 5. **A dedicated regression test for the dropped-field bug** — assert that a `tool_response`
@@ -516,5 +593,14 @@ may claim otherwise.
   `stdout` is replaced. Subagent measurement shows `stdout` is truncated to 30,000 chars
   before the hook sees it, which suggests the spill happens elsewhere, but the interaction
   was not tested directly.
-- Every filter number in this card was produced by a subagent on a corpus it also tuned
-  against. Reproduced independently: none of them yet.
+- **Provenance of every number in this card, stated once so no table reads as first-hand.**
+  Reproduced independently by me: the entropy figures only (`cache/spike/ent.py`, after the
+  compliance judge caught an error in them). Measured by me directly: the `updatedToolOutput`
+  replacement, its absence from the transcript JSONL, and the parallel/last-write-wins
+  clobber. **Everything else — the runtime table, the hashing costs, the false-blank rates,
+  the 30,000-char truncation, the failure-direction matrix, and all filter figures — comes
+  from subagent measurement that I have not reproduced.** The filter figures additionally
+  come from a corpus the same agent tuned against.
+- The claim that this hook closes five of the sibling card's seven gap shapes is a reading of
+  that card's table, not a measurement. It should be re-derived against the shapes as they
+  stand when implementation starts.
