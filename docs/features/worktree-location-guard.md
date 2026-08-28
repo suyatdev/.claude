@@ -1,20 +1,21 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: docs/worktree-guard-doc-cleanup
+branch: docs/worktree-guard-citation-sweep
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
 
 > Closes the TODO recorded at `session-state.md:79-82`: the standing worktree rule (memory
+> `feedback_always_work_in_a_worktree`, 2026-08-23) has lived only in memory and prose. Memory is
+> advisory and does not survive into every session's attention; this feature gives the rule a
+> computational home.
+>
 > ⚠️ **Anchor does not resolve, found during task 15's population sweep (2026-08-28).**
 > `session-state.md` was untracked from this repo before `64c21ae`'s citation sweep even ran, so
 > the line range cites a file no longer on disk. Neither the sweep nor task 15's own accounting
 > caught it — outside the scope of all three of task 15's named groups. Left in place as the
 > record of what motivated this card; not repointed, since there is nothing left to quote.
-> `feedback_always_work_in_a_worktree`, 2026-08-23) has lived only in memory and prose. Memory is
-> advisory and does not survive into every session's attention; this feature gives the rule a
-> computational home.
 
 > **⚠️ Reconciled card, 2026-08-24.** This document is the merge of two versions that were developed
 > in parallel and diverged from the same planning commit — a live demonstration of the very problem
@@ -1603,7 +1604,7 @@ Feature: worktree-guard.sh — preconditions shared by every arm
     # Boundary 7. The command could not be lexed, so its contents are unknown.
     # "git status" is a read-only command Arm D allows, so an implementation that
     # skips the lexer it cannot run allows this — that is the falsifier. Resolution
-    # follows git-guard.sh:54 (command -v python3 || command -v python).
+    # follows git-guard.sh's `command -v python3 || command -v python`.
 
   Scenario Outline: A lexer exits non-zero
     Given the session cwd is a primary checkout
@@ -1964,6 +1965,8 @@ Feature: Arm D — moving a primary checkout's HEAD
       | git stash apply            |
     # git merge --ff-only is the command in this repo's own logged incident
     # (session-state.md:85); the first version of this arm did not cover it.
+    # ⚠️ Anchor does not resolve (found in observability-judge round 1, 2026-08-28) — same
+    # session-state.md gap noted at the top of this card; left in place.
 
   Scenario Outline: Commands that touch named paths, not HEAD, are allowed
     When Bash runs "<command>"
@@ -2072,7 +2075,8 @@ Feature: Arm D — moving a primary checkout's HEAD
     And the message names "git" and segment 0
     # SEG_OPAQUE. Measured: this emits NO fact at all today, and env -C works on
     # this host, so it is a live HEAD move against another repo that is wholly
-    # invisible. WRAPPERS is a documented denylist (shell_segments.py:62-63).
+    # invisible. WRAPPERS is a documented denylist (shell_segments.py, "This is a
+    # denylist:").
 
   Scenario: A shell keyword holds the command position
     Given the session cwd is a primary checkout
@@ -2090,8 +2094,9 @@ Feature: Arm D — moving a primary checkout's HEAD
 
   # Clause 3b — collapsed tokens. Round 6. Everything above reads bare argv
   # tokens; a quoted command survives lexing as ONE token, so "git" is never a
-  # member of argv[1:] and every scenario above allows it. shell_segments.py:60-62
-  # states this limit outright; clause 3a derived from :62-63 and ignored it.
+  # member of argv[1:] and every scenario above allows it. shell_segments.py,
+  # "`eval` covers only the unquoted form", states this limit outright; clause 3a
+  # derived from :62-63 and ignored it.
 
   Scenario: A git command hidden inside a quoted shell string
     Given the session cwd is a primary checkout
@@ -2201,8 +2206,9 @@ Feature: Arm D — moving a primary checkout's HEAD
     And the message names the grouping operator
     # SEG_GROUPED. Bash discards this cd at the ')', so the switch really does
     # act on the session repo and refusing it is over-strict. segments() cannot
-    # tell '(' from '{' — the operator is thrown away at shell_segments.py:139-140
-    # — so the guard cannot distinguish the safe case from the unsafe one.
+    # tell '(' from '{' — the operator is thrown away, per shell_segments.py's own
+    # `throws the operator` note on has_grouping() — so the guard cannot
+    # distinguish the safe case from the unsafe one.
 
   Scenario: A cd inside a brace group
     Given the session cwd is a primary checkout
@@ -2637,6 +2643,8 @@ Feature: Arm D layer 2 — the commands it does not see
     # fail-open applies to them undiminished.
     # git merge --ff-only is the command in this repo's own logged incident
     # (session-state.md:85).
+    # ⚠️ Anchor does not resolve (found in observability-judge round 1, 2026-08-28) — same
+    # session-state.md gap noted at the top of this card; left in place.
 
   Scenario: A script file running a HEAD move is refused; the same script running a stash pop is not
     Given ./myscript.sh contains "git switch main"
@@ -4369,7 +4377,9 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         50-citation count: every citation in that commit's diff, converted or logged unresolved,
         carried a filename prefix. Roughly a dozen instances found across the in-scope range. Not
         converted here: the user's 2026-08-28 gate decision authorized exactly two spec-text
-        rewrites (the doc-guard.sh re-tense and the `:3948` clause) plus the population re-measure,
+        rewrites (the doc-guard.sh re-tense and the WORKTREE_GUARD_MODE mode-read re-tense — the
+        ⚠️ block correcting "anything else is a hard deny naming the bad value" against `6bf830c`)
+        plus the population re-measure,
         not a new, undiscussed class of edits. Recommend a follow-up task if these are to be
         addressed; they carry the same rot risk as the filename-prefixed form.
       - **Groups A/B/C outcome:** Group A converted 12 of 14 cleanly (anchor rot, quoted claim
@@ -4383,15 +4393,29 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 - [ ] 16. The three things task 15 found but was not authorized to change. Opened 2026-08-28 under
       an explicit user gate decision, after task 15's commit `ae8cb27`. Each needs its own reading;
       none is a citation swap, which is why none was done in that commit.
-      - 🔴 **`:805` describes a two-clause test that no longer exists anywhere.** The card claims
-            `classify-git-command.py` tests
-            `blocking_option is not None and blocking_option != "-C"`. Independently re-measured:
-            the only surviving site is a **single**-clause `if blocking_option is not None:`, and
-            the `-C` half moved inside `resolve_git_segment()`, which now filters it before
-            `classify()` ever sees it. So this is not anchor rot and cannot be repointed — the
-            described mechanism was refactored. The fix is to work out what the design section
-            should now say about where `-C` is filtered, and say that.
-      - 🔴 **`:894`'s second citation describes a discard that is gone, not moved.** The card says
+      - 🔴 **The `SEG_SCOPE_OPT` two-clause-test bullet in the design section describes a test
+            that no longer exists anywhere.**
+            ⚠️ **Corrected, observability-judge round 1 (2026-08-28) — this bullet's own first
+            version named the wrong site.** The card claims `classify-git-command.py` tests
+            `blocking_option is not None and blocking_option != "-C"`. That two-clause form is
+            gone, but the surviving site is **not** the single-clause `if blocking_option is not
+            None:` — that gate feeds `scope_unknown`, the `SCOPE_UNKNOWN` fact, a **different
+            mechanism** that emits no `SEG_SCOPE_OPT` at all. `SEG_SCOPE_OPT` is actually emitted
+            by the single-clause `if residual_option is not None:`, immediately followed by
+            `facts.add(_seg("SEG_SCOPE_OPT", index, residual_option))` — the same site task 15's
+            own ⚠️ marker in the design section above already named correctly. `residual_option`
+            is `resolve_git_segment()`'s own account of itself: "the first such option that is NOT
+            `-C`, i.e. the one that denies" (`blocking_option`, by contrast, is what "`SCOPE_UNKNOWN`
+            has always named, and it is unchanged"). One variable name, two gates — grepping
+            `blocking_option is not None` finds the `SCOPE_UNKNOWN` gate and misleads. The design
+            section's `SEG_SCOPE_OPT` bullet needs no further change: it already names
+            `residual_option`. **Dead reference:** commit `e304436`'s own message and this bullet's
+            first version both stated the wrong surviving site; that commit is merged and cannot be
+            edited, so it stands as a dead reference and this corrected bullet is the redirect — the
+            same pattern task 14 used for `6bf830c`'s dead `scratchpad/probe-badmode-exempt.sh`
+            citation.
+      - 🔴 **The second citation in the `_assigns` discard paragraph (design section) describes a
+            discard that is gone, not moved.** The card says
             `classify()` "unpacks that dict as `_assigns` and discards it". Independently
             re-measured: `classify()` binds `assigns` and passes it to `segment_facts()`. The one
             remaining `for _assigns, iargv in inner:` is a **different, inner** loop, so a grep for
@@ -4403,6 +4427,31 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             so a later sweep does not rediscover them as new.
       Two of the three are false statements about current code, carrying dated markers in place.
       The markers stop a reader believing the text; they do not make the card true.
+
+      **Observability-judge round 1 (2026-08-28), risk=medium confidence=high, ran against
+      `e304436`.** It rated the conversions themselves good — 19 of 20 fragments unique, every one
+      supporting its sentence, both gate-approved rewrites correct, and the refusal above to
+      repoint the `SEG_SCOPE_OPT` and `_assigns`-discard citations the right call — but found five
+      defects in `ae8cb27`/`e304436`'s own self-audit, not in the conversions:
+      - The `SEG_SCOPE_OPT` two-clause-test bullet above named the wrong surviving site
+        (`blocking_option` instead of `residual_option`) — corrected in place above, with the
+        dead-reference note that `e304436`'s commit message still carries the wrong account.
+      - Six `file:line` citations inside Gherkin/code-comment blocks were never counted by either
+        `64c21ae`'s sweep or task 15's population re-measure: three (`shell_segments.py`'s WRAPPERS
+        denylist, its `eval`-unquoted-form note, and its grouping-operator-discard note) had gone
+        stale and are now converted to quoted fragments; `git-guard.sh:54` still resolved and is
+        now quoted too; the two `session-state.md:85` citations are unresolvable (same untracked
+        file already marked at the top of this card) and now carry the same dated-marker treatment.
+      - Three bare `` `:NNN` `` self-references written by `ae8cb27`/`e304436` themselves — one in
+        task 15's "not converted here" sentence, two in task 16's bullet headers — were stale on
+        arrival: the commits' own insertions elsewhere shifted the numbers they pointed at.
+        Replaced with durable descriptors instead of corrected numbers, on the same reasoning as
+        the bare-`:NNN` species task 15 already catalogued: a number rots again the moment the
+        file is next edited.
+      - Frontmatter `branch:` had been left at `docs/worktree-guard-doc-cleanup`, the prior branch —
+        corrected to `docs/worktree-guard-citation-sweep`.
+      - The opening blockquote's session-state.md marker was interposed mid-sentence, splitting the
+        parenthetical `(memory ... 2026-08-23)` in half — moved to follow the complete blockquote.
 
 ## Notes
 
