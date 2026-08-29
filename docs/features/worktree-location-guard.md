@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: feat/worktree-location-guard
+branch: docs/worktree-guard-doc-cleanup
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
@@ -70,7 +70,7 @@ flowchart TD
 ```
 
 The diagram cannot show the two things most likely to bite: Arm A resolves the repo from the
-**write target**, never the session cwd (`phase-guard.sh:191-197` records this as its one bug
+**write target**, never the session cwd (`phase-guard.sh`, `Resolved from the WRITE TARGET, never from the session's cwd`, records this as its one bug
 class, found in round 6), and the primary-vs-linked test is a **fail-open** unless paths are
 normalized first (see Detection).
 
@@ -84,13 +84,13 @@ of a known cost, and a later reader will otherwise re-litigate them.
 | Enforcement | **Hard deny** (exit 2) | Arm D alone carries a bypass — see below |
 | Trigger surface | `Edit`/`Write`/`NotebookEdit` + two **git-command** Bash arms | The heuristic Bash write arm was **dropped** — see Non-goals |
 | Path exemptions | Explicit list, below — **not** "reuse phase-guard verbatim" | Round-1 compliance fix; the prose and the list disagreed |
-| Repo opt-in | **None — every git repo on this machine** | Deliberate divergence from `phase-guard.sh:248`; blast radius accepted, see below |
+| Repo opt-in | **None — every git repo on this machine** | Deliberate divergence from `phase-guard.sh`'s `[ -d "$root/docs/features" ] \|\| exit 0`; blast radius accepted, see below |
 | `<repo-name>` segment | **Directory basename**, collision-detected | A `.repo-root` marker makes a collision a deny, not a silent share |
 | Existing 4 worktrees | **Not migrated** | Guard applies to new `git worktree add` only |
 | Branch switching | **Arm D added** (2026-08-24, round-1 revision) | The original design never covered the incident in Problem |
 | Arm D bypass | `WORKTREE_EXEMPT=<reason>`, logged | User: "I can bypass by manually switching the branch if I really need to" |
 | Arming | **Log-only first, then flip to deny** | `settings.json` `env.WORKTREE_GUARD_MODE`; absent means `log` |
-| Switch location | **`settings.json`, not `hooks/state/`** | Round-2 fix: `.gitignore:17` ignores `/hooks/state/`, so arming would have left no record in git |
+| Switch location | **`settings.json`, not `hooks/state/`** | Round-2 fix: `.gitignore` ignores `/hooks/state/`, so arming would have left no record in git |
 | What the log records | **Refusals only** — never allows | Round-2 fix: one line per evaluation measured at 10–20 MB per three days |
 | Dirty worktree on removal | **Refuse, never `--force`** | Boundary 26. A stale directory is recoverable; silently destroyed work is not |
 
@@ -100,7 +100,7 @@ of a known cost, and a later reader will otherwise re-litigate them.
 `CODING_MEMORY.md`, `coding-memory/*`.
 
 The last two matter and were **missing** from the round-1 draft, which claimed to reuse
-`phase-guard.sh:294-298` "verbatim" while printing a shorter list beside it. `coding-memory/` holds
+`phase-guard.sh`'s `case "$rel" in` exemption block "verbatim" while printing a shorter list beside it. `coding-memory/` holds
 `observability-judge/verdicts.jsonl` and `compliance-judge/verdicts.jsonl` — under the shorter
 list, a judge running with its cwd in a primary checkout would be denied permission to write its
 own verdict, and this feature's own gate would jam. The list is now written out rather than
@@ -108,7 +108,7 @@ incorporated by reference, so the two can no longer drift.
 
 ### The accepted blast radius
 
-`phase-guard.sh:248` exits silently unless the repo has a `docs/features/` directory — an opt-in
+`phase-guard.sh`'s `[ -d "$root/docs/features" ] || exit 0` exits silently unless the repo has a `docs/features/` directory — an opt-in
 signal, so a repo that never heard of the phase workflow is never blocked by it. **This hook has no
 such signal, by explicit user decision.** The consequence was stated plainly before the choice and
 is restated here so it is not discovered later as a bug:
@@ -119,7 +119,7 @@ is restated here so it is not discovered later as a bug:
 That is the intended behavior, not an oversight. Two things bound it: the guard ships in **log-only
 mode**, so the first days produce evidence rather than friction; and `settings.json` is on the
 exemption list, so the hook's own registration always remains editable — the same reasoning
-`phase-guard.sh:280-283` gives for exempting it there ("a guard that can block edits to its own off
+`phase-guard.sh`'s `it holds this hook's own registration` comment gives for exempting it there ("a guard that can block edits to its own off
 switch is a footgun").
 
 ## Detection — verified, not assumed
@@ -290,7 +290,7 @@ Two consequences — **but read the correction first**:
 - `Agent(isolation: "worktree")` cannot *switch into an existing* one. **Note this is not the same
   as pane dispatch** — `dispatch-pane-agent.sh` passes `--cwd`, launching a fresh session.
   **CONFIRMED — task 1a, by code and live** (2026-08-24):
-  - `run-pane-agent.sh:47` does a plain `cd "$run_cwd"`, then invokes `"$CLAUDE_BIN" -p … --agent …`
+  - `run-pane-agent.sh` does a plain `cd "$run_cwd" || fail_early`, then invokes `"$CLAUDE_BIN" -p … --agent …`
     as a fresh OS process. `EnterWorktree` is never called on this path, so `requireManagedLocation`
     is never consulted — (b)/(c) cannot apply.
   - Live check: a `general-purpose` pane dispatched with `--cwd` at a worktree *outside* its repo
@@ -398,7 +398,7 @@ session lands in `<repo>/.claude/worktrees/` instead" — it did fire, and it di
   ⚠️ **Probe-design note.** The agent-isolation case first came back "blocked" — but by
   `hooks/pane-dispatch-guard.sh`, which denies an Agent dispatch when no pane-split policy is
   recorded. That is *our own guard*, not a worktree limit, and it fired before the hook could be
-  reached. Re-run with `CLAUDE_PANE_AGENT=1` (`pane-dispatch-guard.sh:76`) it routed through the
+  reached. Re-run with `CLAUDE_PANE_AGENT=1` (`pane-dispatch-guard.sh`, `[ -n "${CLAUDE_PANE_AGENT:-}" ] && exit 0`) it routed through the
   hook normally. **A probe that measures our own guard instead of the harness reads as a harness
   limitation** — worth remembering for tasks 3–7.
 
@@ -571,7 +571,7 @@ must not be written anywhere in this card.
 
 **What it does not buy.** It is not defence in depth against an adversary. Four one-flag bypasses
 defeat layer 2, all measured — and `WORKTREE_EXEMPT` is **one hatch clearing both layers, not one
-per layer**: layer 2 honours it too, at `reference-transaction:593-594`, allowing with a
+per layer**: layer 2 honours it too, at `reference-transaction`'s `allow 'bypass-worktree-exempt'`, allowing with a
 `bypass-worktree-exempt` record. (Corrected 2026-08-27, user-approved spec fix. This line previously
 read "clears layer 1", which implied two hatches where there is one and so overstated what the
 feature stops. It was the third copy of that error; the other two were in ADR 0038 and
@@ -900,7 +900,7 @@ The rule is a prefix test, not an enumeration: **any assignment on segment `i` w
 values; they are named here as evidence the dict works, **not** as the set being matched.
 
 **3 — `argv[0]` is only trustworthy when it is accounted for.**
-`WRAPPERS` (`shell_segments.py:64`) carries a comment that states **two** separate limitations, and
+`WRAPPERS` (`shell_segments.py`, `# token-proxy wrapper used in this repo`) carries a comment that states **two** separate limitations, and
 this derivation must answer both. Verified line numbers 2026-08-25 — the round-6 verdict cites
 `:59-61` for the second sentence; the measured range is `:60-62`.
 
@@ -1255,7 +1255,8 @@ member without revisiting this rule fails the suite; and must pin each shape in 
 A rule that is only asserted in prose is the fifth list wearing different clothes.
 
 **Prior art for the two-clause shape**, both verified in this repo on 2026-08-24:
-`classify-commit-command.py:207-213` and `decide-commit-gate.py:69-78` already pair
+`classify-commit-command.py` (`if argv[0] == "cd":`) and `decide-commit-gate.py`
+(`def _unsupported_trigger(command):`) already pair
 `argv[0] == "cd"` with `blocking_option is not None` rather than enumerating options. This design
 extends that shape; it does not invent it.
 
@@ -1283,7 +1284,7 @@ written for callers that are not the last line of defence.
 strict **superset**; it is not "byte-identical", and they do **not** simply ignore what they do not
 recognize:
 
-- `git-guard.sh:80-86` reads facts with `while IFS= read -r`, one whole line at a time, **after
+- `git-guard.sh`'s `has_fact() {` reads facts with `while IFS= read -r`, one whole line at a time, **after
   fixing exactly this bug** — its own comment records that an unquoted `for f in $facts` "splits on
   bash's default IFS, which includes the TAB that carries a path in `COMMIT_PATH<tab><path>` — so
   committing a file named PUSH_FORCE produced the token PUSH_FORCE and blocked the push in the very
@@ -1330,7 +1331,7 @@ with no verdict available to it at all (boundary 34, where no layer-2 code runs)
 | 5 | `git rev-parse --show-toplevel` exits non-zero with the "not a git repository" diagnostic | **Allow, silently.** |
 | 5a | `git rev-parse --show-toplevel` exits non-zero with the "this operation must be run in a work tree" diagnostic | **Allow, silently** — this is a bare repository (Arm A step 4). Measured in task 2a: rc=128, `fatal: this operation must be run in a work tree`, both at the bare directory and in a subdirectory of it. Without this row the bare case falls to row 6 and denies, which is what the original recipe did and why the `Bare repository` scenario was unreachable. |
 | 6 | Any *other* non-zero exit or empty output from any `rev-parse` probe (`--show-superproject-working-tree`, `--path-format=absolute --git-dir`, `--git-common-dir`) | **Deny.** Boundaries 5 and 5a have already ruled out "not a repo" and "bare", so this is a validation failure. `--is-bare-repository` is deliberately absent from this list: the recipe no longer runs it (see "Repo shapes that are out of scope"). **When the failure is step 4's — a third diagnostic matching neither row 5 nor row 5a — the message quotes the text it actually read**, the same requirement rows 4 and 28 place on their own messages. Step 4 discriminates on two English sentences from git; an upstream wording change lands in this row and denies every write, and a deny that does not name what it read is indistinguishable from every other deny. |
-| 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. Interpreter pinned at the system `/usr/bin/python3` **3.9.6** (measured 2026-08-24); both lexers already run under it via `#!/usr/bin/env python3`, so **no floor above 3.9 is introduced** and none may be relied on. Resolution follows `git-guard.sh:54` (`command -v python3 \|\| command -v python`), which already fails closed when neither exists. |
+| 7 | `python3` absent, or `shell_segments.py` / `classify-git-command.py` exits non-zero (Arms B2, D) | **Deny.** The command could not be lexed, so its contents are unknown. Interpreter pinned at the system `/usr/bin/python3` **3.9.6** (measured 2026-08-24); both lexers already run under it via `#!/usr/bin/env python3`, so **no floor above 3.9 is introduced** and none may be relied on. Resolution follows `git-guard.sh`'s `command -v python3 \|\| command -v python`, which already fails closed when neither exists. |
 | 8 | `WORKTREE_GUARD_MODE` is unset | **`log`.** This is the documented ship state — the guard arrives unarmed on purpose. |
 | 9 | `WORKTREE_GUARD_MODE` is set to anything other than `log` or `deny` | **`deny`**, and the message names the bad value. A *present but wrong* value means someone tried to arm the guard and mistyped; reading a failed configuration attempt as "off" is the silent disarm the git-floor section argues against. Absence and a typo are deliberately not the same case. |
 | 10 | Appending to the log fails (disk full, permissions, path missing) | **Depends on mode and on what was being recorded — three rules, stated in full below the table.** Not one verdict: round 3's blanket deny rested on "this can fire only on a refusal", and round 4 found that false. |
@@ -1341,7 +1342,7 @@ with no verdict available to it at all (boundary 34, where no layer-2 code runs)
 
 **Boundary 10, in full.** Round 3 replaced the original "decision stands, write to stderr" with a
 blanket deny, because task 10 computes the arm-it decision *from this log*, so a lossy log reads
-cleanest exactly when it is dropping entries, and `git-guard.sh:409` records that stderr from an
+cleanest exactly when it is dropping entries, and `git-guard.sh`'s `Unverified whether stderr from an exit-0 hook is surfaced anywhere` records that stderr from an
 exit-0 hook may reach nobody. Round 4 then found that deny's stated justification false — "this
 path can fire only on a refusal that was already going to be reported" ignores that the log also
 records `decision=bypass`, and a bypass is an *allow*. A failed append is three different
@@ -1367,7 +1368,7 @@ situations, and one verdict cannot serve all three:
    same full disk fails the same way, and a per-session sequence number counted from the log is
    silently *reused* rather than skipped when a write is lost, so the gap stays invisible. No
    sourceable in-log gap signal exists, so none is specified. The only trace is the stderr warning,
-   and `git-guard.sh:409` records that whether stderr from an exit-0 hook reaches anyone is itself
+   and `git-guard.sh`'s `Unverified whether stderr from an exit-0 hook is surfaced anywhere` records that whether stderr from an exit-0 hook reaches anyone is itself
    unverified.
 
    **What bounds the cost instead:** a bypass exists only in `deny` mode, while the arming window
@@ -1442,7 +1443,7 @@ move, and that the tree may hold another branch's content — and stops.
 
 ### Deny message contract
 
-`phase-guard.sh:537-561` sets the house shape and it should be followed: what was blocked, why, the
+`phase-guard.sh`'s `# --- Step 10: deny` block sets the house shape and it should be followed: what was blocked, why, the
 current state that caused it, the legitimate fixes, and a *narrow* closing claim.
 
 Two elements differ here:
@@ -1454,7 +1455,7 @@ Two elements differ here:
   variable" and can, because its escape hatch is editing a `docs/` file. Here the hatch is
   `settings.json` (exempt, so registration stays editable), plus `WORKTREE_EXEMPT` on Arm D. The
   message must name those and must **not** claim the Bash write surface is covered — it is not
-  (see Non-goals). `phase-guard.sh:544-545` declines to overclaim for the same reason: "a safety
+  (see Non-goals). `phase-guard.sh`, `The Bash-tool write surface is unguarded (Non-goals)`, declines to overclaim for the same reason: "a safety
   message that overclaims teaches sessions to distrust its true parts too."
 
 **Unverified and deliberately not asserted:** whether two `PreToolUse` denies on one tool call both
@@ -1471,7 +1472,7 @@ double-deny behavior.
 "env": { "WORKTREE_GUARD_MODE": "log" }
 ```
 
-The round-1 draft put it at `hooks/state/worktree-guard.mode`, which cannot work: **`.gitignore:17`
+The round-1 draft put it at `hooks/state/worktree-guard.mode`, which cannot work: **`.gitignore`
 ignores `/hooks/state/`** ("machine-local, never committed"), so arming a hard deny across every
 repo on this machine would have left no record in git at all, and task 10's "flip it in a separate
 commit" could not have existed. `settings.json` is already tracked, is already on the exemption
@@ -1493,7 +1494,7 @@ read by two downstream documents as "arms in `deny` mode" and by the implementat
 call", and those are three different behaviours. The implementation took the third: measured, a
 mistyped `WORKTREE_GUARD_MODE=DENY` refused a `Write` to `settings.json` — the file whose exemption
 exists so the switch stays editable — while the refusal's own text said this guard never blocks it.
-That is the footgun `phase-guard.sh:280-283` names, recreated in the one state where the switch most
+That is the footgun `phase-guard.sh`'s `it holds this hook's own registration` comment names, recreated in the one state where the switch most
 needs editing. Boundary 9's table already said "**`deny`**, and the message names the bad
 value", so the code was the thing out of line with the card, not the reverse. Fixed in
 `worktree-guard.sh`'s `case "$WORKTREE_GUARD_MODE" in` block with `BAD_MODE_NOTE`; pinned by
@@ -3058,7 +3059,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 - [x] 1. Read the probe result; settle open question 1. **DONE** — `WorktreeCreate` hook is the
       mechanism; `worktree.location` is Desktop-SSH-only. Two claims re-verified against the binary.
 - [x] 1a. Confirm `dispatch-pane-agent.sh --cwd` is unaffected by the (b)/(c) re-entry block.
-      **DONE** — `run-pane-agent.sh:47` plain-`cd`s and launches a fresh `claude` process; no
+      **DONE** — `run-pane-agent.sh`'s `cd "$run_cwd" || fail_early` plain-`cd`s and launches a fresh `claude` process; no
       `EnterWorktree` call exists on that path. Live pane dispatch into an out-of-repo worktree
       returned `VERDICT: FULLY_FUNCTIONAL`. Detail in "Two consequences" above.
 - [x] 1b. Re-verify the `WorktreeCreate` payload and stdout contract first-hand.
@@ -3232,16 +3233,16 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         payload cannot be parsed at all, so the deny comes from the payload step, not the lexer
         step the scenario names. Right verdict, different mechanism; `P4` is what actually pins
         the lexer-failure deny.
-      - The default state dir mirrors `phase-guard.sh:62`
+      - The default state dir mirrors `phase-guard.sh`'s `STATE_DIR="${PHASE_GUARD_STATE_DIR:-${HOME:-}/.claude/hooks/state}"`
         (`${WORKTREE_GUARD_STATE_DIR:-${HOME:-}/.claude/hooks/state}`) — the citation was opened
         and confirmed byte-identical in shape, including its `${HOME:-}` rationale. Untested:
         the suite always overrides it.
       - One implementer comment claimed "all five elements of the house contract
-        (`phase-guard.sh:537-561`)"; that location's own comment counts **four** and does not
+        (`phase-guard.sh`'s `# --- Step 10: deny` block)"; that location's own comment counts **four** and does not
         list them, so the five belongs to this card's Deny message contract (`:1438`). The
         comment was corrected to attribute each to its real source and to claim no mapping
         between them, since none is determinable from `phase-guard.sh`.
-- [x] 5. **First port `git-guard.sh:80-86`'s `while IFS= read -r` reader into `doc-guard.sh:133`**,
+- [x] 5. **First port `git-guard.sh`'s `has_fact() {` / `while IFS= read -r` reader into `doc-guard.sh:133`**,
       which still uses the unquoted `for f in $facts` form and word-splits on the tab. Do this
       before emitting any new tab-bearing fact. Then extend `classify-git-command.py` with
       the seven **segment-indexed** facts — `SEG_CD`, `SEG_GIT_C`, `SEG_WORKTREE_ADD`,
@@ -3289,8 +3290,10 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         choice. It is specified** — `:788-789` requires the indexed facts be collected *before*
         the `SCOPE_UNKNOWN` `continue`, and `:1261` requires them emitted in addition to it.
         The implementation matches the card; the ambiguity flag was an under-read, not a gap.
-      - **`resolve_subcommand` has three callers, not one** — `git-guard.sh:325`,
-        `classify-commit-command.py:216`, `decide-commit-gate.py:78`. Widening its tuple broke
+      - **`resolve_subcommand` has three callers, not one** — `git-guard.sh`'s
+        `subcommand, rest, blocking = mod.resolve_subcommand(argv)`,
+        `classify-commit-command.py`'s `subcommand, rest, blocking_option = resolve_subcommand(argv)`,
+        `decide-commit-gate.py`'s `subcommand, rest, blocking_option = _CLASSIFIER.resolve_subcommand(argv)`. Widening its tuple broke
         two suites (git-guard 152→141, test-marker 248→149); resolved by extracting
         `_walk_globals()` and leaving the public 3-tuple untouched. Worth recording because
         task 6 will be tempted by the same widening.
@@ -3510,7 +3513,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       (rc=0, HEAD moved), so an unreported absence is indistinguishable from a working guard. Pin a
       test per mode: missing file, missing directory, present-but-not-executable.
       **DONE 2026-08-26.** The verdict lives in `hooks/lib/worktree_guard_liveness.sh` (80 lines,
-      sourced never executed) and is called from `worktree-guard.sh:190` `check_liveness()`, which
+      sourced never executed) and is called from `worktree-guard.sh`'s `check_liveness() {`, which
       `refuse()` reaches from every arm. Shared with task 6e's installer on purpose — two copies of
       "is layer 2 armed" would drift invisibly, the same argument round 4 made about
       `resolve_effective_repo()`. Resolution is `git -C <repo> rev-parse --path-format=absolute
@@ -3519,7 +3522,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       **The ⚠️ OPEN channel question at :2494 is now CLOSED — user-endorsed 2026-08-26.** Of the
       three candidates the card named, what ships is *append a paragraph to a refusal layer 1 was
       already printing*: it does **not** deny on its own, and it does **not** warn on an allow. The
-      reasoning and its cost are at `worktree-guard.sh:174-181` — denying every git command because
+      reasoning and its cost are at `worktree-guard.sh`'s `# CHANNEL` comment — denying every git command because
       one repo lacks a hook file is too large a blast radius, and warning on every allow puts a
       paragraph on stderr often enough to teach sessions to skip the stream real refusals arrive
       on. **The cost is real and is not hidden:** while layer 1 is quiet, and in `log` mode where it
@@ -3941,12 +3944,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       nothing else, and no registration entry was invented to hang it from.
 
       **Mode read and the refusals-only log — already built, not new work here.**
-      `hooks/worktree-guard.sh:311-318` already reads `$WORKTREE_GUARD_MODE` from the hook's own
+      `hooks/worktree-guard.sh`'s `# --- step 2: the mode` block already reads `$WORKTREE_GUARD_MODE` from the hook's own
       environment (absent → `log`; `log`/`deny` accepted; anything else is a hard deny naming the
       bad value) — this predates task 8 and was not touched. `append_log()`
-      (`hooks/worktree-guard.sh:146-164`) is called only from `refuse()` (a `deny`/`would-deny`
+      (`hooks/worktree-guard.sh`, `append_log() { # $1 arm, $2 decision`) is called only from `refuse()` (a `deny`/`would-deny`
       decision) and from Arm D's `WORKTREE_EXEMPT` bypass path
-      (`hooks/lib/worktree_guard_bash_arms.sh:121`) — grepped, there is no call on an allow path.
+      (`hooks/lib/worktree_guard_bash_arms.sh`, `if append_log "$1" bypass "$2" "$command_line" "$reason"; then`) — grepped, there is no call on an allow path.
       That already satisfies "refusals-only" as specified; nothing needed adding. No `.sh` file was
       edited for this task, so no TDD cycle applies — regression run instead:
       `hooks/worktree-guard.test.sh` **189 passed, 0 failed, 1 skipped**;
@@ -4118,6 +4121,33 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       message where it is not. Not attempted in this session because it is a design decision, not a
       wording fix, and expanding scope on my own initiative is what the user's gate exists to stop.
 
+      ⚠️ **Re-measured 2026-08-27 (task 14), and the population above is wrong in both directions.**
+      The evidence line was the first thing to go: shadowing `python3`/`python` never reaches any of
+      the three, because `hard_deny "$MSG_NO_PYTHON"` fires in step 1. Each state was therefore
+      built on its own, in a throwaway primary checkout, with the *healthy* guard as a control —
+      `hooks/worktree-guard.probe.sh`, committed alongside this note so the receipt exists.
+      Measured, `WORKTREE_GUARD_MODE=deny`, a `Write` to `settings.json`:
+      - **`$HOME` unset (E1) → rc=2**, and the refusal prints "settings.json is exempt from this
+        guard". Claim false. Open, as recorded above.
+      - **git below the version floor (E2) → rc=2**, same claim printed. Claim false. Open.
+      - **the lib dir missing (E3) → rc=0, ALLOWED.** `deny_arms()` is reached only from the
+        `[ "$ARM" = B2D ]` branch, and a `Write` never sources the Bash arms — so `settings.json`
+        stays writable and that message's claim is **true**. It does not belong in this item and is
+        removed from it. This is round 5's reading, now independently confirmed.
+      - **`python3`/`python` shadowed (E4) → rc=2**, and the message makes **no** recoverability
+        claim. So it is not a false statement — it is a **fourth, separate** gap: the switch is
+        genuinely unreachable and nothing tells you so. Newly named here.
+      The open item is therefore **two** false claims, not three, plus one unstated unreachability.
+      ⚠️ The first two runs of the probe were themselves wrong and are worth recording: `env -u HOME
+      HOME=/fix` re-sets what `-u` removed, so every `$HOME`-unset row silently measured a healthy
+      guard; and a raw `grep -F` for the claim missed it in `require_home()` alone, because the
+      sentence wraps across a line break there and nowhere else. Both would have read as substantive
+      findings. The controls are what surfaced them — E0 refuses a guarded write and allows an
+      exempt one, so a row that agrees with E0 is a row that measured nothing.
+      ⚠️ Also measured: `WORKTREE_EXEMPT` **does not rescue** any of E1, E2 or E3. `rules/gates.md`
+      called it "one escape hatch that clears both layers"; that is true of layer 2 and false of
+      layer 1's preconditions. Corrected there and in ADR 0038.
+
       **Round 3 run 2026-08-27 at `6bf830c`** (pane, Opus 5 / xhigh): risk=medium, confidence=high,
       no dimension `fail` — so the verdict did **not** block the PR. It re-derived all seven suite
       counts exactly, probed the round-2 fix seven ways rather than reading the diff, and
@@ -4192,7 +4222,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       finish converting `file:line` citations on this branch to quoted code text, fix the
       `two`→`three` `hard_deny()` count, correct the deferred item's evidence line (re-measuring it
       first), and either commit `scratchpad/probe-badmode-exempt.sh` or drop the citations to it.
-      One pass, not piecemeal — that is the whole lesson of rounds 3–5.
+      One pass, not piecemeal — that is the whole lesson of rounds 3–5. **Opened as task 14.**
       2. **No test crossed a bad mode with a failed append.** G7 is a good `deny` with a broken log,
          G2b is a bad value with a healthy log; the corner where both hold was unasserted, so 193
          green tests were blind to finding 1 — the third time on this branch that a suite passing on
@@ -4219,6 +4249,64 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       and cannot gate the PR — `judge-guard.sh` compares `head_sha` exactly. **Round 4 is required
       before `gh pr create`,** and rounds 1, 2 and 3 each found something real, so it is not a
       formality either.
+
+- [ ] 14. The doc-cleanup pass, in one commit rather than five — round 3 findings 3–4 and round 5
+      findings 1–3, deferred together because rounds 3, 4 and 5 each found drift created by the
+      previous round's own fix. Branch `docs/worktree-guard-doc-cleanup`, opened 2026-08-27 after
+      PR #83 merged.
+      - [x] **Re-measure the deferred item before correcting its evidence line.** Done, and it
+            changed the item: two false claims, not three, plus a fourth unstated gap. Full table
+            in the ⚠️ block under round 2's findings above. `rules/gates.md` and ADR 0038 both
+            corrected.
+      - [x] **The receipt exists now.** `scratchpad/probe-badmode-exempt.sh` was cited by commit
+            `6bf830c` and by this note and is not on disk — a session scratchpad, never committed.
+            Replaced by `hooks/worktree-guard.probe.sh`, which is tracked, covers the bad-mode ×
+            exempt-path cross the original probed (E5) *and* the four precondition states, and
+            carries its own controls. The citation in `6bf830c`'s message cannot be edited — it is
+            merged — so it stands as a dead reference and this line is the redirect.
+      - [x] **`two` → `three` `hard_deny()` call sites** in `rules/gates.md` and ADR 0038.
+            Re-counted rather than copied: `hard_deny "$MSG_NO_PAYLOAD"` twice and
+            `hard_deny "$MSG_NO_PYTHON"` once — three sites, two distinct messages.
+      - [x] **`WORKTREE_EXEMPT` is not one hatch clearing everything.** It clears both *layers*, and
+            neither of layer 1's precondition refusals. Narrowed in `rules/gates.md` and ADR 0038.
+      - [x] **Finish converting `file:line` citations to quoted code text.** `rules/gates.md` (2)
+            and ADR 0038 (5) are done. **49 remain in this card's body** (everything before the
+            task-13 note). The note's *own* citations are deliberately excluded: they record what
+            the numbers were when rounds 1–5 ran, and rewriting them would corrupt the audit trail
+            to fix a footnote (`feedback_a_blanket_rewrite_corrupts_historical_claims`).
+            Every anchor must be re-opened before it is quoted — a copied citation is laundered,
+            not verified — and any that no longer resolves is a finding, not a thing to silently
+            repoint.
+            **DONE in `64c21ae`, and the exclusion held — but only 32 of 50 converted.** (The
+            in-scope count is 50, not the 49 written above: my regex missed one and the sweep's
+            found it.) The other **18 were deliberately left in place**, because repointing a stale
+            number silently is the failure this whole sub-item exists to stop. They are task 15.
+
+- [ ] 15. The 18 citations the sweep could not convert. Three groups, needing different answers.
+      - **Fourteen are anchor rot, all from one event.** `classify-git-command.py` grew from
+            ~250 lines to 601 when task 5's seven segment-indexed facts landed, and
+            `shell_segments.py` shifted with it — so every anchor written into the *design* section
+            before that implementation now points at unrelated code. Affected card lines **as of
+            `64c21ae`** — they will drift, so re-run the sweep's grep rather than trusting them:
+            `:768`,
+            `:773`, `:788`, `:795`, `:805`, `:825`, `:879`, `:880`, `:894` (two citations on that
+            one line), `:907`, `:909`, `:1236`, `:3256`. In every case the *quoted claim* was
+            found still to exist in the
+            file, just at a different line — so this is anchor rot, not a wrong statement, and the
+            fix is the same quoting conversion applied to the real location.
+      - 🔴 **Two are not anchor rot — they are one false claim, stated twice.** The card says at
+            `:1292` and `:3245`
+            that `doc-guard.sh` "still uses the unquoted `for f in $facts` form". It does not, and
+            has not for some time: `doc-guard.sh` reads `while IFS= read -r f`, and the comment
+            above it records the port — "the same reader git-guard.sh already uses, ported here".
+            Independently confirmed. **A statement about another hook's current behaviour went
+            stale inside this card and no round caught it**, which is a stronger argument for
+            quoting text than any of the anchor cases: a quoted fragment that no longer exists
+            fails loudly, a line number that no longer exists reads fine.
+      - **Two are correct and were left by judgment, not by failure:** `phase-guard.sh:248` and
+            `.gitignore:17` in task 11's dated verification note. There the sentence *is* the
+            anchor→content mapping, so quoting the content makes it tautological — the same species
+            of audit record as the task-13 note. Confirm that reading before converting them.
 
 ## Notes
 
