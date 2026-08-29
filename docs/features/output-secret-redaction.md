@@ -77,12 +77,16 @@ command text, and the existing guard never touches the output. Neither replaces 
 | --- | --- | --- |
 | Claude Code CLI | `2.1.251` | every platform behaviour below was measured against this build **and only this build** — `2.1.245` and `2.1.246` are also present on disk and were not tested. `updatedToolOutput` is not documented publicly and its contract may move, so the corrections in Task 9 must be version-scoped rather than stated absolutely |
 | python3 | `3.9.6` (macOS system, `/usr/bin/python3`) | the sibling guard resolves `python3` then `python` from PATH; 3.9 is the floor — no `match`, no `str.removeprefix` in hot paths |
-| `sqlite3` | `3.51.0` (`/usr/bin/sqlite3`, 2025-06-12) | required to read gcloud's `credentials.db` / `access_tokens.db`; a line-oriented parser on those produces binary garbage |
 | `jq` | `1.7.1-apple` | used by the registration self-test, per house convention |
 | No third-party libraries | — | the hook runs on every Bash call; an import outside the stdlib is a supply-chain surface and a startup cost |
 
-If `sqlite3` is absent the harvester **skips those two sources and records the skip** — it
-must not fall back to a text parser, and it must not abort the whole harvest.
+**No `sqlite3` binary dependency.** An earlier revision pinned `/usr/bin/sqlite3` 3.51.0 and
+built a degraded-coverage failure path around its absence. That was unnecessary: the already-
+pinned python3 3.9.6 ships the stdlib `sqlite3` module linked against the **same SQLite
+3.51.0**, and the read-only URI open this design needs works —
+`sqlite3.connect("file:…?mode=ro&immutable=1", uri=True)` was measured returning rows. The
+binary, its version pin, and the "binary unavailable" skip condition are all removed rather
+than kept as a dependency that cannot fail.
 
 ## Contracts
 
@@ -177,6 +181,7 @@ a hook that runs on every command.
 | YAML/TOML/XML | `~/.config/gh/hosts.yml`, `~/.kube/config`, `~/.gem/credentials`, `~/.bundle/config`, `~/.cargo/credentials.toml`, `~/.m2/settings.xml` |
 | JSON | `~/.docker/config.json`, `~/.claude.json`, `~/.config/gcloud/legacy_credentials/*/adc.json`, `~/.aws/sso/cache/*.json`, `*/Application Support/*/credentials*.json` |
 | whole-file secrets | `~/.ssh/id_*` (excluding `*.pub`), `~/.vault-token`, `*.token` |
+| SQLite | `~/.config/gcloud/credentials.db` (table `credentials`, column `value` — a JSON blob), `~/.config/gcloud/access_tokens.db` (table `access_tokens`, column `access_token`) |
 
 **Excluded, and the reason matters.** `.env.example`, `.env.template`, `.env.sample`,
 `.env.dist`, `.env.defaults`, `.env.schema`, `.env.vault` are excluded **as a
@@ -190,7 +195,8 @@ blanks directory names out of every command), and all Apple-shipped `/etc/*`.
 `~/.kube/config` and `~/.config/gh/hosts.yml` are YAML, not JSON; `~/.pgpass` is
 colon-positional (the secret is field 5); gcloud's `credentials.db` and `access_tokens.db`
 are **SQLite**, where a line-oriented parser produces short binary garbage — the worst
-possible candidate values. Read those with `sqlite3` in read-only mode or not at all.
+possible candidate values. Read them through python's stdlib `sqlite3` module with
+`mode=ro&immutable=1`, or not at all; never with a text parser.
 
 **Never log a scanned path.** `~/.config/gcloud/legacy_credentials/<google-account>/adc.json`
 embeds an email address in its directory name; a hook that logs which files it read writes
@@ -445,7 +451,9 @@ what it has — it does **not** abort, because an abort would mean no redaction 
      C `memmem`; re-measured on the tracked script (rows D and E, mean of 5 runs, 100 KB, 40
      needles) a compiled 40-branch alternation costs **~5.2 ms** against **~1.0 ms** for the
      loop, so do not reach for a regex here. The superseded `3.31 / 0.45 ms` pair from an
-     untracked earlier measurement is retired everywhere; the ~5× ratio is unchanged.
+     untracked earlier measurement is retired everywhere. **The ratio moved too and the
+     direction is all that survived:** the old pair is 7.4×, the new one 5.2× — a 40%
+     difference, so do not read the two measurements as agreeing.
   2. Needles **≥ 20 chars** → build an index of every 20-character substring, then slide one
      20-character window over the text a single time. Cost is O(output + Σ needle lengths) and
      **does not grow with needle count**, which is what makes the 360-needle case affordable.
@@ -552,18 +560,33 @@ If absence counted as a skip, this notice would append to the output of every Ba
 every session, forever — which is the same "maddening to diagnose" corruption the filter design
 goes to such lengths to avoid.
 
-| Condition | Counted? |
-| --- | --- |
-| the path does not exist | **no** — expected, and the normal case for most of the list |
-| the path is a broken symlink, or resolves outside `$HOME` | **no** — treated as absent |
-| the file exists but cannot be opened (permissions) | **yes** |
-| the file opens but the parser raises | **yes** |
-| the file is skipped for exceeding `MAX_FILE_BYTES`, or because the total budget is spent | **yes** |
-| `sqlite3` is unavailable so a `.db` source is skipped | **yes** |
+| Condition | Counted in `N`? | Counted in `M`? |
+| --- | --- | --- |
+| the path does not exist | no — expected, the normal case for most of the list | no |
+| the path is a broken symlink | no — treated as absent | no |
+| the file exists but cannot be opened (permissions) | **yes** | yes |
+| the file opens but the parser raises | **yes** | yes |
+| the file exceeds `MAX_FILE_BYTES` | **yes** | yes |
+| the total budget `MAX_TOTAL_BYTES` is spent before this source is reached | **yes** | yes |
+| a `source`-chain file is unreachable because `MAX_SOURCE_DEPTH` is exhausted | **yes** | yes |
 
-`M` is the count of sources that were **present and attempted**, not the length of the Sources
-table — so `N of M` reads as a fraction of what this machine actually has, and on a healthy
-machine `N` is 0 and no notice is emitted at all.
+**`M` counts every source in the `N` column's "yes" rows plus every source read successfully**
+— i.e. everything attempted. An earlier revision defined `M` as "present and attempted" while
+counting budget-exhausted sources (never opened, so never *present* under that wording) in
+`N`, which permitted a notice reading `5 of 3`. Both columns now derive from the same set.
+
+**`MAX_SOURCE_DEPTH` exhaustion is counted deliberately, and it is not hypothetical:**
+`~/.terminal_aliases` — the file that leaked twice — is reachable *only* through a `source`
+chain. A depth cut-off that silently dropped it would reproduce the original incident while
+the hook reported success.
+
+**One rule that was hiding in this table and does not belong here.** An earlier revision
+listed "resolves outside `$HOME`" as a not-counted condition. That is a *harvest-scope* rule,
+not a counting rule, and as written it silently dropped the entire cwd-relative `.env` group
+for any repository living outside `$HOME`. Scope is defined once, in Sources: `~`-rooted
+entries resolve against `$HOME`; the `.env` group resolves against the **command's `cwd`**
+wherever that is. Neither is filtered by location, and a path that resolves outside both is
+simply not on the list and so never attempted.
 
 — which the model reads like any other output and can surface. This is the one case where the
 hook emits an envelope for output it did not redact, and row 2 of the table above is what
