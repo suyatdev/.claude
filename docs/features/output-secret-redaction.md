@@ -778,6 +778,16 @@ may claim otherwise.
       candidate `0040` came from a snapshot roughly a day stale, `git fetch origin` failed
       with `Permission denied (publickey)` in that environment, and two `0026-*` files already
       coexist on `origin/main`, so collisions here are real rather than hypothetical.
+- [ ] 13. **Secret-gate override, mechanical half.** Amend `hooks/secret-command-guard.sh` (and
+      `hooks/lib/classify-secret-command.py`) so a `SECRET_EXEMPT=` assignment is refused unless a
+      session-scoped user-approval record exists, and add the matching assertions to
+      `hooks/secret-command-guard.test.sh`. The judgment half already shipped as a gate stub in
+      `rules/gates.md` plus the **Human Approval of a Secret-Bearing Read** procedure in
+      `skills/securing-agentic-systems/SKILL.md` (user decision 2026-08-29: rule half now, hook
+      half queued). Scope note, so the next agent does not overclaim it: the approval record is
+      written by the agent, so this arm is forgeable from inside the session and is a momentum
+      guardrail like every other Tier 1 guard here — the load-bearing control is the literal
+      `secret-gate override` phrase, not this hook. The deny message must not imply otherwise.
 
 ## Decisions taken — user-confirmed 2026-08-28
 
