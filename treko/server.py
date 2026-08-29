@@ -612,6 +612,13 @@ class ControlHandler(http.server.BaseHTTPRequestHandler):
 
     def _run_send(self, command_id):
         surface = self.config["surface"]
+        if surface is None:
+            # D3: there is no control channel on this server, for its whole lifetime, so
+            # nothing is attempted. Keyed off the surface itself and not config["channel"]:
+            # a guard on the channel token could disagree with the surface it is guarding,
+            # one on the surface cannot. Placed above confirm_surface so the refusal precedes
+            # every cmux invocation -- a degraded server spawns no subprocess on this path.
+            return self._fail(503, "no_channel", "no_channel", command_id=command_id)
         state = confirm_surface(surface)
         if state == "absent":
             # Criterion 9: the refusal happens on the near side of the socket, so nothing
