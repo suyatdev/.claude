@@ -67,7 +67,9 @@ command text, and the existing guard never touches the output. Neither replaces 
    placeholder.
 5. **Emit** `hookSpecificOutput.updatedToolOutput` containing a mutated copy of the received
    `tool_response`.
-6. **Correct the false premise** in the three sites that state it, plus the fourth site whose
+6. **Honour `SECRET_EXEMPT`**, read from the command text exactly as the sibling guard reads
+   it; on exemption emit nothing at all. See Decisions taken.
+7. **Correct the false premise** in the three sites that state it, plus the fourth site whose
    separate objection is also obsolete — one commit, with this card as the single authority
    the other three point at.
 
@@ -527,7 +529,12 @@ Two error boundaries, not one:
 below: in the one case the notice exists for, there would have been no envelope to carry it.
 The rule is:
 
-**`isImage: true` short-circuits this table before any row is evaluated.** The hook returns no
+**Two conditions short-circuit this table before any row is evaluated: a valid
+`SECRET_EXEMPT` on the command, and `isImage: true`.** In either case the hook emits nothing —
+no redaction, no notice line. The exemption is checked first, because it is the user's
+explicit instruction and it makes the rest of the work unnecessary.
+
+**`isImage: true` short-circuits this table too.** The hook returns no
 replacement at all — no redaction, and **no notice line**, because appending text to base64
 image data corrupts the image, and a corrupted image is a worse outcome than an unreported
 degraded harvest. This precedence is absolute and is the first thing the hook checks.
@@ -668,15 +675,18 @@ Feature: Redact known secret values from Bash output
     When the hook runs
     Then the hook returns no replacement at all
 
-  # NOT YET A REQUIREMENT — blocked on Open Question 1. Written here so the shape is
-  # reviewable, but it must not be implemented until the question is answered, and the
-  # mechanism is deliberately absent from Scope, Contracts and Runtime until then.
-  @pending-open-question-1
   Scenario: An exempted command is not scanned
-    Given a command prefixed with SECRET_EXEMPT=<reason>
+    Given a command prefixed with SECRET_EXEMPT=<reason> and a non-empty reason
     When the command runs and prints a harvested value
-    Then the output is returned unmodified
-    And the exemption is logged
+    Then the hook returns no replacement at all
+    And no notice line is appended
+    And the exemption is recorded with its reason
+
+  Scenario: An empty exemption reason does not exempt
+    Given a command prefixed with SECRET_EXEMPT= and no reason
+    When the command runs and prints a harvested value
+    Then the value is still redacted
+    # Matches the sibling guard, where an empty reason is likewise not an exemption
 ```
 
 ## Non-goals
@@ -757,7 +767,8 @@ may claim otherwise.
       `lead`/`full` trim arithmetic and its 2,100-embedding check), the two-strategy scan
       (`str.replace` loop under 20 chars, 20-gram index at or above it), both streams,
       `isImage` passthrough, and the two-floor composition rule.
-- [ ] 7. Implement the wrapper and the catch-all that emits a withheld-output envelope.
+- [ ] 7. Implement the wrapper, the `SECRET_EXEMPT` short-circuit (first non-empty reason
+      wins; empty does not exempt), and the catch-all that emits a withheld-output envelope.
 - [ ] 8. Register in `settings.json` under `PostToolUse` / matcher `Bash`.
 - [ ] 9. Correct the false premise in all four sites in one commit; make this card the single
       authority the other three point at.
@@ -768,17 +779,29 @@ may claim otherwise.
       with `Permission denied (publickey)` in that environment, and two `0026-*` files already
       coexist on `origin/main`, so collisions here are real rather than hypothetical.
 
-## Open questions for the user
+## Decisions taken — user-confirmed 2026-08-28
 
-1. **Should `SECRET_EXEMPT` also disable output redaction?** The sibling guard uses it to
-   permit a blocked command. Reusing it here means one flag turns off both layers, which is
-   simple but blunt. My recommendation: **yes, reuse it** — a user who has justified reading
-   a secret file does not want the output blanked either, and a second flag name is a
-   memorisation cost for a rare case.
-2. **Is the strong arm's 6-character floor acceptable?** It will blank short innocent values
-   under credential-sounding keys (the `AUTH_MODE=oauth2` scenario). My recommendation:
-   **accept it** — missing `DB_PASSWORD=hunter2` is the worse error, and the denylist already
-   catches the common English-word cases.
+1. **`SECRET_EXEMPT` disables output redaction as well.** One flag clears both layers. A user
+   who has justified reading a secret file does not want the output blanked either, and a
+   second flag name is a memorisation cost for a rare case. Accepted cost: the two layers
+   cannot be switched independently, so a command where the read is permitted but the output
+   should still be protected is not expressible.
+   Mechanics, matching the sibling guard exactly (`classify-secret-command.py:125-131`): the
+   reason is read from the leading `VAR=value` assignments of any segment of the command text,
+   the **first non-empty** `SECRET_EXEMPT` wins, and an **empty** reason does not exempt. On
+   exemption the hook returns no replacement at all — no redaction and no notice line — and
+   records the reason.
+2. **The 6-character floor on credential-named values is accepted.** It will occasionally
+   blank a short innocent value sitting under a credential-sounding name (the
+   `AUTH_MODE=oauth2` scenario, recorded in Scenarios). Missing `DB_PASSWORD=hunter2` is the
+   worse error, short passwords being the weakest ones, and the denylist already catches the
+   common English-word cases.
+3. **The spec goes to human review rather than a seventh judge round** (2026-08-28). Six
+   rounds returned 7 → 6 → 6 → 3 → 3 → 4 violations; every round's fixes were verified fixed
+   by the next, and every round then found new defects in the prose recording those fixes.
+   Round 6 stated that none of its findings touched the design's soundness. The residual risk
+   is documentation precision, which is what a human read catches and what further automated
+   rounds keep regenerating.
 
 ## Not verified
 
