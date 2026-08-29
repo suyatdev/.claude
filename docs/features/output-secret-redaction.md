@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/output-secret-redaction
 ---
 
 # Output secret redaction — blank known secret values out of what a command printed
