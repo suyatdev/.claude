@@ -221,13 +221,13 @@ the URL. The overlap alone settles it; no sweep is needed, and none is quoted.
 ⚠️ **Correction record, left visible on purpose.** An earlier revision of this table
 (`9208751`) recorded the hex token at **2.43**. That single figure was wrong: hex uses a
 16-symbol alphabet, so entropy is capped at log₂(16) = 4.0 and a random hex string lands just
-under it. Re-measured at **3.82** (`cache/spike/ent.py`) after the compliance judge flagged
+under it. Re-measured at **3.82** (`docs/features/evidence/output-secret-redaction/ent.py`) after the compliance judge flagged
 it. Two things this correction does *not* claim: the earlier revision's surrounding sentence
 ("the lowest real secret scores below the highest innocent value") was **correct** and is
 still true under the new numbers; and an intermediate revision of this paragraph asserted that
 `9208751` argued "hex has only 16 symbols", which `git show` disproves. **That intermediate
 revision then guessed at where the phrase came from, and guessed wrong a second time.** No
-attribution is offered here: the measurements are `cache/spike/ent.py`, the blob is
+attribution is offered here: the measurements are `docs/features/evidence/output-secret-redaction/ent.py`, the blob is
 `9208751`, and where the erroneous sentence originated is not established and is not worth
 another guess. An earlier threshold sweep ("9/19", "19/23") was also removed — it cannot have
 come from the 41-entry corpus described below (17 secrets, 24 innocent) and no other corpus
@@ -308,7 +308,7 @@ parsing is too slow is false, and not narrowly:
 | **read + parse the real corpus** (3 files, 21,846 bytes, 58 assignments) | **0.16 ms** |
 | parse 200 KB synthetic shell corpus | 1.24 ms |
 | parse 1 MB synthetic shell corpus | 6.35 ms |
-| in-hook total, ~~40-needle scan~~ | ~~≈ 0.25 ms~~ — **superseded**, see Matching mechanics: the nine-needle expansion puts the worst case at ~19.5 ms |
+| in-hook total, ~~40-needle scan~~ | ~~≈ 0.25 ms~~ — **superseded**, see Matching mechanics: the nine-needle expansion puts the worst case at ~17 ms |
 
 Harvesting costs 0.7% of the interpreter startup already being paid. Every caching option
 therefore trades a measurable security regression for an unmeasurable speedup:
@@ -321,7 +321,10 @@ therefore trades a measurable security regression for an unmeasurable speedup:
   substring-search for a value you hold only a hash of; you must hash every window of every
   candidate length. For 100 KB of output across 22 realistic credential lengths that is
   2,251,931 windows: **556 ms** (sha256), 678 ms (blake2b), 2,402 ms (HMAC), against
-  **0.45 ms** for naive replacement — ~1,200× slower. A Rabin-Karp rolling hash restores
+  **~17 ms** for the mandated scan — **~33× slower**. (An earlier revision divided by the
+  superseded 0.45 ms single-pass figure and reported ~1,200×; the decision is unchanged —
+  hashing is rejected on unconfirmability as much as on cost — but the ratio was stale.)
+  A Rabin-Karp rolling hash restores
   O(1) per window only for an *unkeyed* polynomial hash, which is brute-forceable and defeats
   the reason for hashing. And a hash hit is unconfirmable: holding no value, a collision
   forces redacting innocent output with no way to check.
@@ -381,7 +384,7 @@ what it has — it does **not** abort, because an abort would mean no redaction 
   | "drop first and last character" (the first attempt) | 171/350 | 41/350 | **0/350** | 212/1050 |
   | **the arithmetic above** | 350/350 | 350/350 | 350/350 | **1050/1050** |
 
-  Script: `cache/spike/b64.py`, seeded with `random.Random(7)` and reset per cell, so these
+  Script: `docs/features/evidence/output-secret-redaction/b64.py`, seeded with `random.Random(7)` and reset per cell, so these
   counts reproduce exactly on re-run — an earlier version of the script drew from
   `os.urandom` and its per-cell counts drifted every execution while appearing to be fixed
   measurements. The failed rule is recorded because it *looked* correct and silently produced
@@ -424,27 +427,53 @@ what it has — it does **not** abort, because an abort would mean no redaction 
 - **The partial-match algorithm, specified — not left to the implementer.** "Any ≥20-char
   contiguous substring" is a *semantics*; read literally it is unimplementable at this budget.
   Measured at 100 KB of output with 40 secrets × 9 needles = **360 needles**
-  (`cache/spike/scan.py`, seeded, worst case):
+  (`docs/features/evidence/output-secret-redaction/scan.py`, seeded, worst case):
 
-  | Strategy | Work | Cost |
+  The **inputs** are seeded and reproduce exactly; the **timings** are wall-clock and vary
+  run to run, so they are quoted to whole milliseconds across five runs on this machine
+  (2026-08-28). Treat the ratio as the finding, not the absolute figures — an independent run
+  measured 15–17 ms for the middle row.
+
+  | Strategy | Work | Cost (5 runs) |
   | --- | --- | --- |
-  | enumerate every 20-char substring, `str.replace` each | 5,992 replace passes | **109.44 ms** — rejected |
-  | **20-gram index, one pass over the output** | 5,992-entry index, output scanned once | **18.16 ms** |
-  | short needles (<20 chars), whole-needle `str.replace` | 40 passes | **1.29 ms** |
+  | enumerate every 20-char substring, `str.replace` each | 5,992 replace passes | **~113 ms** (112–117) — rejected |
+  | **20-gram index, one pass over the output** | 5,992-entry index, output scanned once | **~16 ms** (15–17) |
+  | short needles (<20 chars), whole-needle `str.replace` | 40 passes | **~1 ms** |
 
   **The mandated algorithm:**
   1. Needles **< 20 chars** → `str.replace` in a loop, longest first. `str.replace` is a tight
      C `memmem`; at 100 KB with 40 needles a compiled 40-branch alternation measured 3.31 ms
      against 0.45 ms, so do not reach for a regex here.
-  2. Needles **≥ 20 chars** → build a dict of every 20-character substring → owning needle,
-     then slide one 20-character window over the text a single time. On a hit, extend the
-     match maximally against the owning needle and replace. Cost is O(output + Σ needle
-     lengths) and **does not grow with needle count**, which is what makes the 360-needle case
-     affordable at all.
+  2. Needles **≥ 20 chars** → build an index of every 20-character substring, then slide one
+     20-character window over the text a single time. Cost is O(output + Σ needle lengths) and
+     **does not grow with needle count**, which is what makes the 360-needle case affordable.
+
+     **One 20-gram routinely belongs to several needles, so "the owning needle" does not
+     denote and a plain `dict` silently drops owners.** Measured over 300 random values
+     (`docs/features/evidence/output-secret-redaction/grams.py`, seeded): **300 of 300**
+     produced at least one 20-gram shared by two or more of that value's own nine needles, and
+     **28.0% of all grams (17,812 of 63,552)** had multiple owners; the first example shared 72
+     of 346. The cause is structural, not incidental — needle 8 is needle 2 with padding
+     stripped, so one contains the other as a prefix, and the standard and url-safe alphabets
+     are identical on any run free of `+/-_`. The index is therefore
+     `gram → list of (needle, label)`, and a hit resolves as:
+
+     1. For each candidate needle, extend the match left and right as far as the text and that
+        needle agree.
+     2. Keep the **longest** extension. Ties break toward the needle registered first, which is
+        deterministic because needles are built in the fixed order of the table above.
+     3. Replace that span with the winning needle's label.
+     4. Resume scanning at the end of the replaced span — not one character on — so an
+        overlapping second match cannot re-enter the middle of a span already redacted.
+
+     Because every needle of one secret carries that secret's label, ties between needles of
+     the *same* secret cannot pick a wrong label; only a gram shared across two *different*
+     secrets could, and the longest-extension rule resolves that to whichever value actually
+     continues in the text.
 
 - **Honest revision of the runtime budget.** The "≈ 0.25 ms in-hook total" in the Runtime
   table above was computed against a **40-needle** scan; the nine-needle expansion makes the
-  worst case 360 needles, and the measured scan is **~19.5 ms** (18.16 + 1.29), not 0.25 ms.
+  worst case 360 needles, and the measured scan is **~17 ms** (≈16 + ≈1), not 0.25 ms.
   Against a 16–22 ms interpreter startup that roughly doubles the hook's cost on a 100 KB
   output. It remains well inside the 30,000-character ceiling the harness imposes, and the
   360-needle figure is a worst case — but the earlier number is superseded and the Runtime
@@ -483,13 +512,22 @@ Two error boundaries, not one:
 | **Per source file** (open, read, parse) | skip that source, count it, continue | a third-party file we do not control must never be able to disable the session; a missing source degrades coverage, which is the failure this design already accepts |
 | **Scan and emit** (filter, needle build, replace, serialise) | withheld-output envelope | this is our own code operating on a payload we *know* may contain a secret; failing open here is exactly the leak |
 
-**Zero harvested values is a valid outcome** — the hook emits no replacement and the output
-passes through unchanged, because there is nothing to redact and withholding would be pure
-damage. But that same state is what a fully-degraded harvest produces, and the two are
-indistinguishable from the outside: a machine with no secrets and a machine whose every source
-failed to parse both yield a silent exit 0.
+**Emit-or-not is decided by two independent conditions, not one.** An earlier revision said
+"zero harvested values ⇒ emit no replacement", which contradicted the degraded-harvest notice
+below: in the one case the notice exists for, there would have been no envelope to carry it.
+The rule is:
 
-**This is the quietest failure in the design, and it must not rely on stderr.** A hook that
+| Redactions made | Sources skipped | Hook emits |
+| --- | --- | --- |
+| none | none | **nothing** — no envelope; output passes through untouched |
+| none | ≥ 1 | **an envelope** carrying the unmodified streams **plus the notice line** |
+| ≥ 1 | none | an envelope with the redacted streams |
+| ≥ 1 | ≥ 1 | an envelope with the redacted streams **plus the notice line** |
+
+So a machine with no secrets stays silent and costs nothing, while a machine whose harvest
+degraded says so — the two states are no longer indistinguishable, which was the defect.
+
+**This was the quietest failure in the design, and the fix must not rely on stderr.** A hook that
 exits 0 has no guaranteed-visible channel — this repo's own
 `docs/features/global-option-blindness.md:594` records stderr visibility for a zero-exit hook
 as unverified. So the notice goes **in band**: whenever one or more sources were skipped, the
@@ -500,9 +538,10 @@ hook appends a single line to `stdout` via the same `updatedToolOutput` it alrea
 ```
 
 — which the model reads like any other output and can surface. This is the one case where the
-hook modifies output it did not redact. The corresponding Known-gaps row records the residual
-risk, because the notice is itself unverified: it has not been measured end to end, and if the
-harness rejects the envelope for any reason the notice is lost along with the redaction.
+hook emits an envelope for output it did not redact, and row 2 of the table above is what
+makes that possible. The residual risk is recorded in Known gaps: the notice is unverified —
+not measured end to end — and if the harness rejects the envelope for any reason the notice is
+lost along with the redaction.
 
 Outside that band — `python3` missing, hook timeout, process killed, the harness's own
 schema rejection — the platform falls back to the original output and the secret is printed.
@@ -619,7 +658,7 @@ may claim otherwise.
 | Encodings beyond raw/base64/URL | hex, gzip, encrypted, chunked across lines, one character per line. |
 | A future sibling hook that also rewrites output | `PostToolUse` hooks run **in parallel on the original output, last write wins by completion time**. A second rewriting hook on `Bash` would race this one non-deterministically and could restore the unredacted text. No hook can defend against this; it must be a standing rule. |
 | Any value below the strong arm's 6-char floor, or a weak-arm value under 24 chars with a non-matching key | e.g. `BUILD_ID=a1b2c3d4`. The direct, accepted price of not corrupting git SHAs and short innocent values. |
-| **A silently degraded harvest** | If every source fails to parse, the hook harvests nothing, emits no replacement, and exits 0 — **identical from the outside to a machine that simply has no secrets.** The in-band `[redaction: N of M sources unreadable]` notice is the only signal, and it is itself unverified: not measured end to end, and lost entirely if the harness rejects the envelope. A user could believe redaction is active while it is covering nothing. |
+| **A silently degraded harvest** | If every source fails to parse, the hook harvests nothing and covers nothing. The in-band `[redaction: N of M sources unreadable]` notice is the only signal that this happened — it is emitted in its own envelope (Failure direction, row 2), but it is **unverified**: not measured end to end, and lost entirely if the harness rejects that envelope. In that case a user could believe redaction is active while it is covering nothing. |
 | A secret that appears only in an encoding outside the nine needles | The needle set is fixed at build time; a value re-encoded by the command itself (gzip, hex, a custom alphabet) is not reached. |
 
 ## Verification plan
@@ -702,8 +741,11 @@ may claim otherwise.
   was not tested directly.
 - **Provenance of every number in this card, stated once so no table reads as first-hand.**
   Reproduced independently by me, after a compliance judge flagged each: the four entropy
-  cells (`cache/spike/ent.py`), the base64 trim arithmetic (`cache/spike/b64.py`, 2,100
-  embeddings) and the scan-strategy costs (`cache/spike/scan.py`). Measured by me directly: the `updatedToolOutput` replacement, its absence from the
+  cells (`ent.py`), the base64 trim arithmetic (`b64.py`, 2,100 embeddings) and the
+  scan-strategy costs (`scan.py`) — all three now **tracked** under
+  `docs/features/evidence/output-secret-redaction/` rather than in gitignored scratch, because
+  `scan.py` is the sole evidence for a mandated algorithm choice and a reviewer must be able
+  to re-run it. Measured by me directly: the `updatedToolOutput` replacement, its absence from the
   transcript JSONL, and the parallel/last-write-wins clobber. **Everything else — the runtime table, the hashing costs, the false-blank rates,
   the 30,000-char truncation, the failure-direction matrix, and all filter figures — comes
   from subagent measurement that I have not reproduced.** The filter figures additionally
