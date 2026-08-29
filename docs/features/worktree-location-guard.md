@@ -4455,7 +4455,8 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             the same file both ways. Recorded, deliberately not fixed here: this species is task 16's
             subject, and converting one instance ad hoc is what leaves the next sweep rediscovering
             the rest as new. Whoever takes this task starts here.
-            ⚠️ **Measured population, rounds 3–5 (2026-08-28) — start here, then re-measure.**
+            ⚠️ **Measured population, rounds 3–5 (2026-08-28), re-measured 2026-08-29 — start here, then
+            re-measure again.**
             (This block was headed "inherit this, do not rediscover it" until round 5. That banner
             is why round 4's stale figures survived a review: it told the next reader not to run the
             check that catches them, and the block then went on to be wrong twice more. A recorded
@@ -4468,26 +4469,43 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 
             **Recorded without new digits, deliberately.** The first version of this note listed
             `old`→`new` pairs measured against its own parent; the commit that wrote them then
-            inserted two lines above four of the five targets, and observability-judge round 4 found
+            inserted two lines above four of the five targets in that version's list, and round 4 found
             the whole list stale *inside the commit that recorded it* — the failure recurring inside
             the paragraph written to stop it. A re-derived list would buy the same finding again next
             round, so no new numbers are written here. Grep the quoted text instead.
 
-            **Measured set: six.** The citing sites are in the task checklists; the cited targets,
-            quoted at `origin/main` @ `21771d1`, each verified unique there:
+            **No total is recorded here, on purpose — enumerate them yourself.** A count of this set has
+            now been published four times and been wrong every time (seven, then five, then six, then
+            seven), each correction written by the commit that broke the next one. The number is what keeps
+            failing, so this note stores the derivation instead. Run:
+
+                (?<![\w./]):(\d{2,4})(?:-(\d{1,4}))?\b
+
+            over this file, then keep the hits that resolve to *this card* **and are citations in use**.
+            Discard the ones that are *mentions* of a citation rather than uses of one — the target list
+            below, task 15's historical anchor-rot list, and the audit notes for tasks 13 and 16, all of
+            which quote line numbers in order to talk about them. That exclusion is semantic, not
+            positional: a line range will not identify it, because these notes grow. **Both of the
+            pattern's lookarounds are load-bearing, and each replaced a real
+            blindness:** a pattern matching only single numbers cannot see `` `:788-789` `` (round 5's
+            finding), and a pattern requiring backticks cannot see the bare `:2494` (found 2026-08-29 by
+            running this recipe against the note that recorded the previous fix). Two independent method
+            failures, each of which shipped a wrong count before it was found.
+
+            **The cited targets, identified by quoted text at `origin/main` @ `21771d1`**, each verified
+            unique there. Grep the fragment; do not trust the number in front of it:
             `:1832` = `Scenario: -C in an earlier segment does not carry to a later one`;
             `:778` = `next section measures.`; `:848` = `> never carries its own list of them.`;
             `:1261` = `extends that shape; it does not invent it.`;
             `:1438` = `specified in task 6d is therefore required on the boundary paths too`;
-            `:788-789` = `**This requires the classifier to stop skipping non-git segments.**`.
+            `:788-789` = `**This requires the classifier to stop skipping non-git segments.**`;
+            `:2494` = `And worktree-guard.sh is registered in settings.json`.
 
-            🔴 **This count has now been wrong in three different directions, and the method is why.**
-            A round-3 report said seven; the first version of this note said five. Both were
-            enumerated with a grep that matched only single-number `` `:NNN` `` forms, so **every
-            range form `` `:NNN-NNN` `` was invisible to it** — which is exactly how `:788-789`
-            (task 5's checklist, in the same sentence as the `:1261` that *was* counted) went
-            missing. Six is what a range-aware grep finds. Treat it as a floor and re-enumerate with
-            a pattern that admits ranges before acting; do not inherit the number.
+            ⚠️ **`:2494` is a different failure from the rest, and needs a different fix.** It is cited in
+            task 6e's DONE note as "the ⚠️ OPEN channel question at :2494". At `21771d1` that line number was
+            *correct* and resolved to the Background step quoted above — the Background of the Feature that
+            contains the question, not the question. So repointing it to a fresh number preserves the same
+            mistake; whoever takes this decides what claim the sentence meant to cite and quotes that instead.
 
             ⚠️ **A correction that over-corrected.** An earlier version of this note claimed `:788`
             "no longer exists". That was false — the text at base `:788` is alive at HEAD. But the
@@ -4495,11 +4513,11 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
             it appears in task 15's historical anchor-rot list. It appears there *and* as a live
             citation at task 5's checklist item. Both facts are true; only the second one counts.
 
-            🔴 **Four of the five cite a mid-sentence continuation line, not an anchor** — see the
-            quotes above. So "convert them to quoted text" is not even well-defined for those four:
-            there is no claim at the target to quote. Whoever takes this task decides what each
-            citation was *trying* to point at before deciding how to write it, which is why this is
-            a task and not a sweep. That also settles the pending option: "leave them as anaphora"
+            🔴 **Most of them cite a mid-sentence continuation line, not an anchor** — see the quotes above,
+            which is why they are given as text and not as a tally. So "convert them to quoted text" is not
+            even well-defined for those: there is no claim at the target to quote. Whoever takes this task
+            decides what each citation was *trying* to point at before deciding how to write it, which is why
+            this is a task and not a sweep. That also settles the pending option: "leave them as anaphora"
             was defensible while they were stable, and they are not stable.
       Two of the three are false statements about current code, carrying dated markers in place.
       The markers stop a reader believing the text; they do not make the card true.
