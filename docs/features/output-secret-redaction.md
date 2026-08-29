@@ -224,12 +224,14 @@ the URL. The overlap alone settles it; no sweep is needed, and none is quoted.
 under it. Re-measured at **3.82** (`cache/spike/ent.py`) after the compliance judge flagged
 it. Two things this correction does *not* claim: the earlier revision's surrounding sentence
 ("the lowest real secret scores below the highest innocent value") was **correct** and is
-still true under the new numbers; and an intermediate revision of this paragraph attributed a
-"hex has only 16 symbols" argument to `9208751` which that blob does not contain — the
-argument came from the underlying research note, not from this card. The four cells now here
-are the only entropy figures in this card that have been independently reproduced; an earlier
-threshold sweep ("9/19", "19/23") was removed because it cannot have come from the 41-entry
-corpus described below (17 secrets, 24 innocent) and no other corpus was ever specified. Use a **character-class count** (how many of
+still true under the new numbers; and an intermediate revision of this paragraph asserted that
+`9208751` argued "hex has only 16 symbols", which `git show` disproves. **That intermediate
+revision then guessed at where the phrase came from, and guessed wrong a second time.** No
+attribution is offered here: the measurements are `cache/spike/ent.py`, the blob is
+`9208751`, and where the erroneous sentence originated is not established and is not worth
+another guess. An earlier threshold sweep ("9/19", "19/23") was also removed — it cannot have
+come from the 41-entry corpus described below (17 secrets, 24 innocent) and no other corpus
+was ever specified. Use a **character-class count** (how many of
 lower/upper/digit/other appear) instead — cheap, and it does not pretend to measure
 randomness.
 
@@ -306,7 +308,7 @@ parsing is too slow is false, and not narrowly:
 | **read + parse the real corpus** (3 files, 21,846 bytes, 58 assignments) | **0.16 ms** |
 | parse 200 KB synthetic shell corpus | 1.24 ms |
 | parse 1 MB synthetic shell corpus | 6.35 ms |
-| in-hook total (parse 0.12 + 40-needle scan 0.102) | ≈ 0.25 ms |
+| in-hook total, ~~40-needle scan~~ | ~~≈ 0.25 ms~~ — **superseded**, see Matching mechanics: the nine-needle expansion puts the worst case at ~19.5 ms |
 
 Harvesting costs 0.7% of the interpreter startup already being paid. Every caching option
 therefore trades a measurable security regression for an unmeasurable speedup:
@@ -370,20 +372,23 @@ what it has — it does **not** abort, because an abort would mean no redaction 
 
   Dropping the leading `lead` characters removes every character contaminated by the
   preceding bytes; taking only `full` characters drops the trailing partial group, which is
-  contaminated by whatever follows. **Measured over 3,150 randomized embeddings** (`v` 24–48
-  random bytes, random prefix and suffix, 350 trials per offset per rule):
+  contaminated by whatever follows. **Measured over 2,100 embeddings — 350 trials per offset
+  per rule, 3 offsets, 2 rules, so 1,050 per rule** (`v` 24–48 bytes, random prefix and
+  suffix):
 
   | Rule | offset 0 | offset 1 | offset 2 | total |
   | --- | --- | --- | --- | --- |
-  | "drop first and last character" (the first attempt) | 171/350 | 37/350 | **0/350** | 208/1050 |
+  | "drop first and last character" (the first attempt) | 171/350 | 41/350 | **0/350** | 212/1050 |
   | **the arithmetic above** | 350/350 | 350/350 | 350/350 | **1050/1050** |
 
-  Script: `cache/spike/b64.py`. The failed rule is recorded because it *looked* correct and
-  silently produced a needle that could never match at offset 2.
+  Script: `cache/spike/b64.py`, seeded with `random.Random(7)` and reset per cell, so these
+  counts reproduce exactly on re-run — an earlier version of the script drew from
+  `os.urandom` and its per-cell counts drifted every execution while appearing to be fixed
+  measurements. The failed rule is recorded because it *looked* correct and silently produced
+  a needle that could never match at offset 2.
 
   If a needle falls below the partial-match floor after trimming, it is still emitted — it is
-  simply matched only in full, per the floor rule below. Nine needles at ~0.011 ms each keeps
-  the scan near the measured 0.102 ms for 40 secrets.
+  simply matched only in full, per the floor rule below.
 - **Two different floors, and they are not in conflict — but only if this is read exactly.**
   The strong arm's **6** is a *harvest* floor: it decides whether a value becomes a needle at
   all. The **20** here is a *partial-match* floor: it decides whether a needle may match a
@@ -416,9 +421,34 @@ what it has — it does **not** abort, because an abort would mean no redaction 
   spurious match would corrupt the image.
 - **Redact longest needle first**, so an overlapping short value cannot blank half a longer
   one.
-- **Use `str.replace` in a loop, not one compiled alternation** — 100 KB with 40 secrets:
-  **0.45 ms** naive vs **3.31 ms** compiled regex, because `str.replace` is a tight C
-  `memmem` and a 40-branch alternation is not.
+- **The partial-match algorithm, specified — not left to the implementer.** "Any ≥20-char
+  contiguous substring" is a *semantics*; read literally it is unimplementable at this budget.
+  Measured at 100 KB of output with 40 secrets × 9 needles = **360 needles**
+  (`cache/spike/scan.py`, seeded, worst case):
+
+  | Strategy | Work | Cost |
+  | --- | --- | --- |
+  | enumerate every 20-char substring, `str.replace` each | 5,992 replace passes | **109.44 ms** — rejected |
+  | **20-gram index, one pass over the output** | 5,992-entry index, output scanned once | **18.16 ms** |
+  | short needles (<20 chars), whole-needle `str.replace` | 40 passes | **1.29 ms** |
+
+  **The mandated algorithm:**
+  1. Needles **< 20 chars** → `str.replace` in a loop, longest first. `str.replace` is a tight
+     C `memmem`; at 100 KB with 40 needles a compiled 40-branch alternation measured 3.31 ms
+     against 0.45 ms, so do not reach for a regex here.
+  2. Needles **≥ 20 chars** → build a dict of every 20-character substring → owning needle,
+     then slide one 20-character window over the text a single time. On a hit, extend the
+     match maximally against the owning needle and replace. Cost is O(output + Σ needle
+     lengths) and **does not grow with needle count**, which is what makes the 360-needle case
+     affordable at all.
+
+- **Honest revision of the runtime budget.** The "≈ 0.25 ms in-hook total" in the Runtime
+  table above was computed against a **40-needle** scan; the nine-needle expansion makes the
+  worst case 360 needles, and the measured scan is **~19.5 ms** (18.16 + 1.29), not 0.25 ms.
+  Against a 16–22 ms interpreter startup that roughly doubles the hook's cost on a 100 KB
+  output. It remains well inside the 30,000-character ceiling the harness imposes, and the
+  360-needle figure is a worst case — but the earlier number is superseded and the Runtime
+  table is annotated accordingly rather than left to be quoted.
 
 ## Failure direction
 
@@ -453,10 +483,26 @@ Two error boundaries, not one:
 | **Per source file** (open, read, parse) | skip that source, count it, continue | a third-party file we do not control must never be able to disable the session; a missing source degrades coverage, which is the failure this design already accepts |
 | **Scan and emit** (filter, needle build, replace, serialise) | withheld-output envelope | this is our own code operating on a payload we *know* may contain a secret; failing open here is exactly the leak |
 
-The hook reports the skipped-source count in its stderr log so a systematically unreadable
-source is visible rather than silent. **Zero harvested values is a valid outcome** — the hook
-emits no replacement at all and the output passes through unchanged, because there is nothing
-to redact and withholding would be pure damage.
+**Zero harvested values is a valid outcome** — the hook emits no replacement and the output
+passes through unchanged, because there is nothing to redact and withholding would be pure
+damage. But that same state is what a fully-degraded harvest produces, and the two are
+indistinguishable from the outside: a machine with no secrets and a machine whose every source
+failed to parse both yield a silent exit 0.
+
+**This is the quietest failure in the design, and it must not rely on stderr.** A hook that
+exits 0 has no guaranteed-visible channel — this repo's own
+`docs/features/global-option-blindness.md:594` records stderr visibility for a zero-exit hook
+as unverified. So the notice goes **in band**: whenever one or more sources were skipped, the
+hook appends a single line to `stdout` via the same `updatedToolOutput` it already emits —
+
+```
+[redaction: N of M sources unreadable — coverage degraded]
+```
+
+— which the model reads like any other output and can surface. This is the one case where the
+hook modifies output it did not redact. The corresponding Known-gaps row records the residual
+risk, because the notice is itself unverified: it has not been measured end to end, and if the
+harness rejects the envelope for any reason the notice is lost along with the redaction.
 
 Outside that band — `python3` missing, hook timeout, process killed, the harness's own
 schema rejection — the platform falls back to the original output and the secret is printed.
@@ -567,12 +613,14 @@ may claim otherwise.
 | A secret in a file nobody listed | "Known values only" means exactly that. Discovery is not a fix — a `find` over `$HOME` at depth 4 did not finish in 2 minutes. |
 | A secret fetched mid-command | `vault read`, `aws sts assume-role`, `gh auth token`, `op read` never existed in a file at harvest time. Large and **growing** — short-lived fetched credentials are the modern pattern. |
 | A credential rotated by the command that prints it | The new value did not exist when the hook harvested, moments earlier. |
-| A secret straddling the 30,000-char truncation | `stdout` is cut mid-token before the hook sees it; the fragment falls below the 20-char floor. Content past 30,000 chars never reaches the model either, so it is not itself a leak. |
+| A secret straddling the 30,000-char truncation | `stdout` is cut mid-token before the hook sees it. Whether the surviving fragment is redacted follows the composition rule, not a blanket floor: a fragment of a **<20-char needle** is never matched (whole-needle only), and a fragment of a **≥20-char needle** IS matched if at least 20 characters survive the cut — so the uncovered case is specifically a surviving fragment shorter than 20 characters. Content past 30,000 chars never reaches the model either, so it is not itself a leak. |
 | A keychain-backed credential | `~/.docker/config.json` is 78 bytes with a `credsStore`; the value lives in Keychain. Same for `~/.authinfo.gpg`, `~/.mylogin.cnf`, Chrome's `Login Data`. No plaintext exists to harvest. |
 | Truncated tokens (first 8 chars) | Catching them costs ~13.9 false blanks/day with a 4-char vendor prefix. Deliberately out of reach at the 20-char floor. |
 | Encodings beyond raw/base64/URL | hex, gzip, encrypted, chunked across lines, one character per line. |
 | A future sibling hook that also rewrites output | `PostToolUse` hooks run **in parallel on the original output, last write wins by completion time**. A second rewriting hook on `Bash` would race this one non-deterministically and could restore the unredacted text. No hook can defend against this; it must be a standing rule. |
 | Any value below the strong arm's 6-char floor, or a weak-arm value under 24 chars with a non-matching key | e.g. `BUILD_ID=a1b2c3d4`. The direct, accepted price of not corrupting git SHAs and short innocent values. |
+| **A silently degraded harvest** | If every source fails to parse, the hook harvests nothing, emits no replacement, and exits 0 — **identical from the outside to a machine that simply has no secrets.** The in-band `[redaction: N of M sources unreadable]` notice is the only signal, and it is itself unverified: not measured end to end, and lost entirely if the harness rejects the envelope. A user could believe redaction is active while it is covering nothing. |
+| A secret that appears only in an encoding outside the nine needles | The needle set is fixed at build time; a value re-encoded by the command itself (gzip, hex, a custom alphabet) is not reached. |
 
 ## Verification plan
 
@@ -616,8 +664,9 @@ may claim otherwise.
 - [ ] 5. Implement the filter exactly as specified, including both URL rules and the weak-arm
       SHA/UUID denials.
 - [ ] 6. Implement the scanner: the **nine** needles defined in Matching mechanics (with the
-      `lead`/`full` trim arithmetic and its 3,150-trial check), longest-first, `str.replace`
-      loop, both streams, `isImage` passthrough, and the two-floor composition rule.
+      `lead`/`full` trim arithmetic and its 2,100-embedding check), the two-strategy scan
+      (`str.replace` loop under 20 chars, 20-gram index at or above it), both streams,
+      `isImage` passthrough, and the two-floor composition rule.
 - [ ] 7. Implement the wrapper and the catch-all that emits a withheld-output envelope.
 - [ ] 8. Register in `settings.json` under `PostToolUse` / matcher `Bash`.
 - [ ] 9. Correct the false premise in all four sites in one commit; make this card the single
@@ -653,8 +702,8 @@ may claim otherwise.
   was not tested directly.
 - **Provenance of every number in this card, stated once so no table reads as first-hand.**
   Reproduced independently by me, after a compliance judge flagged each: the four entropy
-  cells (`cache/spike/ent.py`) and the base64 trim arithmetic (`cache/spike/b64.py`, 3,150
-  trials). Measured by me directly: the `updatedToolOutput` replacement, its absence from the
+  cells (`cache/spike/ent.py`), the base64 trim arithmetic (`cache/spike/b64.py`, 2,100
+  embeddings) and the scan-strategy costs (`cache/spike/scan.py`). Measured by me directly: the `updatedToolOutput` replacement, its absence from the
   transcript JSONL, and the parallel/last-write-wins clobber. **Everything else — the runtime table, the hashing costs, the false-blank rates,
   the 30,000-char truncation, the failure-direction matrix, and all filter figures — comes
   from subagent measurement that I have not reproduced.** The filter figures additionally
