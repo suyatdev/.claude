@@ -484,7 +484,7 @@ def test_the_refusal_audits_reason_no_channel(launcher, command_id):
 
     srv.command(command_id)
 
-    line = srv.last_audit(command_id=command_id)
+    line = srv.last_audit(id=command_id)
     assert line["outcome"] == "refused"
     assert line["status"] == "503"
     assert line["reason"] == "no_channel"
