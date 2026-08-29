@@ -75,7 +75,7 @@ command text, and the existing guard never touches the output. Neither replaces 
 
 | Thing | Version | Why pinned |
 | --- | --- | --- |
-| Claude Code CLI | `2.1.251` | every platform behaviour below was measured against this build; `updatedToolOutput` is not documented publicly and its contract may move |
+| Claude Code CLI | `2.1.251` | every platform behaviour below was measured against this build **and only this build** — `2.1.245` and `2.1.246` are also present on disk and were not tested. `updatedToolOutput` is not documented publicly and its contract may move, so the corrections in Task 9 must be version-scoped rather than stated absolutely |
 | python3 | `3.9.6` (macOS system, `/usr/bin/python3`) | the sibling guard resolves `python3` then `python` from PATH; 3.9 is the floor — no `match`, no `str.removeprefix` in hot paths |
 | `sqlite3` | `3.51.0` (`/usr/bin/sqlite3`, 2025-06-12) | required to read gcloud's `credentials.db` / `access_tokens.db`; a line-oriented parser on those produces binary garbage |
 | `jq` | `1.7.1-apple` | used by the registration self-test, per house convention |
@@ -442,8 +442,10 @@ what it has — it does **not** abort, because an abort would mean no redaction 
 
   **The mandated algorithm:**
   1. Needles **< 20 chars** → `str.replace` in a loop, longest first. `str.replace` is a tight
-     C `memmem`; at 100 KB with 40 needles a compiled 40-branch alternation measured 3.31 ms
-     against 0.45 ms, so do not reach for a regex here.
+     C `memmem`; re-measured on the tracked script (rows D and E, mean of 5 runs, 100 KB, 40
+     needles) a compiled 40-branch alternation costs **~5.2 ms** against **~1.0 ms** for the
+     loop, so do not reach for a regex here. The superseded `3.31 / 0.45 ms` pair from an
+     untracked earlier measurement is retired everywhere; the ~5× ratio is unchanged.
   2. Needles **≥ 20 chars** → build an index of every 20-character substring, then slide one
      20-character window over the text a single time. Cost is O(output + Σ needle lengths) and
      **does not grow with needle count**, which is what makes the 360-needle case affordable.
@@ -509,13 +511,20 @@ Two error boundaries, not one:
 
 | Stage | On error | Why |
 | --- | --- | --- |
-| **Per source file** (open, read, parse) | skip that source, count it, continue | a third-party file we do not control must never be able to disable the session; a missing source degrades coverage, which is the failure this design already accepts |
+| **Per source file** (open, read, parse) | skip that source, continue — and see the counting rule below for whether it is *counted* | a third-party file we do not control must never be able to disable the session |
 | **Scan and emit** (filter, needle build, replace, serialise) | withheld-output envelope | this is our own code operating on a payload we *know* may contain a secret; failing open here is exactly the leak |
 
 **Emit-or-not is decided by two independent conditions, not one.** An earlier revision said
 "zero harvested values ⇒ emit no replacement", which contradicted the degraded-harvest notice
 below: in the one case the notice exists for, there would have been no envelope to carry it.
 The rule is:
+
+**`isImage: true` short-circuits this table before any row is evaluated.** The hook returns no
+replacement at all — no redaction, and **no notice line**, because appending text to base64
+image data corrupts the image, and a corrupted image is a worse outcome than an unreported
+degraded harvest. This precedence is absolute and is the first thing the hook checks.
+
+Otherwise:
 
 | Redactions made | Sources skipped | Hook emits |
 | --- | --- | --- |
@@ -536,6 +545,25 @@ hook appends a single line to `stdout` via the same `updatedToolOutput` it alrea
 ```
 [redaction: N of M sources unreadable — coverage degraded]
 ```
+
+**What counts as "skipped" — and what emphatically does not.** The Sources table lists ~40
+paths, and the Verification plan records that **most of them are absent on any given machine**.
+If absence counted as a skip, this notice would append to the output of every Bash command in
+every session, forever — which is the same "maddening to diagnose" corruption the filter design
+goes to such lengths to avoid.
+
+| Condition | Counted? |
+| --- | --- |
+| the path does not exist | **no** — expected, and the normal case for most of the list |
+| the path is a broken symlink, or resolves outside `$HOME` | **no** — treated as absent |
+| the file exists but cannot be opened (permissions) | **yes** |
+| the file opens but the parser raises | **yes** |
+| the file is skipped for exceeding `MAX_FILE_BYTES`, or because the total budget is spent | **yes** |
+| `sqlite3` is unavailable so a `.db` source is skipped | **yes** |
+
+`M` is the count of sources that were **present and attempted**, not the length of the Sources
+table — so `N of M` reads as a fraction of what this machine actually has, and on a healthy
+machine `N` is 0 and no notice is emitted at all.
 
 — which the model reads like any other output and can surface. This is the one case where the
 hook emits an envelope for output it did not redact, and row 2 of the table above is what

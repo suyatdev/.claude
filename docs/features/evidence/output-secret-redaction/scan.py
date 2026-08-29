@@ -68,3 +68,22 @@ print(f"A. enumerate substrings + str.replace : {passes:,} replace passes   {(t1
 print(f"B. 20-gram index, one pass over output: {hits} hit(s)              {(t3-t2)*1000:8.2f} ms")
 print(f"C. short needles (<20), whole-only     : {len(short_needles)} passes            {(t5-t4)*1000:8.2f} ms")
 print(f"   index size: {sum(len(nd)-W+1 for nd in needles):,} grams")
+
+# --- short-needle strategy: str.replace loop vs one compiled alternation ---
+import re as _re
+_rounds = 5
+_t_rep = _t_rx = 0.0
+_rx = _re.compile("|".join(_re.escape(n) for n in sorted(short_needles, key=len, reverse=True)))
+for _ in range(_rounds):
+    _a = time.perf_counter()
+    _tx = output
+    for _nd in sorted(short_needles, key=len, reverse=True):
+        _tx = _tx.replace(_nd, "[R]")
+    _b = time.perf_counter()
+    _rx.sub("[R]", output)
+    _c = time.perf_counter()
+    _t_rep += _b - _a
+    _t_rx += _c - _b
+print()
+print(f"D. short needles, {len(short_needles)} x str.replace : {_t_rep/_rounds*1000:6.2f} ms (mean of {_rounds})")
+print(f"E. short needles, 1 compiled alternation  : {_t_rx/_rounds*1000:6.2f} ms (mean of {_rounds})")
