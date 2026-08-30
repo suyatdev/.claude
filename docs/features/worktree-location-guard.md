@@ -4667,7 +4667,17 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
           this one and the "Disagreements" note below — the same mention-vs-use exclusion this
           card's population-count convention already applies to line numbers. What remains is
           always 1. **A future reader must not "fix" a card-internal fragment's count back down to
-          1 without that subtraction** — for these six, 1 is the target count, never the raw count.
+          1 without that subtraction** — for **all seven** fragments enumerated above, 1 is the
+          target count and never the raw count. That includes `` `:1438` ``'s: its literal `1` is
+          the wrap artifact described above, not a raw count that happens to agree. ⚠️ This clause
+          read "for these six" until observability-judge round 2 (2026-08-30) caught it — a
+          miscount inside the paragraph written to stop miscounts. It is the **second** wrong count
+          this one property has produced *in this card*, after "confirmed to return exactly 1"
+          above; a third lived outside the card, where the orchestrator's brief to the implementer
+          asserted "eight card-internal fragments return 2" when its own printed table showed
+          **seven**, and the round-1 judge repeated that eight back without re-deriving it. The
+          implementer re-measured, disagreed, and was right. State the population, not just the
+          number — and re-derive an inherited count before repeating it.
         - Left one citation unconverted, by judgment: the `` `:59-61` ``/`` `:60-62` `` pair in
           derivation 3's "Verified line numbers 2026-08-25" sentence is a historical note about what
           round 6's verdict cited versus what was measured, not a live navigational use — the two
