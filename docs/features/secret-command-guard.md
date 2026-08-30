@@ -40,7 +40,14 @@ happen at `PreToolUse`, on the command text, before it runs.
      blast radius (nearly every Bash call, every session) is much larger than a
      single write.
    - Bypass: `SECRET_EXEMPT=<reason> <command>` (logged), matching this repo's
-     other Tier 1 guards.
+     other Tier 1 guards. **Amended 2026-08-30** by task 13 of
+     `docs/features/output-secret-redaction.md`: the flag no longer clears a block
+     on its own. It is honoured only alongside a session- and command-scoped
+     approval record (`hooks/lib/secret_approval.py grant <id>`), granted after the
+     user types the literal phrase `secret-gate override`, and spent on first use.
+     An unapproved flag is ignored rather than fatal — the command is then judged
+     on its own merits. A full-environment dump cannot be cleared at all, by flag
+     or approval. That card is the authority; this bullet is a pointer.
 2. Register the existing dormant `hooks/scan-secrets.sh` under
    `PreToolUse`/`Edit|Write|NotebookEdit` in `settings.json`. It blocks writes that
    introduce credential material and was never wired in. It had **no test suite
@@ -108,7 +115,13 @@ phrasing and described a wider guard than exists. The boundary is stated next
 to the strong wording deliberately, so the two cannot drift apart.
 
 This is a momentum guardrail against the two shapes that actually fired, **not a
-security boundary**. `SECRET_EXEMPT` clears it in one flag.
+security boundary**. Until 2026-08-30 `SECRET_EXEMPT` cleared it in one flag; task
+13 of `docs/features/output-secret-redaction.md` now requires a recorded approval
+alongside it. That raises the floor and changes nothing about the boundary claim:
+the approval record is written from inside the session by the agent the gate
+constrains, so it is forgeable. It states that an approval was claimed; it does
+not prove one was given. The load-bearing control remains the literal phrase
+`secret-gate override`, typed by a human.
 
 ## Verification plan
 

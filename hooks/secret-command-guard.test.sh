@@ -63,6 +63,73 @@ run_case_nomsg() { # $1 desc, $2 want-exit, $3 stderr substring that must be ABS
   rm -f "$err"
 }
 
+# --- Approval store (task 13) -------------------------------------------------
+# Redirected to a temp dir so the suite never reads or writes the real
+# $HOME/.claude/hooks/state, and so one run cannot leak an approval into the
+# next. SID_A/SID_B exercise the session scoping; every assertion that predates
+# task 13 runs through payload(), which carries no session_id at all.
+LIBDIR="$(cd "$(dirname "$0")" && pwd)/lib"
+SECRET_GUARD_STATE_DIR="$(mktemp -d)"; export SECRET_GUARD_STATE_DIR
+# Unset, or payload() -- which carries no session_id -- falls back to the REAL
+# session running the suite, so results would depend on who invoked it.
+unset CLAUDE_CODE_SESSION_ID
+SID_A="session-aaaa"
+SID_B="session-bbbb"
+trap 'rm -rf "$SECRET_GUARD_STATE_DIR"' EXIT
+
+payload_sid() { /usr/bin/jq -nc --arg c "$1" --arg s "$2" \
+  '{hook_event_name:"PreToolUse",session_id:$s,tool_input:{command:$c}}'; }
+
+run_case_sid() { # $1 desc, $2 want-exit, $3 session, $4 command string
+  local desc="$1" want="$2" sid="$3" cmd="$4" got
+  payload_sid "$cmd" "$sid" | bash "$HOOK" >/dev/null 2>&1
+  got=$?
+  if [ "$got" -eq "$want" ]; then
+    printf 'ok   — %s (exit %s)\n' "$desc" "$got"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s (want %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1))
+  fi
+}
+
+run_case_sid_msg() { # $1 desc, $2 want-exit, $3 session, $4 stderr substring, $5 command
+  local desc="$1" want="$2" sid="$3" want_msg="$4" cmd="$5" got err
+  err=$(mktemp)
+  payload_sid "$cmd" "$sid" | bash "$HOOK" >/dev/null 2>"$err"
+  got=$?
+  if [ "$got" -ne "$want" ]; then
+    printf 'FAIL — %s (want exit %s, got %s)\n' "$desc" "$want" "$got"; fail=$((fail+1)); rm -f "$err"; return
+  fi
+  case "$(cat "$err")" in
+    *"$want_msg"*) printf 'ok   — %s (exit %s, names "%s")\n' "$desc" "$got" "$want_msg"; pass=$((pass+1)) ;;
+    *) printf 'FAIL — %s: stderr lacks "%s", got: %s\n' "$desc" "$want_msg" "$(cat "$err")"; fail=$((fail+1)) ;;
+  esac
+  rm -f "$err"
+}
+
+# Drives the REAL round trip rather than computing an id independently: block the
+# command, scrape the approval id out of the deny message, grant exactly that id.
+# A deny message that stops printing a usable id therefore turns every dependent
+# assertion red instead of letting them pass against a private calculation.
+grant_from_block() { # $1 session, $2 command string
+  local sid="$1" cmd="$2" err id
+  # Clear first, so each scenario starts from a known-empty store. Without this
+  # an approval left unspent by the previous scenario silently ALLOWS the very
+  # command this helper needs to see blocked, and the helper then has no deny
+  # message to scrape an id from -- measured, 2026-08-30.
+  rm -f "$SECRET_GUARD_STATE_DIR"/secret-approval-* 2>/dev/null
+  err=$(mktemp)
+  payload_sid "$cmd" "$sid" | bash "$HOOK" >/dev/null 2>"$err"
+  id=$(sed -n 's/.*grant \([0-9a-f][0-9a-f]*\).*/\1/p' "$err" | head -1)
+  rm -f "$err"
+  if [ -z "$id" ]; then
+    printf 'FAIL — grant_from_block: deny message printed no approval id for: %s\n' "$cmd"
+    fail=$((fail+1)); return 1
+  fi
+  if ! python3 "$LIBDIR/secret_approval.py" grant "$id" --session "$sid" >/dev/null 2>&1; then
+    printf 'FAIL — grant_from_block: grant rejected id %s\n' "$id"; fail=$((fail+1)); return 1
+  fi
+}
+
 # =============================================================================
 # Dotfile / path mentions — EVERY mention blocks. There is no permitted read
 # shape (2026-08-28 amendment; ADR 0039).
@@ -123,23 +190,111 @@ run_case_msg "control: docker --env-file .env -> block"                 2 '.env'
 run_case "docker --env-file .env.example -> allow"                      0 'docker compose --env-file .env.example up'
 
 # =============================================================================
-# SECRET_EXEMPT=<reason> — the escape hatch, matching this repo's other Tier 1
-# guards (MERGE_EXEMPT / TEST_EXEMPT / JUDGE_EXEMPT / WORKTREE_EXEMPT).
+# SECRET_EXEMPT=<reason> — a HUMAN's escape hatch, not the agent's.
+#
+# Task 13 (docs/features/output-secret-redaction.md): the flag alone no longer
+# clears a block. The classifier honours it only when a session-scoped,
+# command-scoped approval record exists, granted via
+# `hooks/lib/secret_approval.py grant <id>` after the user typed the literal
+# phrase `secret-gate override` (rules/gates.md, Secret-gate override).
+#
+# THIS IS A SPEED BUMP, NOT A SECURITY BOUNDARY, and no assertion here should
+# be read as claiming otherwise: the approval record is written from inside the
+# session by the same agent the gate constrains, so it is forgeable. It records
+# an agreement; it does not prove one. The typed phrase is the actual control.
+#
+# An unapproved flag is IGNORED, not fatal — the command is then judged on its
+# own merits, so an exempt on a harmless command still allows.
 # =============================================================================
-run_case "SECRET_EXEMPT with a reason -> allow"                         0 'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
-run_case "SECRET_EXEMPT also clears an env dump"                        0 'SECRET_EXEMPT=debugging-a-hook env'
-run_case_msg "SECRET_EXEMPT clears os.environ, not just bare env"       0 'exempted' \
-  'SECRET_EXEMPT=inspecting-a-payload python3 -c "print(os.environ)"'
-
-# A bypass that leaves no trace is not an audited bypass. Without this, turning
-# the classifier's `return 3` into `return 0` keeps the suite fully green while
-# silently deleting the only record that the guard was overridden.
-run_case_msg "the bypass is LOGGED, naming the reason"                  0 'SECRET_EXEMPT=rotating-the-key' \
+run_case_msg "SECRET_EXEMPT with NO approval record -> block"           2 '.zshrc' \
   'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
-run_case_msg "the bypass log says it is allowing"                       0 'allowing' \
+run_case_msg "...and the deny names the phrase the user must type"      2 'secret-gate override' \
   'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_msg "...and says the flag was ignored for want of approval"    2 'no recorded approval' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_msg "...and prints the grant command with an approval id"      2 'secret_approval.py grant' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_msg "the deny must NOT imply the record proves consent"        2 'does not prove' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case "an unapproved flag on a harmless command still allows"        0 'SECRET_EXEMPT=whatever git status'
 run_case_msg "SECRET_EXEMPT with an EMPTY reason -> still blocks"       2 '.zshrc' 'SECRET_EXEMPT= cat ~/.zshrc'
 run_case_msg "an unrelated assignment does not exempt"                  2 '.zshrc' 'FOO=bar cat ~/.zshrc'
+
+# -----------------------------------------------------------------------------
+# With an approval granted. grant_from_block() drives the REAL round trip: it
+# runs the command, scrapes the approval id out of the deny message, and grants
+# exactly that id — so a deny message that stops printing a usable id turns this
+# section red rather than passing on an id computed independently.
+#
+# A round trip on its own proves only that the two halves agree with each other.
+# The scoping assertions below (different command, different session, flag still
+# required, approval spent) are the ones that prove the grant is not a rubber
+# stamp.
+# -----------------------------------------------------------------------------
+grant_from_block "$SID_A" 'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_sid_msg "granted + flag -> allow, and the bypass is LOGGED"    0 "$SID_A" 'rotating-the-key' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+grant_from_block "$SID_A" 'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_sid_msg "...and the log says it is allowing"                   0 "$SID_A" 'allowing' \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+
+# CONSUMED ON FIRST USE. Without this, one `secret-gate override` would license
+# an unlimited number of re-runs — exactly what rules/gates.md forbids ("re-run
+# once, covering that one command only").
+grant_from_block "$SID_A" 'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_sid "consume #1: granted -> allow"                             0 "$SID_A" \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+run_case_sid "consume #2: same command again -> block, approval spent"  2 "$SID_A" \
+  'SECRET_EXEMPT=rotating-the-key cat ~/.zshrc'
+
+# Scoped to ONE command: an approval for ~/.zshrc does not clear ~/.zprofile.
+grant_from_block "$SID_A" 'SECRET_EXEMPT=r cat ~/.zshrc'
+run_case_sid_msg "approval does not carry to a different command"       2 "$SID_A" '.zprofile' \
+  'SECRET_EXEMPT=r cat ~/.zprofile'
+run_case_sid "control: the same approval still clears its own command"  0 "$SID_A" \
+  'SECRET_EXEMPT=r cat ~/.zshrc'
+
+# Scoped to ONE session.
+grant_from_block "$SID_A" 'SECRET_EXEMPT=r cat ~/.zshrc'
+run_case_sid "approval granted in session A does not clear session B"   2 "$SID_B" \
+  'SECRET_EXEMPT=r cat ~/.zshrc'
+run_case_sid "control: session A still clears it"                       0 "$SID_A" \
+  'SECRET_EXEMPT=r cat ~/.zshrc'
+
+# The flag is still REQUIRED. An approval on its own is not a bypass, and a run
+# without the flag must not silently spend it.
+grant_from_block "$SID_A" 'SECRET_EXEMPT=r cat ~/.zshrc'
+run_case_sid "approval without the flag -> still blocks"                2 "$SID_A" 'cat ~/.zshrc'
+run_case_sid "...and did not spend the approval"                        0 "$SID_A" \
+  'SECRET_EXEMPT=r cat ~/.zshrc'
+
+# The reason TEXT is not part of the fingerprint: the user approves a command,
+# not a wording. Without this, re-typing the reason differently would silently
+# waste the approval.
+grant_from_block "$SID_A" 'SECRET_EXEMPT=first-wording cat ~/.zshrc'
+run_case_sid "a different reason still matches the same approval"       0 "$SID_A" \
+  'SECRET_EXEMPT=totally-different-wording cat ~/.zshrc'
+
+# ...but any OTHER assignment IS part of it, so the id printed in a deny message
+# always belongs to the exact command that produced it.
+grant_from_block "$SID_A" 'SECRET_EXEMPT=r cat ~/.zshrc'
+run_case_sid "an extra assignment changes the fingerprint -> block"     2 "$SID_A" \
+  'FOO=1 SECRET_EXEMPT=r cat ~/.zshrc'
+
+# Store unreadable -> the bypass is REFUSED and the command judged normally
+# (user decision 2026-08-30). An unverifiable permission slip is no permission
+# slip. This narrow arm deliberately does NOT fail open like the rest of the
+# hook: it can only ever block a command that was already a blockable shape, so
+# it cannot become a de facto ban on using the shell.
+grant_from_block "$SID_A" 'SECRET_EXEMPT=r cat ~/.zshrc'
+REAL_STORE="$SECRET_GUARD_STATE_DIR"
+export SECRET_GUARD_STATE_DIR="/nonexistent/secret-approvals-$$"
+run_case_sid "unreadable approval store -> bypass refused"              2 "$SID_A" \
+  'SECRET_EXEMPT=r cat ~/.zshrc'
+run_case_sid "...and an ordinary command is still unaffected"           0 "$SID_A" 'git status'
+export SECRET_GUARD_STATE_DIR="$REAL_STORE"
+run_case_sid "control: the real store still honours that approval"      0 "$SID_A" \
+  'SECRET_EXEMPT=r cat ~/.zshrc'
 
 # =============================================================================
 # Full-environment dumps
@@ -150,6 +305,39 @@ run_case "env with an assignment argument -> allow"                     0 'env F
 run_case "printenv with a specific var -> allow"                        0 'printenv HOME'
 run_case_msg "os.environ in a python -c string -> block"                2 'os.environ' 'python3 -c "print(os.environ)"'
 run_case_msg "process.env in a node -e string -> block"                 2 'process.env' "node -e 'console.log(process.env)'"
+
+# A full-environment dump can NEVER be cleared by SECRET_EXEMPT (rules/gates.md,
+# Secret-gate override; user decision 2026-08-30) — there is nothing for the user
+# to inspect in advance, so there is nothing an approval could be an approval OF.
+# The exempt check therefore runs AFTER the env-dump check, not before it.
+#
+# Until 2026-08-30 the first and third of these were pinned as ALLOW. The
+# inversion is deliberate: it brings the code into line with a rule that had
+# already shipped in rules/gates.md and skills/securing-agentic-systems.
+run_case_msg "SECRET_EXEMPT does NOT clear a bare env"                  2 "'env'" \
+  'SECRET_EXEMPT=debugging-a-hook env'
+run_case_msg "SECRET_EXEMPT does NOT clear a bare printenv"             2 "'printenv'" \
+  'SECRET_EXEMPT=debugging-a-hook printenv'
+run_case_msg "SECRET_EXEMPT does NOT clear os.environ"                  2 'os.environ' \
+  'SECRET_EXEMPT=inspecting-a-payload python3 -c "print(os.environ)"'
+run_case_msg "SECRET_EXEMPT does NOT clear process.env"                 2 'process.env' \
+  "SECRET_EXEMPT=inspecting-a-payload node -e 'console.log(process.env)'"
+run_case_msg "the env-dump deny says it cannot be approved"             2 'cannot be approved' \
+  'SECRET_EXEMPT=debugging-a-hook env'
+run_case_nomsg "...and offers no approval id, since none would work"    2 'secret_approval.py grant' \
+  'SECRET_EXEMPT=debugging-a-hook env'
+
+# The strongest form of the same claim: forge an approval for the env-dump
+# command directly — computing its id ourselves, since the deny message
+# deliberately offers none — and confirm it changes nothing.
+ENVDUMP_CMD='SECRET_EXEMPT=debugging-a-hook env'
+ENVDUMP_ID=$(python3 "$LIBDIR/secret_approval.py" id "$ENVDUMP_CMD" 2>/dev/null)
+if [ -n "$ENVDUMP_ID" ]; then
+  python3 "$LIBDIR/secret_approval.py" grant "$ENVDUMP_ID" --session "$SID_A" >/dev/null 2>&1
+  run_case_sid "a forged approval for an env dump changes nothing"      2 "$SID_A" "$ENVDUMP_CMD"
+else
+  printf 'FAIL — could not compute an approval id for the env-dump forgery case\n'; fail=$((fail+1))
+fi
 
 # =============================================================================
 # KNOWN GAPS — every row of the card's Known-gaps table, pinned as ALLOW.
@@ -221,6 +409,32 @@ fi
 rm -rf "$ORPHAN"
 
 run_case_msg "control: same command, real hook -> block"                2 '.zshrc' 'cat ~/.zshrc'
+
+# Task 13 made the classifier import hooks/lib/secret_approval.py. That import
+# is a NEW way for the classifier to die, so it needs the same fail-open
+# guarantee as the rest: this hook sits on every Bash call in every session, and
+# a broken helper must never become a de facto ban on using the shell.
+#
+# Note the deliberate asymmetry with the store check inside secret_approval.py,
+# which fails CLOSED. Refusing an unverifiable BYPASS can only block a command
+# that was already blockable; a dead MODULE would block everything.
+for broken in missing corrupt; do
+  ORPHAN=$(mktemp -d)
+  cp -R "$(dirname "$HOOK")/." "$ORPHAN/"
+  if [ "$broken" = missing ]; then
+    rm -f "$ORPHAN/lib/secret_approval.py"
+  else
+    printf 'this is not python(\n' > "$ORPHAN/lib/secret_approval.py"
+  fi
+  payload 'cat ~/.zshrc' | bash "$ORPHAN/secret-command-guard.sh" >/dev/null 2>&1
+  got=$?
+  if [ "$got" -eq 0 ]; then
+    printf 'ok   — %s secret_approval.py -> FAIL OPEN (exit %s)\n' "$broken" "$got"; pass=$((pass+1))
+  else
+    printf 'FAIL — %s secret_approval.py -> FAIL OPEN (want 0, got %s)\n' "$broken" "$got"; fail=$((fail+1))
+  fi
+  rm -rf "$ORPHAN"
+done
 
 # =============================================================================
 # Registration assertion: checked against the REAL repo settings.json, not a

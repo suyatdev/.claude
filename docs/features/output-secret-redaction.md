@@ -778,7 +778,7 @@ may claim otherwise.
       candidate `0040` came from a snapshot roughly a day stale, `git fetch origin` failed
       with `Permission denied (publickey)` in that environment, and two `0026-*` files already
       coexist on `origin/main`, so collisions here are real rather than hypothetical.
-- [ ] 13. **Secret-gate override, mechanical half.** Amend `hooks/secret-command-guard.sh` (and
+- [x] 13. **Secret-gate override, mechanical half.** *(landed 2026-08-30)* Amend `hooks/secret-command-guard.sh` (and
       `hooks/lib/classify-secret-command.py`) so a `SECRET_EXEMPT=` assignment is refused unless a
       session-scoped user-approval record exists, and add the matching assertions to
       `hooks/secret-command-guard.test.sh`. The judgment half already shipped as a gate stub in

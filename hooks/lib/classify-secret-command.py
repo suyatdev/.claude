@@ -39,11 +39,31 @@ Two independent checks, either one blocks (docs/features/secret-command-guard.md
      meant to touch.
 
 Escape hatch: a leading `SECRET_EXEMPT=<reason>` assignment on any segment,
-with a NON-EMPTY reason, allows the command and reports the reason for the
-caller to log -- matching MERGE_EXEMPT / TEST_EXEMPT / JUDGE_EXEMPT /
-WORKTREE_EXEMPT elsewhere in this repo. v1 shipped no bypass on the reasoning
-that the hook "only fires on two narrow shapes, not ordinary work"; the
-.env.example measurements above proved that false.
+with a NON-EMPTY reason -- but as of 2026-08-30 (task 13 on
+docs/features/output-secret-redaction.md) the flag NO LONGER CLEARS A BLOCK ON
+ITS OWN. It is honoured only when a matching approval record exists, granted by
+`secret_approval.py grant <id>` after the user typed the literal phrase
+`secret-gate override` (rules/gates.md). The record is session-scoped,
+command-scoped, and DELETED on first use, so one approval clears one run of one
+command. An unapproved flag is IGNORED, not fatal: the command is then judged on
+its own merits, so an exempt on a harmless command still allows.
+
+That check is a SPEED BUMP, not a security boundary, and the deny message must
+not imply otherwise: the record is written from inside the session by the agent
+the gate constrains, so it is forgeable. It states that an approval was claimed;
+it does not prove one was given. See secret_approval.py for the full rationale.
+
+A FULL-ENVIRONMENT DUMP CANNOT BE EXEMPTED AT ALL, by any flag or any approval:
+there is nothing for the user to inspect in advance, so there is nothing an
+approval could be an approval OF (rules/gates.md; user decision 2026-08-30). The
+env-dump check therefore runs BEFORE the exempt check. Until that date it ran
+after, and `SECRET_EXEMPT=x env` was allowed -- pinned green by three assertions
+that are now inverted. Exit 4 reports this class separately from exit 2 so the
+wrapper can offer an approval id for one and, correctly, none for the other.
+
+v1 shipped no bypass at all, on the reasoning that the hook "only fires on two
+narrow shapes, not ordinary work"; the .env.example measurements above proved
+that false.
 
 What this does NOT decide is written down in the card's Known-gaps table and
 pinned by ALLOW assertions in the test suite: variable indirection
@@ -74,9 +94,10 @@ Segments come from shell_segments.segments(), the same lexer git-guard and
 doc-guard use, so a chained or piped command is judged per segment rather
 than by a regex anchored to the string's start.
 
-Usage: classify-secret-command.py <raw-command-text>
-Exit 0 = allow (silent). Exit 2 = block (one-line reason on stderr).
-Exit 3 = allowed by SECRET_EXEMPT (reason on stderr, for the caller to log).
+Usage: classify-secret-command.py <raw-command-text> [session-id]
+Exit 0 = allow (silent). Exit 2 = block, APPROVABLE (one-line reason on stderr).
+Exit 4 = block, NEVER approvable -- a full-environment dump.
+Exit 3 = allowed by an approved SECRET_EXEMPT (reason on stderr, to be logged).
 Any other exit (missing arg, internal error) means the caller should fail
 OPEN -- this hook's blast radius is every Bash call in every session, and a
 broken classifier must never become a de facto ban on using the shell.
@@ -87,6 +108,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_segments import segments  # noqa: E402
+from secret_approval import consume as consume_approval  # noqa: E402
+from secret_approval import fingerprint  # noqa: E402
 
 ENV_DUMP_RE = re.compile(r"os\.environ|process\.env")
 
@@ -135,31 +158,38 @@ def main():
     if len(sys.argv) < 2:
         return 0
     command = sys.argv[1]
+    session = sys.argv[2] if len(sys.argv) > 2 else ""
 
     parsed = segments(command)
 
-    # Checked before anything else so the hatch clears BOTH block shapes.
-    reason = exempt_reason(parsed)
-    if reason:
-        print("exempted (%s=%s)" % (EXEMPT_VAR, reason), file=sys.stderr)
-        return 3
-
+    # ---- Full-environment dumps. Checked FIRST, because no flag and no
+    # approval can clear one: there is nothing to inspect in advance.
     if ENV_DUMP_RE.search(command):
         print("a raw os.environ/process.env expression dumps the full inherited environment", file=sys.stderr)
-        return 2
+        return 4
 
     for _assigns, argv in parsed:
-        if not argv:
-            continue
-
-        if argv[0] in ("env", "printenv") and len(argv) == 1:
+        if argv and argv[0] in ("env", "printenv") and len(argv) == 1:
             print("a bare '%s' with no arguments dumps the full inherited environment" % argv[0], file=sys.stderr)
-            return 2
+            return 4
 
-        for tok in argv:
+    # ---- The hatch, now gated on a recorded approval. An unapproved flag is
+    # ignored rather than fatal, so the command falls through to be judged on
+    # its own merits below.
+    ignored_note = ""
+    reason = exempt_reason(parsed)
+    if reason:
+        if consume_approval(session, fingerprint(command)):
+            print("exempted (%s=%s); approval consumed" % (EXEMPT_VAR, reason), file=sys.stderr)
+            return 3
+        ignored_note = "; %s ignored -- no recorded approval for this command" % EXEMPT_VAR
+
+    for _assigns, argv in parsed:
+        for tok in argv or []:
             label = matches_dotfile(tok)
             if label:
-                print("mentions %s, which can surface credential material" % label, file=sys.stderr)
+                print("mentions %s, which can surface credential material%s"
+                      % (label, ignored_note), file=sys.stderr)
                 return 2
 
     return 0
