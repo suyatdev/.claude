@@ -18,7 +18,27 @@
 <style>
 body{margin:0;background:var(--color-bg)}
 /* semantic status hues — OKLCH-matched to the Nocturne ramps' lightness family */
-:root{--ok:#8fcaa8;--ok-bg:#17352a;--warn:#d8b06c;--warn-bg:#3a2d15;--bad:#e8968e;--bad-bg:#42201d;--info:#9ec2ec;--info-bg:#1d2c44;--mono:ui-monospace,Menlo,Consolas,monospace}
+:root{--ok:#82dfa9;--ok-bg:#123526;--warn:#d8b06c;--warn-bg:#3a2d15;--bad:#e8968e;--bad-bg:#42201d;--info:#89b4f2;--info-bg:#16294a;--mono:ui-monospace,Menlo,Consolas,monospace;
+/* darker panels + lifted grey text */
+--color-surface:#1c1e2b;--color-neutral-400:#c0c4d6;--color-neutral-500:#a6aabe;--color-neutral-600:#8b8fa4;
+/* Treko brand: accent re-tinted from the logo — cyan as UI accent, green = ok, blue = info */
+--color-accent:#38c4e3;--color-accent-100:#d9f4fb;--color-accent-200:#b0e8f7;--color-accent-300:#82d8f0;--color-accent-400:#5aceeb;--color-accent-500:#38c4e3;--color-accent-600:#2c9ebd;--color-accent-700:#227a93;--color-accent-800:#18586b;--color-accent-900:#103845;
+--color-accent-2:#2ed47e;--color-accent-2-100:#d6f8e6;--color-accent-2-200:#aef0cc;--color-accent-2-300:#7fe6ae;--color-accent-2-400:#55dd94;--color-accent-2-500:#2ed47e;--color-accent-2-600:#26ab66;--color-accent-2-700:#1e844f;--color-accent-2-800:#165e39;--color-accent-2-900:#0e3b24}
+:root{--rail:#12131e;--hair:rgba(255,255,255,.06);--hair-2:rgba(255,255,255,.08);--hair-3:rgba(255,255,255,.12);--hover:rgba(255,255,255,.05);--hover-soft:rgba(255,255,255,.03);--hover-faint:rgba(255,255,255,.025);--hover-ghost:rgba(255,255,255,.02)}
+/* Light theme (§D3). 51 custom properties: 33 overriding nocturne.css's :root, the 8 status
+   hues and the 8 chrome tokens declared above, and 2 shadows. Three things are deliberately
+   NOT here, all for the same reason — a declared value nothing reads is not a state:
+   --shadow-md (zero readers; no .elev-* class in this page), --color-section* (deck-scale
+   fills, zero readers), and --panel (not ported at all, §Background 5). */
+body[data-theme="light"]{
+--color-bg:#f5f6fa;--color-surface:#ffffff;--color-text:#1b1d29;--color-divider:rgba(15,18,35,.12);
+--color-neutral-100:#14161f;--color-neutral-200:#262a38;--color-neutral-300:#3b4054;--color-neutral-400:#464c5f;--color-neutral-500:#51576c;--color-neutral-600:#5e6377;--color-neutral-700:#6e727e;--color-neutral-800:#e3e6ef;--color-neutral-900:#f0f2f8;
+--color-accent:#007492;--color-accent-100:#0a4a5b;--color-accent-200:#0c5e73;--color-accent-300:#006d88;--color-accent-400:#1298b8;--color-accent-500:#007492;--color-accent-600:#4ec2dd;--color-accent-700:#a4e2f3;--color-accent-800:#cdeffa;--color-accent-900:#e2f6fc;
+--color-accent-2:#14904f;--color-accent-2-100:#0b4b2c;--color-accent-2-200:#0e5c36;--color-accent-2-300:#127a46;--color-accent-2-400:#14904f;--color-accent-2-500:#14904f;--color-accent-2-600:#4bbd85;--color-accent-2-700:#9fe7c2;--color-accent-2-800:#cdf4e0;--color-accent-2-900:#e4faee;
+--ok:#12794a;--ok-bg:#dbf3e6;--warn:#8a6113;--warn-bg:#faeed2;--bad:#b03a30;--bad-bg:#fbe2df;--info:#28569f;--info-bg:#dfe9fb;
+--rail:#eceef5;--hair:rgba(15,18,35,.09);--hair-2:rgba(15,18,35,.13);--hair-3:rgba(15,18,35,.16);--hover:rgba(15,18,35,.05);--hover-soft:rgba(15,18,35,.03);--hover-faint:rgba(15,18,35,.025);--hover-ghost:rgba(15,18,35,.02);
+--shadow-sm:0 1px 2px rgba(15,18,35,.06), 0 0 0 1px rgba(15,18,35,.07);--shadow-lg:0 16px 40px rgba(15,18,35,.16), 0 0 0 1px rgba(15,18,35,.10);
+color-scheme:light}
 </style>
 </helmet>
 <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
@@ -36,8 +56,8 @@ body{margin:0;background:var(--color-bg)}
 <sc-if value="{{ ready }}" hint-placeholder-val="{{ true }}">
 <div style="min-height:100vh">
   <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:0;top:0;bottom:0;width:56px;z-index:30;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;background:#12131e;border-right:1px solid rgba(255,255,255,.06)">
-      <div onClick="{{ toggleSidebar }}" title="Expand sidebar" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer;marginBottom:4px" style-hover="color:var(--color-accent-300);background:rgba(255,255,255,.05)"><i class="ph ph-sidebar-simple" style="font-size:17px"></i></div>
+    <div style="position:fixed;left:0;top:0;bottom:0;width:56px;z-index:30;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px;background:var(--rail);border-right:1px solid var(--hair)">
+      <div onClick="{{ toggleSidebar }}" title="Expand sidebar" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer;marginBottom:4px" style-hover="color:var(--color-accent-300);background:var(--hover)"><i class="ph ph-sidebar-simple" style="font-size:17px"></i></div>
       <img src="treko-icon.png" alt="Treko" title="Treko" style="width:30px;height:30px;border-radius:8px;margin-bottom:8px;display:block">
       <sc-for list="{{ runsList }}" as="r" hint-placeholder-count="3">
         <div onClick="{{ r.pick }}" title="{{ r.name }}" style="width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:10.5px;font-weight:600;font-family:var(--mono);cursor:pointer;color:{{ r.railC }};background:{{ r.railBg }};box-shadow:{{ r.railGlow }}">{{ r.init }}</div>
@@ -53,15 +73,15 @@ body{margin:0;background:var(--color-bg)}
     </div>
   </sc-if>
   <sc-if value="{{ expandedBar }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:0;top:0;bottom:0;width:236px;z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:#12131e;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto">
+    <div style="position:fixed;left:0;top:0;bottom:0;width:{{ sideW }};z-index:30;display:flex;flex-direction:column;padding:16px 0 0;background:var(--rail);border-right:1px solid var(--hair);overflow-y:auto">
       <div style="display:flex;align-items:center;gap:9px;padding:0 16px 14px">
         <img src="treko-icon.png" alt="" style="width:26px;height:26px;border-radius:7px;flex:none;display:block">
         <span style="font-size:14px;font-weight:500;color:var(--color-neutral-100)">Treko</span>
-        <div onClick="{{ toggleSidebar }}" title="Collapse sidebar" style="margin-left:auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--color-neutral-600);cursor:pointer" style-hover="color:var(--color-accent-300);background:rgba(255,255,255,.05)"><i class="ph ph-caret-double-left" style="font-size:14px"></i></div>
+        <div onClick="{{ toggleSidebar }}" title="Collapse sidebar" style="margin-left:auto;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;color:var(--color-neutral-600);cursor:pointer" style-hover="color:var(--color-accent-300);background:var(--hover)"><i class="ph ph-caret-double-left" style="font-size:14px"></i></div>
       </div>
       <div style="padding:0 16px 6px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600)">Open runs</div>
       <sc-for list="{{ runsList }}" as="r" hint-placeholder-count="3">
-        <div onClick="{{ r.pick }}" style="padding:7px 16px;cursor:pointer;border-left:2px solid {{ r.edge }};background:{{ r.bg }}" style-hover="background:rgba(255,255,255,.03)">
+        <div onClick="{{ r.pick }}" style="padding:7px 16px;cursor:pointer;border-left:2px solid {{ r.edge }};background:{{ r.bg }}" style-hover="background:var(--hover-soft)">
           <div style="font-size:12.5px;color:{{ r.nameC }}">{{ r.name }}</div>
           <div style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);margin-top:1px">{{ r.dir }} · {{ r.analyzedAt }}</div>
         </div>
@@ -74,11 +94,12 @@ body{margin:0;background:var(--color-bg)}
       <div style="height:1px;margin:14px 16px;background:var(--color-divider)"></div>
       <div onClick="{{ toggleAgent }}" style="display:flex;align-items:center;gap:9px;padding:6.5px 16px;font-size:12.5px;cursor:pointer;color:{{ agentC }};border-left:2px solid {{ agentEdge }};background:{{ agentRowBg }}" style-hover="color:var(--color-accent-300)"><i class="ph ph-robot" style="font-size:14px"></i>Agent panel<span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600)">a</span></div>
       <div style="flex:1"></div>
-      <div style="padding:12px 16px;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);line-height:1.7;border-top:1px solid rgba(255,255,255,.05)">{{ srcLabel }}<br>{{ toolLabel }}</div>
+      <div style="padding:12px 16px;font-family:var(--mono);font-size:10px;color:var(--color-neutral-600);line-height:1.7;border-top:1px solid var(--hover)">{{ srcLabel }}<br>{{ toolLabel }}</div>
     </div>
+    <div onMouseDown="{{ sideHandleDown }}" title="Drag to resize the sidebar" style="position:fixed;left:{{ sideHandleL }};top:0;bottom:0;width:7px;z-index:31;cursor:col-resize;background:transparent" style-hover="background:var(--color-accent)"></div>
   </sc-if>
   <div style="margin-left:{{ mainML }};transition:margin-left .18s ease;min-width:0">
-    <div style="position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--color-bg) 90%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,.06);padding:14px 32px;display:flex;align-items:center;gap:14px">
+    <div style="position:sticky;top:0;z-index:20;background:color-mix(in srgb, var(--color-bg) 90%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--hair);padding:14px 32px;display:flex;align-items:center;gap:14px">
       <div style="min-width:0;flex:1 1 auto;overflow:hidden">
         <div style="display:flex;align-items:baseline;gap:10px;min-width:0"><h1 style="font-size:19px;margin:0;white-space:nowrap">{{ runName }}</h1><span style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ runDir }}</span></div>
         <div style="font-size:11px;color:var(--color-neutral-500);margin-top:1px">analyzed {{ runAnalyzed }} · {{ repoCount }} repos · {{ wtCount }} worktrees scanned</div>
@@ -93,8 +114,9 @@ body{margin:0;background:var(--color-bg)}
         <button class="{{ c.cls }}" onClick="{{ c.go }}" title="{{ c.title }}" style="font-size:13px"><i class="{{ c.icon }}"></i>{{ c.label }}</button>
       </sc-for>
       <sc-for list="{{ cmdCopies }}" as="c">
-        <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid rgba(255,255,255,.08)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
+        <span onClick="{{ c.copy }}" title="{{ c.title }}" style="flex:none;font-family:var(--mono);font-size:11.5px;padding:6px 10px;border-radius:7px;cursor:pointer;color:{{ c.c }};background:var(--color-neutral-900);border:1px solid var(--hair-2)" style-hover="border-color:var(--color-accent-600)"><i class="{{ c.icon }}" style="margin-right:5px"></i>{{ c.text }}</span>
       </sc-for>
+      <button class="btn btn-ghost btn-icon" onClick="{{ openSettings }}" title="Settings" style="color:var(--color-neutral-500)" style-hover="color:var(--color-accent-300);background:var(--hover)"><i class="ph ph-gear-six" style="font-size:16px"></i></button>
     </div>
     <div style="padding:24px 32px {{ mainPB }};max-width:1560px">
       <div id="sec-overview" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:10px">
@@ -131,7 +153,7 @@ body{margin:0;background:var(--color-bg)}
         <sc-for list="{{ feats }}" as="f" hint-placeholder-count="2">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 0 5px;font-family:var(--mono);font-size:11px;color:var(--color-accent-300)"><i class="ph ph-folder-simple"></i>{{ f.name }}<span style="color:var(--color-neutral-600)">{{ f.meta }}</span><span style="flex:1;height:1px;background:linear-gradient(to right,var(--color-divider),transparent)"></span></div>
           <sc-for list="{{ f.tasks }}" as="t" hint-placeholder-count="3">
-            <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:minmax(250px,1.6fr) 148px 106px 200px 62px 106px 26px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer" style-hover="background:rgba(255,255,255,.025)">
+            <div onClick="{{ t.toggle }}" style="display:grid;grid-template-columns:minmax(250px,1.6fr) 148px 106px 200px 62px 106px 26px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hover);cursor:pointer" style-hover="background:var(--hover-faint)">
               <span style="min-width:0"><span style="display:block;font-size:13.5px;color:var(--color-neutral-100)">{{ t.name }}</span><sc-if value="{{ showDesc }}" hint-placeholder-val="{{ true }}"><span style="display:block;font-size:11.5px;color:var(--color-neutral-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.desc }}</span></sc-if></span>
               <span style="display:flex;align-items:center;gap:6px"><span style="display:flex;gap:3px"><sc-for list="{{ t.dots }}" as="d" hint-placeholder-count="5"><span style="width:5px;height:5px;border-radius:50%;background:{{ d.bg }}"></span></sc-for></span><span style="font-size:11.5px;color:var(--color-neutral-400)">{{ t.phase }}</span></span>
               <span style="justify-self:start;font-size:11px;padding:2px 9px;border-radius:6px;color:{{ t.sc.c }};background:{{ t.sc.bg }}">{{ t.state }}</span>
@@ -141,7 +163,7 @@ body{margin:0;background:var(--color-bg)}
               <i class="{{ t.chev }}" style="font-size:13px;color:var(--color-neutral-600)"></i>
             </div>
             <sc-if value="{{ t.open }}" hint-placeholder-val="{{ false }}">
-              <div style="margin:0 0 8px 12px;padding:14px 18px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.06);border-radius:10px;display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:22px">
+              <div style="margin:0 0 8px 12px;padding:14px 18px;background:rgba(0,0,0,.28);border:1px solid var(--hair);border-radius:10px;display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:22px">
                 <div style="font-size:12px">
                   <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:7px">Worktree</div>
                   <div style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-300)">{{ t.d.worktree }}</div>
@@ -180,7 +202,7 @@ body{margin:0;background:var(--color-bg)}
         <div style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px;min-width:0">
           <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:14px">Execution &amp; merge order</div>
           <sc-for list="{{ waves }}" as="w" hint-placeholder-count="4">
-            <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)">
+            <div style="display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--hover)">
               <div style="width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--color-accent);border:1px solid var(--color-accent-700);background:var(--color-accent-900)">{{ w.n }}</div>
               <div style="min-width:0"><div style="display:flex;flex-wrap:wrap;gap:6px">
                 <sc-for list="{{ w.items }}" as="i" hint-placeholder-count="2"><span style="font-size:11.5px;padding:3px 9px;border-radius:6px;background:var(--color-neutral-900);color:var(--color-neutral-200);display:inline-flex;gap:6px;align-items:center">{{ i.t }}<span style="font-family:var(--mono);color:{{ i.prC }}">{{ i.pr }}</span></span></sc-for>
@@ -212,8 +234,8 @@ body{margin:0;background:var(--color-bg)}
           <div style="font-size:12.5px;color:var(--color-neutral-500);padding:6px 0">No hard ordering constraints in this run.</div>
         </sc-if>
         <sc-for list="{{ cons }}" as="c" hint-placeholder-count="3">
-          <div style="border-top:1px solid rgba(255,255,255,.05)">
-            <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:10px;padding:11px 0;cursor:pointer" style-hover="background:rgba(255,255,255,.02)">
+          <div style="border-top:1px solid var(--hover)">
+            <div onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:10px;padding:11px 0;cursor:pointer" style-hover="background:var(--hover-ghost)">
               <i class="{{ c.chev }}" style="color:var(--color-neutral-500)"></i>
               <span style="font-family:var(--mono);font-size:11px;color:var(--bad);background:var(--bad-bg);padding:2px 7px;border-radius:5px">{{ c.id }}</span>
               <span style="font-size:13.5px;color:var(--color-neutral-100)">{{ c.title }}</span>
@@ -232,7 +254,7 @@ body{margin:0;background:var(--color-bg)}
             <div style="min-width:0">
               <div style="font-family:var(--mono);font-size:11px;color:var(--color-accent-300);padding:8px 0 4px;display:flex;align-items:center;gap:6px"><i class="ph ph-git-branch"></i>{{ g.repo }}</div>
               <sc-for list="{{ g.rows }}" as="b" hint-placeholder-count="2">
-                <div style="display:grid;grid-template-columns:1.35fr 1.15fr 84px 100px 40px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(255,255,255,.05);font-size:11.5px">
+                <div style="display:grid;grid-template-columns:1.35fr 1.15fr 84px 100px 40px;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--hover);font-size:11.5px">
                   <span style="font-family:var(--mono);color:var(--color-neutral-200);display:flex;align-items:center;gap:6px;min-width:0"><span style="width:7px;height:7px;flex:none;border-radius:50%;background:{{ b.dotBg }};box-shadow:{{ b.dotGlow }}"></span><span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.branch }}</span></span>
                   <span style="font-family:var(--mono);color:var(--color-neutral-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ b.wt }}</span>
                   <span style="font-family:var(--mono)"><span style="color:var(--ok)">↑{{ b.ahead }}</span> <span style="color:{{ b.behindC }}">↓{{ b.behind }}</span></span>
@@ -254,7 +276,7 @@ body{margin:0;background:var(--color-bg)}
             <div style="min-width:0">
               <div style="display:flex;align-items:center;gap:7px;padding-bottom:8px;border-bottom:2px solid {{ k.c }};margin-bottom:10px"><span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:{{ k.c }}">{{ k.title }}</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--color-neutral-500)">{{ k.n }}</span></div>
               <sc-for list="{{ k.items }}" as="i" hint-placeholder-count="3">
-                <div style="padding:9px 11px;border-radius:9px;background:var(--color-bg);border:1px solid rgba(255,255,255,.06);margin-bottom:7px">
+                <div style="padding:9px 11px;border-radius:9px;background:var(--color-bg);border:1px solid var(--hair);margin-bottom:7px">
                   <div style="font-size:12px;color:var(--color-neutral-200);line-height:1.35">{{ i.t }}</div>
                   <div style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-500);margin-top:4px">{{ i.m }}</div>
                 </div>
@@ -267,7 +289,7 @@ body{margin:0;background:var(--color-bg)}
       <div id="sec-questions" style="background:var(--color-surface);border-radius:12px;box-shadow:var(--shadow-sm);padding:18px 20px">
         <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent);margin-bottom:12px">Open questions</div>
         <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
-          <div style="padding:10px 0;border-top:1px solid rgba(255,255,255,.05);opacity:{{ q.op }}">
+          <div style="padding:10px 0;border-top:1px solid var(--hover);opacity:{{ q.op }}">
             <div style="display:flex;gap:9px;align-items:flex-start"><i class="{{ q.icon }}" style="color:{{ q.ic }};font-size:15px;margin-top:1px"></i>
             <div style="min-width:0;flex:1"><div style="font-size:13px;color:var(--color-neutral-100)">{{ q.q }}</div>
             <div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:3px;line-height:1.5">{{ q.ctx }}</div></div>
@@ -278,23 +300,68 @@ body{margin:0;background:var(--color-bg)}
     </div>
   </div>
   <sc-if value="{{ agentOpen }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;left:{{ mainML }};right:0;bottom:0;height:{{ agentHpx }};z-index:40;display:flex;flex-direction:column;background:#12131e;border-top:1px solid rgba(255,255,255,.1);box-shadow:0 -14px 40px rgba(0,0,0,.5);transition:left .18s ease">
-      <div onMouseDown="{{ agentHandleDown }}" style="position:relative;cursor:ns-resize;padding:9px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.06);user-select:none">
+    <div style="position:fixed;left:{{ mainML }};right:0;bottom:0;height:{{ agentHpx }};z-index:40;display:flex;flex-direction:column;background:var(--rail);border-top:1px solid var(--hair-3);box-shadow:0 -14px 40px rgba(0,0,0,.5);transition:left .18s ease">
+      <div onMouseDown="{{ agentHandleDown }}" style="position:relative;cursor:ns-resize;padding:9px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--hair);user-select:none">
         <span style="position:absolute;left:50%;top:4px;transform:translateX(-50%);width:44px;height:4px;border-radius:2px;background:var(--color-neutral-800)"></span>
         <i class="ph ph-robot" style="color:var(--color-accent);font-size:15px"></i>
         <span style="font-size:12.5px;color:var(--color-neutral-200)">Agent — {{ runName }}</span>
         <span style="font-family:var(--mono);font-size:10px;color:var(--color-neutral-600)">drag to resize</span>
         <span style="flex:1"></span>
-        <div onClick="{{ toggleAgent }}" onMouseDown="{{ stopEvt }}" title="Close (esc)" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-200);background:rgba(255,255,255,.06)"><i class="ph ph-x" style="font-size:13px"></i></div>
+        <div onClick="{{ toggleAgent }}" onMouseDown="{{ stopEvt }}" title="Close (esc)" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-200);background:var(--hair)"><i class="ph ph-x" style="font-size:13px"></i></div>
       </div>
       <div ref="{{ agentScrollRef }}" style="flex:1;overflow-y:auto;padding:12px 18px;font-family:var(--mono);font-size:11.5px;line-height:1.7">
         <sc-for list="{{ agentMsgs }}" as="m" hint-placeholder-count="4">
           <div style="display:flex;gap:10px;padding:2px 0"><span style="flex:none;width:46px;text-align:right;color:{{ m.lc }}">{{ m.label }}</span><span style="color:{{ m.tc }};white-space:pre-wrap;min-width:0">{{ m.t }}</span></div>
         </sc-for>
       </div>
-      <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
+      <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--hair)">
         <input class="input" value="{{ agentQ }}" onChange="{{ setAgentQ }}" onKeyDown="{{ agentKey }}" ref="{{ agentInputRef }}" placeholder="Ask about this run — ordering, blockers, a task…" style="flex:1;min-height:32px;font-size:12.5px;font-family:var(--mono)">
         <button class="btn btn-primary" onClick="{{ sendAgent }}" style="font-size:12px"><i class="ph ph-paper-plane-right"></i>Send</button>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSettings }}" style="position:fixed;inset:0;z-index:75;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);display:flex;justify-content:flex-end">
+      <div onClick="{{ stopEvt }}" style="width:min(400px,92vw);height:100%;overflow-y:auto;background:var(--color-surface);border-left:1px solid var(--hair-2);box-shadow:var(--shadow-lg);padding:20px 24px 32px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+          <i class="ph ph-gear-six" style="font-size:17px;color:var(--color-accent)"></i>
+          <div style="font-size:15px;color:var(--color-neutral-100);flex:1">Configuration</div>
+          <div onClick="{{ closeSettings }}" title="Close" style="width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--color-neutral-500);cursor:pointer" style-hover="color:var(--color-neutral-100);background:var(--hover)"><i class="ph ph-x" style="font-size:13px"></i></div>
+        </div>
+
+        <div style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Appearance</div>
+        <!-- criterion-2-exempt:start §D2 -- the two preview cards are the ONE place the dark
+             literals stay literal. Each card is a miniature of the OTHER theme, so it must not
+             follow the active one: tokenizing these would make both previews render identically
+             and the selection control would stop meaning anything. Every other occurrence of the
+             dark rail hex and the white-alpha hairline/hover values belongs in a :root
+             declaration -- and this comment deliberately names them in words rather than
+             quoting them, because a quoted literal here would sit outside its own exemption. -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div onClick="{{ setDark }}" style="padding:12px;border-radius:9px;cursor:pointer;border:1px solid {{ darkEdge }};background:{{ darkBg }}">
+            <div style="height:34px;border-radius:6px;background:#161826;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:5px;padding:0 8px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#38c4e3"></span>
+              <span style="flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.22)"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;color:{{ darkC }}"><i class="ph ph-moon" style="font-size:14px"></i>Dark</div>
+          </div>
+          <div onClick="{{ setLight }}" style="padding:12px;border-radius:9px;cursor:pointer;border:1px solid {{ lightEdge }};background:{{ lightBg }}">
+            <div style="height:34px;border-radius:6px;background:#f5f6fa;border:1px solid rgba(15,18,35,.14);display:flex;align-items:center;gap:5px;padding:0 8px">
+              <span style="width:7px;height:7px;border-radius:50%;background:#0e93b2"></span>
+              <span style="flex:1;height:4px;border-radius:2px;background:rgba(15,18,35,.2)"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:9px;font-size:12.5px;color:{{ lightC }}"><i class="ph ph-sun" style="font-size:14px"></i>Light</div>
+          </div>
+        </div>
+        <!-- criterion-2-exempt:end -->
+
+        <div style="height:1px;margin:22px 0;background:var(--color-divider)"></div>
+
+        <div style="font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:8px">Layout</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="flex:1;font-size:12.5px;color:var(--color-neutral-400)">Sidebar width<div style="font-family:var(--mono);font-size:11px;color:var(--color-neutral-600);margin-top:2px">{{ sideW }} — drag its edge to resize</div></div>
+          <button class="btn btn-ghost" onClick="{{ resetSideW }}" style="font-size:12px">Reset</button>
+        </div>
       </div>
     </div>
   </sc-if>
@@ -316,6 +383,13 @@ const NAVDEF=[
  {icon:'ph ph-kanban',label:"What's left",sec:'sec-left'},
  {icon:'ph ph-chat-circle-dots',label:'Open questions',sec:'sec-questions'}];
 const OPEN_PR=['Draft','Open','Approved','Changes req.'];
+// §D4. The sidebar's drag bounds and its default. Named because each is read in three
+// places -- the mount-time seed, the drag handler's clamp, and Reset -- and a bound that
+// disagrees between them is exactly the defect criterion 11 exists to catch.
+const SIDE_W_MIN=190, SIDE_W_MAX=440, SIDE_W_DEFAULT=236;
+// §D3. The only value the seed accepts besides the literal 'light'; every other stored
+// string falls back to this, so S.theme is always exactly one of {'dark','light'}.
+const THEME_DEFAULT='dark';
 function ls(k){try{return localStorage.getItem(k)}catch(_){return null}}
 function lsSet(k,v){try{localStorage.setItem(k,v)}catch(_){}}
 function copyText(s){
@@ -429,8 +503,9 @@ const CMD_TONES={idle:'transparent',success:'var(--ok)',stale_token:'var(--warn)
                  unexpected:'var(--bad)',server_gone:'var(--bad)'};
 
 class Component extends DCLogic {
-  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
+  state={data:null,missing:false,runId:ls('taskTracker.run')||'',collapsed:ls('taskTracker.sidebar')==='1',sideW:(w=>isNaN(w)?SIDE_W_DEFAULT:Math.max(SIDE_W_MIN,Math.min(SIDE_W_MAX,w)))(parseInt(ls('taskTracker.sideW'))),theme:(t=>t==='light'?'light':THEME_DEFAULT)(ls('taskTracker.theme')),q:'',filter:'All',sortKey:null,sortDir:1,ox:{},oc:{},resolvedQ:JSON.parse(ls('taskTracker.resolved')||'{}'),copied:null,active:'sec-overview',settingsOpen:false,agentOpen:false,agentH:parseInt(ls('taskTracker.agentH'))||300,agentQ:'',agentMsgs:null,cmdToken:null,cmdView:null};
   componentDidMount(){
+    this.applyTheme(this.state.theme);
     // The token exists only when server.py served this page. Over file://, or on a host
     // where no injection route exists, there is no meta tag and the UI runs in copy mode
     // — a supported runtime mode, not a degradation (criterion 8).
@@ -445,8 +520,12 @@ class Component extends DCLogic {
       const tag=(document.activeElement||{}).tagName;
       if(e.key==='/'&&tag!=='INPUT'&&tag!=='TEXTAREA'){e.preventDefault();if(this._search)this._search.focus();}
       else if(e.key==='a'&&tag!=='INPUT'&&tag!=='TEXTAREA'){this.toggleAgent();}
+      // §D6. The drawer arm goes FIRST: a modal overlay is dismissed before
+      // field-level Esc. The three arms below are unchanged apart from the second's
+      // leading keyword, which the prepend necessarily rewrites.
       else if(e.key==='Escape'){
-        if(tag==='INPUT'&&document.activeElement===this._search){this.setState({q:''});document.activeElement.blur();}
+        if(this.state.settingsOpen){this.setState({settingsOpen:false});}
+        else if(tag==='INPUT'&&document.activeElement===this._search){this.setState({q:''});document.activeElement.blur();}
         else if(tag==='INPUT'){document.activeElement.blur();}
         else if(this.state.agentOpen){this.setState({agentOpen:false});}
       }
@@ -465,12 +544,24 @@ class Component extends DCLogic {
     clearTimeout(this._pt);clearTimeout(this._ct);if(this._raf)cancelAnimationFrame(this._raf);
     window.removeEventListener('keydown',this._key);window.removeEventListener('scroll',this._scroll);
   }
+  // §D3. The try/catch is what keeps a DOM-less environment from throwing; setTheme is the
+  // only writer of taskTracker.theme and only ever writes 'dark' or 'light'. Its callers are
+  // the drawer's two preview cards, which land at task 7.
+  applyTheme(t){try{document.body.setAttribute('data-theme',t)}catch(_){}}
+  setTheme=t=>{lsSet('taskTracker.theme',t);this.applyTheme(t);this.setState({theme:t})};
   goTo(sec){const el=document.getElementById(sec);if(!el)return;window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-84,behavior:'smooth'});}
   componentDidUpdate(prevProps,prevState){if(this._agentScroll&&prevState&&prevState.agentMsgs!==this.state.agentMsgs){this._agentScroll.scrollTop=this._agentScroll.scrollHeight;}}
   toggleAgent=()=>{const v=!this.state.agentOpen;this.setState({agentOpen:v});if(v)setTimeout(()=>{if(this._agentIn)this._agentIn.focus()},60);};
   agentHandleDown=e=>{e.preventDefault();const startY=e.clientY,startH=this.state.agentH;
     const mv=ev=>{const h=Math.min(Math.max(startH+(startY-ev.clientY),160),Math.max(220,window.innerHeight-120));this.setState({agentH:h});};
     const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);lsSet('taskTracker.agentH',String(this.state.agentH));};
+    window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);};
+  // §D4. Persist on mouseup, never per frame: mousemove fires at frame rate and a
+  // synchronous localStorage write per frame is the cost agentHandleDown above already
+  // declined to pay.
+  sideHandleDown=e=>{e.preventDefault();
+    const mv=ev=>{const w=Math.max(SIDE_W_MIN,Math.min(SIDE_W_MAX,ev.clientX));this.setState({sideW:w});};
+    const up=()=>{window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',up);lsSet('taskTracker.sideW',String(this.state.sideW));};
     window.addEventListener('mousemove',mv);window.addEventListener('mouseup',up);};
   commandProps(S,run){
     // `runAnalyzed` above stays bound to the store, never to this view: a failed
@@ -593,14 +684,14 @@ class Component extends DCLogic {
       const active=r.id===run.id;
       const init=r.name.split(/\s+/).filter(w=>/^[a-z0-9]/i.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
       return {...r,init,active,railC:active?'var(--color-accent-100)':'var(--color-neutral-500)',railBg:active?'var(--color-accent-800)':'var(--color-neutral-900)',railGlow:active?'0 0 12px var(--color-accent-800)':'none',
-        edge:active?'var(--color-accent)':'transparent',bg:active?'rgba(255,255,255,.03)':'transparent',nameC:active?'var(--color-neutral-100)':'var(--color-neutral-500)',
+        edge:active?'var(--color-accent)':'transparent',bg:active?'var(--hover-soft)':'transparent',nameC:active?'var(--color-neutral-100)':'var(--color-neutral-500)',
         pick:()=>{lsSet('taskTracker.run',r.id);this.setState({runId:r.id,q:'',filter:'All',ox:{},oc:{},active:'sec-overview',agentMsgs:null});window.scrollTo({top:0});}};});
     const counts={['sec-overview']:'',['sec-tasks']:String(total),['sec-merge']:String(waves.length),['sec-constraints']:String((run.constraints||[]).length),['sec-branches']:String(branches.length),['sec-left']:String(kanbanTotal),['sec-questions']:String(openQ)};
     const navItems=NAVDEF.map(n=>{
       const on=S.active===n.sec;
       return {...n,count:counts[n.sec],go:()=>this.goTo(n.sec),
         railC:on?'var(--color-accent)':'var(--color-neutral-600)',railBg:on?'var(--color-accent-900)':'transparent',
-        sideC:on?'var(--color-accent-300)':'var(--color-neutral-400)',sideEdge:on?'var(--color-accent)':'transparent',sideBg:on?'rgba(255,255,255,.03)':'transparent'};});
+        sideC:on?'var(--color-accent-300)':'var(--color-neutral-400)',sideEdge:on?'var(--color-accent)':'transparent',sideBg:on?'var(--hover-soft)':'transparent'};});
     const AL={sys:{label:'·',lc:'var(--color-neutral-700)',tc:'var(--color-neutral-400)'},you:{label:'you ❯',lc:'var(--color-accent-300)',tc:'var(--color-neutral-100)'},agent:{label:'agent',lc:'var(--ok)',tc:'var(--color-neutral-300)'}};
     const blockedNames=tasksAll.filter(t=>t.state==='Blocked').map(t=>t.name).join(', ');
     this._sample=[
@@ -617,8 +708,18 @@ class Component extends DCLogic {
       agentKey:e=>{if(e.key==='Enter')this.sendAgent()},
       agentScrollRef:el=>{this._agentScroll=el},agentInputRef:el=>{this._agentIn=el},stopEvt:e=>e.stopPropagation(),
       agentC:S.agentOpen?'var(--color-accent)':'var(--color-neutral-600)',agentBg:S.agentOpen?'var(--color-accent-900)':'transparent',
-      agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'rgba(255,255,255,.03)':'transparent',
-      collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:S.collapsed?'56px':'236px',
+      agentEdge:S.agentOpen?'var(--color-accent)':'transparent',agentRowBg:S.agentOpen?'var(--hover-soft)':'transparent',
+      settingsOpen:S.settingsOpen,openSettings:()=>this.setState({settingsOpen:true}),closeSettings:()=>this.setState({settingsOpen:false}),
+      // §D5's Appearance section. Six ternaries on S.theme, which §D3 validates against the
+      // closed set {'dark','light'} at mount -- so exactly one arm fires and exactly one card is
+      // ever marked selected. That is what makes criterion 7's "a corrupt stored theme leaves the
+      // Dark card selected, never neither" true by construction rather than by a second check.
+      setDark:()=>this.setTheme('dark'),setLight:()=>this.setTheme('light'),
+      darkEdge:S.theme==='dark'?'var(--color-accent)':'var(--color-neutral-700)',darkBg:S.theme==='dark'?'var(--color-accent-900)':'transparent',darkC:S.theme==='dark'?'var(--color-accent-300)':'var(--color-neutral-400)',
+      lightEdge:S.theme==='light'?'var(--color-accent)':'var(--color-neutral-700)',lightBg:S.theme==='light'?'var(--color-accent-900)':'transparent',lightC:S.theme==='light'?'var(--color-accent-300)':'var(--color-neutral-400)',
+      collapsed:S.collapsed,expandedBar:!S.collapsed,mainML:(S.collapsed?56:S.sideW)+'px',
+      sideW:S.sideW+'px',sideHandleL:(S.sideW-3)+'px',sideHandleDown:this.sideHandleDown,
+      resetSideW:()=>{lsSet('taskTracker.sideW',String(SIDE_W_DEFAULT));this.setState({sideW:SIDE_W_DEFAULT})},
       toggleSidebar:()=>{const v=!S.collapsed;lsSet('taskTracker.sidebar',v?'1':'0');this.setState({collapsed:v})},
       ...this.commandProps(S,run),
       runName:run.name,runDir:run.dir,runAnalyzed:run.analyzedAt,repoCount:String(repoCount),wtCount:String(wtCount),

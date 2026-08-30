@@ -34,6 +34,7 @@ These skills load on demand, not on every turn. Read the one whose trigger match
 - `writing-project-readmes` — a repo missing its README, creating one from the house template, or updating the Roadmap when a feature lands.
 - `allocating-local-ports` — checking/updating PORTS.md before a new local port or service.
 - `triaging-new-instructions` — classifying a proposed new rule/hook/skill before writing it anywhere.
+- `verifying-durable-claims` — before writing a factual claim into a commit message, ADR, spec, PR body, memory file, or handoff: what a citation DID vs. that it exists, scoping quantifiers, not copying a subagent's finding unchecked.
 - `verifying-subagent-commits` — independently confirming a subagent's reported commit actually landed in the right checkout, before trusting it.
 
 When authoring or editing any skill or agent, read skills/_standards/authoring-skills-and-agents.md first.

@@ -195,6 +195,100 @@ def check_accepted_limit():
     return problems
 
 
+# (command, expected has_grouping, why) -- worktree-location-guard derivation 4.
+#
+# segments() appends a fresh segment for every control operator and THROWS THE
+# OPERATOR AWAY, so `(`, `)`, `{` and `}` are indistinguishable in its return
+# value. That distinction is load-bearing and unrecoverable: bash discards a `cd`
+# at `)` but keeps it past `}`. This second VIEW of the same token stream is what
+# lets a caller notice the ambiguity instead of resolving it wrongly.
+GROUPING_CASES = [
+    ("( cd /x && git log ) && git switch main", True, "subshell parens"),
+    ("{ cd /x; git log; }", True, "brace group -- `{` is not a shlex punctuation char by default"),
+    ("( git log )", True, "parens with nothing to carry are still parens"),
+    ("cd /x && git switch main", False, "control operators are not grouping operators"),
+    ("git commit -m x ; git push", False, "; separates, it does not group"),
+    ("git log | grep x", False, "a pipe separates"),
+    ("git log > out.txt", False, "a redirection is part of its command"),
+    ("git log 2>&1", False, "and so is the fd form, which is why `>&` must not read as grouping"),
+    # ONE LEXER, TWO VIEWS. Every row below holds a grouping character inside a
+    # QUOTED token, where it is ordinary text. A second parser written to scan the
+    # raw string is exactly what would get these wrong.
+    ('echo "(a)"', False, "parens inside double quotes are one ordinary token"),
+    ("echo '(a)'", False, "and inside single quotes"),
+    ('git commit -m "fix(lexer): stop splitting"', False,
+     "a Conventional-Commits scope is the routine shape this repo would have broken on"),
+    ('echo "{ }"', False, "braces inside quotes"),
+    ("git commit -m 'see f(x)'", False, "an unspaced paren inside a quoted message"),
+    # Process substitution contains `(` AND opens a command context, so it groups.
+    ("cat <(git log)", True, "`<(` opens a command context exactly as `(` does"),
+    ("echo hi > >(git log)", True, "the `>(` opener, likewise"),
+    ("", False, "empty input"),
+    ("   ", False, "whitespace only"),
+    ("unbalanced ' quote ( git log )", False,
+     "shlex cannot lex this at all. has_grouping reports what it SAW, which is nothing; "
+     "the empty return from segments() is the signal callers fail closed on"),
+]
+
+
+def check_has_grouping():
+    """Pin has_grouping()'s answers. Absent, this reports one clean failure per row
+    rather than exploding at import, so the red run is readable."""
+    fn = getattr(_MOD, "has_grouping", None)
+    if fn is None:
+        return ["has_grouping() DOES NOT EXIST — shell_segments.py exports {!r}".format(
+            sorted(n for n in dir(_MOD) if not n.startswith("__")))]
+    problems = []
+    for src, want, why in GROUPING_CASES:
+        got = fn(src)
+        if got is not want:
+            problems.append("FAIL — has_grouping({!r}) ({})\n       want {!r}, got {!r}".format(
+                src, why, want, got))
+    return problems
+
+
+def check_one_lexer():
+    """ONE LEXER, TWO VIEWS -- asserted structurally, not by reading the source.
+
+    Replacing _lex must move BOTH views. A has_grouping() carrying its own parser
+    would keep answering from the real command string and go unmoved here, which
+    is the only failure mode this rule exists to prevent. The card rejects a
+    second parser outright, and prose cannot enforce that; this can.
+    """
+    lex = getattr(_MOD, "_lex", None)
+    fn = getattr(_MOD, "has_grouping", None)
+    if lex is None or fn is None:
+        return ["_lex()/has_grouping() DO NOT BOTH EXIST — got _lex={!r}, has_grouping={!r}".format(
+            lex, fn)]
+
+    # Sanity first: _lex is the real token producer, not a stub that happens to exist.
+    if lex("a && b") != ["a", "&&", "b"]:
+        return ["_lex() IS NOT THE TOKEN PRODUCER — _lex('a && b') = {!r}".format(lex("a && b"))]
+    if lex("unbalanced ' quote") is not None:
+        return ["_lex() MUST RETURN None FOR UNPARSEABLE INPUT, so segments() can tell that "
+                "case apart from an empty command — got {!r}".format(lex("unbalanced ' quote"))]
+
+    original = _MOD._lex
+    try:
+        _MOD._lex = lambda src: ["(", "cd", "/x"]
+        seg_view = _MOD.segments("this string holds no parens")
+        grp_view = _MOD.has_grouping("this string holds no parens")
+    finally:
+        _MOD._lex = original
+
+    problems = []
+    if [argv for _, argv in seg_view if argv] != [["cd", "/x"]]:
+        problems.append("SECOND PARSER — segments() did not read the substituted _lex; got {!r}".format(
+            seg_view))
+    if grp_view is not True:
+        problems.append(
+            "SECOND PARSER — has_grouping() did not read the substituted _lex. It answered {!r} "
+            "for a token stream whose first token is '(', which means it lexed the source "
+            "string itself. One lexer, two views: a second parser is an automatic reject.".format(
+                grp_view))
+    return problems
+
+
 def main():
     passed = failed = 0
     problems = []
@@ -210,7 +304,8 @@ def main():
             problems.append("FAIL — {!r} ({})\n       want {!r}\n       got  {!r}".format(
                 cmd, why, want, got))
 
-    for extra in (check_heredoc, check_assignments, check_unparseable, check_accepted_limit):
+    for extra in (check_heredoc, check_assignments, check_unparseable, check_accepted_limit,
+                  check_has_grouping, check_one_lexer):
         msgs = extra()
         if msgs:
             failed += len(msgs)

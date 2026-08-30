@@ -128,11 +128,16 @@ if isinstance(ti, dict):
 # Contrast git-guard.sh, which fails closed on the same condition.
 facts=$(printf '%s' "$command_line" | "$py" "$CLASSIFIER" 2>/dev/null) || exit 0
 
+# One fact per LINE, and compared as a whole line -- the same reader git-guard.sh
+# already uses, ported here. An unquoted `for f in $facts` splits on bash's default
+# IFS, which includes the TAB that carries a path in `COMMIT_PATH<tab><path>` -- so
+# committing a file named COMMIT_ALL produced the token COMMIT_ALL and made this hook
+# judge HEAD's diff instead of the index it was about to commit.
 has_fact() {
   local f
-  for f in $facts; do
+  while IFS= read -r f; do
     [ "$f" = "$1" ] && return 0
-  done
+  done <<< "$facts"
   return 1
 }
 
