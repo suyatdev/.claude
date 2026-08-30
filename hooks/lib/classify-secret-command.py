@@ -108,8 +108,19 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_segments import segments  # noqa: E402
-from secret_approval import consume as consume_approval  # noqa: E402
-from secret_approval import fingerprint  # noqa: E402
+# Defensive: a broken or missing helper must disable only the HATCH, never the
+# block checks. The first cut let this import fail open like the rest of the
+# hook, which shipped a silent off-switch for the whole guard -- corrupt one
+# auxiliary file and both block shapes vanished with an empty stderr. Found by
+# the observability judge, 2026-08-30. Refusing the hatch instead is safer in
+# both directions: secret shapes still block, and ordinary commands still allow,
+# so it is not a de facto ban on using the shell either.
+try:
+    from secret_approval import consume as consume_approval  # noqa: E402
+    from secret_approval import fingerprint, is_approvable  # noqa: E402
+    APPROVAL_HELPER_OK = True
+except Exception:  # noqa: BLE001 -- any import failure, not just ImportError
+    APPROVAL_HELPER_OK = False
 
 ENV_DUMP_RE = re.compile(r"os\.environ|process\.env")
 
@@ -179,10 +190,17 @@ def main():
     ignored_note = ""
     reason = exempt_reason(parsed)
     if reason:
-        if consume_approval(session, fingerprint(command)):
+        if not APPROVAL_HELPER_OK:
+            ignored_note = ("; %s ignored -- the approval helper is unavailable, so no "
+                            "exemption can be verified" % EXEMPT_VAR)
+        elif not is_approvable(command):
+            ignored_note = ("; %s ignored -- a redirection is invisible to the approval id, "
+                            "so this command cannot be approved" % EXEMPT_VAR)
+        elif consume_approval(session, fingerprint(command)):
             print("exempted (%s=%s); approval consumed" % (EXEMPT_VAR, reason), file=sys.stderr)
             return 3
-        ignored_note = "; %s ignored -- no recorded approval for this command" % EXEMPT_VAR
+        else:
+            ignored_note = "; %s ignored -- no recorded approval for this command" % EXEMPT_VAR
 
     for _assigns, argv in parsed:
         for tok in argv or []:

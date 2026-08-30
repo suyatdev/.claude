@@ -15,8 +15,12 @@ What it buys, and the only thing it buys: `SECRET_EXEMPT=<reason> <cmd>` used to
 clear a block on its own, so the flag was one keystroke away at the exact moment
 an agent was already frustrated by a refusal. Now the flag alone does nothing.
 Getting past the guard takes a second, separate, differently-shaped step whose
-whole purpose is to be a place to stop and ask -- and which leaves a file on
-disk naming the command it covers.
+whole purpose is to be a place to stop and ask.
+
+Do not call that file an audit trail. It is EMPTY, named only by a truncated
+hash and the session, and deleted on first use, so after a bypass has been used
+there is nothing left on disk at all. The durable record of a bypass is the
+stderr line the wrapper logs into the transcript, not this file.
 
 THE FLOW
 --------
@@ -43,9 +47,37 @@ whitespace and assignment ORDER do not change it. Deliberately:
     commands -- an assignment can change what the command reads (`HOME=/x cat
     $HOME/.zshrc`) -- and including them keeps the id in a deny message tied to
     the exact command that produced it.
-  * The lexer's own blind spots are inherited whole. Two commands that segments()
-    parses identically share an id. That is the same lexer the block decision
-    already rests on, so it adds no new blindness.
+  * The lexer's own blind spots are inherited whole: two commands that segments()
+    parses identically share an id. It is the same lexer the block decision
+    already rests on, but do NOT conclude from that -- as an earlier revision of
+    this docstring did -- that it "adds no new blindness". A blind spot means
+    something different for an identity decision than for a block decision: for a
+    block it merely fails to catch a shape, while for an identity it silently
+    WIDENS what a human's consent covers. The redirection case below is exactly
+    that, and it is why is_approvable() refuses rather than trusting the parse.
+
+REDIRECTIONS ARE NOT APPROVABLE
+-------------------------------
+segments() reads a redirection as part of its command rather than as a separator
+and drops it from argv, so the id cannot see one -- measured 2026-08-30:
+
+    id("cat .env")           = 088ade89056f9f6a
+    id("cat .env > /tmp/x")  = 088ade89056f9f6a      <- the SAME id
+
+For a BLOCK decision that blindness is harmless. For an IDENTITY decision it is
+not: a user who inspected `cat .env` and typed `secret-gate override` would have
+unknowingly approved writing that file's contents to disk. The docstring of the
+first cut said the inherited blindness "adds no new blindness", which was wrong
+in exactly this way -- found by the observability judge, and the reason
+is_approvable() exists.
+
+Closed by REFUSING, not by parsing: any raw command text containing `<` or `>`
+gets no id and is never exempted. Over-refusing is the safe direction here -- it
+costs an out-of-band ask, never a leak -- and it avoids inventing the redirection
+mini-language ADR 0039 warned against when it rejected a bounded `grep -o`. A
+PIPE needs no special case: it produces a second segment, so the id already
+changes. The cost is that a quoted `>` inside an unrelated argument also makes a
+command unapprovable; that only ever fires on a command already being blocked.
 
 FAIL DIRECTION -- opposite to the rest of the hook, on purpose
 --------------------------------------------------------------
@@ -61,6 +93,7 @@ the old unchecked flag, with nothing running to report that it had.
 
 Usage:
   secret_approval.py id <command-text>            # print the approval id
+                                                  # exit 3 = not approvable
   secret_approval.py grant <id> [--session <sid>] # record an approval
 Exit 0 on success, 2 on a malformed argument or an unwritable store.
 """
@@ -95,6 +128,11 @@ def state_dir():
 def safe_session(session):
     session = (session or "").strip() or NO_SESSION
     return _SESSION_UNSAFE_RE.sub("_", session)[:128]
+
+
+def is_approvable(command):
+    """False for any command a fingerprint cannot faithfully identify."""
+    return "<" not in command and ">" not in command
 
 
 def fingerprint(command):
@@ -149,6 +187,10 @@ def main(argv):
         session = argv[i + 1]
 
     if mode == "id":
+        if not is_approvable(arg):
+            print("not approvable: a redirection is invisible to the fingerprint",
+                  file=sys.stderr)
+            return 3
         print(fingerprint(arg))
         return 0
 
