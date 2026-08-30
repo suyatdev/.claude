@@ -814,10 +814,11 @@ file's documented token style, tab-separated:
   `return subcommand, rest, first, blocking, c_operands` — its third element, the local `first`,
   is what `classify()` binds as `blocking_option`; the element spelled `blocking` is position 4,
   which `classify()` binds as `residual_option`, **the actual source of this fact**) by
-  the two-clause test
-  `blocking_option is not None and blocking_option != "-C"` — never from a list of option names.
-  ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test quoted
-  above no longer exists as one expression: `resolve_git_segment()` now filters `-C` out of
+  the single-clause test
+  `if residual_option is not None:` — never from a list of option names.
+  ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test this
+  bullet originally specified, `blocking_option is not None and blocking_option != "-C"`, no longer
+  exists as one expression: `resolve_git_segment()` now filters `-C` out of
   `blocking` internally (`if blocking != "-C":`) before `classify()` ever sees it, so `classify()`'s
   own test is the single-clause `if residual_option is not None:`. The resulting fact emission is
   believed unchanged — `SEG_SCOPE_OPT` still fires only for a genuine non-`-C` blocker — but that
@@ -843,6 +844,16 @@ file's documented token style, tab-separated:
   "other than `-C`" was self-contradictory. `blocking` (position 4, bound as `residual_option`)
   never can be `-C`, because the loop only returns once `blocking != "-C"`. Naming the right
   variable resolves the mechanism and the contradiction at once.
+  ⚠️ **The claim closing the round-2 marker above — "that half remains task 16's, and is
+  unchanged" — is now stale, paid here (2026-08-30).** It stayed true through `0ae143d`, which
+  fixed only the source-variable half of this bullet's lead sentence (`blocking_option` →
+  `residual_option`); task 16's checklist sub-item 1 was nonetheless ticked `[x]` as fully done.
+  The result was a lead sentence naming `residual_option` as the source but describing emission by
+  a two-clause test on `blocking_option` — two different variables feeding two different gates,
+  true of no version of the code. A fresh observability-judge pass against `0ae143d` caught it
+  (2026-08-30). The lead sentence above now states the live single-clause test, `if residual_option
+  is not None:`; the first marker above preserves the original two-clause expression,
+  `blocking_option is not None and blocking_option != "-C"`, as history.
 - `SEG_ENV<tab><i><tab><name>` — one per entry in segment `i`'s `assignments` dict whose name begins
   `GIT_`. A **prefix** test over the namespace git owns, so a variable added upstream is covered the
   day it ships.
@@ -4600,6 +4611,16 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         bullet's own "other than `-C`" clause read as self-contradicting — `first` (bound as
         `blocking_option`) can be `-C`; `blocking` (bound as `residual_option`) never can. Corrected
         in place, with a dated marker rather than a silent rewrite.
+        ⚠️ **Correction (2026-08-30): defect (a) was not fixed here — only flagged.** This note's
+        own wording, "already flagged above," described the state accurately, but the surrounding
+        "Sub-item 1 ... — closed" heading and the checklist's `- [x]` tick both read as if both
+        defects were paid. They were not: defect (a), the two-clause-test sentence, still described
+        `blocking_option is not None and blocking_option != "-C"` as live code after this commit —
+        `0ae143d` fixed only defect (b), the source-variable swap. A fresh observability-judge pass
+        against `0ae143d` caught the gap (2026-08-30); see the new dated marker under the
+        `SEG_SCOPE_OPT` bullet above. Defect (a) is paid in this commit: the lead sentence now
+        states the live single-clause test, `if residual_option is not None:`. Recorded here rather
+        than silently re-ticked, because a caught error is the thing this card exists to preserve.
       - **Sub-item 2 (`_assigns` discard paragraph) — closed, no text change needed.**
         Independently re-read against `classify-git-command.py`: `classify()` binds `assigns` at
         its loop header and passes it straight to `segment_facts()`; the only surviving `_assigns`
@@ -4611,8 +4632,8 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
           file at branch base: **76 total hits, 18 range forms** — agrees with the figure this task
           was briefed with.
         - Converted 13 live-use citation instances, each fragment checked with
-          `grep -cF '<fragment>'` against the file actually being cited and confirmed to return
-          exactly 1: `` `:62-63` `` (2 sites, `shell_segments.py`'s denylist sentence), `` `:60-62` ``
+          `grep -cF '<fragment>'` against the file actually being cited: `` `:62-63` `` (2 sites,
+          `shell_segments.py`'s denylist sentence), `` `:60-62` ``
           (1 site, `shell_segments.py`'s `eval` sentence), `` `:229-232` `` (1 site,
           `classify-git-command.py`'s own "collected BEFORE the SCOPE_UNKNOWN `continue`" docstring
           line — not the `BRANCH_MOVE_ALWAYS` code either number this citation has ever carried
@@ -4623,6 +4644,30 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
           accurate — `has_fact() {` is at that file's line 136, `while IFS= read -r f` at 138 — but
           the same species, so converted for the same reason. Found only by re-running the
           enumeration independently rather than trusting the given list.
+          ⚠️ **The claim that every fragment "confirmed to return exactly 1" was false, and stayed
+          false through this task's close — caught by a fresh observability-judge pass against
+          `0ae143d` (2026-08-30), re-measured independently here.** A card-internal citation —
+          one quoting a fragment that lives inside this same card, rather than in
+          `shell_segments.py`, `classify-git-command.py` or `doc-guard.sh` — **cannot** return 1
+          from `grep -cF '<fragment>' docs/features/worktree-location-guard.md`: the count sees
+          both the fragment's original target *and* the citing sentence that just quoted it, so 2
+          is the floor, not 1. Run against `0ae143d` (the commit that made the claim, so this
+          note's own prose cannot inflate the count): `` `:778` ``+`` `:1832` ``'s two fragments,
+          `` `:848` ``, `` `:788-789` `` and `` `:2494` `` each returned **2**; `` `:1261` ``'s
+          fragment returned **3**, because the list above already records it as cited from two
+          sites, not one; `` `:1438` ``'s fragment returned **1** by that literal single-line
+          command, which looks like agreement with the original claim but is a measurement
+          artifact, not evidence of uniqueness — its citing sentence wraps the fragment across two
+          source lines, and a single-line literal match cannot see across the wrap, so the command
+          silently missed a real second occurrence rather than confirming one.
+          The property that actually holds, and the one worth recording, is **each of these
+          fragments resolves to exactly one *target*** — take the raw `grep -cF` count (collapsing
+          line-wraps first, so `:1438`'s fragment is not undercounted), then subtract one for every
+          citing sentence that itself quotes the fragment, including mentions in audit notes like
+          this one and the "Disagreements" note below — the same mention-vs-use exclusion this
+          card's population-count convention already applies to line numbers. What remains is
+          always 1. **A future reader must not "fix" a card-internal fragment's count back down to
+          1 without that subtraction** — for these six, 1 is the target count, never the raw count.
         - Left one citation unconverted, by judgment: the `` `:59-61` ``/`` `:60-62` `` pair in
           derivation 3's "Verified line numbers 2026-08-25" sentence is a historical note about what
           round 6's verdict cited versus what was measured, not a live navigational use — the two
@@ -4676,6 +4721,21 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       subtraction is the wrong instrument here; re-derive the live population with the semantic
       exclusion (citations *in use* only, this note included among the excluded *mentions*), not
       with arithmetic on a raw count.
+
+      **Re-run, task 16 continued (2026-08-30) — the floor kept rising, as predicted above.**
+      Running `(?<![\w./]):(\d{2,4})(?:-(\d{1,4}))?\b` independently at three points: at the
+      branch's own base, `8506bc6`, it returns **76 total, 18 range forms** — the same figure this
+      task was briefed with, now independently confirmed rather than inherited. At `0ae143d`
+      (this session's starting `HEAD`) it already returns **85 total, 23 range forms** — more than
+      76, for the reason the paragraph above already gives: `0ae143d`'s own close-out note is a
+      fourth audit-note block naming the converted numbers. After this commit's edits it returns
+      **more again**, for the identical reason one level deeper — this correction pass added its
+      own audit prose naming several of the same fragments and citations by their old `:NNN`
+      identity. **Do not subtract to find "how many were converted this round"** — the same warning
+      the paragraph above already gives, now confirmed to hold recursively: every commit that adds
+      an audit note about the citations raises the floor, and the note recording that fact becomes
+      one more audit note the next reader must also exclude. Re-run the recipe and apply the
+      semantic exclusion; do not diff two raw totals.
 
 ## Notes
 
