@@ -70,7 +70,11 @@ pinned by ALLOW assertions in the test suite: variable indirection
 (`F=~/.zshrc; cat "$F"`), a path built by expansion, a read performed inside a
 script file, a secrets file not named .env (`config/prod.env`), and the
 full-environment dumps that are not bare env/printenv (`export -p`,
-`declare -p`, `set`, `env -0`, `ps eww`).
+`declare -p`, `set`, `env -0`, `ps eww`), and -- the shortest route of the lot --
+an INPUT REDIRECTION, which hides the path from this check entirely because the
+lexer drops the redirection target: `cat < ~/.zshrc` lexes to argv ['cat'] and
+matches nothing. Eight rows, not seven; that last one was measured on 2026-08-30
+and is pre-existing, neither introduced nor fixed by the approval gate.
 
 One boundary matters when reading "a token in any segment matches" above.
 SEVEN of the eight patterns are anchored at BOTH ends -- `(^|/)` before the
@@ -117,7 +121,7 @@ from shell_segments import segments  # noqa: E402
 # so it is not a de facto ban on using the shell either.
 try:
     from secret_approval import consume as consume_approval  # noqa: E402
-    from secret_approval import fingerprint, is_approvable  # noqa: E402
+    from secret_approval import fingerprint, unapprovable_reason  # noqa: E402
     APPROVAL_HELPER_OK = True
 except Exception:  # noqa: BLE001 -- any import failure, not just ImportError
     APPROVAL_HELPER_OK = False
@@ -193,9 +197,9 @@ def main():
         if not APPROVAL_HELPER_OK:
             ignored_note = ("; %s ignored -- the approval helper is unavailable, so no "
                             "exemption can be verified" % EXEMPT_VAR)
-        elif not is_approvable(command):
-            ignored_note = ("; %s ignored -- a redirection is invisible to the approval id, "
-                            "so this command cannot be approved" % EXEMPT_VAR)
+        elif unapprovable_reason(command):
+            ignored_note = ("; %s ignored -- this command cannot be approved: %s"
+                            % (EXEMPT_VAR, unapprovable_reason(command)))
         elif consume_approval(session, fingerprint(command)):
             print("exempted (%s=%s); approval consumed" % (EXEMPT_VAR, reason), file=sys.stderr)
             return 3

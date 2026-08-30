@@ -778,7 +778,21 @@ may claim otherwise.
       candidate `0040` came from a snapshot roughly a day stale, `git fetch origin` failed
       with `Permission denied (publickey)` in that environment, and two `0026-*` files already
       coexist on `origin/main`, so collisions here are real rather than hypothetical.
-- [x] 13. **Secret-gate override, mechanical half.** *(landed 2026-08-30)* Amend `hooks/secret-command-guard.sh` (and
+- [x] 13. **Secret-gate override, mechanical half.** *(landed 2026-08-30)*
+      Two limits found in review and closed by REFUSING rather than by parsing, so the
+      guard never prints a route that cannot work. A command is **not approvable** if it
+      contains a redirection (`<`/`>`), because the lexer drops redirections from `argv`
+      and `cat .env` / `cat .env > /tmp/leak` therefore share an id — approving the read
+      would have approved the write; or if a **wrapper word** (`rtk`, `time`, `eval`,
+      `command`, `builtin`, `exec`, `nohup`) makes the id unstable, because
+      `shell_segments` strips a leading wrapper *before* it reads assignments, so adding
+      `SECRET_EXEMPT=` stops the stripping and moves the id (`nohup cat .env` →
+      `088ade89056f9f6a`, with the flag → `ee2802fc504a950a`, measured). The second is
+      detected by testing the property itself — the id must not move when the flag is
+      added — rather than by copying the lexer's wrapper list, which would drift.
+      Separately, an **input** redirection was measured to hide the path from the block
+      check entirely (`cat < ~/.zshrc` → `argv ['cat']`, allowed): pre-existing, the
+      eighth Known-gaps row, deliberately not fixed here. Amend `hooks/secret-command-guard.sh` (and
       `hooks/lib/classify-secret-command.py`) so a `SECRET_EXEMPT=` assignment is refused unless a
       session-scoped user-approval record exists, and add the matching assertions to
       `hooks/secret-command-guard.test.sh`. The judgment half already shipped as a gate stub in

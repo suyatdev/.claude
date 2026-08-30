@@ -50,8 +50,10 @@
 # does not prove one was given. The typed phrase is the load-bearing control.
 #
 # NOT a security boundary, and this file must not imply otherwise: the card's
-# Known-gaps table lists seven measured ALLOW shapes, incl. variable indirection
-# and any read performed inside a script file. Note especially that "any
+# Known-gaps table lists EIGHT measured ALLOW shapes, incl. variable indirection,
+# any read performed inside a script file, and -- the shortest of them -- an INPUT
+# REDIRECTION: `cat < ~/.zshrc` lexes to argv ['cat'], matches nothing, and is
+# allowed, because the lexer drops the redirection target. Note especially that "any
 # mention" means, for 7 of the 8 patterns, "the path is a WHOLE TRAILING
 # COMPONENT of a lexed token" (the Application Support pattern is an unanchored
 # substring match, and so is wider):
@@ -149,13 +151,15 @@ fi
 approval_id=""
 approval_why="broken"
 if [ -r "$APPROVAL_LIB" ]; then
-  approval_id=$("$py" "$APPROVAL_LIB" id "$command_line" 2>/dev/null)
+  id_err=$(mktemp)
+  approval_id=$("$py" "$APPROVAL_LIB" id "$command_line" 2>"$id_err")
   id_status=$?          # read immediately -- anything else here overwrites it
   case "$id_status" in
     0) approval_why="" ;;
-    3) approval_why="redirect"; approval_id="" ;;
+    3) approval_why=$(cat "$id_err"); approval_id="" ;;
     *) approval_why="broken"; approval_id="" ;;
   esac
+  rm -f "$id_err"
 fi
 
 printf 'secret-command-guard: blocked -- %s.\n' "$reason" >&2
@@ -173,11 +177,10 @@ if [ -n "$approval_id" ]; then
   printf 'The approval covers one run of this one command and is deleted on first use.\n' >&2
   printf 'It is written from inside this session, so it records that an approval was claimed -- it does not prove\n' >&2
   printf 'one was given. The typed phrase is the control; this file is only a speed bump. Do not grant it yourself.\n' >&2
-elif [ "$approval_why" = redirect ]; then
-  printf '\nThis command cannot be approved through the override path. The approval id is computed from the\n' >&2
-  printf 'lexed command, which does not include redirections, so approving it would silently also approve\n' >&2
-  printf "writing this file's contents somewhere else. Ask the user for the value out of band, or drop the\n" >&2
-  printf 'redirection and seek approval for the plain read.\n' >&2
+elif [ "$approval_why" != broken ] && [ -n "$approval_why" ]; then
+  printf '\nThis command cannot be approved through the override path: %s.\n' "$approval_why" >&2
+  printf 'Ask the user for the value out of band, or seek approval for the plain command without the\n' >&2
+  printf 'redirection or wrapper word and run that one.\n' >&2
 else
   printf '\nThe override path is unavailable: hooks/lib/secret_approval.py is missing or broken, so no exemption\n' >&2
   printf 'can be verified. The block above still stands. Ask the user for the value out of band.\n' >&2

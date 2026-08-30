@@ -71,8 +71,17 @@ first cut said the inherited blindness "adds no new blindness", which was wrong
 in exactly this way -- found by the observability judge, and the reason
 is_approvable() exists.
 
-Closed by REFUSING, not by parsing: any raw command text containing `<` or `>`
-gets no id and is never exempted. Over-refusing is the safe direction here -- it
+A SECOND SHAPE, same species, found in review round 2: segments() strips a
+leading wrapper word (`rtk`, `time`, `eval`, `command`, `builtin`, `exec`,
+`nohup`) BEFORE it reads assignments, so a leading `SECRET_EXEMPT=` stops the
+stripping and moves the id -- `nohup cat .env` hashes to 088ade89056f9f6a but
+`SECRET_EXEMPT=r nohup cat .env` to ee2802fc504a950a (measured). The id printed
+in a deny message could therefore never be spent by the re-run. That failed
+SAFE, but printing unusable instructions is its own defect.
+
+Closed by REFUSING, not by parsing: any raw command text containing `<` or `>`,
+and any command whose id moves when the flag is added, gets no id and is never
+exempted. Over-refusing is the safe direction here -- it
 costs an out-of-band ask, never a leak -- and it avoids inventing the redirection
 mini-language ADR 0039 warned against when it rejected a bounded `grep -o`. A
 PIPE needs no special case: it produces a second segment, so the id already
@@ -130,11 +139,6 @@ def safe_session(session):
     return _SESSION_UNSAFE_RE.sub("_", session)[:128]
 
 
-def is_approvable(command):
-    """False for any command a fingerprint cannot faithfully identify."""
-    return "<" not in command and ">" not in command
-
-
 def fingerprint(command):
     """A stable id for the command, ignoring only SECRET_EXEMPT's value."""
     shape = []
@@ -143,6 +147,40 @@ def fingerprint(command):
         shape.append([sorted(kept.items()), list(argv or [])])
     blob = json.dumps(shape, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:ID_LEN]
+
+
+def unapprovable_reason(command):
+    """Why this command cannot be approved, or None if it can.
+
+    Two ways a fingerprint fails to identify the thing a human consented to.
+    Both are stated as REFUSALS rather than repaired by parsing: printing an id
+    that cannot work, or one that covers more than the user saw, is worse than
+    printing none.
+    """
+    if "<" in command or ">" in command:
+        return ("a redirection is invisible to the approval id, so approving this "
+                "command would also approve writing the file's contents elsewhere")
+
+    # The whole flow rests on one property: the id computed from the BLOCKED
+    # command must equal the id computed from the same command carrying the flag.
+    # segments() strips a leading wrapper word (rtk/time/eval/command/builtin/
+    # exec/nohup) BEFORE it reads assignments, so a leading SECRET_EXEMPT= stops
+    # the stripping and moves the id -- `nohup cat .env` and
+    # `SECRET_EXEMPT=r nohup cat .env` do not match (measured).
+    #
+    # Tested as the property itself rather than by re-listing WRAPPERS here: a
+    # copy of that list would drift from the lexer's, and this form also catches
+    # any future quirk with the same shape. It costs one extra hash of a short
+    # string, on a path that only runs when a command is already blocked.
+    if fingerprint(command) != fingerprint("%s=x %s" % (EXEMPT_VAR, command)):
+        return ("a wrapper word makes the approval id unstable -- the id shown here "
+                "is not the one the re-run would compute, so the grant could never "
+                "be spent")
+    return None
+
+
+def is_approvable(command):
+    return unapprovable_reason(command) is None
 
 
 def approval_path(session, approval_id):
@@ -187,9 +225,9 @@ def main(argv):
         session = argv[i + 1]
 
     if mode == "id":
-        if not is_approvable(arg):
-            print("not approvable: a redirection is invisible to the fingerprint",
-                  file=sys.stderr)
+        why = unapprovable_reason(arg)
+        if why:
+            print(why, file=sys.stderr)
             return 3
         print(fingerprint(arg))
         return 0
