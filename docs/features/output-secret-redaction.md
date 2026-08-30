@@ -10,7 +10,7 @@ branch: feat/output-secret-redaction
 
 Two real credentials leaked out of `~/.terminal_aliases` into a session transcript on
 2026-08-27. `secret-command-guard.sh` shipped in response, and it works — but it judges
-the **text of a command**, never what came back. Every one of the seven shapes in that
+the **text of a command**, never what came back. Every one of the eight shapes in that
 card's Known-gaps table is the same defect wearing a different hat: put the read inside a
 script file, behind a variable, behind a glob, or in a file not named `.env`, and the
 classifier has nothing to match on. Widening the pattern list cannot close a gap whose
@@ -21,8 +21,13 @@ and can replace it before the model ever reads it. That closes the shapes whose 
 *how the file was reached* — script file, variable, glob, `$(…)` — because output redaction
 does not care about the route. It does **not** close the two whose defect is *which file*:
 `cat foo.zshrc` / `cat my.env` and `cat config/prod.env` name files that are absent from the
-Sources table below, so a known-values design never harvests them either. Five of seven, not
-seven; the Known-gaps table records the remainder.
+Sources table below, so a known-values design never harvests them either. **Six of eight, not
+eight**; the Known-gaps table records the remainder. (That table had seven rows when this was
+written. An eighth was measured on 2026-08-30 — an INPUT REDIRECTION, `cat < ~/.zshrc`, which
+lexes to `argv ['cat']` and is allowed. It is a route defect like the script-file row, so
+output redaction should close it too, which is why the count moved five-of-seven to
+six-of-eight rather than five-of-eight. That reading carries the same caveat as the original,
+recorded under Not verified: it is a reading of the sibling card's table, not a measurement.)
 
 **The premise that said this was impossible is false. It is written in three places, and a
 fourth site rests on a separate objection that is also obsolete.**
@@ -848,6 +853,8 @@ may claim otherwise.
   the 30,000-char truncation, the failure-direction matrix, and all filter figures — comes
   from subagent measurement that I have not reproduced.** The filter figures additionally
   come from a corpus the same agent tuned against.
-- The claim that this hook closes five of the sibling card's seven gap shapes is a reading of
+- The claim that this hook closes six of the sibling card's eight gap shapes is a reading of
   that card's table, not a measurement. It should be re-derived against the shapes as they
-  stand when implementation starts.
+  stand when implementation starts. The count was five-of-seven until 2026-08-30, when an
+  eighth row (an input redirection) was measured and added; classifying that one as closed is
+  the same kind of unverified reading as the original five, not a stronger claim.

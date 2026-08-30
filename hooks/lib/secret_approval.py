@@ -84,9 +84,29 @@ and any command whose id moves when the flag is added, gets no id and is never
 exempted. Over-refusing is the safe direction here -- it
 costs an out-of-band ask, never a leak -- and it avoids inventing the redirection
 mini-language ADR 0039 warned against when it rejected a bounded `grep -o`. A
-PIPE needs no special case: it produces a second segment, so the id already
-changes. The cost is that a quoted `>` inside an unrelated argument also makes a
-command unapprovable; that only ever fires on a command already being blocked.
+The cost is that a quoted `>` inside an unrelated argument also makes a command
+unapprovable; that only ever fires on a command already being blocked.
+
+An earlier revision of this docstring said "a PIPE needs no special case: it
+produces a second segment, so the id already distinguishes it." **That was false,
+untested, and is why the separator case below went unwritten for two review
+rounds.** A pipe is distinguished from the UNPIPED command, never from `;` or
+`&&` -- see the next section. Do not restate it.
+
+A THIRD SHAPE: THE SEPARATOR IS INVISIBLE TOO
+---------------------------------------------
+segments() returns the segments and drops what joined them, so every separator
+hashes alike -- measured 2026-08-30:
+
+    id("cat .env ; true") == id("cat .env | true") == 9c3686e29bdc3ec0
+
+`;` hands the second command nothing; `|` hands it the file. A human who
+inspected the `;` form and approved it would have approved the pipe form too --
+an exfiltration path THROUGH a human approval, found by the observability judge
+in round 3 and reproduced against the live hook. So a command with more than one
+segment is not approvable either. Carrying separators into the fingerprint would
+mean changing shell_segments.py, which three other guards depend on; refusing
+costs `cd /x && cat .env`, which the user can approve as a plain read instead.
 
 FAIL DIRECTION -- opposite to the rest of the hook, on purpose
 --------------------------------------------------------------
@@ -103,6 +123,7 @@ the old unchecked flag, with nothing running to report that it had.
 Usage:
   secret_approval.py id <command-text>            # print the approval id
                                                   # exit 3 = not approvable
+  secret_approval.py fingerprint <command-text>   # the raw hash, checks skipped
   secret_approval.py grant <id> [--session <sid>] # record an approval
 Exit 0 on success, 2 on a malformed argument or an unwritable store.
 """
@@ -113,7 +134,11 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_segments import segments  # noqa: E402
+# _lex is shell_segments' own token-producing head, imported rather than
+# reimplemented: a second lexer would be free to disagree with the one the block
+# decision uses, and the disagreement would land inside a guard. It is private by
+# name, and this is a deliberate in-repo coupling -- see accounts_for_every_token.
+from shell_segments import segments, _lex, WRAPPERS  # noqa: E402
 
 EXEMPT_VAR = "SECRET_EXEMPT"
 ID_LEN = 16
@@ -149,13 +174,45 @@ def fingerprint(command):
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:ID_LEN]
 
 
+def accounts_for_every_token(command):
+    """True when the fingerprint's inputs account for every lexed token.
+
+    THE RULE THAT REPLACED THREE SPECIAL CASES. Three review rounds each found a
+    different thing the id could not see -- a redirection, a wrapper word, a
+    separator -- and each was patched individually. They were one defect: the
+    fingerprint is built from segments(), which was designed for a BLOCK
+    decision and keeps only (assignments, argv) per segment, discarding
+    everything else. Enumerating what it discards cannot terminate, because the
+    list is "whatever the next reviewer notices".
+
+    So this inverts the default. Rather than name the discards, compare the raw
+    token list against the tokens the fingerprint actually consumed. If anything
+    was dropped -- a `>`, a `;`, a `nohup`, a subshell paren, or something nobody
+    has thought of yet -- the id does not identify the command a human saw, and
+    it is refused. Closed by default, and it cannot go stale as the lexer grows.
+
+    Costs an approval for `cd /x && cat .env` and `nohup cat .env`. The user can
+    approve the plain read instead. That is the right side to err on: an id that
+    covers more than the user inspected is how consent gets widened silently,
+    which is exactly what round 1 and round 3 each measured.
+    """
+    toks = _lex(command)
+    if toks is None:          # unparseable: segments() fails OPEN for a block
+        return False          # decision, the wrong direction for an identity one
+    accounted = []
+    for assigns, argv in segments(command):
+        accounted += ["%s=%s" % kv for kv in (assigns or {}).items()]
+        accounted += list(argv or [])
+    return sorted(toks) == sorted(accounted)
+
+
 def unapprovable_reason(command):
     """Why this command cannot be approved, or None if it can.
 
-    Two ways a fingerprint fails to identify the thing a human consented to.
-    Both are stated as REFUSALS rather than repaired by parsing: printing an id
-    that cannot work, or one that covers more than the user saw, is worse than
-    printing none.
+    Every answer here is a REFUSAL rather than a repair: printing an id that
+    cannot work, or one that covers more than the user saw, is worse than
+    printing none. The specific cases below run first only so the message can say
+    something useful; accounts_for_every_token is the rule that actually holds.
     """
     if "<" in command or ">" in command:
         return ("a redirection is invisible to the approval id, so approving this "
@@ -176,6 +233,43 @@ def unapprovable_reason(command):
         return ("a wrapper word makes the approval id unstable -- the id shown here "
                 "is not the one the re-run would compute, so the grant could never "
                 "be spent")
+
+    # The check above catches a wrapper only on the UNFLAGGED command: once a
+    # leading assignment is present the wrapper is no longer stripped, so both
+    # sides agree and the flagged form slipped through with a grantable id. Same
+    # answer either way -- refuse -- so test argv[0] directly as well, against the
+    # lexer's OWN list rather than a copy of it, which would drift.
+    parsed = segments(command)
+
+    # The instability check above sees a wrapper only on the UNFLAGGED command:
+    # once a leading assignment is present the wrapper is no longer stripped, so
+    # both probes agree AND the token accounting balances -- the backstop below
+    # cannot catch it either (measured). Without this, refusing `nohup cat .env`
+    # would be a detour rather than a refusal: adding the flag and retrying would
+    # yield a grantable id. Tested against the lexer's OWN list, never a copy.
+    for _assigns, argv in parsed:
+        if argv and argv[0] in WRAPPERS:
+            return ("a wrapper word (%s) sits in the command position, so the id "
+                    "depends on where the shell prefix falls and would not reliably "
+                    "identify the command that was inspected" % argv[0])
+
+    # Every separator hashes alike: `;` gives the next command nothing while `|`
+    # gives it the file, and the id cannot tell them apart, so approving the
+    # harmless-looking form would approve the exfiltrating one. Also refuses the
+    # unparseable case (segments() returns [] and fails open for BLOCK decisions,
+    # which is the wrong direction for an IDENTITY decision).
+    if len(parsed) != 1:
+        return ("the approval id cannot see which separator joins the commands -- "
+                "`;`, `|`, `&&` and `&` all produce the same id, so approving this "
+                "would also approve piping the file into the next command")
+
+    # The backstop, and the only one of these that is not an enumeration. Runs
+    # last because the messages above are more specific, but it is what makes the
+    # set closed rather than a list of the blindnesses found so far.
+    if not accounts_for_every_token(command):
+        return ("the approval id does not account for every part of this command "
+                "(a wrapper word, grouping, or something else the lexer drops), so "
+                "it would not identify the exact command that was inspected")
     return None
 
 
@@ -224,6 +318,12 @@ def main(argv):
             return 2
         session = argv[i + 1]
 
+    if mode == "fingerprint":
+        # Deliberately skips the approvability checks: this is how the suite pins
+        # that `;` and `|` still collide, i.e. that the refusal is still needed.
+        print(fingerprint(arg))
+        return 0
+
     if mode == "id":
         why = unapprovable_reason(arg)
         if why:
@@ -248,7 +348,8 @@ def main(argv):
         print(path)
         return 0
 
-    print("unknown mode %r (expected 'id' or 'grant')" % mode, file=sys.stderr)
+    print("unknown mode %r (expected 'id', 'fingerprint' or 'grant')" % mode,
+          file=sys.stderr)
     return 2
 
 
