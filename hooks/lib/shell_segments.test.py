@@ -105,6 +105,50 @@ CASES = [
     ('git commit -m "2>&1 in the subject" -- a.sh',
      [["git", "commit", "-m", "2>&1 in the subject", "--", "a.sh"]], "quoted fd syntax is prose"),
 
+    # --- THE FIX: `#` opens a comment only where it begins a WORD, which is bash's own rule ---
+    # shlex opens one at an unquoted `#` ANYWHERE in a word, and -- because _lex translates
+    # newline -> `;` BEFORE lexing -- then discards to end of INPUT rather than end of line.
+    # Two independent infidelities, both fail-OPEN. Every expectation in this block is pinned
+    # against real bash and zsh by check_bash_fidelity() below, so it is an execution rather
+    # than a reading of the manual.
+
+    # (a) the exploit. Nine characters hid every following segment from all eight Tier-1
+    # guards at once -- measured end to end in docs/features/shell-lexer-comment-blindness.md.
+    ("echo hi#; git commit -m x -- foo.sh", [["echo", "hi#"], GIT_COMMIT],
+     "word-final # is ordinary text in bash -- this was a universal guard bypass"),
+    ("echo hi#; gh pr create", [["echo", "hi#"], ["gh", "pr", "create"]],
+     "same nine characters against the PR classifier"),
+    ("echo hi#&&git push --force", [["echo", "hi#"], ["git", "push", "--force"]],
+     "no whitespace anywhere: the operator still splits"),
+    ("git add a#b && git commit -m x -- foo.sh", [["git", "add", "a#b"], GIT_COMMIT],
+     "# in the middle of a word, mid-command"),
+
+    # (b) the second, separate fail-open: a GENUINE comment must end at the newline. It did
+    # not, because by lexing time there were no newlines left to end it.
+    ("git add -- a.sh # note\ngit commit -m x -- foo.sh", [["git", "add", "--", "a.sh"], GIT_COMMIT],
+     "a real comment ends at end of LINE; the next line's command must still be seen"),
+
+    # (c) the half the fix must not break -- a word-initial comment is still stripped.
+    ("git status # a real comment", [["git", "status"]], "comment after whitespace"),
+    ("git status ;# no space after the operator", [["git", "status"]],
+     "a control operator begins a word too, so # right after `;` IS a comment"),
+    ("# leading comment only", [], "a whole-line comment runs nothing"),
+    ("git status\t# after a tab", [["git", "status"]], "any unquoted whitespace, not only a space"),
+
+    # (d) the false positives a bare `commenters=\"\"` would introduce. These are ordinary work,
+    # and this lexer sits on every Bash call -- a false denial here is expensive, which is the
+    # whole reason SECRET_EXEMPT had to be retrofitted to secret-command-guard.sh.
+    ("git commit -m fix#123 -- foo.sh", [["git", "commit", "-m", "fix#123", "--", "foo.sh"]],
+     "an issue number is not a comment"),
+    ("echo '#not a comment'", [["echo", "#not a comment"]], "single-quoted # is text"),
+    ('echo "a # b"', [["echo", "a # b"]], "double-quoted # is text"),
+    ("echo \\#notcomment", [["echo", "#notcomment"]],
+     "a BACKSLASH-escaped # at word start is text -- measured against bash, not assumed"),
+    ("echo a\\ # b", [["echo", "a #", "b"]],
+     "backslash-escaped whitespace does NOT end the word, so this # is still text"),
+    ("echo 'a'#b", [["echo", "a#b"]], "a closing quote does not end the word either"),
+    ("curl http://x/#frag", [["curl", "http://x/#frag"]], "a URL fragment"),
+
     # --- REGRESSION: behaviour that already worked and the fix must preserve ---
     ("git push && gh pr create", [["git", "push"], ["gh", "pr", "create"]], "chained &&"),
     ("git push&&gh pr create", [["git", "push"], ["gh", "pr", "create"]], "unspaced &&"),
@@ -289,6 +333,64 @@ def check_one_lexer():
     return problems
 
 
+# Anchored OUTSIDE this file: each command is executed by a real shell and the lexer is held to
+# what the shell actually did. The CASES block above states bash's rule; this proves the statement.
+# `SECOND` is echoed by the half a comment would swallow, so "did SECOND print?" is exactly the
+# question every guard is really asking. Every command is a harmless echo -- nothing here may have
+# an effect if a shell disagrees with us about where the comment starts.
+FIDELITY = [
+    "echo hi#; echo SECOND",
+    "echo hi ; # echo SECOND",
+    "echo hi ;# echo SECOND",
+    "echo 'hi#'; echo SECOND",
+    'echo "a # b"; echo SECOND',
+    "echo \\#notcomment; echo SECOND",
+    "echo a\\ # b; echo SECOND",
+    "echo 'a'#b; echo SECOND",
+    "echo a#b#c; echo SECOND",
+    "echo hi >/dev/null # x; echo SECOND",
+    "# echo SECOND",
+    "echo http://x/#frag; echo SECOND",
+    "echo hi\t# echo SECOND",
+]
+
+
+def check_bash_fidelity():
+    """The lexer must see `echo SECOND` as a command exactly when the shell really runs it.
+
+    bash is REQUIRED -- a missing shell is reported as a failure, never skipped, because a check
+    that quietly declines to run is indistinguishable from a passing one. zsh is checked too (it is
+    this machine's login shell) and is required for the same reason; if the two shells ever disagree
+    the disagreement itself is the finding, so each is asserted separately rather than merged.
+
+    The harness also has to be able to fail in both directions: if no command runs SECOND, or every
+    command does, the table discriminates nothing and the whole check is reported broken.
+    """
+    out = []
+    for shell in ("bash", "zsh"):
+        ran_true = ran_false = 0
+        for cmd in FIDELITY:
+            try:
+                proc = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError) as exc:
+                out.append("FAIL — {} could not run {!r}: {}".format(shell, cmd, exc))
+                continue
+            really_ran = "SECOND" in proc.stdout
+            ran_true += really_ran
+            ran_false += not really_ran
+            lexer_sees = ["echo", "SECOND"] in argvs(cmd)
+            if lexer_sees != really_ran:
+                out.append(
+                    "FAIL — {} disagrees with the lexer on {!r}\n"
+                    "       shell ran the second command: {}  (stdout {!r})\n"
+                    "       lexer saw it as a command:    {}  (argvs {!r})".format(
+                        shell, cmd, really_ran, proc.stdout, lexer_sees, argvs(cmd)))
+        if not ran_true or not ran_false:
+            out.append("FAIL — {} fidelity table discriminates nothing: {} ran, {} did not"
+                       .format(shell, ran_true, ran_false))
+    return out
+
+
 def main():
     passed = failed = 0
     problems = []
@@ -305,7 +407,7 @@ def main():
                 cmd, why, want, got))
 
     for extra in (check_heredoc, check_assignments, check_unparseable, check_accepted_limit,
-                  check_has_grouping, check_one_lexer):
+                  check_has_grouping, check_one_lexer, check_bash_fidelity):
         msgs = extra()
         if msgs:
             failed += len(msgs)
