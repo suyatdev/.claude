@@ -167,6 +167,30 @@ transcript "$TMP/t-override.jsonl" 101000 0 0 "claude-sonnet-5"
 out=$(printf '%s' "$(payload s-override "$TMP/t-override.jsonl")" | HOME="$SETTINGS_HOME" bash "$HOOK")
 chk "transcript sonnet outranks settings opus: fires at 101k" '[ -f "$PANE_STATE_DIR/handoff-fired-s-override" ]'
 
+# --- HANDOFF_PANE_MODE toggle --------------------------------------------
+# off: dispatch is never invoked, but the checkpoint nudge still fires.
+# (dispatch-calls already exists from earlier cases in this suite, so diff
+# against a pre-call snapshot rather than asserting the file's absence.)
+cp "$TMP/dispatch-calls" "$TMP/calls-before-toggle"
+transcript "$TMP/t-toggleoff.jsonl" 80000 0 0
+out=$(printf '%s' "$(payload s-toggleoff "$TMP/t-toggleoff.jsonl")" | HANDOFF_PANE_MODE=off bash "$HOOK")
+chk "toggle off: flag written"        '[ -f "$PANE_STATE_DIR/handoff-fired-s-toggleoff" ]'
+chk "toggle off: dispatch not called" 'cmp -s "$TMP/dispatch-calls" "$TMP/calls-before-toggle"'
+chk "toggle off: still mentions checkpoint" 'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"checkpoint\")" >/dev/null'
+chk "toggle off: says disabled"       'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"disabled\")" >/dev/null'
+chk "toggle off: no pane-ready claim" '! printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"pane is ready\")" >/dev/null'
+chk "toggle off: no failure wording"  '! printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"could not be prepared\")" >/dev/null'
+
+# unset (default) and any non-"off" value keep today's behavior: dispatch runs.
+transcript "$TMP/t-toggleon.jsonl" 80000 0 0
+out=$(printf '%s' "$(payload s-toggleon "$TMP/t-toggleon.jsonl")" | HANDOFF_PANE_MODE=on bash "$HOOK")
+chk "toggle on: dispatch called"      'grep -q "^handoff$" "$TMP/dispatch-calls"'
+chk "toggle on: pane-ready message"   'printf "%s" "$out" | /usr/bin/jq -e ".hookSpecificOutput.additionalContext | contains(\"pane is ready\")" >/dev/null'
+
+transcript "$TMP/t-togglegarbage.jsonl" 80000 0 0
+out=$(printf '%s' "$(payload s-togglegarbage "$TMP/t-togglegarbage.jsonl")" | HANDOFF_PANE_MODE=bogus bash "$HOOK")
+chk "toggle mistyped value: dispatch still called" 'grep -q "^handoff$" "$TMP/dispatch-calls"'
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
