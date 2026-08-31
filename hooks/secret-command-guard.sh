@@ -50,7 +50,7 @@
 # does not prove one was given. The typed phrase is the load-bearing control.
 #
 # NOT a security boundary, and this file must not imply otherwise: the card's
-# Known-gaps table lists EIGHT measured ALLOW shapes, incl. variable indirection,
+# Known-gaps table lists NINE measured ALLOW shapes, incl. variable indirection,
 # any read performed inside a script file, and -- the shortest of them -- an INPUT
 # REDIRECTION: `cat < ~/.zshrc` lexes to argv ['cat'], matches nothing, and is
 # allowed, because the lexer drops the redirection target. Note especially that "any

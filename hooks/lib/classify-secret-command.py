@@ -73,8 +73,10 @@ full-environment dumps that are not bare env/printenv (`export -p`,
 `declare -p`, `set`, `env -0`, `ps eww`), and -- the shortest route of the lot --
 an INPUT REDIRECTION, which hides the path from this check entirely because the
 lexer drops the redirection target: `cat < ~/.zshrc` lexes to argv ['cat'] and
-matches nothing. Eight rows, not seven; that last one was measured on 2026-08-30
-and is pre-existing, neither introduced nor fixed by the approval gate.
+matches nothing. Nine rows, not eight; that one was measured on 2026-08-30 and
+is pre-existing, neither introduced nor fixed by the approval gate. The ninth
+row -- an unquoted `#` truncating the shared lexer before a path -- was found
+the same day; see task 13 of docs/features/output-secret-redaction.md.
 
 One boundary matters when reading "a token in any segment matches" above.
 SEVEN of the eight patterns are anchored at BOTH ends -- `(^|/)` before the

