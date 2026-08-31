@@ -377,13 +377,22 @@ FIDELITY = [
     "echo `echo x`#y; echo SECOND",
 ]
 
-# The ONE shape where this lexer deliberately disagrees with the shell, in the fail-CLOSED
-# direction: a `)` closing a subshell really does end the word, so bash starts a comment, but
-# distinguishing it from the `)` that closes `$( )` needs expansion tracking the pre-pass does
-# not do. The lexer therefore reports a command bash never ran. Asserted rather than merely
-# absent from FIDELITY, so the deviation cannot widen -- or quietly reverse -- unnoticed.
-FIDELITY_FAIL_CLOSED = [
-    "(echo hi)# echo SECOND",
+# The ONE shape where this lexer deliberately disagrees with the shell. A `)` closing a subshell
+# really does end the word, so bash starts a comment there -- but distinguishing it from the `)`
+# that closes `$( )` needs expansion tracking the pre-pass does not do, so the rule excludes both
+# closers. The tokens after the `#` are therefore RETAINED rather than discarded, which is the
+# fail-closed direction: this lexer never hides less than bash runs.
+#
+# What actually reaches a guard is milder, and is measured rather than reasoned: `#` itself takes
+# the segment's command position, so classify-git-command reports SEG_OPAQUE and emits no COMMIT
+# fact -- git-guard and doc-guard allow, which is what bash's own reading would produce anyway,
+# while worktree-guard denies on an opaque segment. So the deviation costs a possible false
+# denial on one guard, never a hidden command on any.
+#
+# Asserted here, not merely absent from FIDELITY, and asserted EXACTLY (the `#` must still be at
+# argv[0]) so the deviation cannot widen -- or quietly reverse -- unnoticed.
+FIDELITY_DEVIATION = [
+    ("(echo hi)# echo SECOND", ["#", "echo", "SECOND"]),
 ]
 
 
@@ -421,20 +430,20 @@ def check_bash_fidelity():
             out.append("FAIL — {} fidelity table discriminates nothing: {} ran, {} did not"
                        .format(shell, ran_true, ran_false))
 
-        for cmd in FIDELITY_FAIL_CLOSED:
+        for cmd, want_argv in FIDELITY_DEVIATION:
             try:
                 proc = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
             except (OSError, subprocess.SubprocessError) as exc:
                 out.append("FAIL — {} could not run {!r}: {}".format(shell, cmd, exc))
                 continue
             really_ran = "SECOND" in proc.stdout
-            lexer_sees = ["echo", "SECOND"] in argvs(cmd)
-            if really_ran or not lexer_sees:
+            got = argvs(cmd)
+            if really_ran or want_argv not in got:
                 out.append(
                     "FAIL — {} accepted deviation no longer holds for {!r}\n"
-                    "       expected: shell does NOT run it, lexer DOES see it (fail-closed)\n"
-                    "       got:      shell ran {}, lexer saw {}".format(
-                        shell, cmd, really_ran, lexer_sees))
+                    "       expected: shell does NOT run it, and the lexer RETAINS {!r}\n"
+                    "       got:      shell ran {}, argvs {!r}".format(
+                        shell, cmd, want_argv, really_ran, got))
     return out
 
 
