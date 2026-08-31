@@ -836,6 +836,79 @@ may claim otherwise.
       `;`-vs-`|` collision pin was inverted to assert the ids now differ, since the
       collision it used to pin is closed by construction rather than by the refusal.
 
+      **Round-6 corrections to the paragraph above and to `a8e1d7d`'s commit body, which
+      cannot be rewritten because it is pushed -- recorded here so the audit trail carries
+      its own correction rather than a silent fix.** Found by the observability judge
+      (round 5, verdict `2026-08-30-feat-output-secret-redaction.round5.md`) and
+      independently re-measured before this note was written:
+
+      1. **Wrong hash.** Both the module docstring and `a8e1d7d`'s commit body stated
+         `fingerprint("cat .env > /tmp/x") = 1c1687803d2848fd`. Measured:
+         `1c1687803d2848fd` is the hash of `cat .env > /tmp/leak`, a different command used
+         elsewhere in the same file. The real hash of `cat .env > /tmp/x` is
+         `d60e853f0bc0a0fc`. Corrected in `hooks/lib/secret_approval.py`'s module docstring.
+      2. **Wrong assertion arithmetic.** The commit body said "11 fingerprint + 1 end-to-end"
+         assertions were added, with "6 of 11" turning red against pre-round-4 `3b7f44c`.
+         Measured: 9 `fp_eq_case`/`fp_ne_case` assertions + 2 end-to-end `run_case_sid`
+         assertions + 1 Known-gaps ALLOW row = 12 assertions (matches the suite's 128→140
+         growth), and the red count against `3b7f44c` is 6 of 12, not 6 of 11.
+      3. **The instability self-test never fired.** "The four refusals in
+         `unapprovable_reason()` ... all survive unchanged" (above) was true as a list of
+         four checks existing in the source, but one of them --
+         the wrapper-instability self-test -- could never fire: it compared
+         `fingerprint(command)` against `fingerprint(EXEMPT_VAR=x + canonical_text(command))`,
+         and `canonical_text()` always strips exactly the prefix that comparison had just
+         invented, so the two sides were equal by construction. Measured: 0 fires in
+         300,000 fuzz commands, 0 of the 379 command strings the suite exercised at the
+         time, and deleting the check left the suite green (140 passed / 0 failed). It was
+         documented as a live defence-in-depth refusal in three places (this file, the
+         module docstring, and the a8e1d7d commit body) while doing nothing at runtime.
+      4. **Its disclosed mitigation didn't mitigate.** A gap this round shipped
+         unverified -- `SECRET_EXEMPT=a'b' cat .env` and `SECRET_EXEMPT=x"y" cat .env` are
+         valid bash assignments whose value starts unquoted and switches to quoted
+         mid-word, which `_EXEMPT_PREFIX_RE`'s value alternation cannot span. The commit
+         body pointed at the (dead) instability self-test as the runtime mitigation for
+         this exact gap; since that check never fired, the mitigation was false as shipped.
+         The gap itself failed SAFE (the grant became unspendable, not a leak), but the
+         deny message blamed "no recorded approval" rather than naming the real cause.
+      5. **The redirection refusal was shadowed by the backstop.** A mutation
+         scorecard (deleting each check in `unapprovable_reason()` from a scratch copy,
+         one at a time, and re-running the suite) showed deleting the redirection-specific
+         check left the suite at 140 passed / 0 failed -- no assertion discriminated it
+         from `accounts_for_every_token()`'s generic backstop. Root cause: the wrapper
+         script (`hooks/secret-command-guard.sh`) appends a fixed boilerplate line whenever
+         *any* `unapprovable_reason()` check fires -- "seek approval for the plain command
+         without the redirection or wrapper word" -- which contains the literal word
+         "redirect" regardless of which check actually produced the refusal, so a
+         `run_case_*_msg` assertion grepping the hook's full stderr could never tell them
+         apart. The same shadowing applied to the mislabeled test below.
+      6. **A mislabeled test.** The assertion named "...and the reason names the
+         instability" (input `time cat .env`) matched only because the BACKSTOP's generic
+         message happens to contain the word "wrapper" -- the instability check had no
+         coverage at all, and `time cat .env` is a wrapper shape, not an instability shape.
+
+      **Round 6 (2026-08-31) fixed all six.** `unapprovable_reason()`'s dead
+      instability check was replaced -- not merely deleted -- with one that asks
+      whether `segments(canonical_text(command))` still finds a `SECRET_EXEMPT`
+      assignment, i.e. whether a second, independent reader (the lexer) agrees the
+      stripping regex actually stripped the flag this command carries. It fires on both
+      disclosed shapes and on neither of the four controls (`SECRET_EXEMPT=plain`, a
+      single-quoted reason, a double-quoted reason, and the unflagged command), verified
+      by direct assertions plus a 75,000-command probe (50,000 ordinary commands, 20,000
+      cleanly-quoted `SECRET_EXEMPT` values, 5,000 unstable-quoting values): 0 false
+      fires, 0 misses. New assertions call `secret_approval.py id` directly rather than
+      through the wrapper, so the redirection check and the wrapper-word backstop are now
+      pinned by their own message text instead of the wrapper's shared boilerplate. Full
+      mutation scorecard, before and after, in the round-6 commit message.
+
+      Unlike the redirection/wrapper/multi-segment checks, the round-6 instability check
+      IS load-bearing for identity, not policy-only -- it is the only thing standing
+      between `canonical_text()`'s stripping regex and a printed id nobody can ever
+      spend. So the accurate count as of round 6 is one load-bearing check plus three
+      policy-only ones, not "four defence-in-depth refusals, none load-bearing", which
+      was the round-4-to-round-5 framing in both this file and the module docstring and
+      is no longer accurate.
+
 ## Decisions taken — user-confirmed 2026-08-28
 
 1. **`SECRET_EXEMPT` disables output redaction as well.** One flag clears both layers. A user

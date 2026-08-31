@@ -91,7 +91,11 @@ ALL CLOSED by this change (measured, PRE-round-4 vs POST-round-4):
 
   * A REDIRECTION: `fingerprint("cat .env")` and `fingerprint("cat .env >
     /tmp/x")` were both `088ade89056f9f6a`. Post-round-4 they are
-    `648b13a0a3555ec5` and `1c1687803d2848fd` -- different.
+    `648b13a0a3555ec5` and `d60e853f0bc0a0fc` -- different. (Round 6
+    correction: this cell previously read `1c1687803d2848fd`, which is
+    actually the hash of `cat .env > /tmp/leak`, a different command used
+    elsewhere in this file and in the test suite. Both hashes re-measured
+    2026-08-31.)
   * A WRAPPER WORD: `fingerprint("nohup cat .env")` was `088ade89056f9f6a`,
     `fingerprint("SECRET_EXEMPT=r nohup cat .env")` was `ee2802fc504a950a` --
     DIFFERENT ids for what should have been the same command, so the id in a
@@ -108,6 +112,31 @@ multi-segment command -- see its docstring -- but none of the three refusals is
 load-bearing for identity any more. They are retained as deliberate policy
 calls (an unattended write, wrapper, or multi-segment command is still a worse
 ask than the plain read), not because the id could still be silently widened.
+
+ROUND 6: A FOURTH CHECK, REPLACED RATHER THAN LEFT DEAD
+---------------------------------------------------------
+unapprovable_reason() carried a FOURTH check from round 4 onward -- an
+"instability self-test" meant to catch a command whose printed id the re-run
+could never reproduce. It compared fingerprint(command) against
+fingerprint(EXEMPT_VAR=x + canonical_text(command)) and could never fire:
+canonical_text() always strips exactly the prefix that comparison had just
+invented, so the two sides were equal BY CONSTRUCTION (measured: 0 fires in
+300,000 fuzz commands, 0 of 379 suite command strings). It was documented in
+three places as a live defence-in-depth refusal. Found by the observability
+judge, round 5 (2026-08-30), and replaced -- not merely deleted -- with a
+check that asks the real question: did canonical_text() actually strip the
+SECRET_EXEMPT assignment THIS command carries, verified by a SECOND,
+independent reader (the shell_segments lexer) rather than by comparing the
+regex against itself. See unapprovable_reason()'s own docstring for the
+mechanics and the shape it closes (`SECRET_EXEMPT=a'b'`, a value that starts
+unquoted and switches to quoted mid-word).
+
+Unlike the three checks above, THIS one is genuinely load-bearing for
+identity: it is the only thing standing between canonical_text()'s stripping
+regex and a printed id nobody can ever spend. So as of round 6 the count is
+one load-bearing check plus three policy-only ones -- not "four
+defence-in-depth refusals, none load-bearing", which was the round-4 to
+round-5 framing and is no longer accurate.
 
 FAIL DIRECTION -- opposite to the rest of the hook, on purpose
 --------------------------------------------------------------
@@ -246,39 +275,48 @@ def accounts_for_every_token(command):
 def unapprovable_reason(command):
     """Why this command cannot be approved, or None if it can.
 
-    STATUS AS OF ROUND 4: none of the checks below are load-bearing for
-    identity any more. fingerprint() now hashes the raw command text, so a
-    redirection, a wrapper word, a separator and quoting all already produce
-    different ids by construction -- the id cannot be silently widened the way
-    it could when it was built from a parsed form. These checks remain as
-    defence-in-depth: even though the id would now correctly distinguish e.g.
-    `cat .env` from `cat .env > /tmp/leak`, running a redirection, a wrapper,
-    or a multi-segment command unattended is still a worse idea than making
-    the user approve the plain read instead, so they still refuse rather than
-    grant. Widening what is approvable is a separate decision this round does
-    not make.
+    STATUS AS OF ROUND 6: three of the four checks below are policy-only, not
+    load-bearing for identity -- fingerprint() hashes the raw command text, so
+    a redirection, a wrapper word and a separator already produce different
+    ids by construction. Running one of those shapes unattended is still a
+    worse idea than making the user approve the plain read, so they still
+    refuse rather than grant, but the id itself was never in danger. The
+    FIRST check below is the exception: it IS load-bearing for identity, not
+    policy. See its own docstring.
     """
     if "<" in command or ">" in command:
         return ("a redirection is refused as a matter of policy, not because the "
                 "approval id cannot see it -- approving a write alongside a read "
                 "is not something this hatch grants")
 
-    # No longer catches an identity hazard: canonical_text() strips a leading
-    # SECRET_EXEMPT= prefix regardless of what follows it (wrapper word or
-    # not), so fingerprint() already agrees whether or not `command` itself
-    # carries the flag -- that is the whole point, since `command` here IS the
-    # flag-carrying re-run on the common path. What survives is a live
-    # self-test of _EXEMPT_PREFIX_RE: prepend a FRESH flag to the
-    # already-stripped base (not to `command` directly -- `command` may
-    # already start with one, and prepending a second would test double
-    # stripping, a question nobody asked) and confirm the regex strips it back
-    # off. If it does not (e.g. a base whose first characters confuse the
-    # value pattern), the two sides diverge and this fires -- refusing an id
-    # the re-run could never reproduce.
-    base = canonical_text(command)
-    if fingerprint(command) != fingerprint("%s=x %s" % (EXEMPT_VAR, base)):
-        return ("the approval id would not survive adding the SECRET_EXEMPT flag "
-                "to this exact command, so the grant could never be spent")
+    # LOAD-BEARING FOR IDENTITY (round 6 -- replaces a round-4 self-test that
+    # could never fire). canonical_text() strips exactly one leading
+    # `SECRET_EXEMPT=<value>` prefix using a regex whose value alternation
+    # cannot span a value that starts UNQUOTED and switches to quoted
+    # mid-word -- SECRET_EXEMPT=a'b' and SECRET_EXEMPT=x"y" are both valid
+    # bash assignments the regex fails to match at all, so canonical_text()
+    # leaves the whole flag sitting in the hash. The id printed when the
+    # bare command was blocked and the id the flagged re-run computes then
+    # differ, and the grant is silently unspendable -- fails SAFE (still
+    # blocked), not open, but until this round the deny message blamed "no
+    # recorded approval" rather than the real cause.
+    #
+    # The round-4 check this replaced compared fingerprint(command) against
+    # fingerprint(EXEMPT_VAR=x + canonical_text(command)) -- but
+    # canonical_text() ALWAYS strips exactly the prefix that comparison just
+    # invented, so the two sides were equal BY CONSTRUCTION and the check
+    # could never fire (measured: 0 fires in 300,000 fuzz commands). The real
+    # property is not "does a FRESH flag survive a round trip" but "did
+    # canonical_text() actually strip the flag THIS command carries" -- asked
+    # by a SECOND, independent reader (the shell_segments lexer) rather than
+    # by comparing the regex against itself. If canonical_text() failed to
+    # strip, the lexer will still find SECRET_EXEMPT as a leading assignment
+    # in what canonical_text() claims is flag-free text.
+    for assigns, _argv in segments(canonical_text(command)):
+        if EXEMPT_VAR in (assigns or {}):
+            return ("the SECRET_EXEMPT flag on this command could not be separated "
+                    "from it reliably, so the id shown here is not the one the "
+                    "re-run would compute and the grant could never be spent")
 
     # Historically caught a wrapper the instability check above missed once a
     # leading assignment was already present. With raw-text hashing the id
