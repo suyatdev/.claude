@@ -4224,7 +4224,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       built on its own, in a throwaway primary checkout, with the *healthy* guard as a control —
       `hooks/worktree-guard.probe.sh`, committed alongside this note so the receipt exists.
       Measured, `WORKTREE_GUARD_MODE=deny`, a `Write` to `settings.json`:
-      - **`$HOME` unset (E1) → rc=2**, and the refusal prints "settings.json is exempt from this
+      ⚠️ **Closed by task 17 (2026-08-31) — the two "Open" verdicts below are the state as measured
+      during task 13, not now.** E1 and E2 both return **rc=0** for a `Write` to `settings.json`
+      after Arm A's exemption check was reordered ahead of them; the E3 reading is unchanged and
+      was always true. Left as written because it is the measurement that motivated task 17.
+
+- **`$HOME` unset (E1) → rc=2**, and the refusal prints "settings.json is exempt from this
         guard". Claim false. Open, as recorded above.
       - **git below the version floor (E2) → rc=2**, same claim printed. Claim false. Open.
       - **the lib dir missing (E3) → rc=0, ALLOWED.** `deny_arms()` is reached only from the
@@ -5167,6 +5172,12 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       **Group C — silence broken (3 messages).** `MSG_NO_PYTHON`, `MSG_NO_PAYLOAD` and
       `MSG_NO_GIT` each end `This fires before the exemption list is reached — settings.json is
       not exempt here; an edit through the Bash tool is the route to it in this state.`
+
+      ⚠️ **Superseded by judge round 1, recorded below (2026-08-31).** That sentence describes
+      what `879ee8f` shipped as Group C, and it is now true of **two** of the three:
+      `MSG_NO_PYTHON` had the Bash-route clause removed, because the route does not exist in that
+      state. Left standing rather than rewritten — it is the record of what was built, and the
+      round-1 section is the record of why it changed.
 
       **Sentence census, re-derived at both commits 2026-08-31.** Matched whitespace-normalized,
       because the sentence hard-wraps and a raw `grep -F` misses `require_home()` — the blindness
