@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: docs/worktree-guard-citation-sweep
+branch: docs/worktree-guard-task16-citations
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
@@ -809,14 +809,16 @@ file's documented token style, tab-separated:
 - `SEG_BRANCH_MOVE<tab><i><tab><subcommand>` — segment `i` runs a git form that moves a checkout's
   HEAD or overwrites its working tree, per the in/out lists above.
 - `SEG_SCOPE_OPT<tab><i><tab><option>` — segment `i`'s git command carries a global option that
-  `resolve_subcommand` refused to walk past, **other than `-C`**. Emitted from the existing
-  `blocking_option` return value (`classify-git-command.py`, `resolve_git_segment()`'s
-  `return subcommand, rest, first, blocking, c_operands` — **its third element, the local `first`;
-  the element spelled `blocking` is position 4, which `classify()` binds as `residual_option`**) by
-  the two-clause test
-  `blocking_option is not None and blocking_option != "-C"` — never from a list of option names.
-  ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test quoted
-  above no longer exists as one expression: `resolve_git_segment()` now filters `-C` out of
+  `resolve_subcommand` refused to walk past, **other than `-C`**. Emitted from `residual_option`
+  (`classify-git-command.py`, `resolve_git_segment()`'s
+  `return subcommand, rest, first, blocking, c_operands` — its third element, the local `first`,
+  is what `classify()` binds as `blocking_option`; the element spelled `blocking` is position 4,
+  which `classify()` binds as `residual_option`, **the actual source of this fact**) by
+  the single-clause test
+  `if residual_option is not None:` — never from a list of option names.
+  ⚠️ **Found stale in this pass (2026-08-28), not simple anchor rot.** The two-clause test this
+  bullet originally specified, `blocking_option is not None and blocking_option != "-C"`, no longer
+  exists as one expression: `resolve_git_segment()` now filters `-C` out of
   `blocking` internally (`if blocking != "-C":`) before `classify()` ever sees it, so `classify()`'s
   own test is the single-clause `if residual_option is not None:`. The resulting fact emission is
   believed unchanged — `SEG_SCOPE_OPT` still fires only for a genuine non-`-C` blocker — but that
@@ -828,6 +830,30 @@ file's documented token style, tab-separated:
   `return subcommand, rest, first, blocking, c_operands`, now quoted in place of the number. The
   *mechanism* sentence above still describes a two-clause test that no longer exists; that half
   remains task 16's, and is unchanged.
+  ⚠️ **A second defect, unflagged until task 16, corrected 2026-08-29 — five judge rounds passed
+  over it.** Round 2 (above) fixed the dead anchor and correctly laid out the tuple positions, but
+  the *lead sentence itself* still read "Emitted from the existing `blocking_option` return
+  value" — naming the wrong variable as this fact's source. The real emission is
+  `if residual_option is not None: facts.add(_seg("SEG_SCOPE_OPT", index, residual_option))`;
+  `blocking_option` feeds `scope_unknown` / the `SCOPE_UNKNOWN` fact instead — a different gate, on
+  a different variable, one variable name away from being mistaken for this one (task 16's own
+  DONE note below independently rediscovered exactly this confusion under "One variable name, two
+  gates"). This is also why the bullet's "other than `-C`" clause read as contradicting its own
+  parenthetical: `first` (position 3, bound as `blocking_option`) *can* be `-C` —
+  `first = "-C" if c_operands else blocking` — so naming it as the source of a fact defined as
+  "other than `-C`" was self-contradictory. `blocking` (position 4, bound as `residual_option`)
+  never can be `-C`, because the loop only returns once `blocking != "-C"`. Naming the right
+  variable resolves the mechanism and the contradiction at once.
+  ⚠️ **The claim closing the round-2 marker above — "that half remains task 16's, and is
+  unchanged" — is now stale, paid here (2026-08-30).** It stayed true through `0ae143d`, which
+  fixed only the source-variable half of this bullet's lead sentence (`blocking_option` →
+  `residual_option`); task 16's checklist sub-item 1 was nonetheless ticked `[x]` as fully done.
+  The result was a lead sentence naming `residual_option` as the source but describing emission by
+  a two-clause test on `blocking_option` — two different variables feeding two different gates,
+  true of no version of the code. A fresh observability-judge pass against `0ae143d` caught it
+  (2026-08-30). The lead sentence above now states the live single-clause test, `if residual_option
+  is not None:`; the first marker above preserves the original two-clause expression,
+  `blocking_option is not None and blocking_option != "-C"`, as history.
 - `SEG_ENV<tab><i><tab><name>` — one per entry in segment `i`'s `assignments` dict whose name begins
   `GIT_`. A **prefix** test over the namespace git owns, so a variable added upstream is covered the
   day it ships.
@@ -922,7 +948,15 @@ pre-task-5 state, same as the `SEG_CD` item above. But unlike that item, the lit
 gone, not just moved: `classify()`'s loop now binds the tuple as `assigns` (not `_assigns`) and
 passes it straight to `segment_facts()`, which is exactly what this paragraph's own design goes on
 to require. No current line still discards it, so there is nothing left to quote as "the code this
-design must change" — the design's own outcome is what stands there now. Measured:
+design must change" — the design's own outcome is what stands there now.
+⚠️ **Re-verified, task 16 (2026-08-29) — this paragraph needed no change.** Independently re-read
+against the live file: `classify()`'s loop binds `` `for index, (assigns, argv) in enumerate(segs):` ``
+and passes it straight to `` `segment_facts(index, assigns, argv)` ``. The file's only remaining
+`_assigns` is a different, inner loop, `` `for _assigns, iargv in inner:` ``, inside `relex_hit()` —
+the exact trap this sub-item was opened to catch, since a bare `grep _assigns` finds that hit and
+appears to support the old, false sentence. It does not: `relex_hit()` has nothing to do with
+`classify()`'s top-level loop or this design's `assigns` binding. Task 16's sub-item 2 closes with
+no text change here. Measured:
 `GIT_DIR=/tmp/o/.git git commit -m x` emits exactly
 `COMMIT` — **byte-identical to a purely local commit**, with the redirect nowhere in the output.
 The rule is a prefix test, not an enumeration: **any assignment on segment `i` whose name begins
@@ -964,7 +998,8 @@ Measured, each emitting **no fact at all** because `argv[0] != "git"`:
 
 **Clause 3a — bare tokens. Rule: if `argv[0]` is neither `git` nor `cd`, yet `git` or `cd` appears
 anywhere later in `argv`, the segment is unaccountable — emit `SEG_OPAQUE` and deny**, naming the
-token and the index. Derived from `:62-63` rather than from a list of wrapper words, so `env`,
+token and the index. Derived from `shell_segments.py`'s
+`` `This is a denylist: `env`, `timeout` and loop keywords are not in` `` rather than from a list of wrapper words, so `env`,
 `timeout`, `if`, `for`/`do` and anything else in that family are covered by one rule.
 
 **Clause 3b — collapsed tokens. Rule: for a segment whose `argv[0]` is neither `git` nor `cd`,
@@ -1005,7 +1040,8 @@ attributed fires to clauses. **Owed before task 10's flip:** re-run the corpus w
 attribution and record what fraction of the 2,832 the depth-bound case actually accounted for. Until
 then the card claims the relaxation is *correct*, not that it is *large*.
 
-This is the direct answer to `:60-62`. That comment says a quoted command *"can never reach a
+This is the direct answer to `shell_segments.py`'s `` `eval` covers only the unquoted form ``.
+That comment says a quoted command *"can never reach a
 command position"* — so the rule re-lexes until it can, then applies the ordinary command-position
 test. **No shell name, no `-c`, and no wrapper word appears in the rule**, which is what keeps it a
 derivation: `zsh -c '…'` is covered without `zsh` being written down anywhere.
@@ -2105,7 +2141,8 @@ Feature: Arm D — moving a primary checkout's HEAD
   # tokens; a quoted command survives lexing as ONE token, so "git" is never a
   # member of argv[1:] and every scenario above allows it. shell_segments.py,
   # "`eval` covers only the unquoted form", states this limit outright; clause 3a
-  # derived from :62-63 and ignored it.
+  # derived from shell_segments.py's "This is a denylist: `env`, `timeout` and loop
+  # keywords are not in" and ignored it.
 
   Scenario: A git command hidden inside a quoted shell string
     Given the session cwd is a primary checkout
@@ -3233,7 +3270,9 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         raised — but they are now part of what task 4 must satisfy.
       - ⚠️ **Wording the suite pins by fiat, because the card fixes the fact and not the phrasing:**
         the literal substrings `segment 0` / `segment 1`. And **boundary 12's deny must name `$d`
-        while `SEG_CD` carries the sentinel `UNRESOLVABLE`** (`:778` against `:1832`) — satisfiable
+        while `SEG_CD` carries the sentinel `UNRESOLVABLE`** (the Gherkin scenario
+        `A cd whose operand cannot be resolved`: `` `the classifier emits SEG_CD\t0\tUNRESOLVABLE` ``
+        and `` `the message names $d and segment 0` ``) — satisfiable
         only by re-reading the raw command line out of the payload. Task 5 should say where that
         text comes from.
       - **Not expressible in this suite, recorded rather than faked:** `L6` — the liveness check is
@@ -3279,7 +3318,9 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         the suite always overrides it.
       - One implementer comment claimed "all five elements of the house contract
         (`phase-guard.sh`'s `# --- Step 10: deny` block)"; that location's own comment counts **four** and does not
-        list them, so the five belongs to this card's Deny message contract (`:1438`). The
+        list them, so the five belongs to this card's Deny message contract — "what was blocked,
+        why, the current state that caused it, `` `the legitimate fixes, and a *narrow* closing
+        claim` ``." The
         comment was corrected to attribute each to its real source and to claim no mapping
         between them, since none is determinable from `phase-guard.sh`.
 - [x] 5. **First port `git-guard.sh`'s `has_fact() {` / `while IFS= read -r` reader into `doc-guard.sh`**,
@@ -3295,7 +3336,9 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       caller stay unchanged; assert that with the existing sibling suites before touching anything
       else, since `classify-pr-command.py` and `decide-commit-gate.py` both depend on it. This means the segment loop must
       stop skipping non-git segments (`classify-git-command.py`, `if len(argv) < 2 or argv[0] != "git":`) and must collect the indexed
-      facts *before* the `SCOPE_UNKNOWN` `continue` (`:229-232`). Must include the discriminating
+      facts *before* the `SCOPE_UNKNOWN` `continue` (`classify-git-command.py`,
+      `` `the indexed facts are collected BEFORE the SCOPE_UNKNOWN `continue`, which` ``).
+      Must include the discriminating
       `-C` case, the matching `cd` case, the `-C`-does-not-carry-forward case, and the
       two-adds-one-line case. The regression test asserts `doc-guard`'s **behavior** is unchanged —
       not the fact set, which necessarily grows.
@@ -3310,9 +3353,11 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       consumes them until task 6.
       - **The four required cases were run against the live classifier, not assumed.**
         `git -C /tmp/other worktree add /tmp/x` → `SCOPE_UNKNOWN\t-C` **plus** `SEG_GIT_C 0`
-        and `SEG_WORKTREE_ADD 0`, i.e. in addition and never in place (`:1261`);
+        and `SEG_WORKTREE_ADD 0`, i.e. in addition and never in place (this design's own
+        `` `emitted **in addition to** the existing `SCOPE_UNKNOWN<tab>-C`, never in place of it` ``);
         `git -C /repos/other log && git switch main` → `SEG_GIT_C 0` + `SEG_BRANCH_MOVE 1`,
-        so `-C` does not carry to segment 1 (`:848`); `cd /tmp/other && git worktree add /bad`
+        so `-C` does not carry to segment 1 (the Worked examples row:
+        `` `segment 0's `-C` does **not** carry` ``); `cd /tmp/other && git worktree add /bad`
         → `SEG_CD 0` + `SEG_WORKTREE_ADD 1`; two adds on one line → indices 0 and 1.
       - **One lexer, two views — verified structurally, not by assertion.** `has_grouping()`
         and `segments()` both call `_lex(src)`, and `has_grouping` contains no tokenizer of its
@@ -3328,9 +3373,12 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         cannot move any row. Re-run after the change: all rows as expected, and the
         discriminating rows still differ across arms (`old=2 new=0`, `old=0 new=2`).
       - **The implementer flagged "indexed facts survive the `-C` bail" as an unspecified
-        choice. It is specified** — `:788-789` requires the indexed facts be collected *before*
-        the `SCOPE_UNKNOWN` `continue`, and `:1261` requires them emitted in addition to it.
-        The implementation matches the card; the ambiguity flag was an under-read, not a gap.
+        choice. It is specified** — the `SEG_GIT_C` bullet's own
+        `` This must be collected before the `SCOPE_UNKNOWN` `continue` `` requires the indexed
+        facts be collected *before* the `SCOPE_UNKNOWN` `continue`, and its
+        `` `emitted **in addition to** the existing `SCOPE_UNKNOWN<tab>-C`, never in place of it` ``
+        requires them emitted in addition to it. The implementation matches the card; the
+        ambiguity flag was an under-read, not a gap.
       - **`resolve_subcommand` has three callers, not one** — `git-guard.sh`'s
         `subcommand, rest, blocking = mod.resolve_subcommand(argv)`,
         `classify-commit-command.py`'s `subcommand, rest, blocking_option = resolve_subcommand(argv)`,
@@ -3560,7 +3608,10 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       `resolve_effective_repo()`. Resolution is `git -C <repo> rev-parse --path-format=absolute
       --git-path hooks`, which honours the whole config precedence, so a repo-**local**
       `core.hooksPath` (how husky and lefthook install) is what gets read.
-      **The ⚠️ OPEN channel question at :2494 is now CLOSED — user-endorsed 2026-08-26.** Of the
+      **The ⚠️ OPEN channel question at the `Layer 1 reports when layer 2 is not armed` Scenario
+      Outline is now CLOSED — user-endorsed 2026-08-26**, and that Scenario Outline's own comment
+      says so directly: `` `and the cost it accepts are recorded ONCE, in task 6b; do not restate them` ``.
+      Of the
       three candidates the card named, what ships is *append a paragraph to a refusal layer 1 was
       already printing*: it does **not** deny on its own, and it does **not** warn on an allow. The
       reasoning and its cost are at `worktree-guard.sh`'s `# CHANNEL` comment — denying every git command because
@@ -4067,7 +4118,8 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       40/0/0, `create-worktree` 89/0/0 (500 passed, 0 failed, 2 skipped); `phase-guard.sh:248` is
       `[ -d "$root/docs/features" ] || exit 0`; `.gitignore:17` is `/hooks/state/`; the four
       `settings.json` registrations and `env.WORKTREE_GUARD_MODE=log` read back from the file;
-      the `doc-guard.sh` reader port is present at `:136-142`; file line counts re-run by `wc -l`.
+      the `doc-guard.sh` reader port is present — `` `has_fact() {` `` and, inside it,
+      `` `while IFS= read -r f` ``; file line counts re-run by `wc -l`.
 - [x] 12. Update `rules/gates.md` with a stub carrying the Non-goals wording, and `CLAUDE.md` if a
       skill is warranted.
       **DONE 2026-08-26.** New **Worktree-location safety** stub, placed with the other Tier 1 hook
@@ -4402,7 +4454,7 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         re-tensed per the user's gate decision. Group C: both anchors confirmed still correct,
         left unchanged.
 
-- [ ] 16. The three things task 15 found but was not authorized to change. Opened 2026-08-28 under
+- [x] 16. The three things task 15 found but was not authorized to change. Opened 2026-08-28 under
       an explicit user gate decision, after task 15's commit `ae8cb27`. Each needs its own reading;
       none is a citation swap, which is why none was done in that commit.
       - 🔴 **The `SEG_SCOPE_OPT` two-clause-test bullet in the design section describes a test
@@ -4546,6 +4598,154 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
         corrected to `docs/worktree-guard-citation-sweep`.
       - The opening blockquote's session-state.md marker was interposed mid-sentence, splitting the
         parenthetical `(memory ... 2026-08-23)` in half — moved to follow the complete blockquote.
+
+      **Closed 2026-08-29, task 16, under a separate explicit user gate decision authorizing this
+      task's card edits** (distinct from the 2026-08-28 decision that opened the task).
+
+      - **Sub-item 1 (`SEG_SCOPE_OPT`) — closed.** Defect (a), the vanished two-clause test, was
+        already flagged above. Independently re-verified against the live `resolve_git_segment()`
+        and `classify()` and found a second, previously unflagged defect (b): the bullet's *lead*
+        sentence named `blocking_option` as this fact's emission source; the real emission is
+        `if residual_option is not None: facts.add(_seg("SEG_SCOPE_OPT", index, residual_option))`.
+        `blocking_option` feeds `scope_unknown`/`SCOPE_UNKNOWN` instead. This is also what made the
+        bullet's own "other than `-C`" clause read as self-contradicting — `first` (bound as
+        `blocking_option`) can be `-C`; `blocking` (bound as `residual_option`) never can. Corrected
+        in place, with a dated marker rather than a silent rewrite.
+        ⚠️ **Correction (2026-08-30): defect (a) was not fixed here — only flagged.** This note's
+        own wording, "already flagged above," described the state accurately, but the surrounding
+        "Sub-item 1 ... — closed" heading and the checklist's `- [x]` tick both read as if both
+        defects were paid. They were not: defect (a), the two-clause-test sentence, still described
+        `blocking_option is not None and blocking_option != "-C"` as live code after this commit —
+        `0ae143d` fixed only defect (b), the source-variable swap. A fresh observability-judge pass
+        against `0ae143d` caught the gap (2026-08-30); see the new dated marker under the
+        `SEG_SCOPE_OPT` bullet above. Defect (a) is paid in this commit: the lead sentence now
+        states the live single-clause test, `if residual_option is not None:`. Recorded here rather
+        than silently re-ticked, because a caught error is the thing this card exists to preserve.
+      - **Sub-item 2 (`_assigns` discard paragraph) — closed, no text change needed.**
+        Independently re-read against `classify-git-command.py`: `classify()` binds `assigns` at
+        its loop header and passes it straight to `segment_facts()`; the only surviving `_assigns`
+        is a different, inner loop inside `relex_hit()`. The orchestrator's reading was correct.
+      - **Sub-item 3 (bare `` `:NNN` `` citations) — closed. User's decision, 2026-08-29: convert
+        them.** Reasoning recorded here so a later sweep does not reopen it: "leave them as
+        anaphora" was defensible only while the targets were stable, and every one has moved.
+        - Re-ran the enumeration independently, `(?<![\w./]):(\d{2,4})(?:-(\d{1,4}))?\b` over the
+          file at branch base: **76 total hits, 18 range forms** — agrees with the figure this task
+          was briefed with.
+        - Converted 13 live-use citation instances, each fragment checked with
+          `grep -cF '<fragment>'` against the file actually being cited: `` `:62-63` `` (2 sites,
+          `shell_segments.py`'s denylist sentence), `` `:60-62` ``
+          (1 site, `shell_segments.py`'s `eval` sentence), `` `:229-232` `` (1 site,
+          `classify-git-command.py`'s own "collected BEFORE the SCOPE_UNKNOWN `continue`" docstring
+          line — not the `BRANCH_MOVE_ALWAYS` code either number this citation has ever carried
+          pointed at), `` `:778` ``+`` `:1832` `` (1 combined site), `` `:1438` `` (1 site),
+          `` `:1261` `` (2 sites), `` `:848` `` (1 site), `` `:788-789` `` (1 site), `` `:2494` ``
+          (1 site) — plus one citation **not in this task's given population**: `` `:136-142` `` in
+          task 11's DONE note ("the `doc-guard.sh` reader port is present at `:136-142`"). Still
+          accurate — `has_fact() {` is at that file's line 136, `while IFS= read -r f` at 138 — but
+          the same species, so converted for the same reason. Found only by re-running the
+          enumeration independently rather than trusting the given list.
+          ⚠️ **The claim that every fragment "confirmed to return exactly 1" was false, and stayed
+          false through this task's close — caught by a fresh observability-judge pass against
+          `0ae143d` (2026-08-30), re-measured independently here.** A card-internal citation —
+          one quoting a fragment that lives inside this same card, rather than in
+          `shell_segments.py`, `classify-git-command.py` or `doc-guard.sh` — **cannot** return 1
+          from `grep -cF '<fragment>' docs/features/worktree-location-guard.md`: the count sees
+          both the fragment's original target *and* the citing sentence that just quoted it, so 2
+          is the floor, not 1. Run against `0ae143d` (the commit that made the claim, so this
+          note's own prose cannot inflate the count): `` `:778` ``+`` `:1832` ``'s two fragments,
+          `` `:848` ``, `` `:788-789` `` and `` `:2494` `` each returned **2**; `` `:1261` ``'s
+          fragment returned **3**, because the list above already records it as cited from two
+          sites, not one; `` `:1438` ``'s fragment returned **1** by that literal single-line
+          command, which looks like agreement with the original claim but is a measurement
+          artifact, not evidence of uniqueness — its citing sentence wraps the fragment across two
+          source lines, and a single-line literal match cannot see across the wrap, so the command
+          silently missed a real second occurrence rather than confirming one.
+          The property that actually holds, and the one worth recording, is **each of these
+          fragments resolves to exactly one *target*** — take the raw `grep -cF` count (collapsing
+          line-wraps first, so `:1438`'s fragment is not undercounted), then subtract one for every
+          citing sentence that itself quotes the fragment, including mentions in audit notes like
+          this one and the "Disagreements" note below — the same mention-vs-use exclusion this
+          card's population-count convention already applies to line numbers. What remains is
+          always 1. **A future reader must not "fix" a card-internal fragment's count back down to
+          1 without that subtraction** — for **all seven** fragments enumerated above, 1 is the
+          target count and never the raw count. That includes `` `:1438` ``'s: its literal `1` is
+          the wrap artifact described above, not a raw count that happens to agree. ⚠️ This clause
+          read "for these six" until observability-judge round 2 (2026-08-30) caught it — a
+          miscount inside the paragraph written to stop miscounts. It is the **second** wrong count
+          this one property has produced *in this card*, after "confirmed to return exactly 1"
+          above; a third lived outside the card, where the orchestrator's brief to the implementer
+          asserted "eight card-internal fragments return 2" when its own printed table showed
+          **seven**, and the round-1 judge repeated that eight back without re-deriving it. The
+          implementer re-measured, disagreed, and was right. State the population, not just the
+          number — and re-derive an inherited count before repeating it.
+        - Left one citation unconverted, by judgment: the `` `:59-61` ``/`` `:60-62` `` pair in
+          derivation 3's "Verified line numbers 2026-08-25" sentence is a historical note about what
+          round 6's verdict cited versus what was measured, not a live navigational use — the two
+          bullets immediately below it already anchor clauses 3a/3b by quote, not by this sentence.
+          Same species as the excluded task-13/15/16 audit notes; left as-is.
+        - **Disagreements with this task's brief, found on independent re-derivation** (the brief's
+          own instruction: the re-run measurement governs where it differs):
+          - `` `:778` ``/`` `:1832` ``: neither of the two targets given ("next section measures." /
+            the "`-C` in an earlier segment" Scenario) supports the citing sentence's claim
+            ("boundary 12's deny must name `$d` while `SEG_CD` carries the sentinel
+            `UNRESOLVABLE`"). The real support is a single Gherkin scenario, `A cd whose operand
+            cannot be resolved`, stating both halves at once. Quoted that instead of either target.
+          - `` `:1261` ``: the given target ("extends that shape; it does not invent it.", the
+            "Prior art for the two-clause shape" paragraph) supports neither citing sentence ("in
+            addition and never in place" / "emitted in addition to it"). The real support is
+            derivation 1's own sentence, "emitted **in addition to** the existing
+            `SCOPE_UNKNOWN<tab>-C`, never in place of it." Quoted that at both use sites instead.
+          - `` `:848` ``: the given target (the "`cd` and `-C` are the only two redirects this rule
+            resolves" paragraph) does not support "`-C` does not carry to segment 1" — this
+            citation was always off-target, not merely drifted. The real support is the Worked
+            examples table row for `git -C /repos/other log && git switch main`. Quoted that.
+          - `` `:1438` ``: quoted the sentence enumerating the five elements themselves ("the
+            legitimate fixes, and a *narrow* closing claim", completing "what was blocked, why, the
+            current state that caused it…"), directly under `### Deny message contract` — not the
+            paragraph immediately preceding that heading, which the brief offered as one candidate;
+            that paragraph is about a boundary deny leaving the tree dirty, a different claim.
+          - `` `:788-789` ``: the brief judged this one "straightforward" — convert whatever text
+            currently sits at that anchor. Disagree: the citing sentence's own words, "requires the
+            indexed facts be collected *before* the `SCOPE_UNKNOWN` `continue`," are a near-verbatim
+            match for the `SEG_GIT_C` bullet's sentence, "This must be collected before the
+            `SCOPE_UNKNOWN` `continue`" — a materially better match than the text presently at that
+            line number, which is about a *different* `continue` (the git-only segment-skip guard,
+            not the `SCOPE_UNKNOWN` suppression). Quoted the `SEG_GIT_C` bullet's sentence instead.
+          - `` `:229-232` ``: confirmed the brief's finding — `classify-git-command.py` lines
+            225-236 are `BRANCH_MOVE_ALWAYS`, unrelated. The real support is that file's own
+            docstring sentence about collection order, quoted above.
+          - `` `:136-142` ``: not part of the population this task was briefed with at all (which
+            counted 5 Group-B use sites); this is a 6th, found only by re-running the recipe over
+            the whole file rather than trusting the given list.
+      - Frontmatter `branch:` had drifted to `docs/worktree-guard-citation-sweep`, the branch that
+        merged before this task opened — corrected to this task's own branch,
+        `docs/worktree-guard-task16-citations`.
+
+      **Floor, not a total — re-run the recipe, do not inherit any number stated here.** Checked
+      before writing this sentence, not assumed: running
+      `(?<![\w./]):(\d{2,4})(?:-(\d{1,4}))?\b` over this file *after* this commit does **not** show
+      76 minus the 13 converted. It shows **more** hits than the 76 measured at branch base, because
+      this close-out note itself is a fourth audit-note block that discusses the converted numbers
+      by name — the same species as the task-13/15/16 notes the exclusion rule already names, and
+      already accounted for by that rule's "audit notes for tasks 13 and 16" clause above. Simple
+      subtraction is the wrong instrument here; re-derive the live population with the semantic
+      exclusion (citations *in use* only, this note included among the excluded *mentions*), not
+      with arithmetic on a raw count.
+
+      **Re-run, task 16 continued (2026-08-30) — the floor kept rising, as predicted above.**
+      Running `(?<![\w./]):(\d{2,4})(?:-(\d{1,4}))?\b` independently at three points: at the
+      branch's own base, `8506bc6`, it returns **76 total, 18 range forms** — the same figure this
+      task was briefed with, now independently confirmed rather than inherited. At `0ae143d`
+      (this session's starting `HEAD`) it already returns **85 total, 23 range forms** — more than
+      76, for the reason the paragraph above already gives: `0ae143d`'s own close-out note is a
+      fourth audit-note block naming the converted numbers. After this commit's edits it returns
+      **more again**, for the identical reason one level deeper — this correction pass added its
+      own audit prose naming several of the same fragments and citations by their old `:NNN`
+      identity. **Do not subtract to find "how many were converted this round"** — the same warning
+      the paragraph above already gives, now confirmed to hold recursively: every commit that adds
+      an audit note about the citations raises the floor, and the note recording that fact becomes
+      one more audit note the next reader must also exclude. Re-run the recipe and apply the
+      semantic exclusion; do not diff two raw totals.
 
 ## Notes
 
