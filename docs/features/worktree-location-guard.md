@@ -5068,7 +5068,7 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
   repo's workflow, not a sample; they establish that the wider form breaks 2 shapes this workflow
   types constantly, and nothing about the rate at which it would break others.
 
-- [ ] 17. The recoverability promise six refusals make and have already broken. Opened 2026-08-30
+- [x] 17. The recoverability promise six refusals make and have already broken. Opened 2026-08-30
       under an explicit **GATE: Spec change needed** decision by the user (this card is
       `phase: implementation`; adding a task to it is a checklist edit).
 
@@ -5151,3 +5151,91 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
       ⚠️ **Not yet decided, deliberately left open:** whether the honest Group B/C wording should
       also name `WORKTREE_EXEMPT` as *not* applicable. It is measured not to help, but saying so
       in six places adds length to messages the card's Deny message contract already keeps narrow.
+
+      ### Done 2026-08-31 — `38f19ca` (RED) → `7775c29` (GREEN) → `1542311` (probe)
+
+      **Group A — reordered, not reworded (3 sites); the promise is now true.** Arm A's Step A6
+      exemption check runs as soon as the repo root resolves, ahead of `$HOME`, the version floor
+      and the submodule probe. `require_git()` was split into `require_git_present` and
+      `require_git_version`, and a `require_git()` wrapper is kept so Arms B2/D are untouched.
+
+      **Group B — reworded (3 sites), because the repo root is unknowable there.** Each now
+      carries `This refusal fires before the exemption list is reached, because the repository
+      that owns` / `this path could not be identified — settings.json is not exempt here`, then
+      the Bash-tool route. The exemption is **not** honoured by filename, as the fix specified.
+
+      **Group C — silence broken (3 messages).** `MSG_NO_PYTHON`, `MSG_NO_PAYLOAD` and
+      `MSG_NO_GIT` each end `This fires before the exemption list is reached — settings.json is
+      not exempt here; an edit through the Bash tool is the route to it in this state.`
+
+      **Sentence census, re-derived at both commits 2026-08-31.** Matched whitespace-normalized,
+      because the sentence hard-wraps and a raw `grep -F` misses `require_home()` — the blindness
+      this task's own enumeration hit on its first attempt, and the implementer hit a third time
+      while writing the Group B wording (its first draft wrapped, so the suite's `grep -F` missed
+      text that was present; caught by the RED/GREEN cycle, not by review).
+
+      | commit | old promise | honest replacement |
+      |--------|-------------|--------------------|
+      | `bb9c13a` (pre-fix)  | 9 | 0 |
+      | `1542311` (post-fix) | 6 | 6 |
+
+      The six survivors were located, not assumed: three are the Group A sites where the promise
+      is now true — `Fix the environment this session was launched with.`, `Install git >=` and
+      `Allowing on a failed probe would make every submodule test indistinguishable from a` —
+      and three were always true: `deny_arms()` (`Restore $LIB_DIR.`), `deny_probe()`
+      (`so an unusable probe denies instead of guessing`), and the primary-checkout deny.
+
+      **Post-fix probe table, measured 2026-08-31 — and so is the pre-fix half.** The pre-fix
+      column is not inherited from the table above: the *new* 28-row probe was run against the
+      *old* hook, by extracting `bb9c13a` into a throwaway repo and overwriting only
+      `hooks/worktree-guard.probe.sh` with `1542311`'s. Both columns are therefore the same 28
+      rows under the same fixture, which the recorded pre-fix table could not be — four of the
+      states it describes had no probe at all at that commit.
+
+      | state | exempt `settings.json` | non-exempt path | claim sentence |
+      |-------|------------------------|-----------------|----------------|
+      | `require_home()` — `$HOME` unset | rc **2 → 0** | rc 2 → 2 | now true, unchanged |
+      | `deny_version()` — git below floor | rc **2 → 0** | rc 2 → 2 | now true, unchanged |
+      | submodule probe failure | rc **2 → 0** | rc 2 → 2 | now true, unchanged |
+      | unrecognized `--show-toplevel` diagnostic | rc 2 → 2 | rc 2 → 2 | **replaced** |
+      | empty `--show-toplevel` | rc 2 → 2 | rc 2 → 2 | **replaced** |
+      | no enterable ancestor | rc 2 → 2 | rc 2 → 2 | **replaced** |
+      | `deny_arms()` — lib dir missing | rc 0 → 0 | rc 2 → 2 | unchanged |
+      | `MSG_NO_PYTHON` (E4) | rc 2 → 2 | rc 2 → 2 | added (invisible to the probe) |
+      | E0 control, E5 mistyped mode | rc 0 → 0 | rc 2 → 2 | unchanged |
+
+      **The safety property, measured over the whole table rather than spot-checked.** Diffing
+      all 28 rows pre against post: exactly **3 rc changes, every one of them `2 → 0`, and every
+      one on the exempt `settings.json` row** (the `$HOME`, version-floor and submodule-probe
+      states). **Zero rc changes on any non-exempt row**, and no non-exempt row moved in the
+      permissive direction. That is the property this task demanded of the reorder.
+
+      ⚠️ **The first script that derived those rc changes reported one, not three.** Its `awk`
+      split on whitespace, and the probe prints single-digit indices as `[ 4]` — the space inside
+      the brackets shifted every field, so only the two-digit `[25]` parsed. Re-derived with an
+      indexed regex. Noted because a *smaller* number of changes is the reassuring direction, and
+      nothing in the output looked wrong.
+
+      Nine rows changed `claim-printed` `yes → no`, and the two reasons differ: on the three
+      rc `2 → 0` rows there is no message at all any more because the write is *allowed*; on the
+      other six it is the Group B rewording, which replaced the sentence while the refusal stands.
+      Reading that column alone would conflate them.
+
+      ⚠️ **The probe is blind to Group C — but the suite is not.** The probe's `claim-printed`
+      column matches only the *old* sentence, so all three Group C rows print `no` both before and
+      after and a Group C regression would read there as clean. GROUP R covers the gap: `R7a`/`R7b`
+      (`MSG_NO_PYTHON`), `R8` (`MSG_NO_PAYLOAD`) and `R9a`/`R9b` (`MSG_NO_GIT`) each assert the
+      literal `settings.json is not exempt here`. So the check exists; it is in the suite, not the
+      probe, and the probe's column must not be read as evidence about the new wording.
+
+      **Suites re-run 2026-08-31, not inherited:** `hooks/worktree-guard.test.sh` **195/0/1** at
+      `bb9c13a` (measured from a clean extraction of that commit, not read from a prior note) →
+      **218/0/1** at `1542311`. GROUP R is `R1`–`R9`: `R1`–`R6` assert both halves — exempt and
+      non-exempt — of the six pre-A6 states, with `R4`/`R5`/`R6` additionally asserting the
+      reworded messages do *not* carry the old claim; `R7`–`R9` cover the three Group C messages.
+
+      ⚠️ **The `WORKTREE_EXEMPT` question left open above was resolved by omission, not by a
+      decision.** Neither the Group B nor the Group C wording names `WORKTREE_EXEMPT` as
+      inapplicable. That is the shorter option and it is consistent with the Deny message
+      contract, but nobody chose it — it is what the implementer shipped. Treat it as settled by
+      what shipped, or reopen it deliberately; do not read this paragraph as a decision record.
