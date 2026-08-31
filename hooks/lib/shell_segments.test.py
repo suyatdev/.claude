@@ -169,6 +169,18 @@ CASES = [
      [["echo", "hi"], ["#"] + GIT_COMMIT],
      "ACCEPTED fail-closed deviation: a ) closing a subshell is not treated as a word break"),
 
+    # (f) ANSI-C quoting, `$'...'`, where a backslash escapes a quote WITHOUT closing the
+    # string. Neither shlex nor this pre-pass models it, so the quote is read as closing one
+    # character early and the whole command becomes unparseable -- segments() then returns []
+    # and fails OPEN, the pre-existing behaviour its own docstring documents. Found by the
+    # observability judge, then reproduced and scoped by a differential fuzz over 5,216
+    # inputs: it is the ONLY shape in that population where this lexer sees fewer commands
+    # than the old one, and what it loses is always a harmless `echo` head -- the guarded
+    # command after the `;` was invisible to BOTH lexers, so no protection changed hands.
+    # Pinned so the fail-open is a recorded limit rather than a surprise.
+    ("echo $'a\\'#b'; git commit -m x -- foo.sh", [],
+     "$'...' with an escaped quote is unparseable: fail-OPEN, pre-existing, both lexers"),
+
     # --- REGRESSION: behaviour that already worked and the fix must preserve ---
     ("git push && gh pr create", [["git", "push"], ["gh", "pr", "create"]], "chained &&"),
     ("git push&&gh pr create", [["git", "push"], ["gh", "pr", "create"]], "unspaced &&"),

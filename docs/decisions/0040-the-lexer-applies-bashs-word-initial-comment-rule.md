@@ -98,12 +98,41 @@ pinned from **both** sides in the suite — as an expected token list, and as an
 *disagreement* with the shell in `check_bash_fidelity()` — so it cannot widen, or silently
 reverse, without a test failing.
 
-### Direction of every change
+### Direction of every change — measured, and the first version of this claim was too strong
 
-On every input measured, the new lexer emits the same tokens or **more** — never fewer. More
-tokens means more segments reach a command position, which means more guard matches. Relative
-to today's behaviour the change is fail-closed by construction; the false-positive risk it
-introduces is bounded by the word-initial rule, which is bash's own.
+An earlier revision of this ADR said "on every input measured the new lexer emits the same
+tokens or **more** — never fewer". That is a universal, and it is **false**. A differential
+fuzz over **5,216 inputs** (`/tmp/judge_differential_fuzz.py`, built from guard-relevant
+fragments) compares the set of segment `argv[0]`s — what a guard actually keys on — under both
+lexers:
+
+| | count |
+|---|---|
+| new lexer sees strictly more commands | 1,537 |
+| identical | 3,149 |
+| **new lexer loses a command the old one saw** | **530** |
+
+All 530 are **one shape**, and the loss is always the same harmless token:
+
+```
+echo $'a\'#b'; git commit -m x -- foo.sh
+   old  argv[0]s: ['echo']      new: []        lost: ['echo']
+```
+
+`$'…'` is bash's ANSI-C quoting, where a backslash escapes a quote **without** closing the
+string. Neither shlex nor this pre-pass models that form, so the quote reads as closing one
+character early, the command becomes unparseable, and `segments()` returns `[]` — the
+pre-existing fail-open its own docstring documents. **The guarded `git commit` after the `;` is
+invisible to both lexers**, so no protection changes hands; what is lost is a benign `echo`
+head. Found by the observability judge in round 1 by direct attack, then reproduced and scoped
+here.
+
+The claim that survives measurement is therefore the narrower one: **in that population, no
+guarded command that the old lexer surfaced is lost, and 1,537 inputs surface one the old lexer
+hid.** It is scoped to the population — the first fuzz run, whose case list had no `$'…'`
+prefix, reported 0 losses and was wrong in exactly the way a clean number is most convincing.
+The shape is pinned as a case in the suite and disclosed as a Known-gaps row in
+`docs/features/secret-command-guard.md`.
 
 ## Consequences
 

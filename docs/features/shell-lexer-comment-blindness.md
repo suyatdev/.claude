@@ -174,7 +174,14 @@ the fail-closed direction**. Measured, and pinned from both sides in the suite:
 | `echo $(echo x)#y; git commit …` | `[['echo','$'],['echo','x']]` 🔴 commit hidden | commit visible |
 | `(echo hi)# git commit …` | `[['echo','hi']]` 🔴 commit hidden | `[['echo','hi'],['#','git','commit',…]]` — visible, and bash would not have run it |
 
-On every input measured the new lexer emits the same tokens or **more**, never fewer.
+**A stronger version of this sentence was written here first and was false.** It read "on every
+input measured the new lexer emits the same tokens or more, never fewer". A differential fuzz
+over 5,216 guard-relevant inputs found **530 losses**, all one shape — `$'…'` ANSI-C quoting,
+where a backslash escapes a quote without closing it, so the command becomes unparseable and
+`segments()` fails open as it already did. The lost token is always a harmless `echo`; the
+guarded command in that shape is invisible to **both** lexers. What measurement supports is
+narrower: in that population, **no guarded command the old lexer surfaced is lost**, and 1,537
+inputs surface one the old lexer hid. Detail and the falsification: ADR 0040.
 
 ## Blast radius — why this is not a one-line drive-by
 
@@ -256,6 +263,35 @@ cases above, not only the exploit shapes.
       whitespace) *do* differ, as does `cat .env` from `cat .env#`. There is no
       separate `secret_approval` suite; its end-to-end grant/spend sequence
       lives in `hooks/secret-command-guard.test.sh`, which is green at 163/0.
+
+## Observability judge
+
+| Round | HEAD | Verdict | What it found |
+| --- | --- | --- | --- |
+| 1 | `f72e0bf` | `risk=medium`, `confidence=high` | Independently re-ran all 22 suites (counts matched), hit the live hook with the three headline commands, and **mutated the lexer twice to confirm `check_bash_fidelity()` actually fires** rather than passing vacuously. Found one undisclosed shape by direct attack: `$'…'` ANSI-C quoting, where a backslash escapes a quote without closing the string. Verified here before acting on it — the finding is real, and its "pre-existing, no protection lost" framing is correct. Acted on: pinned as a suite case, disclosed as a Known-gaps row, and it falsified a universal in ADR 0040 (below). |
+
+### The judge's finding, reproduced and scoped
+
+`$'…'` is bash's ANSI-C quoting. Neither `shlex` nor the new pre-pass models it, so the
+escaped quote reads as closing the string one character early, the command becomes
+unparseable, and `segments()` returns `[]` — the fail-open its own docstring documents.
+Measured against **both** lexers: identical, so it is pre-existing.
+
+Chasing it produced a second, larger correction. ADR 0040 had claimed "on every input
+measured the new lexer emits the same tokens or more, never fewer". A differential fuzz over
+guard-relevant fragments (`/tmp/judge_differential_fuzz.py`) compares the set of segment
+`argv[0]`s under both lexers:
+
+| Run | population | more | identical | **loses a command** |
+|---|---|---|---|---|
+| first | 4,960 | 1,796 | 3,164 | **0** |
+| after adding `$'…'` prefixes | 5,216 | 1,537 | 3,149 | **530** |
+
+The first run's clean zero was an artefact of its **case list**, not a property of the code —
+the population had no `$'…'` shape in it. All 530 losses are that one shape, and the lost
+token is always a harmless `echo`; the guarded command in it is invisible to both lexers. The
+surviving claim is the narrow one: *in that population, no guarded command the old lexer
+surfaced is lost.*
 
 ## Task 6 — every consumer re-run, before and after
 
