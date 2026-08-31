@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: docs/worktree-guard-task16-citations
+branch: fix/worktree-guard-refusal-messages
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
@@ -5067,3 +5067,87 @@ Two things the fix deliberately did **not** do, so neither reads as settled:
 - It did not claim the populations are representative. They are shapes chosen by hand from this
   repo's workflow, not a sample; they establish that the wider form breaks 2 shapes this workflow
   types constantly, and nothing about the rate at which it would break others.
+
+- [ ] 17. The recoverability promise six refusals make and have already broken. Opened 2026-08-30
+      under an explicit **GATE: Spec change needed** decision by the user (this card is
+      `phase: implementation`; adding a task to it is a checklist edit).
+
+      **The promise.** Nine refusal messages in `hooks/worktree-guard.sh` carry the sentence
+      *"settings.json is exempt from this guard, so the hook registration and its
+      WORKTREE_GUARD_MODE switch stay editable."* It is not decoration — it is the guard's stated
+      recoverability contract, the reason a session that has been refused knows it can still reach
+      the switch that disarms the guard. Task 13's note recorded that **two** of them fire before
+      Step A6 consults the exemption list and so break the promise.
+
+      **The population is six, not two.** The earlier count came from probing the two states
+      someone thought to construct. Enumerated 2026-08-30 by matching the claim sentence against
+      **whitespace-normalized** file text — the sentence hard-wraps, and a raw `grep -F` misses
+      `require_home()` and `deny_arms()` entirely (recorded in `worktree-guard.probe.sh`'s header
+      as a past defect; reproduced again on the first attempt of this enumeration). Nine
+      occurrences; the Step A6 `settings.json) exit 0` arm sits between them.
+
+      Every row below was **measured, not read** — `Write` of the repo-root `settings.json`, the
+      genuinely exempt file, into a primary checkout with `WORKTREE_GUARD_MODE=deny`:
+
+      | site | precondition that fires it | rc | claim printed | verdict |
+      |------|----------------------------|----|---------------|---------|
+      | `require_home()` | `$HOME` unset or empty | 2 | yes | **false** |
+      | `deny_version()` | git below the 2.31 floor | 2 | yes | **false** |
+      | no-enterable-ancestor | repo root not enterable, cwd elsewhere | 2 | yes | **false** |
+      | unrecognized diagnostic | `--show-toplevel` says something new | 2 | yes | **false** |
+      | empty `--show-toplevel` | exits 0, prints nothing | 2 | yes | **false** |
+      | submodule probe failure | `--show-superproject-working-tree` non-zero | 2 | yes | **false** |
+      | `deny_arms()` | lib dir missing | 0 | — | true (Bash-only; a `Write` never reaches it) |
+      | `deny_probe()` | `--path-format=absolute` unusable | — | yes | true (runs after A6) |
+      | the primary-checkout deny | the guard's real refusal | — | yes | true (runs after A6) |
+
+      The last four rows of the first group were never probed by anything before this task. Two of
+      them need a `git` shim that bends one `rev-parse` subcommand; the ancestor row needs only
+      `chmod 000` on the repo root with the session's cwd elsewhere.
+
+      **A separate, third species: three messages block `settings.json` and say nothing at all
+      about it** — `MSG_NO_PYTHON` (measured: rc=2, claim absent), `MSG_NO_PAYLOAD` and
+      `MSG_NO_GIT`, all reached through `hard_deny()` or before the root is knowable. Silence is
+      not a false claim, but it leaves a refused session with no route stated at the one moment it
+      needs one.
+
+      **The escape hatch that does work, and which no message names.** This guard reads only
+      `Edit`/`Write`/`NotebookEdit` payloads. A `settings.json` edit made **through the Bash tool**
+      is outside its surface in every one of the six states. `WORKTREE_EXEMPT` is **not** that
+      hatch — measured rc=2 in both the `$HOME` and version-floor states, because those refusals
+      fire before the bypass is consulted.
+
+      **The fix, split by what the guard can know** (user decision, 2026-08-30 — "do both"):
+
+      - **Group A — make the promise true (3 sites), by reordering, not rewording.** Where the
+        repository that owns the path is knowable, Step A6 should run before the refusal.
+        - Move the Step A6 exemption check to immediately after the repo root resolves, ahead of
+          the submodule probe. That alone makes **submodule probe failure** true.
+        - Split `require_git()` into a presence check (needed before any `git` call) and the
+          **version floor**, and move the floor to just before Step A7 — the floor exists only for
+          `--path-format=absolute`, and `--show-toplevel` long predates 2.31. That makes
+          **`deny_version()`** true.
+        - Move `require_home()` to after the exemption check. Verified 2026-08-30 that Arm A needs
+          `$HOME` nowhere else: `hooks/worktree-guard.sh` uses it only in `require_home()` itself
+          and in `STATE_DIR`'s `${HOME:-}` default; the worktree store path
+          `"${HOME%/}/$STORE_REL/$repo_name"` lives in `hooks/lib/worktree_guard_bash_arms.sh`,
+          i.e. Arms B2/D only, and Arm A's deny message writes a literal `~/.worktrees/`. That
+          makes **`require_home()`** true.
+      - **Group B — tell the truth (3 sites).** For no-enterable-ancestor, the unrecognized
+        diagnostic, and the empty `--show-toplevel`, the repo root is *by construction* unknowable,
+        so the exemption cannot be evaluated at all. Rewording is the only honest option: state
+        that this refusal fires before the exemption list is reached, and name the Bash-tool route.
+        **Do not** honour the exemption by filename here — matching `settings.json` without a
+        repo root would exempt every repository's copy, including ones this guard should watch.
+      - **Group C — break the silence (3 messages).** Give `MSG_NO_PYTHON`, `MSG_NO_PAYLOAD` and
+        `MSG_NO_GIT` the same honest sentence Group B gets.
+
+      **The safety property the tests must pin.** The reorder may only convert refusals into
+      allows **for paths on the exemption list**. For every non-exempt path, the outcome in every
+      one of these states must be byte-identical to the pre-change behaviour. A reorder inside a
+      guard is exactly the change that can go silently permissive, so the suite must assert the
+      non-exempt half of each state, not only the exempt half.
+
+      ⚠️ **Not yet decided, deliberately left open:** whether the honest Group B/C wording should
+      also name `WORKTREE_EXEMPT` as *not* applicable. It is measured not to help, but saying so
+      in six places adds length to messages the card's Deny message contract already keeps narrow.
