@@ -1009,10 +1009,24 @@ may claim otherwise.
       carried forward: for a wrapper-word refusal, the generic advice "remove what the
       reason above names" names nothing actionable, since a wrapper refusal is not a
       reason-character refusal -- pre-existing, not touched by round 8 or 9. And
-      `rules/gates.md` has grown by roughly 2,081 words (1,691 to 3,772, measured by
-      `wc -w` against this branch's merge-base with `main`) across this branch's rounds,
-      entirely inside the Secret-command-guard / Secret-gate-override bullet -- deferred
-      to the user as its own change, not touched here.
+      `rules/gates.md` has grown by **489 words** (3,274 to 3,763) across this branch's
+      rounds, entirely inside the Secret-command-guard / Secret-gate-override bullet --
+      deferred to the user as its own change, not touched here.
+
+      ⚠️ **Correction, same day, to the round-9 implementer's figure and to the sentence
+      it replaced.** The round-9 implementer reported this growth as "roughly 2,081 words
+      (1,691 to 3,772)" and offered it as a correction to the observability judge's
+      ~491, which it called "off by more than 4x". Re-measured by the main agent: **the
+      judge was right and the correction was wrong.** The implementer took its baseline
+      from **local `main`** (merge-base `fd552e9`, where `rules/gates.md` is 1,690 words),
+      which is stale -- this branch already merged `origin/main` at `92e087c`. Against
+      the deciding ref, `origin/main`, the merge-base is `92e087c` and the file is 3,274
+      words there; HEAD is 3,763. Delta **+489**, matching the judge's ~491 to within
+      tokenizer noise. Measured with `len(git show <ref>:rules/gates.md .split())` for
+      both `main` and `origin/main`, printed side by side so the two baselines could not
+      be confused again. The lesson is the one this repo has recorded before: a "next
+      free number" or a "growth since main" check must be run against the ref that
+      actually decides, never a stale local branch.
 
 ## Decisions taken — user-confirmed 2026-08-28
 
