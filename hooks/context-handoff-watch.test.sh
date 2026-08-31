@@ -19,6 +19,7 @@ export HOME="$TMP"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >> "%s/dispatch-calls"\n' "$TMP" > "$PANE_DISPATCH"
 chmod 700 "$PANE_DISPATCH"
 unset CLAUDE_PANE_AGENT
+unset HANDOFF_PANE_MODE
 
 transcript() { # $1 path, $2 input, $3 cache_creation, $4 cache_read, [$5 model] — plus noise
   local model_field=""
