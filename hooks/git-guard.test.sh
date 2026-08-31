@@ -823,6 +823,46 @@ run_case "defect table row (a): -c k=v -> ask"             0 'git -c k=v commit 
 assert_stdout "$REPO" "  ...row (a) -c k=v: ask JSON present" 'git -c k=v commit -m x' '"permissionDecision":"ask"'
 
 # ---------------------------------------------------------------------------
+# SEG_UNPARSED — a command the lexer cannot read at all must be REFUSED.
+#
+# This guard's own header already says it "fails CLOSED (exit 2) when it cannot
+# inspect the command at all -- no python3, or an unrunnable classifier". A
+# command that lexes to nothing is the same condition reached by a third route,
+# and until 2026-08-31 it was the one route that fell through to allow: an empty
+# fact set reads as "no commit here", and an absent fact is not safety.
+# worktree-guard.sh has always refused on this fact; these two now agree.
+#
+# Found by the observability judge (round 3) as a REGRESSION on this branch:
+# the old lexer's comment bug truncated a command at a mid-word `#`, throwing
+# away an unbalanced quote that followed and leaving something parseable behind.
+# Fixing the comment rule removed that accident, so commands that used to
+# classify as COMMIT/PUSH_FORCE started classifying as SEG_UNPARSED and were
+# allowed. But the hole itself is OLDER than the accident -- the last control
+# below is unparseable with no `#` involved at all, and was allowed on
+# origin/main too. Rows measured 2026-08-31 against origin/main and this HEAD.
+# ---------------------------------------------------------------------------
+on_branch main
+stage src/app.sh
+
+run_case "unparseable: ANSI-C quote hiding a commit -> block"  2 "git commit -m \$'a\\'#b' -- foo.sh"
+run_case "unparseable: ANSI-C quote hiding a force push -> block" 2 "git push --force \$'a\\'#b'"
+run_case "unparseable: unbalanced single quote after # -> block" 2 "git commit -m x#'unbalanced -- foo.sh"
+run_case "unparseable: unbalanced double quote after # -> block" 2 'git commit -m x#"unbalanced -- foo.sh'
+run_case "unparseable: unbalanced quote, NO # at all -> block"  2 "git commit -m 'unbalanced -- foo.sh"
+
+# The refusal must be attributable, not a silent 2 that looks like the commit
+# guard firing. A message naming the wrong reason is how a guard teaches the
+# next reader something false.
+assert_stderr "$REPO" "  ...the refusal says it could not lex the command" \
+  "git commit -m 'unbalanced -- foo.sh" 'cannot be lexed'
+
+# CONTROLS. Without these a blanket "block everything" stub passes every row above.
+run_case "control: parseable commit on main still blocks"      2 'git commit -m msg'
+run_case "control: parseable unrelated command still allows"   0 'ls -la'
+run_case "control: an apostrophe inside double quotes parses"  0 'echo "don'"'"'t"'
+run_case "control: a quoted # is not a comment and still parses" 0 "echo 'hi#'"
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }

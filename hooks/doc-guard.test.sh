@@ -221,6 +221,18 @@ run_case "SEG_ENV rides along, commit still judged -> block"  2 'GIT_AUTHOR_NAME
 stage src/f1.sh src/f2.sh src/f3.sh
 run_case "SEG_OPAQUE rides along, no commit fact -> allow"    0 'timeout 5 git commit -m msg'
 
+# SEG_UNPARSED — this guard DELIBERATELY still allows, and that is a decision, not an
+# oversight. The observability judge (round 3, 2026-08-31) proposed making both this guard
+# and git-guard.sh refuse a command the lexer cannot read. git-guard.sh now does, because
+# its own header already commits it to failing closed when it cannot inspect a command.
+# This one says the opposite in two places -- "it fails OPEN (missing note) rather than
+# block legitimate work" -- and reversing a documented decision was not what the change was
+# for. The harm the judge found (an unreviewable commit reaching main, a force push) is
+# git-guard's to refuse and now is refused there; what stays open here is a missing
+# documentation note, which is exactly what this guard's policy says is not worth blocking
+# work over. Pinned so the choice is visible rather than merely absent.
+run_case "SEG_UNPARSED -> allow, deliberately (see git-guard)" 0 "git commit -m 'unbalanced"
+
 # ---------------------------------------------------------------------------
 printf '\ndoc-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
