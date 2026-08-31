@@ -876,12 +876,16 @@ may claim otherwise.
          one at a time, and re-running the suite) showed deleting the redirection-specific
          check left the suite at 140 passed / 0 failed -- no assertion discriminated it
          from `accounts_for_every_token()`'s generic backstop. Root cause: the wrapper
-         script (`hooks/secret-command-guard.sh`) appends a fixed boilerplate line whenever
-         *any* `unapprovable_reason()` check fires -- "seek approval for the plain command
-         without the redirection or wrapper word" -- which contains the literal word
+         script (`hooks/secret-command-guard.sh`) appended a fixed boilerplate line whenever
+         *any* `unapprovable_reason()` check fired -- "seek approval for the plain command
+         without the redirection or wrapper word" -- which contained the literal word
          "redirect" regardless of which check actually produced the refusal, so a
          `run_case_*_msg` assertion grepping the hook's full stderr could never tell them
-         apart. The same shadowing applied to the mislabeled test below.
+         apart. The same shadowing applied to the mislabeled test below. `cbee532` reworded
+         that boilerplate line to "change the command to remove what the reason above
+         names", which no longer contains "redirect" -- the shadowing this describes is
+         closed at the message level too, on top of the test's own fix (calling
+         `secret_approval.py id` directly instead of grepping the wrapper's stderr).
       6. **A mislabeled test.** The assertion named "...and the reason names the
          instability" (input `time cat .env`) matched only because the BACKSTOP's generic
          message happens to contain the word "wrapper" -- the instability check had no
