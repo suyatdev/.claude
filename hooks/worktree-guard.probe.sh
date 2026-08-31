@@ -159,8 +159,44 @@ run() { # $1 label, $2 payload, $3.. env assignments (HOME=@UNSET drops HOME)
     "$n" "$rc" "$claim" "$label" "${first:0:74}"
 }
 
+# task 17, judge round 1: MSG_NO_PYTHON claimed "an edit through the Bash tool is the
+# route to it in this state", but hard_deny fires in step 1, before tool_name is parsed —
+# a Bash payload is refused exactly like a Write. $CLAIM above is blind to this: none of
+# the three Group C messages ever carried IT, so every E4 row already read claim-printed=no
+# on both the broken wording and the fixed one, and a regression here would not surface.
+# bash-route-claimed is the column that can actually see it.
+BASH_ROUTE_CLAIM='an edit through the Bash tool is the route to it in this state'
+
+run_bash_route() { # same as run() above, plus a bash-route-claimed column
+  local label="$1" payload="$2"; shift 2
+  n=$((n+1))
+  local errf="$TMP/err.$n" outf="$TMP/out.$n"
+  local -a envv=(WORKTREE_GUARD_STATE_DIR="$STATE_DIR" WORKTREE_GUARD_MODE=deny)
+  local -a unsets=() a
+  local drop_home=0
+  for a in "$@"; do
+    case "$a" in
+      HOME=@UNSET) drop_home=1; unsets+=(-u HOME) ;;
+      *) envv+=("$a") ;;
+    esac
+  done
+  [ "$drop_home" = 0 ] && envv+=(HOME="$HOME_FIX")
+  ( cd "$PRIMARY" && printf '%s' "$payload" |
+      env ${unsets[@]+"${unsets[@]}"} "${envv[@]}" bash "$HOOK" ) >"$outf" 2>"$errf"
+  local rc=$?
+  local claim=no bash_route=no
+  tr '\n' ' ' < "$errf" | tr -s ' ' | grep -qF -- "$CLAIM" && claim=yes
+  tr '\n' ' ' < "$errf" | tr -s ' ' | grep -qF -- "$BASH_ROUTE_CLAIM" && bash_route=yes
+  local first; first=$(head -1 "$errf")
+  [ -z "$first" ] && first='(no stderr)'
+  first=${first#worktree-guard: }
+  printf '  [%2d] rc=%-2s claim-printed=%-3s bash-route-claimed=%-3s  %-30s  %s\n' \
+    "$n" "$rc" "$claim" "$bash_route" "$label" "${first:0:74}"
+}
+
 printf 'worktree-guard.probe.sh — mode=deny, cwd=%s (a PRIMARY checkout)\n' "$PRIMARY"
-printf 'claim-printed = the refusal text contains "%s"\n\n' "$CLAIM"
+printf 'claim-printed = the refusal text contains "%s"\n' "$CLAIM"
+printf 'bash-route-claimed (E4 only) = the refusal text contains "%s"\n\n' "$BASH_ROUTE_CLAIM"
 
 W_EXEMPT="$(payload_write "$PRIMARY/settings.json")"
 W_GUARDED="$(payload_write "$PRIMARY/panes/run-pane-agent.sh")"
@@ -201,8 +237,9 @@ printf '\n'
 
 NOPY="$(mk_shadow_path nopy python3 python)"
 printf 'E4 python3 and python shadowed — the recipe the card USED to cite for E1/E2/E3\n'
-run 'Write settings.json (exempt)'   "$W_EXEMPT"   PATH="$NOPY"
-run 'Write panes/... (guarded)'      "$W_GUARDED"  PATH="$NOPY"
+run_bash_route 'Write settings.json (exempt)'   "$W_EXEMPT"   PATH="$NOPY"
+run_bash_route 'Write panes/... (guarded)'      "$W_GUARDED"  PATH="$NOPY"
+run_bash_route 'Bash: git switch main'          "$B_SWITCH"   PATH="$NOPY"
 printf '\n'
 
 printf 'E5 a mistyped WORKTREE_GUARD_MODE — the cross that 189 green tests missed\n'
