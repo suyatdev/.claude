@@ -275,23 +275,41 @@ cases above, not only the exploit shapes.
 `$'…'` is bash's ANSI-C quoting. Neither `shlex` nor the new pre-pass models it, so the
 escaped quote reads as closing the string one character early, the command becomes
 unparseable, and `segments()` returns `[]` — the fail-open its own docstring documents.
-Measured against **both** lexers: identical, so it is pre-existing.
+**"Identical" is the wrong word, and this sentence said it in an earlier revision** — caught
+by the judge in round 2. The two lexers' raw output for this shape *differs*
+(`[['echo', '$a\\']]` old, `[]` new), and the fuzz table below says so in the same document
+ten lines later. What is identical is the only thing that matters to a guard: **the guarded
+command after the `;` is invisible to both**, and the hook's verdict is ALLOW either way. So
+the gap is pre-existing and no protection changes hands — but it is pre-existing *in the
+guard's verdict*, not in the token stream.
 
 Chasing it produced a second, larger correction. ADR 0040 had claimed "on every input
 measured the new lexer emits the same tokens or more, never fewer". A differential fuzz over
 guard-relevant fragments (`/tmp/judge_differential_fuzz.py`) compares the set of segment
 `argv[0]`s under both lexers:
 
-| Run | population | more | identical | **loses a command** |
-|---|---|---|---|---|
-| first | 4,960 | 1,796 | 3,164 | **0** |
-| after adding `$'…'` prefixes | 5,216 | 1,537 | 3,149 | **530** |
+| Run | population | more | identical | loses a head | **loses a GUARDED head** |
+|---|---|---|---|---|---|
+| 1 | 4,960 | 1,796 | 3,164 | **0** | 0 |
+| 2 — added `$'…'` prefixes | 5,216 | 1,537 | 3,149 | **530** | 0 |
+| 3 — added `$(( ))`, `<( )`, hex/octal `$'…'`, `${V#pfx}` seeds (judge round 2) | 5,984 | 2,348 | 3,054 | **582** | **0** |
 
-The first run's clean zero was an artefact of its **case list**, not a property of the code —
-the population had no `$'…'` shape in it. All 530 losses are that one shape, and the lost
-token is always a harmless `echo`; the guarded command in it is invisible to both lexers. The
-surviving claim is the narrow one: *in that population, no guarded command the old lexer
-surfaced is lost.*
+Run 1's clean zero was an artefact of its **case list**, not a property of the code — the
+population had no `$'…'` shape in it. Run 3 then showed that the raw loss count is itself the
+wrong metric: it counts a *garbage* head vanishing as a loss. Partitioned by whether the lost
+token is a command any guard keys on (`/tmp/judge_fuzz_partition.py`), all 582 fall into two
+buckets and **neither is a command**:
+
+- `echo` × 394 — the `$'…'` shape above.
+- `1` × 188 — `$((1#2))`, bash's *arithmetic base* notation. The old lexer commented at that
+  `#` and left a bare `1` standing at a segment's argv[0]; the new one keeps `1#2` as one
+  token. In every one of those 188 rows the new lexer *also* surfaces guarded commands
+  (`git`, `gh`, `cat`, `curl`) that the old one hid — a strict improvement that the naive
+  metric scored as a regression.
+
+**Zero losses of a guarded head across all three runs.** That is the claim, and it is scoped
+to a hand-built population — run 1 is the standing proof that a clean number from this method
+means "no counterexample in *this* case list", never "no counterexample".
 
 ## Task 6 — every consumer re-run, before and after
 

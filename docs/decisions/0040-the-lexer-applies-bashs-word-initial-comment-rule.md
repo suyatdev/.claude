@@ -110,7 +110,8 @@ lexers:
 |---|---|
 | new lexer sees strictly more commands | 1,537 |
 | identical | 3,149 |
-| **new lexer loses a command the old one saw** | **530** |
+| new lexer loses a head the old one saw | 530 |
+| **of those, a head any guard keys on** | **0** |
 
 All 530 are **one shape**, and the loss is always the same harmless token:
 
@@ -133,6 +134,13 @@ hid.** It is scoped to the population — the first fuzz run, whose case list ha
 prefix, reported 0 losses and was wrong in exactly the way a clean number is most convincing.
 The shape is pinned as a case in the suite and disclosed as a Known-gaps row in
 `docs/features/secret-command-guard.md`.
+
+A third run (5,984 cases, seeded with `$(( ))`, `<( )` and hex/octal `$'…'` forms at the
+judge's suggestion) raises the raw loss count to 582 and leaves the guarded-head count at
+**0**. It also shows the raw count is the wrong metric: 188 of those "losses" are the bare
+`1` from `$((1#2))`, bash's arithmetic *base* notation, which the old lexer produced only by
+commenting mid-token — and in all 188 the new lexer additionally surfaces guarded commands the
+old one hid. Per-run figures and the partition: `docs/features/shell-lexer-comment-blindness.md`.
 
 ## Consequences
 
