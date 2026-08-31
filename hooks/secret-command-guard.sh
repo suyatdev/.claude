@@ -173,14 +173,14 @@ if [ -n "$approval_id" ]; then
   printf '\nIf the user has inspected THIS EXACT COMMAND and typed the literal phrase `secret-gate override`,\n' >&2
   printf 'record that and re-run once:\n' >&2
   printf '  %s %s grant %s\n' "$py" "$APPROVAL_LIB" "$approval_id" >&2
-  printf '  SECRET_EXEMPT=<reason> <the same command>\n' >&2
+  printf '  SECRET_EXEMPT=<one-word-reason> <the same command>   (letters, digits, . _ , : / - only)\n' >&2
   printf 'The approval covers one run of this one command and is deleted on first use.\n' >&2
   printf 'It is written from inside this session, so it records that an approval was claimed -- it does not prove\n' >&2
   printf 'one was given. The typed phrase is the control; this file is only a speed bump. Do not grant it yourself.\n' >&2
 elif [ "$approval_why" != broken ] && [ -n "$approval_why" ]; then
   printf '\nThis command cannot be approved through the override path: %s.\n' "$approval_why" >&2
-  printf 'Ask the user for the value out of band, or seek approval for the plain command without the\n' >&2
-  printf 'redirection or wrapper word and run that one.\n' >&2
+  printf 'Ask the user for the value out of band, or change the command to remove what the reason\n' >&2
+  printf 'above names, then seek approval for that.\n' >&2
 else
   printf '\nThe override path is unavailable: hooks/lib/secret_approval.py is missing or broken, so no exemption\n' >&2
   printf 'can be verified. The block above still stands. Ask the user for the value out of band.\n' >&2

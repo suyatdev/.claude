@@ -924,12 +924,20 @@ may claim otherwise.
 
       `grant()` for the plain form, then submit the backtick form: **allowed, and the
       grant was consumed** -- an approval for `cat .env` cleared a command that
-      exfiltrates it. The `$( )` form of the same idea is refused today, but only by
-      accident: `unapprovable_reason()`'s multi-segment check fires because shlex splits
-      on the parens, not because anything inspected the value -- `is_approvable()` returns
-      `True` for the backtick form, and would for the `$( )` form too if that check were
-      ever removed or narrowed. **This is a refusal by accident, not a defence,** and
-      nothing in the pre-round-7 code or docs should be read as claiming otherwise.
+      exfiltrates it. PRE-round-7, the `$( )` form of the same idea was refused too, but
+      only by accident: `unapprovable_reason()`'s multi-segment check fired because shlex
+      split on the parens, not because anything inspected the value -- `is_approvable()`
+      returned `True` for the backtick form, and would have for the `$( )` form too if
+      that check were ever removed or narrowed. **That was a refusal by accident, not a
+      defence,** and nothing in the pre-round-7 code or docs should be read as claiming
+      otherwise.
+
+      **CORRECTION:** as of this round, the allowlist below refuses the `$( )` form
+      first and deliberately -- before the multi-segment check ever runs -- so the
+      refusal is no longer an accident (a suite assertion in this same commit pins
+      that: "ROUND 7: a `$( )` form is unapprovable for the SAME reason, not by
+      accident"). The paragraph above is kept as the historical record of why the fix
+      was needed, not as a description of the current behaviour.
 
       Fixed by allowlisting the value in `unapprovable_reason()` rather than denylisting
       dangerous characters: `^[A-Za-z0-9._,:/-]+$`, checked against the raw text
