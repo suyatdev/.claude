@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# worktree-guard.probe.sh — what worktree-guard.sh actually does in its four
+# worktree-guard.probe.sh — what worktree-guard.sh actually does in its
 # precondition failure states, measured rather than read off the source.
 #
-# WHY THIS EXISTS. Three of the guard's refusal messages tell the reader
-# "settings.json is exempt from this guard, so the hook registration and its
-# WORKTREE_GUARD_MODE switch stay editable." That sentence is a recoverability
-# promise: whatever else is broken, you can still reach the switch that turns the
-# guard off. Two of those refusals fire BEFORE the exemption list is consulted
-# (worktree-guard.sh, "Step A6: the exemption list"), so the promise is not
-# self-evidently true and had been recorded in the card from a recipe that never
-# reached the code it named — shadowing python3 exits at `hard_deny "$MSG_NO_PYTHON"`
-# in step 1, long before any of them. This script constructs each state on its own
-# and prints what happened, so the written record cites a run rather than a reading.
+# WHY THIS EXISTS. Nine of the guard's refusal messages either claimed, or were
+# silent about, "settings.json is exempt from this guard, so the hook
+# registration and its WORKTREE_GUARD_MODE switch stay editable." That sentence
+# is a recoverability promise: whatever else is broken, you can still reach the
+# switch that turns the guard off. Task 17 enumerated the population at six
+# sites firing before the exemption list is ever consulted (worktree-guard.sh,
+# Step A4 as of that task) — the two E1/E2 already measured below, plus E6-E9
+# added by that task: no enterable ancestor, an unrecognized --show-toplevel
+# diagnostic, an empty --show-toplevel, and a failed submodule probe. This
+# script constructs each state on its own and prints what happened, so the
+# written record cites a run rather than a reading.
 #
 # It is a PROBE, not a test: it asserts nothing and always exits 0 (unless the
 # fixture itself cannot be built). Read the table. The suite that does assert is
@@ -52,9 +53,12 @@ mkdir -p "$PRIMARY/hooks" "$PRIMARY/panes" "$PRIMARY/docs" "$PRIMARY/rules"
 
 # --- stubs ---------------------------------------------------------------------
 
-# A `git` shim ahead of the real one, bending only --version. Everything else is
-# handed straight through, so the too-old-git state differs from a healthy run in
-# exactly one probe.
+# A `git` shim ahead of the real one, bending --version and (task 17) three more
+# probes on their own knobs, each independent so a state bends exactly one thing:
+# STUB_TOPLEVEL_DIAG (an unrecognized --show-toplevel diagnostic, rc=128),
+# STUB_TOPLEVEL_EMPTY (--show-toplevel exits 0 printing nothing), STUB_SUPER_FAIL
+# (the submodule probe exits non-zero). Everything else is handed straight
+# through, so each state differs from a healthy run in exactly one probe.
 mk_git_stub() {
   mkdir -p "$TMP/stub"
   cat > "$TMP/stub/git" <<STUB
@@ -62,6 +66,17 @@ mk_git_stub() {
 if [ "\$1" = "--version" ] && [ -n "\${STUB_VERSION:-}" ]; then
   printf '%s\n' "\$STUB_VERSION"; exit 0
 fi
+for a in "\$@"; do
+  case "\$a" in
+    --show-toplevel)
+      [ -n "\${STUB_TOPLEVEL_DIAG:-}" ] && { printf '%s\n' "\$STUB_TOPLEVEL_DIAG" >&2; exit 128; }
+      [ "\${STUB_TOPLEVEL_EMPTY:-}" = 1 ] && exit 0
+      ;;
+    --show-superproject-working-tree)
+      [ "\${STUB_SUPER_FAIL:-}" = 1 ] && exit 1
+      ;;
+  esac
+done
 exec "$GIT_REAL" "\$@"
 STUB
   chmod +x "$TMP/stub/git"
@@ -194,6 +209,39 @@ printf 'E5 a mistyped WORKTREE_GUARD_MODE — the cross that 189 green tests mis
 run 'Write settings.json (exempt)'   "$W_EXEMPT"   WORKTREE_GUARD_MODE=DENY
 run 'Write panes/... (guarded)'      "$W_GUARDED"  WORKTREE_GUARD_MODE=DENY
 run 'Bash: git switch main'          "$B_SWITCH"   WORKTREE_GUARD_MODE=DENY
+printf '\n'
+
+# --- task 17: the four states no earlier probe reached -------------------------
+# E6-E8 reuse $GIT_STUB_PATH from E2 above — same stub file, three more knobs.
+# All four fire before the repository root is knowable, so — unlike E1/E2 — a
+# fixed guard must show claim-printed=no on BOTH rows, exempt and guarded alike;
+# there is no repo root to relativize $W_EXEMPT's path against.
+
+printf 'E6 git --show-toplevel emits an unrecognized diagnostic\n'
+run 'Write settings.json (exempt)'   "$W_EXEMPT"   PATH="$GIT_STUB_PATH" \
+  STUB_TOPLEVEL_DIAG='fatal: detected dubious ownership'
+run 'Write panes/... (guarded)'      "$W_GUARDED"  PATH="$GIT_STUB_PATH" \
+  STUB_TOPLEVEL_DIAG='fatal: detected dubious ownership'
+printf '\n'
+
+printf 'E7 git --show-toplevel exits 0 and prints nothing\n'
+run 'Write settings.json (exempt)'   "$W_EXEMPT"   PATH="$GIT_STUB_PATH" STUB_TOPLEVEL_EMPTY=1
+run 'Write panes/... (guarded)'      "$W_GUARDED"  PATH="$GIT_STUB_PATH" STUB_TOPLEVEL_EMPTY=1
+printf '\n'
+
+printf 'E8 the submodule probe (--show-superproject-working-tree) exits non-zero\n'
+run 'Write settings.json (exempt)'   "$W_EXEMPT"   PATH="$GIT_STUB_PATH" STUB_SUPER_FAIL=1
+run 'Write panes/... (guarded)'      "$W_GUARDED"  PATH="$GIT_STUB_PATH" STUB_SUPER_FAIL=1
+printf '\n'
+
+printf 'E9 no enterable ancestor of the write target (plain filesystem permissions)\n'
+mkdir -p "$TMP/locked/sub"
+LOCKED_EXEMPT="$(payload_write "$TMP/locked/sub/settings.json")"
+LOCKED_GUARDED="$(payload_write "$TMP/locked/sub/panes/x.sh")"
+chmod 000 "$TMP/locked"
+run 'Write <unenterable>/settings.json' "$LOCKED_EXEMPT"
+run 'Write <unenterable>/panes/x.sh'    "$LOCKED_GUARDED"
+chmod 755 "$TMP/locked"
 printf '\n'
 
 printf 'Full stderr per row: %s/err.N (N is the bracketed index). Fixture removed on exit.\n' "$TMP"
