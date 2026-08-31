@@ -270,6 +270,52 @@ cases above, not only the exploit shapes.
 | --- | --- | --- | --- |
 | 1 | `f72e0bf` | `risk=medium`, `confidence=high` | Independently re-ran all 22 suites (counts matched), hit the live hook with the three headline commands, and **mutated the lexer twice to confirm `check_bash_fidelity()` actually fires** rather than passing vacuously. Found one undisclosed shape by direct attack: `$'…'` ANSI-C quoting, where a backslash escapes a quote without closing the string. Verified here before acting on it — the finding is real, and its "pre-existing, no protection lost" framing is correct. Acted on: pinned as a suite case, disclosed as a Known-gaps row, and it falsified a universal in ADR 0040 (below). |
 
+### ⚠️ BLOCKING — round 3 found a real Tier-1 regression. Do not open a PR on this branch.
+
+`risk=high`. Reproduced independently, end to end through the real hook scripts, with
+controls that discriminate. **Two protections `origin/main` has are gone on this branch:**
+
+| Command | `origin/main` | this branch | `git-guard.sh` on `main` |
+|---|---|---|---|
+| `git commit -m $'a\'#b' -- foo.sh` | `COMMIT` | `SEG_UNPARSED` | blocked → **allowed** 🔴 |
+| `git push --force $'a\'#b'` | `PUSH, PUSH_FORCE` | `SEG_UNPARSED` | blocked → **allowed** 🔴 |
+
+The judge reported the first. **The force-push row is wider than it reported**, and so is the
+class: it is not really about ANSI-C quoting at all. Measured, five shapes, controls attached:
+
+```
+git commit -m x#'unbalanced -- foo.sh    COMMIT      -> SEG_UNPARSED   (a plain typo!)
+git commit -m x#"unbalanced -- foo.sh    COMMIT      -> SEG_UNPARSED
+git push --force#'oops                   PUSH_FORCE  -> SEG_UNPARSED
+CONTROL git commit -m 'ok' -- foo.sh     COMMIT      -> COMMIT         (agrees)
+CONTROL git commit -m 'unbalanced …      SEG_UNPARSED-> SEG_UNPARSED   (already open on main)
+```
+
+**The real class is: an unquoted mid-word `#` followed later by an unbalanced quote.** The old
+lexer's comment bug *accidentally rescued* those commands — it truncated the input at the `#`,
+throwing the unbalanced quote away and leaving something shlex could parse. Removing the bug
+removes the accident.
+
+**The underlying defect is older than this branch.** `classify-git-command.py` already emits
+`SEG_UNPARSED`; `git-guard.sh` (`has_fact COMMIT && on_main`) and `doc-guard.sh`
+(`has_fact COMMIT || exit 0`) simply never read it, so they fail **open** on input they could
+not parse — while `worktree-guard.sh` already fails **closed** on the same fact. The control
+row above proves it: `git commit -m 'unbalanced -- foo.sh` is `SEG_UNPARSED` on `origin/main`
+too and is allowed there **today**. This branch does not create that hole; it widens the set of
+inputs that fall into it (968 of the 5,984 fuzz inputs are unparseable here vs 574 on
+`origin/main` — a population deliberately stuffed with odd quoting, so those rates say nothing
+about real traffic).
+
+**Not fixed, and deliberately not fixed unilaterally.** The fix is to make `git-guard.sh` and
+`doc-guard.sh` deny on `SEG_UNPARSED`, matching `worktree-guard.sh`. That is a behavioural
+change to two Tier-1 guards — it will deny commands that are valid bash but not
+shlex-parseable — so it is the user's call, not this card's. Escalated 2026-08-31; the branch
+is held, unmerged, until it is answered.
+
+Repro: `/tmp/judge_r3_verify3.py` (classifier, each side in its own process — an in-process
+version silently shared one cached module and reported 0 divergences, caught by its own
+falsifier) and `/tmp/judge_r3_e2e.sh` (the real hooks, scratch repo on `main`).
+
 ### The judge's finding, reproduced and scoped
 
 `$'…'` is bash's ANSI-C quoting. Neither `shlex` nor the new pre-pass models it, so the
