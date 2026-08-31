@@ -102,8 +102,14 @@ Nothing in the hook, `rules/gates.md`, or the deny message may claim otherwise.
 | `cat foo.zshrc`, `cat my.env` | the same rule in the other direction: the patterns require the start of the token or a `/` before the name, so a basename that merely *ends* in a listed one is out of scope. `cat ./foo/.zshrc` blocks. |
 | `cat < ~/.zshrc`, `grep -f p < .env` | **an input redirection hides the path from the check entirely** — `shell_segments()` drops the redirection target, so `cat < ~/.zshrc` lexes to `argv ['cat']` and matches nothing. Measured 2026-08-30 while building task 13 of `output-secret-redaction`; pre-existing, neither introduced nor fixed there, and pinned by an ALLOW assertion. The shortest known route past the guard. |
 | `cat config/prod.env` | the dotenv pattern is anchored on a `.env` *basename*, so a secrets file named `prod.env` is out of scope by construction. |
+| `echo hi#; cat ~/.zshrc` | **an unquoted `#` truncates the shared lexer.** `shell_segments.segments()` uses `shlex`, which treats an unquoted `#` mid-word as the start of a comment and discards everything after it — the `.zshrc` mention is never lexed, so the BLOCK check never sees it. Pre-existing in `shell_segments.py`, shared with git-guard/doc-guard/merge-guard; found and pinned while building round 4 of task 13 of `output-secret-redaction`, documented here, not fixed. |
 
-**Seven of the eight patterns** behave as described above. The eighth,
+The Known-gaps table above has **nine rows** (eight until 2026-08-30, when the
+`#`-truncation row was measured and added).
+
+Separately, the guard's own list of secret-bearing path *patterns* (not the
+Known-gaps table) has eight entries. **Seven of the eight patterns** behave as
+described above. The eighth,
 `Application Support/[^/]*/credentials`, is deliberately an unanchored substring
 match and is therefore **wider**: it blocks `credentials.json.bak` and a
 mid-string mention, both of which the anchored seven allow. Measured and pinned
