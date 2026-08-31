@@ -116,9 +116,12 @@ EXEMPT_VAR='WORKTREE_EXEMPT'
 # both hooks are PreToolUse on the same matchers, so a bare refusal does not say which one
 # fired (card, "Deny message contract").
 
-MSG_NO_PYTHON='worktree-guard: blocked — no python3 or python on PATH, so this tool payload could not be read at all. The guard cannot permit a request it cannot identify.'
-MSG_NO_PAYLOAD='worktree-guard: blocked — this tool payload could not be read as JSON. The guard cannot permit a request it cannot identify, and it will not record a decision under a session id it had to invent.'
-MSG_NO_GIT='worktree-guard: blocked — no git on PATH, so the guard could not verify the checkout this request acts on.'
+# task 17, Group C: each of these three fires before a repository is knowable — the payload
+# cannot be read, or there is no git to ask — so, like Group B above, none of them can honour
+# the exemption list; the trailing clause says so rather than staying silent about it.
+MSG_NO_PYTHON='worktree-guard: blocked — no python3 or python on PATH, so this tool payload could not be read at all. The guard cannot permit a request it cannot identify. This fires before the exemption list is reached — settings.json is not exempt here; an edit through the Bash tool is the route to it in this state.'
+MSG_NO_PAYLOAD='worktree-guard: blocked — this tool payload could not be read as JSON. The guard cannot permit a request it cannot identify, and it will not record a decision under a session id it had to invent. This fires before the exemption list is reached — settings.json is not exempt here; an edit through the Bash tool is the route to it in this state.'
+MSG_NO_GIT='worktree-guard: blocked — no git on PATH, so the guard could not verify the checkout this request acts on. This fires before the exemption list is reached — settings.json is not exempt here; an edit through the Bash tool is the route to it in this state.'
 MSG_LOG_WARN="worktree-guard: this refusal could not be appended to $LOG_FILE — the guard is in log mode, so the request was allowed and the evidence line is lost."
 MSG_NOT_RECORDED="worktree-guard: additionally, this decision could not be recorded in $LOG_FILE."
 # Boundary 10, rule 3 — the design's ONE deliberate fail-open on an enforcement path. It
@@ -183,9 +186,10 @@ append_log() { # $1 arm, $2 decision, $3 repo-root, $4 path-or-command, [$5 exem
 # The repository is NOT re-derived here. It arrives as refuse()'s own repo-root argument,
 # which each arm filled in from the resolution it had already done — Arm A's $top, Arms B2
 # and D's $EFF_ROOT. An empty one means no repository was ever established (every
-# precondition refusal, including the one require_git raises), and there is no hooks path to
-# resolve without one. That is also why the --path-format=absolute below is safe: every
-# caller that passes a non-empty root has already been through require_git's version floor.
+# precondition refusal, including the ones require_git_present/require_git_version raise),
+# and there is no hooks path to resolve without one. That is also why the
+# --path-format=absolute below is safe: every caller that passes a non-empty root has
+# already been through require_git_version's floor.
 LIVENESS_NOTE=''
 check_liveness() { # $1 the repository this refusal was judged against, '' when there is none
   local rc
@@ -385,13 +389,18 @@ and its WORKTREE_GUARD_MODE switch stay editable."
   refuse "$ARM" '' "$SUBJECT"
 }
 
-# git, and its version. Both run before any rev-parse, because a missing or too-old git makes
-# every later probe fail in a way that is indistinguishable from "not a git repository" — and
-# `git rev-parse --path-format=absolute` exits 128 for BOTH of those, so the support test
-# cannot be an exit code (card, "Detection", task 2 re-probe).
-require_git() {
-  local git_version version major minor tail_version
+# git, and its version. Split in two (task 17) so Arm A can run the presence check
+# early — every rev-parse needs SOME git — while deferring the VERSION FLOOR until
+# just before Step A8 below, which is the only probe that needs it
+# (--path-format=absolute, landed in 2.31; --show-toplevel long predates it). That
+# split is what lets the exemption check move ahead of the floor without ever
+# asking a too-old git to answer a question it cannot.
+require_git_present() {
   command -v git >/dev/null 2>&1 || { REFUSE_MSG="$MSG_NO_GIT"; refuse "$ARM" '' "$SUBJECT"; }
+}
+
+require_git_version() {
+  local git_version version major minor tail_version
   git_version=$(git --version 2>/dev/null) || deny_version '<git --version failed>'
   version=${git_version#git version }
   major=${version%%.*}
@@ -403,6 +412,14 @@ require_git() {
      { [ "$major" -eq "$FLOOR_MAJOR" ] && [ "$minor" -lt "$FLOOR_MINOR" ]; }; then
     deny_version "$git_version"
   fi
+}
+
+# Arms B2/D (lib/worktree_guard_bash_arms.sh) have no exemption check to defer the floor
+# past — a Bash command is judged as a whole, not against a write target — so they keep
+# needing presence and the floor together, in one call, unchanged by task 17.
+require_git() {
+  require_git_present
+  require_git_version
 }
 
 # lib/worktree_guard_bash_arms.sh, unreadable or unparseable. Its own refusal rather than a
@@ -496,14 +513,20 @@ fi
 [ -n "$operand" ] || exit 0
 file_path=$operand
 
-# Step A2: $HOME (boundary 13).
-require_home
+# Step A2: git, presence only (boundary 3). Every later probe in this arm needs SOME git;
+# the version floor is deferred to Step A6, after the exemption check, because only Step A8's
+# --path-format=absolute needs it (task 17 — this ordering is what lets an exempt write
+# survive an old-but-present git).
+require_git_present
 
-# Step A3: git, and its version.
-require_git
-
-# Step A4: the repository that owns the WRITE TARGET. A PreToolUse Write names a file that
+# Step A3: the repository that owns the WRITE TARGET. A PreToolUse Write names a file that
 # need not exist yet, so walk up to the deepest ancestor that does and resolve from there.
+#
+# Every refusal in this step fires before the repository is known, so none of them can
+# honour the exemption list (Step A4 below) — there is no repo root yet to relativize a path
+# against, and matching `settings.json` by name alone would exempt every repository's copy,
+# including ones this guard should be watching (task 17, Group B — "do not honour the
+# exemption by filename here").
 physical_path "$PWD" "$file_path" || :
 fp_phys=$PP_ANCHOR
 if [ -z "$fp_phys" ]; then
@@ -512,8 +535,10 @@ if [ -z "$fp_phys" ]; then
   write target: $file_path
 
 Create the parent directory, or write from a session whose permissions can read it.
-settings.json is exempt from this guard, so the hook registration and its
-WORKTREE_GUARD_MODE switch stay editable."
+This refusal fires before the exemption list is reached, because the repository that owns
+this path could not be identified — settings.json is not exempt here. This guard reads only
+Edit, Write and NotebookEdit payloads; an edit made through the Bash tool is outside its
+surface, and is the route to settings.json in this state."
   refuse A '' "$file_path"
 fi
 
@@ -543,8 +568,10 @@ if [ "$top_rc" -ne 0 ]; then
 That is neither 'not a git repository' (which the guard allows) nor 'this operation must be
 run in a work tree' (a bare repo, which it also allows), so the guard cannot tell whether
 this write lands in a shared primary checkout. Resolve what git is reporting.
-settings.json is exempt from this guard, so the hook registration and its
-WORKTREE_GUARD_MODE switch stay editable."
+This refusal fires before the exemption list is reached, because the repository that owns
+this path could not be identified — settings.json is not exempt here. This guard reads only
+Edit, Write and NotebookEdit payloads; an edit made through the Bash tool is outside its
+surface, and is the route to settings.json in this state."
   refuse A '' "$file_path"
 fi
 if [ -z "$top" ]; then
@@ -553,12 +580,54 @@ if [ -z "$top" ]; then
   write target: $file_path
 
 An empty answer is not an allow: the guard would compare against an empty root and read
-every path as outside the repository. settings.json is exempt from this guard, so the hook
-registration and its WORKTREE_GUARD_MODE switch stay editable."
+every path as outside the repository. This refusal fires before the exemption list is
+reached, because the repository that owns this path could not be identified —
+settings.json is not exempt here. This guard reads only Edit, Write and NotebookEdit
+payloads; an edit made through the Bash tool is outside its surface, and is the route to
+settings.json in this state."
   refuse A '' "$file_path"
 fi
 
-# Step A5: a submodule. Its --git-dir and --git-common-dir are BOTH
+# Step A4: the exemption list, stated in full (card :99). It is written out rather than
+# incorporated by reference from phase-guard.sh:294-298, because the round-1 draft claimed
+# to reuse that list "verbatim" while printing a shorter one — and under the shorter list a
+# judge writing coding-memory/*/verdicts.jsonl from a primary checkout would be denied, so
+# this feature's own gate would jam. Relativized against the repo root first.
+#
+# Runs here — as soon as the repo root is known, ahead of $HOME, the version floor and the
+# submodule probe — so that an exempt write survives every precondition failure a later step
+# could raise (task 17, Group A: this is what makes require_home()'s, deny_version()'s and
+# the submodule-probe refusal's own "settings.json is exempt" sentence true).
+case "$file_path" in
+  "$top"/*) rel=${file_path#"$top"/} ;;
+  *)
+    # The target as written does not sit under the repo root, so try its physical form —
+    # the payload may have reached the same file through a symlinked ancestor.
+    case "$PP_PATH" in
+      "$top"/*) rel=${PP_PATH#"$top"/} ;;
+      # Reachable only when the target IS the repo root directory, which no Write means.
+      # Retained as the floor: a path that does not relativize into this repo is not this
+      # repo's write to judge.
+      *) exit 0 ;;
+    esac
+    ;;
+esac
+case "$rel" in
+  CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
+  projects/*/memory/*) exit 0 ;;
+  rules/*|skills/*) exit 0 ;;
+esac
+
+# Step A5: $HOME (boundary 13). Deferred behind the exemption check above (task 17); an
+# exempt write no longer depends on $HOME being usable at all.
+require_home
+
+# Step A6: the git version floor. Deferred behind the exemption check above (task 17) —
+# Step A3's --show-toplevel long predates 2.31, so resolving the root ahead of the floor is
+# sound, and only Step A8's --path-format=absolute actually needs it.
+require_git_version
+
+# Step A7: a submodule. Its --git-dir and --git-common-dir are BOTH
 # <super>/.git/modules/<name>, i.e. equal, so it reads as a primary checkout and omitting
 # this step denies every submodule wholesale. Deliberate under-block (card, "Repo shapes
 # that are out of scope"). Runs BEFORE the primary-vs-linked compare, so a swallowed failure
@@ -581,32 +650,7 @@ WORKTREE_GUARD_MODE switch stay editable."
 fi
 [ -z "$super" ] || exit 0
 
-# Step A6: the exemption list, stated in full (card :99). It is written out rather than
-# incorporated by reference from phase-guard.sh:294-298, because the round-1 draft claimed
-# to reuse that list "verbatim" while printing a shorter one — and under the shorter list a
-# judge writing coding-memory/*/verdicts.jsonl from a primary checkout would be denied, so
-# this feature's own gate would jam. Relativized against the repo root first.
-case "$file_path" in
-  "$top"/*) rel=${file_path#"$top"/} ;;
-  *)
-    # The target as written does not sit under the repo root, so try its physical form —
-    # the payload may have reached the same file through a symlinked ancestor.
-    case "$PP_PATH" in
-      "$top"/*) rel=${PP_PATH#"$top"/} ;;
-      # Reachable only when the target IS the repo root directory, which no Write means.
-      # Retained as the floor: a path that does not relativize into this repo is not this
-      # repo's write to judge.
-      *) exit 0 ;;
-    esac
-    ;;
-esac
-case "$rel" in
-  CODING_MEMORY.md|coding-memory/*|docs/*|.claude/*|settings.json) exit 0 ;;
-  projects/*/memory/*) exit 0 ;;
-  rules/*|skills/*) exit 0 ;;
-esac
-
-# Step A7: primary checkout, or linked worktree?
+# Step A8: primary checkout, or linked worktree?
 #
 # --path-format=absolute is load-bearing, not stylistic. The bare forms are `.git` and
 # `../../.git` from a subdirectory of a PRIMARY checkout — they differ in FORM only, so a
