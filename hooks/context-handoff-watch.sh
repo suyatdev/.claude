@@ -2,8 +2,8 @@
 # context-handoff-watch.sh — PostToolUse hook, matcher "*". At >= threshold context
 # tokens (input + cache_creation + cache_read of the transcript's last assistant
 # usage entry — the statusline's orange line), once per session: write the
-# fired-flag, prepare a press-Enter handoff pane, and nudge the freshness
-# checkpoint via additionalContext.
+# fired-flag, prepare a press-Enter handoff pane (unless HANDOFF_PANE_MODE=off),
+# and nudge the freshness checkpoint via additionalContext.
 #
 # Threshold is model-dependent: 100k for Sonnet, 130k for Opus/Fable, 75k fallback.
 # These are context-rot budgets, not window fractions -- see ADR 0035.
@@ -77,7 +77,13 @@ cwd=$(printf '%s' "$payload" | "$JQ_BIN" -er '.cwd // empty' 2>/dev/null) || cwd
 # (obs final-review F5): the failure is still swallowed so the hook's own
 # plumbing stays silent, but we must not tell the user a pane is ready when it
 # is not. Only the additionalContext wording changes; the hook still exits 0.
-if "$DISPATCH" handoff --cwd "$cwd" >/dev/null 2>&1; then
+#
+# HANDOFF_PANE_MODE=off skips the dispatch call outright -- the freshness
+# nudge still fires either way, only the trailing sentence differs from the
+# failure case above, which reports a prepare that was attempted and lost.
+if [ "${HANDOFF_PANE_MODE:-}" = "off" ]; then
+  pane_note=" Handoff pane is disabled (HANDOFF_PANE_MODE=off) — continue in this session after checkpointing."
+elif "$DISPATCH" handoff --cwd "$cwd" >/dev/null 2>&1; then
   pane_note=" Then tell the user a handoff pane is ready: pressing Enter in it starts the fresh session."
 else
   pane_note=" A handoff pane could not be prepared, so continue in this session after checkpointing."
