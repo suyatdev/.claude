@@ -220,11 +220,13 @@ run_case_msg "the deny must NOT imply the record proves consent"        2 'does 
 # The printed re-run line's charset description ("letters, digits, . _ , : / -
 # only") is prose in hooks/secret-command-guard.sh:176 -- nothing pins it to
 # _EXEMPT_VALUE_ALLOWED_RE in hooks/lib/secret_approval.py, so the regex can
-# change while this line silently goes stale (it is one of six copies of the
-# same charset; see docs/features/output-secret-redaction.md). Derive the
-# expected punctuation from the regex itself rather than hardcoding a second
-# copy of it, so a regex edit turns this assertion red instead of leaving it
-# to agree with whatever the printed line happens to say.
+# change while this line silently goes stale. Other prose copies of the same
+# charset exist elsewhere in the codebase and remain similarly unpinned; they
+# are not counted here, since a stale count would be its own stale copy.
+# Derive the expected punctuation from the regex itself rather than
+# hardcoding a second copy of it, so a regex edit turns this assertion red
+# instead of leaving it to agree with whatever the printed line happens to
+# say.
 EXEMPT_CHARSET=$(python3 - "$LIBDIR/secret_approval.py" <<'PYEOF'
 import re, sys
 src = open(sys.argv[1]).read()
