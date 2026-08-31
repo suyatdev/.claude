@@ -40,7 +40,14 @@ happen at `PreToolUse`, on the command text, before it runs.
      blast radius (nearly every Bash call, every session) is much larger than a
      single write.
    - Bypass: `SECRET_EXEMPT=<reason> <command>` (logged), matching this repo's
-     other Tier 1 guards.
+     other Tier 1 guards. **Amended 2026-08-30** by task 13 of
+     `docs/features/output-secret-redaction.md`: the flag no longer clears a block
+     on its own. It is honoured only alongside a session- and command-scoped
+     approval record (`hooks/lib/secret_approval.py grant <id>`), granted after the
+     user types the literal phrase `secret-gate override`, and spent on first use.
+     An unapproved flag is ignored rather than fatal — the command is then judged
+     on its own merits. A full-environment dump cannot be cleared at all, by flag
+     or approval. That card is the authority; this bullet is a pointer.
 2. Register the existing dormant `hooks/scan-secrets.sh` under
    `PreToolUse`/`Edit|Write|NotebookEdit` in `settings.json`. It blocks writes that
    introduce credential material and was never wired in. It had **no test suite
@@ -93,9 +100,16 @@ Nothing in the hook, `rules/gates.md`, or the deny message may claim otherwise.
 | `export -p`, `declare -p`, `set`, `env -0`, `ps eww` | full-environment dumps that are not `env`/`printenv` with zero arguments. Widening was offered and **declined** (user, 2026-08-28) — `set` with no arguments is common enough that blocking it was judged worse than the residual risk. (`printenv -0` is *not* in this list: BSD `printenv` on this machine rejects `-0`, so it dumps nothing. GNU `printenv -0` would.) |
 | `bash -c "cat ~/.zshrc \| head -5"`, `ssh host "cat ~/.zshrc; true"`, `python3 -c "print(open('…/.zshrc').read())"` | **the operative rule is "the path is a whole *trailing component* of a lexed token", not "any mention".** An interpreter or remote string is a single token; if the path sits at its end it blocks (`bash -c "cat ~/.zshrc"` does), and appending anything at all flips it to allow. Found by the observability judge in round 2, reproduced, and pre-existing — the carve-out removal neither caused nor widened it. |
 | `cat foo.zshrc`, `cat my.env` | the same rule in the other direction: the patterns require the start of the token or a `/` before the name, so a basename that merely *ends* in a listed one is out of scope. `cat ./foo/.zshrc` blocks. |
+| `cat < ~/.zshrc`, `grep -f p < .env` | **an input redirection hides the path from the check entirely** — `shell_segments()` drops the redirection target, so `cat < ~/.zshrc` lexes to `argv ['cat']` and matches nothing. Measured 2026-08-30 while building task 13 of `output-secret-redaction`; pre-existing, neither introduced nor fixed there, and pinned by an ALLOW assertion. The shortest known route past the guard. |
 | `cat config/prod.env` | the dotenv pattern is anchored on a `.env` *basename*, so a secrets file named `prod.env` is out of scope by construction. |
+| `echo hi#; cat ~/.zshrc` | **an unquoted `#` truncates the shared lexer.** `shell_segments.segments()` uses `shlex`, which treats an unquoted `#` mid-word as the start of a comment and discards everything after it — the `.zshrc` mention is never lexed, so the BLOCK check never sees it. Pre-existing in `shell_segments.py`, shared with git-guard/doc-guard/merge-guard; found and pinned while building round 4 of task 13 of `output-secret-redaction`, documented here, not fixed. |
 
-**Seven of the eight patterns** behave as described above. The eighth,
+The Known-gaps table above has **nine rows** (eight until 2026-08-30, when the
+`#`-truncation row was measured and added).
+
+Separately, the guard's own list of secret-bearing path *patterns* (not the
+Known-gaps table) has eight entries. **Seven of the eight patterns** behave as
+described above. The eighth,
 `Application Support/[^/]*/credentials`, is deliberately an unanchored substring
 match and is therefore **wider**: it blocks `credentials.json.bak` and a
 mid-string mention, both of which the anchored seven allow. Measured and pinned
@@ -108,7 +122,13 @@ phrasing and described a wider guard than exists. The boundary is stated next
 to the strong wording deliberately, so the two cannot drift apart.
 
 This is a momentum guardrail against the two shapes that actually fired, **not a
-security boundary**. `SECRET_EXEMPT` clears it in one flag.
+security boundary**. Until 2026-08-30 `SECRET_EXEMPT` cleared it in one flag; task
+13 of `docs/features/output-secret-redaction.md` now requires a recorded approval
+alongside it. That raises the floor and changes nothing about the boundary claim:
+the approval record is written from inside the session by the agent the gate
+constrains, so it is forgeable. It states that an approval was claimed; it does
+not prove one was given. The load-bearing control remains the literal phrase
+`secret-gate override`, typed by a human.
 
 ## Verification plan
 
