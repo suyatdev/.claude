@@ -573,6 +573,10 @@ deny 'A17 the submodule probe exits non-zero' "$LINKED" \
 
 FALSE_CLAIM='settings.json is exempt from this guard, so'
 HONEST_CLAUSE='settings.json is not exempt here'
+# MSG_NO_PYTHON's own false clause (card task 17, judge round 1): it names the Bash tool
+# as "the route to it in this state", but hard_deny fires in step 1, before tool_name is
+# even parsed — a Bash payload is refused exactly like a Write. There is no route.
+FALSE_BASH_ROUTE_CLAIM='an edit through the Bash tool is the route to it in this state'
 
 # --- Group A sites: reordering makes the existing promise true (3 sites) -------
 # require_home(), deny_version() and the submodule-probe refusal are NOT
@@ -682,6 +686,34 @@ RUN_ENV=(PATH="$NOGIT_PATH")
 deny 'R9b no git on PATH: a non-exempt write still denies, same message' "$PRIMARY" \
   "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r9b)" \
   "$HONEST_CLAUSE"
+
+# --- R7c/R8b/R9c — judge round 1: MSG_NO_PYTHON's Bash-route clause, and its controls ---
+# A command that never mentions `git` or `cd` carries no SEG_* fact at all, so
+# lib/worktree_guard_bash_arms.sh's fast path exits 0 before require_home/require_git ever
+# run — this is the real "route through Bash" the three Group C messages describe.
+SETTINGS_BASH_CMD="printf 'x' >> \"$PRIMARY/settings.json\""
+
+# R7c — falsifies MSG_NO_PYTHON's route claim. hard_deny fires in step 1, before tool_name
+# is parsed at all, so a Bash payload is refused exactly like a Write — there is no route.
+RUN_ENV=(PATH="$NOPY_PATH")
+deny 'R7c no python3/python: a Bash write to settings.json also denies (no route exists)' \
+  "$PRIMARY" "$(payload_bash "$SETTINGS_BASH_CMD" s-r7c)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R7c …and does not claim the Bash route this state does not have' \
+  "$FALSE_BASH_ROUTE_CLAIM"
+
+# R8b — control for MSG_NO_PAYLOAD's route claim: with python present and the payload
+# parseable, the same command really does allow. Expected to PASS already; it is what stops
+# a future reader from deleting MSG_NO_PAYLOAD's route clause along with MSG_NO_PYTHON's.
+allow_silent 'R8b control: a well-formed Bash payload really does route to settings.json' \
+  "$PRIMARY" "$(payload_bash "$SETTINGS_BASH_CMD" s-r8b)"
+
+# R9c — control for MSG_NO_GIT's route claim: the command carries no SEG_* fact, so it
+# never reaches require_git() at all, and allows even with git absent. Expected to PASS
+# already, for the same reason as R8b above.
+RUN_ENV=(PATH="$NOGIT_PATH")
+allow_silent 'R9c control: with git absent, the same Bash write to settings.json still allows' \
+  "$PRIMARY" "$(payload_bash "$SETTINGS_BASH_CMD" s-r9c)"
 
 # ================================================================= GROUP B ===
 # Feature: Arm B2 — hand-rolled git worktree add (card :1754)
