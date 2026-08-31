@@ -149,6 +149,26 @@ CASES = [
     ("echo 'a'#b", [["echo", "a#b"]], "a closing quote does not end the word either"),
     ("curl http://x/#frag", [["curl", "http://x/#frag"]], "a URL fragment"),
 
+    # (e) `)` and `}` are AMBIGUOUS word breaks, and this is measured rather than reasoned:
+    # a `)` that closes a SUBSHELL ends the word, so bash comments after it -- but a `)` that
+    # closes `$( )` does NOT, and the same split holds for `}` vs `${ }` and for a backtick.
+    # Telling the two apart needs expansion tracking the pre-pass deliberately does not do;
+    # it excludes the closers instead, which can only ever emit MORE tokens. So the expansion
+    # forms are read faithfully and the following command is no longer hidden...
+    ("echo $(echo x)#y; git commit -m x -- foo.sh",
+     [["echo", "$"], ["echo", "x"], ["#y"], GIT_COMMIT],
+     "a ) closing $( ) does not end the word -- the commit after it must still be seen"),
+    ("V=q; echo ${V}#y; git commit -m x -- foo.sh",
+     [["echo", "${V}#y"], GIT_COMMIT], "same for } closing ${ }"),
+    ("echo `echo x`#y; git commit -m x -- foo.sh",
+     [["echo", "`echo", "x`#y"], GIT_COMMIT], "same for a closing backtick"),
+    # ...and the subshell form is read fail-CLOSED on purpose: bash really does start a comment
+    # here and this lexer does not, so a guard sees a command bash would not have run. Pinned
+    # from BOTH sides -- here, and as an expected disagreement in check_bash_fidelity().
+    ("(echo hi)# git commit -m x -- foo.sh",
+     [["echo", "hi"], ["#"] + GIT_COMMIT],
+     "ACCEPTED fail-closed deviation: a ) closing a subshell is not treated as a word break"),
+
     # --- REGRESSION: behaviour that already worked and the fix must preserve ---
     ("git push && gh pr create", [["git", "push"], ["gh", "pr", "create"]], "chained &&"),
     ("git push&&gh pr create", [["git", "push"], ["gh", "pr", "create"]], "unspaced &&"),
@@ -352,6 +372,18 @@ FIDELITY = [
     "# echo SECOND",
     "echo http://x/#frag; echo SECOND",
     "echo hi\t# echo SECOND",
+    "echo $(echo x)#y; echo SECOND",
+    "V=q; echo ${V}#y; echo SECOND",
+    "echo `echo x`#y; echo SECOND",
+]
+
+# The ONE shape where this lexer deliberately disagrees with the shell, in the fail-CLOSED
+# direction: a `)` closing a subshell really does end the word, so bash starts a comment, but
+# distinguishing it from the `)` that closes `$( )` needs expansion tracking the pre-pass does
+# not do. The lexer therefore reports a command bash never ran. Asserted rather than merely
+# absent from FIDELITY, so the deviation cannot widen -- or quietly reverse -- unnoticed.
+FIDELITY_FAIL_CLOSED = [
+    "(echo hi)# echo SECOND",
 ]
 
 
@@ -388,6 +420,21 @@ def check_bash_fidelity():
         if not ran_true or not ran_false:
             out.append("FAIL — {} fidelity table discriminates nothing: {} ran, {} did not"
                        .format(shell, ran_true, ran_false))
+
+        for cmd in FIDELITY_FAIL_CLOSED:
+            try:
+                proc = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.SubprocessError) as exc:
+                out.append("FAIL — {} could not run {!r}: {}".format(shell, cmd, exc))
+                continue
+            really_ran = "SECOND" in proc.stdout
+            lexer_sees = ["echo", "SECOND"] in argvs(cmd)
+            if really_ran or not lexer_sees:
+                out.append(
+                    "FAIL — {} accepted deviation no longer holds for {!r}\n"
+                    "       expected: shell does NOT run it, lexer DOES see it (fail-closed)\n"
+                    "       got:      shell ran {}, lexer saw {}".format(
+                        shell, cmd, really_ran, lexer_sees))
     return out
 
 
