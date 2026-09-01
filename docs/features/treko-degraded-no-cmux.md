@@ -1394,7 +1394,17 @@ separate ask (`rules/core-conduct.md`, Parallel-Agent Invariants).
       `TypeError` (`confirm_surface(None)`) after spawning one real `cmux tree` call --
       confirmed by hand, not assumed. The other two (`reanalyze`, unknown id) are green
       already, by design. Full module: 6 red / 32 green, no regression.
-- [ ] 7. Implement `_run_send`'s guard. Task 6 goes green.
+- [x] 7. Implement `_run_send`'s guard. Task 6 goes green.
+      `5eb96bf` adds the guard; `55010b1` repairs an assertion task 6 had written blind
+      (`srv.last_audit(command_id=…)` → `id=…`; the harness parses that audit field as `id`,
+      `server_harness.py:239`, so the filter matched nothing and the test could not pass against
+      any implementation). Verified 2026-09-01 on `55010b1`: `pytest treko/test_degraded.py -q`
+      → **38 passed**, the 32 already-green plus task 6's 6 — the count task 6 predicted.
+      The commit records two falsifiers run at the time: reverting `treko/server.py` to the
+      pre-guard parent → 2 failed, and mutating the guard's audit token to `wrong_reason` →
+      2 failed on `assert 'wrong_reason' == 'no_channel'`. The second one is load-bearing: the
+      no-guard run dies earlier at `RemoteDisconnected`, so without the mutation the
+      `reason=no_channel` check would be proven only in the direction that passes.
 - [ ] 7a. **Repair `test_server.py`'s reason contract for `503 no_channel`** (D7, third sealed
       door): add `"no_channel": 503` to `REASON_STATUS` (`test_server.py:56-73`), add `503` to
       `CONTRACT_STATUSES` (`:77`), and drive one real `no_channel` refusal **from inside
