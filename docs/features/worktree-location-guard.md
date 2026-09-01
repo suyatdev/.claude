@@ -4098,6 +4098,27 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
       recorded, were they right — and must never be reported as evidence of coverage. Coverage is
       what task 3's suite asserts, against shapes chosen deliberately rather than shapes that
       happened to be typed during the window.
+
+      **Progress 2026-09-01.** Layer 1's evidence window started at `b466252`, 2026-08-26
+      18:16:58 -04:00 (task 9's registration commit) — criterion 1's 7 days complete
+      2026-09-02 18:16:58 -04:00, about a day out from this note. Layer 1's two current arms
+      have both fired: `A` (Edit/Write/NotebookEdit) 326 times, `B2D` (Bash) 640 times, in
+      `hooks/state/worktree-guard.log` (998 lines total). The log's 27 `D` and 5 `B2` lines
+      predate the code consolidating those two arms into `B2D`; they are not a currently-live
+      arm and don't count for or against criterion 2.
+
+      **Layer 2 was found unarmed and has been armed today.** `git config --get
+      core.hooksPath` read empty before this note — `hooks/install-layer2.sh` had been built
+      (task 6e) but never run on this machine, so layer 2's arm (`D-L2`) had zero
+      observations, independent of the 7-day question. Ran `hooks/install-layer2.sh
+      --arm-in-log-mode` at 2026-09-01T20:06:31Z; the script's own liveness check confirmed
+      armed (`hooks path: /Users/marksuyat/.config/git/hooks`, mode `log`). Layer 2's evidence
+      window therefore starts at 2026-09-01T20:06:31Z, not task 9's date — its own 7 days
+      complete 2026-09-08T20:06:31Z. **Task 10 cannot flip before that date**, since criterion
+      1 applies per arm and layer 2 is now the binding one.
+
+      Criterion 3 (reading every would-deny line) is not yet done for either layer — still
+      open when this note was written.
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
