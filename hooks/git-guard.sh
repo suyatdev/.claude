@@ -105,10 +105,24 @@ has_fact() {
 # Checked first, before any per-fact guard and before current_branch() below is
 # even called: a command the guard cannot read cannot be shown safe on any
 # branch, so which branch is checked out is not a question worth asking yet.
+#
+# Scoped to commands that MENTION git: this guard's whole subject is `git`
+# (Guard 1 commits, Guard 2 force-pushes), so refusing a git-free command that
+# merely fails to lex is overreach, not caution -- measured, not hypothetical:
+# `echo $'a\'b'` is valid bash (`bash -n` exit 0) and was refused before this
+# scoping existed. The match is a case-pattern SUBSTRING on the raw command
+# line on purpose -- not a word match -- so `curl https://github.com/x#'...`
+# still blocks; wider is the fail-closed direction here. `gh` is deliberately
+# NOT matched: this guard never keys on gh at all, so a real `gh pr create` or
+# a `highlight` substring must not trip it.
 if has_fact SEG_UNPARSED; then
-  printf 'git-guard: this command cannot be lexed -- the lexer returned no segments for a non-empty command, usually from an unbalanced quote. Refusing rather than guessing what it runs.\n' >&2
-  printf 'Rewrite the command so it lexes (check for an unbalanced quote) and try again.\n' >&2
-  exit 2
+  case "$command_line" in
+    *git*)
+      printf 'git-guard: this command cannot be lexed -- the lexer returned no segments for a non-empty command, usually from an unbalanced quote. Refusing rather than guessing what it runs.\n' >&2
+      printf 'Rewrite the command so it lexes (check for an unbalanced quote) and try again.\n' >&2
+      exit 2
+      ;;
+  esac
 fi
 
 current_branch() {
