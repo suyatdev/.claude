@@ -346,6 +346,24 @@ names" should read this table alongside it.
       classify-git-command 212/4, classify-commit-command 54/3, classify-pr-command 60/3,
       secret-command-guard 164/4, test-marker-guard 248/1 -- 61 new assertions total across
       6 files (16 `program()` + 45 classifier/hook-level).
+      **Completion pass, 2026-09-01:** the first pass's prompt omitted two of the ten
+      must-move sites -- `hooks/git-guard.sh:358` and `hooks/feature-sync-guard.sh:130`,
+      both inline python embedded in a shell script, so neither has an importable
+      module the way `decide-commit-gate.py` does. Both are gated behind
+      `classify-git-command.py:520`'s own COMMIT-fact bug: pre-fix, a capitalized/path
+      `git` invocation never sets COMMIT at all, so the guard body containing each site
+      is never entered end to end, regardless of the site's own bug. Isolated the same
+      way task 2 isolated `decide-commit-gate.py`'s own check -- by extracting just the
+      function/assignment from the REAL script text (awk, start/end markers rather than
+      a hardcoded line range, so extraction survives drift) and sourcing it, so the
+      assertions run the actual bytes of the hook, not a copy. 3 RED rows each in
+      `hooks/git-guard.test.sh` (`prints_and_exits_option()`) and
+      `hooks/feature-sync-guard.test.sh` (the `exempt_reason` assignment), plus one
+      lowercase control per file that is asserted to pass today (confirmed: git-guard's
+      control reports `--version`, feature-sync-guard's reports `reason`) -- 8
+      assertions total, 6 new failures. Full suite counts after: git-guard 168/3
+      (was 167/0), feature-sync-guard 31/3 (was 30/0). No new must-move row: both sites
+      were already in task 1's table.
 - [x] 3. **Done 2026-09-01.** Falsified all 45 non-`program()` new assertions (the 16
       `program()` rows are pinned separately against the stand-in allow/deny functions
       described below, since `program()` itself does not exist yet) against an always-allow
