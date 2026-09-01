@@ -508,6 +508,37 @@ git commit --patch -m msg
 git commit --interactive
 TABLE
 
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3, RED).
+# decide-commit-gate.py:76's OWN `argv[0] != "git"` check re-derives which of the four
+# UNSUPPORTED triggers fired, for the message only -- it never decides block/allow, which
+# classify-commit-command.py already settled. It cannot be exercised end to end through
+# `block` above: classify-commit-command.py:213 (a SEPARATE call site, covered in
+# classify-commit-command.test.py) already reads a capitalized "Git" as kind=OTHER before
+# _unsupported_trigger() is ever called, so the door never opens for this input at all --
+# fixing :213 alone would not fix :76, and a fixture that routed through the door would
+# leave :76 untested by construction. Called directly instead, the same way the
+# `_EXEMPT_RE.match` vs `_valid_exempt` case above isolates one internal rule from the
+# doors around it. Measured against this checkout, pre-fix, 2026-09-01: "Git commit -i -m
+# x" reports OFF_WHITELIST (falling through every branch, since argv[0] != "git" skips the
+# segment before the -i check ever runs), matching neither "git commit -i -m x"
+# (INCLUDE_OR_FROM_FILE) nor its own capitalized self after the fix.
+if python3 -c "
+import importlib.util
+spec = importlib.util.spec_from_file_location('decide_commit_gate', '$HOOKS/lib/decide-commit-gate.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+got_lower = mod._unsupported_trigger('git commit -i -m x')
+assert got_lower == 'INCLUDE_OR_FROM_FILE', 'control: lowercase must report INCLUDE_OR_FROM_FILE, got %r' % (got_lower,)
+for spelling in ('Git commit -i -m x', 'GIT commit -i -m x', '/usr/bin/git commit -i -m x'):
+    got = mod._unsupported_trigger(spelling)
+    assert got == 'INCLUDE_OR_FROM_FILE', \
+        'argv0-spelling RED: %r must report INCLUDE_OR_FROM_FILE like the lowercase form, got %r (measured pre-fix: OFF_WHITELIST)' % (spelling, got)
+" 2>&1; then
+  ok "argv0-spelling RED: decide-commit-gate.py:76's own git check folds case and path"
+else
+  bad "argv0-spelling RED: decide-commit-gate.py:76's own git check folds case and path (see stderr above)"
+fi
+
 # Measured: the amended commit's contents are `git diff --cached HEAD^`, not HEAD.
 R="$(new_repo adopt)"
 mark "$R" hooks/foo.test.sh

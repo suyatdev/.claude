@@ -330,11 +330,35 @@ names" should read this table alongside it.
       tests `argv[1:]`, and the pattern anchors on `argv[0]`; confirmed present and
       unchanged by reading the file. **Zero unclassified sites.** Every line number
       in both tables still resolves to the stated code on this base -- no drift.
-- [ ] 2. Red first: add case, path, `cd`-not-folded, and `program()`-is-total assertions to
-      `hooks/lib/shell_segments.test.py` and each affected classifier's `.test.py`.
-      Confirm each fails for the right reason before writing `program()`.
-- [ ] 3. Falsify the new assertions against an always-allow and an always-deny stub; any
-      assertion passing under both discriminates nothing and must be rewritten.
+- [x] 2. **Done 2026-09-01.** Red-first assertions added to `hooks/lib/shell_segments.test.py`
+      (`PROGRAM_CASES`/`check_program()` -- 16 rows, all fail on ABSENCE of `program()`),
+      `classify-git-command.test.py` (`ARGV0_SPELLING_CASES` -- 13 rows), 3 rows each in
+      `classify-commit-command.test.py` and `classify-pr-command.test.py`, 4 rows in
+      `hooks/secret-command-guard.test.sh` (3 env-dump fold + 1 `Nohup` wrapper fold), and
+      3 rows in `hooks/test-marker-guard.test.sh` calling `decide-commit-gate.py`'s
+      `_unsupported_trigger()` directly (isolated from `classify-commit-command.py:213`,
+      a separate call site). 42 assertions fail on a WRONG CLASSIFICATION (verbatim
+      failure text recorded below); the 16 `program()` rows fail on ABSENCE, the only
+      correct failure mode before the helper exists. No `os.environ`/`process.env`/bare
+      `env`/`printenv` was ever executed -- the `ENV`/`Printenv`/path rows are asserted
+      through `classify-secret-command.py`'s exit code via the hook's normal JSON-on-stdin
+      path, per the card's warning. Full suite counts: shell_segments 59/1,
+      classify-git-command 212/4, classify-commit-command 54/3, classify-pr-command 60/3,
+      secret-command-guard 164/4, test-marker-guard 248/1 -- 61 new assertions total across
+      6 files (16 `program()` + 45 classifier/hook-level).
+- [x] 3. **Done 2026-09-01.** Falsified all 45 non-`program()` new assertions (the 16
+      `program()` rows are pinned separately against the stand-in allow/deny functions
+      described below, since `program()` itself does not exist yet) against an always-allow
+      stub (returns "nothing detected": `[]` / `"OTHER"` / `"NONE"` / `("NO","")` / exit 0 /
+      `""`) and an always-deny stub (returns a fixed maximal/triggered value: a superset
+      fact list / `"COMMIT"` / `"UNSUPPORTED"` / `("PR","")` / exit 2 / `"git"`).
+      **Intersection (pass under BOTH stubs): empty** -- every one of the 45 assertions
+      fails against at least one stub. 38 fail against the allow-stub, 34 against the
+      deny-stub; the 7 that pass under allow are the deliberate negative/control rows
+      (`git COMMIT`, `timeout 5 GIT commit`, `gh PR create`, `CD /other && ...` for
+      `classify-git-command`) and still fail under deny, proving they are not vacuous.
+      Full per-assertion scorecard recorded in the branch's task report to the user,
+      not duplicated here -- see PR/commit history for this branch.
 - [ ] 4. Add `program()` to `hooks/lib/shell_segments.py` with its Google-style docstring.
       Assert totality directly — `""`, `"/"`, `"///"`, `"foo/"` — because
       `secret-command-guard.sh:146` fails OPEN on a crash. (No `__all__` entry: verified
