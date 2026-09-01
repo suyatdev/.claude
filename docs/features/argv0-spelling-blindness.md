@@ -62,10 +62,30 @@ Probe: `hooks/…` invoked with a `PreToolUse` payload (`hook_event_name`, `tool
 ¹ `gh pr merge 5` / `Gh pr merge 5` / `/opt/homebrew/bin/gh pr merge 5`.
 ² `env` and `printenv` / `ENV` and `Printenv` / `/usr/bin/env`.
 
-**`test-marker-guard.sh` is UNMEASURED.** Its lowercase control also returned rc=0 in this
-fixture (no sibling-test pair staged), so the probe could not discriminate and its rows say
-nothing. `judge-guard.sh` and `feature-sync-guard.sh` read the same classifiers but were not
-probed. Do not read this table as covering them.
+**`test-marker-guard.sh` and `judge-guard.sh` are now measured, and both are affected.**
+Fixture and controls (`hooks/argv0-task9-guards.probe.sh`, tracked): a scratch repo with a
+`foo.py`/`foo.test.py` sibling pair staged and no marker written gives
+`test-marker-guard.sh` a control that refuses (`MSG_NO_MARKER`); a scratch repo with an
+initial commit and no verdict store gives `judge-guard.sh` a control that refuses (no
+verdict store). Both controls **do** refuse, so the group is measured, not blind like the
+first round.
+
+| Guard | lowercase (control) | `Git`/`Gh` | `GIT`/`GH` | path form |
+|---|---|---|---|---|
+| `test-marker-guard.sh` | **rc=2 refused** (`MSG_NO_MARKER`) | rc=0 | rc=0 | rc=0 (`/usr/bin/git`) |
+| `judge-guard.sh` | **rc=2 refused** (no verdict store) | rc=0 | rc=0 | rc=0 (`/opt/homebrew/bin/gh`) |
+
+Both guards are affected, but through call sites **already in the must-move table** above:
+`test-marker-guard.sh` classifies via `decide-commit-gate.py` → `classify-commit-command.py`,
+whose `argv[0] != "git"` at `:213` is already row 4 of the must-move table. `judge-guard.sh`
+classifies via `classify-pr-command.py`, whose `argv[0] != "gh"` at `:55` is already row 5.
+Neither guard has its own separate literal-comparison site — task 5 fixing those two shared
+classifiers closes both guards for free. No new row is added to the must-move table.
+
+`feature-sync-guard.sh` reads the same classifiers but was not probed this round; its call
+site (`argv[0] == "git"` inline python, `:130`) is already in the must-move table too, so the
+same reasoning applies, but this is inference from the code, not a measured row — flagged
+here rather than silently claimed as measured.
 
 **The first probe round was blind and is recorded here as the reason for the payload note
 above.** It omitted `hook_event_name`, and `secret-command-guard.sh` exits 0 at its event
@@ -295,7 +315,7 @@ than trusting any number written in prose.
 | `env git commit -m x` | `git-guard.sh` rc=0; facts `SEG_OPAQUE 0 env` | yes | Fails open for the **lowercase** form too. A pre-existing `SEG_OPAQUE` hole, unrelated to spelling. Its own card. |
 | `sh -c 'git commit -m x'` | `git-guard.sh` rc=0 | yes | A command inside an interpreter string is invisible to a lexer by construction. Long-standing, documented. |
 | `TIME git commit`, `Time git commit` | facts `SEG_OPAQUE 0 TIME` / `Time` | yes | A capitalized `WRAPPERS` entry is not stripped, so the segment lands in the `SEG_OPAQUE` hole above rather than in a guard. Fixing wrappers without fixing `SEG_OPAQUE` buys nothing. |
-| Unicode case folding, e.g. `GİT` | **not measured** | **no** | `str.lower()` on Python 3.9.6 is Unicode-aware, but whether its folding agrees with APFS's own case-folding table is unknown and untested. Task 8 decides: measure it, or say plainly it is untested. |
+| Unicode case folding, e.g. `GİT` (dotted capital I, U+0130) | **measured, task 8** | **no** | Neither precondition for a gap holds. (1) `zsh -c "GİT --version"` and `bash -c "GİT --version"` both → `command not found` (rc=127) on this machine's APFS — it does not resolve to the git binary at all, so nothing is owed on that ground alone. (2) Independently, Python 3.9.6's `'GİT'.lower()` → `'gi̇t'` (4 codepoints: `g`, `i`, U+0307 COMBINING DOT ABOVE, `t`), which is **not equal** to `'git'` — confirmed `'GİT'.lower() == 'git'` is `False`. So even on a filesystem where this spelling did resolve, a `program()` built on `str.lower()` would not catch it. Per the card's own decision rule, a gap requires BOTH preconditions; here neither holds, so this is not an unclosed gap on this toolchain, and no assertion is pinned for a behavior that cannot be observed running. |
 
 **`SEG_OPAQUE` failing open is the larger hole of the two.** It is not made worse by this
 change, and it is not made better. Anyone reading "the guards now catch misspelled command
@@ -326,10 +346,15 @@ names" should read this table alongside it.
       aborts the run rather than reporting a clean table. Record before/after here.
 - [ ] 7. Confirm — do not assume — that `hooks/shell-segments-falsifier.sh:78` must stay
       literal, by checking what it measures against.
-- [ ] 8. Decide the Unicode row: measure `GİT` against APFS resolution, or state in the
-      card that it is untested. Do not pin an assertion either way until measured.
-- [ ] 9. Establish whether `test-marker-guard.sh` and `judge-guard.sh` are affected, with a
-      fixture whose control actually refuses. Record the answer; fix only if affected.
+- [x] 8. **Done 2026-09-01.** Measured: `GİT` (U+0130) resolves to `command not found` on
+      this machine's APFS (zsh and bash both rc=127), and independently
+      `'GİT'.lower() != 'git'` on Python 3.9.6. Neither precondition for a gap holds, so
+      no assertion is pinned.
+- [x] 9. **Done 2026-09-01.** Both `test-marker-guard.sh` and `judge-guard.sh` are affected
+      — measured against a fixture whose control actually refuses
+      (`hooks/argv0-task9-guards.probe.sh`). Both classify through call sites already in
+      the must-move table (`classify-commit-command.py:213`, `classify-pr-command.py:55`),
+      so task 5 closes them; no new must-move row added.
 - [ ] 10. Run the full suite. Record pass/fail counts **and the deselected count**.
 - [ ] 11. ADR under `docs/decisions/` — the fail-closed trade, the `cd` exception, and the
       `OPAQUE_TARGETS` split are all direction-setting, and the `cd` reasoning is the part
