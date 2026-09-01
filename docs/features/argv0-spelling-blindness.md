@@ -423,8 +423,34 @@ names" should read this table alongside it.
 - [ ] 6. Commit the hook-level probe as a tracked script beside the existing
       `hooks/*.probe.sh`, with "the lowercase control refuses" as a hard precondition that
       aborts the run rather than reporting a clean table. Record before/after here.
-- [ ] 7. Confirm — do not assume — that `hooks/shell-segments-falsifier.sh:78` must stay
-      literal, by checking what it measures against.
+- [x] 7. **Done 2026-09-01. Confirmed: it must stay literal — and the fix broke the
+      harness around it, which is the more important finding.**
+
+      *The comparison itself:* the site (now `:101`, moved by the shim below) is the
+      falsifier's own **baseline sentinel**. It asks the *pinned pre-fix lexer* whether a
+      leading redirect still hides the command — `PRE-FIX` if no segment starts with `git`,
+      `FIXED` if one does — and aborts the whole run when the baseline turns out to already
+      contain the change under test. Folding it would call `program()` on a `shell_segments`
+      copy from `bc7da76`, which predates the function. Left literal.
+
+      *What running it exposed:* the falsifier reported **3 rows UNEXPECTED**, including its
+      own BASELINE row (`old=2`, want `old=0`) — and its header says that when BASELINE or
+      CONTROL differ, the harness is broken and no other row means anything. Diagnosed, not
+      guessed: the OLD arm pairs the pinned `shell_segments.py` with **today's** rest-of-lib,
+      today's `classify-git-command.py:114` now imports `program` by name, and the pinned
+      base defines it zero times (measured). The import fails, git-guard cannot run its
+      classifier, and it **fails closed** — so every row read "block" for a reason with
+      nothing to do with redirections. This is precisely the failure mode the script's own
+      `has_grouping` comment was written to prevent, arriving through a second symbol.
+
+      Fixed the way the script already established: append a `program` shim to the old lib.
+      **Unlike `has_grouping`, a constant would be a fabrication** — `program()` decides
+      whether a segment is git at all, so a stub would move every row. The shim is the real
+      implementation copied verbatim, which is what keeps the two trees differing only in
+      redirect handling. After the shim: **all rows as expected.**
+
+      ⚠️ This was invisible to the task-10 suite run, which globs `*.test.sh` / `*.test.py`;
+      the falsifier is neither. It has to be run by hand.
 - [x] 8. **Done 2026-09-01.** Measured: `GİT` (U+0130) resolves to `command not found` on
       this machine's APFS (zsh and bash both rc=127), and independently
       `'GİT'.lower() != 'git'` on Python 3.9.6. Neither precondition for a gap holds, so
