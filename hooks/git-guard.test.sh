@@ -863,6 +863,35 @@ run_case "control: an apostrophe inside double quotes parses"  0 'echo "don'"'"'
 run_case "control: a quoted # is not a comment and still parses" 0 "echo 'hi#'"
 
 # ---------------------------------------------------------------------------
+# Guard 0 is SCOPED TO COMMANDS THAT MENTION git, and the scoping is the point.
+#
+# The first cut refused every unparseable command, and this guard runs on EVERY
+# Bash call. Measured after the fact by the observability judge (round 4) and
+# reproduced: `echo $'a\'b'` -- ANSI-C quoting, an ordinary way to embed an
+# apostrophe, and valid bash by `bash -n` -- was refused. In the branch's own
+# 5,984-case fuzz population, 773 of the 968 commands Guard 0 refused were valid
+# bash. That population is deliberately stuffed with this idiom and says nothing
+# about how often it appears in real traffic, but ONE valid non-git command
+# refused by the git guard is already one too many: git-guard guards
+# `git commit` and `git push --force`, so a command that never mentions git has
+# nothing here to protect and refusing it is pure overreach.
+#
+# The claim that preceded this -- "zero shapes become newly unparseable" -- was
+# drawn from ten hand-picked shapes while the fuzz population sat unused. It was
+# false, and the user approved the change partly on its strength. The rows below
+# are the correction, pinned from both sides.
+#
+# `gh` is deliberately NOT in scope: this guard never keys on gh at all.
+# ---------------------------------------------------------------------------
+on_branch main
+
+run_case "unparseable but git-free -> ALLOW (not this guard's business)" 0 "echo \$'a\\'b'"
+run_case "unparseable, git-free, 'gh' only as a substring -> ALLOW"      0 "echo \$'a\\'b' # highlight"
+run_case "unparseable gh command -> ALLOW (git-guard never keys on gh)"  0 "gh pr create#'x"
+run_case "unparseable and mentions git -> still BLOCK"                   2 "echo \$'a\\'b' && git commit -m x -- foo.sh"
+run_case "unparseable, git only in a url -> BLOCK (substring, fail closed)" 2 "curl https://github.com/x#'unbalanced"
+
+# ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
