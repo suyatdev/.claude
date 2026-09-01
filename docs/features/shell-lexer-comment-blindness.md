@@ -270,10 +270,44 @@ cases above, not only the exploit shapes.
 | --- | --- | --- | --- |
 | 1 | `f72e0bf` | `risk=medium`, `confidence=high` | Independently re-ran all 22 suites (counts matched), hit the live hook with the three headline commands, and **mutated the lexer twice to confirm `check_bash_fidelity()` actually fires** rather than passing vacuously. Found one undisclosed shape by direct attack: `$'…'` ANSI-C quoting, where a backslash escapes a quote without closing the string. Verified here before acting on it — the finding is real, and its "pre-existing, no protection lost" framing is correct. Acted on: pinned as a suite case, disclosed as a Known-gaps row, and it falsified a universal in ADR 0040 (below). |
 
-### ⚠️ BLOCKING — round 3 found a real Tier-1 regression. Do not open a PR on this branch.
+### Round 3 found a real Tier-1 regression — RESOLVED 2026-08-31, `914f1ec`
+
+**Resolved.** `git-guard.sh` now refuses on `SEG_UNPARSED` (Guard 0, ahead of every per-fact
+guard and before a branch is even resolved), so both rows below block again — verified end to
+end through the real hook, with the same controls that caught the regression:
+
+```
+git commit -m $'a\'#b' -- foo.sh    exit 0 -> exit 2      git push --force $'a\'#b'  exit 0 -> exit 2
+CONTROL plain commit on main        exit 2 (unchanged)    CONTROL docs-only commit   exit 0 (unchanged)
+CONTROL git status                  exit 0 (unchanged)
+```
+
+It closes more than the regression: the last control row below — unparseable with **no `#` at
+all** — was allowed on `origin/main` too, and now blocks. **User decision, 2026-08-31**, after
+the cost was measured (below); not taken unilaterally.
+
+**`doc-guard.sh` was deliberately NOT changed**, and that is the one place this deviates from
+what the judge proposed. That guard states in two places that it "fails OPEN (missing note)
+rather than block legitimate work", contrasting itself with `git-guard.sh` on purpose.
+Reversing a recorded decision was not what this change was for, and it is not needed: the harm
+— an unreviewable commit reaching `main`, a force push — is `git-guard`'s to refuse, and now
+is. What stays open there is a missing documentation note on a feature branch, which is
+exactly what that guard's policy says is not worth blocking work over. Pinned by an assertion
+in `doc-guard.test.sh` so the choice is visible rather than merely absent.
+
+**What the fix costs, measured before it was written.** `git-guard.sh` runs on *every* Bash
+command, so failing closed here could have been intolerable. It is not:
+**zero shapes become newly unparseable on this branch.** Ten routine shapes were measured
+against both lexers — an apostrophe inside double quotes, a `#` inside quotes, an inline
+`python3 -c`, an `awk` program, `jq`, `grep` with a regex, a heredoc with and without an
+apostrophe. The only *valid bash* that now gets refused is a heredoc whose body carries a
+**bare** apostrophe, and that shape is unparseable on `origin/main` too — a pre-existing
+condition surfaced, not a new cost. The remedy is to quote the apostrophe or use `-m`.
+
+The original finding, kept because the reasoning matters:
 
 `risk=high`. Reproduced independently, end to end through the real hook scripts, with
-controls that discriminate. **Two protections `origin/main` has are gone on this branch:**
+controls that discriminate. **Two protections `origin/main` had were gone on this branch:**
 
 | Command | `origin/main` | this branch | `git-guard.sh` on `main` |
 |---|---|---|---|
@@ -306,11 +340,10 @@ inputs that fall into it (968 of the 5,984 fuzz inputs are unparseable here vs 5
 `origin/main` — a population deliberately stuffed with odd quoting, so those rates say nothing
 about real traffic).
 
-**Not fixed, and deliberately not fixed unilaterally.** The fix is to make `git-guard.sh` and
-`doc-guard.sh` deny on `SEG_UNPARSED`, matching `worktree-guard.sh`. That is a behavioural
-change to two Tier-1 guards — it will deny commands that are valid bash but not
-shlex-parseable — so it is the user's call, not this card's. Escalated 2026-08-31; the branch
-is held, unmerged, until it is answered.
+**Escalated rather than fixed unilaterally**, because denying on `SEG_UNPARSED` is a
+behavioural change to a Tier-1 guard that runs on every Bash call. Answered by the user
+2026-08-31: fix it on this branch. Done in `914f1ec` — for `git-guard.sh` only, for the reason
+given above.
 
 Repro: `/tmp/judge_r3_verify3.py` (classifier, each side in its own process — an in-process
 version silently shared one cached module and reported 0 divergences, caught by its own
