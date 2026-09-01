@@ -49,8 +49,13 @@ All rows below ran the **real hook scripts** against a scratch repo on `main` wi
 120-function source file staged, so the lowercase row is a control that is *known* to
 refuse. A group whose control allows is reported as unmeasured, never as a clean result.
 
-Probe: `hooks/…` invoked with a `PreToolUse` payload (`hook_event_name`, `tool_name`,
-`tool_input.command`, `cwd`, `session_id`).
+Probe: `hooks/argv0-task6-guards.probe.sh`, tracked (task 6), invoked with a `PreToolUse`
+payload (`hook_event_name`, `tool_name`, `tool_input.command`, `cwd`, `session_id`). The
+lowercase control's refusal is a hard precondition in that script: it aborts the group
+(prints `UNMEASURED`, exits 1) rather than printing rows for a fixture that never engaged
+the guard.
+
+**Before** — pre-fix, measured during planning (throwaway probe, not committed):
 
 | Guard | lowercase (control) | `Git` | `GIT` | `/usr/bin/git` |
 |---|---|---|---|---|
@@ -61,6 +66,21 @@ Probe: `hooks/…` invoked with a `PreToolUse` payload (`hook_event_name`, `tool
 
 ¹ `gh pr merge 5` / `Gh pr merge 5` / `/opt/homebrew/bin/gh pr merge 5`.
 ² `env` and `printenv` / `ENV` and `Printenv` / `/usr/bin/env`.
+
+**After** — re-measured task 6, 2026-09-01, `hooks/argv0-task6-guards.probe.sh` against
+commit `566d1f7` (task 7, HEAD of this branch at the time of the run). Every lowercase
+control refused (verified before any spelling row for that guard was reported), so all four
+groups are measured, not blind:
+
+| Guard | lowercase (control) | `Git`/`Gh`/`ENV` | `GIT`/`Printenv` | path form |
+|---|---|---|---|---|
+| `git-guard.sh` | **rc=2 refused** | rc=2 | rc=2 | rc=2 |
+| `doc-guard.sh` | **rc=2 refused** | rc=2 | rc=2 | rc=2 |
+| `merge-guard.sh` ¹ | **rc=2 refused** | rc=2 | — | rc=2 |
+| `secret-command-guard.sh` ² | **rc=2 refused** | rc=2 | rc=2 | rc=2 |
+
+Every previously-blind row (`Git`, `GIT`, `/usr/bin/git`, `Gh`, `ENV`, `Printenv`,
+`/usr/bin/env`) now refuses, matching its lowercase control. No row failed to flip.
 
 **`test-marker-guard.sh` and `judge-guard.sh` are now measured, and both are affected.**
 Fixture and controls (`hooks/argv0-task9-guards.probe.sh`, tracked): a scratch repo with a
@@ -420,9 +440,16 @@ names" should read this table alongside it.
       orchestrator rather than silently working around it. Every other suite run under
       `hooks/` and `hooks/lib/` (18 `.test.sh` + 6 `.test.py`, full list in commit) passed
       with no new failures and no count regression.
-- [ ] 6. Commit the hook-level probe as a tracked script beside the existing
-      `hooks/*.probe.sh`, with "the lowercase control refuses" as a hard precondition that
-      aborts the run rather than reporting a clean table. Record before/after here.
+- [x] 6. **Done 2026-09-01.** Committed `hooks/argv0-task6-guards.probe.sh`, covering the
+      card's original four guards (`git-guard.sh`, `doc-guard.sh`, `merge-guard.sh`,
+      `secret-command-guard.sh`) and spellings, following `argv0-task9-guards.probe.sh`'s
+      shape. The lowercase control's refusal is a hard precondition per guard
+      (`assert_control_refuses`): a control that does not refuse aborts that group as
+      `UNMEASURED` and sets the script's overall exit to 1, rather than printing a table
+      that would look clean. Never executes the env-dump forms -- `env`/`printenv`/`ENV`/
+      `Printenv`/`/usr/bin/env` are passed only as JSON command text. Before/after recorded
+      above in "Measured: the current behavior": all four lowercase controls refused, and
+      every after-row flipped from rc=0 to rc=2 -- no row failed to flip.
 - [x] 7. **Done 2026-09-01. Confirmed: it must stay literal — and the fix broke the
       harness around it, which is the more important finding.**
 
