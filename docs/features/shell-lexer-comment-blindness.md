@@ -295,14 +295,49 @@ is. What stays open there is a missing documentation note on a feature branch, w
 exactly what that guard's policy says is not worth blocking work over. Pinned by an assertion
 in `doc-guard.test.sh` so the choice is visible rather than merely absent.
 
-**What the fix costs, measured before it was written.** `git-guard.sh` runs on *every* Bash
-command, so failing closed here could have been intolerable. It is not:
-**zero shapes become newly unparseable on this branch.** Ten routine shapes were measured
-against both lexers — an apostrophe inside double quotes, a `#` inside quotes, an inline
-`python3 -c`, an `awk` program, `jq`, `grep` with a regex, a heredoc with and without an
-apostrophe. The only *valid bash* that now gets refused is a heredoc whose body carries a
-**bare** apostrophe, and that shape is unparseable on `origin/main` too — a pre-existing
-condition surfaced, not a new cost. The remedy is to quote the apostrophe or use `-m`.
+**What the fix costs — the first answer here was FALSE, and the correction is the point.**
+
+This paragraph originally read: *"zero shapes become newly unparseable on this branch"*, drawn
+from ten hand-picked shapes. **The observability judge falsified it in round 4** with a
+one-line counter-example — `echo $'a\'b'`, ANSI-C quoting, an ordinary way to embed an
+apostrophe, valid by `bash -n`, and refused by Guard 0. Re-measured properly, against this
+branch's own 5,984-case fuzz population with `bash -n` as the oracle: **773 of the 968 commands
+Guard 0 refused were valid bash.** The tooling to measure that was already sitting in `/tmp`
+and was not pointed at the question, and the user approved the change partly on the strength of
+the wrong number.
+
+Two scoping notes so the corrected figure is not itself over-read. That population is
+deliberately stuffed with the `$'…'` idiom, so **773/968 is a rate within an adversarial case
+list, not a rate in real traffic** — no measurement of real traffic exists. And the fix does
+not turn on the rate at all: git-guard guards `git commit` and `git push --force`, so a command
+that never mentions `git` has nothing here to protect and refusing it is overreach at *any*
+rate, even one.
+
+**The fix** (`403f134`). Guard 0 now fires only when the raw command line contains the
+substring `git`. Substring on purpose — `curl https://github.com/x#'unbalanced` still blocks,
+which is the fail-closed direction. `gh` is excluded because this guard never keys on it.
+Measured against the same population, with the probe corrected to mirror the shipped rule
+exactly (an earlier revision of the probe also matched `gh`, which the code does not):
+
+| | before scoping | after |
+|---|---|---|
+| valid-bash commands Guard 0 refuses | 773 | **306** |
+| of those, commands that mention `git` | 306 | 306 |
+| the five pinned must-block commands | all block | **all still block** |
+| `echo $'a\'b'`, `echo $'don\'t'`, `printf`, `ls -la` | refused | **all allow** |
+
+The 306 that remain all mention `git`, which is the fail-closed trade the change is for.
+
+**What still costs something, stated narrowly.** A command that *does* mention git and cannot
+be lexed is refused even when it is valid bash — for example
+`echo $'a\'b' && git commit -m x -- foo.sh`. That is the fail-closed trade the change is for,
+not a defect. So is a heredoc whose body carries a bare apostrophe; that shape is unparseable
+on `origin/main` too, so it is a pre-existing condition surfaced rather than a new cost. In
+both cases the remedy is to rewrite the quoting.
+
+**Still open, not fixed here:** `classify-pr-command.py` emits no `SEG_UNPARSED` fact at all,
+so `merge-guard.sh` and `judge-guard.sh` have the same fail-open with no fact to key on. Out of
+scope for this card; recorded rather than silently left.
 
 The original finding, kept because the reasoning matters:
 
