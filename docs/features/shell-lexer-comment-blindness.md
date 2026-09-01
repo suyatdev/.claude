@@ -335,9 +335,22 @@ not a defect. So is a heredoc whose body carries a bare apostrophe; that shape i
 on `origin/main` too, so it is a pre-existing condition surfaced rather than a new cost. In
 both cases the remedy is to rewrite the quoting.
 
-**Still open, not fixed here:** `classify-pr-command.py` emits no `SEG_UNPARSED` fact at all,
-so `merge-guard.sh` and `judge-guard.sh` have the same fail-open with no fact to key on. Out of
-scope for this card; recorded rather than silently left.
+**Still open, not fixed here** — two, both recorded rather than silently left:
+
+- `classify-pr-command.py` emits no `SEG_UNPARSED` fact at all, so `merge-guard.sh` and
+  `judge-guard.sh` have the same fail-open with no fact to key on.
+- **`Git commit` with a capital G evades both the classifier and Guard 0.** Found by the judge
+  in round 5, verified here with a control that discriminates — in a scratch repo on `main`
+  with source staged, `git commit -m x` exits 2 and `Git commit -m x` exits 0, while
+  `Git rev-parse` really does run the git binary on this case-insensitive filesystem.
+  **Pre-existing:** `hooks/lib/classify-git-command.py` is byte-identical to `origin/main`
+  (`git diff origin/main...HEAD --` over it is empty) and `origin/main`'s own classifier
+  returns `[]` for the capital-G form too. Its own card, not this one.
+
+(The first probe written for the capital-G check was **blind** — it ran the hook with `cwd` set
+to `/tmp`, which is not a repo on `main`, so even plain `git commit -m x` exited 0 and every row
+read clean. Caught by the lowercase control disagreeing with a known-blocking case. It is the
+third blind probe on this card, and the reason every table here carries controls.)
 
 The original finding, kept because the reasoning matters:
 
