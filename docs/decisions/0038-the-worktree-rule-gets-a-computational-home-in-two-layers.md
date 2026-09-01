@@ -164,7 +164,7 @@ names the bad value", so the code — not the spec — was the thing out of line
 still refused under the strictest real mode, while an exempt path and a write already inside a
 worktree pass. Pinned by tests G2a/G2b/G2c, which were committed red first.
 
-**The recoverability claim is scoped to that case and no further.** **Two** sibling refusals —
+**The recoverability claim is scoped to that case and no further.** ⚠️ *Superseded 2026-08-31 by card task 17 — see the dated note two paragraphs below; this paragraph records the state at the time of the decision.* **Two** sibling refusals —
 `$HOME` unset and git below the version floor — still `refuse()` from an arm's entry point *before*
 the exemption list is consulted, while their text makes the same "settings.json stays editable"
 claim. Measured false (`hooks/worktree-guard.probe.sh`, E1 and E2: a `Write` to `settings.json`
@@ -177,7 +177,35 @@ settled. The **missing-lib-dir** refusal governs only the Bash arms — a `Write
 so `settings.json` stays writable there (probe E3, rc=0) and its message is **true**. `hard_deny
 "$MSG_NO_PYTHON"` *does* refuse a `Write` to `settings.json` (probe E4, rc=2), but it makes no
 recoverability claim, so it is a fourth and separate gap: the switch is unreachable and nothing
-says so. Tracked in the card's task-13 note. The switch is
+says so. Tracked in the card's task-13 note.
+
+> ⚠️ **Superseded 2026-08-31 by card task 17 — the two paragraphs above record the state at the
+> time of this decision, not the current code.** They are left as written because the decision
+> they justify was taken on those facts; this note is the correction, not a rewrite.
+>
+> The `$HOME`-unset and version-floor refusals **no longer** refuse a `Write` to `settings.json`:
+> Arm A's Step A6 exemption check was moved to run as soon as the repo root resolves, so both now
+> return **rc=0**, and the "settings.json stays editable" sentence they print became true rather
+> than being removed. A failed submodule probe joined them. Measured before and after on one
+> fixture (the post-task-17 probe run against the pre-task-17 hook), across the whole 28-row
+> table: **3 rc changes, all `2 → 0`, all on the exempt path, none on any non-exempt path.**
+>
+> Where the repository root is genuinely unknowable — no enterable ancestor, an unrecognized
+> `--show-toplevel` diagnostic, an empty one — the refusal stands but the message was **reworded**
+> to say the exemption list was never reached. The exemption is deliberately *not* honoured by
+> filename in those states; matching `settings.json` with no repo root would exempt every
+> repository's copy, including ones this guard should watch.
+>
+> `hard_deny "$MSG_NO_PYTHON"` is no longer silent — the "fourth and separate gap" named above is
+> closed as a *silence*, but it remains the one state with **no route out**: it fires before the
+> guard dispatches on tool name, so a Bash edit is refused identically. Its message now says so
+> and names the fix (restore `python3` on `PATH`). `MSG_NO_PAYLOAD` and `MSG_NO_GIT` were also
+> given the sentence and *are* escapable through the Bash tool, which is asserted by controls
+> `R8b`/`R9c` rather than assumed. The missing-lib-dir reading above is unchanged and still true.
+>
+> The guard's behaviour was **not** relaxed anywhere the guard would otherwise have judged: in the
+> no-python state a Bash payload is still refused, deliberately — a guard that cannot read its
+> payload must not fail open. Detail and the measurement record: the card's task-17 section. The switch is
 **not** at `hooks/state/worktree-guard.mode`, which cannot work: `.gitignore` carries a
 `/hooks/state/` entry, so arming a hard deny across every repo on this machine would have left no record
 in git at all. In `settings.json` it is a one-line reviewable diff sitting next to the registration

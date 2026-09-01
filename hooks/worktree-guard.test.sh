@@ -562,6 +562,158 @@ RUN_ENV=(PATH="$(mk_git_stub)" STUB_FAIL_PROBE="--show-superproject-working-tree
 deny 'A17 the submodule probe exits non-zero' "$LINKED" \
   "$(payload_write Write file_path "$LINKED/hooks/git-guard.sh" s-a17)"
 
+# ================================================================= GROUP R ===
+# Feature: the recoverability promise (card task 17). Nine refusal messages carry
+# "settings.json is exempt from this guard, so the hook registration and its
+# WORKTREE_GUARD_MODE switch stay editable." Six fire before Step A6 (the
+# exemption list) is reached and so break that promise. Every case below asserts
+# BOTH halves of the safety property: the exempt outcome must change to an allow
+# where the reorder makes that possible, and the non-exempt outcome in the same
+# state must be unaffected — proving the reorder did not go silently permissive.
+
+FALSE_CLAIM='settings.json is exempt from this guard, so'
+HONEST_CLAUSE='settings.json is not exempt here'
+# MSG_NO_PYTHON's own false clause (card task 17, judge round 1): it names the Bash tool
+# as "the route to it in this state", but hard_deny fires in step 1, before tool_name is
+# even parsed — a Bash payload is refused exactly like a Write. There is no route.
+FALSE_BASH_ROUTE_CLAIM='an edit through the Bash tool is the route to it in this state'
+
+# --- Group A sites: reordering makes the existing promise true (3 sites) -------
+# require_home(), deny_version() and the submodule-probe refusal are NOT
+# reworded — same message text as today. Only the point in Arm A's flow where
+# they run moves, to after the exemption check.
+
+# R1 — require_home(): $HOME empty.
+RUN_ENV=(HOME=)
+allow_silent 'R1a HOME empty: settings.json (exempt) now allows' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/settings.json" s-r1a)"
+RUN_ENV=(HOME=)
+deny 'R1b HOME empty: a non-exempt write still denies via require_home(), unchanged' \
+  "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r1b)" \
+  '$HOME is unset or empty'
+
+# R2 — deny_version(): git below the 2.31 floor.
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_VERSION="git version 2.30.0")
+allow_silent 'R2a git below floor: settings.json (exempt) now allows' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/settings.json" s-r2a)"
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_VERSION="git version 2.30.0")
+deny 'R2b git below floor: a non-exempt write still denies via deny_version(), unchanged' \
+  "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r2b)" \
+  "2.31"
+
+# R3 — the submodule probe fails. Uses PRIMARY, not LINKED: a LINKED write
+# already always allows regardless of the exemption list (A3), so it would
+# prove nothing about the reorder. PRIMARY isolates the claim to Step A6 moving
+# ahead of the submodule probe.
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_FAIL_PROBE="--show-superproject-working-tree")
+allow_silent 'R3a submodule probe fails: settings.json (exempt) now allows' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/settings.json" s-r3a)"
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_FAIL_PROBE="--show-superproject-working-tree")
+deny 'R3b submodule probe fails: a non-exempt write still denies, unchanged' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r3b)" \
+  "submodule probe"
+
+# --- Group B sites: the repo root is unknowable, so the promise is reworded,
+# never honoured by filename (3 sites) -------------------------------------
+# Both the exempt-named path and a non-exempt path must still deny — the site
+# cannot tell them apart without a repo root — but the false claim must be gone.
+
+# R4 — no existing ancestor of the write target could be entered.
+mkdir -p "$TMP/locked/sub"
+chmod 000 "$TMP/locked"
+deny 'R4a no enterable ancestor: settings.json write still denies (root unknowable)' \
+  "$PRIMARY" "$(payload_write Write file_path "$TMP/locked/sub/settings.json" s-r4a)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R4a …and does not falsely claim the exemption applies' "$FALSE_CLAIM"
+deny 'R4b no enterable ancestor: a non-exempt write still denies, same honest message' \
+  "$PRIMARY" "$(payload_write Write file_path "$TMP/locked/sub/panes/x.sh" s-r4b)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R4b …and does not falsely claim the exemption applies' "$FALSE_CLAIM"
+chmod 755 "$TMP/locked"
+
+# R5 — git --show-toplevel emits a diagnostic step 4 recognizes neither way.
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_TOPLEVEL_RC=128 \
+         STUB_TOPLEVEL_MSG="fatal: detected dubious ownership")
+deny 'R5a unrecognized diagnostic: settings.json write still denies (root unknowable)' \
+  "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/settings.json" s-r5a)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R5a …and does not falsely claim the exemption applies' "$FALSE_CLAIM"
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_TOPLEVEL_RC=128 \
+         STUB_TOPLEVEL_MSG="fatal: detected dubious ownership")
+deny 'R5b unrecognized diagnostic: a non-exempt write still denies, same honest message' \
+  "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r5b)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R5b …and does not falsely claim the exemption applies' "$FALSE_CLAIM"
+
+# R6 — git --show-toplevel exits 0 and prints nothing.
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_EMPTY_PROBE="--show-toplevel")
+deny 'R6a empty --show-toplevel: settings.json write still denies (root unknowable)' \
+  "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/settings.json" s-r6a)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R6a …and does not falsely claim the exemption applies' "$FALSE_CLAIM"
+RUN_ENV=(PATH="$(mk_git_stub)" STUB_EMPTY_PROBE="--show-toplevel")
+deny 'R6b empty --show-toplevel: a non-exempt write still denies, same honest message' \
+  "$PRIMARY" "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r6b)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R6b …and does not falsely claim the exemption applies' "$FALSE_CLAIM"
+
+# --- Group C: three messages that block settings.json and said nothing --------
+# Outcome is unchanged (these already denied); only the added honest sentence is
+# new, so no false claim to check for absence — these never carried one.
+
+NOPY_PATH="$(mk_shadow_path nopy python3 python)"
+RUN_ENV=(PATH="$NOPY_PATH")
+deny 'R7a no python3/python: settings.json write still denies' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/settings.json" s-r7a)" \
+  "$HONEST_CLAUSE"
+RUN_ENV=(PATH="$NOPY_PATH")
+deny 'R7b no python3/python: a non-exempt write still denies, same message' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r7b)" \
+  "$HONEST_CLAUSE"
+
+# R8 — MSG_NO_PAYLOAD. No operand can be extracted from an unparseable payload,
+# so there is no exempt/non-exempt distinction to draw here — only that the
+# refusal still fires (P1 already pins that) and now carries the honest clause.
+deny 'R8 unparseable payload still denies, with the new honest route note' "$PRIMARY" \
+  'not json at all' "$HONEST_CLAUSE"
+
+NOGIT_PATH="$(mk_shadow_path nogit git)"
+RUN_ENV=(PATH="$NOGIT_PATH")
+deny 'R9a no git on PATH: settings.json write still denies' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/settings.json" s-r9a)" \
+  "$HONEST_CLAUSE"
+RUN_ENV=(PATH="$NOGIT_PATH")
+deny 'R9b no git on PATH: a non-exempt write still denies, same message' "$PRIMARY" \
+  "$(payload_write Write file_path "$PRIMARY/panes/run-pane-agent.sh" s-r9b)" \
+  "$HONEST_CLAUSE"
+
+# --- R7c/R8b/R9c — judge round 1: MSG_NO_PYTHON's Bash-route clause, and its controls ---
+# A command that never mentions `git` or `cd` carries no SEG_* fact at all, so
+# lib/worktree_guard_bash_arms.sh's fast path exits 0 before require_home/require_git ever
+# run — this is the real "route through Bash" the three Group C messages describe.
+SETTINGS_BASH_CMD="printf 'x' >> \"$PRIMARY/settings.json\""
+
+# R7c — falsifies MSG_NO_PYTHON's route claim. hard_deny fires in step 1, before tool_name
+# is parsed at all, so a Bash payload is refused exactly like a Write — there is no route.
+RUN_ENV=(PATH="$NOPY_PATH")
+deny 'R7c no python3/python: a Bash write to settings.json also denies (no route exists)' \
+  "$PRIMARY" "$(payload_bash "$SETTINGS_BASH_CMD" s-r7c)" \
+  "$HONEST_CLAUSE"
+assert_last_stderr_lacks 'R7c …and does not claim the Bash route this state does not have' \
+  "$FALSE_BASH_ROUTE_CLAIM"
+
+# R8b — control for MSG_NO_PAYLOAD's route claim: with python present and the payload
+# parseable, the same command really does allow. Expected to PASS already; it is what stops
+# a future reader from deleting MSG_NO_PAYLOAD's route clause along with MSG_NO_PYTHON's.
+allow_silent 'R8b control: a well-formed Bash payload really does route to settings.json' \
+  "$PRIMARY" "$(payload_bash "$SETTINGS_BASH_CMD" s-r8b)"
+
+# R9c — control for MSG_NO_GIT's route claim: the command carries no SEG_* fact, so it
+# never reaches require_git() at all, and allows even with git absent. Expected to PASS
+# already, for the same reason as R8b above.
+RUN_ENV=(PATH="$NOGIT_PATH")
+allow_silent 'R9c control: with git absent, the same Bash write to settings.json still allows' \
+  "$PRIMARY" "$(payload_bash "$SETTINGS_BASH_CMD" s-r9c)"
 
 # ================================================================= GROUP B ===
 # Feature: Arm B2 — hand-rolled git worktree add (card :1754)
