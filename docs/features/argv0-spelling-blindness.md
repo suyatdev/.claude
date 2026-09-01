@@ -434,12 +434,54 @@ names" should read this table alongside it.
       (`hooks/argv0-task9-guards.probe.sh`). Both classify through call sites already in
       the must-move table (`classify-commit-command.py:213`, `classify-pr-command.py:55`),
       so task 5 closes them; no new must-move row added.
-- [ ] 10. Run the full suite. Record pass/fail counts **and the deselected count**.
+- [x] 10. **Done 2026-09-01.** Every suite under `hooks/` and `hooks/lib/`:
+      **22 suites, 2059 passed, 0 failed**, every suite exiting 0. There is no pytest
+      `addopts` and therefore no deselected count in this repo -- the analogue is a suite
+      whose count line cannot be parsed, and that was checked rather than assumed: two
+      suites (`memsearch-nudge.test.sh`, `verify-hook-wiring.test.sh`) report in an
+      `N/N passed` format instead of `N passed, M failed`, and both were run and read by
+      hand -- 27/27 and 37/37. Their 64 tests are included in the 2059. No suite ran zero
+      tests.
+
+      Per-suite: context-handoff-watch 43, create-worktree 89, doc-guard 27,
+      feature-sync-guard 34, git-guard 171, install-layer2 40, judge-guard 101,
+      classify-commit-command 57, classify-git-command 216, classify-pr-command 63,
+      shell_segments 60, write-test-marker 65, memsearch-nudge 27, merge-guard 10,
+      pane-dispatch-guard 34, phase-guard 147, reference-transaction 182, scan-secrets 17,
+      secret-command-guard 168, test-marker-guard 249, verify-hook-wiring 37,
+      worktree-guard 222.
 - [ ] 11. ADR under `docs/decisions/` — the fail-closed trade, the `cd` exception, and the
       `OPAQUE_TARGETS` split are all direction-setting, and the `cd` reasoning is the part
       a future reader will otherwise undo.
 - [ ] 12. Close out `docs/features/shell-lexer-comment-blindness.md`: `phase: review`,
       `branch: none  # merged via PR #92 (115e244) 2026-09-01`.
+
+## Implementation corrections
+
+Recorded for the same reason as the round-1 list below: a spec that quietly fixes its own
+errors teaches the next reader nothing.
+
+1. **Three of task 2's assertions asserted the wrong exit code.** The capitalized
+   `ENV` / `Printenv` / `/usr/bin/env` rows in `hooks/secret-command-guard.test.sh` were
+   written expecting hook exit **4**. Exit 4 is the *classifier's internal* env-dump status;
+   `secret-command-guard.sh` translates it to hook exit **2** (its `if [ "$status" -eq 4 ]`
+   branch ends in `exit 2`), so 4 is unreachable at the hook boundary. The lowercase controls
+   twenty lines above have always asserted 2, and the failing rows' own comment said they
+   must behave "exactly like the lowercase controls" -- the stated intent was right and only
+   the number was wrong. Corrected to 2 in a commit of its own, separate from the
+   implementation commit, so the record shows a baseline being fixed rather than a fix being
+   fitted to its own exam.
+
+   Verified independently before the edit, by invoking the hook with a `PreToolUse` payload
+   and reading its exit code -- **nothing was executed**: `env`, `printenv`, `ENV`,
+   `Printenv` and `/usr/bin/env` all return rc=2 with the identical message
+   `blocked -- a bare '<name>' with no arguments dumps the full inherited environment`,
+   differing only in the quoted name. That identity is the actual proof the fold works.
+
+2. **Two of the ten must-move sites were initially left untested** -- `git-guard.sh:358` and
+   `feature-sync-guard.sh:130`, the two inline-python sites. The omission was in the task-2
+   dispatch's file list, not in the card. Closed by a separate completion pass (`b410df0`)
+   before any implementation was written.
 
 ## Round-1 corrections
 

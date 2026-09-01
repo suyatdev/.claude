@@ -966,15 +966,23 @@ done
 # decides allow/block from the command TEXT.
 #
 # Measured against this checkout, pre-fix, 2026-09-01: all three below exit 0
-# (ALLOW) and print nothing. After the fix they must exit 4 (env-dump, never
-# approvable) exactly like the lowercase controls above.
+# (ALLOW) and print nothing. After the fix they must block exactly like the
+# lowercase controls above -- which is HOOK exit 2, not 4. Corrected 2026-09-01:
+# these three were written asserting 4, the classifier's INTERNAL env-dump
+# status. The hook translates that status to exit 2 at secret-command-guard.sh
+# (the `if [ "$status" -eq 4 ]` branch ends in `exit 2`), so 4 is unreachable at
+# the hook boundary and the lowercase controls above have always asserted 2.
+# The comment's stated intent -- "exactly like the lowercase controls" -- was
+# right; only the number was wrong. Verified after the fix: all five spellings
+# return rc=2 with the same "blocked -- a bare '<name>' with no arguments dumps
+# the full inherited environment" message, differing only in the quoted name.
 # =============================================================================
 run_case_msg "argv0-spelling RED: capitalized ENV -> block as an env dump (measured pre-fix: exit 0)" \
-  4 "'ENV'" 'ENV'
+  2 "'ENV'" 'ENV'
 run_case_msg "argv0-spelling RED: capitalized Printenv -> block as an env dump (measured pre-fix: exit 0)" \
-  4 "'Printenv'" 'Printenv'
+  2 "'Printenv'" 'Printenv'
 run_case_msg "argv0-spelling RED: an absolute env path -> block as an env dump (measured pre-fix: exit 0)" \
-  4 "'/usr/bin/env'" '/usr/bin/env'
+  2 "'/usr/bin/env'" '/usr/bin/env'
 
 # =============================================================================
 # argv0-spelling-blindness: secret_approval.py:422 compares argv[0] to the
