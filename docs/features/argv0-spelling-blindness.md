@@ -150,8 +150,15 @@ grep -rn -E 'argv\[0\][^=!]*(==|!=|[[:space:]]in[[:space:]])' hooks \
   --include=*.py --include=*.sh | grep -v '\.test\.'
 ```
 
-As of 2026-09-01 that returns 14 lines, of which these are **command-position program
-tests that must move onto `program()`**:
+As of 2026-09-01 that returns **19 lines**, of which **5 are prose** -- two docstrings
+(`classify-git-command.py:272`, `:326`), two comments in `shell_segments.py` (`:50`,
+`:287`) and one in `worktree_guard_bash_arms.sh:185`. The remaining **14 are real
+tests**. (Revision 1 wrote "14 lines"; the command emits 19 and 14 is the count after
+the prose is dropped by eye. Re-measured task 1, 2026-09-01, with `command grep` --
+a bare `grep` on this machine is ugrep and honours `.gitignore`.)
+
+Of those 14, these are **command-position program tests that must move onto
+`program()`**:
 
 | File:line | Test | Note |
 |---|---|---|
@@ -296,8 +303,13 @@ names" should read this table alongside it.
 
 ## Tasks
 
-- [ ] 1. Re-run the call-site derivation command above and reconcile it against the two
-      tables. Any line in neither table is an unclassified site and blocks the task.
+- [x] 1. **Done 2026-09-01.** Re-ran the derivation on this branch (base `6444871`).
+      19 lines out, 5 prose, 14 tests. All 14 are already in the two tables: the 10
+      must-move rows and 4 of the 5 must-NOT-move rows. The 5th must-not-move row,
+      `classify-git-command.py:423`, is **not matched by the command at all** -- it
+      tests `argv[1:]`, and the pattern anchors on `argv[0]`; confirmed present and
+      unchanged by reading the file. **Zero unclassified sites.** Every line number
+      in both tables still resolves to the stated code on this base -- no drift.
 - [ ] 2. Red first: add case, path, `cd`-not-folded, and `program()`-is-total assertions to
       `hooks/lib/shell_segments.test.py` and each affected classifier's `.test.py`.
       Confirm each fails for the right reason before writing `program()`.
