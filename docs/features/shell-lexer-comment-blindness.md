@@ -1,7 +1,7 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
-branch: fix/shell-lexer-comment-blindness
+branch: none  # merged via PR #92 (115e244) 2026-09-01
 ---
 
 # An unquoted `#` truncates the shared lexer, blinding every Tier-1 command guard

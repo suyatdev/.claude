@@ -503,11 +503,32 @@ names" should read this table alongside it.
       pane-dispatch-guard 34, phase-guard 147, reference-transaction 182, scan-secrets 17,
       secret-command-guard 168, test-marker-guard 249, verify-hook-wiring 37,
       worktree-guard 222.
-- [ ] 11. ADR under `docs/decisions/` — the fail-closed trade, the `cd` exception, and the
-      `OPAQUE_TARGETS` split are all direction-setting, and the `cd` reasoning is the part
-      a future reader will otherwise undo.
-- [ ] 12. Close out `docs/features/shell-lexer-comment-blindness.md`: `phase: review`,
-      `branch: none  # merged via PR #92 (115e244) 2026-09-01`.
+- [x] 11. **Done 2026-09-01.** `docs/decisions/0041-one-shared-program-helper-folds-command-names-and-cd-is-exempt.md`.
+      Number confirmed free across **all 22 remote branches** (`git ls-remote --heads
+      origin`, each tree searched with `git ls-tree`) rather than against local `main` alone
+      — a number that collides on an unmerged branch merges cleanly, because the filenames
+      differ, so nothing would ever surface it.
+
+      Every factual claim in it was re-run before it was written down, and two were wrong:
+      the `OPAQUE_TARGETS` split is at `:400` post-change (not `:399`) and the `argv[1:]`
+      scan at `:424` (not `:423`); both now cite the post-change number and name the
+      pre-change one. `git-guard.sh:75` was checked and is correct — it is the `if !` that
+      opens the fail-closed block, whose body runs to `:78`. The ADR also scopes "six Tier-1
+      hooks affected" to the six actually **probed**, and records `feature-sync-guard.sh`
+      separately as inference.
+- [x] 12. **Done 2026-09-01.** `docs/features/shell-lexer-comment-blindness.md` moved from
+      `phase: implementation` / `branch: fix/shell-lexer-comment-blindness` to
+      `phase: review` / `branch: none  # merged via PR #92 (115e244) 2026-09-01`.
+
+### Task 6 addendum — the probe's precondition was itself falsified
+
+The probe reported every lowercase control refusing, so its `UNMEASURED` abort path **never
+fired** — and a guard clause that never fires reads identically to one that *cannot* fire.
+Falsified by substituting an always-allow stub for one guard's script and re-running:
+`merge-guard.sh` reported `UNMEASURED -- lowercase control did not refuse (rc=0, expected
+2)`, the other three groups still printed their full `rc=2` tables, and the probe exited 1.
+So the precondition fires, is scoped to the group whose control failed, and does not suppress
+the groups that are still measurable.
 
 ## Implementation corrections
 
