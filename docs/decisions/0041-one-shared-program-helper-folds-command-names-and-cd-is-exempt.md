@@ -130,8 +130,13 @@ own docstring.
 
 ## What this does not fix
 
-Recorded so the change cannot imply a wider claim than it earns. Each is measured and pinned
-as an ALLOW assertion, so widening is a deliberate edit rather than silent drift.
+Recorded so the change cannot imply a wider claim than it earns. All four are measured;
+**three of the four are pinned as ALLOW assertions**, so widening those is a deliberate edit
+rather than silent drift. The fourth — the Unicode row — is measured and deliberately *not*
+pinned, because what was measured is that the shape cannot run on this machine at all, and
+an assertion for a behavior nobody can observe would assert a guess. (An earlier draft of
+this paragraph said "each is measured and pinned", a universal that was false in both
+halves; the `TIME`/`Time` row had no assertion at all until it was written.)
 
 - **`SEG_OPAQUE` fails open** — `env git commit -m x` is allowed, and is allowed for the
   **lowercase** form too. Unrelated to spelling, pre-existing, and **the larger hole of the
@@ -139,6 +144,16 @@ as an ALLOW assertion, so widening is a deliberate edit rather than silent drift
 - **Interpreter strings** — `sh -c 'git commit -m x'` is invisible to a lexer by construction.
 - **Capitalized wrapper words** — `TIME git commit` lands in the `SEG_OPAQUE` hole above
   rather than in a guard. Fixing wrappers without fixing `SEG_OPAQUE` buys nothing.
+- **Secret FILE names are not case-folded.** This ADR folds the **program** name;
+  `classify-secret-command.py`'s `DOTFILE_PATTERNS` match the **file** name and are
+  untouched, so `cat .ENV`, `cat .Env`, `cat ~/.ZSHRC` and `cat CREDENTIALS.json` all allow
+  while their lowercase forms block (measured through the hook with a `PreToolUse` payload,
+  executing nothing). Pre-existing and not widened here — but on the same case-insensitive
+  filesystem and behind the same guard, which makes it the gap a reader is most likely to
+  assume this change closed. Folding filenames is a **different decision with a different
+  blast radius** (it would fold every path a user legitimately names in caps), so it is
+  deliberately left to `secret-command-guard`'s own card:
+  `docs/features/secret-filename-case-blindness.md`.
 - **Unicode case folding** is measured and closed rather than left open: the dotted capital-I
   spelling `GİT` (U+0130) does not resolve to the git binary on this machine's APFS
   (`command not found` under both zsh and bash), and independently `'GİT'.lower()` on

@@ -325,10 +325,23 @@ Scenario: the already-correct spellings do not regress
 
 ## Known gaps — measured, and NOT closed by this change
 
-Recorded so the PR cannot imply a wider claim than it earns. **Three rows are measured and
-pinned as ALLOW assertions; the fourth is unmeasured and is deliberately NOT pinned** —
-pinning a behavior nobody has observed would assert a guess. Count the rows here rather
-than trusting any number written in prose.
+Recorded so the PR cannot imply a wider claim than it earns. **All five rows are measured.
+Three are pinned as ALLOW assertions; two are deliberately NOT pinned** — not because
+they are unmeasured. The Unicode row is unpinned because what task 8 measured is that the
+shape *cannot run here at all*, and an assertion for a behavior nobody can observe would
+assert a guess; the filename row is unpinned because it belongs to another card and pinning
+it here would imply this branch owns it. Count the rows here rather than trusting any number
+written in prose.
+
+⚠️ **Corrected 2026-09-01 (compliance judge, round 2).** This preamble read "three rows are
+measured … the fourth is unmeasured", which was true when it was written and went stale the
+moment task 8 measured the Unicode row inside this same document. Worse, row 3
+(`TIME`/`Time git commit`) said `Pinned? yes` while **no assertion for that shape existed
+anywhere in the repo** — a claim about a test that had never been written. Both are now
+true: the row is pinned at `hooks/lib/classify-git-command.test.py`, in
+`ARGV0_SPELLING_CASES`, as two ALLOW rows plus a lowercase `time git commit` control that
+reaches `COMMIT` — without that control the two ALLOW rows could pass for an unrelated
+reason.
 
 | Shape | Measured | Pinned? | Why out of scope |
 |---|---|---|---|
@@ -336,10 +349,16 @@ than trusting any number written in prose.
 | `sh -c 'git commit -m x'` | `git-guard.sh` rc=0 | yes | A command inside an interpreter string is invisible to a lexer by construction. Long-standing, documented. |
 | `TIME git commit`, `Time git commit` | facts `SEG_OPAQUE 0 TIME` / `Time` | yes | A capitalized `WRAPPERS` entry is not stripped, so the segment lands in the `SEG_OPAQUE` hole above rather than in a guard. Fixing wrappers without fixing `SEG_OPAQUE` buys nothing. |
 | Unicode case folding, e.g. `GİT` (dotted capital I, U+0130) | **measured, task 8** | **no** | Neither precondition for a gap holds. (1) `zsh -c "GİT --version"` and `bash -c "GİT --version"` both → `command not found` (rc=127) on this machine's APFS — it does not resolve to the git binary at all, so nothing is owed on that ground alone. (2) Independently, Python 3.9.6's `'GİT'.lower()` → `'gi̇t'` (4 codepoints: `g`, `i`, U+0307 COMBINING DOT ABOVE, `t`), which is **not equal** to `'git'` — confirmed `'GİT'.lower() == 'git'` is `False`. So even on a filesystem where this spelling did resolve, a `program()` built on `str.lower()` would not catch it. Per the card's own decision rule, a gap requires BOTH preconditions; here neither holds, so this is not an unclosed gap on this toolchain, and no assertion is pinned for a behavior that cannot be observed running. |
+| **Secret FILE names are not case-folded** -- `cat .ENV`, `cat .Env`, `cat ~/.ZSHRC`, `cat CREDENTIALS.json` | **measured 2026-09-01** | **no** | This change folds the **program** name (`argv[0]`); `classify-secret-command.py`'s `DOTFILE_PATTERNS` (`:137`-`:147`) match the **file** name and were never folded -- untouched by this branch (`797663e` changes exactly two lines in that file, both on the `argv[0]` test). Pre-existing and **not widened here**, but on the same case-insensitive filesystem and behind the same guard, so a reader who takes "the guards now catch misspelled names" to cover `cat ~/.ZSHRC` would be wrong. Measured through the hook with a `PreToolUse` payload, executing nothing: `.env`/`~/.zshrc`/`credentials.json` block (rc=2), all four capitalized spellings allow (rc=0). Deliberately NOT pinned and NOT fixed here -- folding filenames is a different decision with a different blast radius (it would also fold every path a user legitimately names in caps), and it belongs to `secret-command-guard`'s own card. Found by the observability judge, round 2. |
 
-**`SEG_OPAQUE` failing open is the larger hole of the two.** It is not made worse by this
-change, and it is not made better. Anyone reading "the guards now catch misspelled command
-names" should read this table alongside it.
+**`SEG_OPAQUE` failing open is the largest hole in this table** — it is not made worse by
+this change, and it is not made better. (This sentence read "the larger hole of the two"
+until round 2 added a fifth row; the ranking survived, the arithmetic did not.) Anyone
+reading "the guards now catch misspelled command names" should read this whole table
+alongside it — and the filename row in particular, because it is the one a reader is most
+likely to assume this change covered.
+
+Follow-up card for the filename row: `docs/features/secret-filename-case-blindness.md`.
 
 ## Tasks
 
@@ -519,6 +538,50 @@ names" should read this table alongside it.
 - [x] 12. **Done 2026-09-01.** `docs/features/shell-lexer-comment-blindness.md` moved from
       `phase: implementation` / `branch: fix/shell-lexer-comment-blindness` to
       `phase: review` / `branch: none  # merged via PR #92 (115e244) 2026-09-01`.
+
+### Judge round 2 — what the two judges found after implementation
+
+Both ran on the finished branch at `eb02618`. Every finding was reproduced before it was
+acted on; one was reproduced and found **wrong**, and is recorded here rather than quietly
+dropped.
+
+1. **Compliance judge, `fail`, 1 violation — upheld.** The Known-gaps table said the
+   `TIME`/`Time git commit` row was `Pinned? yes` while **no assertion for that shape existed
+   anywhere in the repo**, and the preamble still called the Unicode row "unmeasured" after
+   task 8 had measured it inside this same document. ADR 0041 then flattened both into "each
+   is measured and pinned", a universal false in both halves. Fixed: the row is now genuinely
+   pinned (two ALLOW rows plus a lowercase `time git commit` control that reaches `COMMIT`,
+   without which the ALLOW rows could pass for an unrelated reason), and both the preamble
+   and the ADR sentence now state what is actually true.
+
+2. **Observability judge, `risk=low` — one finding upheld and promoted to a table row.**
+   Secret **file** names are not case-folded, so `cat .ENV`, `cat .Env`, `cat ~/.ZSHRC` and
+   `cat CREDENTIALS.json` all allow while their lowercase forms block. Reproduced through the
+   hook with a `PreToolUse` payload, executing nothing. Pre-existing and untouched by this
+   branch, but on the same filesystem and behind the same guard — exactly the thing a reader
+   would assume this change covered. Now the fifth row above, with its own follow-up card.
+
+3. **Observability judge's second finding — upheld, and annotated rather than removed.** The
+   `timeout 5 GIT commit -m x` row expects an **empty** fact set, which also passes if the
+   classifier stopped emitting facts entirely. The fact it pins is a real decision, so the
+   row stays; it now carries a warning that it pins an accepted fail-open and is not
+   coverage.
+
+4. **Observability judge's third finding — NOT upheld.** It reported that "two files now
+   disagree about what counts as a wrapper word". Checked: there is exactly **one**
+   `WRAPPERS` definition, `shell_segments.py:70`, and every consumer imports it —
+   `classify-commit-command.py:35`, `classify-pr-command.py:25`, `secret_approval.py:216`.
+   No copy exists to drift.
+
+   What is real, and is probably what the judge saw imprecisely, is an **asymmetry in how two
+   sites consult that one list**: the lexer strips wrappers with a literal test
+   (`shell_segments.py:330`, `seg[0] in WRAPPERS`) while `secret_approval.py:422` now folds
+   (`program(argv[0]) in WRAPPERS`). So `Nohup cat .env` is refused approval while
+   `TIME git commit` is still not stripped. That asymmetry is **deliberate and fails
+   closed** in both directions: the approval refusal is the safe answer, and the unstripped
+   wrapper is Known-gaps row 3, which this card explicitly declines to fix because doing so
+   without fixing `SEG_OPAQUE` buys nothing. `shell_segments.py:330` is not in the must-move
+   table — it tests `seg[0]` in a stripping loop, not a command-position program test.
 
 ### Task 6 addendum — the probe's precondition was itself falsified
 

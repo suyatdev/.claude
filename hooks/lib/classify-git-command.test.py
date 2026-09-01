@@ -628,9 +628,18 @@ ARGV0_SPELLING_CASES = [
     # --- per the card's explicit split ("Folding here would contradict program()'s own
     # --- docstring"). Measured pre-fix: no SEG_OPAQUE, because "GIT" in argv[1:] is not
     # --- folded and does not match OPAQUE_TARGETS.
+    # --- ⚠️ This row's expected set is EMPTY, and an empty expectation is the one
+    # --- shape that reads like coverage while asserting almost nothing: it also
+    # --- passes if the classifier stopped emitting facts entirely. It is kept
+    # --- because the fact it pins is a real, deliberate decision (the argv[1:]
+    # --- scan stays literal), but read it as pinning a FAIL-OPEN, not as proof
+    # --- the classifier is working. The rows above it, which expect non-empty
+    # --- fact sets from the same classifier in the same run, are what establish
+    # --- that. Flagged by the observability judge, 2026-09-01.
     ("timeout 5 GIT commit -m x", [],
      "argv0-spelling control: the argv[1:] OPAQUE_TARGETS scan at :423 must stay literal -- "
-     "a capitalized token later in argv is not a command-position match"),
+     "a capitalized token later in argv is not a command-position match. NOTE: empty "
+     "expectation -- this pins an accepted fail-open, it is not coverage"),
 
     # --- regression: the already-correct spellings, copied verbatim from the card's
     # --- "What is already correct" table, so folding argv[0] cannot break quote handling.
@@ -649,6 +658,22 @@ ARGV0_SPELLING_CASES = [
     ("exec git commit -m x -- foo.sh",
      ["COMMIT", "COMMIT_PATH\tfoo.sh", "COMMIT_PATHSPEC"],
      "argv0-spelling regression: the exec wrapper form must keep working"),
+
+    # --- ACCEPTED GAP, pinned as ALLOW so widening it is a deliberate edit.
+    # --- A capitalized WRAPPERS entry is not stripped, so the segment lands in
+    # --- the pre-existing SEG_OPAQUE hole rather than in a guard. Fixing wrappers
+    # --- without fixing SEG_OPAQUE buys nothing, so this card does NOT close it.
+    # --- The lowercase control below is what makes the two rows above mean
+    # --- something: it reaches COMMIT, so the difference is the spelling and not
+    # --- some unrelated reason the segment was never classified.
+    ("TIME git commit -m x", ["SEG_OPAQUE\t0\tTIME"],
+     "argv0-spelling ACCEPTED GAP: an all-caps wrapper word is not stripped, so the "
+     "segment falls into SEG_OPAQUE instead of reaching a guard (card Known-gaps row 3)"),
+    ("Time git commit -m x", ["SEG_OPAQUE\t0\tTime"],
+     "argv0-spelling ACCEPTED GAP: same for the capitalized wrapper word"),
+    ("time git commit -m x", ["COMMIT"],
+     "argv0-spelling control: the LOWERCASE wrapper IS stripped and reaches COMMIT -- "
+     "without this row the two above could pass for an unrelated reason"),
 ]
 
 
