@@ -213,7 +213,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # reimplemented: a second lexer would be free to disagree with the one the block
 # decision uses, and the disagreement would land inside a guard. It is private by
 # name, and this is a deliberate in-repo coupling -- see accounts_for_every_token.
-from shell_segments import segments, _lex, WRAPPERS  # noqa: E402
+from shell_segments import segments, _lex, program, WRAPPERS  # noqa: E402
 
 EXEMPT_VAR = "SECRET_EXEMPT"
 ID_LEN = 16
@@ -419,7 +419,7 @@ def unapprovable_reason(command):
     parsed = segments(command)
 
     for _assigns, argv in parsed:
-        if argv and argv[0] in WRAPPERS:
+        if argv and program(argv[0]) in WRAPPERS:
             return ("a wrapper word (%s) sits in the command position; approving "
                     "the plain command instead is the safer ask" % argv[0])
 

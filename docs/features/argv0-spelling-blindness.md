@@ -377,12 +377,49 @@ names" should read this table alongside it.
       `classify-git-command`) and still fail under deny, proving they are not vacuous.
       Full per-assertion scorecard recorded in the branch's task report to the user,
       not duplicated here -- see PR/commit history for this branch.
-- [ ] 4. Add `program()` to `hooks/lib/shell_segments.py` with its Google-style docstring.
-      Assert totality directly — `""`, `"/"`, `"///"`, `"foo/"` — because
-      `secret-command-guard.sh:146` fails OPEN on a crash. (No `__all__` entry: verified
-      2026-09-01 that `shell_segments.py` defines none; consumers import by name.)
-- [ ] 5. Move the ten command-position sites onto `program()`, `OPAQUE_TARGETS:399` in the
-      split form shown above. Leave every row of the "must NOT move" table untouched.
+- [x] 4. **Done 2026-09-01.** Added `program()` to `hooks/lib/shell_segments.py` with the
+      card's docstring verbatim. `shell_segments unit: 60 passed, 0 failed` (was 59/1) --
+      the 16 `PROGRAM_CASES` rows, including the four totality rows (`""`, `"/"`, `"///"`,
+      `"foo/"`), now pass against the real implementation instead of failing on absence.
+      No `__all__` entry added.
+- [x] 5. **Done 2026-09-01.** Moved all ten command-position sites onto `program()`:
+      `classify-git-command.py:400,438,521` (`:400`'s `OPAQUE_TARGETS` test split exactly as
+      shown -- `program(iargv[0]) == "git" or iargv[0] == "cd"`), `classify-commit-command.py:213`,
+      `classify-pr-command.py:55`, `classify-secret-command.py:189`, `decide-commit-gate.py:76`
+      (via `_CLASSIFIER.program`, since that module loads `classify-commit-command.py`
+      dynamically and now inherits its `program` import), `secret_approval.py:422`,
+      `git-guard.sh:358` and `feature-sync-guard.sh:130` (both inline python, via
+      `mod.program` / a added `program` import inside the embedded script). Every row of the
+      "must NOT move" table (`:424`/`:434` `cd` checks, the `argv[1:]` scan, the falsifier)
+      confirmed untouched by re-reading the file after the edit.
+
+      Before/after, the eight suites named in the dispatch:
+      | Suite | Before | After |
+      |---|---|---|
+      | shell_segments | 59/1 | 60/0 |
+      | classify-git-command | 212/4 | 216/0 |
+      | classify-commit-command | 54/3 | 57/0 |
+      | classify-pr-command | 60/3 | 63/0 |
+      | secret-command-guard | 164/4 | 165/3 |
+      | test-marker-guard | 248/1 | 249/0 |
+      | git-guard | 168/3 | 171/0 |
+      | feature-sync-guard | 31/3 | 34/0 |
+
+      **3 of the original 22 red assertions did not turn green, and this is a test bug, not
+      an implementation gap.** `hooks/secret-command-guard.test.sh`'s three new
+      `argv0-spelling` rows for `ENV`/`Printenv`/`/usr/bin/env` (lines ~972-977) assert the
+      *outer hook's* exit code is `4`. But `secret-command-guard.sh:134-144` documents and
+      implements exit 4 as an *internal classifier* status that the hook always translates
+      to `exit 2` before returning -- exactly like the already-passing lowercase controls at
+      lines 773-774, which assert `2` for bare `env`/`printenv`. Manually confirmed: after
+      this fix, `ENV` piped through the real hook now exits `2` with stderr
+      `blocked -- a bare 'ENV' with no arguments dumps the full inherited environment` --
+      byte-for-byte the same shape as the lowercase case, which is exactly what this card
+      requires. The test's own `want=4` is inconsistent with its neighbor assertions and was
+      not corrected here per instructions not to edit test files; flagging for the
+      orchestrator rather than silently working around it. Every other suite run under
+      `hooks/` and `hooks/lib/` (18 `.test.sh` + 6 `.test.py`, full list in commit) passed
+      with no new failures and no count regression.
 - [ ] 6. Commit the hook-level probe as a tracked script beside the existing
       `hooks/*.probe.sh`, with "the lowercase control refuses" as a hard precondition that
       aborts the run rather than reporting a clean table. Record before/after here.

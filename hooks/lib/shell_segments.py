@@ -242,6 +242,33 @@ def has_grouping(src):
                for tok in toks)
 
 
+def program(token):
+    """Canonical program name for a token in COMMAND POSITION.
+
+    Strips any directory component and folds case, so `/usr/bin/Git`, `GIT` and
+    `git` all answer `git`.
+
+    Total by contract: never raises, for any str input. Callers are Tier-1 guards
+    whose fail directions differ (see "Fail direction"), so a raising helper would
+    disarm one guard while blocking another. A non-str input is the caller's bug
+    and is allowed to raise.
+
+    Use ONLY where the token is in command position -- never for subcommands,
+    flags, `cd`, or a scan over `argv[1:]`, all of which are case-sensitive or
+    position-sensitive at runtime (see the measurement tables).
+
+    Args:
+        token: the raw argv[0] string from `segments()`.
+
+    Returns:
+        The lowercased basename, or "" for a token that cannot name an
+        executable (empty, or ending in "/").
+    """
+    if token.endswith("/"):
+        return ""
+    return token.rsplit("/", 1)[-1].lower()
+
+
 def segments(src):
     """Return [(assignments, argv), ...] -- one entry per shell segment of `src`.
 
