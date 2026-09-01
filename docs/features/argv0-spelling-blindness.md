@@ -507,17 +507,24 @@ Follow-up card for the filename row: `docs/features/secret-filename-case-blindne
       the must-move table (`classify-commit-command.py:213`, `classify-pr-command.py:55`),
       so task 5 closes them; no new must-move row added.
 - [x] 10. **Done 2026-09-01.** Every suite under `hooks/` and `hooks/lib/`:
-      **22 suites, 2059 passed, 0 failed**, every suite exiting 0. There is no pytest
+      **22 suites, 2062 passed, 0 failed**, every suite exiting 0. There is no pytest
       `addopts` and therefore no deselected count in this repo -- the analogue is a suite
       whose count line cannot be parsed, and that was checked rather than assumed: two
       suites (`memsearch-nudge.test.sh`, `verify-hook-wiring.test.sh`) report in an
       `N/N passed` format instead of `N passed, M failed`, and both were run and read by
-      hand -- 27/27 and 37/37. Their 64 tests are included in the 2059. No suite ran zero
+      hand -- 27/27 and 37/37. Their 64 tests are included in the 2062. No suite ran zero
       tests.
 
-      Per-suite: context-handoff-watch 43, create-worktree 89, doc-guard 27,
+      ⚠️ **This total is pinned to a commit, and is re-measured whenever a test changes.**
+      Measured at **`7b2db03`**. It was `2059` at `eb02618`; the three assertions added in
+      `7b2db03` to close the compliance judge's round-2 finding moved
+      `classify-git-command` from 216 to 219, and the total with it. The first version of
+      this line was not re-measured after that edit — caught by the compliance judge, round
+      3. A pass total is a measurement of one tree, never a property of the branch.
+
+      Per-suite (at `7b2db03`): context-handoff-watch 43, create-worktree 89, doc-guard 27,
       feature-sync-guard 34, git-guard 171, install-layer2 40, judge-guard 101,
-      classify-commit-command 57, classify-git-command 216, classify-pr-command 63,
+      classify-commit-command 57, classify-git-command 219, classify-pr-command 63,
       shell_segments 60, write-test-marker 65, memsearch-nudge 27, merge-guard 10,
       pane-dispatch-guard 34, phase-guard 147, reference-transaction 182, scan-secrets 17,
       secret-command-guard 168, test-marker-guard 249, verify-hook-wiring 37,

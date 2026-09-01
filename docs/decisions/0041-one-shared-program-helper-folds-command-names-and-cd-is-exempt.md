@@ -130,13 +130,17 @@ own docstring.
 
 ## What this does not fix
 
-Recorded so the change cannot imply a wider claim than it earns. All four are measured;
-**three of the four are pinned as ALLOW assertions**, so widening those is a deliberate edit
-rather than silent drift. The fourth — the Unicode row — is measured and deliberately *not*
-pinned, because what was measured is that the shape cannot run on this machine at all, and
-an assertion for a behavior nobody can observe would assert a guess. (An earlier draft of
-this paragraph said "each is measured and pinned", a universal that was false in both
-halves; the `TIME`/`Time` row had no assertion at all until it was written.)
+Recorded so the change cannot imply a wider claim than it earns. Which of these are pinned
+as ALLOW assertions, and which are deliberately not, is stated **per row in the card's
+Known-gaps table** — see `docs/features/argv0-spelling-blindness.md`, which also tells the
+reader to count the rows there rather than trust a figure in prose.
+
+**This paragraph deliberately carries no count and no "all"/"each" quantifier.** Two
+successive compliance rounds failed it here for exactly that: first a universal that was
+false in both halves, then — in the very edit that fixed the universal — a count and a
+singular "the fourth" left behind when a fifth bullet was added below. A sentence that
+restates the table's arithmetic has to be re-derived every time the table changes, and it
+has now been wrong twice. There is one place that number lives, and it is not here.
 
 - **`SEG_OPAQUE` fails open** — `env git commit -m x` is allowed, and is allowed for the
   **lowercase** form too. Unrelated to spelling, pre-existing, and **the larger hole of the
@@ -166,9 +170,13 @@ halves; the `TIME`/`Time` row had no assertion at all until it was written.)
 - Tests written first and in a **separate commit** from the implementation, then falsified
   against an always-allow and an always-deny stub: the both-pass intersection was **empty**,
   so no assertion discriminates nothing.
-- Full suite after the change: **22 suites, 2059 passed, 0 failed.** Two suites report in an
-  `N/N passed` format the count parser cannot read; both were run and read by hand (27/27,
-  37/37) and are included in that total, rather than being silently dropped.
+- Full suite after the change: green, with **no failures in any suite**. The pass total
+  itself is recorded once, in the card's task 10, pinned to the commit it was measured at —
+  it is not repeated here, because a total copied into a second document goes stale the next
+  time anyone adds an assertion, and that is precisely how this bullet was wrong on its
+  first draft. Note when reading it: two suites report in an `N/N passed` format the runner's
+  parser cannot read, so they are run and read by hand and are included deliberately rather
+  than dropped silently.
 - The tracked probe's `UNMEASURED` precondition — which aborts rather than printing a clean
   table when a lowercase control fails to refuse — was itself falsified by substituting an
   always-allow stub for one guard: that group reported `UNMEASURED (rc=0)`, the other three
