@@ -9,8 +9,17 @@ branch: fix/argv0-spelling-blindness
 Queued 2026-09-01, out of the "still open" section of
 `docs/features/shell-lexer-comment-blindness.md` (PR #92, merged 2026-09-01). That card
 recorded one shape — `Git commit` with a capital G — as pre-existing and deliberately
-unfixed. Measurement here found the defect is **two spellings across four guards**, not
-one shape in one guard.
+unfixed. Measurement here found the defect is **two spellings, in the shared classifiers
+every Tier-1 guard reads**, not one shape in one guard. How many guards that is, and which
+ones were probed rather than inferred, is stated in the measurement tables below — this
+sentence deliberately does not restate it.
+
+⚠️ **Corrected 2026-09-01 (compliance judge, round 4).** This line said "across four
+guards", which was true when the card was opened (`b6628fa`) and went stale the moment
+**task 9 measured `test-marker-guard.sh` and `judge-guard.sh` affected as well** — inside
+this same document, three judge rounds before anyone noticed. It is the same species as the
+two ADR failures rounds 2 and 3 caught: a count derived elsewhere, retyped where it cannot
+be kept in step. Fixed the same way — the count is gone, not corrected.
 
 Gate: **confirmed 2026-09-01.** Branch `fix/argv0-spelling-blindness`, from `origin/main` (6444871).
 

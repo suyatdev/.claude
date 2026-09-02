@@ -36,10 +36,12 @@ name. There are two more, and both really execute:
   `gh version 2.96.0`.
 - **Path.** `/usr/bin/git` is the same binary named a different way, on every platform.
 
-Measured pre-fix, with a lowercase control that genuinely refused in every group, all six
-affected guards allowed both spellings while refusing the lowercase bare name. The tracked
-probe is `hooks/argv0-task6-guards.probe.sh` (four guards) and
-`hooks/argv0-task9-guards.probe.sh` (the two that route through shared classifiers).
+Measured pre-fix, with a lowercase control that genuinely refused in every group: each guard
+probed allowed both spellings while refusing the lowercase bare name. Which guards those are
+is named once, in the Context bullet above, and the runnable evidence is
+`hooks/argv0-task6-guards.probe.sh` and `hooks/argv0-task9-guards.probe.sh` — run them
+rather than trusting a count here. (This sentence said "all six" until round 4; it is the
+same restated arithmetic as the rest, one paragraph away from the list it restated.)
 
 **`Git commit` is a plausible typo, not an attack**, which is what makes it the worse failure
 mode: the guard is silent, so the user believes the checkpoint ran. This is a
@@ -130,6 +132,13 @@ own docstring.
 
 ## What this does not fix
 
+**The authoritative list is the card's Known-gaps table**
+(`docs/features/argv0-spelling-blindness.md`), which records per row whether it was measured
+and whether it is pinned. The bullets below carry the *decision rationale* for leaving each
+one open — which the table does not — and deliberately carry no count, no ranking among
+themselves, and no `all`/`each` quantifier. Four successive compliance rounds each found one
+more restated count in these two documents; the fix is that they no longer restate.
+
 Recorded so the change cannot imply a wider claim than it earns. Which of these are pinned
 as ALLOW assertions, and which are deliberately not, is stated **per row in the card's
 Known-gaps table** — see `docs/features/argv0-spelling-blindness.md`, which also tells the
@@ -143,8 +152,13 @@ restates the table's arithmetic has to be re-derived every time the table change
 has now been wrong twice. There is one place that number lives, and it is not here.
 
 - **`SEG_OPAQUE` fails open** — `env git commit -m x` is allowed, and is allowed for the
-  **lowercase** form too. Unrelated to spelling, pre-existing, and **the larger hole of the
-  two**. Its own card.
+  **lowercase** form too. Unrelated to spelling, pre-existing, and **a bigger hole than
+  anything this change closes**. Its own card. (That comparison is against this change, not
+  a rank among the bullets below it: this sentence said "the larger hole of the two" until
+  round 4, having been written when there were two, and it is the same species of stale
+  arithmetic the paragraph above this list now refuses to carry. The card's copy of the
+  sentence was fixed in round 2 and this one was not — one statement, two homes, which is
+  the class itself.)
 - **Interpreter strings** — `sh -c 'git commit -m x'` is invisible to a lexer by construction.
 - **Capitalized wrapper words** — `TIME git commit` lands in the `SEG_OPAQUE` hole above
   rather than in a guard. Fixing wrappers without fixing `SEG_OPAQUE` buys nothing.
@@ -170,7 +184,10 @@ has now been wrong twice. There is one place that number lives, and it is not he
 - Tests written first and in a **separate commit** from the implementation, then falsified
   against an always-allow and an always-deny stub: the both-pass intersection was **empty**,
   so no assertion discriminates nothing.
-- Full suite after the change: green, with **no failures in any suite**. The pass total
+- Full suite after the change: measured green at `7b2db03`, with no failing suite in that
+  run. (Scoped to a commit on purpose: "no failures in any suite" with no commit attached is
+  an unpinned universal about a branch, and a suite total is a measurement of one tree.) The
+  pass total
   itself is recorded once, in the card's task 10, pinned to the commit it was measured at —
   it is not repeated here, because a total copied into a second document goes stale the next
   time anyone adds an assertion, and that is precisely how this bullet was wrong on its
