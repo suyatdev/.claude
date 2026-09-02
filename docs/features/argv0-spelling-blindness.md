@@ -207,7 +207,17 @@ the prose is dropped by eye. Re-measured task 1, 2026-09-01, with `command grep`
 a bare `grep` on this machine is ugrep and honours `.gitignore`.)
 
 Of those 14, these are **command-position program tests that must move onto
-`program()`**:
+`program()`**.
+
+⚠️ **Every line number in both tables below is as measured at the task-1 base,
+`6444871` — the pre-change tree.** They are deliberately NOT updated to HEAD: the tables
+record where the defect was found, and a citation pinned to a fixed tree cannot go stale,
+whereas one chased to HEAD goes stale on the next edit. Six of them have in fact moved since
+(`:437`→`:438`, `:520`→`:521`, `:399`→`:400`, `:434`→`:435`, `:423`→`:424`, and the
+falsifier's `:78`→`:101`); ADR 0041 annotates its copies of two of these, which is itself the
+one-statement-two-homes shape this card kept failing on. To locate a site at HEAD, re-run the
+derivation command above rather than trusting either number. (Flagged as a non-blocking note
+by the compliance judge, round 5.)
 
 | File:line | Test | Note |
 |---|---|---|
@@ -358,7 +368,7 @@ reason.
 | `sh -c 'git commit -m x'` | `git-guard.sh` rc=0 | yes | A command inside an interpreter string is invisible to a lexer by construction. Long-standing, documented. |
 | `TIME git commit`, `Time git commit` | facts `SEG_OPAQUE 0 TIME` / `Time` | yes | A capitalized `WRAPPERS` entry is not stripped, so the segment lands in the `SEG_OPAQUE` hole above rather than in a guard. Fixing wrappers without fixing `SEG_OPAQUE` buys nothing. |
 | Unicode case folding, e.g. `GİT` (dotted capital I, U+0130) | **measured, task 8** | **no** | Neither precondition for a gap holds. (1) `zsh -c "GİT --version"` and `bash -c "GİT --version"` both → `command not found` (rc=127) on this machine's APFS — it does not resolve to the git binary at all, so nothing is owed on that ground alone. (2) Independently, Python 3.9.6's `'GİT'.lower()` → `'gi̇t'` (4 codepoints: `g`, `i`, U+0307 COMBINING DOT ABOVE, `t`), which is **not equal** to `'git'` — confirmed `'GİT'.lower() == 'git'` is `False`. So even on a filesystem where this spelling did resolve, a `program()` built on `str.lower()` would not catch it. Per the card's own decision rule, a gap requires BOTH preconditions; here neither holds, so this is not an unclosed gap on this toolchain, and no assertion is pinned for a behavior that cannot be observed running. |
-| **Secret FILE names are not case-folded** -- `cat .ENV`, `cat .Env`, `cat ~/.ZSHRC`, `cat CREDENTIALS.json` | **measured 2026-09-01** | **no** | This change folds the **program** name (`argv[0]`); `classify-secret-command.py`'s `DOTFILE_PATTERNS` (`:137`-`:147`) match the **file** name and were never folded -- untouched by this branch (`797663e` changes exactly two lines in that file, both on the `argv[0]` test). Pre-existing and **not widened here**, but on the same case-insensitive filesystem and behind the same guard, so a reader who takes "the guards now catch misspelled names" to cover `cat ~/.ZSHRC` would be wrong. Measured through the hook with a `PreToolUse` payload, executing nothing: `.env`/`~/.zshrc`/`credentials.json` block (rc=2), all four capitalized spellings allow (rc=0). Deliberately NOT pinned and NOT fixed here -- folding filenames is a different decision with a different blast radius (it would also fold every path a user legitimately names in caps), and it belongs to `secret-command-guard`'s own card. Found by the observability judge, round 2. |
+| **Secret FILE names are not case-folded** -- `cat .ENV`, `cat .Env`, `cat ~/.ZSHRC`, `cat CREDENTIALS.json` | **measured 2026-09-01** | **no** | This change folds the **program** name (`argv[0]`); `classify-secret-command.py`'s `DOTFILE_PATTERNS` (`:137`-`:147`) match the **file** name and were never folded -- untouched by this branch (`797663e` changes exactly two lines in that file: the `from shell_segments import` line and the `argv[0]` test itself — an earlier version of this cell said both were on the `argv[0]` test, which is off by one). Pre-existing and **not widened here**, but on the same case-insensitive filesystem and behind the same guard, so a reader who takes "the guards now catch misspelled names" to cover `cat ~/.ZSHRC` would be wrong. Measured through the hook with a `PreToolUse` payload, executing nothing: `.env`/`~/.zshrc`/`credentials.json` block (rc=2), all four capitalized spellings allow (rc=0). Deliberately NOT pinned and NOT fixed here -- folding filenames is a different decision with a different blast radius (it would also fold every path a user legitimately names in caps), and it belongs to `secret-command-guard`'s own card. Found by the observability judge, round 2. |
 
 **`SEG_OPAQUE` failing open is the largest hole in this table** — it is not made worse by
 this change, and it is not made better. (This sentence read "the larger hole of the two"
@@ -385,15 +395,27 @@ Follow-up card for the filename row: `docs/features/secret-filename-case-blindne
       `hooks/secret-command-guard.test.sh` (3 env-dump fold + 1 `Nohup` wrapper fold), and
       3 rows in `hooks/test-marker-guard.test.sh` calling `decide-commit-gate.py`'s
       `_unsupported_trigger()` directly (isolated from `classify-commit-command.py:213`,
-      a separate call site). 42 assertions fail on a WRONG CLASSIFICATION (verbatim
-      failure text recorded below); the 16 `program()` rows fail on ABSENCE, the only
-      correct failure mode before the helper exists. No `os.environ`/`process.env`/bare
+      a separate call site). **Every new assertion except the `program()` rows fails on a
+      WRONG CLASSIFICATION** (verbatim failure text recorded below); the `program()` rows
+      fail on ABSENCE, the only correct failure mode before the helper exists. That split
+      is the claim worth making, and it is the one recorded; a headcount of assertions is
+      not (see the correction note below). No `os.environ`/`process.env`/bare
       `env`/`printenv` was ever executed -- the `ENV`/`Printenv`/path rows are asserted
       through `classify-secret-command.py`'s exit code via the hook's normal JSON-on-stdin
       path, per the card's warning. Full suite counts: shell_segments 59/1,
       classify-git-command 212/4, classify-commit-command 54/3, classify-pr-command 60/3,
-      secret-command-guard 164/4, test-marker-guard 248/1 -- 61 new assertions total across
-      6 files (16 `program()` + 45 classifier/hook-level).
+      secret-command-guard 164/4, test-marker-guard 248/1.
+
+      ⚠️ **Corrected 2026-09-02 (compliance judge, round 5).** This entry carried two
+      assertion tallies and both were wrong: "42 fail on a wrong classification" (42 is the
+      *total*, not that subset) and "61 new assertions total (16 `program()` + 45
+      classifier/hook-level)" (which adds the 16 a second time). The enumeration one
+      sentence earlier -- 16 + 13 + 3 + 3 + 4 + 3 -- comes to 42, not 61. **The tallies are
+      deleted rather than corrected.** Two independent recounts, the judge's and one written
+      here, disagreed with each other as well as with the card, and a hand-rolled counter
+      across four different test-file styles is exactly the kind of derivation that produces
+      a confident wrong number; replacing one unverified figure with another is not a fix.
+      The suite before/after counts above and in task 10 come from real runs and stand.
       **Completion pass, 2026-09-01:** the first pass's prompt omitted two of the ten
       must-move sites -- `hooks/git-guard.sh:358` and `hooks/feature-sync-guard.sh:130`,
       both inline python embedded in a shell script, so neither has an importable
@@ -412,17 +434,24 @@ Follow-up card for the filename row: `docs/features/secret-filename-case-blindne
       assertions total, 6 new failures. Full suite counts after: git-guard 168/3
       (was 167/0), feature-sync-guard 31/3 (was 30/0). No new must-move row: both sites
       were already in task 1's table.
-- [x] 3. **Done 2026-09-01.** Falsified all 45 non-`program()` new assertions (the 16
+- [x] 3. **Done 2026-09-01.** Falsified every non-`program()` new assertion (the
       `program()` rows are pinned separately against the stand-in allow/deny functions
       described below, since `program()` itself does not exist yet) against an always-allow
       stub (returns "nothing detected": `[]` / `"OTHER"` / `"NONE"` / `("NO","")` / exit 0 /
       `""`) and an always-deny stub (returns a fixed maximal/triggered value: a superset
       fact list / `"COMMIT"` / `"UNSUPPORTED"` / `("PR","")` / exit 2 / `"git"`).
-      **Intersection (pass under BOTH stubs): empty** -- every one of the 45 assertions
-      fails against at least one stub. 38 fail against the allow-stub, 34 against the
-      deny-stub; the 7 that pass under allow are the deliberate negative/control rows
-      (`git COMMIT`, `timeout 5 GIT commit`, `gh PR create`, `CD /other && ...` for
-      `classify-git-command`) and still fail under deny, proving they are not vacuous.
+      **Intersection (pass under BOTH stubs): empty** -- every assertion falsified fails
+      against at least one stub, which is the result that matters and does not depend on a
+      headcount. The rows that pass under the allow-stub are the deliberate negative and
+      control rows (`git COMMIT`, `timeout 5 GIT commit`, `gh PR create`,
+      `CD /other && ...` for `classify-git-command`); each still fails under deny, proving
+      none is vacuous.
+
+      ⚠️ **Corrected 2026-09-02 (compliance judge, round 5).** This entry read "all 45
+      non-`program()` assertions ... 38 fail against allow, 34 against deny; the 7 that pass
+      under allow". Those three figures were derived from task 2's wrong base of 45 and are
+      deleted with it. The empty intersection and the named control rows were separately
+      re-checked and stand.
       Full per-assertion scorecard recorded in the branch's task report to the user,
       not duplicated here -- see PR/commit history for this branch.
 - [x] 4. **Done 2026-09-01.** Added `program()` to `hooks/lib/shell_segments.py` with the
