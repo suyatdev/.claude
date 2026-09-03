@@ -1070,13 +1070,26 @@ run_case_msg "filename-fold RED: CREDENTIALS.json -> block, labels credentials.j
 
 # --- Scenario Outline: the widest pattern folds too --------------------------
 # Application Support/[^/]*/credentials is already unanchored/substring, but
-# still case-sensitive today -- RED for the two all-caps/mixed spellings.
+# still case-sensitive today -- RED for the all-caps/mixed spellings.
+#
+# The path MUST be quoted in the command text. This pattern is the only one that
+# spans a space, and segments() splits an unquoted path on it: the argv becomes
+# ['cat', '~/Library/Application', 'Support/app/credentials'] and no single token
+# can ever contain "Application Support". Measured, and it is a quoting gap, not a
+# casing one -- the all-lowercase unquoted form allows too, at every HEAD. The
+# unquoted shape is the pre-existing token-splitting gap, out of scope for this
+# card; the ALLOW assertion directly below pins it so it cannot drift unnoticed.
 run_case_msg "filename-fold RED: Application Support/CREDENTIALS -> block" \
-  2 'Application Support' 'cat ~/Library/Application Support/app/CREDENTIALS'
+  2 'Application Support' 'cat "~/Library/Application Support/app/CREDENTIALS"'
 run_case_msg "filename-fold RED: APPLICATION SUPPORT/credentials -> block" \
-  2 'Application Support' 'cat ~/Library/APPLICATION SUPPORT/app/credentials'
+  2 'Application Support' 'cat "~/Library/APPLICATION SUPPORT/app/credentials"'
 run_case_msg "filename-fold RED: application support/credentials -> block" \
-  2 'Application Support' 'cat ~/Library/application support/app/credentials'
+  2 'Application Support' 'cat "~/Library/application support/app/credentials"'
+# The control that proves the three above test casing and not quoting: the same
+# path unquoted, in the pattern's own canonical spelling, allows -- before and
+# after the fold.
+run_case "filename-fold: unquoted Application Support path -> allow (token-splitting gap, pinned)" \
+  0 'cat ~/Library/Application Support/app/credentials'
 
 # --- Scenario: the committed-template exemption survives folding ------------
 # Already green today: lowercase .env.example is already exempt.

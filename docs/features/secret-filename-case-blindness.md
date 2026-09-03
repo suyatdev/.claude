@@ -496,8 +496,15 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       any implementation edit — every scenario above, controls included. **Done.** 35
       assertions added; suite goes 168 passed / 0 failed at the parent commit to **176
       passed / 27 failed**, additive-only, both implementation files byte-identical.
-      The 27 reds are 9 capitalisation rows + 9 U+017F same-file bypasses + 10 accepted
-      Turkish-i false refusals, which is exactly the split the Flag choice table predicts.
+      The 27 reds, counted from the suite output rather than from the implementer's report
+      (which said 9/9/10 = 28 and was wrong): **7** capitalisation rows (`.ENV`, `.Env`,
+      `~/.ZSHRC`, `CREDENTIALS.json` and three `Application Support` spellings) + **1**
+      exemption-suffix row + **9** U+017F same-file bypasses + **10** accepted Turkish-i
+      false refusals. The 9 and the 10 are exactly what the Flag choice table predicts.
+      ⚠️ The exemption row runs the **opposite** direction from the other 26:
+      `git add .env.Template` is *blocked* today and must become *allowed*, because the
+      `.env.example`-family exemption is a case-sensitive `endswith`. It is red for a
+      missing allow, not a missing block.
       The three U+FB01 ligature rows are pinned as **ALLOW** assertions so the residual gap
       cannot change silently. Two rows (`.ENV.EXAMPLE`, `.Env.SAMPLE`) are green today for a
       different reason than they will be after task 5, and are labelled inline as
