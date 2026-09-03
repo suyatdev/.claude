@@ -590,6 +590,93 @@ CASES = [
      "exactly what segments() sees. A second parser is what would disagree here"),
 ]
 
+# =========================================================================
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3,
+# RED). classify-git-command.py:437/520 compare argv[0] to the literal "git", and
+# :399 to "git"/"cd" via OPAQUE_TARGETS -- so a capitalized or path-qualified spelling
+# is silently unrecognised today even though it really runs. Verified against this
+# checkout, pre-fix, 2026-09-01 -- see the failing-classification column below.
+# =========================================================================
+ARGV0_SPELLING_CASES = [
+    # --- RED: case and path folding. Measured pre-fix: all four return [] today. ---
+    ("Git commit -m x", ["COMMIT"],
+     "argv0-spelling RED: capitalized git must fold like lowercase (measured pre-fix: [])"),
+    ("GIT commit -m x", ["COMMIT"],
+     "argv0-spelling RED: all-caps git must fold too (measured pre-fix: [])"),
+    ("/usr/bin/git commit -m x", ["COMMIT"],
+     "argv0-spelling RED: an absolute path is the same binary (measured pre-fix: [])"),
+    ("Git push --force", ["PUSH", "PUSH_FORCE"],
+     "argv0-spelling RED: folding applies to every git subcommand, not just commit "
+     "(measured pre-fix: [])"),
+
+    # --- control: cd is NEVER folded (classify-git-command.py:434 stays literal).
+    # --- Measured pre-fix: the lowercase form already emits SEG_CD; capitalized CD
+    # --- does not, and must go on not doing so after the fix.
+    ("CD /other && git commit -m x", ["COMMIT"],
+     "argv0-spelling control: capitalized CD must NOT be folded -- no SEG_CD fact, only "
+     "the commit itself (folding cd would be a fail-open the card explicitly rejects)"),
+    ("cd /other && git commit -m x", ["COMMIT", "SEG_CD\t0\t/other"],
+     "argv0-spelling control: the LOWERCASE cd is the load-bearing control -- it must "
+     "keep emitting SEG_CD, or the row above passing would mean nothing ran at all"),
+
+    # --- control: subcommands stay case-sensitive (git itself rejects `COMMIT`).
+    ("git COMMIT -m x", [],
+     "argv0-spelling control: subcommand case-sensitivity is unchanged -- COMMIT is not "
+     "commit, and folding argv[0] must not spill into resolve_subcommand()'s own compare"),
+
+    # --- control: the argv[1:] scan at :423 is NOT command position and stays literal,
+    # --- per the card's explicit split ("Folding here would contradict program()'s own
+    # --- docstring"). Measured pre-fix: no SEG_OPAQUE, because "GIT" in argv[1:] is not
+    # --- folded and does not match OPAQUE_TARGETS.
+    # --- ⚠️ This row's expected set is EMPTY, and an empty expectation is the one
+    # --- shape that reads like coverage while asserting almost nothing: it also
+    # --- passes if the classifier stopped emitting facts entirely. It is kept
+    # --- because the fact it pins is a real, deliberate decision (the argv[1:]
+    # --- scan stays literal), but read it as pinning a FAIL-OPEN, not as proof
+    # --- the classifier is working. The rows above it, which expect non-empty
+    # --- fact sets from the same classifier in the same run, are what establish
+    # --- that. Flagged by the observability judge, 2026-09-01.
+    ("timeout 5 GIT commit -m x", [],
+     "argv0-spelling control: the argv[1:] OPAQUE_TARGETS scan at :423 must stay literal -- "
+     "a capitalized token later in argv is not a command-position match. NOTE: empty "
+     "expectation -- this pins an accepted fail-open, it is not coverage"),
+
+    # --- regression: the already-correct spellings, copied verbatim from the card's
+    # --- "What is already correct" table, so folding argv[0] cannot break quote handling.
+    (r"\git commit -m x -- foo.sh",
+     ["COMMIT", "COMMIT_PATH\tfoo.sh", "COMMIT_PATHSPEC"],
+     "argv0-spelling regression: a backslash-escaped git must keep working"),
+    ("'git' commit -m x -- foo.sh",
+     ["COMMIT", "COMMIT_PATH\tfoo.sh", "COMMIT_PATHSPEC"],
+     "argv0-spelling regression: a fully-quoted git must keep working"),
+    ("gi't' commit -m x -- foo.sh",
+     ["COMMIT", "COMMIT_PATH\tfoo.sh", "COMMIT_PATHSPEC"],
+     "argv0-spelling regression: a partially-quoted git must keep working"),
+    ("command git commit -m x -- foo.sh",
+     ["COMMIT", "COMMIT_PATH\tfoo.sh", "COMMIT_PATHSPEC"],
+     "argv0-spelling regression: the command wrapper form must keep working"),
+    ("exec git commit -m x -- foo.sh",
+     ["COMMIT", "COMMIT_PATH\tfoo.sh", "COMMIT_PATHSPEC"],
+     "argv0-spelling regression: the exec wrapper form must keep working"),
+
+    # --- ACCEPTED GAP, pinned as ALLOW so widening it is a deliberate edit.
+    # --- A capitalized WRAPPERS entry is not stripped, so the segment lands in
+    # --- the pre-existing SEG_OPAQUE hole rather than in a guard. Fixing wrappers
+    # --- without fixing SEG_OPAQUE buys nothing, so this card does NOT close it.
+    # --- The lowercase control below is what makes the two rows above mean
+    # --- something: it reaches COMMIT, so the difference is the spelling and not
+    # --- some unrelated reason the segment was never classified.
+    ("TIME git commit -m x", ["SEG_OPAQUE\t0\tTIME"],
+     "argv0-spelling ACCEPTED GAP: an all-caps wrapper word is not stripped, so the "
+     "segment falls into SEG_OPAQUE instead of reaching a guard (card Known-gaps row 3)"),
+    ("Time git commit -m x", ["SEG_OPAQUE\t0\tTime"],
+     "argv0-spelling ACCEPTED GAP: same for the capitalized wrapper word"),
+    ("time git commit -m x", ["COMMIT"],
+     "argv0-spelling control: the LOWERCASE wrapper IS stripped and reaches COMMIT -- "
+     "without this row the two above could pass for an unrelated reason"),
+]
+
+
 # The measured populations from the card's derivation-3 section. Pinned as data
 # rather than paraphrased, and asserted on the SEG_OPAQUE fact SPECIFICALLY --
 # `git switch main` is a population-3 member that this classifier emits
@@ -748,7 +835,7 @@ def check_depth_bound():
 
 def main():
     passed = failed = 0
-    for cmd, want, why in CASES:
+    for cmd, want, why in CASES + ARGV0_SPELLING_CASES:
         got = classify(cmd)
         if got == want:
             passed += 1

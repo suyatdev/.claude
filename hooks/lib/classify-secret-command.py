@@ -113,7 +113,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_segments import segments  # noqa: E402
+from shell_segments import program, segments  # noqa: E402
 # Defensive: a broken or missing helper must disable only the HATCH, never the
 # block checks. The first cut let this import fail open like the rest of the
 # hook, which shipped a silent off-switch for the whole guard -- corrupt one
@@ -186,7 +186,7 @@ def main():
         return 4
 
     for _assigns, argv in parsed:
-        if argv and argv[0] in ("env", "printenv") and len(argv) == 1:
+        if argv and program(argv[0]) in ("env", "printenv") and len(argv) == 1:
             print("a bare '%s' with no arguments dumps the full inherited environment" % argv[0], file=sys.stderr)
             return 4
 

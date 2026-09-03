@@ -323,6 +323,61 @@ def check_has_grouping():
     return problems
 
 
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks 2/3, RED).
+# program() does not exist yet -- every row below fails on ABSENCE, not on a wrong answer,
+# because there is nothing to call. Split from GROUPING_CASES/check_has_grouping's pattern:
+# one clean "DOES NOT EXIST" failure rather than an ImportError exploding at collection time.
+PROGRAM_CASES = [
+    # --- case folding: this machine's filesystem is case-insensitive, so PATH resolution
+    # --- finds the same binary regardless of spelling; program() must agree.
+    ("git", "git", "already-lowercase is unchanged"),
+    ("Git", "git", "capitalized name folds"),
+    ("GIT", "git", "all-caps folds"),
+    ("gh", "gh", "already-lowercase"),
+    ("Gh", "gh", "capitalized gh folds"),
+    ("GH", "gh", "all-caps gh folds"),
+    ("ENV", "env", "capitalized env folds"),
+    ("Printenv", "printenv", "capitalized printenv folds"),
+    ("Nohup", "nohup", "capitalized WRAPPERS entry folds -- secret_approval.py:422 depends on this"),
+    # --- path spelling: /usr/bin/git is the same binary named a different way.
+    ("/usr/bin/git", "git", "absolute path strips the directory and folds"),
+    ("/opt/homebrew/bin/gh", "gh", "a different absolute path, second binary"),
+    ("/usr/bin/env", "env", "a different absolute path, third binary"),
+    # --- totality: program() must never raise, for any str, because
+    # --- secret-command-guard.sh:146 fails OPEN on a crash (card, "Fail direction").
+    ("", "", "the empty string names no executable"),
+    ("/", "", "a single slash names no executable"),
+    ("///", "", "several slashes name no executable"),
+    ("foo/", "", "a token ending in / names no executable"),
+]
+
+
+def check_program():
+    """Pin program()'s case-folding, path-stripping and totality contracts.
+
+    Absent, this reports one clean failure per row instead of exploding at import --
+    same shape as check_has_grouping() above."""
+    fn = getattr(_MOD, "program", None)
+    if fn is None:
+        return ["program() DOES NOT EXIST — shell_segments.py exports {!r}".format(
+            sorted(n for n in dir(_MOD) if not n.startswith("__")))]
+    problems = []
+    for tok, want, why in PROGRAM_CASES:
+        try:
+            got = fn(tok)
+        except Exception as exc:  # noqa: BLE001 -- totality is exactly what this must catch
+            problems.append("FAIL — program({!r}) RAISED ({}): {!r}".format(tok, why, exc))
+            continue
+        if not isinstance(got, str):
+            problems.append("FAIL — program({!r}) ({}) did not return a str, got {!r}".format(
+                tok, why, got))
+            continue
+        if got != want:
+            problems.append("FAIL — program({!r}) ({})\n       want {!r}, got {!r}".format(
+                tok, why, want, got))
+    return problems
+
+
 def check_one_lexer():
     """ONE LEXER, TWO VIEWS -- asserted structurally, not by reading the source.
 
@@ -475,7 +530,7 @@ def main():
                 cmd, why, want, got))
 
     for extra in (check_heredoc, check_assignments, check_unparseable, check_accepted_limit,
-                  check_has_grouping, check_one_lexer, check_bash_fidelity):
+                  check_has_grouping, check_one_lexer, check_bash_fidelity, check_program):
         msgs = extra()
         if msgs:
             failed += len(msgs)

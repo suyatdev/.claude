@@ -355,7 +355,7 @@ PRINTS_AND_EXITS = {
 }
 
 for _assigns, argv in mod.segments(sys.stdin.read()):
-    if len(argv) < 2 or argv[0] != "git":
+    if len(argv) < 2 or mod.program(argv[0]) != "git":
         continue
     subcommand, rest, blocking = mod.resolve_subcommand(argv)
     if subcommand != "commit":

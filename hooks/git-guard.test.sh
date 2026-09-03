@@ -891,6 +891,67 @@ run_case "unparseable gh command -> ALLOW (git-guard never keys on gh)"  0 "gh p
 run_case "unparseable and mentions git -> still BLOCK"                   2 "echo \$'a\\'b' && git commit -m x -- foo.sh"
 run_case "unparseable, git only in a url -> BLOCK (substring, fail closed)" 2 "curl https://github.com/x#'unbalanced"
 
+# =============================================================================
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, task 2
+# completion pass, RED). git-guard.sh:358's OWN `argv[0] != "git"` check, inside
+# prints_and_exits_option(), decides which bucket-1 print-and-exit option (if any)
+# preceded a resolved `commit` subcommand -- for the MESSAGE only; whether to
+# refuse at all is already decided by `has_fact COMMIT`, which comes from
+# classify-git-command.py's own :520 site (a separate call site, already covered
+# by task 2's PROGRAM_CASES/ARGV0_SPELLING_CASES rows).
+#
+# It cannot be exercised end to end through run_case: pre-fix, :520 fails to set
+# the COMMIT fact for a capitalized/path invocation at all, so Guard 1 is never
+# entered and :358 is never reached, regardless of :358's own bug -- fixing :520
+# alone would not fix :358, and a fixture routed through Guard 1 would leave :358
+# untested by construction. Isolated instead, the same way
+# test-marker-guard.test.sh isolates decide-commit-gate.py's own git check from
+# classify-commit-command.py's: prints_and_exits_option() is extracted from the
+# REAL script text with awk (start/end markers, not a hardcoded line range, so
+# extraction survives drift) and sourced, so the assertions run the actual bytes
+# of git-guard.sh, never a copy.
+#
+# Measured directly against this checkout, pre-fix, 2026-09-01: the lowercase
+# control reports "--version"; all three capitalized/path spellings report
+# empty (verbatim, quoted in the FAIL lines below).
+# =============================================================================
+PE_EXTRACT="$TMP/prints_and_exits_option.sh"
+awk '/^prints_and_exits_option\(\) \{/{p=1} p{print} p && /2>\/dev\/null$/{f=1} f && /^}$/{exit}' \
+  "$HOOK" > "$PE_EXTRACT"
+if [ -s "$PE_EXTRACT" ]; then
+  CLASSIFIER="$(cd "$(dirname "$HOOK")" && pwd)/lib/classify-git-command.py"
+  py="$(command -v python3 || command -v python)"
+  # shellcheck disable=SC1090  # extracted at run time from the real hook, see above
+  source "$PE_EXTRACT"
+
+  check_prints_and_exits() { # $1 desc, $2 command_line, $3 expected result
+    local desc="$1" want="$3" got
+    command_line="$2"
+    got="$(prints_and_exits_option)"
+    if [ "$got" = "$want" ]; then
+      printf 'ok   — %s (got %s)\n' "$desc" "${got:-<empty>}"; pass=$((pass+1))
+    else
+      printf 'FAIL — %s (want %s, got %s)\n' "$desc" "${want:-<empty>}" "${got:-<empty>}"; fail=$((fail+1))
+    fi
+  }
+
+  check_prints_and_exits \
+    "argv0-spelling RED: control -- lowercase 'git --version commit' -> reports --version" \
+    'git --version commit -m x' '--version'
+  check_prints_and_exits \
+    "argv0-spelling RED: capitalized 'Git --version commit' must report --version like lowercase (measured pre-fix: empty)" \
+    'Git --version commit -m x' '--version'
+  check_prints_and_exits \
+    "argv0-spelling RED: 'GIT --version commit' must report --version like lowercase (measured pre-fix: empty)" \
+    'GIT --version commit -m x' '--version'
+  check_prints_and_exits \
+    "argv0-spelling RED: '/usr/bin/git --version commit' must report --version like lowercase (measured pre-fix: empty)" \
+    '/usr/bin/git --version commit -m x' '--version'
+else
+  printf 'FAIL — argv0-spelling RED: could not extract prints_and_exits_option() from git-guard.sh (extraction markers drifted) -- unmeasured\n'
+  fail=$((fail+1))
+fi
+
 # ---------------------------------------------------------------------------
 printf '\ngit-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \

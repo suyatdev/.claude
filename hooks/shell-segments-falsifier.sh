@@ -61,6 +61,29 @@ def has_grouping(src):  # appended by hooks/shell-segments-falsifier.sh -- see i
 SHIM
 fi
 
+# program() arrived with argv0-spelling-blindness, and hits the SAME import wall: today's
+# classify-git-command.py imports it by name, so without it the OLD arm cannot load its
+# classifier and git-guard fails closed on every row -- which is what the BASELINE row
+# reports when this shim is missing.
+#
+# Unlike has_grouping above, a CONSTANT would be a fabrication here: program() decides
+# whether a segment is git at all, so a stub would move every row. The honest shim is the
+# REAL implementation, copied verbatim from lib/shell_segments.py. That is what keeps the
+# two trees differing only in redirect handling -- the harness's whole invariant. Keep this
+# in sync with the real definition; a drifted copy would silently make the old arm answer a
+# different question from the new one.
+if ! grep -q '^def program' "$TMP/old/lib/shell_segments.py"; then
+  cat >> "$TMP/old/lib/shell_segments.py" <<'SHIM'
+
+
+def program(token):  # appended by hooks/shell-segments-falsifier.sh -- see its comment
+    """The real implementation, verbatim. NOT a stub: a constant would move every row."""
+    if token.endswith("/"):
+        return ""
+    return token.rsplit("/", 1)[-1].lower()
+SHIM
+fi
+
 # Assert the baseline actually PREDATES the fix, before running a single row. Pinning the default is
 # not enough on its own: it cures today's symptom and leaves the failure MODE -- a silently invalid
 # baseline reported as content failures -- completely intact for the next caller who passes a base by

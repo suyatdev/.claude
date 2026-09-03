@@ -405,6 +405,68 @@ else
   pass=$((pass+1))
 fi
 
+# =============================================================================
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, task 2
+# completion pass, RED). feature-sync-guard.sh:130's OWN
+# `argv[0] == "git" and argv[1] == "commit"` check reads FEATURE_SYNC_EXEMPT
+# from the assignments of the segment that runs the commit -- for a capitalized
+# or path-qualified spelling, this check never matches, so the exemption is
+# silently ignored even though the same commit really runs.
+#
+# It cannot be exercised end to end through run_case: `has_fact COMMIT` (line
+# 111, from classify-git-command.py's own :520 site, a separate call site
+# already covered by task 2's ARGV0_SPELLING_CASES rows) fails to fire for a
+# capitalized/path invocation pre-fix, so the hook exits at line 111 before
+# this exempt-reading code ever runs, regardless of :130's own bug -- fixing
+# :520 alone would not fix :130, and a fixture routed past line 111 would leave
+# :130 untested by construction. Isolated instead, the same way
+# test-marker-guard.test.sh isolates decide-commit-gate.py's own git check: the
+# exempt_reason assignment is extracted from the REAL script text with awk
+# (start/end markers, not a hardcoded line range, so extraction survives
+# drift) and sourced, so the assertions run the actual bytes of
+# feature-sync-guard.sh, never a copy.
+#
+# Measured directly against this checkout, pre-fix, 2026-09-01: the lowercase
+# control reports "reason"; all three capitalized/path spellings report empty
+# (verbatim, quoted in the FAIL lines below).
+# =============================================================================
+FSG_EXTRACT="$TMP/exempt_reason.sh"
+awk '/^export FSG_HOOK_DIR=/{p=1} p{print} p && /^'"'"' 2>\/dev\/null\)$/{exit}' \
+  "$HOOK" > "$FSG_EXTRACT"
+if [ -s "$FSG_EXTRACT" ]; then
+  py="$(command -v python3 || command -v python)"
+
+  check_exempt_reason() { # $1 desc, $2 command_line, $3 expected result
+    local desc="$1" want="$3" got
+    HOOK_DIR="$(cd "$(dirname "$HOOK")" && pwd)"
+    command_line="$2"
+    # shellcheck disable=SC1090  # extracted at run time from the real hook, see above
+    source "$FSG_EXTRACT"
+    got="$exempt_reason"
+    if [ "$got" = "$want" ]; then
+      printf 'ok   — %s (got %s)\n' "$desc" "${got:-<empty>}"; pass=$((pass+1))
+    else
+      printf 'FAIL — %s (want %s, got %s)\n' "$desc" "${want:-<empty>}" "${got:-<empty>}"; fail=$((fail+1))
+    fi
+  }
+
+  check_exempt_reason \
+    "argv0-spelling RED: control -- lowercase 'FEATURE_SYNC_EXEMPT=reason git commit' -> reports reason" \
+    'FEATURE_SYNC_EXEMPT=reason git commit -m x' 'reason'
+  check_exempt_reason \
+    "argv0-spelling RED: capitalized 'FEATURE_SYNC_EXEMPT=reason Git commit' must report reason like lowercase (measured pre-fix: empty)" \
+    'FEATURE_SYNC_EXEMPT=reason Git commit -m x' 'reason'
+  check_exempt_reason \
+    "argv0-spelling RED: 'FEATURE_SYNC_EXEMPT=reason GIT commit' must report reason like lowercase (measured pre-fix: empty)" \
+    'FEATURE_SYNC_EXEMPT=reason GIT commit -m x' 'reason'
+  check_exempt_reason \
+    "argv0-spelling RED: 'FEATURE_SYNC_EXEMPT=reason /usr/bin/git commit' must report reason like lowercase (measured pre-fix: empty)" \
+    'FEATURE_SYNC_EXEMPT=reason /usr/bin/git commit -m x' 'reason'
+else
+  printf 'FAIL — argv0-spelling RED: could not extract the exempt_reason assignment from feature-sync-guard.sh (extraction markers drifted) -- unmeasured\n'
+  fail=$((fail+1))
+fi
+
 printf '\nfeature-sync-guard: %s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }

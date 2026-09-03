@@ -952,6 +952,64 @@ for broken in missing corrupt; do
 done
 
 # =============================================================================
+# argv0-spelling-blindness (docs/features/argv0-spelling-blindness.md, tasks
+# 2/3, RED). classify-secret-command.py:189 compares argv[0] to the literal
+# tuple ("env", "printenv"), so a capitalized or path-qualified spelling reads
+# as an ordinary command today, even though it really dumps the environment.
+#
+# WARNING, repeated from the card: these are asserted by calling
+# classify-secret-command.py directly through the hook's normal JSON-on-stdin
+# path -- run_case_msg never causes a real shell to execute "ENV" or
+# "Printenv". A judge dumped a live API key into its own context during
+# planning by running the capitalized form through a real shell to "verify"
+# it; that incident is why this suite never does that. The hook only ever
+# decides allow/block from the command TEXT.
+#
+# Measured against this checkout, pre-fix, 2026-09-01: all three below exit 0
+# (ALLOW) and print nothing. After the fix they must block exactly like the
+# lowercase controls above -- which is HOOK exit 2, not 4. Corrected 2026-09-01:
+# these three were written asserting 4, the classifier's INTERNAL env-dump
+# status. The hook translates that status to exit 2 at secret-command-guard.sh
+# (the `if [ "$status" -eq 4 ]` branch ends in `exit 2`), so 4 is unreachable at
+# the hook boundary and the lowercase controls above have always asserted 2.
+# The comment's stated intent -- "exactly like the lowercase controls" -- was
+# right; only the number was wrong. Verified after the fix: all five spellings
+# return rc=2 with the same "blocked -- a bare '<name>' with no arguments dumps
+# the full inherited environment" message, differing only in the quoted name.
+# =============================================================================
+run_case_msg "argv0-spelling RED: capitalized ENV -> block as an env dump (measured pre-fix: exit 0)" \
+  2 "'ENV'" 'ENV'
+run_case_msg "argv0-spelling RED: capitalized Printenv -> block as an env dump (measured pre-fix: exit 0)" \
+  2 "'Printenv'" 'Printenv'
+run_case_msg "argv0-spelling RED: an absolute env path -> block as an env dump (measured pre-fix: exit 0)" \
+  2 "'/usr/bin/env'" '/usr/bin/env'
+
+# =============================================================================
+# argv0-spelling-blindness: secret_approval.py:422 compares argv[0] to the
+# literal tuple WRAPPERS, so a capitalized wrapper word is not recognised as a
+# wrapper at all -- and because shell_segments.segments() only strips a
+# WRAPPERS member it recognises, "Nohup" is left sitting in argv[0], which
+# means accounts_for_every_token() finds nothing dropped and approves it.
+#
+# Measured against this checkout, pre-fix, 2026-09-01:
+#   secret_approval.py id 'Nohup cat .env'  -> exit 0, prints an approval id
+#   secret_approval.py id 'nohup cat .env'  -> exit 3, "the lexer treats
+#                                              specially" (the backstop, not
+#                                              the wrapper-position check --
+#                                              see the WRAPBACKSTOP case
+#                                              above; segments() already
+#                                              strips the lowercase form
+#                                              before the WRAPPERS-position
+#                                              check ever runs)
+# After the fix, program(argv[0]) folds "Nohup" to "nohup" at the
+# WRAPPERS-position check in unapprovable_reason(), so it must refuse with
+# exit 3 like the lowercase form -- scenario "a capitalized wrapper is not
+# approvable" in the card.
+# =============================================================================
+instab_id_case "argv0-spelling RED: a capitalized wrapper (Nohup) must be refused like nohup (measured pre-fix: exit 0, approvable)" \
+  3 'Nohup cat .env' ""
+
+# =============================================================================
 # Registration assertion: checked against the REAL repo settings.json, not a
 # fixture — that file is what Claude Code actually loads.
 # =============================================================================

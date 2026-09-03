@@ -111,7 +111,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from shell_segments import has_grouping, segments  # noqa: E402  (path must be set first)
+from shell_segments import has_grouping, program, segments  # noqa: E402  (path must be set first)
 
 __all__ = ["classify"]
 
@@ -396,7 +396,8 @@ def relex_hit(argv, depth):
         if not inner:
             return tok
         for _assigns, iargv in inner:
-            if iargv and iargv[0] in OPAQUE_TARGETS:
+            # command position, so git folds and cd does not
+            if iargv and (program(iargv[0]) == "git" or iargv[0] == "cd"):
                 return tok
             if relex_hit(iargv, depth + 1) is not None:
                 return tok
@@ -434,7 +435,7 @@ def segment_facts(index, assigns, argv):
     if argv[0] == "cd":
         facts.append(_seg("SEG_CD", index, cd_operand(argv)))
         return facts
-    if argv[0] == "git":
+    if program(argv[0]) == "git":
         return facts
     token = opaque_token(argv)
     if token is not None:
@@ -517,7 +518,7 @@ def classify(src):
         facts.update(indexed)
         saw_cd = saw_cd or any(f.startswith("SEG_CD\t") for f in indexed)
 
-        if len(argv) < 2 or argv[0] != "git":
+        if len(argv) < 2 or program(argv[0]) != "git":
             continue
         subcommand, rest, blocking_option, residual_option, c_operands = \
             resolve_git_segment(argv)
