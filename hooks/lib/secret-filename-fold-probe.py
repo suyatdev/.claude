@@ -118,18 +118,12 @@ all_table_a_tokens = sorted({t for toks in table_a_tokens_by_pattern.values() fo
 print(f"\nunion of all Table A candidate tokens: {len(all_table_a_tokens)}")
 
 # ---------------------------------------------------------------------------
-# Section 1b -- production DOTFILE_RE must not silently drift from the
-# self-compiled re.IGNORECASE column. Before task 5 lands, DOTFILE_RE is
-# compiled with no flags (plain), so this is expected to disagree today; it
-# is printed rather than asserted-fatal so the probe stays a measurement, not
-# a test.
-#
-# The Table A tokens alone CANNOT discriminate the flag choice this card
-# decided. They are pure-ASCII case variants, and re.IGNORECASE behaves
-# identically to re.IGNORECASE|re.ASCII on those -- measured, 0 of 11 differ.
-# A receipt that still reads True under the rejected flag is not a receipt.
-# So the comparison population is widened with the same-file homoglyph tokens,
-# where the two flags disagree on every one (6 of 6). Do not narrow it back.
+# Section 1b -- moved. The production-drift receipt now lives at section 4b.
+# This block used to carry its own figures ("0 of 11", "6 of 6") describing a
+# hand-typed token list; both the list and the figures were replaced by derived
+# ones, and the comment was left behind for a whole round saying numbers that
+# no longer existed. The receipt's own output is the only place those counts
+# are stated now -- run the probe rather than reading a comment.
 # ---------------------------------------------------------------------------
 # The receipt is deliberately NOT printed here -- see section 4b. It needs a
 # population that can tell re.IGNORECASE from the rejected re.IGNORECASE|re.ASCII,

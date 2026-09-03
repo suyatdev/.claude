@@ -536,11 +536,19 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       non-discriminating rather than counted as coverage.
 - [x] 5. **Done.** Landed exactly as prescribed below, 8 lines in
       `hooks/lib/classify-secret-command.py` and nothing else. Suite: **204 passed, 0
-      failed**. Probe receipt: `production DOTFILE_RE agrees with self-compiled
-      re.IGNORECASE column: True (0 of 50 tokens differ, of which 6 discriminate
-      re.IGNORECASE from re.IGNORECASE|re.ASCII)` — it read `False` at the parent commit.
-      The three U+FB01 ligature rows are still **ALLOW**, as designed; this card does not
-      close them (task 8).
+      failed**. Probe receipt, as the shipped probe prints it today: `production DOTFILE_RE
+      agrees with self-compiled re.IGNORECASE column: True (0 of 53 tokens differ, of which
+      9 derived tokens discriminate re.IGNORECASE from re.IGNORECASE|re.ASCII)` — it read
+      `False` at the parent commit. The three U+FB01 ligature rows are still **ALLOW**, as
+      designed; this card does not close them (task 8).
+
+      ⚠️ **This quotation read `0 of 50 … 6` until round 7.** Round 6 changed the receipt's
+      population and rewrote the paragraph immediately below to explain the change — and
+      left the quoted output it was explaining untouched, in the present tense, with no SHA
+      anchor. The observability judge caught it by running the probe instead of reading the
+      card. Same species as everything else this card has paid for: **the narrative was
+      updated and the artefact it narrates was not.** A quoted command output is a claim
+      about the present, so it either gets re-run or gets a SHA.
 
       ⚠️ **The receipt originally could not prove what this bullet credited it with, and was
       rebuilt across rounds 5 and 6.** As first shipped it compared only the Table A union —
@@ -628,11 +636,11 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       if label == ENV_LABEL and ENV_EXEMPT_RE.search(tok):
       ```
 
-      - `DOTFILE_RE` (`classify-secret-command.py:147`) — the gap itself. This is the
+      - `DOTFILE_RE` (`classify-secret-command.py:147` **in the pre-fix tree `7e3f802`**; `:149` at HEAD, where `:147` is now `FOLD_FLAGS`) — the gap itself. This is the
         **single** compile site; the probe and the tests import `DOTFILE_RE`, they never
         recompile `DOTFILE_PATTERNS`, because a second compile site is where a future
         refactor drops a flag.
-      - `ENV_EXEMPT_RE` replaces `tok.endswith(ENV_EXEMPT_SUFFIXES)` (`:159`). **A regex,
+      - `ENV_EXEMPT_RE` replaces `tok.endswith(ENV_EXEMPT_SUFFIXES)` (`:159` pre-fix, `:161` at HEAD). **A regex,
         not `tok.lower().endswith(...)`** — `str.lower()` is Unicode-aware with its own
         table, so a `lower()`-based exemption and an `re.IGNORECASE` pattern can disagree,
         which is precisely the class of bug this card exists to fix. `ENV_EXEMPT_SUFFIXES`
@@ -641,7 +649,7 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       Verified before prescribing: this exact form scores **20/20** on a case list covering
       every capitalisation row, both committed-template forms, the long-s bypasses, the
       ligature gap, `.envexample` (allow) and `.env.examples` (block).
-      `program(argv[0])` (`:189`) already folds via ADR 0041 and needs no change.
+      `program(argv[0])` (`:189` pre-fix, `:191` at HEAD) already folds via ADR 0041 and needs no change.
 
       ⚠️ **Corrected premise, round 1.** The first draft justified this by saying folding
       the patterns alone would newly block `.env.EXAMPLE`. That is false and was measured:
