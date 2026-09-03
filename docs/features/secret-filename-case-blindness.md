@@ -195,55 +195,91 @@ asking it*.
 - **Guard verdict** — match the substituted spelling against `DOTFILE_PATTERNS` under each
   candidate flag set.
 
-The candidate population is the **union** of two derivations, because either alone has a hole
-the other covers: (a) codepoints whose NFKD + casefold lands on one of the ASCII letters used
-in the seven names, and (b) codepoints Python's own `re.IGNORECASE` matches against those
-letters. Derivation (a) alone misses U+0131 dotless i, which casefolds to itself — and (a)
-alone is what an earlier pass used, reporting 4 false refusals where the union reports 8.
+**The population took three rounds to get right, and every earlier figure in this card's
+history was understated.** Recording the three holes, because each one produced a confident
+wrong table and each was found by a different reader:
 
-**Result** — 1,908 substitutions tested on this volume at HEAD `7e3f802`, python3 3.9.6:
+1. **Candidates from NFKD alone** (my round 2) — no entry for U+0131 dotless i, which
+   casefolds to itself. Fixed by taking the **union** of (a) codepoints whose NFKD + casefold
+   lands on one of the ASCII letters in the seven names and (b) codepoints Python's own
+   `re.IGNORECASE` matches against those letters.
+2. **First occurrence only** (compliance judge, round 3) — `name.find(run)` substituted only
+   the first instance of each letter, missing `.terminal_aliaseſ` and `credentials.jſon`,
+   both same-file, both live bypasses. Fixed by sweeping **every** position.
+3. **Single substitutions only** (observability judge, round 3) — nobody had tried two
+   homoglyphs in one name. `.baſh_proﬁle` opens the real file. Fixed by composing every
+   non-overlapping combination of confirmed same-file substitutions within a name.
 
-| Strategy | Bypasses (of 7 same-file spellings) | False refusals (of 1,901 different-file spellings) |
+**Result** — 2,336 variants tested on this volume at HEAD `7e3f802`, python3 3.9.6:
+
+| Strategy | Bypasses (of 12 same-file spellings) | False refusals (of 2,324 different-file spellings) |
 |---|---|---|
-| plain — today | 7 | 0 |
-| **`re.IGNORECASE`** | **2** | **8** |
-| `re.IGNORECASE \| re.ASCII` | 7 | 0 |
-| NFKD + `re.IGNORECASE` | 0 | 496 |
+| plain — today | 12 | 0 |
+| **`re.IGNORECASE`** | **3** | **10** |
+| `re.IGNORECASE \| re.ASCII` | 12 | 0 |
+| NFKD + `re.IGNORECASE` | 0 | hundreds — **see below, figure deliberately not published** |
+
+⚠️ **The NFKD false-refusal count is deliberately absent.** Two independent measurements
+disagree: this card's sweep returns 577 of 2,324, the compliance judge's round-3 sweep
+returned 1,881 of 1,901 on its own population. Both agree the answer is *hundreds*, and the
+rejection below does not depend on which is right — so the number is deleted rather than a
+third one published. If a future reader needs it, re-derive it; do not resurrect either
+figure from this paragraph.
+
+**The 12 breaks down as 9 single-character spellings plus 3 two-character combinations.** The
+observability judge independently reported 9; that count is correct for singles and the two
+figures reconcile exactly.
 
 Every one of the three fixes closes the ASCII capitalisation gap identically. They differ
 **only** on the homoglyph axis, and that axis is a *pre-existing* gap this card discovered —
 today's guard misses all 7, so no option here is a regression.
 
-The seven same-file spellings, and which strategy catches each:
+All twelve same-file spellings, and which strategy catches each:
 
-| Protected name | Same-file spelling | Codepoint | plain | `IC` | `IC\|A` | NFKD+`IC` |
+| Protected name | Same-file spelling | Codepoints | plain | `IC` | `IC\|A` | NFKD+`IC` |
 |---|---|---|---|---|---|---|
 | `.bash_profile` | `.bash_proﬁle` | U+FB01 | · | · | · | ✓ |
 | `.bash_profile` | `.baſh_profile` | U+017F | · | ✓ | · | ✓ |
+| `.bash_profile` | `.baſh_proﬁle` | U+017F U+FB01 | · | · | · | ✓ |
 | `.terminal_aliases` | `.terminal_aliaſes` | U+017F | · | ✓ | · | ✓ |
+| `.terminal_aliases` | `.terminal_aliaseſ` | U+017F | · | ✓ | · | ✓ |
+| `.terminal_aliases` | `.terminal_aliaſeſ` | U+017F U+017F | · | ✓ | · | ✓ |
 | `.zprofile` | `.zproﬁle` | U+FB01 | · | · | · | ✓ |
 | `.zshenv` | `.zſhenv` | U+017F | · | ✓ | · | ✓ |
 | `.zshrc` | `.zſhrc` | U+017F | · | ✓ | · | ✓ |
 | `credentials.json` | `credentialſ.json` | U+017F | · | ✓ | · | ✓ |
+| `credentials.json` | `credentials.jſon` | U+017F | · | ✓ | · | ✓ |
+| `credentials.json` | `credentialſ.jſon` | U+017F U+017F | · | ✓ | · | ✓ |
 
-**Decision: bare `re.IGNORECASE`.** User call, 2026-09-03, on the table above. It closes 5 of
-the 7 live bypasses on top of the capitalisation fix. Its whole cost is 8 false refusals,
-each of which is U+0130 or U+0131 (Turkish dotted / dotless i) appearing inside one of these
-four filenames — and a false refusal here is a printed message with a documented override,
-not a leak.
+The three `re.IGNORECASE` misses are exactly the three rows containing U+FB01 — the `ﬁ`
+ligature is a *decomposition*, not a case fold, so no regex flag reaches it.
 
-Rejected: `re.IGNORECASE | re.ASCII` — closes **zero** of the 7, measured. Its only merit is
-avoiding the 8 false refusals, which is not worth leaving a written-down bypass open in a
-Tier-1 guard.
+**Decision: bare `re.IGNORECASE`.** User call, 2026-09-03, taken on a smaller table (7
+spellings, 8 false refusals) and **retained on the corrected one**: it closes **9 of the 12**
+live bypasses on top of the capitalisation fix, at a cost of **10** false refusals, each of
+which is U+0130 or U+0131 (Turkish dotted / dotless i) inside one of four filenames. A false
+refusal here is a printed message with a documented override, not a leak. The correction
+moved every number in the same direction, so the decision does not turn on it.
 
-Rejected: NFKD normalisation — the only strategy that closes all 7, and it wrongly refuses
-496 of 1,901 spellings. In a guard whose every false refusal costs a human typing
-`secret-gate override`, that is unshippable.
+Rejected: `re.IGNORECASE | re.ASCII` — closes **zero** of the 12, measured. Its only merit is
+avoiding the 10 false refusals, which is not worth leaving twelve written-down bypasses open
+in a Tier-1 guard.
 
-**Residual, carried forward deliberately:** the two U+FB01 `ﬁ`-ligature spellings remain live
-bypasses. They are pre-existing, they are now written down, and closing them needs
+Rejected: NFKD normalisation — the only strategy that closes all 12, at a cost of hundreds of
+false refusals (see the ⚠️ above on why no exact figure is published). In a guard whose every
+false refusal costs a human typing `secret-gate override`, that is unshippable at any of the
+measured magnitudes.
+
+**Residual, carried forward deliberately:** the three U+FB01 `ﬁ`-ligature spellings remain
+live bypasses. They are pre-existing, they are now written down, and closing them needs
 normalisation, which the table above rules out at this price. They become a Known-gaps row
 (task 6) and a follow-up card (task 8), not a silent omission.
+
+**Observability, stated rather than implied:** at runtime, *nothing* reports that the fold is
+still working. This guard is silent when it works and silent when it is broken, and it fails
+open. The only signal is the test suite, and only when someone runs it. That is the honest
+answer to "how would we know", and it is why task 3 ships a probe before task 5 changes any
+code.
 
 ## Scenarios
 
@@ -315,12 +351,21 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       | .zſhenv             | .zshenv            |
       | .baſh_profile       | .bash_profile      |
       | .terminal_aliaſes   | .terminal_aliases  |
+      | .terminal_aliaseſ   | .terminal_aliases  |
+      | .terminal_aliaſeſ   | .terminal_aliases  |
       | credentialſ.json    | credentials.json   |
+      | credentials.jſon    | credentials.json   |
+      | credentialſ.jſon    | credentials.json   |
 
-    # U+017F LONG S. These five are the bypasses bare re.IGNORECASE closes, and
+    # U+017F LONG S. These nine are the bypasses bare re.IGNORECASE closes, and
     # they are the assertions that go red if a future refactor adds re.ASCII.
-    # The Given is not decoration: it is the ground-truth oracle, and it must be
-    # a real filesystem check, not an assumption about what the volume does.
+    # Three of them substitute TWO positions -- the shape no round of this card
+    # tested until the observability judge asked for it.
+    #
+    # The Given is NOT a comment. It must execute: write a decoy under <real> in
+    # a scratch dir, open it as <path>, assert the decoy content comes back. A
+    # scenario that assumes the volume's behaviour instead of asking it is the
+    # exact error round 2 of this card shipped.
 
   Scenario Outline: a known-gap homoglyph stays allowed, and is pinned as a gap
     Given a decoy file proves "<path>" and "<real>" are the same file on this volume
@@ -331,11 +376,17 @@ Feature: secret-command-guard recognises secret file names regardless of capital
     Examples:
       | path           | real           |
       | .bash_proﬁle   | .bash_profile  |
+      | .baſh_proﬁle   | .bash_profile  |
       | .zproﬁle       | .zprofile      |
 
-    # U+FB01 LIGATURE FI. These are LIVE BYPASSES, pinned as ALLOW so the gap is
-    # visible rather than forgotten -- the same contract as the other rows in the
-    # Known-gaps table. Closing them needs NFKD, which costs 496 false refusals.
+    # U+FB01 LIGATURE FI -- a decomposition, not a case fold, so no regex flag
+    # reaches it. These are LIVE BYPASSES pinned as ALLOW so the gap is visible
+    # rather than forgotten, the same contract as every other Known-gaps row.
+    #
+    # This is only honest while the Given actually runs. A pinned-ALLOW row whose
+    # ground-truth check is a comment asserts nothing and lets a green suite
+    # coexist with a hole nobody re-verifies. Closing these needs NFKD, which the
+    # Flag choice table rules out.
 
   Scenario Outline: an accepted false refusal, recorded so it is not a surprise
     Given a decoy file proves "<path>" is a DIFFERENT file from "<real>"
@@ -344,13 +395,22 @@ Feature: secret-command-guard recognises secret file names regardless of capital
     Then it is BLOCKED
 
     Examples:
-      | path                | real               |
-      | credentıals.json    | credentials.json   |
-      | credentİals.json    | credentials.json   |
+      | path                   | real               |
+      | credentıals.json       | credentials.json   |
+      | credentİals.json       | credentials.json   |
+      | .termınal_aliases      | .terminal_aliases  |
+      | .termİnal_aliases      | .terminal_aliases  |
+      | .terminal_alıases      | .terminal_aliases  |
+      | .terminal_alİases      | .terminal_aliases  |
+      | .bash_profıle          | .bash_profile      |
+      | .bash_profİle          | .bash_profile      |
+      | .zprofıle              | .zprofile          |
+      | .zprofİle              | .zprofile          |
 
-    # U+0131 / U+0130 Turkish dotless and dotted i. These are the priced cost of
-    # bare re.IGNORECASE: 8 such spellings across 4 names. Asserted so that if the
-    # count ever moves, a test says so.
+    # U+0131 / U+0130 Turkish dotless and dotted i. These ten are the entire
+    # priced cost of bare re.IGNORECASE -- the complete list, not a sample.
+    # Asserted so that if the count ever moves, a test says so rather than a
+    # number in prose going quietly stale.
 
   Scenario: an unrelated path is unaffected
     Given the command "cat foo.zshrc"
@@ -380,6 +440,18 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       read, or name a real secret-bearing file. Ordered ahead of the code change on both
       judges' advice — a probe that ships after the fix can never reproduce the "before"
       numbers that justified the decision.
+
+      Its candidate population must sweep **every letter position** and **every
+      non-overlapping combination** of confirmed same-file substitutions. Three separate
+      rounds of this card each shipped a confident table built on a population with a hole
+      (see Flag choice); the per-name coverage print exists so the fourth hole is visible.
+
+      ⚠️ **No contradiction with task 5's single-compile-site rule.** That rule governs the
+      *production* path: `matches_dotfile` reads exactly one compiled list. The probe
+      imports `DOTFILE_PATTERNS` — the raw source list — and compiles its own alternates,
+      because comparing four strategies is the one job that genuinely needs four
+      compilations. It must additionally import `DOTFILE_RE` and assert the production list
+      agrees with its own `re.IGNORECASE` column, so the two cannot silently drift.
 - [ ] 4. **Red tests**, in `hooks/secret-command-guard.test.sh`, in their own commit before
       any implementation edit — every scenario above, controls included.
 - [ ] 5. Fold **both** case-sensitive comparisons, not just the obvious one:
@@ -438,17 +510,19 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       Decide from the fixed code, and re-count from the artifact at that point rather than
       trusting the 10 above.
 
-      One row is **required** regardless: the two U+FB01 `ﬁ`-ligature spellings
-      (`.bash_proﬁle`, `.zproﬁle`) that open the real file and are still allowed after this
-      card. They are pre-existing, they are now measured, and a measured bypass that is not
-      in the table is worse than one nobody found.
+      One row is **required** regardless: the three U+FB01 `ﬁ`-ligature spellings
+      (`.bash_proﬁle`, `.baſh_proﬁle`, `.zproﬁle`) that open the real file and are still
+      allowed after this card. They are pre-existing, they are now measured, and a measured
+      bypass that is not in the table is worse than one nobody found.
 - [ ] 7. ADR recording: the fold decision, the rejected filesystem-probe alternative, the
       flag choice with its measured bypass/false-refusal table, the two rejected flag
       alternatives, and the deliberate widening of the `Application Support` pattern.
 - [ ] 8. Queue a follow-up card for the `ﬁ`-ligature bypasses — Unicode normalisation of the
-      token before matching, which this card measured at 496 false refusals under plain
-      NFKD and therefore needs a narrower approach than "normalise everything". Placeholder
-      only; not designed here.
+      token before matching. Plain NFKD costs hundreds of false refusals (Flag choice; the
+      exact figure is deliberately unpublished because two sweeps disagreed), so this needs
+      a narrower approach than "normalise everything" — most likely folding only the
+      specific ligature codepoints that appear in these seven names. Placeholder only; not
+      designed here, and the first task on that card is to re-derive the cost.
 
 ## Out of scope
 
