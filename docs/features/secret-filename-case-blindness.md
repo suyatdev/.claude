@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: fix/secret-filename-case-blindness
 ---
@@ -56,7 +56,8 @@ pre-existing.
 - **False positives are real.** A path a user legitimately names in caps — a directory
   `ENV/`, a file `Credentials.json` in someone else's project — would start refusing.
   *Measured since, and this concern did not survive contact:* zero such names exist across
-  789,829 scanned. See **Task 1**, section B. Kept here as the reasoning the decision had
+  every name in both walks of section B — a total that drifts run to run, so it is not
+  pinned here either. See **Task 1**, section B. Kept here as the reasoning the decision had
   to answer, not as a live claim.
 - **The filesystem is the actual variable.** The gap exists because APFS is
   case-insensitive. On a case-sensitive volume `cat .ENV` reads a *different* file, and
@@ -137,9 +138,12 @@ So the two counts above establish a narrower fact than "folding is free":
   capitalised spelling of one of these eight names, appearing in a command" — e.g.
   `Credentials.json` in a project that uses that casing.
 
-**Scope the counts to what they measured:** 789,829 names, on *this* machine, at HEAD
-`7e3f802`, matched by name. Nothing about a case-sensitive volume, and nothing about
-command text.
+**Scope the counts to what they measured:** the names in both walks of section B, on *this*
+machine, matched by name. The total was recorded as 789,829 at HEAD `7e3f802`; it drifts
+between runs and is not pinned here — run `hooks/secret-filename-fold.probe.sh` for the
+current figure. The load-bearing result is the **0** in the Newly-matching column, which
+has held in every walk. Nothing about a case-sensitive volume, and nothing about command
+text.
 
 The filesystem premise is confirmed by direct test rather than assumed: a file written as
 `casetest.txt` in the scratchpad read back as `CASETEST.TXT`. `diskutil info /` reports
