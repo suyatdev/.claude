@@ -199,12 +199,18 @@ grep -rn -E 'argv\[0\][^=!]*(==|!=|[[:space:]]in[[:space:]])' hooks \
   --include=*.py --include=*.sh | grep -v '\.test\.'
 ```
 
-As of 2026-09-01 that returns **19 lines**, of which **5 are prose** -- two docstrings
+At the task-1 base `6444871` that returns **19 lines**, of which **5 are prose** -- two docstrings
 (`classify-git-command.py:272`, `:326`), two comments in `shell_segments.py` (`:50`,
 `:287`) and one in `worktree_guard_bash_arms.sh:185`. The remaining **14 are real
 tests**. (Revision 1 wrote "14 lines"; the command emits 19 and 14 is the count after
 the prose is dropped by eye. Re-measured task 1, 2026-09-01, with `command grep` --
 a bare `grep` on this machine is ugrep and honours `.gitignore`.)
+
+**Re-run at HEAD during the round-5 sweep: still 19 lines.** The ten sites were edited in
+place, so nothing shifted, and the three call-site citations quoted in the task-9 paragraphs
+above (`classify-commit-command.py:213`, `classify-pr-command.py:55`,
+`feature-sync-guard.sh:130`) were re-opened and all three still resolve to the stated code.
+That is luck rather than design — re-run the command rather than trusting them.
 
 Of those 14, these are **command-position program tests that must move onto
 `program()`**.
@@ -467,10 +473,24 @@ Follow-up card for the filename row: `docs/features/secret-filename-case-blindne
       dynamically and now inherits its `program` import), `secret_approval.py:422`,
       `git-guard.sh:358` and `feature-sync-guard.sh:130` (both inline python, via
       `mod.program` / a added `program` import inside the embedded script). Every row of the
-      "must NOT move" table (`:424`/`:434` `cd` checks, the `argv[1:]` scan, the falsifier)
-      confirmed untouched by re-reading the file after the edit.
+      "must NOT move" table -- the two `argv[0] == "cd"` checks in `classify-git-command.py`
+      and `classify-commit-command.py`, `decide-commit-gate.py`'s `cd` check, the
+      `any(tok in OPAQUE_TARGETS for tok in argv[1:])` scan, and the falsifier's
+      `argv[0] == "git"` baseline sentinel -- confirmed untouched by re-reading the file
+      after the edit. (Named by the code they contain rather than by line number: a citation
+      into a file this branch edits is self-invalidating, and the same anchors were already
+      caught stale once.)
 
-      Before/after, the eight suites named in the dispatch:
+      Before/after, the eight suites named in the dispatch. ⚠️ **These are an audit-trail
+      entry, measured at `797663e` — the tasks 4/5 commit — and deliberately not updated
+      since.** Two rows have moved on purpose in later commits and would otherwise read as
+      contradictions of task 10: `classify-git-command` 216 → **219** (round 2's three
+      wrapper-gap assertions, `7b2db03`) and `secret-command-guard` 165/3 → **168/0** (the
+      three wrong-exit-code assertions corrected in `5d66395`). **Task 10 carries the
+      current figures; this table records what that one commit measured.** Rewriting an
+      audit trail to fix a footnote corrupts the record.
+
+
       | Suite | Before | After |
       |---|---|---|
       | shell_segments | 59/1 | 60/0 |
@@ -482,8 +502,9 @@ Follow-up card for the filename row: `docs/features/secret-filename-case-blindne
       | git-guard | 168/3 | 171/0 |
       | feature-sync-guard | 31/3 | 34/0 |
 
-      **3 of the original 22 red assertions did not turn green, and this is a test bug, not
-      an implementation gap.** `hooks/secret-command-guard.test.sh`'s three new
+      **3 of the 22 assertions red at `b410df0` did not turn green, and this was a test bug,
+      not an implementation gap.** (22 is the red count measured at that commit, before the
+      round-2 additions; it is an audit-trail figure, not a current one.) `hooks/secret-command-guard.test.sh`'s three new
       `argv0-spelling` rows for `ENV`/`Printenv`/`/usr/bin/env` (lines ~972-977) assert the
       *outer hook's* exit code is `4`. But `secret-command-guard.sh:134-144` documents and
       implements exit 4 as an *internal classifier* status that the hook always translates
