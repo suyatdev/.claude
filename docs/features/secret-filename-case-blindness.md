@@ -509,7 +509,22 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       cannot change silently. Two rows (`.ENV.EXAMPLE`, `.Env.SAMPLE`) are green today for a
       different reason than they will be after task 5, and are labelled inline as
       non-discriminating rather than counted as coverage.
-- [ ] 5. Fold **both** case-sensitive comparisons, not just the obvious one:
+- [x] 5. **Done.** Landed exactly as prescribed below, 8 lines in
+      `hooks/lib/classify-secret-command.py` and nothing else. Suite: **204 passed, 0
+      failed**. Probe receipt: `production DOTFILE_RE agrees with self-compiled
+      re.IGNORECASE column: True (0 of 44 tokens differ)` — it read `False` at the parent
+      commit. The three U+FB01 ligature rows are still **ALLOW**, as designed; this card
+      does not close them (task 8).
+
+      ⚠️ Found while verifying, and fixed in the preceding commit rather than here: the
+      three `Application Support` assertions passed the path **unquoted**, and
+      `segments()` splits an unquoted path on the space, so no single token could ever
+      hold both words. They were red for a quoting reason, not the casing reason they
+      claimed. The all-lowercase unquoted form allows too — measured — so the shape is a
+      **pre-existing token-splitting gap**, now pinned by its own ALLOW control. It is the
+      only pattern of the eight that spans a space.
+
+      Fold **both** case-sensitive comparisons, not just the obvious one:
       Write it exactly as below — the two halves must share **one** flags constant, so they
       cannot disagree about what "the same letter" means:
 

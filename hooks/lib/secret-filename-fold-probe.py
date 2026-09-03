@@ -283,7 +283,10 @@ def hit(tok, compiled, nfkd=False):
 
 
 STRATS = [
-    ("plain (today)", lambda t: hit(t, compiled_plain)),
+    # "pre-fix", not "today": task 5 landed re.IGNORECASE in production, so the
+    # unfolded column is now a historical baseline, not a description of the guard.
+    # The DOTFILE_RE agreement line above is what reports production's real strategy.
+    ("plain (pre-fix)", lambda t: hit(t, compiled_plain)),
     ("re.IGNORECASE", lambda t: hit(t, compiled_ic)),
     ("IGNORECASE|ASCII", lambda t: hit(t, compiled_ica)),
     ("NFKD + IGNORECASE", lambda t: hit(t, compiled_ic, nfkd=True)),
