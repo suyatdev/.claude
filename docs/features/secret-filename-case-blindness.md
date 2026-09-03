@@ -570,7 +570,26 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       unchanged — both halves still move together — only the reason was wrong.** Folding
       both also fixes the pre-existing `.env.EXAMPLE` refusal as a side effect, which is in
       scope precisely because it is the same root cause.
-- [ ] 6. Update the Known-gaps table in `docs/features/secret-command-guard.md`. Counted
+- [x] 6. **Done.** The Known-gaps table went **10 rows → 12**, re-counted from the artifact
+      by parsing the table at the edited commit (not carried forward from the plan). Two
+      rows added, both pre-existing shapes the probe measured rather than anything this
+      card introduced: the three U+FB01 `ﬁ`-ligature spellings, and the **unquoted**
+      `Application Support` path. No row was removed and none was reworded.
+
+      **The case-blindness shape itself gets no row** — deliberate. It was never in the
+      table, and once folded it is not a gap. Its residual runs the *opposite* direction
+      from every row in that table (over-refusal, not a bypass) and is documented in
+      `## Flag choice` here, which is the right home for it.
+
+      `rules/gates.md` carried the count in two places and both were repaired: the
+      **Secret-command-guard** bullet now reads twelve rows as of 2026-09-03, and the
+      **Secret-gate override** bullet's "nine known gaps" was **stale even before this card**
+      (the table already held ten). That one now carries **no number at all** and points at
+      the artifact — a count restated in a second document has drifted every time. The
+      Secret-command-guard bullet's "In brief" enumeration also gained both new shapes,
+      since a list that omits a row is the same defect as a wrong total.
+
+      Update the Known-gaps table in `docs/features/secret-command-guard.md`. Counted
       from the artifact at HEAD `7e3f802` by parsing the table and discarding the separator
       row: **10 data rows** (lines 99–108), independently re-derived by the compliance judge
       at round 1. That agrees with the "ten rows as of 2026-08-31" figure in `rules/gates.md`,
@@ -584,10 +603,25 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       (`.bash_proﬁle`, `.baſh_proﬁle`, `.zproﬁle`) that open the real file and are still
       allowed after this card. They are pre-existing, they are now measured, and a measured
       bypass that is not in the table is worse than one nobody found.
-- [ ] 7. ADR recording: the fold decision, the rejected filesystem-probe alternative, the
+- [x] 7. **Done** —
+      `docs/decisions/0042-secret-command-guard-folds-file-names-case-insensitively.md`.
+      ADR number verified free against `origin/main` **and** against every ref reachable
+      from `--all`, not just local `main`. Its three `classify-secret-command.py` line
+      citations (`:147`, `:149`, `:154`) were re-opened and confirmed to point at
+      `FOLD_FLAGS`, `DOTFILE_RE` and `ENV_EXEMPT_RE` respectively. The NFKD false-refusal
+      figure is written as "hundreds" with the two disagreeing sweeps named, per the
+      standing instruction not to publish either.
+
+      ADR recording: the fold decision, the rejected filesystem-probe alternative, the
       flag choice with its measured bypass/false-refusal table, the two rejected flag
       alternatives, and the deliberate widening of the `Application Support` pattern.
-- [ ] 8. Queue a follow-up card for the `ﬁ`-ligature bypasses — Unicode normalisation of the
+- [x] 8. **Done** — `docs/features/secret-filename-ligature-blindness.md`, `phase: planning`,
+      no branch. Placeholder only, as specified: its task 1 is to re-derive the NFKD cost
+      and to add a fifth strategy column for a *targeted* ligature pre-fold, and everything
+      else is explicitly out of scope until that lands. Both disagreeing sweeps (577 and
+      1,881) are named there as untrustworthy and marked not to be resurrected.
+
+      Queue a follow-up card for the `ﬁ`-ligature bypasses — Unicode normalisation of the
       token before matching. Plain NFKD costs hundreds of false refusals (Flag choice; the
       exact figure is deliberately unpublished because two sweeps disagreed), so this needs
       a narrower approach than "normalise everything" — most likely folding only the
