@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: fix/secret-filename-case-blindness
 ---
 
 # `secret-command-guard` matches secret file names case-sensitively
@@ -12,8 +12,9 @@ Queued 2026-09-01 out of the observability judge's round-2 read of
 `git commit`. The judge asked the obvious next question and measured it: nobody folded the
 **file** name.
 
-Gate: **not confirmed.** No branch, no code. Designed 2026-09-03 — task 1 is measured and
-task 2 is decided (see **Decision**); the remaining tasks below are a plan, not a sketch.
+Gate: **confirmed 2026-09-03**, after four judge rounds. Branch
+`fix/secret-filename-case-blindness`. Tasks 1-2 were done in planning; 3-8 are the
+implementation, ordered probe -> red tests -> fix -> docs by deliberate design (see task 3).
 
 ## Measured
 
