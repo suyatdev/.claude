@@ -83,7 +83,15 @@ Nothing was executed and no file contents were read; the probe matches **names**
 | `~/.zshenv` | yes |
 | `.env / .env.*` | yes |
 | `credentials.json` | yes |
-| `*/Application Support/*/credentials*` | **yes** — 4 of 5 sampled spellings flip: `.../Application Support/foo/CREDENTIALS`, `.../APPLICATION SUPPORT/foo/credentials`, `.../APPLICATION SUPPORT/foo/CREDENTIALS`, `.../application support/foo/credentials` |
+| `*/Application Support/*/credentials*` | **yes** — **28 of 28** cases flip (`hooks/secret-filename-fold.probe.sh`) |
+
+⚠️ **The "4 of 5 sampled spellings" figure that stood in this row is superseded and was
+deleted.** It came from a hand-picked sample taken during task 1, before the probe existed.
+The shipped probe derives this row's cases from the pattern's **regex source** rather than
+its human label and gets **28**, which is also what ADR 0042 records. The compliance judge
+caught the two documents disagreeing at round 5. A hand-sample and a derived population are
+not the same measurement, and only the derived one is reproducible — so the hand-sample is
+gone rather than reconciled.
 
 ⚠️ **This row read "no" in the first draft of this card, and that was wrong.** Both judges
 caught it independently and it was then reproduced here directly against the pattern. The
@@ -466,10 +474,19 @@ Feature: secret-command-guard recognises secret file names regardless of capital
 - [x] 2. Decide the filesystem question. **Done** — fold unconditionally; decision retained
       on corrected evidence.
 - [x] 3. **Ship the probe first**, as `hooks/secret-filename-fold.probe.sh` (+ its python
-      helper `hooks/lib/secret-filename-fold-probe.py`). **Done.** Every number in this card
-      reproduced exactly except the disk-census scanned-name totals, which drift (see the ⚠️
-      under table B). The `DOTFILE_RE` agreement assertion reads **False** today, as it must
-      before task 5 lands; it flipping to **True** is task 5's receipt. It must source **every** number this card states, or the number is deleted:
+      helper `hooks/lib/secret-filename-fold-probe.py`). **Done.**
+
+      ⚠️ **This bullet claimed "every number reproduced exactly except the disk-census
+      totals". That was false when written** and the compliance judge caught it at round 5.
+      Two numbers did not reproduce: the drifting census totals (see the ⚠️ under table B),
+      **and** table A's `Application Support` row, which said "4 of 5 sampled" against the
+      probe's 28 of 28. The row has been replaced with the probe's figure. The lesson is the
+      card's own: a claim of the form *everything reproduced except X* is a universal, and
+      universals are what fail — it should have been a per-number list from the start.
+
+      The `DOTFILE_RE` agreement assertion reads **False** before task 5 and **True** after;
+      that flip is task 5's receipt. See task 5 for what that receipt does and does not
+      prove. It must source **every** number this card states, or the number is deleted:
       - table A (which patterns flip), with **a per-pattern case count** printed — the
         round-1 error was a row with zero test cases printing identically to a row that
         passed;
@@ -516,9 +533,31 @@ Feature: secret-command-guard recognises secret file names regardless of capital
 - [x] 5. **Done.** Landed exactly as prescribed below, 8 lines in
       `hooks/lib/classify-secret-command.py` and nothing else. Suite: **204 passed, 0
       failed**. Probe receipt: `production DOTFILE_RE agrees with self-compiled
-      re.IGNORECASE column: True (0 of 44 tokens differ)` — it read `False` at the parent
-      commit. The three U+FB01 ligature rows are still **ALLOW**, as designed; this card
-      does not close them (task 8).
+      re.IGNORECASE column: True (0 of 50 tokens differ, of which 6 discriminate
+      re.IGNORECASE from re.IGNORECASE|re.ASCII)` — it read `False` at the parent commit.
+      The three U+FB01 ligature rows are still **ALLOW**, as designed; this card does not
+      close them (task 8).
+
+      ⚠️ **The receipt originally could not prove what this bullet credited it with, and was
+      strengthened at round 5.** As first shipped it compared 44 pure-ASCII case variants,
+      and `re.IGNORECASE` behaves identically to the **rejected** `re.IGNORECASE | re.ASCII`
+      on those — measured, 0 of 11 differ. So the receipt read `True` under either flag: it
+      proved *a* fold had landed, never *which*. The compliance judge found this by mutation.
+      Fixed by widening the comparison population with the six same-file homoglyph tokens,
+      where the two flags disagree on all six. Falsified after the fix, on a copy of the tree
+      rather than the live one: chosen flag → `True (0 of 50)`, rejected flag →
+      `False (6 of 50)`. The **test suite** always did discriminate this (19 red under
+      `re.ASCII`); the receipt now does too, and neither claim rests on the other.
+
+      ⚠️ **What folding the exemption newly *allows*, named plainly** — the card names its
+      other widening, so it must name this narrowing too. Measured against the parent commit
+      `cf1567f` and HEAD, token by token, exactly **two** move from block to allow:
+      `.env.EXAMPLE` and `.env.Template`. Both are committed-template names that the
+      case-sensitive `endswith` was refusing by accident, which is the pre-existing false
+      positive this task was always going to fix. `.ENV.EXAMPLE` and `.Env.SAMPLE` did
+      **not** move — they allowed before and allow now (the observability judge's round-5
+      relay named `.ENV.EXAMPLE` here; re-measuring showed that was wrong). One token moves
+      the other way, allow to block: `.ENV`, which is the fix.
 
       ⚠️ Found while verifying, and fixed in the preceding commit rather than here: the
       three `Application Support` assertions passed the path **unquoted**, and

@@ -123,9 +123,22 @@ print(f"\nunion of all Table A candidate tokens: {len(all_table_a_tokens)}")
 # compiled with no flags (plain), so this is expected to disagree today; it
 # is printed rather than asserted-fatal so the probe stays a measurement, not
 # a test.
+#
+# The Table A tokens alone CANNOT discriminate the flag choice this card
+# decided. They are pure-ASCII case variants, and re.IGNORECASE behaves
+# identically to re.IGNORECASE|re.ASCII on those -- measured, 0 of 11 differ.
+# A receipt that still reads True under the rejected flag is not a receipt.
+# So the comparison population is widened with the same-file homoglyph tokens,
+# where the two flags disagree on every one (6 of 6). Do not narrow it back.
 # ---------------------------------------------------------------------------
+DISCRIMINATING_TOKENS = [
+    ".zſhrc", ".zſhenv", ".baſh_profile",
+    ".terminal_aliaſes", "credentialſ.json", "credentials.jſon",
+]
+
+agreement_tokens = list(all_table_a_tokens) + DISCRIMINATING_TOKENS
 mismatches = []
-for tok in all_table_a_tokens:
+for tok in agreement_tokens:
     prod_hit = any(rx.search(tok) for rx, _ in mod.DOTFILE_RE)
     self_ic_hit = any(rx.search(tok) for rx in compiled_ic_by_pattern)
     if prod_hit != self_ic_hit:
@@ -133,7 +146,9 @@ for tok in all_table_a_tokens:
 agrees = len(mismatches) == 0
 print(
     f"\nproduction DOTFILE_RE agrees with self-compiled re.IGNORECASE column: "
-    f"{agrees} ({len(mismatches)} of {len(all_table_a_tokens)} tokens differ)"
+    f"{agrees} ({len(mismatches)} of {len(agreement_tokens)} tokens differ, "
+    f"of which {len(DISCRIMINATING_TOKENS)} discriminate re.IGNORECASE from "
+    f"re.IGNORECASE|re.ASCII)"
 )
 
 # ---------------------------------------------------------------------------

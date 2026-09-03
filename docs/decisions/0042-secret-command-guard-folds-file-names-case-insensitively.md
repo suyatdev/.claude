@@ -4,7 +4,7 @@
 - **Context:** `hooks/lib/classify-secret-command.py` — `DOTFILE_PATTERNS` compiled into
   `DOTFILE_RE` under a new shared `FOLD_FLAGS = re.IGNORECASE` constant (`:147`, `:149`); the
   `.env.example`/`.template`/`.sample` exemption becomes `ENV_EXEMPT_RE` (`:154`), also under
-  `FOLD_FLAGS`, replacing `ENV_EXEMPT_SUFFIXES` and its `str.lower().endswith` check. Tests
+  `FOLD_FLAGS`, replacing `ENV_EXEMPT_SUFFIXES` and its case-sensitive `endswith` check. Tests
   written first (`c3d3a6d`, `cf1567f`), fix landed separately (`26e40a7`). Sibling decision to
   **ADR 0041**, which folded the **program** name (`argv[0]`) on the same case-insensitive
   volume and explicitly deferred the **file**-name gap to this card. Full measurement record:
@@ -69,15 +69,19 @@ filesystem what it does, do not reason about what a codepoint table implies it s
 **Rejected — NFKD + `re.IGNORECASE`.** It closes every one of the 12 same-file bypasses, at
 the cost of hundreds of false refusals on different-file spellings — mostly Turkish
 dotted/dotless-i–adjacent Unicode confusables that normalise onto the same ASCII letters the
-protected names use. ⚠️ No exact figure is published here: two earlier sweeps of this
-population disagreed (577 and 1,881). A run of `hooks/secret-filename-fold.probe.sh` this
-session printed 577/2,324. Both earlier figures agree on the order of magnitude —
-"hundreds" — and the rejection does not depend on which exact count is right, so treat
-"hundreds" as the citable figure and re-run the probe for the current one rather than
-trusting any number written down here.
+protected names use. ⚠️ **No exact figure is published here.** Two earlier sweeps of this
+population disagreed (577 and 1,881), and nobody has explained the disagreement, so neither
+is trustworthy and neither is to be resurrected. The rejection does not depend on which
+count is right: "hundreds" against 10 decides it either way. Run
+`hooks/secret-filename-fold.probe.sh` for the current figure. ⚠️ This paragraph said "no
+exact figure is published here" and then published one in the next sentence, until the
+compliance judge's round-5 read; the number is gone rather than re-caveated.
 
-**Accepted — bare `re.IGNORECASE`.** It closes 3 of the 12 same-file bypasses (the U+017F
-long-s spellings) and leaves 3 open (the U+FB01 `ﬁ` ligature spellings — see Accepted costs).
+**Accepted — bare `re.IGNORECASE`.** It closes **9** of the 12 same-file bypasses (the
+U+017F long-s spellings) and leaves 3 open (the U+FB01 `ﬁ` ligature spellings — see Accepted
+costs). ⚠️ This sentence read "closes 3 of the 12" until the observability judge's round-5
+read: the residual had been copied into the wins column, which made the accepted option look
+barely worth taking and contradicted the card. 9 + 3 = 12, and the probe prints both.
 It costs exactly 10 false refusals, all Turkish dotted/dotless i, across 4 of the 7 names.
 
 ## Accepted costs
@@ -114,10 +118,19 @@ not exist.
 ## Single shared `FOLD_FLAGS` constant
 
 `DOTFILE_RE` and the `.env.example`/`.template`/`.sample` exemption used to disagree in kind:
-the patterns compiled with no flag at all, and the exemption checked
-`tok.endswith((".example", ".template", ".sample"))` after a `str.lower()`. `str.lower()`
-carries its own Unicode case table, which can disagree with `re.IGNORECASE`'s — exactly the
-bug class this card closes, one level down. Both halves now read one constant,
+the patterns compiled with no flag at all, and the exemption was a bare, case-sensitive
+`tok.endswith(ENV_EXEMPT_SUFFIXES)`.
+
+⚠️ **This paragraph described the old code as calling `str.lower()`. It never did** — that
+was a *rejected alternative* the card weighed, promoted into a description of history by
+this ADR and by the commit message of `26e40a7`. Found by the observability judge at round 5
+and corrected here rather than by rewriting the pushed commit. The reasoning it was offered
+for still stands as the reason the replacement is a **regex** and not a `lower()`-based
+check: `str.lower()` carries its own Unicode case table, which can disagree with
+`re.IGNORECASE`'s — exactly the bug class this card closes, one level down. That is why the
+alternative was rejected; it is not what the code used to do.
+
+Both halves now read one constant,
 `FOLD_FLAGS = re.IGNORECASE` (`hooks/lib/classify-secret-command.py:147`), and the exemption
 became a regex, `ENV_EXEMPT_RE` (`:154`), rather than a string-method check, so the pattern
 list and the exemption cannot disagree about what "the same letter" means. `ENV_EXEMPT_SUFFIXES`
