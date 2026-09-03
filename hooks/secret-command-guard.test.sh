@@ -1010,6 +1010,160 @@ instab_id_case "argv0-spelling RED: a capitalized wrapper (Nohup) must be refuse
   3 'Nohup cat .env' ""
 
 # =============================================================================
+# secret-filename-case-blindness (docs/features/secret-filename-case-blindness.md)
+# task 4 -- red tests, written before task 5's fix. Every scenario in that
+# card's Scenarios section becomes an assertion here, controls included. Run
+# against UNMODIFIED code: DOTFILE_RE has no re.IGNORECASE and
+# ENV_EXEMPT_SUFFIXES is a case-sensitive endswith, so several of these are
+# EXPECTED RED today and will only go green once task 5 lands
+# `FOLD_FLAGS = re.IGNORECASE` on both DOTFILE_RE and ENV_EXEMPT_RE. Do not
+# "fix" a red one here -- that is the point of this commit.
+#
+# Two-oracle helpers for the homoglyph rows. Ground truth is a real decoy
+# file written under the <real> spelling in a throwaway mktemp -d, then
+# opened under the <path> spelling -- never a real secret-bearing name, never
+# executed through the guard. The guard verdict is a SEPARATE call, on the
+# literal command text, exactly like every other assertion in this suite. If
+# the ground-truth check itself fails, that is reported as its own FAIL
+# ("ground truth broken") rather than silently asserting against a false
+# premise -- see docs/features/secret-filename-case-blindness.md, Flag
+# choice, on why round 2 of this card shipped a green test for a live bypass
+# by reasoning about the filesystem instead of asking it.
+# =============================================================================
+run_case_decoy_samefile() { # $1 desc, $2 want-exit, $3 path spelling, $4 real spelling
+  local desc="$1" want="$2" path="$3" real="$4" dir content got
+  dir=$(mktemp -d)
+  content="decoy-$$-$RANDOM"
+  printf '%s' "$content" > "$dir/$real"
+  got=$(cat "$dir/$path" 2>/dev/null)
+  rm -rf "$dir"
+  if [ "$got" != "$content" ]; then
+    printf 'FAIL — %s: ground truth broken, "%s" did not open the same file as "%s" on this volume\n' "$desc" "$path" "$real"
+    fail=$((fail+1)); return
+  fi
+  run_case "$desc" "$want" "cat $path"
+}
+
+run_case_decoy_difffile() { # $1 desc, $2 want-exit, $3 path spelling, $4 real spelling
+  local desc="$1" want="$2" path="$3" real="$4" dir content got
+  dir=$(mktemp -d)
+  content="decoy-$$-$RANDOM"
+  printf '%s' "$content" > "$dir/$real"
+  got=$(cat "$dir/$path" 2>/dev/null)
+  rm -rf "$dir"
+  if [ "$got" = "$content" ]; then
+    printf 'FAIL — %s: ground truth broken, "%s" unexpectedly opened the same file as "%s" on this volume\n' "$desc" "$path" "$real"
+    fail=$((fail+1)); return
+  fi
+  run_case "$desc" "$want" "cat $path"
+}
+
+# --- Scenario: the lowercase control still refuses --------------------------
+run_case_msg "filename-fold: lowercase .env control -> block" 2 '.env' 'cat .env'
+
+# --- Scenario Outline: a capitalised spelling of a secret file is refused ---
+# RED today: DOTFILE_RE has no re.IGNORECASE, so none of these four match.
+run_case_msg "filename-fold RED: .ENV -> block, labels .env / .env.*"          2 '.env / .env.*'    'cat .ENV'
+run_case_msg "filename-fold RED: .Env -> block, labels .env / .env.*"          2 '.env / .env.*'    'cat .Env'
+run_case_msg "filename-fold RED: ~/.ZSHRC -> block, labels ~/.zshrc"           2 '~/.zshrc'         'cat ~/.ZSHRC'
+run_case_msg "filename-fold RED: CREDENTIALS.json -> block, labels credentials.json" 2 'credentials.json' 'cat CREDENTIALS.json'
+
+# --- Scenario Outline: the widest pattern folds too --------------------------
+# Application Support/[^/]*/credentials is already unanchored/substring, but
+# still case-sensitive today -- RED for the two all-caps/mixed spellings.
+run_case_msg "filename-fold RED: Application Support/CREDENTIALS -> block" \
+  2 'Application Support' 'cat ~/Library/Application Support/app/CREDENTIALS'
+run_case_msg "filename-fold RED: APPLICATION SUPPORT/credentials -> block" \
+  2 'Application Support' 'cat ~/Library/APPLICATION SUPPORT/app/credentials'
+run_case_msg "filename-fold RED: application support/credentials -> block" \
+  2 'Application Support' 'cat ~/Library/application support/app/credentials'
+
+# --- Scenario: the committed-template exemption survives folding ------------
+# Already green today: lowercase .env.example is already exempt.
+run_case "filename-fold: git add .env.example -> allow (regression control for task 5)" 0 'git add .env.example'
+
+# --- Scenario Outline: a capitalised template is exempt after the fold ------
+# .ENV.EXAMPLE and .Env.SAMPLE are already green TODAY, but for the wrong
+# reason: DOTFILE_RE is case-sensitive and does not match the pattern at all,
+# so matches_dotfile returns None before the exemption is ever consulted --
+# they are allowed by blindness, not by exemption. .env.Template is RED
+# today: the lowercase ".env" prefix already matches, but the case-sensitive
+# ENV_EXEMPT_SUFFIXES endswith check misses "Template", so it blocks. Card:
+# "`.env.Template` is refused today and task 5 fixes it as a side effect."
+run_case "filename-fold: git add .ENV.EXAMPLE -> allow (green today by pattern-blindness, not exemption)" 0 'git add .ENV.EXAMPLE'
+run_case "filename-fold RED: git add .env.Template -> allow (blocked today, case-sensitive exemption suffix)" 0 'git add .env.Template'
+run_case "filename-fold: git add .Env.SAMPLE -> allow (green today by pattern-blindness, not exemption)" 0 'git add .Env.SAMPLE'
+
+# --- Scenario Outline: a homoglyph that opens the SAME file is refused ------
+# U+017F LONG S. RED today: bare re.IGNORECASE is what task 5 adds, and it is
+# the only flag choice (of the four measured) that closes these nine.
+run_case_decoy_samefile "filename-fold RED: .zſhrc (U+017F) same-file as .zshrc -> block" \
+  2 '.zſhrc' '.zshrc'
+run_case_decoy_samefile "filename-fold RED: .zſhenv (U+017F) same-file as .zshenv -> block" \
+  2 '.zſhenv' '.zshenv'
+run_case_decoy_samefile "filename-fold RED: .baſh_profile (U+017F) same-file as .bash_profile -> block" \
+  2 '.baſh_profile' '.bash_profile'
+run_case_decoy_samefile "filename-fold RED: .terminal_aliaſes (U+017F) same-file as .terminal_aliases -> block" \
+  2 '.terminal_aliaſes' '.terminal_aliases'
+run_case_decoy_samefile "filename-fold RED: .terminal_aliaseſ (U+017F) same-file as .terminal_aliases -> block" \
+  2 '.terminal_aliaseſ' '.terminal_aliases'
+run_case_decoy_samefile "filename-fold RED: .terminal_aliaſeſ (U+017F x2) same-file as .terminal_aliases -> block" \
+  2 '.terminal_aliaſeſ' '.terminal_aliases'
+run_case_decoy_samefile "filename-fold RED: credentialſ.json (U+017F) same-file as credentials.json -> block" \
+  2 'credentialſ.json' 'credentials.json'
+run_case_decoy_samefile "filename-fold RED: credentials.jſon (U+017F) same-file as credentials.json -> block" \
+  2 'credentials.jſon' 'credentials.json'
+run_case_decoy_samefile "filename-fold RED: credentialſ.jſon (U+017F x2) same-file as credentials.json -> block" \
+  2 'credentialſ.jſon' 'credentials.json'
+
+# --- Scenario Outline: a known-gap homoglyph stays allowed, pinned as a gap -
+# U+FB01 LIGATURE FI is a decomposition, not a case fold -- no flag in the
+# Flag choice table reaches it. GREEN both before and after task 5; if a
+# future change (NFKD, task 8) flips one of these, that is a real behavior
+# change and this suite must say so.
+run_case_decoy_samefile "filename-fold: .bash_proﬁle (U+FB01) same-file as .bash_profile -> allow (known gap, pinned)" \
+  0 '.bash_proﬁle' '.bash_profile'
+run_case_decoy_samefile "filename-fold: .baſh_proﬁle (U+017F U+FB01) same-file as .bash_profile -> allow (known gap, pinned)" \
+  0 '.baſh_proﬁle' '.bash_profile'
+run_case_decoy_samefile "filename-fold: .zproﬁle (U+FB01) same-file as .zprofile -> allow (known gap, pinned)" \
+  0 '.zproﬁle' '.zprofile'
+
+# --- Scenario Outline: an accepted false refusal, recorded so it is not a ---
+# --- surprise ----------------------------------------------------------------
+# U+0131/U+0130 Turkish dotless/dotted i. These are DIFFERENT files from
+# <real> on this volume (ground truth: run_case_decoy_difffile requires the
+# decoy content NOT come back). RED today: DOTFILE_RE is case-sensitive ASCII
+# and does not match a Turkish-i spelling at all, so these currently allow.
+# Bare re.IGNORECASE (task 5) is Unicode-aware and folds these too -- the
+# priced, accepted cost of the flag choice, not a bug in the fix.
+run_case_decoy_difffile "filename-fold RED: credentıals.json (U+0131) accepted false refusal -> block" \
+  2 'credentıals.json' 'credentials.json'
+run_case_decoy_difffile "filename-fold RED: credentİals.json (U+0130) accepted false refusal -> block" \
+  2 'credentİals.json' 'credentials.json'
+run_case_decoy_difffile "filename-fold RED: .termınal_aliases (U+0131) accepted false refusal -> block" \
+  2 '.termınal_aliases' '.terminal_aliases'
+run_case_decoy_difffile "filename-fold RED: .termİnal_aliases (U+0130) accepted false refusal -> block" \
+  2 '.termİnal_aliases' '.terminal_aliases'
+run_case_decoy_difffile "filename-fold RED: .terminal_alıases (U+0131) accepted false refusal -> block" \
+  2 '.terminal_alıases' '.terminal_aliases'
+run_case_decoy_difffile "filename-fold RED: .terminal_alİases (U+0130) accepted false refusal -> block" \
+  2 '.terminal_alİases' '.terminal_aliases'
+run_case_decoy_difffile "filename-fold RED: .bash_profıle (U+0131) accepted false refusal -> block" \
+  2 '.bash_profıle' '.bash_profile'
+run_case_decoy_difffile "filename-fold RED: .bash_profİle (U+0130) accepted false refusal -> block" \
+  2 '.bash_profİle' '.bash_profile'
+run_case_decoy_difffile "filename-fold RED: .zprofıle (U+0131) accepted false refusal -> block" \
+  2 '.zprofıle' '.zprofile'
+run_case_decoy_difffile "filename-fold RED: .zprofİle (U+0130) accepted false refusal -> block" \
+  2 '.zprofİle' '.zprofile'
+
+# --- Scenario: an unrelated path is unaffected -------------------------------
+# Pre-existing known gap (no "/" before the name -> not a whole trailing
+# component), unrelated to this card's fold. Pinned so the fold does not
+# silently close or widen it.
+run_case "filename-fold: cat foo.zshrc -> allow (pre-existing gap, unaffected by the fold)" 0 'cat foo.zshrc'
+
+# =============================================================================
 # Registration assertion: checked against the REAL repo settings.json, not a
 # fixture — that file is what Claude Code actually loads.
 # =============================================================================

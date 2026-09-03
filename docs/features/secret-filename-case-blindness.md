@@ -492,8 +492,16 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       because comparing four strategies is the one job that genuinely needs four
       compilations. It must additionally import `DOTFILE_RE` and assert the production list
       agrees with its own `re.IGNORECASE` column, so the two cannot silently drift.
-- [ ] 4. **Red tests**, in `hooks/secret-command-guard.test.sh`, in their own commit before
-      any implementation edit — every scenario above, controls included.
+- [x] 4. **Red tests**, in `hooks/secret-command-guard.test.sh`, in their own commit before
+      any implementation edit — every scenario above, controls included. **Done.** 35
+      assertions added; suite goes 168 passed / 0 failed at the parent commit to **176
+      passed / 27 failed**, additive-only, both implementation files byte-identical.
+      The 27 reds are 9 capitalisation rows + 9 U+017F same-file bypasses + 10 accepted
+      Turkish-i false refusals, which is exactly the split the Flag choice table predicts.
+      The three U+FB01 ligature rows are pinned as **ALLOW** assertions so the residual gap
+      cannot change silently. Two rows (`.ENV.EXAMPLE`, `.Env.SAMPLE`) are green today for a
+      different reason than they will be after task 5, and are labelled inline as
+      non-discriminating rather than counted as coverage.
 - [ ] 5. Fold **both** case-sensitive comparisons, not just the obvious one:
       Write it exactly as below — the two halves must share **one** flags constant, so they
       cannot disagree about what "the same letter" means:
