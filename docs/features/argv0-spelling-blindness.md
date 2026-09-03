@@ -1,7 +1,7 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
-branch: fix/argv0-spelling-blindness
+branch: none  # merged via PR #93 (89bc610) 2026-09-03
 ---
 
 # Every Tier-1 guard trusts one exact spelling of a command name
