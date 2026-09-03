@@ -256,10 +256,26 @@ ligature is a *decomposition*, not a case fold, so no regex flag reaches it.
 
 **Decision: bare `re.IGNORECASE`.** User call, 2026-09-03, taken on a smaller table (7
 spellings, 8 false refusals) and **retained on the corrected one**: it closes **9 of the 12**
-live bypasses on top of the capitalisation fix, at a cost of **10** false refusals, each of
-which is U+0130 or U+0131 (Turkish dotted / dotless i) inside one of four filenames. A false
-refusal here is a printed message with a documented override, not a leak. The correction
-moved every number in the same direction, so the decision does not turn on it.
+live bypasses on top of the capitalisation fix, at a cost of **10** false refusals *in the
+homoglyph class*, each of which is U+0130 or U+0131 (Turkish dotted / dotless i) inside one of
+four filenames. A false refusal here is a printed message with a documented override, not a
+leak. The correction moved every number in the same direction, so the decision does not turn
+on it.
+
+⚠️ **Two scoping limits on the "10 of 2,324", added round 4 after both judges raised them.**
+
+1. **It is not the whole priced cost.** Ten is the complete count of *homoglyph* false
+   refusals. Round 4 measured two further classes against the live classifier:
+   ASCII-case template names the case-sensitive `.env` exemption stops recognising
+   (`.Env.Example`, `.ENV.SAMPLE` — closed by task 5, which folds the exemption in the same
+   edit; `.env.Template` is refused **today** and task 5 fixes it), and the unanchored
+   `Application Support` pattern widening (`.../Application Support/Foo/CREDENTIALS.md` —
+   accepted and argued in **Measured** above). See the scenario comment at
+   `Scenarios → the ten priced false refusals` for the same scoping in test form.
+2. **"10 of 2,324" is not a false-positive rate and must never be quoted as one (0.4%).**
+   Every one of the 2,324 is an exotic homoglyph spelling; the denominator contains nothing a
+   person would type. The honest statement is the numerator alone: ten specific filenames,
+   listed.
 
 Rejected: `re.IGNORECASE | re.ASCII` — closes **zero** of the 12, measured. Its only merit is
 avoiding the 10 false refusals, which is not worth leaving twelve written-down bypasses open
@@ -407,10 +423,22 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       | .zprofıle              | .zprofile          |
       | .zprofİle              | .zprofile          |
 
-    # U+0131 / U+0130 Turkish dotless and dotted i. These ten are the entire
-    # priced cost of bare re.IGNORECASE -- the complete list, not a sample.
-    # Asserted so that if the count ever moves, a test says so rather than a
-    # number in prose going quietly stale.
+    # U+0131 / U+0130 Turkish dotless and dotted i. These ten are the complete
+    # list -- not a sample -- OF ONE CLASS: homoglyph spellings of the seven
+    # protected names that fold into a match. They are NOT the entire priced
+    # cost of bare re.IGNORECASE. Two other classes exist, both measured
+    # (round 4) and both handled elsewhere in this card rather than here:
+    #   (a) ASCII-case template names the .env exemption stops recognising --
+    #       `.Env.Example`, `.ENV.SAMPLE` newly block, because the exemption is
+    #       a case-sensitive endswith. Task 5 folds the exemption in the same
+    #       edit, so these do not ship; `.env.Template` is ALREADY refused today
+    #       and task 5 fixes it as a side effect.
+    #   (b) the unanchored Application Support pattern getting wider --
+    #       `.../Application Support/Foo/CREDENTIALS.md` newly blocks. Accepted
+    #       and argued in the Measured section above; it is a widening, and it
+    #       is not to be described as anything else.
+    # Asserted so that if this class's count ever moves, a test says so rather
+    # than a number in prose going quietly stale.
 
   Scenario: an unrelated path is unaffected
     Given the command "cat foo.zshrc"
