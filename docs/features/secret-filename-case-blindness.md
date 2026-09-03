@@ -105,8 +105,15 @@ walks, both comparing every real path against both compiled forms:
 
 | Scan root | Exclusions | Names scanned | Newly matching |
 |---|---|---|---|
-| repo worktree + `$HOME` | `.git`, `node_modules`, `Library`, depth ≥ 4 | 29,773 | **0** |
-| `~/Library` | none, full depth | 760,056 | **0** |
+| repo worktree + `$HOME` | `.git`, `node_modules`, `Library`, depth ≥ 4 | ~30k, drifts | **0** |
+| `~/Library` | none, full depth | ~760k, drifts | **0** |
+
+⚠️ **The scanned-name totals are deliberately not pinned to a figure.** They were recorded
+as 29,773 / 760,056 during task 1. Task 3's tracked probe re-derived them twice minutes
+apart and got 29,960 / 760,543 and then 29,963 / 760,542 — the volume is live, so any exact
+figure written here is stale before it is committed. The load-bearing column is
+**Newly matching**, which is **0** in every walk; run
+`hooks/secret-filename-fold.probe.sh` for the current totals rather than quoting one.
 
 The `~/Library` walk exists because the first scan excluded it, and `Application Support` —
 the one pattern whose breadth is in question — lives nowhere else. Excluding it would have
@@ -454,12 +461,16 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       see Task 1 and the ⚠️ on table A.
 - [x] 2. Decide the filesystem question. **Done** — fold unconditionally; decision retained
       on corrected evidence.
-- [ ] 3. **Ship the probe first**, as `hooks/secret-filename-fold.probe.sh` (+ its python
-      helper). It must source **every** number this card states, or the number is deleted:
+- [x] 3. **Ship the probe first**, as `hooks/secret-filename-fold.probe.sh` (+ its python
+      helper `hooks/lib/secret-filename-fold-probe.py`). **Done.** Every number in this card
+      reproduced exactly except the disk-census scanned-name totals, which drift (see the ⚠️
+      under table B). The `DOTFILE_RE` agreement assertion reads **False** today, as it must
+      before task 5 lands; it flipping to **True** is task 5's receipt. It must source **every** number this card states, or the number is deleted:
       - table A (which patterns flip), with **a per-pattern case count** printed — the
         round-1 error was a row with zero test cases printing identically to a row that
         passed;
-      - the two disk-census counts (29,773 / 760,056);
+      - the two disk-census walks — the **Newly matching** column, not a pinned
+        scanned-name total (see the ⚠️ under table B: the totals drift between runs);
       - the full flag-choice table: all four strategies side by side, both columns
         (bypasses and false refusals), over the **union** candidate population. After the
         single-compile-site rule lands, nothing else can reproduce this comparison.
