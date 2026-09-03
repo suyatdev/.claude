@@ -131,25 +131,13 @@ print(f"\nunion of all Table A candidate tokens: {len(all_table_a_tokens)}")
 # So the comparison population is widened with the same-file homoglyph tokens,
 # where the two flags disagree on every one (6 of 6). Do not narrow it back.
 # ---------------------------------------------------------------------------
-DISCRIMINATING_TOKENS = [
-    ".zſhrc", ".zſhenv", ".baſh_profile",
-    ".terminal_aliaſes", "credentialſ.json", "credentials.jſon",
-]
-
-agreement_tokens = list(all_table_a_tokens) + DISCRIMINATING_TOKENS
-mismatches = []
-for tok in agreement_tokens:
-    prod_hit = any(rx.search(tok) for rx, _ in mod.DOTFILE_RE)
-    self_ic_hit = any(rx.search(tok) for rx in compiled_ic_by_pattern)
-    if prod_hit != self_ic_hit:
-        mismatches.append(tok)
-agrees = len(mismatches) == 0
-print(
-    f"\nproduction DOTFILE_RE agrees with self-compiled re.IGNORECASE column: "
-    f"{agrees} ({len(mismatches)} of {len(agreement_tokens)} tokens differ, "
-    f"of which {len(DISCRIMINATING_TOKENS)} discriminate re.IGNORECASE from "
-    f"re.IGNORECASE|re.ASCII)"
-)
+# The receipt is deliberately NOT printed here -- see section 4b. It needs a
+# population that can tell re.IGNORECASE from the rejected re.IGNORECASE|re.ASCII,
+# and the Table A tokens cannot: they are pure-ASCII case variants, on which the
+# two flags behave identically, so a receipt built from them reads True under
+# either flag and proves nothing about the choice the decision rests on. The
+# tokens that DO discriminate are the same-file homoglyph variants, and those are
+# derived by the section 4 sweep rather than typed out here.
 
 # ---------------------------------------------------------------------------
 # Section 2 -- disk census: two walks, same method as the Task 1 probe
@@ -353,6 +341,49 @@ print(f"\ntotal variants tested on this volume: {len(same_rows) + len(diff_rows)
 print(f"  SAME file (guard SHOULD block): {len(same_rows)}")
 print(f"  DIFFERENT file (should ALLOW):  {len(diff_rows)}\n")
 
+# ---------------------------------------------------------------------------
+# Section 4b -- production DOTFILE_RE must not silently drift from the
+# self-compiled re.IGNORECASE column. Printed rather than asserted-fatal, so
+# the probe stays a measurement and not a test.
+#
+# The population is DERIVED, never typed. It is the Table A tokens plus every
+# same-file variant the sweep above found on which re.IGNORECASE and the
+# rejected re.IGNORECASE|re.ASCII actually disagree. A hand-typed list was used
+# for one commit and removed: this file deletes a hand-sample elsewhere on the
+# grounds that only a derived population is reproducible, and the same rule has
+# to apply here. If the sweep ever finds no discriminating variant, the count
+# below prints 0 and the receipt is announcing that it has gone blind.
+# ---------------------------------------------------------------------------
+discriminating = [
+    v for _, v, _ in same_rows
+    if hit(v, compiled_ic) != hit(v, compiled_ica)
+]
+# Source the claim that Table A alone cannot discriminate, rather than asserting
+# it in a comment. If this ever prints non-zero, the paragraph in the card that
+# explains why section 4b exists has gone stale and must be re-derived.
+table_a_disc = [
+    t for t in all_table_a_tokens
+    if hit(t, compiled_ic) != hit(t, compiled_ica)
+]
+print(
+    f"Table A tokens that discriminate re.IGNORECASE from re.IGNORECASE|re.ASCII: "
+    f"{len(table_a_disc)} of {len(all_table_a_tokens)} "
+    f"(this is why the derived same-file tokens below are added)"
+)
+agreement_tokens = list(all_table_a_tokens) + discriminating
+mismatches = [
+    tok for tok in agreement_tokens
+    if any(rx.search(tok) for rx, _ in mod.DOTFILE_RE)
+    != any(rx.search(tok) for rx in compiled_ic_by_pattern)
+]
+agrees = len(mismatches) == 0
+print(
+    f"production DOTFILE_RE agrees with self-compiled re.IGNORECASE column: "
+    f"{agrees} ({len(mismatches)} of {len(agreement_tokens)} tokens differ, "
+    f"of which {len(discriminating)} derived tokens discriminate re.IGNORECASE "
+    f"from re.IGNORECASE|re.ASCII)\n"
+)
+
 print(f"{'strategy':20s} {'bypasses':>14s} {'false refusals':>18s}")
 print("-" * 56)
 for nm, fn in STRATS:
@@ -375,3 +406,68 @@ for nm, v, ss in diff_rows:
         cps = " ".join(f"U+{ord(s[2]):04X}" for s in ss)
         print(f"  {nm:20s} {v:28s} {cps}")
 print(f"  total: {n}")
+
+
+# ---------------------------------------------------------------------------
+# Section 5 -- the exemption delta. Folding the patterns WIDENS what the guard
+# refuses; folding the committed-template exemption NARROWS it, and the card is
+# required to name both. This sweeps every case variant of the dotenv family and
+# reports the delta by direction.
+#
+# Pre-fix behaviour is reconstructed from the two mechanisms rather than read
+# out of git, so the probe stays self-contained and runnable at any checkout:
+# patterns compiled with no flag, plus a case-sensitive endswith exemption.
+# Post-fix behaviour comes from the live classifier. The card states these
+# counts and nothing else derives them -- an earlier draft said "exactly two",
+# which was a hand-picked list of 11 spellings written up as a complete delta.
+# ---------------------------------------------------------------------------
+print("\n=== Section 5: exemption delta over the dotenv family ===")
+
+DOTENV_LABEL = ".env / .env.*"
+EXEMPT_SUFFIXES = (".example", ".template", ".sample")
+FAMILY = [".env"] + [".env" + _s for _s in EXEMPT_SUFFIXES]
+
+
+def all_case_variants(name):
+    slots = [(i, c) for i, c in enumerate(name) if c.isalpha()]
+    out = set()
+    for bits in itertools.product((0, 1), repeat=len(slots)):
+        chars = list(name)
+        for (i, c), b in zip(slots, bits):
+            chars[i] = c.upper() if b else c.lower()
+        out.add("".join(chars))
+    return out
+
+
+def pre_fix_blocks(tok):
+    for rx, (_pat, label) in zip(compiled_plain, PATTERNS):
+        if rx.search(tok):
+            if label == DOTENV_LABEL and tok.endswith(EXEMPT_SUFFIXES):
+                return False
+            return True
+    return False
+
+
+family_pop = set()
+for _name in FAMILY:
+    family_pop |= all_case_variants(_name)
+
+to_allow, to_block, unchanged = [], [], 0
+for tok in sorted(family_pop):
+    before = pre_fix_blocks(tok)
+    after = mod.matches_dotfile(tok) is not None
+    if before and not after:
+        to_allow.append(tok)
+    elif after and not before:
+        to_block.append(tok)
+    else:
+        unchanged += 1
+
+print(f"  population: every case variant of {', '.join(FAMILY)}")
+print(f"  total basenames:                  {len(family_pop)}")
+print(f"  block -> allow (newly permitted): {len(to_allow)}")
+print(f"  allow -> block (the fix):         {len(to_block)}")
+print(f"  unchanged:                        {unchanged}")
+print("  every newly-permitted name is a template-family name: "
+      f"{all(t.lower() != '.env' for t in to_allow)}")
+print(f"  newly-refused names: {sorted(to_block)}")

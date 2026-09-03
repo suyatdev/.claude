@@ -37,7 +37,11 @@ live API key.
 Every lowercase control refuses, so the group is measured rather than blind.
 
 Cause: `hooks/lib/classify-secret-command.py`, `DOTFILE_PATTERNS` (`:137`) compiled into
-`DOTFILE_RE` (`:147`) — plain `re.compile` with no `re.IGNORECASE`, e.g.
+`DOTFILE_RE` (`:147`) — **line numbers as of the pre-fix tree, HEAD `7e3f802`**, which is
+what this section describes. After task 5 landed, `:147` is `FOLD_FLAGS` and `DOTFILE_RE`
+moved to `:149`; the compliance judge caught the unanchored citation at round 6. A line
+number in a "here is the bug" section only means anything against the tree that had the bug.
+Plain `re.compile` with no `re.IGNORECASE`, e.g.
 `(r"(^|/)\.zshrc$", "~/.zshrc")`. On this machine's case-insensitive APFS, `cat ~/.ZSHRC`
 opens the same file.
 
@@ -539,25 +543,61 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       close them (task 8).
 
       ⚠️ **The receipt originally could not prove what this bullet credited it with, and was
-      strengthened at round 5.** As first shipped it compared 44 pure-ASCII case variants,
-      and `re.IGNORECASE` behaves identically to the **rejected** `re.IGNORECASE | re.ASCII`
-      on those — measured, 0 of 11 differ. So the receipt read `True` under either flag: it
-      proved *a* fold had landed, never *which*. The compliance judge found this by mutation.
-      Fixed by widening the comparison population with the six same-file homoglyph tokens,
-      where the two flags disagree on all six. Falsified after the fix, on a copy of the tree
-      rather than the live one: chosen flag → `True (0 of 50)`, rejected flag →
-      `False (6 of 50)`. The **test suite** always did discriminate this (19 red under
-      `re.ASCII`); the receipt now does too, and neither claim rests on the other.
+      rebuilt across rounds 5 and 6.** As first shipped it compared only the Table A union —
+      pure-ASCII case variants — and `re.IGNORECASE` behaves identically to the **rejected**
+      `re.IGNORECASE | re.ASCII` on every one of them. The probe now sources that denominator
+      itself: `Table A tokens that discriminate re.IGNORECASE from re.IGNORECASE|re.ASCII:
+      0 of 44`. So the receipt read `True` under either flag: it proved *a* fold had landed,
+      never *which*. The compliance judge found it by mutation at round 5.
 
-      ⚠️ **What folding the exemption newly *allows*, named plainly** — the card names its
-      other widening, so it must name this narrowing too. Measured against the parent commit
-      `cf1567f` and HEAD, token by token, exactly **two** move from block to allow:
-      `.env.EXAMPLE` and `.env.Template`. Both are committed-template names that the
-      case-sensitive `endswith` was refusing by accident, which is the pre-existing false
-      positive this task was always going to fix. `.ENV.EXAMPLE` and `.Env.SAMPLE` did
-      **not** move — they allowed before and allow now (the observability judge's round-5
-      relay named `.ENV.EXAMPLE` here; re-measuring showed that was wrong). One token moves
-      the other way, allow to block: `.ENV`, which is the fix.
+      Round 5 fixed it with a **hand-typed** list of six homoglyph tokens. The observability
+      judge caught the hypocrisy at round 6 — that hand-list shipped in the same commit whose
+      message deletes a different hand-sample "because only the derived population is
+      reproducible". The list is now **derived**: every same-file variant the section 4 sweep
+      finds on which the two flags actually disagree, which is **9**, not the 6 that were
+      guessed. Falsified after the fix, on a copy of the tree rather than the live one:
+      chosen flag → `True (0 of 53)`, rejected flag → `False (9 of 53)`. The **test suite**
+      always discriminated this independently (19 red under `re.ASCII`); the receipt now does
+      too, and neither claim rests on the other.
+
+      ⚠️ **Known bound on the receipt:** the observability judge mutated `FOLD_FLAGS` to
+      `re.IGNORECASE | re.MULTILINE` and **both** oracles stayed green — probe `True`, suite
+      204/0. That is a widening rather than a fail-open, so it is recorded as a limit on what
+      these two checks can see, not fixed here.
+
+      ⚠️ **What folding the exemption newly *allows*, scoped to the population that was
+      swept** — the card names its other widening, so it must name this narrowing too.
+      Over **every case variant of the four dotenv-family names** (`.env`, `.env.example`,
+      `.env.template`, `.env.sample` — 3,592 basenames). Sourced by the probe,
+      **section 5**, which reconstructs the pre-fix behaviour from its two mechanisms
+      (unflagged patterns plus a case-sensitive `endswith`) rather than reading it out of
+      git, so it stays runnable at any checkout. Cross-checked against an independent sweep
+      that *did* classify against the parent commit `cf1567f`: both give 445 and 7.
+
+      | direction | count |
+      |---|---|
+      | block → allow (newly permitted) | **445** |
+      | allow → block (the fix) | **7** |
+      | unchanged | 3,140 |
+
+      Every one of the 445 is a **template-family** name in some mixed casing
+      (`.env.Example`, `.env.SAMPLE`, …) — never a bare `.env` variant; that is the property
+      worth relying on, and section 5 checks it (`every newly-permitted name is a
+      template-family name: True`) rather than asserting it. The 7 are enumerated in full by
+      the probe and are the seven non-lowercase case variants of `.env` itself — `.ENV`,
+      `.ENv`, `.EnV`, `.Env`, `.eNV`, `.eNv`, `.enV` — which is exactly the fix.
+      `.ENV.EXAMPLE` and `.Env.SAMPLE` did **not** move: they allowed before and allow now
+      (the observability judge's round-5 relay named `.ENV.EXAMPLE` here; re-measuring showed
+      that was wrong).
+
+      ⚠️ **This paragraph said "exactly two move from block to allow" until round 6, and both
+      judges caught it.** Two tokens is what a hand-picked list of 11 spellings showed; 445 is
+      what the swept population shows. It was the same defect the paragraph three above it
+      describes — a hand-sample written as a complete measurement — committed one paragraph
+      later, in the very commit that deleted another one. The counts here are scoped to the
+      dotenv family and to nothing else; the observability judge swept a larger population and
+      got larger numbers, which is consistent, not contradictory, and is why the population is
+      now named in the sentence rather than left implied.
 
       ⚠️ Found while verifying, and fixed in the preceding commit rather than here: the
       three `Application Support` assertions passed the path **unquoted**, and

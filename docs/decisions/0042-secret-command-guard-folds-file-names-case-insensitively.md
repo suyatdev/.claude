@@ -74,8 +74,11 @@ population disagreed (577 and 1,881), and nobody has explained the disagreement,
 is trustworthy and neither is to be resurrected. The rejection does not depend on which
 count is right: "hundreds" against 10 decides it either way. Run
 `hooks/secret-filename-fold.probe.sh` for the current figure. ⚠️ This paragraph said "no
-exact figure is published here" and then published one in the next sentence, until the
-compliance judge's round-5 read; the number is gone rather than re-caveated.
+exact figure is published here" and then published one as a **live measurement** in the next
+sentence, until the compliance judge's round-5 read. That live figure is gone. The two
+historical sweep values above are deliberately kept, precisely because naming them as
+untrustworthy is what stops a future reader from re-deriving one and believing it settled —
+so "no exact figure" means none is offered as *the* count, not that no number appears.
 
 **Accepted — bare `re.IGNORECASE`.** It closes **9** of the 12 same-file bypasses (the
 U+017F long-s spellings) and leaves 3 open (the U+FB01 `ﬁ` ligature spellings — see Accepted
