@@ -526,7 +526,7 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       disagreed.** The chain, replayed from a pristine `git archive` of each commit rather
       than inherited: `34a35b7` 168/0 → `7b08fad` 168/0 (probe only) → `c3d3a6d` **176/27**
       → `cf1567f` **177/27** (the quoting fix adds one control) → `26e40a7` **204/0** →
-      `9d0d925` 204/0 → **212/0** once round 8's eight exhaustive assertions land.
+      `9d0d925` 204/0 → **212/0** at `8d4dfac`, once round 8's eight exhaustive assertions land.
       This bullet said "176 at the parent commit" and ADR 0042 said "177 at the
       parent commit" for the same before-the-fix moment; both were true of *different*
       commits and neither named one, so together they read as a contradiction a reader
@@ -535,13 +535,21 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       this by construction, because the two copies carry **different** numbers and so never
       collide. Both judges reported the same single finding independently.
 
+      ⚠️ **A pristine `git archive` extract has no `.git`.** Confirmed: running the suite
+      straight out of `git archive` (no `git init`) prints no total line at all — the suite
+      aborts at its `MARKER_ROOT="$(git rev-parse --show-toplevel)"` line with `fatal: not a
+      git repository`, exit 1, and zero `FAIL` lines. A replay harness that greps only for
+      `FAIL` reads that as a clean pass; `git init` the extract first, as every replay above
+      did, or check the exit code and the totals line both being present.
+
       ⚠️ **Round 8 also turned the safety property into an assertion.** Folding the
       exemption newly allows 445 mixed-case template names; what makes that safe is that
       **none is a bare `.env`** — every one carries an `.example`/`.template`/`.sample`
       suffix. Probe section 5 *printed* that property, and the observability judge pointed
       out a printed property is not a regression gate. The bare-`.env` name has only 8 case
-      spellings, so all 8 are now asserted exhaustively (suite 204 → **212**). Falsified on
-      a scratch copy by widening `ENV_EXEMPT_RE` to match every token: 212/0 → **178/40**,
+      spellings, so all 8 are now asserted exhaustively (suite 204 → **212** at `8d4dfac`).
+      Falsified on a scratch copy of `8d4dfac` by widening `ENV_EXEMPT_RE` to match every
+      token: 212/0 → **178/40**,
       with **all 8** of the new rows firing. They discriminate; they are not decoration.
       The 27 reds, counted from the suite output rather than from the implementer's report
       (which said 9/9/10 = 28 and was wrong): **7** capitalisation rows (`.ENV`, `.Env`,
@@ -558,7 +566,7 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       non-discriminating rather than counted as coverage.
 - [x] 5. **Done.** Landed exactly as prescribed below, 8 lines in
       `hooks/lib/classify-secret-command.py` and nothing else. Suite: **204 passed, 0
-      failed**. Probe receipt, as the shipped probe prints it today: `production DOTFILE_RE
+      failed**, at `26e40a7`. Probe receipt, as the shipped probe prints it today: `production DOTFILE_RE
       agrees with self-compiled re.IGNORECASE column: True (0 of 53 tokens differ, of which
       9 derived tokens discriminate re.IGNORECASE from re.IGNORECASE|re.ASCII)` — it read
       `False` at the parent commit. The three U+FB01 ligature rows are still **ALLOW**, as
@@ -587,13 +595,15 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       finds on which the two flags actually disagree, which is **9**, not the 6 that were
       guessed. Falsified after the fix, on a copy of the tree rather than the live one:
       chosen flag → `True (0 of 53)`, rejected flag → `False (9 of 53)`. The **test suite**
-      always discriminated this independently (19 red under `re.ASCII`); the receipt now does
-      too, and neither claim rests on the other.
+      always discriminated this independently (19 red under `re.ASCII`, at `2cb5aec`); the
+      receipt now does too, and neither claim rests on the other.
 
       ⚠️ **Known bound on the receipt:** the observability judge mutated `FOLD_FLAGS` to
       `re.IGNORECASE | re.MULTILINE` and **both** oracles stayed green — probe `True`, suite
-      204/0. That is a widening rather than a fail-open, so it is recorded as a limit on what
-      these two checks can see, not fixed here.
+      204/0 at `2cb5aec`. That is a widening rather than a fail-open, so it is recorded as a
+      limit on what these two checks can see, not fixed here. Re-run at `8d4dfac`: the same
+      mutation is still green, now against the larger suite — **212/0**. The bound has not
+      closed; only the denominator grew.
 
       ⚠️ **What folding the exemption newly *allows*, scoped to the population that was
       swept** — the card names its other widening, so it must name this narrowing too.

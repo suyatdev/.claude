@@ -1065,6 +1065,8 @@ run_case_msg "filename-fold: lowercase .env control -> block" 2 '.env' 'cat .env
 # RED today: DOTFILE_RE has no re.IGNORECASE, so none of these four match.
 run_case_msg "filename-fold RED: .ENV -> block, labels .env / .env.*"          2 '.env / .env.*'    'cat .ENV'
 run_case_msg "filename-fold RED: .Env -> block, labels .env / .env.*"          2 '.env / .env.*'    'cat .Env'
+run_case_msg "filename-fold RED: ~/.ZSHRC -> block, labels ~/.zshrc"           2 '~/.zshrc'         'cat ~/.ZSHRC'
+run_case_msg "filename-fold RED: CREDENTIALS.json -> block, labels credentials.json" 2 'credentials.json' 'cat CREDENTIALS.json'
 
 # --- The safety property, asserted rather than printed --------------------------
 # Folding the committed-template exemption newly ALLOWS 445 mixed-case template
@@ -1080,8 +1082,6 @@ for _v in .env .enV .eNv .eNV .Env .EnV .ENv .ENV; do
     2 '.env / .env.*' "cat $_v"
 done
 unset _v
-run_case_msg "filename-fold RED: ~/.ZSHRC -> block, labels ~/.zshrc"           2 '~/.zshrc'         'cat ~/.ZSHRC'
-run_case_msg "filename-fold RED: CREDENTIALS.json -> block, labels credentials.json" 2 'credentials.json' 'cat CREDENTIALS.json'
 
 # --- Scenario Outline: the widest pattern folds too --------------------------
 # Application Support/[^/]*/credentials is already unanchored/substring, but
