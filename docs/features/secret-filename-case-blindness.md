@@ -256,7 +256,10 @@ figures reconcile exactly.
 
 Every one of the three fixes closes the ASCII capitalisation gap identically. They differ
 **only** on the homoglyph axis, and that axis is a *pre-existing* gap this card discovered —
-today's guard misses all 7, so no option here is a regression.
+today's guard misses all 12, so no option here is a regression.
+The count is the probe's, not the table's: section 4 prints `plain (pre-fix) 12/12`.
+It read **7** until the round-3/4 rounds found three more spellings; the sentence was
+left behind while every figure around it was corrected.
 
 All twelve same-file spellings, and which strategy catches each:
 
@@ -522,8 +525,13 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       assertions added; suite goes 168 passed / 0 failed at `34a35b7` to **176 passed / 27
       failed** at `c3d3a6d`, additive-only, both implementation files byte-identical.
 
-      ⚠️ **Every suite count on this branch is now SHA-anchored, because two of them
-      disagreed.** The chain, replayed from a pristine `git archive` of each commit rather
+      ⚠️ **Every suite count this card records is now SHA-anchored, because two of them
+      disagreed.** Scope stated rather than implied: three bare counts (140/0, 140/0,
+      159/1) survive as inherited explanatory comments in
+      `hooks/secret-command-guard.test.sh` at `:364`, `:631` and `:687`. They predate
+      this branch, none reproduces against today's suite, and re-anchoring them would
+      mean replaying a predecessor branch — so they are excluded deliberately, not
+      overlooked. The chain, replayed from a pristine `git archive` of each commit rather
       than inherited: `34a35b7` 168/0 → `7b08fad` 168/0 (probe only) → `c3d3a6d` **176/27**
       → `cf1567f` **177/27** (the quoting fix adds one control) → `26e40a7` **204/0** →
       `9d0d925` 204/0 → **212/0** at `8d4dfac`, once round 8's eight exhaustive assertions land.
