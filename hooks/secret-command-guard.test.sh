@@ -1065,6 +1065,21 @@ run_case_msg "filename-fold: lowercase .env control -> block" 2 '.env' 'cat .env
 # RED today: DOTFILE_RE has no re.IGNORECASE, so none of these four match.
 run_case_msg "filename-fold RED: .ENV -> block, labels .env / .env.*"          2 '.env / .env.*'    'cat .ENV'
 run_case_msg "filename-fold RED: .Env -> block, labels .env / .env.*"          2 '.env / .env.*'    'cat .Env'
+
+# --- The safety property, asserted rather than printed --------------------------
+# Folding the committed-template exemption newly ALLOWS 445 mixed-case template
+# names (probe section 5). What keeps that safe is that NONE of them is a bare
+# .env: every one carries an .example/.template/.sample suffix. The probe checks
+# that property and prints True, but a printed property is not a regression gate --
+# the observability judge raised exactly this at round 8. The bare-.env name has
+# only 8 case spellings, so the property is asserted here exhaustively: all 8 block,
+# and none is ever exempted. If a future edit widens the exemption so that a bare
+# .env spelling slips into it, these fire.
+for _v in .env .enV .eNv .eNV .Env .EnV .ENv .ENV; do
+  run_case_msg "exhaustive: bare-.env spelling $_v is never exempted -> block" \
+    2 '.env / .env.*' "cat $_v"
+done
+unset _v
 run_case_msg "filename-fold RED: ~/.ZSHRC -> block, labels ~/.zshrc"           2 '~/.zshrc'         'cat ~/.ZSHRC'
 run_case_msg "filename-fold RED: CREDENTIALS.json -> block, labels credentials.json" 2 'credentials.json' 'cat CREDENTIALS.json'
 

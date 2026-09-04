@@ -519,8 +519,30 @@ Feature: secret-command-guard recognises secret file names regardless of capital
       agrees with its own `re.IGNORECASE` column, so the two cannot silently drift.
 - [x] 4. **Red tests**, in `hooks/secret-command-guard.test.sh`, in their own commit before
       any implementation edit — every scenario above, controls included. **Done.** 35
-      assertions added; suite goes 168 passed / 0 failed at the parent commit to **176
-      passed / 27 failed**, additive-only, both implementation files byte-identical.
+      assertions added; suite goes 168 passed / 0 failed at `34a35b7` to **176 passed / 27
+      failed** at `c3d3a6d`, additive-only, both implementation files byte-identical.
+
+      ⚠️ **Every suite count on this branch is now SHA-anchored, because two of them
+      disagreed.** The chain, replayed from a pristine `git archive` of each commit rather
+      than inherited: `34a35b7` 168/0 → `7b08fad` 168/0 (probe only) → `c3d3a6d` **176/27**
+      → `cf1567f` **177/27** (the quoting fix adds one control) → `26e40a7` **204/0** →
+      `9d0d925` 204/0 → **212/0** once round 8's eight exhaustive assertions land.
+      This bullet said "176 at the parent commit" and ADR 0042 said "177 at the
+      parent commit" for the same before-the-fix moment; both were true of *different*
+      commits and neither named one, so together they read as a contradiction a reader
+      could not resolve. The compliance judge found it at round 8 by replaying the suite at
+      four historical commits — its cross-document number-intersection sweep was blind to
+      this by construction, because the two copies carry **different** numbers and so never
+      collide. Both judges reported the same single finding independently.
+
+      ⚠️ **Round 8 also turned the safety property into an assertion.** Folding the
+      exemption newly allows 445 mixed-case template names; what makes that safe is that
+      **none is a bare `.env`** — every one carries an `.example`/`.template`/`.sample`
+      suffix. Probe section 5 *printed* that property, and the observability judge pointed
+      out a printed property is not a regression gate. The bare-`.env` name has only 8 case
+      spellings, so all 8 are now asserted exhaustively (suite 204 → **212**). Falsified on
+      a scratch copy by widening `ENV_EXEMPT_RE` to match every token: 212/0 → **178/40**,
+      with **all 8** of the new rows firing. They discriminate; they are not decoration.
       The 27 reds, counted from the suite output rather than from the implementer's report
       (which said 9/9/10 = 28 and was wrong): **7** capitalisation rows (`.ENV`, `.Env`,
       `~/.ZSHRC`, `CREDENTIALS.json` and three `Application Support` spellings) + **1**

@@ -146,7 +146,7 @@ had no other readers and was removed rather than kept alongside its replacement.
 reproduce the "before" numbers that justified the decision, so any later reader would be
 unable to check the claim that folding actually closed the measured gap. Shipping the probe
 first, and red tests against it (task 4), means the before/after comparison in the task 5
-commit message — 177 passed / 27 failed at the parent commit, 204 passed / 0 failed after —
+commit message — 177 passed / 27 failed at `cf1567f`, 204 passed / 0 failed at `26e40a7` —
 is a real measurement of the same suite at two commits, not a number invented to match the
 decision.
 
