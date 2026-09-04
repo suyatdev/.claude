@@ -258,8 +258,16 @@ Every one of the three fixes closes the ASCII capitalisation gap identically. Th
 **only** on the homoglyph axis, and that axis is a *pre-existing* gap this card discovered —
 today's guard misses all 12, so no option here is a regression.
 The count is the probe's, not the table's: section 4 prints `plain (pre-fix) 12/12`.
-It read **7** until the round-3/4 rounds found three more spellings; the sentence was
-left behind while every figure around it was corrected.
+It read **7** until the round-3 fix `42721f5` re-derived the sweep over every position
+and found **five** more: `.baſh_proﬁle`, `.terminal_aliaseſ`, `.terminal_aliaſeſ`, `credentials.jſon`, `credentialſ.jſon`. One commit, not two rounds — round 4 added none;
+counted by parsing the table at each commit, 7 rows at `5c41af9`, 12 at `42721f5`, 12 ever
+since.
+
+⚠️ This clause itself read "the round-3/4 rounds found **three** more spellings" until
+round 11 measured it. The stray three was the count of two-character *combinations* from
+the sentence above, borrowed for a sentence about *spellings* — the card's signature
+failure, recurring inside the paragraph that records a prior figure being wrong. Commit
+`9950c56`'s message still carries the superseded version and cannot be edited.
 
 All twelve same-file spellings, and which strategy catches each:
 
