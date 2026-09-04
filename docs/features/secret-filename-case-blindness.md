@@ -264,10 +264,25 @@ counted by parsing the table at each commit, 7 rows at `5c41af9`, 12 at `42721f5
 since.
 
 ⚠️ This clause itself read "the round-3/4 rounds found **three** more spellings" until
-round 11 measured it. The stray three was the count of two-character *combinations* from
-the sentence above, borrowed for a sentence about *spellings* — the card's signature
-failure, recurring inside the paragraph that records a prior figure being wrong. Commit
-`9950c56`'s message still carries the superseded version and cannot be edited.
+round 11 measured it — the card's signature failure, recurring inside the paragraph that
+records a prior figure being wrong. Commit `9950c56`'s message still carries the superseded
+version and cannot be edited.
+
+**Where the wrong 3 came from is not recorded here, because it is not recoverable.** Round 11
+asserted it was borrowed from the two-character *combination* count in the sentence above.
+Round 12 showed that sentence is only one candidate among several in the immediate
+neighbourhood — the `re.IGNORECASE` miss count in the strategy table, the combination count,
+"every one of the three fixes", and the U+FB01 row count all sit within a few paragraphs,
+each a different and legitimate three. It also showed the round-10 judge verdict carried
+*both* halves of the bad clause, so the attribution explained the "three" and left the "/4"
+unaccounted for. That verdict is gitignored (`.gitignore:114`; only `verdicts.jsonl` is
+tracked), so no reader of this branch can check any such claim in either direction. The
+measurement above stands on its own; the causal story is deleted rather than hedged.
+
+Cited by description rather than by line: the first draft of this very note carried four
+`file:line` anchors measured *before* the edit that inserted it, and the insertion moved one
+of them off its target. A line number inside the paragraph that shifts it is a fact with a
+half-life of one commit.
 
 All twelve same-file spellings, and which strategy catches each:
 

@@ -12,12 +12,18 @@ Queued 2026-09-04 out of round 10 of `docs/features/secret-filename-case-blindne
 ## What happened
 
 Two judges — `compliance-judge` and `observability-judge` — were dispatched in parallel into
-separate panes against the same repository. The observability judge reported, unprompted:
+separate panes against the same repository. The observability judge reported, unprompted,
+that another judge working in the same `/tmp` directory had overwritten its script and deleted
+its working copies, and that it produced one wrong measurement before it isolated itself; it
+added that parallel judges must not share a scratch path, because a contaminated replay yields
+a plausible number rather than an error.
 
-> another judge was running concurrently in the same `/tmp` directory, overwrote my script and
-> deleted my working copies, and produced one wrong measurement before I isolated. Parallel
-> judges must not share a scratch path — a contaminated replay yields a *plausible* number,
-> which is the worst failure mode there is.
+Stated in this card's own voice, not quoted. The judge said it twice in different words — once
+in its pane report and once in its persisted verdict — and **neither travels with this branch**:
+pane reports live in a session scratchpad under `/tmp`, and verdict markdown is gitignored
+(`.gitignore:114`; only `verdicts.jsonl` is tracked). A blockquote here would promise a
+verbatimness no reader of this branch could check, which is precisely the defect this card is
+about.
 
 It recovered on its own. The round-10 verdicts are not in doubt: the finding it eventually
 reported was independently reproduced in the dispatching session. What is in doubt is every
