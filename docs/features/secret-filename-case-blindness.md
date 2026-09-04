@@ -265,24 +265,42 @@ since.
 
 ⚠️ This clause itself read "the round-3/4 rounds found **three** more spellings" until
 round 11 measured it — the card's signature failure, recurring inside the paragraph that
-records a prior figure being wrong. Commit `9950c56`'s message still carries the superseded
-version and cannot be edited.
+records a prior figure being wrong. Two commit messages still carry retracted text and cannot
+be edited: `9950c56` asserts the superseded **count**, and `5d4b012` asserts the **causal
+story** that the note below deletes. `git log` shows both with nothing pointing at the
+retraction; this paragraph is that pointer.
 
 **Where the wrong 3 came from is not recorded here, because it is not recoverable.** Round 11
 asserted it was borrowed from the two-character *combination* count in the sentence above.
 Round 12 showed that sentence is only one candidate among several in the immediate
-neighbourhood — the `re.IGNORECASE` miss count in the strategy table, the combination count,
-"every one of the three fixes", and the U+FB01 row count all sit within a few paragraphs,
-each a different and legitimate three. It also showed the round-10 judge verdict carried
+neighbourhood: the combination count, "every one of the three fixes", and the
+`re.IGNORECASE` miss count — which is the **same** three rows as the U+FB01 row count, as
+this card's own later section says and the probe confirms, so round 12 listed those two as
+distinct and was wrong to. Three legitimate threes, not four. It also showed the round-10 judge verdict carried
 *both* halves of the bad clause, so the attribution explained the "three" and left the "/4"
-unaccounted for. That verdict is gitignored (`.gitignore:114`; only `verdicts.jsonl` is
-tracked), so no reader of this branch can check any such claim in either direction. The
+unaccounted for. That verdict is the **compliance** judge's, gitignored by
+`.gitignore:117` (`:114` covers the *observability* judge's tree — this note cited it for a
+round, copied from the sibling pane card where `:114` is the correct rule); only
+`verdicts.jsonl` is tracked from either. So no reader of this branch can check any such claim
+in either direction. The
 measurement above stands on its own; the causal story is deleted rather than hedged.
 
 Cited by description rather than by line: the first draft of this very note carried four
 `file:line` anchors measured *before* the edit that inserted it, and the insertion moved one
 of them off its target. A line number inside the paragraph that shifts it is a fact with a
 half-life of one commit.
+
+⚠️ **Known follow-up, deliberately out of scope.** Task 5's commit `26e40a7` moved the
+`env`/`printenv` test in `classify-secret-command.py` from `:189` to `:191`. This card records
+both (see task 8's prescription). Two sites still cite `:189` and were **not** corrected here,
+because both are already merged to `main` via PR #93 and belong to a different feature:
+`hooks/secret-command-guard.test.sh:956` (a comment, blamed to `80e0318`) and
+`docs/features/argv0-spelling-blindness.md` (a table row plus a list). That card also says
+"Six of them have in fact moved since"; this move makes it at least seven, and the enumerated
+list omits it. The count is **not** restated here as a number, because deriving it needs an
+oracle that distinguishes a line that *moved* from one the argv0 fix *rewrote* — an exact-text
+match reports the rewritten ones as GONE and would produce a confident wrong figure. Raised by
+the round-13 compliance judge; left for whoever next touches that card.
 
 All twelve same-file spellings, and which strategy catches each:
 
