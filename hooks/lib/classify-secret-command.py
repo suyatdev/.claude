@@ -144,19 +144,21 @@ DOTFILE_PATTERNS = [
     (r"(^|/)credentials\.json$", "credentials.json"),
     (r"Application Support/[^/]*/credentials", "*/Application Support/*/credentials*"),
 ]
-DOTFILE_RE = [(re.compile(p), label) for p, label in DOTFILE_PATTERNS]
+FOLD_FLAGS = re.IGNORECASE          # single source; see Flag choice
+
+DOTFILE_RE = [(re.compile(p, FOLD_FLAGS), label) for p, label in DOTFILE_PATTERNS]
 
 # Conventionally committed, never carry a real value. Checked only against a
 # token the .env pattern already matched, so an unrelated "foo.sample" is
 # unaffected either way.
-ENV_EXEMPT_SUFFIXES = (".example", ".template", ".sample")
+ENV_EXEMPT_RE = re.compile(r"\.(example|template|sample)$", FOLD_FLAGS)
 ENV_LABEL = ".env / .env.*"
 
 
 def matches_dotfile(tok):
     for rx, label in DOTFILE_RE:
         if rx.search(tok):
-            if label == ENV_LABEL and tok.endswith(ENV_EXEMPT_SUFFIXES):
+            if label == ENV_LABEL and ENV_EXEMPT_RE.search(tok):
                 return None
             return label
     return None
