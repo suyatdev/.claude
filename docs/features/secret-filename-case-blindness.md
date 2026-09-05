@@ -1,7 +1,7 @@
 ---
 phase: review
 model_tier: high
-branch: fix/secret-filename-case-blindness
+branch: none  # merged via PR #95 (59f91e2) 2026-09-04
 ---
 
 # `secret-command-guard` matches secret file names case-sensitively
