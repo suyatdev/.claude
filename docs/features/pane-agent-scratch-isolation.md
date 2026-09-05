@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: TBD
+branch: fix/pane-agent-scratch-isolation
 ---
 
 # Parallel pane agents share a scratch directory and overwrite each other
@@ -410,10 +410,10 @@ these figures:
 
 ## Checklist
 
-Gate is CLOSED — `phase: planning`, no branch. Nothing below starts before the literal
-phrase `gate confirmed`.
+Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter moved to
+`phase: implementation` and the branch recorded in the same commit.
 
-- [ ] 1. Branch `fix/pane-agent-scratch-isolation`; record it in this frontmatter.
+- [x] 1. Branch `fix/pane-agent-scratch-isolation`; record it in this frontmatter.
 - [ ] 2. Failing tests first, in `panes/dispatch-pane-agent.test.sh`: work dir exists, mode
       700, path present in `prompt.md`, two dispatches differ, caller bytes preserved
       verbatim past a `---` line, `mkdir` failure dies before the adapter is called.
