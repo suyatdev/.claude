@@ -414,13 +414,13 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
 `phase: implementation` and the branch recorded in the same commit.
 
 - [x] 1. Branch `fix/pane-agent-scratch-isolation`; record it in this frontmatter.
-- [ ] 2. Failing tests first, in `panes/dispatch-pane-agent.test.sh`: work dir exists, mode
+- [x] 2. Failing tests first, in `panes/dispatch-pane-agent.test.sh`: work dir exists, mode
       700, path present in `prompt.md`, two dispatches differ, caller bytes preserved
       verbatim past a `---` line, `mkdir` failure dies before the adapter is called.
-- [ ] 3. Failing tests first, in `panes/run-pane-agent.test.sh`: `TMPDIR` exported for an
+- [x] 3. Failing tests first, in `panes/run-pane-agent.test.sh`: `TMPDIR` exported for an
       in-shape run dir with a `work` child; left alone for an out-of-shape path; left alone
       when `work` is absent, with the result file still written.
-- [ ] 4. Failing tests first, for `cleanup_stale`, one per Gherkin case: the 25h child
+- [x] 4. Failing tests first, for `cleanup_stale`, one per Gherkin case: the 25h child
       survives and the 49h child is pruned (this pair is what catches `-mtime` truncation —
       a single 3-day case passes either way); a 30-day child with no `agent-exit` survives;
       the parent's mtime is unchanged after a prune.

@@ -106,6 +106,88 @@ if ! grep -q -- '--model' "$TMP/args-nomodel"; then
   printf 'ok   — no 5th positional emits no --model flag\n'; pass=$((pass+1))
 else printf 'FAIL — no 5th positional emits no --model flag (%s)\n' "$(cat "$TMP/args-nomodel" 2>/dev/null)"; fail=$((fail+1)); fi
 
+# 13-18. Per-dispatch scratch isolation (docs/features/pane-agent-scratch-isolation.md,
+# "Layer 1 — mechanics" changes 3 and 4a). run-pane-agent.sh does not yet derive run_dir
+# up front, export TMPDIR at <run_dir>/work, mkdir -p it, or write work-used — every
+# assertion below is expected to be RED against today's implementation.
+
+# 13. an in-shape run dir whose work/ child already exists -> TMPDIR exported at it
+RUNS13="$TMP/state/runs/1700000000-13-13"; mkdir -p "$RUNS13/work"; cp "$PROMPT" "$RUNS13/prompt.md"
+RUNS13_ABS="$(cd "$RUNS13" && pwd)"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs, not here
+make_stub 'printf "%s\n" "${TMPDIR:-unset}" > "$PANE_TMPDIR_OUT"; printf "{\"result\":\"x\"}\n"'
+PANE_TMPDIR_OUT="$TMP/tmpdir-13" PANE_CLAUDE_BIN="$TMP/claude-stub" \
+  bash "$RUNNER" pane-echo "$RUNS13/prompt.md" "$TMP/r13.md" "$TMP" >/dev/null 2>&1
+got13="$(cat "$TMP/tmpdir-13" 2>/dev/null)"
+if [ "$got13" = "$RUNS13_ABS/work" ]; then
+  printf 'ok   — TMPDIR exported at existing run_dir/work\n'; pass=$((pass+1))
+else printf 'FAIL — TMPDIR exported at existing run_dir/work (got %s want %s)\n' "$got13" "$RUNS13_ABS/work"; fail=$((fail+1)); fi
+
+# 14. an in-shape run dir whose work/ child is missing -> it is CREATED, not skipped,
+# and TMPDIR is still exported at it (the card: falling back to the inherited TMPDIR
+# reinstates the shared-scratch collision this feature removes).
+RUNS14="$TMP/state/runs/1700000000-14-14"; mkdir -p "$RUNS14"; cp "$PROMPT" "$RUNS14/prompt.md"
+RUNS14_ABS="$(cd "$RUNS14" && pwd)"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs, not here
+make_stub 'printf "%s\n" "${TMPDIR:-unset}" > "$PANE_TMPDIR_OUT"; printf "{\"result\":\"x\"}\n"'
+PANE_TMPDIR_OUT="$TMP/tmpdir-14" PANE_CLAUDE_BIN="$TMP/claude-stub" \
+  bash "$RUNNER" pane-echo "$RUNS14/prompt.md" "$TMP/r14.md" "$TMP" >/dev/null 2>&1
+got14="$(cat "$TMP/tmpdir-14" 2>/dev/null)"
+if [ -d "$RUNS14/work" ] && [ "$got14" = "$RUNS14_ABS/work" ]; then
+  printf 'ok   — missing run_dir/work is created and TMPDIR exported at it\n'; pass=$((pass+1))
+else printf 'FAIL — missing run_dir/work is created and TMPDIR exported at it (dir=%s got=%s want=%s)\n' \
+  "$( [ -d "$RUNS14/work" ] && printf yes || printf no )" "$got14" "$RUNS14_ABS/work"; fail=$((fail+1)); fi
+
+# 15. an out-of-shape prompt path (direct invocation outside */runs/*) leaves TMPDIR
+# alone and prints a line containing the word "shared" to the pane; the result file
+# is still written.
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs, not here
+make_stub 'printf "%s\n" "${TMPDIR:-unset}" > "$PANE_TMPDIR_OUT"; printf "{\"result\":\"x\"}\n"'
+PANE_TMPDIR_OUT="$TMP/tmpdir-15" PANE_CLAUDE_BIN="$TMP/claude-stub" TMPDIR="/tmp/sentinel-do-not-touch-15" \
+  bash "$RUNNER" pane-echo "$PROMPT" "$TMP/r15.md" "$TMP" >"$TMP/out-15" 2>&1
+got15="$(cat "$TMP/tmpdir-15" 2>/dev/null)"; last15="$(tail -n 1 "$TMP/r15.md" 2>/dev/null)"
+if [ "$got15" = "/tmp/sentinel-do-not-touch-15" ] && grep -q 'shared' "$TMP/out-15" \
+   && [ "$last15" = "PANE_RESULT: DONE" ]; then
+  printf 'ok   — out-of-shape prompt path leaves TMPDIR alone and warns shared\n'; pass=$((pass+1))
+else printf 'FAIL — out-of-shape prompt path leaves TMPDIR alone and warns shared (tmpdir=%s last=%s)\n' \
+  "$got15" "$last15"; fail=$((fail+1)); fi
+
+# 16. mkdir -p of the work dir failing also leaves TMPDIR alone and prints the shared
+# line; the result file is still written. Forced by pre-placing a regular file at the
+# exact work path, so mkdir -p cannot create a directory there.
+RUNS16="$TMP/state/runs/1700000000-16-16"; mkdir -p "$RUNS16"; cp "$PROMPT" "$RUNS16/prompt.md"
+printf 'blocker\n' > "$RUNS16/work"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs, not here
+make_stub 'printf "%s\n" "${TMPDIR:-unset}" > "$PANE_TMPDIR_OUT"; printf "{\"result\":\"x\"}\n"'
+PANE_TMPDIR_OUT="$TMP/tmpdir-16" PANE_CLAUDE_BIN="$TMP/claude-stub" TMPDIR="/tmp/sentinel-do-not-touch-16" \
+  bash "$RUNNER" pane-echo "$RUNS16/prompt.md" "$TMP/r16.md" "$TMP" >"$TMP/out-16" 2>&1
+got16="$(cat "$TMP/tmpdir-16" 2>/dev/null)"; last16="$(tail -n 1 "$TMP/r16.md" 2>/dev/null)"
+if [ "$got16" = "/tmp/sentinel-do-not-touch-16" ] && grep -q 'shared' "$TMP/out-16" \
+   && [ "$last16" = "PANE_RESULT: DONE" ]; then
+  printf 'ok   — mkdir -p failure leaves TMPDIR alone and warns shared\n'; pass=$((pass+1))
+else printf 'FAIL — mkdir -p failure leaves TMPDIR alone and warns shared (tmpdir=%s last=%s)\n' \
+  "$got16" "$last16"; fail=$((fail+1)); fi
+
+# 17-18. work-used marker (card change 4a): non-empty when the agent wrote a file
+# under run_dir/work, empty when it wrote nothing there.
+RUNS17="$TMP/state/runs/1700000000-17-17"; mkdir -p "$RUNS17"; cp "$PROMPT" "$RUNS17/prompt.md"
+# shellcheck disable=SC2016 # stub body is expanded when the stub runs, not here
+make_stub 'printf "x" > "$TMPDIR/touched" 2>/dev/null; printf "{\"result\":\"x\"}\n"'
+PANE_CLAUDE_BIN="$TMP/claude-stub" bash "$RUNNER" pane-echo "$RUNS17/prompt.md" "$TMP/r17.md" "$TMP" >/dev/null 2>&1
+if [ -s "$RUNS17/work-used" ]; then
+  printf 'ok   — work-used is non-empty after the agent wrote under work/\n'; pass=$((pass+1))
+else printf 'FAIL — work-used is non-empty after the agent wrote under work/\n'; fail=$((fail+1)); fi
+
+RUNS18="$TMP/state/runs/1700000000-18-18"; mkdir -p "$RUNS18"; cp "$PROMPT" "$RUNS18/prompt.md"
+make_stub 'printf "{\"result\":\"x\"}\n"'
+PANE_CLAUDE_BIN="$TMP/claude-stub" bash "$RUNNER" pane-echo "$RUNS18/prompt.md" "$TMP/r18.md" "$TMP" >/dev/null 2>&1
+exists18=no; size18=0
+if [ -e "$RUNS18/work-used" ]; then exists18=yes; size18="$(wc -c < "$RUNS18/work-used")"; fi
+if [ "$exists18" = yes ] && [ ! -s "$RUNS18/work-used" ]; then
+  printf 'ok   — work-used is empty when the agent wrote nothing under work/\n'; pass=$((pass+1))
+else printf 'FAIL — work-used is empty when the agent wrote nothing under work/ (exists=%s size=%s)\n' \
+  "$exists18" "$size18"; fail=$((fail+1)); fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && { ( cd "$MARKER_ROOT" && python3 -I hooks/lib/write-test-marker.py \
   "$MARKER_SELF" ) || { printf 'marker write FAILED\n' >&2; exit 1; }; }
