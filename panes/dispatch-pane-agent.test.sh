@@ -882,28 +882,37 @@ ts_days_ago()  { date -v-"$1"d '+%Y%m%d%H%M.%S'; }
 mkdir -p "$PANE_STATE_DIR/runs"
 
 # Boundary pair -- this is what catches BSD find's -mtime whole-day truncation.
+# The ages STRADDLE 24h (WORK_STALE_MINUTES=1440), not 48h. This originally read
+# 25h-survives / 49h-pruned, copied from the buggy -mtime +1 output the card
+# recorded; measured on one fixture set aged 23h/25h/36h/49h, `-mmin +2880` (the
+# only round constant that satisfies that pair) and `-mtime +1` (the bug) prune
+# an IDENTICAL set -- 49h alone -- so the old pair could not tell the fix from
+# the defect. Under -mtime +1 neither 23h nor 25h is pruned, so the 25h case
+# below is the one that discriminates; the 23h case holds under both and guards
+# only against an over-eager pruner. See the card, "The boundary pair straddles
+# 24h, not 48h".
+CS_23H="$PANE_STATE_DIR/runs/cs-23h-$$"
+mkdir -p "$CS_23H/work"
+printf 'DONE\n' > "$CS_23H/agent-exit"
+printf 'p\n' > "$CS_23H/prompt.md"
+touch -t "$(ts_hours_ago 23)" "$CS_23H/work"
+call_cleanup_stale >/dev/null 2>&1
+[ -d "$CS_23H/work" ] && ok "a completed run's 23h-old work child survives cleanup_stale" \
+  || bad "a completed run's 23h-old work child survives cleanup_stale" "$CS_23H/work missing"
+
 CS_25H="$PANE_STATE_DIR/runs/cs-25h-$$"
 mkdir -p "$CS_25H/work"
 printf 'DONE\n' > "$CS_25H/agent-exit"
 printf 'p\n' > "$CS_25H/prompt.md"
+printf 'l\n' > "$CS_25H/launch.sh"
 touch -t "$(ts_hours_ago 25)" "$CS_25H/work"
 call_cleanup_stale >/dev/null 2>&1
-[ -d "$CS_25H/work" ] && ok "a completed run's 25h-old work child survives cleanup_stale" \
-  || bad "a completed run's 25h-old work child survives cleanup_stale" "$CS_25H/work missing"
-
-CS_49H="$PANE_STATE_DIR/runs/cs-49h-$$"
-mkdir -p "$CS_49H/work"
-printf 'DONE\n' > "$CS_49H/agent-exit"
-printf 'p\n' > "$CS_49H/prompt.md"
-printf 'l\n' > "$CS_49H/launch.sh"
-touch -t "$(ts_hours_ago 49)" "$CS_49H/work"
-call_cleanup_stale >/dev/null 2>&1
-[ ! -d "$CS_49H/work" ] && ok "a completed run's 49h-old work child is pruned by cleanup_stale" \
-  || bad "a completed run's 49h-old work child is pruned by cleanup_stale" "$CS_49H/work still present"
-{ [ -f "$CS_49H/prompt.md" ] && [ -f "$CS_49H/launch.sh" ] && [ -f "$CS_49H/agent-exit" ]; } \
-  && ok "pruning the 49h-old work child leaves prompt.md, launch.sh and agent-exit in place" \
-  || bad "pruning the 49h-old work child leaves the run dir's other files in place" \
-    "prompt.md=$([ -f "$CS_49H/prompt.md" ] && echo y || echo n) launch.sh=$([ -f "$CS_49H/launch.sh" ] && echo y || echo n) agent-exit=$([ -f "$CS_49H/agent-exit" ] && echo y || echo n)"
+[ ! -d "$CS_25H/work" ] && ok "a completed run's 25h-old work child is pruned by cleanup_stale" \
+  || bad "a completed run's 25h-old work child is pruned by cleanup_stale" "$CS_25H/work still present"
+{ [ -f "$CS_25H/prompt.md" ] && [ -f "$CS_25H/launch.sh" ] && [ -f "$CS_25H/agent-exit" ]; } \
+  && ok "pruning the 25h-old work child leaves prompt.md, launch.sh and agent-exit in place" \
+  || bad "pruning the 25h-old work child leaves the run dir's other files in place" \
+    "prompt.md=$([ -f "$CS_25H/prompt.md" ] && echo y || echo n) launch.sh=$([ -f "$CS_25H/launch.sh" ] && echo y || echo n) agent-exit=$([ -f "$CS_25H/agent-exit" ] && echo y || echo n)"
 
 # An unfinished run (no agent-exit) keeps its scratch regardless of age. The
 # RUN DIR itself is left fresh here, deliberately: the pre-existing, unrelated
