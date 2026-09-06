@@ -450,7 +450,7 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
       a single 3-day case passes either way, and so did the 25h/49h pair this originally
       specified: see "The boundary pair straddles 24h" above); a 30-day child with no `agent-exit` survives;
       the parent's mtime is unchanged after a prune.
-- [ ] 5. Implement the four `dispatch-pane-agent.sh` / `run-pane-agent.sh` changes. Confirm
+- [x] 5. Implement the four `dispatch-pane-agent.sh` / `run-pane-agent.sh` changes. Confirm
       both suites go green and both markers are written.
 - [ ] 6. Falsify. One mutation per new assertion, not four for ten — a pass shared by the
       broken and unbroken versions discriminates nothing, and the four-mutation population
