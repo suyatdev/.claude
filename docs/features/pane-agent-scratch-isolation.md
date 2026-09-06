@@ -260,6 +260,29 @@ behaviour, so nothing would have caught it. Two corrections:
   The originating incident was diagnosed the day *after* it happened; a blind clock would
   have deleted the evidence.
 
+**The boundary pair straddles 24h, not 48h.** Corrected 2026-09-06, after the task 5
+implementer hit the contradiction and escalated it rather than working around it. This
+card pinned `WORK_STALE_MINUTES=1440` (24h) in four places while its Gherkin pair asked
+for a **25-hour** child to *survive*. Both cannot hold: 25h is 1500 minutes, already past
+1440. The pair had been written by reading off the *buggy* `-mtime +1` output above
+instead of the intended semantics.
+
+Choosing the constant to satisfy the old pair is what makes this load-bearing rather than
+cosmetic. Any value in `[1500, 2940)` minutes satisfies 25h-survives/49h-pruned, and 2880
+(48h) is the natural one -- which is exactly the ~1.0 GB ceiling this section already names
+as the defect. Measured on the same fixture set, 23h/25h/36h/49h:
+
+| Spelling | Prunes |
+|---|---|
+| `-mmin +1440` (24h, pinned) | 25h, 36h, 49h |
+| `-mmin +2880` (48h, to satisfy the old pair) | 49h |
+| `-mtime +1` (the bug) | 49h |
+
+The bottom two rows are **identical output**. The old pair therefore could not tell the fix
+apart from the bug it exists to catch -- a receipt with no discriminating population. The
+new pair can: under `-mtime +1` neither 23h nor 25h is pruned, so the 25h-pruned case
+fails. `WORK_STALE_MINUTES=1440` stands; the scenarios moved.
+
 **Pruning refreshes the parent's mtime, restarting the run dir's own 7-day clock.**
 Measured — a run dir stamped 3 days old reads as today's date the moment its `work` child
 is removed, and no longer matches `-mtime +7`. Restore it in the same breath:
@@ -326,14 +349,16 @@ Feature: per-dispatch scratch isolation for paned agents
     Then <run_dir>/work-used is non-empty
     And an agent that wrote nothing there leaves it empty
 
-  # Boundary pair -- the pruner must not truncate age to whole days.
+  # Boundary pair -- the pruner must not truncate age to whole days. The ages
+  # straddle the 24h window, NOT 48h: see "The boundary pair straddles 24h"
+  # below for why 25h/49h was measurably unable to discriminate.
   Scenario: a work child younger than the window survives
-    Given a completed run directory whose work child is 25 hours old
+    Given a completed run directory whose work child is 23 hours old
     When cleanup_stale runs
     Then the work child still exists
 
   Scenario: a work child older than the window is pruned
-    Given a completed run directory whose work child is 49 hours old
+    Given a completed run directory whose work child is 25 hours old
     When cleanup_stale runs
     Then the work child is gone
     And prompt.md, launch.sh and agent-exit remain
@@ -420,9 +445,10 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
 - [x] 3. Failing tests first, in `panes/run-pane-agent.test.sh`: `TMPDIR` exported for an
       in-shape run dir with a `work` child; left alone for an out-of-shape path; left alone
       when `work` is absent, with the result file still written.
-- [x] 4. Failing tests first, for `cleanup_stale`, one per Gherkin case: the 25h child
-      survives and the 49h child is pruned (this pair is what catches `-mtime` truncation —
-      a single 3-day case passes either way); a 30-day child with no `agent-exit` survives;
+- [x] 4. Failing tests first, for `cleanup_stale`, one per Gherkin case: the 23h child
+      survives and the 25h child is pruned (this pair is what catches `-mtime` truncation —
+      a single 3-day case passes either way, and so did the 25h/49h pair this originally
+      specified: see "The boundary pair straddles 24h" above); a 30-day child with no `agent-exit` survives;
       the parent's mtime is unchanged after a prune.
 - [ ] 5. Implement the four `dispatch-pane-agent.sh` / `run-pane-agent.sh` changes. Confirm
       both suites go green and both markers are written.
@@ -432,7 +458,8 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
       each with the assertion it must break named in the record: drop the `mkdir`;
       `mkdir -m 755` (mode); write the preamble **last** (caller-byte preservation); drop
       the `export`; widen the `*/runs/*` shape guard to `*`; `|| true` on the `mkdir`
-      failure (fatality); `-mtime +1` in place of `-mmin +1440` (must break the 25h case);
+      failure (fatality); `-mtime +1` in place of `-mmin +1440` (must break the 25h-**pruned** case;
+      it cannot break the 23h-survives one, which holds under both);
       drop the `agent-exit` precondition; drop the `touch -r`. Note also that "two
       dispatches get different work dirs" passes with none of this change present — it
       rides on `new_run_dir`, so it anchors nothing and must not be counted as coverage.
