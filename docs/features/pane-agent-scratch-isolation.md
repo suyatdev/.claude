@@ -256,14 +256,25 @@ behaviour, so nothing would have caught it. Two corrections:
   not truncate. `STALE_DAYS=7` is untouched and still governs the run dir.
 - Prune a `work` child **only when its run dir holds an `agent-exit` marker.** The runner
   writes that marker solely after a successful result write, so a completed run gives its
-  disk back on schedule while a failed or in-flight one keeps its evidence **for up to
-  `STALE_DAYS` (7 days)** — not indefinitely, as an earlier draft of this line and the
-  residual below both said. The pre-existing run-dir prune (`find "$RUNS_DIR" ... -mtime
+  disk back on schedule while a failed or in-flight one keeps its evidence **for just under
+  8 days** — not indefinitely, as an earlier draft of this line and the residual below both
+  said, and not "up to `STALE_DAYS` (7 days)", which is what the first correction said and
+  is also wrong. The pre-existing run-dir prune (`find "$RUNS_DIR" ... -mtime
   +"$STALE_DAYS" -exec rm -rf {} +`) deletes the whole run dir, work child and all,
-  regardless of any marker. Measured 2026-09-07: a run dir aged 8 days holding an
-  `agent-exit` and a populated `work` child was gone after one `dispatch`. The originating
-  incident was diagnosed the day *after* it happened, so 7 days is ample; a blind 24h clock
-  would have deleted the evidence.
+  regardless of any marker — but it is spelled `-mtime`, so it truncates age to whole days
+  exactly as the `-mtime +1` paragraph below explains at length. `+7` therefore means
+  *strictly more than 7 whole days*, which a run dir does not reach until it is 8 days old.
+  Measured 2026-09-07 on one fixture set, each aged and then put through a real `dispatch`:
+
+  | Run dir age | 7d00h | 7d12h | 7d23h | 8d00h | 8d01h |
+  |---|---|---|---|---|---|
+  | After one dispatch | survives | survives | survives | **pruned** | **pruned** |
+
+  The card's first receipt for this was a single 8-day fixture, which could not tell a 7-day
+  window from an 8-day one — the same non-discriminating shape the boundary-pair section
+  below was written to catch, repeated by the correction to it. The originating incident was
+  diagnosed the day *after* it happened, so either bound is ample; a blind 24h clock would
+  have deleted the evidence.
 
 **The boundary pair straddles 24h, not 48h.** Corrected 2026-09-06, after the task 5
 implementer hit the contradiction and escalated it rather than working around it. This
@@ -435,12 +446,16 @@ these figures:
 - **The disk ceiling assumes every dispatch clones.** ~31 dispatches/day is measured; the
   fraction that will actually clone anything is not, so ~0.50 GB/day is an upper bound with
   no observed clone rate behind it. Pruning only completed runs means a run of failures
-  holds its scratch for the full `STALE_DAYS` window rather than 24h — deliberate (evidence
-  beats disk), and **bounded at 7 days**, not unbounded: the pre-existing run-dir prune takes
-  the work child with it. This bullet said "indefinitely" until 2026-09-07, when the
-  implementation-stage observability judge reported the opposite and it was re-measured
-  (see *Retention*). Still the first thing to look at if state grows unexpectedly, since a
-  run of failures raises the ceiling from ~0.50 GB to ~3.5 GB.
+  holds its scratch for the full run-dir window rather than 24h — deliberate (evidence beats
+  disk), and **bounded at just under 8 days**, not unbounded: the pre-existing run-dir prune
+  takes the work child with it, and `-mtime +7` does not fire until day 8 (measured table in
+  *Retention*). This bullet said "indefinitely" until 2026-09-07, when the
+  implementation-stage observability judge reported the opposite; the first correction then
+  said "7 days", which the compliance judge caught as the same `-mtime` truncation trap the
+  card explains elsewhere. Still the first thing to look at if state grows unexpectedly:
+  ~31 dispatches/day x 16 MiB x 8 days ~= **3.9 GiB**, against ~0.50 GB/day when work
+  children are pruned on the 24h clock. (The ~3.3 GB figure in *Retention* is the same daily
+  product over a 7-day window and is not this number.)
 
 - **`work-used` has no reader, and only one of its two directions is sound.** Nothing in the
   tree reads the marker today. Worse, `TMPDIR` points *at* the work dir, so any `mktemp` by
@@ -524,8 +539,12 @@ assertions — the preamble-head case, the caller-bytes case, the opens-no-pane 
 two-dispatches case, the prune-leaves-other-files case, and the no-`agent-exit` case. Five of
 the six were observed failing during this record's own runs, so a next pass that fixes only
 three named ones leaves three behind. Corrected in round 2 after the compliance judge counted
-them; re-derived here by pairing every `ok "…" || bad "…"` in the file (**48 of 133** pairs
-diverge file-wide, so this is a house pattern, not something this card introduced). Every
+them; re-derived here by pairing every `ok "…" || bad "…"` in the file — **48 of 135** pairs
+diverge file-wide, so this is a house pattern, not something this card introduced. (The
+denominator was written as 133 in round 2 and corrected in round 3: the file makes 139 `ok`
+calls, 4 of which are not in `ok … || bad …` form at all, leaving 135. The first pass used a
+regex that also missed two line-continuation spellings — the numerator 48 was right in both
+passes, the total was not.) Every
 mutation result above was confirmed by reading its failure lines, not by string-matching.
 Nothing is changed in the tests here — a test edit belongs in its own step.
 

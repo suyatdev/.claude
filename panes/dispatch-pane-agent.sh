@@ -100,7 +100,11 @@ cleanup_stale() {
   # Card pane-agent-scratch-isolation change 4b: a "work" child is pruned on
   # its own, much shorter clock than the run dir itself -- and only where the
   # run dir already holds an agent-exit marker, so a failed or in-flight run
-  # keeps its scratch (evidence) indefinitely instead of on a blind clock.
+  # keeps its scratch (evidence) for the whole run-dir window instead of losing
+  # it on a blind 24h clock. NOT indefinitely: the STALE_DAYS prune above takes
+  # the run dir whole, work child included, regardless of any marker -- and
+  # since it is spelled -mtime it truncates to whole days, so the real bound is
+  # just under 8 days, not 7 (measured; see the card's Retention table).
   # touch -r restores the parent's mtime from prompt.md (written once at
   # dispatch, never modified) right after the removal, because rm -rf on a
   # child bumps the parent's own mtime and would otherwise restart its
