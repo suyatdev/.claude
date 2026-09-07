@@ -54,3 +54,13 @@ suite validates is exactly that. Deferring is the cheaper error.
 
 No branch, no code. This card is `phase: planning`; the gate transition needs the literal
 phrase `gate confirmed`.
+
+**If `hooks/phase-guard.sh` just denied your write, this card is probably why.** A parked
+`planning` card denies writes to source on any branch that has no `implementation` feature
+file recording it — that is the gate working as designed, not a bug. `docs/*`, `.claude/*`,
+`settings.json`, `projects/*/memory/*`, `rules/*` and `skills/*` stay writable. To get moving
+again: open this card (say `gate confirmed` and move it to `implementation`), supersede it,
+or work on a branch whose own card is already in `implementation`. The cost was taken
+knowingly — a follow-up with no card file is a promise with no ledger entry — and it is
+stated here as well as in the residual on `docs/features/pane-agent-scratch-isolation.md`,
+because this card is what a blocked reader finds first.

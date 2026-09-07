@@ -649,8 +649,11 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
       re-judged -- that is the accepted cost of stopping, and it is recorded rather than
       dressed up as a pass. The obs judge is re-run on the final commit only because
       `judge-guard.sh` requires `head_sha == HEAD`.
-- [ ] 11. Close out: PR, then frontmatter to `review` only after the merge SHA is confirmed
-      contained in `origin/main`.
+- [~] 11. Close out: PR **#97** opened as a draft 2026-09-07 at `7eab32d`
+      (`https://github.com/suyatdev/.claude/pull/97`). Draft-first per
+      `preparing-pull-requests`: the audit trail is pushed onto the open PR, then
+      `gh pr ready`. Frontmatter moves to `review` only after the merge SHA is confirmed
+      contained in `origin/main` (`git merge-base --is-ancestor`).
 
 ## Not done on the originating branch
 
