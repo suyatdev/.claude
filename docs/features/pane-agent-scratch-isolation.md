@@ -256,9 +256,14 @@ behaviour, so nothing would have caught it. Two corrections:
   not truncate. `STALE_DAYS=7` is untouched and still governs the run dir.
 - Prune a `work` child **only when its run dir holds an `agent-exit` marker.** The runner
   writes that marker solely after a successful result write, so a completed run gives its
-  disk back on schedule while a failed or in-flight one keeps its evidence indefinitely.
-  The originating incident was diagnosed the day *after* it happened; a blind clock would
-  have deleted the evidence.
+  disk back on schedule while a failed or in-flight one keeps its evidence **for up to
+  `STALE_DAYS` (7 days)** — not indefinitely, as an earlier draft of this line and the
+  residual below both said. The pre-existing run-dir prune (`find "$RUNS_DIR" ... -mtime
+  +"$STALE_DAYS" -exec rm -rf {} +`) deletes the whole run dir, work child and all,
+  regardless of any marker. Measured 2026-09-07: a run dir aged 8 days holding an
+  `agent-exit` and a populated `work` child was gone after one `dispatch`. The originating
+  incident was diagnosed the day *after* it happened, so 7 days is ample; a blind 24h clock
+  would have deleted the evidence.
 
 **The boundary pair straddles 24h, not 48h.** Corrected 2026-09-06, after the task 5
 implementer hit the contradiction and escalated it rather than working around it. This
@@ -429,9 +434,28 @@ these figures:
   `/tmp/judge-work` in a script the agent writes.
 - **The disk ceiling assumes every dispatch clones.** ~31 dispatches/day is measured; the
   fraction that will actually clone anything is not, so ~0.50 GB/day is an upper bound with
-  no observed clone rate behind it. Pruning only completed runs means a run of failures can
-  hold scratch indefinitely — deliberate (evidence beats disk), but it is an unbounded case
-  and the first thing to look at if state grows unexpectedly.
+  no observed clone rate behind it. Pruning only completed runs means a run of failures
+  holds its scratch for the full `STALE_DAYS` window rather than 24h — deliberate (evidence
+  beats disk), and **bounded at 7 days**, not unbounded: the pre-existing run-dir prune takes
+  the work child with it. This bullet said "indefinitely" until 2026-09-07, when the
+  implementation-stage observability judge reported the opposite and it was re-measured
+  (see *Retention*). Still the first thing to look at if state grows unexpectedly, since a
+  run of failures raises the ceiling from ~0.50 GB to ~3.5 GB.
+
+- **`work-used` has no reader, and only one of its two directions is sound.** Nothing in the
+  tree reads the marker today. Worse, `TMPDIR` points *at* the work dir, so any `mktemp` by
+  the CLI or by the agent's own tooling populates it — a non-empty `work-used` therefore does
+  **not** show the agent used its locker deliberately. Only the empty direction is
+  informative: nothing at all landed there. Reported by the implementation-stage
+  observability judge, 2026-09-07.
+
+- **The "scratch is shared" warning is not durable.** It prints to the pane's scrollback and
+  nowhere else — `launch.sh` redirects nothing to a file — and a run that hit it still writes
+  `agent-exit: DONE` beside a zero-byte `work-used`, byte-identical to a run that simply used
+  no scratch. The out-of-shape case writes neither marker, which is identical to a crash. So
+  the warning is visible while a human is watching the pane and undetectable afterwards.
+  Bounded, because the dispatcher fail-fasts earlier and a real paned run almost always has
+  `work/` already. Measured by the implementation-stage observability judge, 2026-09-07.
 
 ## Falsification record (task 6)
 
@@ -445,19 +469,27 @@ harness error rather than a result. Both suites then run against the mutated cop
 repo root. The copies have their test-marker write stripped (it is not an assertion) so a
 scratch run can never register a marker naming a scratch path.
 
-**The harness was falsified before it was trusted**, against two controls: a null control
-(comment-only edit) came back 139/0 and 18/0, and a positive control (run dir pointed at a
-nonexistent path) came back 97/42. A harness that could not tell those apart would have
-reported every mutation below as "caught" while measuring nothing.
+**The harness was falsified before it was trusted**, against two controls. The recipes are
+given exactly, because a control quoted only by its result is a number nobody else can
+reproduce — round 2 of the compliance judge tried and got two different answers from the
+one-line description this paragraph used to carry.
+
+| Control | Exact patch to the copy of `panes/` | Result |
+|---|---|---|
+| null | `STALE_DAYS=7` → `STALE_DAYS=7 # control: comment only` | 139/0 and 18/0 |
+| positive | `RUNS_DIR="$STATE_DIR/runs"` → `RUNS_DIR="$STATE_DIR/runs-BROKEN-CONTROL"` | **97 passed / 42 failed** on `dispatch-pane-agent.test.sh`; 18/0 on `run-pane-agent.test.sh` |
+
+A harness that could not tell those two apart would have reported every mutation below as
+"caught" while measuring nothing.
 
 | Mutation | Assertion it broke | Also broke |
 |---|---|---|
 | drop the `mkdir` | work child exists after dispatch | 5 more, incl. mode 700 |
 | `mkdir -m 755` | the work dir's mode is 700 | — |
-| write the preamble **last** | preamble occupies the head of prompt.md | — |
+| write the preamble **last** | preamble occupies the head of prompt.md | caller's bytes preserved verbatim |
 | drop the `export TMPDIR` | TMPDIR exported at existing run_dir/work | 2 more |
 | widen the `*/runs/*` shape guard to `*` | out-of-shape path leaves TMPDIR alone and warns shared | — |
-| `\|\| true` on the `mkdir` failure | mkdir failure makes dispatch exit non-zero | opens no pane; never calls the adapter |
+| `\|\| true` on the `mkdir` failure | mkdir failure makes dispatch exit non-zero | the failure message names the path; opens no pane; never calls the adapter |
 | `-mtime +1` for `-mmin +1440` | **25h child is pruned** | — (23h-survives held, as the card predicted) |
 | drop the `agent-exit` precondition | no-agent-exit child survives regardless of age | — |
 | drop the `touch -r` | prune does not restart the run dir's mtime clock | — |
@@ -485,11 +517,25 @@ stop a later assertion from passing vacuously rather than to assert anything the
 (`work-dir dispatch happy path exits 0`, `work-dir dispatch: run dir located`, `dispatch
 with a literal '---' line exits 0`, `dash-prompt dispatch: prompt.md located`).
 
-**One thing worth knowing for the next pass:** three assertions spell their `ok` label and
-their `bad` label differently (the no-`agent-exit` case, the prune-leaves-other-files case
-and the caller-bytes case), so matching a failure by its `ok` text silently misses them.
-Confirmed by reading each failure line rather than trusting the match. Not changed here —
-a test edit belongs in its own step.
+**One thing worth knowing for the next pass:** an assertion's `ok` label and its `bad` label
+are often not the same string, so matching a failure by its `ok` text silently misses it.
+This paragraph said **three**; the real figure is **six of the twenty** new dispatch-side
+assertions — the preamble-head case, the caller-bytes case, the opens-no-pane case, the
+two-dispatches case, the prune-leaves-other-files case, and the no-`agent-exit` case. Five of
+the six were observed failing during this record's own runs, so a next pass that fixes only
+three named ones leaves three behind. Corrected in round 2 after the compliance judge counted
+them; re-derived here by pairing every `ok "…" || bad "…"` in the file (**48 of 133** pairs
+diverge file-wide, so this is a house pattern, not something this card introduced). Every
+mutation result above was confirmed by reading its failure lines, not by string-matching.
+Nothing is changed in the tests here — a test edit belongs in its own step.
+
+**One mutation in this table was itself wrong, and the judge caught it.** The first
+"write the preamble last" mutation moved the preamble after the caller's bytes but left the
+original trailing append in place, so the caller's bytes were written *twice* — once before
+the preamble and once after — which accidentally satisfied the byte-preservation check and
+reported 138/1. The corrected mutation drops the duplicate append and reports **137/2**,
+breaking both assertions, reproducing the judge's number exactly. The row above is the
+corrected run.
 
 ## Checklist
 
