@@ -620,7 +620,18 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
 - [x] 9. ADR under `docs/decisions/` — two-layer split, the `updatedInput` rejection with
       its measurement, and the retention constant. Check the next free number against the
       deciding ref, not stale local `main`.
-- [ ] 10. Observability judge (implementation stage) + compliance judge, in panes, on Opus.
+- [x] 10. Observability judge (implementation stage) + compliance judge, in panes, on Opus.
+      Obs judge: `risk=low confidence=high`, no dimension failed; its three findings are
+      recorded above (the false "indefinitely" residual, `work-used` having no reader and
+      only one sound direction, and the non-durable "scratch is shared" warning). Compliance
+      judge ran **four** rounds: round 1 (design stage) clean-after-fixes, rounds 2, 3 and 4
+      each `fail`, each closing the previous round's findings and each catching a wrong
+      number introduced *by* the previous round's correction. Round 3 tripped the skill's
+      oscillation tripwire and was escalated; the user chose one more round, after which the
+      PR opens regardless. Round 4's two findings are fixed at `5bf6a8a` and are **not**
+      re-judged -- that is the accepted cost of stopping, and it is recorded rather than
+      dressed up as a pass. The obs judge is re-run on the final commit only because
+      `judge-guard.sh` requires `head_sha == HEAD`.
 - [ ] 11. Close out: PR, then frontmatter to `review` only after the merge SHA is confirmed
       contained in `origin/main`.
 
