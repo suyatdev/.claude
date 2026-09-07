@@ -97,6 +97,10 @@ Rationale: `docs/decisions/0009-pane-split-policy-three-lane-governance.md`.
    without touching the session default — panes otherwise inherit whatever
    `/model` was current at launch. Omitting it is unchanged: the pane runs
    the configured default, as before this flag existed.
+
+   The dispatcher also hands the agent its own private scratch directory —
+   `$run_dir/work`, named in a preamble written ahead of the prompt, with
+   `TMPDIR` pointed at it — so you never need to invent or stage one yourself.
 3. Capture the `RESULT_FILE:` line from its output.
 4. Wait:
    - Judges: `... wait --result-file <f> --timeout 540` in a foreground Bash

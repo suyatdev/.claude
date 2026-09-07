@@ -433,6 +433,64 @@ these figures:
   hold scratch indefinitely — deliberate (evidence beats disk), but it is an unbounded case
   and the first thing to look at if state grows unexpectedly.
 
+## Falsification record (task 6)
+
+Measured 2026-09-07 at HEAD `a846d5b`. Green baseline first, in this checkout:
+`panes/dispatch-pane-agent.test.sh` 139 passed / 0 failed, `panes/run-pane-agent.test.sh`
+18 passed / 0 failed.
+
+Method: each mutation is applied to a **fresh copy** of `panes/` in a private scratch tree,
+never to the working checkout, and its patch anchor must match exactly once or the run is a
+harness error rather than a result. Both suites then run against the mutated copy from the
+repo root. The copies have their test-marker write stripped (it is not an assertion) so a
+scratch run can never register a marker naming a scratch path.
+
+**The harness was falsified before it was trusted**, against two controls: a null control
+(comment-only edit) came back 139/0 and 18/0, and a positive control (run dir pointed at a
+nonexistent path) came back 97/42. A harness that could not tell those apart would have
+reported every mutation below as "caught" while measuring nothing.
+
+| Mutation | Assertion it broke | Also broke |
+|---|---|---|
+| drop the `mkdir` | work child exists after dispatch | 5 more, incl. mode 700 |
+| `mkdir -m 755` | the work dir's mode is 700 | — |
+| write the preamble **last** | preamble occupies the head of prompt.md | — |
+| drop the `export TMPDIR` | TMPDIR exported at existing run_dir/work | 2 more |
+| widen the `*/runs/*` shape guard to `*` | out-of-shape path leaves TMPDIR alone and warns shared | — |
+| `\|\| true` on the `mkdir` failure | mkdir failure makes dispatch exit non-zero | opens no pane; never calls the adapter |
+| `-mtime +1` for `-mmin +1440` | **25h child is pruned** | — (23h-survives held, as the card predicted) |
+| drop the `agent-exit` precondition | no-agent-exit child survives regardless of age | — |
+| drop the `touch -r` | prune does not restart the run dir's mtime clock | — |
+| `work-used` always empty | work-used is non-empty after the agent wrote | — |
+| `work-used` always non-empty | work-used is empty when the agent wrote nothing | — |
+| preamble names `/tmp/judge-work` | the work dir's absolute path appears in the preamble | — |
+| export TMPDIR even when `mkdir -p` fails | mkdir -p failure leaves TMPDIR alone and warns shared | — |
+| prune `${d}` instead of `${d}work` | prune leaves prompt.md, launch.sh, agent-exit in place | the mtime-restore check |
+| `die` message omits the path | the mkdir-failure message names the work path | — |
+| `sed` the caller's bytes on append | caller's bytes preserved verbatim past its own `---` | — |
+| `WORK_STALE_MINUTES=1` | **23h child survives** | — |
+| never prune (`-mmin +999999`) | the 3-day-old-child precondition | 25h-is-pruned |
+| runner tests for `work` instead of `mkdir -p` | missing work dir is created and TMPDIR exported | work-used non-empty |
+
+19 mutations, 19 distinct target assertions broken, none of them shared. The last three go
+beyond the card's named minimum and exist only to give three assertions a discriminating
+population they otherwise had none of: **23h-survives** (no named mutation could break it —
+`-mtime` truncation cannot, by construction), the **3-day precondition**, and **`mkdir -p`
+in the runner** as distinct from the `export` beside it.
+
+**Still not discriminated, and deliberately so.** Five assertions are not broken by any
+mutation: `two dispatches get different work dirs` (already labelled non-discriminating in
+the suite — it rides on `new_run_dir`), and four locator/precondition lines that exist to
+stop a later assertion from passing vacuously rather than to assert anything themselves
+(`work-dir dispatch happy path exits 0`, `work-dir dispatch: run dir located`, `dispatch
+with a literal '---' line exits 0`, `dash-prompt dispatch: prompt.md located`).
+
+**One thing worth knowing for the next pass:** three assertions spell their `ok` label and
+their `bad` label differently (the no-`agent-exit` case, the prune-leaves-other-files case
+and the caller-bytes case), so matching a failure by its `ok` text silently misses them.
+Confirmed by reading each failure line rather than trusting the match. Not changed here —
+a test edit belongs in its own step.
+
 ## Checklist
 
 Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter moved to
@@ -452,7 +510,7 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
       the parent's mtime is unchanged after a prune.
 - [x] 5. Implement the four `dispatch-pane-agent.sh` / `run-pane-agent.sh` changes. Confirm
       both suites go green and both markers are written.
-- [ ] 6. Falsify. One mutation per new assertion, not four for ten — a pass shared by the
+- [x] 6. Falsify. One mutation per new assertion, not four for ten — a pass shared by the
       broken and unbroken versions discriminates nothing, and the four-mutation population
       an earlier draft proposed left at least five assertions undiscriminated. Minimum set,
       each with the assertion it must break named in the record: drop the `mkdir`;
@@ -463,12 +521,12 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
       drop the `agent-exit` precondition; drop the `touch -r`. Note also that "two
       dispatches get different work dirs" passes with none of this change present — it
       rides on `new_run_dir`, so it anchors nothing and must not be counted as coverage.
-- [ ] 7. Layer 2: append the one sentence to `rules/core-conduct.md` Parallel-Agent
+- [x] 7. Layer 2: append the one sentence to `rules/core-conduct.md` Parallel-Agent
       Invariants. No other rule text changes.
-- [ ] 8. Update `skills/dispatching-pane-agents/SKILL.md` — its Procedure section tells the
+- [x] 8. Update `skills/dispatching-pane-agents/SKILL.md` — its Procedure section tells the
       orchestrator where to stage the prompt and says nothing about the agent's own scratch;
       add the one fact that the dispatcher now provides it.
-- [ ] 9. ADR under `docs/decisions/` — two-layer split, the `updatedInput` rejection with
+- [x] 9. ADR under `docs/decisions/` — two-layer split, the `updatedInput` rejection with
       its measurement, and the retention constant. Check the next free number against the
       deciding ref, not stale local `main`.
 - [ ] 10. Observability judge (implementation stage) + compliance judge, in panes, on Opus.
