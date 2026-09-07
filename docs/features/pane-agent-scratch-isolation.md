@@ -209,6 +209,20 @@ be present"). No new section, no new skill, no new gate stub.
 
 ### Retention
 
+**Current state, before the history below.** Two clocks, measured, not inferred:
+
+| What | Window | Spelling |
+|---|---|---|
+| a run dir's `work` child | **24h** | `find -mmin +1440`, gated on an `agent-exit` marker |
+| the run dir itself | **just under 8 days** | the pre-existing `find -mtime +"$STALE_DAYS"`, which truncates to whole days |
+
+Worst-case disk, if every dispatch shallow-clones: **~0.48 GiB/day**, **~3.9 GiB** across a
+full run-dir window. Every figure in this section is GiB.
+
+The rest of this section is the audit trail of how those numbers were got wrong and
+corrected — three times. It is kept because in this repo a wrong durable number costs more
+than the error it describes; read it only if you need to know why a value is what it is.
+
 Layer 1 changes what a run directory can hold from a few KB (a prompt and a launcher) to
 whatever the agent puts in it. An earlier draft sized that at the **12M** tracked tree and
 called it a ceiling. It is not one — the preamble tells agents to clone, and a clone is
@@ -271,7 +285,7 @@ behaviour, so nothing would have caught it. Two corrections:
   is also wrong. The pre-existing run-dir prune (`find "$RUNS_DIR" ... -mtime
   +"$STALE_DAYS" -exec rm -rf {} +`) deletes the whole run dir, work child and all,
   regardless of any marker — but it is spelled `-mtime`, so it truncates age to whole days
-  exactly as the `-mtime +1` paragraph below explains at length. `+7` therefore means
+  exactly as the `-mtime +1` paragraph above explains at length. `+7` therefore means
   *strictly more than 7 whole days*, which a run dir does not reach until it is 8 days old.
   Measured 2026-09-07 on one fixture set, each aged and then put through a real `dispatch`:
 
@@ -450,10 +464,13 @@ these figures:
   none of the card's own Contracts or checklist items, mentioned it. **Not fixed here, on
   purpose:** splitting a 957-line suite is a mechanical change to the one file that is the
   unbiased baseline for everything else on this branch, and doing it in the same breath as
-  the feature it validates is exactly what `rules/core-conduct.md` Testing forbids. Queued
-  here as a follow-up to open as its own card — no card file exists for it yet, deliberately:
-  a parked `planning` card denies source writes repo-wide under `hooks/phase-guard.sh`, and
-  this branch is mid-implementation. The honest statement of the trade-off is that this
+  the feature it validates is exactly what `rules/core-conduct.md` Testing forbids. Queued as
+  `docs/features/pane-dispatch-test-suite-split.md`, `phase: planning`. That card is a parked
+  planning card, so `hooks/phase-guard.sh` will deny source writes on any branch that has no
+  `implementation` card of its own until it is opened or superseded — a real cost, taken
+  deliberately, because a follow-up with no card file is a promise with no ledger entry (the
+  implementation-stage observability judge's words). This branch is unaffected: its own
+  `implementation` card records it. The honest statement of the trade-off is that this
   branch ships a file
   over a stated hard limit, knowingly, with the split deferred — not that the limit does not
   apply.
@@ -469,7 +486,7 @@ these figures:
   `mktemp`, Python's `tempfile` and most tooling; it is not honoured by a literal
   `/tmp/judge-work` in a script the agent writes.
 - **The disk ceiling assumes every dispatch clones.** ~31 dispatches/day is measured; the
-  fraction that will actually clone anything is not, so ~0.50 GB/day is an upper bound with
+  fraction that will actually clone anything is not, so ~0.48 GiB/day is an upper bound with
   no observed clone rate behind it. Pruning only completed runs means a run of failures
   holds its scratch for the full run-dir window rather than 24h — deliberate (evidence beats
   disk), and **bounded at just under 8 days**, not unbounded: the pre-existing run-dir prune

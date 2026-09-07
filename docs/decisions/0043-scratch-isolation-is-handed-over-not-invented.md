@@ -1,15 +1,21 @@
 # 0043 — Scratch isolation is handed over, not invented, in two layers that fail differently
 
 - **Status:** Accepted (2026-09-05).
-- **Context:** `panes/dispatch-pane-agent.sh` — `mkdir "$run_dir/work"` (`:399`), the preamble
-  heredoc (`:425`-`:439`), written ahead of the caller's prompt bytes (`:441`), the new
+- **Context:** `panes/dispatch-pane-agent.sh` — `mkdir "$run_dir/work"` (`:403`), the preamble
+  heredoc (`:429`-`:443`), written ahead of the caller's prompt bytes (`:445`), the new
   `WORK_STALE_MINUTES=1440` constant (`:39`), and the `cleanup_stale` prune loop gated on an
-  `agent-exit` marker with `touch -r` mtime restoration (`:108`-`:116`). `panes/run-pane-agent.sh`
+  `agent-exit` marker with `touch -r` mtime restoration (`:112`-`:120`). `panes/run-pane-agent.sh`
   — the hoisted `run_dir` derivation and `*/runs/*` shape guard (`:37`-`:39`) and the
   `mkdir -p` + `export TMPDIR` pair (`:47`-`:48`). Full design, the Gherkin scenarios, and the
   measurement record: `docs/features/pane-agent-scratch-isolation.md`.
 - **Note:** ADR number **0043** was confirmed free against every `origin/*` ref (checked
   2026-09-07); not re-derived here.
+- **Note on the line numbers:** every `:NNN` below was re-opened and confirmed at
+  `81f58d5`. They are anchors, not identifiers — six of them went stale *inside this
+  branch* when a five-line comment expansion in `cleanup_stale` pushed everything below
+  line 104 down by four, and the implementation-stage observability judge caught it. If one
+  does not resolve, the quoted token beside it is the real anchor: `git grep -n
+  'mkdir "$run_dir/work"' panes/` relocates it in one command.
 
 ## Context
 
@@ -35,8 +41,8 @@ The split lands there because the paned lane is the only one that already owns t
 ingredients a mechanical fix needs: a per-dispatch unique directory (`new_run_dir`, mode 700 via
 the file's `umask 077`) and a file the dispatcher writes into before the agent ever sees it
 (`$run_dir/prompt.md`). Layer 1 rides both — it `mkdir`s a `work` child of the run dir
-(`panes/dispatch-pane-agent.sh:399`) and prepends a preamble naming that absolute path to the
-prompt the agent receives (`:425`-`:439`, ahead of the caller's bytes at `:441`), then `panes/run-pane-agent.sh` re-derives the same
+(`panes/dispatch-pane-agent.sh:403`) and prepends a preamble naming that absolute path to the
+prompt the agent receives (`:429`-`:443`, ahead of the caller's bytes at `:445`), then `panes/run-pane-agent.sh` re-derives the same
 run dir from `dirname(prompt_file)` under a `*/runs/*` shape guard (`:37`-`:39`) and points
 `TMPDIR` at the same `work` child (`:47`-`:48`) — one fact, not two independent derivations that
 could disagree.
@@ -77,10 +83,10 @@ Rejected anyway, on cost:
 `WORK_STALE_MINUTES=1440` (`panes/dispatch-pane-agent.sh:39`), matched with `find -mmin`, never
 `find -mtime` — BSD `find` truncates `-mtime` to whole days, so `-mtime +1` means strictly more
 than two days, not one. A `work` child is pruned only where its run directory already holds an
-`agent-exit` marker (`:110`), so a failed or in-flight run keeps its scratch for
+`agent-exit` marker (`:114`), so a failed or in-flight run keeps its scratch for
 post-mortem rather than losing it on a blind clock. Because removing the child bumps the parent
 run directory's own mtime, `cleanup_stale` restores it immediately with
-`touch -r "${d}prompt.md" "$d"` (`:114`) — `prompt.md` is written once at dispatch and never
+`touch -r "${d}prompt.md" "$d"` (`:118`) — `prompt.md` is written once at dispatch and never
 modified afterward, so it is a stable reference that needs no captured timestamp of its own.
 
 The 1440-minute (24h) figure is load-bearing, not a round number picked for tidiness. On one
