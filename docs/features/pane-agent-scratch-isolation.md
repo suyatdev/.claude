@@ -1,5 +1,5 @@
 ---
-phase: implementation
+phase: review
 model_tier: high
 branch: fix/pane-agent-scratch-isolation
 ---
@@ -649,11 +649,12 @@ Gate **OPENED 2026-09-05** on the literal phrase `gate confirmed`. Frontmatter m
       re-judged -- that is the accepted cost of stopping, and it is recorded rather than
       dressed up as a pass. The obs judge is re-run on the final commit only because
       `judge-guard.sh` requires `head_sha == HEAD`.
-- [~] 11. Close out: PR **#97** opened as a draft 2026-09-07 at `7eab32d`
-      (`https://github.com/suyatdev/.claude/pull/97`). Draft-first per
-      `preparing-pull-requests`: the audit trail is pushed onto the open PR, then
-      `gh pr ready`. Frontmatter moves to `review` only after the merge SHA is confirmed
-      contained in `origin/main` (`git merge-base --is-ancestor`).
+- [x] 11. Closed out. PR **#97** merged 2026-09-08 (merge commit `6f1f55f`); branch tip
+      `2294d79` confirmed contained in `origin/main` with
+      `git merge-base --is-ancestor`, both the tip and the merge commit, rather than
+      assuming the merge captured the tip. Frontmatter moved to `review` on
+      `chore/pane-scratch-card-closeout`, since `main` is checked out in the primary
+      checkout and cannot be checked out a second time here.
 
 ## Not done on the originating branch
 
