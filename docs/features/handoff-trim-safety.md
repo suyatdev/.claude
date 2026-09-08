@@ -1,7 +1,9 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: none
+branch: feat/handoff-trim-safety
+worktree: ~/.worktrees/.claude/handoff-trim-safety
+gate_confirmed: 2026-09-08
 ---
 
 # Handoff trim safety — stop the session notepad losing facts
