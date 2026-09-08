@@ -19,9 +19,11 @@ sat waiting to be judged.
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: planning, round 5 revision. Compliance has FAILED four times — 9, 8, 7 and 4
-violations across rounds 1 to 4 — and the observability read has failed its `success_masking`
-dimension in rounds 2, 3 and 4. Every
+Status: planning, round 7 revision. Compliance has FAILED six times — 9, 8, 7, 4, 1 and 5
+violations across rounds 1 to 6 — and the observability read failed its `success_masking`
+dimension in rounds 2, 3 and 4 before **passing in round 5**, where it also stated the design
+is ready to hand to a human reviewer. Counts are from `coding-memory/compliance-judge/verdicts.jsonl`;
+read them there rather than trusting this sentence, which has been stale twice. Every
 finding from both rounds was independently re-measured before being acted on, and every one
 held. Two round-2 findings were defects the design would have shipped: the replacement
 memsearch globs matched **zero** files, and the evidence table carried a byte-per-line range
@@ -79,8 +81,10 @@ that ignores them, in two repos measured as not covering them today.
 - [ ] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
 - [ ] 12. Register the guard in `settings.json` under `Stop`.
-- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, by mtime comparison, also above
-      the early exits.
+- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
+      **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
+      see `unprotected`, because a guard heartbeating it every turn keeps the log looking
+      fresh while nothing is protected.
 - [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
 - [ ] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
       `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
@@ -137,6 +141,7 @@ in this table, not a missing test.
 | Archive-append failure handling removed | The archive append fails | `And the snapshot is NOT deleted` |
 | Log-write failure silenced | The liveness log cannot be written | `Then it reports the failure in its Stop output` |
 | `unprotected` collapsed into `allow` | The guard runs with no snapshot present | `Then the liveness line records decision=unprotected` |
+| Session-start reader consults only mtime | The session-start report reads the last decision token | `And a reader that consults only mtime fails this scenario` |
 | Quarantine reverted to per-file skip | A block that looks like a secret is quarantined, not archived | `And the rest of AR indexes normally` |
 | Sanitizer removed from a notepad-derived string | A notepad heading that mimics an envelope marker is defanged | `Then the heading is prefixed by the sanitizer` |
 | Envelope removed from a notepad-derived string | A notepad heading that mimics an envelope marker is defanged | `And the model sees one well-formed DATA envelope, not two` |

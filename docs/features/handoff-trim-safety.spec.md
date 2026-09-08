@@ -319,7 +319,7 @@ gap rather than a detail.
 
 | Job | Tool | Why |
 |---|---|---|
-| Heading and fence detection | `grep -E` on a line at a time | `[[ =~ ]]` exists in bash 3.2 but its regex is locale-dependent and the house rule at `git-guard.sh:22` already keeps patterns out of `[[ ]]`. |
+| Heading and fence detection | `grep -E` on a line at a time, or `[[ =~ ]]` **with the pattern held in a variable, never inline** | The house rule is *regex in a variable*, not *no `[[ ]]`*. `slim-session-start.sh:36` — the very function this card extracts — matches with `[[ "$line" =~ $MARKER_PATTERN ]]`, so forbidding `[[ ]]` would contradict the code being moved. ⚠️ The rule is stated at `slim-session-start.sh:14`, which attributes it to `git-guard.sh:22`; that anchor is **wrong** — `git-guard.sh` contains no `[[ ]]` at all and line 22 is about the shell-segment classifier. An earlier revision of this spec copied that citation without opening it. Fix the comment in the hook when task 2 touches it. |
 | Line membership | `grep -F -x -q -f <protected-lines-file> <current-file>` inverted per line | Fixed-string, whole-line matching. No line of a notepad can be read as a pattern, which is the injection risk a regex match would carry. |
 | Region extraction | `awk` with an explicit fence-state variable | Needs one pass with state; `grep` cannot carry it. |
 
@@ -377,7 +377,7 @@ place, and that one case is exempt from the silent-failure rule and is reported 
 start.
 
 **Where the reaper runs (finding C6).** The reaper turns an orphaned snapshot into archived
-text. Assigning it to `slim-session-start.sh` without stating an order put it behind six
+text. Assigning it to `slim-session-start.sh` without stating an order put it behind the
 early exits in `slim-session-start.sh` main(), including `exit 0` when
 `session-state.md` is missing or unreadable — which is the exact state the "notepad is deleted
 while a snapshot is pending" scenario describes, and the one where the snapshot is the only
@@ -654,7 +654,6 @@ Scenario: A block that looks like a secret is quarantined, not archived
   And AR carries a stub recording that a block was quarantined and why
   And the quarantine file is never indexed
   And the rest of AR indexes normally, so one flagged block never removes the archive
-  And the indexer counts this on its own counter, not the generic skipped counter
 
 Scenario: An archive that previously held a flagged block is purged from the index
   Given AR was indexed before a flagged block was found in it
@@ -737,6 +736,13 @@ Scenario: The liveness log cannot be written
   When the guard runs
   Then it reports the failure in its Stop output rather than exiting 0
   And the absence of a log line is never left to read as a guard that was never installed
+
+Scenario: The session-start report reads the last decision token
+  Given the newest liveness line records decision=unprotected
+  And session-state.md is older than the log, so the mtime check reads healthy
+  When slim-session-start.sh runs
+  Then the header says the last guard run left the notepad unprotected
+  And a reader that consults only mtime fails this scenario
 
 Scenario: The guard runs with no snapshot present
   Given no snapshot exists for this session
@@ -928,8 +934,10 @@ that ignores them, in two repos measured as not covering them today.
 - [ ] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
 - [ ] 12. Register the guard in `settings.json` under `Stop`.
-- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, by mtime comparison, also above
-      the early exits.
+- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
+      **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
+      see `unprotected`, because a guard heartbeating it every turn keeps the log looking
+      fresh while nothing is protected.
 - [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
 - [ ] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
       `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
