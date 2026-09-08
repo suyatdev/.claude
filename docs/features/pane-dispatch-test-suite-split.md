@@ -146,10 +146,12 @@ independent dispatcher subcommands belonging to none of the four buckets that ca
 chain. Measured, the `CSID` chain spans sections 228, 259, 279, 288, 295 — lines 228–315,
 **88 lines**. **Seventeen** session keys are assigned in the file
 (`grep -cE '^[A-Z][A-Z0-9_]*SID='` = 17, at `:157, 177, 237, 299, 339, 368, 387, 402, 417,
-425, 448, 487, 514, 559, 593, 647, 686`), and every section outside 228–298 defines its own.
-Note `UMAX_SID` (`:299`) sits *inside* the claimed chain and defines its own key, so the true
-`CSID` dependency ends at `:298`, not `:315`; the cut at `:316` is unaffected. The chain
-justified keeping 228–315 together, never all 574 lines.
+425, 448, 487, 514, 559, 593, 647, 686`). **The load-bearing fact is narrower than "every
+other section defines its own key"** — 17 sections define none at all, so that phrasing was
+false and is corrected here: what is true, and what the cut rests on, is that **no line outside
+228–297 references `CSID`** (`grep -n CSID`, last use `:297`). `UMAX_SID` (`:299`) sits inside
+the claimed chain and defines its own key, so the true dependency ends at `:297`, not `:315`;
+the cut at `:316` is unaffected. The chain justified keeping 228–315 together, never all 574.
 
 **The cut is engineered to cost zero relocations.** Judge round 2 measured that the naive cut
 crossed twice, not once: `call_read_policy` (`:207`) **and** `RP_DIR` (assigned `:206`,
@@ -330,11 +332,22 @@ table that lumps it with the `$TMP`-marker rows would preserve the wrong invaria
 own comment at `:262-268` records that keying a search off a preamble-era file is what made an
 assertion vacuous once already.
 
+**One section inherits an adapter stub from across a bucket boundary, and it is safe.**
+Section `:736` (`--model` passthrough, assigned to `dispatch.test.sh`) runs today against
+whichever stub the routing sections last installed. Judge round 3 chased this down: inside
+`dispatch.test.sh` the in-effect stub becomes the one at `:169`, which succeeds for every verb,
+and no assertion in `:736` reads the surface ref or the verb — **so it does not break.** It is
+the only such case across all six files. Recorded here so the implementer does not have to
+re-derive it, and so that a future change to `:169` is known to have a second consumer.
+
 Two further pieces of shared, cross-section-mutable state to preserve when relocating:
 
-- `$PANE_STATE_DIR/{panes,tabs,tabtargets}` are ad-hoc counter files that two sections
-  explicitly `rm -f` immediately before use (`:561`, `:652`) — evidence the authors know these
-  are not zeroed by the preamble.
+- `$PANE_STATE_DIR/{panes,tabs,tabtargets}` are ad-hoc counter files explicitly `rm -f`d
+  immediately before use at **three** sites (`:561`, `:597`, `:652`) — all inside the **one**
+  section headed `:533`, so they relocate as a unit. Evidence the authors know these are not
+  zeroed by the preamble. (An earlier revision said "two sections"; it was three sites in one
+  section. Note "section" is used strictly in Decision 1 — a `# ---` header block — and that
+  is the sense meant here.)
 - The cleanup bucket's `CS_25H` fixture deliberately leaves a stray `launch.sh` behind after
   pruning (to prove sibling files survive), and its own comment (`:872-876`) says it calls
   `cleanup_stale` directly precisely so an unrelated dispatch cannot disturb it. Cleanup is
@@ -520,3 +533,18 @@ confirmed fixed). All three accepted.**
    each proves and is blind to; `RUN-SET` must strip `FAIL — ` as well as `ok   — `.
    Also added the blind spot the judge named unprompted: **a duplicate label introduced by
    copy-and-delete** passes every set comparison, so task 8 now asserts the emitted count.
+
+**2026-09-08, compliance judge round 3: PASS, zero violations, none waived.** All three
+round-2 findings verified resolved by independent measurement — the zero-crossing result by
+exhaustive enumeration of every assignment, reference, definition and call site across all 957
+lines (11 apparent crossings, all 11 opened and all false positives: comments, a single-quoted
+`printf` format, a single-quoted `grep -oE` pattern, and `sed`'s `$d`). The judge was asked
+directly whether it was correcting prose rather than defects and answered **yes, proceed**. Its
+three residuals are folded in above anyway — two were false sentences (the session-key phrasing
+and "two sections" for what is three sites in one), and the third is the `:736` stub
+inheritance, run to ground and recorded as safe rather than filed as a maybe.
+
+**Not verified by any round:** neither judge ran either suite, because a green run writes a
+test marker and a judge must not cause that side effect. `139/0` and `18/0` are corroborated
+statically only — task 2 exists to settle them by execution. And no code exists yet, so the
+zero-crossing result is static enumeration, not a built `routing.test.sh`.
