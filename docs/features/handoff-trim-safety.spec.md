@@ -319,7 +319,7 @@ gap rather than a detail.
 
 | Job | Tool | Why |
 |---|---|---|
-| Heading and fence detection | `grep -E` on a line at a time, or `[[ =~ ]]` **with the pattern held in a variable, never inline** | The house rule is *regex in a variable*, not *no `[[ ]]`*. `slim-session-start.sh:36` — the very function this card extracts — matches with `[[ "$line" =~ $MARKER_PATTERN ]]`, so forbidding `[[ ]]` would contradict the code being moved. ⚠️ The rule is stated at `slim-session-start.sh:14`, which attributes it to `git-guard.sh:22`; that anchor is **wrong** — `git-guard.sh` contains no `[[ ]]` at all and line 22 is about the shell-segment classifier. An earlier revision of this spec copied that citation without opening it. Fix the comment in the hook when task 2 touches it. |
+| Heading and fence detection | `grep -E` on a line at a time, or `[[ =~ ]]` **with the pattern held in a variable, never inline** | The house rule is *regex in a variable*, not *no `[[ ]]`*. `slim-session-start.sh:36` — the very function this card extracts — matches with `[[ "$line" =~ $MARKER_PATTERN ]]`, so forbidding `[[ ]]` would contradict the code being moved. ⚠️ The rule is stated at `slim-session-start.sh:14`, which attributes it to `git-guard.sh:22`; that anchor is **wrong** — `git-guard.sh` contains no `[[ ]]` at all and line 22 is about the shell-segment classifier. An earlier revision of this spec copied that citation without opening it. Fix the comment in the hook when the extraction task touches it. |
 | Line membership | `grep -F -x -q -f <protected-lines-file> <current-file>` inverted per line | Fixed-string, whole-line matching. No line of a notepad can be read as a pattern, which is the injection risk a regex match would carry. |
 | Region extraction | `awk` with an explicit fence-state variable | Needs one pass with state; `grep` cannot carry it. |
 
@@ -970,7 +970,11 @@ matching edit; adding or removing a task does.
 
 ### A note on cross-references
 
-Task numbers are deliberately **not** cited anywhere in this document. Three of them went
+Task numbers are deliberately **not** cited anywhere in this document — verified by search,
+not asserted; the check is `grep -nE "task [0-9]"` over both halves, which must return nothing.
+The list also has a deliberate numbering gap: the read-cap step was folded into the write-cap
+step so both caps rise in a single commit, and the numbers were not re-flowed afterwards,
+because re-flowing them is what made cross-references stale twice before. Three of them went
 stale inside a single revision when the list was renumbered, and the sync guard compares task
 *text*, so it is blind to a wrong number in prose. References name the task by what it does.
 Recorded because the same failure is already in the memory file

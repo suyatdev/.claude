@@ -19,19 +19,21 @@ sat waiting to be judged.
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: planning, round 7 revision. Compliance has FAILED six times — 9, 8, 7, 4, 1 and 5
-violations across rounds 1 to 6 — and the observability read failed its `success_masking`
+Status: planning, round 8 revision. Compliance has FAILED seven times — 9, 8, 7, 4, 1, 5 and 1
+violations across rounds 1 to 7 — and the observability read failed its `success_masking`
 dimension in rounds 2, 3 and 4 before **passing in round 5**, where it also stated the design
-is ready to hand to a human reviewer. Counts are from `coding-memory/compliance-judge/verdicts.jsonl`;
-read them there rather than trusting this sentence, which has been stale twice. Every
-finding from both rounds was independently re-measured before being acted on, and every one
-held. Two round-2 findings were defects the design would have shipped: the replacement
+is ready to hand to a human reviewer. Counts are from
+`coding-memory/compliance-judge/verdicts.jsonl`; read them there rather than trusting this
+sentence, which has been stale twice. Every finding across all rounds was independently
+re-measured before being acted on, and every one held — including one this session first
+reported as not reproducing, which did reproduce and was missed by a line-based search of
+line-wrapped prose. From round 5 onward the findings are predominantly **introduced by the
+previous round's own edit**, which is the signal to stop revising and hand over. Two round-2 findings were defects the design would have shipped: the replacement
 memsearch globs matched **zero** files, and the evidence table carried a byte-per-line range
 that re-measurement falsified. **D16 is answered** (2026-09-08): a secret-looking cut block goes to
 `session-state.quarantine.md`, never the archive, never indexed, deletable by hand. **D17 is
 answered**: the read cap is 24,576, confirmed by the user against the arithmetic and the
-context cost, superseding the ~12,000 in D6. (superseded: D16 open, what happens to a
-block that looks like it contains a secret). The gate has not opened.
+context cost, superseding the ~12,000 in D6. The gate has not opened.
 
 ## Tasks
 
@@ -131,10 +133,10 @@ in this table, not a missing test.
 
 | Mutation | Scenario | Clause that must go red |
 |---|---|---|
-| Archive append deleted | A normal trim archives what it cut | `Then the guard appends the 47 removed lines to AR` |
+| Archive append deleted | A normal trim archives what it cut | `And the guard appends the 47 removed lines to AR under an Auto-captured heading` |
 | `[KEEP]` heading regex matches nothing | A protected line is deleted | `Then the guard blocks the turn` |
 | Fence tracking removed (region end) | A heading inside a fenced code block does not end a region | `Then the inner line is body` |
-| Fence tracking removed (region open) | A `[KEEP]` heading inside a fenced code block does not open a region | `Then no region opens` |
+| Fence tracking removed (region open) | A [KEEP] heading inside a fenced code block does not open a region | `Then no region opens` |
 | Fence char/length matching removed | A tilde fence does not close a backtick fence | `Then the fence is still open` |
 | Strike reset removed | The guard must not wedge the session | `And it deletes the strike file` |
 | Snapshot-failure suppression removed | The snapshot cannot be written | `Then no trim directive is emitted` |
