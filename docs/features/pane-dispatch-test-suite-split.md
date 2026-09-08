@@ -96,8 +96,8 @@ sums close for exactly one assignment, so the assignment *is* the spec.
 | File | Concern | Section headers | Body | + skeleton |
 |---|---|---|---|---|
 | `dispatch-pane-agent.dispatch.test.sh` | happy path, launcher shape, `--role`/`--model`/validation, F1/F4 regressions | 38, 60, 72, 151, 167, 736 | 101 | 142 |
-| `dispatch-pane-agent.policy.test.sh` | no-terminal + adapter-failure cooldown, set-policy, read_policy, lane/session markers, live worker count, at/over-max overflow | 83, 90, 175, 202, 228, 259, 279, 288, 295 | 154 | 195 |
-| `dispatch-pane-agent.routing.test.sh` | surface-ref fixtures, round-robin, tab targeting, degrade paths, open_tab failure streaks, final-review carry-forwards | 316, 333, 364, 382, 398, 412, 435, 475, 533, 674 | 420 | 461 |
+| `dispatch-pane-agent.policy.test.sh` | no-terminal + adapter-failure cooldown, set-policy, read_policy (incl. the `:696-703` wrap case moved in), lane/session markers, live worker count, at/over-max overflow | 83, 90, 175, 202, 228, 259, 279, 288, 295 **+ `:696-703`** | 162 | 203 |
+| `dispatch-pane-agent.routing.test.sh` | surface-ref fixtures, round-robin, tab targeting, degrade paths, open_tab failure streaks, final-review carry-forwards | 316, 333, 364, 382, 398, 412, 435, 475, 533, 674 **− `:696-703`** | 412 | 453 |
 | `dispatch-pane-agent.cleanup.test.sh` | `cleanup_stale` / run-dir + work-child retention | 96, 866 | 97 | 138 |
 | `dispatch-pane-agent.scratch.test.sh` | work-child dir, `prompt.md` preamble | 768, 794, 820, 849 | 98 | 139 |
 | `dispatch-pane-agent.subcommands.test.sh` | `wait`, `handoff` | 105, 127 | 46 | 87 |
@@ -127,6 +127,10 @@ for k, secs in BUCKET.items():
     print(f"{k:12s} {n:4d} body  {n+41:4d} with skeleton")
 print("body", tot, "+ 37 preamble + 4 footer =", tot+41)
 assert tot + 41 == 957
+# The one sub-section move: the read_policy wrap case leaves routing for policy.
+WRAP = 703 - 696 + 1                      # 8 lines, :696-703
+print("after the wrap move -> policy", 154 + WRAP, " routing", 420 - WRAP)
+assert 154 + WRAP == 162 and 420 - WRAP == 412
 EOF
 ```
 
@@ -137,22 +141,36 @@ against `wc -l`. Both must pass before task 7 begins.
 **A sixth concern exists that the original card did not name.** `wait` and `handoff` are
 independent dispatcher subcommands belonging to none of the four buckets that card listed.
 
-**Why routing was cut from policy** (this reverses the previous revision). The earlier draft
-kept all 574 routing-and-policy lines in one file at ~615 and justified it by an intra-bucket
-fixture chain. The judge measured that chain: `CSID` spans sections 228, 259, 279, 288, 295 —
-lines 228–315, **88 lines**. Every other section in that range defines its own session key
-(`SP_SID`, `OSID`, `FSID`, `TSID`, `NOSID`, `APSID`/`NTSID`, `XSID`, `TFSID`/`TRSID`,
-`PCSID`/`CDSID`/`RRSID`, `NLSID`; `:202` uses none). Fifteen distinct keys exist in the file.
-So the chain justified keeping **228–315** together, not all 574 lines. The cut at `:316`
-keeps that chain intact and costs exactly one relocation: `call_read_policy` (`:207`, one
-line) is called from both halves (`:202` and `:674`) and moves to the shared library.
-`mk_run` (`:244`) stays with policy; `mk_run_ref` (`:322`) stays with routing.
+**Why routing was cut from policy** (this reverses the first revision). That draft kept all
+574 routing-and-policy lines in one file at ~615 and justified it by an intra-bucket fixture
+chain. Measured, the `CSID` chain spans sections 228, 259, 279, 288, 295 — lines 228–315,
+**88 lines**. **Seventeen** session keys are assigned in the file
+(`grep -cE '^[A-Z][A-Z0-9_]*SID='` = 17, at `:157, 177, 237, 299, 339, 368, 387, 402, 417,
+425, 448, 487, 514, 559, 593, 647, 686`), and every section outside 228–298 defines its own.
+Note `UMAX_SID` (`:299`) sits *inside* the claimed chain and defines its own key, so the true
+`CSID` dependency ends at `:298`, not `:315`; the cut at `:316` is unaffected. The chain
+justified keeping 228–315 together, never all 574 lines.
 
-**Remaining residual, stated not hidden:** `routing.test.sh` lands at **461 lines with the
+**The cut is engineered to cost zero relocations.** Judge round 2 measured that the naive cut
+crossed twice, not once: `call_read_policy` (`:207`) **and** `RP_DIR` (assigned `:206`,
+consumed at `:701-702`). Under the file's `set -u`, a `routing.test.sh` holding `:701-702`
+would abort with `RP_DIR: unbound variable`. Rather than relocate either symbol, **the
+`read_policy` wrap case at `:696-703` moves to `policy.test.sh`**, where its five sibling
+`read_policy` cases already live. That is where it belongs on the concern axis anyway. After
+the move both symbols are policy-local, `call_read_policy` does **not** enter the shared
+library, and no variable crosses a file boundary.
+
+| | Section body | `:696-703` delta | Final body | + skeleton |
+|---|---|---|---|---|
+| `policy.test.sh` | 154 | **+8** | **162** | **203** |
+| `routing.test.sh` | 420 | **−8** | **412** | **453** |
+
+**Remaining residual, stated not hidden:** `routing.test.sh` lands at **453 lines with the
 skeleton** — under the 800 hard maximum, over the 400 preferred. No further cut is proposed
-because no measurement supports one yet; if that file is cut again it should be on a measured
-fixture boundary, the way this cut was. The previous 615-line residual was under-argued in the
-same shape as the residual that created this card, which is why it did not survive review.
+because no measurement supports a boundary yet; if it is cut again it should be on a measured
+fixture boundary, the way this cut was. The first revision's 615-line residual was
+under-argued in the same shape as the residual that created this card, which is why it did not
+survive review.
 
 **One placement is a judgment call, recorded so a reviewer can disagree cheaply:** the
 `cleanup_stale` work-child section (`:866`) is scored to cleanup because the function under
@@ -162,10 +180,13 @@ compliance either way.
 
 ### Decision 2 — shared harness: `panes/test-lib.sh`
 
-Measured: **`ok()` and `bad()` are the only helpers called from more than one bucket**, plus
-`call_read_policy` which the Decision 1 cut newly makes cross-file. Every other helper —
-`mk_run`, `mk_run_ref`, `tf_dispatch`, `tr_dispatch`, `mk_stale_run`, `call_count_workers`,
-`call_cleanup_stale`, `ts_hours_ago`, `ts_days_ago` — is used inside exactly one bucket.
+Measured: **`ok()` and `bad()` are the only helpers called from more than one bucket.** Every
+other helper — `call_read_policy`, `mk_run`, `mk_run_ref`, `tf_dispatch`, `tr_dispatch`,
+`mk_stale_run`, `call_count_workers`, `call_cleanup_stale`, `ts_hours_ago`, `ts_days_ago` — is
+used inside exactly one bucket once the `:696-703` move of Decision 1 lands. **No variable
+crosses a file boundary either** — judge round 2 caught `RP_DIR` (`:206` → `:701-702`) doing
+so, which under `set -u` would have aborted `routing.test.sh` with `RP_DIR: unbound variable`;
+the move removes the crossing rather than papering it with a relocation.
 
 #### Contract
 
@@ -174,12 +195,11 @@ The library is **sourced, not executed**. It defines and exports nothing else.
 | Symbol | Kind | Contract |
 |---|---|---|
 | `MARKER_SELF` | var | absolute path of the **sourcing** script. Built from `$0`, which under `source` is the caller — this is correct but subtle, and is why it must live in the library rather than be passed in. |
-| `MARKER_ROOT` | var | `git rev-parse --show-toplevel`; the library `return 1`s if it fails. |
-| `TMP` | var | fresh `mktemp -d`, per sourcing script. |
+| `MARKER_ROOT` | var | `git rev-parse --show-toplevel`, and **`\|\| exit 1` — not `return 1`.** Measured by the judge: `return 1` from a sourced file is **fail-open** — the caller keeps running with `MARKER_ROOT` unset and exits 0, so a suite outside a repo would report green. `exit` from a sourced file exits the *caller*, preserving today's fail-closed `:12` semantics. |
+| `TMP` | var | fresh `mktemp -d`, per sourcing script. **The library also owns the `trap 'rm -rf "$TMP"' EXIT`** — it creates the directory, so it installs the cleanup. No caller may install its own EXIT trap (see the `tl_finish` note below). |
 | `pass`, `fail` | var | initialised to 0. |
 | `ok "<label>"` | fn | prints `ok   — <label>`, increments `pass`. |
 | `bad "<label>" [detail]` | fn | prints `FAIL — <label> (detail)`, increments `fail`. |
-| `call_read_policy …` | fn | relocated from `:207`; called by both policy and routing. |
 | `tl_finish` | fn | prints the `%s passed, %s failed` summary, writes the test marker when `fail` is 0, and returns `fail -eq 0`. |
 
 **Caller contract, in order:** `. "$(dirname "$0")/test-lib.sh"` as the first executable line
@@ -216,7 +236,26 @@ A total that still adds to 139 is not proof; an unchanged count can hide a swap.
 **set equality over the 139 assertion labels**, before against after.
 
 Measured 2026-09-07 at `1b213a1`: **139 `ok` calls, 139 `bad` calls, 139 distinct labels,
-zero duplicates.** No label repeats, so a set diff cannot be defeated by collision.
+zero duplicates.** No label repeats today, so a set diff is not defeated by collision *at the
+baseline* — but see the duplicate row in the blind-spot table, which is about the after-set.
+
+#### Two label sets, not one — they answer different questions
+
+Judge round 2 found the first revision used "the label set" to mean source extraction in the
+checklist and runtime emission in the scenarios, and never defined the runtime side. They are
+both needed and they prove different things:
+
+| | `SOURCE-SET` | `RUN-SET` |
+|---|---|---|
+| How | `panes/label-set.py <files…>` parses the `ok "…"` literals out of the **source** | capture each suite's **stdout**, strip the `ok   — ` and `FAIL — ` prefixes |
+| Proves | no assertion was **deleted from the source** during the move | every assertion **actually executed** |
+| Blind to | whether the code ever ran | an assertion deleted from a file the runner never invoked |
+
+`RUN-SET` must strip **both** prefixes — a label emitted as `FAIL — <label>` still ran, and
+counting only `ok   — ` would make a genuinely failing assertion look like a lost one.
+Task 8 compares `SOURCE-SET` before against `SOURCE-SET` after, **and** asserts
+`RUN-SET after == SOURCE-SET after`. The first catches a deletion; the second catches a file
+that never ran or died partway.
 
 **⚠️ The extractor must understand escaped quotes.** Two labels contain them:
 
@@ -242,7 +281,8 @@ method delivers:
 | Two test **bodies** swapped between labels | **no** — the label set is unchanged |
 | A body edited to pass unconditionally | **no** |
 | An assertion that goes **vacuous** after the reorder | **no**, and it reports green |
-| One of the six files never invoked by the runner | **no** — see task 8's union guard |
+| One of the six files never invoked by the runner | **no** by `SOURCE-SET`; **yes** by `RUN-SET` |
+| A **duplicate** label introduced by the split | **no** — set equality is blind in the opposite direction from the count it warns against: copy-and-delete yields 140 emissions of 139 distinct labels and passes green. Task 8 therefore asserts the emitted **count** is 139 as well as the set. |
 
 The third and fifth rows are not hypothetical: **vacuity is the exact hazard this card
 documents at line 45** (§Hazard). Hardening line 45 closes one instance; the class survives
@@ -382,28 +422,42 @@ Then it passes whether or not its own dispatch created a launcher
   `implementation`. (Gate transition — `gate confirmed` only.)
 - [ ] 2. Re-run both suites at the branch base and re-read the output. Record the counts here.
   Do not carry §Baseline forward on trust.
-- [ ] 3. Write `panes/label-set.py` — the escape-aware extractor of Decision 3, taking file
-  paths as `sys.argv` and printing one label per line to stdout. Capture the before-set to
-  `panes/.label-baseline` (untracked). **Falsify it**: delete one label from a copy, confirm
-  the diff names that exact label; and run it against the naive `[^"]*` rule to confirm the
-  138-with-duplicate result it must not reproduce. Record both outcomes.
+- [ ] 3. Write `panes/label-set.py` — the escape-aware **source** extractor of Decision 3,
+  taking file paths as `sys.argv` and printing one label per line to stdout. Capture
+  `SOURCE-SET` before to `panes/.label-baseline` (untracked). Write the **`RUN-SET`** reader
+  too: it reads a suite's stdout and strips **both** the `ok   — ` and `FAIL — ` prefixes.
+  **Falsify both**: delete one label from a source copy and confirm the diff names that exact
+  label; feed the run reader a stdout containing one `FAIL — ` line and confirm that label is
+  still counted as having run; and run the source extractor against the naive `[^"]*` rule to
+  confirm the 138-with-duplicate result it must not reproduce. Record all three outcomes.
 - [ ] 4. **Harden line 45** with a `touch` marker + `-newer`, matching `:140`. Own commit,
   before any code moves. Re-run: still 139/0. Do **not** touch `:761` — it is safe by its
   content filter, and adding a marker there would be a change with no measured cause.
-- [ ] 5. Create `panes/test-lib.sh` per the Decision 2 contract, including `tl_finish` and the
-  relocated `call_read_policy`. No behavior change to any suite yet.
+- [ ] 5. Create `panes/test-lib.sh` per the Decision 2 contract, including `tl_finish`, the
+  `|| exit 1` on `MARKER_ROOT`, and the library-owned EXIT trap. Assert the fail-closed
+  behaviour directly: source it from a directory outside any repository and confirm the caller
+  **stops** rather than continuing with `MARKER_ROOT` unset. No behavior change to any suite yet.
 - [ ] 6. Convert `panes/run-pane-agent.test.sh` to source it and end with `tl_finish`. Re-run:
   still 18/0. Assert that a caller omitting `tl_finish` writes no marker. This proves the
   skeleton under a second caller before the big file depends on it.
-- [ ] 7. Run the Decision 1 derivation script; both asserts must pass. Then split
+- [ ] 7. Run the Decision 1 derivation script; all three asserts must pass. Then split
   `dispatch-pane-agent.test.sh` into the six files by the published header mapping, each
-  sourcing the library with its own domain fixtures. Delete the original.
-- [ ] 8. Run all six plus `run-pane-agent`. Assert, in this order: (a) each of the six named
-  files ran — by name, not by glob count; (b) each exited 0; (c) the union of labels is
-  **set-equal** to the task-3 baseline. Order matters — (c) alone cannot distinguish a lost
-  label from a crashed file.
+  sourcing the library with its own domain fixtures. **Move `:696-703` (the `read_policy` wrap
+  case) into `policy.test.sh`, not `routing.test.sh`** — that move is what keeps `RP_DIR` and
+  `call_read_policy` from crossing a file boundary. Delete the original. Then grep each new
+  file for a variable it uses but never assigns; `set -u` makes any such crossing fatal, and
+  `RP_DIR` was found only because someone looked for it.
+- [ ] 8. Run all six plus `run-pane-agent`. Assert, in this order:
+  (a) each of the six named files ran — **by name, not by glob count**;
+  (b) each exited 0;
+  (c) `SOURCE-SET` after is **set-equal** to the task-3 baseline;
+  (d) `RUN-SET` after is set-equal to `SOURCE-SET` after;
+  (e) the emitted label **count** is exactly 139.
+  Order matters: (c) alone cannot distinguish a lost label from a crashed file, and (e) is the
+  only check that catches a duplicate introduced by copy-and-delete — 140 emissions of 139
+  distinct labels satisfies every set comparison above it.
 - [ ] 9. `wc -l` every new file. Assert each under 800; record which exceed the 400 preferred
-  (`routing.test.sh` is expected to, at ~461) as a named residual with its measured number.
+  (`routing.test.sh` is expected to, at ~453) as a named residual with its measured number.
 - [ ] 10. Six files where there was one means six markers. Verify `write-test-marker.py` is
   invoked once per file, that `MARKER_SELF` resolves to the sourcing script and not to
   `test-lib.sh`, and that `hooks/test-marker-guard.sh` passes for a commit staging all six.
@@ -443,3 +497,26 @@ Then it passes whether or not its own dispatch created a launcher
    costing one 1-line helper relocation. Five files became six.
 6. `writing-specs/edge-cases` — no Gherkin. Six scenarios added, including the two the judge
    named (a bucket dying partway, and a file never invoked) which drove the task-8 rewrite.
+
+**2026-09-08, after compliance judge round 2 (FAIL, 3 violations; four of six round-1 findings
+confirmed fixed). All three accepted.**
+
+7. `writing-specs/api-contracts` — three measured holes. **`RP_DIR`** (`:206` to `:701-702`)
+   crossed the cut, so the naive split cost two relocations, not one, and `routing.test.sh`
+   would have died under `set -u` with `RP_DIR: unbound variable`. Resolved by **moving the
+   `read_policy` wrap case `:696-703` into policy**, where its five siblings already live —
+   after which neither `RP_DIR` nor `call_read_policy` crosses, and the library needs neither.
+   The library's `return 1` on `MARKER_ROOT` was **fail-open** (judge measured: caller
+   continues, variable unset, exit 0); it is now `|| exit 1`, which from a sourced file exits
+   the caller and preserves the fail-closed semantics of `:12`. The `rm -rf "$TMP"` EXIT trap
+   now has a stated owner: the library, because it creates `TMP`.
+8. `core-conduct/no-unsourced-metric` — "fifteen distinct keys" was wrong; **seventeen** are
+   assigned. The parenthetical omitted `F1SID` (`:157`) and `UMAX_SID` (`:299`), and
+   `UMAX_SID` matters because its section sits inside the claimed `CSID` chain — so the true
+   dependency ends at `:298`, not `:315`. The cut at `:316` is unaffected.
+9. `writing-specs/no-ambiguity` — the document used "the label set" to mean **source
+   extraction** in the checklist and **runtime emission** in every scenario, and never
+   specified the runtime reader. Split into `SOURCE-SET` and `RUN-SET` with a table of what
+   each proves and is blind to; `RUN-SET` must strip `FAIL — ` as well as `ok   — `.
+   Also added the blind spot the judge named unprompted: **a duplicate label introduced by
+   copy-and-delete** passes every set comparison, so task 8 now asserts the emitted count.
