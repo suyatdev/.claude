@@ -378,7 +378,7 @@ start.
 
 **Where the reaper runs (finding C6).** The reaper turns an orphaned snapshot into archived
 text. Assigning it to `slim-session-start.sh` without stating an order put it behind six
-unrelated early exits (`slim-session-start.sh:59-79`), including `exit 0` when
+early exits in `slim-session-start.sh` main(), including `exit 0` when
 `session-state.md` is missing or unreadable — which is the exact state the "notepad is deleted
 while a snapshot is pending" scenario describes, and the one where the snapshot is the only
 copy left. So the reaper runs **first**, before any of those exits, and it does not depend on
@@ -417,16 +417,22 @@ So the library runs the same detection over each block before appending.
 Round 2 found the first attempt at this made things worse in one direction. "memsearch skips
 any file containing a flagged block" means **one** false positive silently removes the entire
 archive — and everything appended to it afterwards — from search, while the indexer records it
-under the same `skipped` counter as an ordinary nothing-changed skip (`index.py:213-215`), so
+under the same `skipped` counter as an ordinary nothing-changed skip (`index.py:222`), so
 the zero-match reporting added for exactly this class never fires. And for an archive already
 indexed before it gained a flag, "nothing is embedded" is simply false: chunks are only
 removed inside `replace_source` (`db.py:210-224`), which a skipped file never reaches.
 
 So the quarantine is per **block**, not per file. A flagged block is written to
 `session-state.quarantine.md` instead of the archive; that file is never indexed, and the
-archive carries a stub recording that a block was quarantined and why. The indexer counts a
-quarantine skip on its own counter, separate from `skipped`, so it is visible in the run
-report. And an archive that has ever contained a flagged block is force-reindexed once through
+archive carries a stub recording that a block was quarantined and why.
+
+The indexer needs **no** quarantine counter. An earlier revision required one; that survived
+from the rejected per-file design and contradicts the one that shipped. Flagged content never
+enters an archive file, so nothing ever reaches the indexer to skip, and a counter for it
+could only ever read zero — a number the data cannot source. `session-state.quarantine.md` is
+excluded by name, which is a configuration fact rather than a runtime measurement.
+
+And an archive that has ever contained a flagged block is force-reindexed once through
 `replace_source` so previously embedded chunks are actually deleted rather than merely
 un-refreshed.
 
@@ -501,6 +507,13 @@ implementation of that omission logs `decision=allow`, so the health log reads a
 every turn while nothing is being protected. The guard must distinguish: no snapshot present
 is `unprotected`, and the session-start report treats a run of `unprotected` lines as a
 failure to investigate, not as health.
+
+**Something must read `unprotected`, or the token is decoration.** The mtime comparison alone
+cannot see it: a guard heartbeating `unprotected` every turn keeps the log fresh, so mtime
+says healthy while nothing is protected. So the session-start report reads the **last line's
+decision token** as well as the mtime, and says so plainly when the most recent run was
+`unprotected` or `archive_failed`. Named because a control nobody reads is the same failure as
+a control that never ran.
 
 **The log rotates on its own size**, not with the archive. It heartbeats every turn; the
 archive only grows on turns that removed text, so tying the two together would have let the
@@ -610,7 +623,7 @@ Scenario: An orphaned snapshot is reaped even when the notepad is gone
   When slim-session-start.sh runs
   Then the reaper runs before any early exit, so the snapshot is archived
   And only then is it deleted
-  And the six unrelated early exits at slim-session-start.sh:59-79 never reach it first
+  And no early exit in that function reaches it first
 
 Scenario: The archive matcher finds the live population
   Given the three configured archive_roots and the live tree on this machine
@@ -893,13 +906,18 @@ that ignores them, in two repos measured as not covering them today.
       regex. Pure library, no hook wiring. Tests first, fence cases first among those.
 - [ ] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
-- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above** the six early
-      exits at `:59-79`, and deleting a snapshot only after confirming the archive append
+- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
+      exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
-- [ ] 6. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
-      and `pre-compact-handoff.sh:85`.
-- [ ] 7. Raise `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) and replace the body-drop
-      (`slim-session-start.sh:84-88`) with truncate-and-say.
+- [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
+      body-drop at `slim-session-start.sh:84-88` replaced by truncate-and-say, **and** the
+      write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and
+      `pre-compact-handoff.sh:85`. Deliberately one task, not two. Raising the write caps
+      first opens a live regression window in every repo: `vibe-scape` is 75 lines / 5,165
+      bytes = 68.9 b/line and prints fine today, but at the new 150-line target it is ~10,330
+      bytes against a still-8192 read cap, so its entire handoff body would be dropped — the
+      exact total-loss failure this card exists to prevent, caused by the fix for it. These
+      are global hooks with no opt-in, so the window is not theoretical.
 - [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path

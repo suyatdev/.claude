@@ -57,13 +57,18 @@ that ignores them, in two repos measured as not covering them today.
       regex. Pure library, no hook wiring. Tests first, fence cases first among those.
 - [ ] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
-- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above** the six early
-      exits at `:59-79`, and deleting a snapshot only after confirming the archive append
+- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
+      exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
-- [ ] 6. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
-      and `pre-compact-handoff.sh:85`.
-- [ ] 7. Raise `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) and replace the body-drop
-      (`slim-session-start.sh:84-88`) with truncate-and-say.
+- [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
+      body-drop at `slim-session-start.sh:84-88` replaced by truncate-and-say, **and** the
+      write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and
+      `pre-compact-handoff.sh:85`. Deliberately one task, not two. Raising the write caps
+      first opens a live regression window in every repo: `vibe-scape` is 75 lines / 5,165
+      bytes = 68.9 b/line and prints fine today, but at the new 150-line target it is ~10,330
+      bytes against a still-8192 read cap, so its entire handoff body would be dropped — the
+      exact total-loss failure this card exists to prevent, caused by the fix for it. These
+      are global hooks with no opt-in, so the window is not theoretical.
 - [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
@@ -133,7 +138,8 @@ in this table, not a missing test.
 | Log-write failure silenced | The liveness log cannot be written | `Then it reports the failure in its Stop output` |
 | `unprotected` collapsed into `allow` | The guard runs with no snapshot present | `Then the liveness line records decision=unprotected` |
 | Quarantine reverted to per-file skip | A block that looks like a secret is quarantined, not archived | `And the rest of AR indexes normally` |
-| Envelope removed from a notepad-derived string | A notepad heading that mimics an envelope marker is defanged | `Then the heading is prefixed by the sanitizer` |
+| Sanitizer removed from a notepad-derived string | A notepad heading that mimics an envelope marker is defanged | `Then the heading is prefixed by the sanitizer` |
+| Envelope removed from a notepad-derived string | A notepad heading that mimics an envelope marker is defanged | `And the model sees one well-formed DATA envelope, not two` |
 | Reaper moved below the early exits | An orphaned snapshot is reaped even when the notepad is gone | `Then the reaper runs before any early exit` |
 | Reaper deletes before confirming the append | The reaper cannot append | `Then the snapshot is left in place` |
 | Matcher reverted to `glob.glob` without `include_hidden` | The archive matcher finds the live population | `Then it returns a non-zero count for every root that holds an archive` |
