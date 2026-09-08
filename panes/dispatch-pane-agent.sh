@@ -23,6 +23,20 @@ REDIRECT_CONF="${PANE_REDIRECT_CONF:-$PANES_DIR/redirect-agents.conf}"
 RUNS_DIR="$STATE_DIR/runs"
 CMUX_BIN="/Applications/cmux.app/Contents/Resources/bin/cmux"
 STALE_DAYS=7
+# Card pane-agent-scratch-isolation: a run dir's "work" child is pruned on its
+# own, much shorter clock than the run dir itself (STALE_DAYS, unchanged).
+# -mmin, NEVER -mtime: BSD find truncates -mtime to whole days, which is the
+# defect this card exists to fix (docs/features/pane-agent-scratch-isolation.md,
+# "Retention").
+#
+# 1440 exactly, and the test fixtures straddle it at 23h/25h. An earlier pass
+# read the card's then-current 25h-survives/49h-pruned pair as the spec and
+# widened this to 2880 to satisfy it. That was measurably the wrong direction:
+# on one fixture set aged 23h/25h/36h/49h, -mmin +2880 and the truncating
+# -mtime +1 prune an identical set (49h alone), so a 48h window is
+# indistinguishable from the defect this constant exists to remove. The card
+# and the fixtures were corrected instead (ac54e57, 24fde96).
+WORK_STALE_MINUTES=1440
 DEFAULT_TIMEOUT=900
 POLL_SECS=2
 MAX_PANES=16                 # upper bound on 'panes max=N' (spec: bounded positive int)
@@ -82,6 +96,28 @@ cleanup_stale() {
   [ -d "$STATE_DIR" ] || return 0
   find "$RUNS_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +"$STALE_DAYS" -exec rm -rf {} + 2>/dev/null
   find "$STATE_DIR" -maxdepth 1 -type f -mtime +"$STALE_DAYS" -delete 2>/dev/null
+
+  # Card pane-agent-scratch-isolation change 4b: a "work" child is pruned on
+  # its own, much shorter clock than the run dir itself -- and only where the
+  # run dir already holds an agent-exit marker, so a failed or in-flight run
+  # keeps its scratch (evidence) for the whole run-dir window instead of losing
+  # it on a blind 24h clock. NOT indefinitely: the STALE_DAYS prune above takes
+  # the run dir whole, work child included, regardless of any marker -- and
+  # since it is spelled -mtime it truncates to whole days, so the real bound is
+  # just under 8 days, not 7 (measured; see the card's Retention table).
+  # touch -r restores the parent's mtime from prompt.md (written once at
+  # dispatch, never modified) right after the removal, because rm -rf on a
+  # child bumps the parent's own mtime and would otherwise restart its
+  # unrelated STALE_DAYS clock.
+  for d in "$RUNS_DIR"/*/; do
+    [ -d "$d" ] || continue
+    [ -f "${d}agent-exit" ] || continue
+    [ -d "${d}work" ] || continue
+    if [ -n "$(find "${d}work" -maxdepth 0 -mmin +"$WORK_STALE_MINUTES" 2>/dev/null)" ]; then
+      rm -rf "${d}work" 2>/dev/null
+      [ -f "${d}prompt.md" ] && touch -r "${d}prompt.md" "$d" 2>/dev/null
+    fi
+  done
   return 0
 }
 
@@ -359,6 +395,13 @@ case "$cmd" in
     cleanup_stale
     run_dir="$(new_run_dir)" || die "could not create a unique run dir under $RUNS_DIR"
 
+    # Card pane-agent-scratch-isolation change 1: the agent's private scratch
+    # dir, created before any pane opens or the adapter is called -- same
+    # fail-fast posture as the --cwd / --result-file checks above. umask 077
+    # (top of file) already makes this 700; no chmod, matching how the run
+    # dir itself gets its mode.
+    mkdir "$run_dir/work" || die "cannot create work dir: $run_dir/work"
+
     if [ -z "$result_file" ]; then
       scratch="$(scratchpad_dir)"
       if [ -n "$scratch" ] && [ -d "$scratch" ]; then
@@ -374,7 +417,33 @@ case "$cmd" in
     [ -e "$result_file" ] && die "refusing to reuse an existing result file: $result_file" 65
     [ -d "$(dirname "$result_file")" ] || die "result-file directory does not exist: $(dirname "$result_file")"
 
-    cp "$prompt_file" "$run_dir/prompt.md" || die "cannot copy prompt into run dir"
+    # Card pane-agent-scratch-isolation change 2: prompt.md is the preamble
+    # (below) followed by the caller's bytes, unmodified. The preamble goes
+    # FIRST so a caller prompt containing its own literal "---" line cannot
+    # displace it. Edge case: the prompt file could in principle be the
+    # destination, so the source is read fully into a temp file before
+    # anything is written to run_dir/prompt.md -- the write path below must
+    # not truncate its own source.
+    prompt_staged="$(mktemp)" || die "cannot stage prompt: mktemp failed"
+    cat "$prompt_file" > "$prompt_staged" || die "cannot read prompt file: $prompt_file"
+    cat <<PREAMBLE > "$run_dir/prompt.md" || die "cannot write prompt into run dir"
+Your private scratch directory for this dispatch is:
+
+    $run_dir/work
+
+It is yours alone, and TMPDIR normally points at it. Put every scratch artifact there
+-- repository clones, mutation scripts, replay output, intermediates. If the pane
+printed a line saying scratch is shared, create this directory yourself first.
+
+Do NOT invent a scratch path. Another agent is very likely running against this same
+repository right now; given a similar prompt it will invent the same obvious path
+(/tmp/judge-work and the like), and you will silently delete each other's files. The
+failure mode is not an error -- it is a plausible wrong number.
+
+--- end of dispatch preamble; the task follows ---
+PREAMBLE
+    cat "$prompt_staged" >> "$run_dir/prompt.md" || die "cannot append prompt into run dir"
+    rm -f "$prompt_staged"
 
     # The launcher is the injection boundary's controlled token: %q-quoted args,
     # mode 700, inside the 700 run dir (prompt lives there too). It keeps the
