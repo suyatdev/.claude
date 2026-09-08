@@ -25,10 +25,16 @@ Two independent limits, set by different hooks that do not know about each other
 Write ceilings vary by marker file (`live-handoff.sh:39-49`): none → 80/60,
 `current-task.md` → 100/80, `current-bug.md` → 120/100.
 
-Byte-per-line rate across all 12 `session-state.md` files on this machine: **57–78 b/line**
-(median ~61). Therefore 150 lines is 8,550–11,700 bytes — over the 8192 read cap at every
-rate in the measured range. Raising the write cap alone would move repos from partial loss
-to total loss.
+Byte-per-line rate across all 12 `session-state.md` files, re-measured 2026-09-08 after the
+compliance judge falsified an earlier figure of 57–78: **14.43–78.26 b/line** on a total-line
+basis, and **25.2–87.2** counting only non-blank lines, which is what survives a ruthless trim.
+
+The earlier version derived from the wrong range that 150 lines is 8,550–11,700 bytes and so
+exceeds the 8192 read cap *at every rate in the measured range*. **That derived claim was
+false at the low end**: at 14.43 b/line, 150 lines is 2,165 bytes, comfortably under. The
+surviving true statement is narrower, and is the one the design actually rests on — at the
+*upper* end of the measured range a raised write cap does cross the old read cap, so raising
+the write cap alone would have moved those repos from partial loss to total loss.
 
 Population survey, 12 files across 6 repos. Two already in failure:
 
@@ -200,7 +206,7 @@ All paths relative to `<repo>/.claude/`.
 | File | Written by | Read by | Lifetime |
 |---|---|---|---|
 | `session-state.md` | model | `slim-session-start.sh` | live |
-| `session-state.pretrim.<session-id>.md` | `live-handoff.sh`, `pre-compact-handoff.sh` | `handoff-keep-guard.sh` | one turn; reaped at session start if older than 24h |
+| `session-state.pretrim.<session-id>.md` | `live-handoff.sh`, `pre-compact-handoff.sh` | `handoff-keep-guard.sh` | one turn; reaped at session start if older than 24h — **reaping runs before the reader early-exits**, see below |
 | `session-state.archive.md` | `handoff-keep-guard.sh` (auto) and model (curated) | humans, memsearch | until rotation |
 | `session-state.archive.<N>.md` | rotation | humans, memsearch | forever, never modified again |
 | `session-state.keepguard-strikes.<session-id>` | `handoff-keep-guard.sh` | itself | cleared on success **and** on fail-open |
@@ -224,7 +230,7 @@ archive:
   rotate_at_bytes: 1048576         # 1 MiB
 keep_guard:
   max_strikes: 2                   # blocks before failing open with a loud warning
-  liveness_stale_turns: 20         # session start complains past this
+  log_rotate_at_bytes: 262144      # 256 KiB; the log heartbeats every turn, the archive does not
 snapshot:
   reap_after_hours: 24
 ```
@@ -241,6 +247,14 @@ lines against an 80-line cap — 2.9x over — so no read cap can be proven suff
 So the load-bearing safety property is not the cap. It is that **the reader never blanks**:
 past the cap it prints what fits and names what it withheld. The cap is a headroom target
 only. 24,576 gives 1.48x over the worst measured density at the largest write cap.
+
+**The cost of that headroom, named rather than left implicit.** The read cap is what a session
+start injects into context. Raising it from 8,192 to 24,576 is a **3x** increase in the worst
+case — round 1 flagged this at 2x, and the round-2 revision made it 3x without saying so. It
+is not a per-session certainty: the cap bounds what *may* be read, and a healthy notepad at
+150 lines and 78 b/line is 11,700 bytes, well under. The 3x applies only to a notepad that has
+overrun, which is the case where dropping the body is the worse outcome. Accepted deliberately,
+and recorded here so a later reader does not have to rediscover the arithmetic.
 
 The test for this is a **runtime measurement over the real notepad population**, not a
 comparison of three constants — a constants test passes by construction and can never fail
@@ -282,6 +296,23 @@ outside any fence, or end of file.
 whitespace stripped, must appear as some line of the post-write file. Membership, not
 position — reordering, re-nesting and moving a block between sections all pass; only deletion
 fails. The heading line is part of the region, so stripping the tag fails.
+
+**Set membership, not multiset.** A protected line that appears twice in the snapshot needs to
+survive once. Requiring both copies would block on de-duplication, which is a tidy-up the trim
+directive actively asks for. Stated because the previous revision left it readable either way.
+
+**Which tool runs the matching, under bash 3.2.57.** The previous revision gave regexes
+without saying what executes them, which under a shell with no associative arrays is a real
+gap rather than a detail.
+
+| Job | Tool | Why |
+|---|---|---|
+| Heading and fence detection | `grep -E` on a line at a time | `[[ =~ ]]` exists in bash 3.2 but its regex is locale-dependent and the house rule at `git-guard.sh:22` already keeps patterns out of `[[ ]]`. |
+| Line membership | `grep -F -x -q -f <protected-lines-file> <current-file>` inverted per line | Fixed-string, whole-line matching. No line of a notepad can be read as a pattern, which is the injection risk a regex match would carry. |
+| Region extraction | `awk` with an explicit fence-state variable | Needs one pass with state; `grep` cannot carry it. |
+
+`grep -F -x` is load-bearing: notepad lines routinely contain regex metacharacters, and a
+non-fixed match would both false-pass and be attacker-influenceable by the file under test.
 
 ### The trim cycle
 
@@ -325,6 +356,14 @@ all, and a voluntary rewrite below the cap could delete a `[KEEP]` line with no 
 check. That was a silent narrowing of D1. A snapshot is a copy of a file capped in the low
 tens of kilobytes; taking it every turn costs less than the loss it prevents.
 
+**Where the reaper runs (finding C6).** The reaper turns an orphaned snapshot into archived
+text. Assigning it to `slim-session-start.sh` without stating an order put it behind six
+unrelated early exits (`slim-session-start.sh:59-79`), including `exit 0` when
+`session-state.md` is missing or unreadable — which is the exact state the "notepad is deleted
+while a snapshot is pending" scenario describes, and the one where the snapshot is the only
+copy left. So the reaper runs **first**, before any of those exits, and it does not depend on
+the notepad existing. Same for the liveness report.
+
 **Snapshot failure fails closed (finding O-C).** If the snapshot cannot be written, the hook
 must not emit the trim directive. Asking for a trim while unable to back it up is exactly the
 promise the card exists to stop making. Trimming pauses and says why.
@@ -342,13 +381,53 @@ only disk, since the archive is never read at session start and never trimmed (D
 A note the model files itself uses `## Filed by session <iso>` instead, so the two are
 distinguishable on sight and by grep.
 
-**Secret handling (finding C9).** The archive makes notepad text permanent and search-indexed,
-on a path that never passes through `scan-secrets.sh` — that hook is `PreToolUse` on
-`Edit|Write`, and a hook appending through bash bypasses it entirely. So the library runs the
-same detection over each block before appending. On a hit the block is **still archived** —
-losing text is the failure this card exists to prevent — but the heading records
-`secrets: flagged`, the guard says so out loud, and **memsearch skips any file containing a
-flagged block**, so a possible secret is never embedded into a searchable index.
+**Archive-append failure (finding O-a).** The design specified what happens when the *snapshot*
+cannot be written and said nothing about the archive append failing, which is the same disk
+and the same permissions. A failed append means text was removed from the notepad and captured
+nowhere. It is escalated in the guard Stop output, the block is retained in the snapshot by
+**not** deleting the snapshot, and the liveness line records `decision=archive_failed`. The
+turn is not blocked — blocking cannot make the disk writable — but the failure is never
+silent, and the snapshot survives as the copy of last resort.
+
+**Secret handling (finding C9, revised after round 2).** The archive makes notepad text
+permanent and search-indexed, on a path that never passes through `scan-secrets.sh` — that
+hook is `PreToolUse` on `Edit|Write`, and a hook appending through bash bypasses it entirely.
+So the library runs the same detection over each block before appending.
+
+Round 2 found the first attempt at this made things worse in one direction. "memsearch skips
+any file containing a flagged block" means **one** false positive silently removes the entire
+archive — and everything appended to it afterwards — from search, while the indexer records it
+under the same `skipped` counter as an ordinary nothing-changed skip (`index.py:213-215`), so
+the zero-match reporting added for exactly this class never fires. And for an archive already
+indexed before it gained a flag, "nothing is embedded" is simply false: chunks are only
+removed inside `replace_source` (`db.py:210-224`), which a skipped file never reaches.
+
+So the quarantine is per **block**, not per file. A flagged block is written to
+`session-state.quarantine.md` instead of the archive; that file is never indexed, and the
+archive carries a stub recording that a block was quarantined and why. The indexer counts a
+quarantine skip on its own counter, separate from `skipped`, so it is visible in the run
+report. And an archive that has ever contained a flagged block is force-reindexed once through
+`replace_source` so previously embedded chunks are actually deleted rather than merely
+un-refreshed.
+
+**The retention trade-off itself is a user decision, not a spec decision** — see D16.
+
+### Block-message sanitization (finding C8, reopened in round 2)
+
+Restricting the block reason to headings and counts is not sufficient on its own. A heading is
+still model-authored text out of the notepad, and the guard feeds it into the `Stop`
+instruction channel — the same class of bytes that `slim-session-start.sh:4-12,26-43` wraps in
+a tamper-evident DATA envelope precisely because a body line must not be able to forge a
+marker.
+
+So the guard reuses that machinery rather than inventing a weaker version: `gen_tag` and
+`sanitize_line` move from `slim-session-start.sh` into `hooks/handoff/lib/handoff-archive.sh`,
+both hooks source them, and every notepad-derived string in a block reason is sanitized and
+enclosed in a tagged envelope. Counts and paths, which the guard itself generates, sit outside
+it.
+
+Moving a working function is a real risk to a hook that currently passes its tests, so the
+task ordering puts the extraction and its tests before either consumer changes.
 
 ### Guard liveness (finding O2)
 
@@ -365,10 +444,33 @@ appends one line to `session-state.keepguard.log`:
 2026-09-08T16:38:44Z session=631d9bd8 decision=allow protected_regions=2 removed_lines=0
 ```
 
-`slim-session-start.sh` reads the last line and says, in the handoff header, when the guard
-last ran. Past `liveness_stale_turns` with a notepad that has been changing, it says so
-plainly. Absence of the log file at all is reported as "guard has never run here", which is
-the state a broken registration produces.
+**Staleness is measured by mtime, not by counting turns.** An earlier revision said
+`liveness_stale_turns: 20`. That number is not computable by anything that could act on it:
+the log carries no turn counter, and the reader runs at *session start* — turn zero — so it
+can never see turns at all. It compares `session-state.md` mtime against
+`session-state.keepguard.log` mtime instead. A notepad newer than the log means the notepad
+changed with no guard run after it, which is exactly the condition worth reporting and is
+sourceable from two `stat` calls.
+
+Absence of the log entirely is reported as "guard has never run here" — the state a broken
+registration produces.
+
+**`decision=unprotected` is a fourth value, and it is not `allow`.** The flowchart previously
+had three arms and none of them was "there is no snapshot to compare against". The natural
+implementation of that omission logs `decision=allow`, so the health log reads a clean line
+every turn while nothing is being protected. The guard must distinguish: no snapshot present
+is `unprotected`, and the session-start report treats a run of `unprotected` lines as a
+failure to investigate, not as health.
+
+**The log rotates on its own size**, not with the archive. It heartbeats every turn; the
+archive only grows on turns that removed text, so tying the two together would have let the
+log grow unbounded between rotations.
+
+**The log write can fail, and that failure is the one that matters most.** A read-only
+directory or a full disk kills the heartbeat and the archive append together, and a missing
+heartbeat line is byte-identical to the guard never having been installed. So a failed log
+write is escalated the same way a failed snapshot is: the guard says so in its Stop output,
+where it cannot be missed, rather than exiting 0.
 
 ### Behaviour scenarios
 
@@ -409,6 +511,8 @@ Scenario: A protected line is deleted
   Then the guard blocks the turn
   And the reason names the heading and the count of missing lines and the path to PT
   And the reason contains no notepad body lines
+  And every notepad-derived heading is wrapped in the same tamper-evident DATA envelope
+      slim-session-start.sh uses, with a per-run tag and the marker sanitizer applied
   And PT is NOT deleted and nothing is appended to AR
   And the strike count becomes 1
 
@@ -553,12 +657,29 @@ and `~/.claude/.claude/worktrees/*/` were both missed — and a glob that matche
 indistinguishable from "nothing changed" in the index report (finding O5).
 
 ```yaml
-archive_globs:                       # glob.glob(..., recursive=True)
-  - "~/.claude/**/session-state.archive*.md"
-  - "~/Other Docs/**/session-state.archive*.md"
-  - "~/.worktrees/**/session-state.archive*.md"
-zero_match_globs_are_reported: true
+archive_roots:                       # expanduser(root), then Path(root).rglob(pattern)
+  - "~/.claude"
+  - "~/Other Docs"
+  - "~/.worktrees"
+archive_pattern: "session-state.archive*.md"
+zero_match_roots_are_reported: true
 ```
+
+**Not `glob.glob`.** The previous revision specified
+`glob.glob("~/.claude/**/session-state.archive*.md", recursive=True)`. Measured under the
+pinned interpreter (`memsearch/.venv`, Python 3.12.13) that matches **zero files**, for two
+independent reasons: `glob` never expands `~`, and `**` does not descend into dot-prefixed
+directories — which is where every notepad lives. The replacement for six hardcoded paths
+would have reached nothing at all.
+
+Measured on the live tree, same interpreter, pattern `session-state.md` under `~/.claude`:
+`glob.glob(..., recursive=True)` finds **1**, `Path.rglob` finds **7**, and
+`glob.glob(..., recursive=True, include_hidden=True)` also finds 7. `Path.rglob` is specified
+because it needs no version-gated keyword — the system `python3` here is 3.9.6, where
+`include_hidden` does not exist at all.
+
+A test asserts the configured roots match at least the live archive population, so a
+regression to a dot-blind matcher fails rather than silently indexing nothing.
 
 Recursive globs anchored at the three roots that actually hold repos, so a new worktree or a
 new project is covered without a config edit. Globs rather than `repo_roots` entries, so the
@@ -573,7 +694,7 @@ The live `session-state.md` is deliberately **not** indexed: it changes every tu
 
 **`archive_doc` is pre-poisoned as a health signal.** The existing `archive_doc` chunks are
 the retired `CODING_MEMORY.md`, so "the archive_doc count went up" proves nothing until a
-`--reclassify` run separates them. Task 10 covers that. The current count must be measured at
+`--reclassify` run separates them. The memsearch task covers that. The current count must be measured at
 implementation time, not carried from this sentence.
 
 ### Non-functional requirements
@@ -604,41 +725,51 @@ implementation time, not carried from this sentence.
    removed; the archive is the only recourse there.
 6. The exact `Stop` hook JSON contract is unverified. The published hooks documentation has
    been measured wrong before on decision values (memory:
-   `reference_hook_permission_decision_values`). Task 7 must confirm the accepted shape
+   `reference_hook_permission_decision_values`). The `Stop`-hook task must confirm the accepted shape
    against the installed binary, not the docs page, and pin the finding in a comment.
 7. Secret detection reuses `scan-secrets.sh` logic and inherits every gap that hook already
    has. Flagging is best-effort; the guarantee is that a flagged block is not indexed, not
    that every secret is caught.
 
-### Judge findings and where each was addressed
+### Judge findings: claim, and what verification actually said
 
-| Finding | Where |
-|---|---|
-| C1 unsourced metric (78 bytes per line) | R1 rewritten; cap 24,576; runtime test |
-| C2 unverified "no data is lost" | Per-session snapshot; gap 5 replaced |
-| C3 no snapshot below the cap | Snapshot every turn |
-| C4 incomplete `[KEEP]` grammar | Full grammar section; 3 new scenarios |
-| C5 strike counter never reset | Reset on success and on fail-open |
-| C6 scenario contradicts `slim-session-start.sh:58` | Per-hook scenario, all three arms |
-| C7 two scenarios with no `When` | Both rewritten |
-| C8 raw notepad text in the block message | Headings and counts only, no body lines |
-| C9 archive bypasses `scan-secrets.sh` | Scan before append; flagged blocks not indexed |
-| O1 `pre-compact-handoff.sh` unmentioned | Added to changed files; own scenario |
-| O2 guard silence reads as success | Liveness log + session-start report |
-| O3 empty Verification section | Written, below |
-| O4 R1 test cannot fail | Replaced with seeded-token test plus mutation |
-| O5 hardcoded globs, zero-match invisible | Recursive globs; zero-match reported |
-| O6 `archive_doc` pre-poisoned | Stated; `--reclassify` in task 10 |
-| O7 root running log exposed | Fixed separately in `.gitignore:74-80` |
+The previous revision presented this as a table of settled fixes. It was written before any
+judge had confirmed a single row, which is precisely the "verification precedes the write-down"
+rule it was breaking. The `Verified` column below is round 2's finding, not mine.
+
+| Finding | Where addressed | Verified in round 2 |
+|---|---|---|
+| C1 unsourced metric (78 bytes per line) | R1 rewritten; cap 24,576; runtime test | arithmetic confirmed; a **different** wrong number found in the evidence section, fixed in round 3 |
+| C2 unverified "no data is lost" | Per-session snapshot; gap 5 replaced | genuinely fixed |
+| C3 no snapshot below the cap | Snapshot every turn | genuinely fixed |
+| C4 incomplete `[KEEP]` grammar | Full grammar section; 3 new scenarios | **partly** — tooling and set-vs-multiset added in round 3 |
+| C5 strike counter never reset | Reset on success and on fail-open | genuinely fixed |
+| C6 scenario contradicts `slim-session-start.sh:58` | Per-hook scenario, all three arms | genuinely fixed |
+| C7 two scenarios with no `When` | Both rewritten | genuinely fixed |
+| C8 raw notepad text in the block message | Headings and counts only, no body lines | **partly** — envelope added in round 3 |
+| C9 archive bypasses `scan-secrets.sh` | Scan before append; flagged blocks not indexed | **partly** — per-file skip was worse than the gap; per-block quarantine in round 3 |
+| O1 `pre-compact-handoff.sh` unmentioned | Added to changed files; own scenario | accepted |
+| O2 guard silence reads as success | Liveness log + session-start report | **FAIL** — the log itself could fail silently; fixed in round 3 |
+| O3 empty Verification section | Written, below | accepted |
+| O4 R1 test cannot fail | Replaced with seeded-token test plus mutation | confirmed fixed |
+| O5 hardcoded globs, zero-match invisible | Recursive globs; zero-match reported | **FAIL** — the replacement globs matched zero files; fixed in round 3 |
+| O6 `archive_doc` pre-poisoned | Stated; `--reclassify` in the memsearch task | accepted |
+| O7 root running log exposed | Fixed separately in `.gitignore:74-80` | accepted |
 
 ## Tasks
 
 Ordered so every step is independently useful and nothing depends on a later step. Tasks 1-4
 are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach.
 
+- [ ] 0. Extract `gen_tag` and `sanitize_line` from `slim-session-start.sh` into
+      `hooks/handoff/lib/handoff-archive.sh`, with tests, and leave both call sites behaving
+      identically — before anything new consumes them. Moving a working function out of a hook
+      that currently passes its tests is the riskiest edit in this list, so it goes first and
+      alone.
 - [ ] 1. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
-      full fence tracking, archive append, rotation, secret flagging. Pure library, no hook
-      wiring. Tests first, and the fence cases are the ones to write first.
+      full fence tracking (`awk` with an explicit fence-state variable), archive append,
+      rotation, secret flagging, quarantine. Line membership uses `grep -F -x -q`, never a
+      regex. Pure library, no hook wiring. Tests first, fence cases first among those.
 - [ ] 2. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
 - [ ] 3. `.gitignore` coverage confirmed in all six repos holding a notepad — measured with
@@ -666,6 +797,16 @@ are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach
       becomes a usable health signal.
 - [ ] 15. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
+- [ ] 16. ADR under `docs/decisions/` for the two structural decisions this design takes:
+      D11 (an append-only store that rotates and is never deleted) and D12 (that store being
+      permanent, gitignored and machine-local). `rules/gates.md` requires an ADR for structural
+      decisions and the previous revisions did not schedule one.
+- [ ] 17. Commit the `.gitignore` fix for the exposed root running log. Applied on disk and
+      effective since 2026-09-08, but held out of the docs-only commits to `main`, so it has
+      no commit of its own yet and would be lost by a clean checkout.
+- [ ] 18. Reap the quarantine path: `session-state.quarantine.md` needs its own gitignore
+      coverage, its own exclusion from indexing, and a stated purge procedure — the retention
+      trade-off is D16 and must be answered before this is built.
 
 Split into `handoff-trim-safety.spec.md` at 719 lines, exercising the MAY in
 `rules/gates.md` (one-canonical-file discipline). The card keeps frontmatter, tasks and
@@ -676,3 +817,11 @@ The task list above is duplicated from `handoff-trim-safety.md` because
 `hooks/feature-sync-guard.sh` requires both halves of a split pair to list the same
 tasks (decision 6 of `docs/features/memory-system-split.md`). Ticking a box needs no
 matching edit; adding or removing a task does.
+
+### A note on cross-references
+
+Task numbers are deliberately **not** cited anywhere in this document. Three of them went
+stale inside a single revision when the list was renumbered, and the sync guard compares task
+*text*, so it is blind to a wrong number in prose. References name the task by what it does.
+Recorded because the same failure is already in the memory file
+`feedback_store_the_derivation_not_the_number` and it recurred here anyway.
