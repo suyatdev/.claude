@@ -19,21 +19,29 @@ sat waiting to be judged.
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: planning, round 8 revision. Compliance has FAILED seven times — 9, 8, 7, 4, 1, 5 and 1
-violations across rounds 1 to 7 — and the observability read failed its `success_masking`
-dimension in rounds 2, 3 and 4 before **passing in round 5**, where it also stated the design
-is ready to hand to a human reviewer. Counts are from
-`coding-memory/compliance-judge/verdicts.jsonl`; read them there rather than trusting this
-sentence, which has been stale twice. Every finding across all rounds was independently
-re-measured before being acted on, and every one held — including one this session first
-reported as not reproducing, which did reproduce and was missed by a line-based search of
-line-wrapped prose. From round 5 onward the findings are predominantly **introduced by the
-previous round's own edit**, which is the signal to stop revising and hand over. Two round-2 findings were defects the design would have shipped: the replacement
-memsearch globs matched **zero** files, and the evidence table carried a byte-per-line range
-that re-measurement falsified. **D16 is answered** (2026-09-08): a secret-looking cut block goes to
-`session-state.quarantine.md`, never the archive, never indexed, deletable by hand. **D17 is
-answered**: the read cap is 24,576, confirmed by the user against the arithmetic and the
-context cost, superseding the ~12,000 in D6. The gate has not opened.
+Status: planning — **both judges PASS**, spec is at the human review gate.
+
+Compliance: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds 1 to 7), then
+**PASSED with zero violations in round 8**. Observability: failed `success_masking` in rounds
+2, 3 and 4, then **passed in round 5**, where it also stated the design is ready to hand to a
+human reviewer. Counts come from `coding-memory/compliance-judge/verdicts.jsonl`; read them
+there rather than trusting this sentence, which has been stale twice.
+
+Every finding across all rounds was independently re-measured before being acted on, and every
+one held — including one this session first reported as not reproducing, which did reproduce
+and had been missed by a line-based search of line-wrapped prose. Two round-2 findings were
+defects the design would otherwise have shipped: the replacement memsearch globs matched
+**zero** files, and the evidence table carried a byte-per-line range that re-measurement
+falsified. From round 5 onward the findings were predominantly **introduced by the previous
+round's own edit** rather than surviving from the original design — a review loop feeding on
+itself, whose correct exit is a pass.
+
+**D16 answered** (2026-09-08): a secret-looking cut block goes to
+`session-state.quarantine.md` — never the archive, never indexed, deletable by hand.
+**D17 answered**: the read cap is 24,576, confirmed against the arithmetic and the context
+cost, superseding the ~12,000 in D6.
+
+The gate has not opened.
 
 ## Tasks
 
