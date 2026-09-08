@@ -24,7 +24,9 @@ round 2 — and the observability read failed its `success_masking` dimension in
 finding from both rounds was independently re-measured before being acted on, and every one
 held. Two round-2 findings were defects the design would have shipped: the replacement
 memsearch globs matched **zero** files, and the evidence table carried a byte-per-line range
-that re-measurement falsified. One question is open for the user as **D16** (what happens to a
+that re-measurement falsified. **D16 is answered** (2026-09-08): a secret-looking cut block goes to
+`session-state.quarantine.md`, never the archive, never indexed, deletable by hand. **D17 is
+open** — the read cap overrides the user's own D6 number and must be confirmed. (superseded: D16 open, what happens to a
 block that looks like it contains a secret). The gate has not opened.
 
 ## Tasks
@@ -32,7 +34,8 @@ block that looks like it contains a secret). The gate has not opened.
 Ordered so every step is independently useful and nothing depends on a later step. Tasks 1-4
 are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach.
 
-- [ ] 0. Extract `gen_tag` and `sanitize_line` from `slim-session-start.sh` into
+- [ ] 0. Extract `gen_tag`, `sanitize_line` **and the three module-level values they read**
+      (`MARKER_PATTERN`, `TAG_BYTES`, `URANDOM_SRC`) from `slim-session-start.sh` into
       `hooks/handoff/lib/handoff-archive.sh`, with tests, and leave both call sites behaving
       identically — before anything new consumes them. Moving a working function out of a hook
       that currently passes its tests is the riskiest edit in this list, so it goes first and
@@ -45,7 +48,11 @@ are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach
       **suppresses the trim directive** if the snapshot cannot be written.
 - [ ] 3. `.gitignore` coverage confirmed in all six repos holding a notepad — measured with
       `git check-ignore`, never assumed. Covers `session-state.archive*`, `.pretrim.*`,
-      `.keepguard-strikes.*`, `.keepguard.log`.
+      `.keepguard-strikes.*`, `.keepguard.log` and **`session-state.quarantine.md`** — the one
+      file designed to hold secrets, and the one left off this list until round 3.
+      `mtg-wizard/.gitignore` and `vibe-scape/.gitignore` list `.claude/` files one by one, so
+      none of these is covered there today. This task runs **before** anything that creates
+      the files, not seventeen tasks after it.
 - [ ] 4. Stale-snapshot reaper in `slim-session-start.sh`: append to the archive, then delete.
 - [ ] 5. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
       and `pre-compact-handoff.sh:85`.
@@ -63,7 +70,7 @@ are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach
 - [ ] 11. Register the guard in `settings.json` under `Stop`.
 - [ ] 12. Guard-liveness reporting in `slim-session-start.sh`.
 - [ ] 13. `pre-compact.sh` injects `session-state.md` first (D7).
-- [ ] 14. memsearch: recursive `archive_globs`, zero-match reporting, `_doc_source_type`
+- [ ] 14. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting, `_doc_source_type`
       widened off the retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc`
       becomes a usable health signal.
 - [ ] 15. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
@@ -77,7 +84,7 @@ are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach
       no commit of its own yet and would be lost by a clean checkout.
 - [ ] 18. Reap the quarantine path: `session-state.quarantine.md` needs its own gitignore
       coverage, its own exclusion from indexing, and a stated purge procedure — the retention
-      trade-off is D16 and must be answered before this is built.
+      trade-off is D16, answered: quarantine file, not redaction, not archive-as-normal.
 
 Split into `handoff-trim-safety.spec.md` at 719 lines, exercising the MAY in
 `rules/gates.md` (one-canonical-file discipline). The card keeps frontmatter, tasks and
@@ -133,7 +140,11 @@ degraded-but-safe, because the reader truncates rather than blanks; a *blank* is
   card was being judged. The first trim after rollout must leave a record.
 - memsearch reports zero-match on no configured glob.
 
-**Every control now has a falsifier listed.** Round 2 found that several controls added in
+**Falsifier coverage is a claim to re-check, not a property to assert.** An earlier revision
+stated every control had one; review then found five rows pointing at scenarios that did not
+exist, and those five were exactly the controls added to fix the round before. They have since
+been written. Check it by listing the scenarios and matching them against the table, which is
+what caught it — not by reading this paragraph. Round 2 found that several controls added in
 response to round 1 had none — the new surface shipped unasserted, which is the failure
 recorded in `feedback_ship_the_control_with_its_test`. The table above is the response, and it
 is the thing to re-check first when a later revision adds another control.

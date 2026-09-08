@@ -164,7 +164,9 @@ migrating existing oversize notepads by hand; changing what the model chooses to
 **Explicitly not covered, stated because it is easy to assume otherwise:** the root-level
 `~/.claude/session-state.md` (95,456 bytes, hand-kept) is a different file, read by no hook,
 and this card does not protect it. It was untracked *and* un-gitignored in a public repo when
-the compliance judge found it; that was fixed separately in `.gitignore:74-80`.
+the compliance judge found it. The ignore rule is **applied in the working tree and effective
+now, but has no commit** — `main` accepts only docs — so a clean checkout still loses it. Not
+"fixed": pending, and scheduled as its own task.
 
 ### Pinned toolchain
 
@@ -197,8 +199,8 @@ No new runtime dependencies. No network access in any hook.
 | `hooks/handoff/slim-session-start.sh` | Raise `MAX_BYTES` (`:18`); replace body-drop (`:84-88`) with truncate-and-say; report guard liveness; reap stale snapshots. |
 | `hooks/handoff/pre-compact.sh` | Inject `.claude/session-state.md` first (D7). |
 | `.gitignore` | Confirm archive coverage per repo with `git check-ignore`, never assumed. |
-| `memsearch/config.json` | New `archive_globs` key (recursive). |
-| `memsearch/memsearch/index.py` | Consume `archive_globs`; widen `_doc_source_type` beyond the retired `CODING_MEMORY.md`; warn on a zero-match glob. |
+| `memsearch/config.json` | New `archive_roots` + `archive_pattern` keys. |
+| `memsearch/memsearch/index.py` | Consume `archive_roots`/`archive_pattern` via `Path.rglob`; widen `_doc_source_type` beyond the retired `CODING_MEMORY.md`; warn on a zero-match root. |
 | `skills/managing-session-memory/SKILL.md` | Document the `[KEEP]` convention. |
 
 ### On-disk contract
@@ -249,6 +251,13 @@ lines against an 80-line cap — 2.9x over — so no read cap can be proven suff
 So the load-bearing safety property is not the cap. It is that **the reader never blanks**:
 past the cap it prints what fits and names what it withheld. The cap is a headroom target
 only. 24,576 gives 1.48x over the worst measured density at the largest write cap.
+
+**⚠️ This number overrides a user decision and is therefore NOT settled — D17.** D6 records
+the user choosing "~12,000 bytes" for the read cap. The design ships **24,576**, slightly more
+than double, on arithmetic the user never saw. The arithmetic is sound and set out below, but
+core-conduct reserves a trade-off like this for the human, and earlier revisions accepted the
+cost in the spec's own voice instead of asking. Raised as D17; the gate must not open while it
+is unanswered.
 
 **The cost of that headroom, named rather than left implicit.** The read cap is what a session
 start injects into context. Raising it from 8,192 to 24,576 is a **3x** increase in the worst
@@ -358,6 +367,14 @@ all, and a voluntary rewrite below the cap could delete a `[KEEP]` line with no 
 check. That was a silent narrowing of D1. A snapshot is a copy of a file capped in the low
 tens of kilobytes; taking it every turn costs less than the loss it prevents.
 
+**The reaper has the same failure branch as the guard.** It performs the same archive write
+— "append, then delete" — inside a hook the spec requires to fail silently. Followed
+literally, an append that fails is ignored and the last surviving copy is then deleted, which
+is this card's own headline disaster reproduced by its own fix. So the reaper deletes a
+snapshot **only** after confirming the append succeeded; on failure it leaves the snapshot in
+place, and that one case is exempt from the silent-failure rule and is reported at session
+start.
+
 **Where the reaper runs (finding C6).** The reaper turns an orphaned snapshot into archived
 text. Assigning it to `slim-session-start.sh` without stating an order put it behind six
 unrelated early exits (`slim-session-start.sh:59-79`), including `exit 0` when
@@ -422,6 +439,10 @@ instruction channel — the same class of bytes that `slim-session-start.sh:4-12
 a tamper-evident DATA envelope precisely because a body line must not be able to forge a
 marker.
 
+**Scope: every notepad-derived string the guard emits, not only a block reason.** The
+strike-cap fail-open warning names the same headings into the same channel and was left
+outside the requirement. The rule is on the *bytes*, not on the message type.
+
 So the guard reuses that machinery rather than inventing a weaker version: `gen_tag` and
 `sanitize_line` move from `slim-session-start.sh` into `hooks/handoff/lib/handoff-archive.sh`,
 both hooks source them, and every notepad-derived string in a block reason is sanitized and
@@ -457,7 +478,23 @@ sourceable from two `stat` calls.
 Absence of the log entirely is reported as "guard has never run here" — the state a broken
 registration produces.
 
-**`decision=unprotected` is a fourth value, and it is not `allow`.** The flowchart previously
+**Every guard state has a distinct log token. This list is the single source; nothing
+elsewhere in this document re-states it.**
+
+| State | Token | Turn blocked? |
+|---|---|---|
+| Snapshot present, nothing protected went missing | `allow` | no |
+| A protected line vanished | `block` | yes |
+| No snapshot to compare against | `unprotected` | no |
+| Strike cap reached, proceeding anyway | `failopen` | no |
+| Archive or quarantine append failed | `archive_failed` | no |
+| The liveness log itself could not be written | reported in Stop output; no line is possible | no |
+
+Round 3 named `unprotected` as "a fourth value" while writing only three, which left `block`
+and the fail-open unnamed — and logging `allow` on either recreates the exact masking failure
+`unprotected` exists to prevent.
+
+**`decision=unprotected` is not `allow`.** The flowchart previously
 had three arms and none of them was "there is no snapshot to compare against". The natural
 implementation of that omission logs `decision=allow`, so the health log reads a clean line
 every turn while nothing is being protected. The guard must distinguish: no snapshot present
@@ -583,11 +620,20 @@ Scenario: Rotation numbering with gaps
   When rotation runs
   Then the new name is session-state.archive.5.md, one above the highest existing number
 
-Scenario: A block that looks like a secret is archived but not indexed
+Scenario: A block that looks like a secret is quarantined, not archived
   Given a removed block matching the scan-secrets detection
-  When the guard appends it
-  Then the block is written verbatim and its heading records secrets: flagged
-  And memsearch skips the whole file, so nothing is embedded
+  When the guard files it
+  Then the block is written verbatim to session-state.quarantine.md, not to AR
+  And AR carries a stub recording that a block was quarantined and why
+  And the quarantine file is never indexed
+  And the rest of AR indexes normally, so one flagged block never removes the archive
+  And the indexer counts this on its own counter, not the generic skipped counter
+
+Scenario: An archive that previously held a flagged block is purged from the index
+  Given AR was indexed before a flagged block was found in it
+  When the indexer next runs
+  Then AR is force-reindexed through replace_source
+  And the previously embedded chunks are deleted, not merely left unrefreshed
 
 Scenario: A pane agent must not touch handoff state
   Given CLAUDE_PANE_AGENT is set
@@ -639,13 +685,43 @@ Scenario: Archive files are never read at session start
   Then it reads only session-state.md, and no archive bytes enter the context
 
 Scenario: memsearch types the archive correctly
-  Given AR exists and matches an entry in archive_globs
+  Given AR exists under one of the archive_roots and matches archive_pattern
   When memsearch index runs
   Then its chunks carry source_type archive_doc and recall_type episodic, weight 1.0
   And a rotated file already indexed is hash-skipped on the next run
 
-Scenario: A glob that matches nothing is reported
-  Given an archive_globs entry matching no file on disk
+Scenario: The archive append fails
+  Given the archive file cannot be written
+  When the guard files a removal
+  Then the liveness line records decision=archive_failed
+  And the guard says so in its Stop output
+  And the snapshot is NOT deleted, so the removed text still has a copy
+
+Scenario: The liveness log cannot be written
+  Given the log file cannot be written
+  When the guard runs
+  Then it reports the failure in its Stop output rather than exiting 0
+  And the absence of a log line is never left to read as a guard that was never installed
+
+Scenario: The guard runs with no snapshot present
+  Given no snapshot exists for this session
+  When the turn ends
+  Then the liveness line records decision=unprotected, never allow
+
+Scenario: The reaper cannot append
+  Given an orphaned snapshot and an unwritable archive
+  When slim-session-start.sh reaps
+  Then the snapshot is left in place, not deleted
+  And the failure is reported
+
+Scenario: The fail-open warning is enveloped too
+  Given the strike cap is reached and the warning names a notepad heading
+  When the guard emits it
+  Then that heading is sanitized and wrapped in the tagged DATA envelope,
+      exactly as a block reason would be
+
+Scenario: A root that matches nothing is reported
+  Given an archive_roots entry under which no file matches archive_pattern
   When memsearch index runs
   Then the run report names that glob as zero-match
   And the run does not silently read as nothing changed
@@ -737,7 +813,9 @@ implementation time, not carried from this sentence.
 
 The previous revision presented this as a table of settled fixes. It was written before any
 judge had confirmed a single row, which is precisely the "verification precedes the write-down"
-rule it was breaking. The `Verified` column below is round 2's finding, not mine.
+rule it was breaking. The `Verified` column mixes two things and says which: round 2's own disposition, plus, where
+a row was reopened, what the next round then did. It is not a clean external verdict, and
+labelling it as one would repeat the fault it was written to correct.
 
 | Finding | Where addressed | Verified in round 2 |
 |---|---|---|
@@ -756,14 +834,15 @@ rule it was breaking. The `Verified` column below is round 2's finding, not mine
 | O4 R1 test cannot fail | Replaced with seeded-token test plus mutation | confirmed fixed |
 | O5 hardcoded globs, zero-match invisible | Recursive globs; zero-match reported | **FAIL** — the replacement globs matched zero files; fixed in round 3 |
 | O6 `archive_doc` pre-poisoned | Stated; `--reclassify` in the memsearch task | accepted |
-| O7 root running log exposed | Fixed separately in `.gitignore:74-80` | accepted |
+| O7 root running log exposed | Ignore rule applied on disk, **not yet committed** | accepted; the uncommitted state is itself a live risk |
 
 ## Tasks
 
 Ordered so every step is independently useful and nothing depends on a later step. Tasks 1-4
 are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach.
 
-- [ ] 0. Extract `gen_tag` and `sanitize_line` from `slim-session-start.sh` into
+- [ ] 0. Extract `gen_tag`, `sanitize_line` **and the three module-level values they read**
+      (`MARKER_PATTERN`, `TAG_BYTES`, `URANDOM_SRC`) from `slim-session-start.sh` into
       `hooks/handoff/lib/handoff-archive.sh`, with tests, and leave both call sites behaving
       identically — before anything new consumes them. Moving a working function out of a hook
       that currently passes its tests is the riskiest edit in this list, so it goes first and
@@ -776,7 +855,11 @@ are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach
       **suppresses the trim directive** if the snapshot cannot be written.
 - [ ] 3. `.gitignore` coverage confirmed in all six repos holding a notepad — measured with
       `git check-ignore`, never assumed. Covers `session-state.archive*`, `.pretrim.*`,
-      `.keepguard-strikes.*`, `.keepguard.log`.
+      `.keepguard-strikes.*`, `.keepguard.log` and **`session-state.quarantine.md`** — the one
+      file designed to hold secrets, and the one left off this list until round 3.
+      `mtg-wizard/.gitignore` and `vibe-scape/.gitignore` list `.claude/` files one by one, so
+      none of these is covered there today. This task runs **before** anything that creates
+      the files, not seventeen tasks after it.
 - [ ] 4. Stale-snapshot reaper in `slim-session-start.sh`: append to the archive, then delete.
 - [ ] 5. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
       and `pre-compact-handoff.sh:85`.
@@ -794,7 +877,7 @@ are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach
 - [ ] 11. Register the guard in `settings.json` under `Stop`.
 - [ ] 12. Guard-liveness reporting in `slim-session-start.sh`.
 - [ ] 13. `pre-compact.sh` injects `session-state.md` first (D7).
-- [ ] 14. memsearch: recursive `archive_globs`, zero-match reporting, `_doc_source_type`
+- [ ] 14. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting, `_doc_source_type`
       widened off the retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc`
       becomes a usable health signal.
 - [ ] 15. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
