@@ -19,8 +19,9 @@ sat waiting to be judged.
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: planning, round 3 revision. Compliance FAILED twice — 9 violations in round 1, 8 in
-round 2 — and the observability read failed its `success_masking` dimension in round 2. Every
+Status: planning, round 5 revision. Compliance has FAILED four times — 9, 8, 7 and 4
+violations across rounds 1 to 4 — and the observability read has failed its `success_masking`
+dimension in rounds 2, 3 and 4. Every
 finding from both rounds was independently re-measured before being acted on, and every one
 held. Two round-2 findings were defects the design would have shipped: the replacement
 memsearch globs matched **zero** files, and the evidence table carried a byte-per-line range
@@ -32,72 +33,78 @@ block that looks like it contains a secret). The gate has not opened.
 
 ## Tasks
 
-Ordered so every step is independently useful and nothing depends on a later step. Tasks 1-4
-are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach.
+Ordered so every step is independently useful and nothing depends on a later step. The ignore
+rules come **first**, before anything writes a file they are meant to cover — an earlier
+ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
+that ignores them, in two repos measured as not covering them today.
 
-- [ ] 0. Extract `gen_tag`, `sanitize_line` **and the three module-level values they read**
+- [ ] 1. Ignore rules, everywhere, before any new file exists. In all six repos holding a
+      notepad, confirm with `git check-ignore` — never assume — that
+      `session-state.archive*`, `session-state.pretrim.*`, `session-state.keepguard-strikes.*`,
+      `session-state.keepguard.log` and `session-state.quarantine.md` are all ignored.
+      Measured 2026-09-08: `vibe-scape` and `mtg-wizard` list `.claude/` files one by one and
+      cover **none** of these. Includes committing the already-applied rule for the root
+      `~/.claude/session-state.md`, which is effective on disk but has no commit and would be
+      lost by a clean checkout.
+- [ ] 2. Extract `gen_tag`, `sanitize_line` and the three module-level values they read
       (`MARKER_PATTERN`, `TAG_BYTES`, `URANDOM_SRC`) from `slim-session-start.sh` into
-      `hooks/handoff/lib/handoff-archive.sh`, with tests, and leave both call sites behaving
-      identically — before anything new consumes them. Moving a working function out of a hook
-      that currently passes its tests is the riskiest edit in this list, so it goes first and
-      alone.
-- [ ] 1. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
+      `hooks/handoff/lib/handoff-archive.sh`, with tests, leaving both call sites behaving
+      identically. Moving a working function out of a hook that passes its tests is the
+      riskiest edit here, so it goes early and alone.
+- [ ] 3. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
       full fence tracking (`awk` with an explicit fence-state variable), archive append,
       rotation, secret flagging, quarantine. Line membership uses `grep -F -x -q`, never a
       regex. Pure library, no hook wiring. Tests first, fence cases first among those.
-- [ ] 2. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
+- [ ] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
-- [ ] 3. `.gitignore` coverage confirmed in all six repos holding a notepad — measured with
-      `git check-ignore`, never assumed. Covers `session-state.archive*`, `.pretrim.*`,
-      `.keepguard-strikes.*`, `.keepguard.log` and **`session-state.quarantine.md`** — the one
-      file designed to hold secrets, and the one left off this list until round 3.
-      `mtg-wizard/.gitignore` and `vibe-scape/.gitignore` list `.claude/` files one by one, so
-      none of these is covered there today. This task runs **before** anything that creates
-      the files, not seventeen tasks after it.
-- [ ] 4. Stale-snapshot reaper in `slim-session-start.sh`: append to the archive, then delete.
-- [ ] 5. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
+- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above** the six early
+      exits at `:59-79`, and deleting a snapshot only after confirming the archive append
+      succeeded.
+- [ ] 6. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
       and `pre-compact-handoff.sh:85`.
-- [ ] 6. Raise `SLIM_HANDOFF_MAX_BYTES` to 24576 and replace the body-drop
+- [ ] 7. Raise `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) and replace the body-drop
       (`slim-session-start.sh:84-88`) with truncate-and-say.
-- [ ] 7. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
+- [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
-- [ ] 8. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
+- [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
-- [ ] 9. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
-      cap with reset on both exits, mechanical archive append, liveness heartbeat. Block
-      messages carry headings and counts only — never notepad body lines.
-- [ ] 10. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
+- [ ] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
+      cap with reset on both exits, mechanical archive append, liveness heartbeat with the full
+      set of decision tokens. Every notepad-derived string it emits is sanitized and enveloped.
+- [ ] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
-- [ ] 11. Register the guard in `settings.json` under `Stop`.
-- [ ] 12. Guard-liveness reporting in `slim-session-start.sh`.
-- [ ] 13. `pre-compact.sh` injects `session-state.md` first (D7).
-- [ ] 14. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting, `_doc_source_type`
-      widened off the retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc`
-      becomes a usable health signal.
-- [ ] 15. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
+- [ ] 12. Register the guard in `settings.json` under `Stop`.
+- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, by mtime comparison, also above
+      the early exits.
+- [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
+- [ ] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
+      `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
+      retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc` becomes a usable
+      health signal.
+- [ ] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
-- [ ] 16. ADR under `docs/decisions/` for the two structural decisions this design takes:
-      D11 (an append-only store that rotates and is never deleted) and D12 (that store being
-      permanent, gitignored and machine-local). `rules/gates.md` requires an ADR for structural
-      decisions and the previous revisions did not schedule one.
-- [ ] 17. Commit the `.gitignore` fix for the exposed root running log. Applied on disk and
-      effective since 2026-09-08, but held out of the docs-only commits to `main`, so it has
-      no commit of its own yet and would be lost by a clean checkout.
-- [ ] 18. Reap the quarantine path: `session-state.quarantine.md` needs its own gitignore
-      coverage, its own exclusion from indexing, and a stated purge procedure — the retention
-      trade-off is D16, answered: quarantine file, not redaction, not archive-as-normal.
+- [ ] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
+      store that rotates and is never deleted) and D12 (that store being permanent, gitignored
+      and machine-local). `rules/gates.md` requires an ADR for structural decisions.
+- [ ] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
+      what `session-state.quarantine.md` is, how to read it, and how to delete it safely. D16
+      is answered — quarantine file, not redaction, not archive-as-normal — so this task
+      documents the decision rather than waiting on it.
 
-Split into `handoff-trim-safety.spec.md` at 719 lines, exercising the MAY in
-`rules/gates.md` (one-canonical-file discipline). The card keeps frontmatter, tasks and
-verification — what a restore needs; the companion keeps evidence, decisions and the spec —
-what an implementer needs. There is no third progress document, and there will not be one.
+Split into `handoff-trim-safety.spec.md`, exercising the MAY in `rules/gates.md`
+(one-canonical-file discipline). The card keeps frontmatter, tasks and verification — what a
+restore needs; the companion keeps evidence, decisions and the spec — what an implementer
+needs. There is no third progress document, and there will not be one.
+
+⚠️ `hooks/feature-sync-guard.sh` compares task identity only up to the first em dash, so it
+cannot see a divergence in the text after it. That is measured, not assumed: a D16 divergence
+between the two halves survived it with exit 0. Sync the halves by copying the whole section,
+never by editing one side.
 
 ## Verification
 
-Written in answer to observability finding O3. The empty section was itself the finding.
-
 **The measurement that decides whether this works.** Not "the archive file exists" and not
-"the tests pass" — both of those are true of a design that archives nothing.
+"the tests pass" — both are true of a design that archives nothing.
 
 1. Seed the notepad with N unique, greppable tokens, at least one inside a `[KEEP]` region
    and at least one outside it.
@@ -105,26 +112,37 @@ Written in answer to observability finding O3. The empty section was itself the 
 3. Assert every token that left `session-state.md` is **byte-present** in
    `session-state.archive.md`, and that every `[KEEP]` token is still in the notepad.
 4. **Then stub out the archive append and re-run.** The test must go red. A check that cannot
-   fail has measured nothing (finding O4, and memory `feedback_confirm_the_check_can_fail`).
+   fail has measured nothing (memory: `feedback_confirm_the_check_can_fail`).
 
-**Falsifiers to build before believing any green run.** Each must be shown to produce a red:
+**Falsifiers, each paired to the scenario *and the assertion* that must go red.** Naming only
+the mutation was not enough: three rounds running, a row pointed at a scenario that did not
+exist or did not assert the thing. Every row below names a scenario by its exact title and the
+clause inside it that fails. A row whose scenario title cannot be found by search is a defect
+in this table, not a missing test.
 
-| Mutation | Must be caught by |
-|---|---|
-| Archive append deleted | the seeded-token test |
-| `[KEEP]` heading regex made to match nothing | the protected-line scenarios |
-| Fence tracking removed | the heading-inside-a-fence scenarios, both directions |
-| Strike reset removed | the fail-open scenario, run twice |
-| Snapshot-failure suppression removed | the read-only-directory scenario |
-| Liveness log write removed | the guard-has-not-run scenario |
-| Zero-match root warning removed | the memsearch root scenario |
-| Matcher reverted to `glob.glob(..., recursive=True)` | the archive-root test, which asserts a non-zero live match |
-| Archive-append failure handling removed | a read-only-archive scenario |
-| `decision=unprotected` collapsed back into `allow` | a no-snapshot scenario reading the log line |
-| Log-write failure silenced | a read-only-log scenario |
-| Quarantine reverted to skipping the whole file | an indexer scenario asserting the rest of the archive still indexes |
-| Envelope removed from the block reason | a scenario feeding a notepad heading that mimics an envelope marker |
-| Reaper moved back below the early exits | the deleted-notepad scenario, which must still archive the snapshot |
+| Mutation | Scenario | Clause that must go red |
+|---|---|---|
+| Archive append deleted | A normal trim archives what it cut | `Then the guard appends the 47 removed lines to AR` |
+| `[KEEP]` heading regex matches nothing | A protected line is deleted | `Then the guard blocks the turn` |
+| Fence tracking removed (region end) | A heading inside a fenced code block does not end a region | `Then the inner line is body` |
+| Fence tracking removed (region open) | A `[KEEP]` heading inside a fenced code block does not open a region | `Then no region opens` |
+| Fence char/length matching removed | A tilde fence does not close a backtick fence | `Then the fence is still open` |
+| Strike reset removed | The guard must not wedge the session | `And it deletes the strike file` |
+| Snapshot-failure suppression removed | The snapshot cannot be written | `Then no trim directive is emitted` |
+| Archive-append failure handling removed | The archive append fails | `And the snapshot is NOT deleted` |
+| Log-write failure silenced | The liveness log cannot be written | `Then it reports the failure in its Stop output` |
+| `unprotected` collapsed into `allow` | The guard runs with no snapshot present | `Then the liveness line records decision=unprotected` |
+| Quarantine reverted to per-file skip | A block that looks like a secret is quarantined, not archived | `And the rest of AR indexes normally` |
+| Envelope removed from a notepad-derived string | A notepad heading that mimics an envelope marker is defanged | `Then the heading is prefixed by the sanitizer` |
+| Reaper moved below the early exits | An orphaned snapshot is reaped even when the notepad is gone | `Then the reaper runs before any early exit` |
+| Reaper deletes before confirming the append | The reaper cannot append | `Then the snapshot is left in place` |
+| Matcher reverted to `glob.glob` without `include_hidden` | The archive matcher finds the live population | `Then it returns a non-zero count for every root that holds an archive` |
+| Zero-match reporting removed | A root that matches nothing is reported | `Then the run report names that root` |
+
+**How to check this table, since reading it is not checking it.** Extract every scenario title
+from the spec, extract every scenario name from this table, and diff the two sets. Every row
+must resolve. That mechanical check is what caught the last three failures; the prose claiming
+coverage never did.
 
 **R1 is measured at runtime, not asserted between constants.** The test walks the live notepad
 population, computes bytes per non-blank line for each, and reports the maximum against the
@@ -139,16 +157,7 @@ degraded-but-safe, because the reader truncates rather than blanks; a *blank* is
   drop in the notepad line count.
 - `mtg-wizard` specifically: it lost roughly 171 lines unrecorded on 2026-09-08 while this
   card was being judged. The first trim after rollout must leave a record.
-- memsearch reports zero-match on no configured glob.
-
-**Falsifier coverage is a claim to re-check, not a property to assert.** An earlier revision
-stated every control had one; review then found five rows pointing at scenarios that did not
-exist, and those five were exactly the controls added to fix the round before. They have since
-been written. Check it by listing the scenarios and matching them against the table, which is
-what caught it — not by reading this paragraph. Round 2 found that several controls added in
-response to round 1 had none — the new surface shipped unasserted, which is the failure
-recorded in `feedback_ship_the_control_with_its_test`. The table above is the response, and it
-is the thing to re-check first when a later revision adds another control.
+- memsearch reports zero-match on no configured root.
 
 **Explicitly not proven by any of the above:** that a secret is never archived (gap 7), that a
 subagent edit is caught (gap 1), or that a determined model cannot delete the snapshot first

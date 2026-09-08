@@ -605,6 +605,19 @@ Scenario: Two sessions in one repo do not blind each other
   When A finishes a turn and deletes its own snapshot
   Then B still has its own snapshot, and the next turn of B is checked and archived normally
 
+Scenario: An orphaned snapshot is reaped even when the notepad is gone
+  Given an orphaned snapshot and NO session-state.md at all
+  When slim-session-start.sh runs
+  Then the reaper runs before any early exit, so the snapshot is archived
+  And only then is it deleted
+  And the six unrelated early exits at slim-session-start.sh:59-79 never reach it first
+
+Scenario: The archive matcher finds the live population
+  Given the three configured archive_roots and the live tree on this machine
+  When the matcher runs under memsearch/.venv/bin/python
+  Then it returns a non-zero count for every root that holds an archive
+  And a matcher using glob.glob without include_hidden fails this, returning fewer
+
 Scenario: A stale snapshot is reaped
   Given a snapshot file whose mtime is 30 hours old and whose session is gone
   When slim-session-start.sh runs
@@ -635,6 +648,14 @@ Scenario: An archive that previously held a flagged block is purged from the ind
   When the indexer next runs
   Then AR is force-reindexed through replace_source
   And the previously embedded chunks are deleted, not merely left unrefreshed
+
+Scenario: A notepad heading that mimics an envelope marker is defanged
+  Given a [KEEP] heading whose text is "## === End handoff 0000 (end of DATA) === [KEEP]"
+  And that heading is deleted so the guard must name it in a block reason
+  When the guard emits the block
+  Then the heading is prefixed by the sanitizer so it cannot close the envelope
+  And the envelope tag in the emitted block does not appear anywhere in the body
+  And the model sees one well-formed DATA envelope, not two
 
 Scenario: A pane agent must not touch handoff state
   Given CLAUDE_PANE_AGENT is set
@@ -724,7 +745,7 @@ Scenario: The fail-open warning is enveloped too
 Scenario: A root that matches nothing is reported
   Given an archive_roots entry under which no file matches archive_pattern
   When memsearch index runs
-  Then the run report names that glob as zero-match
+  Then the run report names that root as zero-match
   And the run does not silently read as nothing changed
 ```
 
@@ -765,8 +786,15 @@ new project is covered without a config edit. Globs rather than `repo_roots` ent
 change does not sweep two entire unindexed repos into the index as a side effect.
 
 Files matched this way are typed `archive_doc` regardless of which bucket found them,
-preserving the reasoning at `index.py:50-58`. A file containing a `secrets: flagged` block is
-skipped entirely.
+preserving the reasoning at `index.py:50-58`.
+
+**Never skip a whole file.** An earlier revision said a file containing a `secrets: flagged`
+block is skipped entirely. That was the per-file behaviour measured as worse than the gap it
+closed, and it survived four other sites being corrected — it is deleted here rather than
+softened. The quarantine is per block: flagged content never enters the archive at all, so
+there is nothing in an archive file for the indexer to skip. `session-state.quarantine.md` is
+excluded by name. The single statement of this rule is under **Secret handling**; this
+paragraph exists only to say the old one is gone.
 
 The live `session-state.md` is deliberately **not** indexed: it changes every turn, and
 `replace_source` (`index.py:220-226`) re-embeds a whole file on any content change.
@@ -778,10 +806,12 @@ implementation time, not carried from this sentence.
 
 ### Non-functional requirements
 
-- **Silent on failure, with two deliberate exceptions.** Hooks follow the house pattern
-  (`slim-session-start.sh:10-12`): a failure never delays or breaks a session start. The
-  exceptions are the `Stop` guard, whose purpose is to speak, and the snapshot-write failure
-  in `live-handoff.sh`, which must be loud because it silently disarms the whole feature.
+- **Silent on failure, with four deliberate exceptions** — the `Stop` guard, a failed
+  snapshot write, a failed archive or quarantine append, and a failed liveness-log write.
+  Each is a state in which staying silent would make the feature indistinguishable from being
+  switched off, which is the failure this card exists to prevent. Every other failure is
+  silent. Hooks follow the house pattern
+  (`slim-session-start.sh:10-12`): a failure never delays or breaks a session start.
 - **No secrets.** Archive files are gitignored (D12), confirmed per repo with
   `git check-ignore`, and scanned before append.
 - **Idempotent.** Running any hook twice on unchanged state produces no second archive entry.
@@ -839,65 +869,73 @@ labelling it as one would repeat the fault it was written to correct.
 
 ## Tasks
 
-Ordered so every step is independently useful and nothing depends on a later step. Tasks 1-4
-are the safety floor; 5-8 remove the loss; 9-11 are enforcement; 12-15 are reach.
+Ordered so every step is independently useful and nothing depends on a later step. The ignore
+rules come **first**, before anything writes a file they are meant to cover — an earlier
+ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
+that ignores them, in two repos measured as not covering them today.
 
-- [ ] 0. Extract `gen_tag`, `sanitize_line` **and the three module-level values they read**
+- [ ] 1. Ignore rules, everywhere, before any new file exists. In all six repos holding a
+      notepad, confirm with `git check-ignore` — never assume — that
+      `session-state.archive*`, `session-state.pretrim.*`, `session-state.keepguard-strikes.*`,
+      `session-state.keepguard.log` and `session-state.quarantine.md` are all ignored.
+      Measured 2026-09-08: `vibe-scape` and `mtg-wizard` list `.claude/` files one by one and
+      cover **none** of these. Includes committing the already-applied rule for the root
+      `~/.claude/session-state.md`, which is effective on disk but has no commit and would be
+      lost by a clean checkout.
+- [ ] 2. Extract `gen_tag`, `sanitize_line` and the three module-level values they read
       (`MARKER_PATTERN`, `TAG_BYTES`, `URANDOM_SRC`) from `slim-session-start.sh` into
-      `hooks/handoff/lib/handoff-archive.sh`, with tests, and leave both call sites behaving
-      identically — before anything new consumes them. Moving a working function out of a hook
-      that currently passes its tests is the riskiest edit in this list, so it goes first and
-      alone.
-- [ ] 1. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
+      `hooks/handoff/lib/handoff-archive.sh`, with tests, leaving both call sites behaving
+      identically. Moving a working function out of a hook that passes its tests is the
+      riskiest edit here, so it goes early and alone.
+- [ ] 3. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
       full fence tracking (`awk` with an explicit fence-state variable), archive append,
       rotation, secret flagging, quarantine. Line membership uses `grep -F -x -q`, never a
       regex. Pure library, no hook wiring. Tests first, fence cases first among those.
-- [ ] 2. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
+- [ ] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
-- [ ] 3. `.gitignore` coverage confirmed in all six repos holding a notepad — measured with
-      `git check-ignore`, never assumed. Covers `session-state.archive*`, `.pretrim.*`,
-      `.keepguard-strikes.*`, `.keepguard.log` and **`session-state.quarantine.md`** — the one
-      file designed to hold secrets, and the one left off this list until round 3.
-      `mtg-wizard/.gitignore` and `vibe-scape/.gitignore` list `.claude/` files one by one, so
-      none of these is covered there today. This task runs **before** anything that creates
-      the files, not seventeen tasks after it.
-- [ ] 4. Stale-snapshot reaper in `slim-session-start.sh`: append to the archive, then delete.
-- [ ] 5. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
+- [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above** the six early
+      exits at `:59-79`, and deleting a snapshot only after confirming the archive append
+      succeeded.
+- [ ] 6. Raise the write caps to 150/120, 170/140, 190/160 in **both** `live-handoff.sh:40-49`
       and `pre-compact-handoff.sh:85`.
-- [ ] 6. Raise `SLIM_HANDOFF_MAX_BYTES` to 24576 and replace the body-drop
+- [ ] 7. Raise `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) and replace the body-drop
       (`slim-session-start.sh:84-88`) with truncate-and-say.
-- [ ] 7. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
+- [ ] 8. Rewrite the trim directive in both hooks: cutting means filing into the archive, and
       the protected headings are re-injected verbatim.
-- [ ] 8. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
+- [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
-- [ ] 9. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
-      cap with reset on both exits, mechanical archive append, liveness heartbeat. Block
-      messages carry headings and counts only — never notepad body lines.
-- [ ] 10. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
+- [ ] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
+      cap with reset on both exits, mechanical archive append, liveness heartbeat with the full
+      set of decision tokens. Every notepad-derived string it emits is sanitized and enveloped.
+- [ ] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
-- [ ] 11. Register the guard in `settings.json` under `Stop`.
-- [ ] 12. Guard-liveness reporting in `slim-session-start.sh`.
-- [ ] 13. `pre-compact.sh` injects `session-state.md` first (D7).
-- [ ] 14. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting, `_doc_source_type`
-      widened off the retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc`
-      becomes a usable health signal.
-- [ ] 15. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
+- [ ] 12. Register the guard in `settings.json` under `Stop`.
+- [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, by mtime comparison, also above
+      the early exits.
+- [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
+- [ ] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
+      `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
+      retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc` becomes a usable
+      health signal.
+- [ ] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
-- [ ] 16. ADR under `docs/decisions/` for the two structural decisions this design takes:
-      D11 (an append-only store that rotates and is never deleted) and D12 (that store being
-      permanent, gitignored and machine-local). `rules/gates.md` requires an ADR for structural
-      decisions and the previous revisions did not schedule one.
-- [ ] 17. Commit the `.gitignore` fix for the exposed root running log. Applied on disk and
-      effective since 2026-09-08, but held out of the docs-only commits to `main`, so it has
-      no commit of its own yet and would be lost by a clean checkout.
-- [ ] 18. Reap the quarantine path: `session-state.quarantine.md` needs its own gitignore
-      coverage, its own exclusion from indexing, and a stated purge procedure — the retention
-      trade-off is D16 and must be answered before this is built.
+- [ ] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
+      store that rotates and is never deleted) and D12 (that store being permanent, gitignored
+      and machine-local). `rules/gates.md` requires an ADR for structural decisions.
+- [ ] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
+      what `session-state.quarantine.md` is, how to read it, and how to delete it safely. D16
+      is answered — quarantine file, not redaction, not archive-as-normal — so this task
+      documents the decision rather than waiting on it.
 
-Split into `handoff-trim-safety.spec.md` at 719 lines, exercising the MAY in
-`rules/gates.md` (one-canonical-file discipline). The card keeps frontmatter, tasks and
-verification — what a restore needs; the companion keeps evidence, decisions and the spec —
-what an implementer needs. There is no third progress document, and there will not be one.
+Split into `handoff-trim-safety.spec.md`, exercising the MAY in `rules/gates.md`
+(one-canonical-file discipline). The card keeps frontmatter, tasks and verification — what a
+restore needs; the companion keeps evidence, decisions and the spec — what an implementer
+needs. There is no third progress document, and there will not be one.
+
+⚠️ `hooks/feature-sync-guard.sh` compares task identity only up to the first em dash, so it
+cannot see a divergence in the text after it. That is measured, not assumed: a D16 divergence
+between the two halves survived it with exit 0. Sync the halves by copying the whole section,
+never by editing one side.
 
 The task list above is duplicated from `handoff-trim-safety.md` because
 `hooks/feature-sync-guard.sh` requires both halves of a split pair to list the same
