@@ -26,7 +26,8 @@ held. Two round-2 findings were defects the design would have shipped: the repla
 memsearch globs matched **zero** files, and the evidence table carried a byte-per-line range
 that re-measurement falsified. **D16 is answered** (2026-09-08): a secret-looking cut block goes to
 `session-state.quarantine.md`, never the archive, never indexed, deletable by hand. **D17 is
-open** — the read cap overrides the user's own D6 number and must be confirmed. (superseded: D16 open, what happens to a
+answered**: the read cap is 24,576, confirmed by the user against the arithmetic and the
+context cost, superseding the ~12,000 in D6. (superseded: D16 open, what happens to a
 block that looks like it contains a secret). The gate has not opened.
 
 ## Tasks

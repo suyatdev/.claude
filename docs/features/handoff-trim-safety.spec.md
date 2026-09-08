@@ -128,6 +128,7 @@ be confirmed — `tmutil latestbackup` requires Full Disk Access, which this she
 | D15 | Check timing | `Stop` hook — runs once per turn after all edits settle, and holds the turn open until a vanished protected block is restored. Rejected: `PostToolUse` per-edit (false alarms on intermediate states of a multi-edit rewrite) and next-turn `UserPromptSubmit` (never runs if the session is cleared first, which is the case that matters) |
 
 | D16 | A cut block that looks like it holds a secret | **Separate quarantine file** — `session-state.quarantine.md`. Never indexed, never in the main archive, and deletable by hand, so the never-delete rule holds for ordinary notes while the one risky category has an exit. Rejected: redaction, because a false positive destroys text permanently and unrecoverably, which is the failure this whole card exists to stop; and archive-as-normal, because it puts a secret in a store the design calls permanent and feeds it to the search index. Asked of the user 2026-09-08 after the compliance judge found the trade-off had been settled inside the spec rather than routed out, which `rules/core-conduct.md` forbids |
+| D17 | Read cap, superseding the ~12,000 in D6 | **24,576 bytes.** Worst measured case is 190 lines at 87.2 b/line = 16,568, which 12,000 would truncate; 24,576 leaves 48% headroom. Cost accepted knowingly: up to 3x context injection at session start for an overrun notepad, unchanged for a healthy one. Rejected: 16,384, which sits just below the number it must clear |
 
 Triage (`triaging-new-instructions`, 2026-09-08): every item classifies as **hook** (tier 1,
 script-decidable from observable facts). No new `core-conduct.md` rule, no new `gates.md`
@@ -252,12 +253,12 @@ So the load-bearing safety property is not the cap. It is that **the reader neve
 past the cap it prints what fits and names what it withheld. The cap is a headroom target
 only. 24,576 gives 1.48x over the worst measured density at the largest write cap.
 
-**⚠️ This number overrides a user decision and is therefore NOT settled — D17.** D6 records
-the user choosing "~12,000 bytes" for the read cap. The design ships **24,576**, slightly more
-than double, on arithmetic the user never saw. The arithmetic is sound and set out below, but
-core-conduct reserves a trade-off like this for the human, and earlier revisions accepted the
-cost in the spec's own voice instead of asking. Raised as D17; the gate must not open while it
-is unanswered.
+**D17 — the read cap, confirmed by the user 2026-09-08.** D6 recorded "~12,000 bytes". The
+design ships **24,576**, slightly more than double, and earlier revisions made that change in
+the spec's own voice rather than asking — the trade-off `rules/core-conduct.md` reserves for
+the human. Raised as D17 and put to the user with the arithmetic and the context cost both
+stated; the user chose 24,576 over keeping 12,000 and over a 16,384 middle option. D6 is
+superseded by D17 on this one number only.
 
 **The cost of that headroom, named rather than left implicit.** The read cap is what a session
 start injects into context. Raising it from 8,192 to 24,576 is a **3x** increase in the worst
