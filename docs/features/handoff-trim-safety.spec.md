@@ -127,6 +127,8 @@ be confirmed — `tmutil latestbackup` requires Full Disk Access, which this she
 | D14 | Rollout | **Everything on, everywhere, immediately** — including the protected-block check enforcing from day one. User chose this over a warn-only first week, having been shown that risk |
 | D15 | Check timing | `Stop` hook — runs once per turn after all edits settle, and holds the turn open until a vanished protected block is restored. Rejected: `PostToolUse` per-edit (false alarms on intermediate states of a multi-edit rewrite) and next-turn `UserPromptSubmit` (never runs if the session is cleared first, which is the case that matters) |
 
+| D16 | A cut block that looks like it holds a secret | **Separate quarantine file** — `session-state.quarantine.md`. Never indexed, never in the main archive, and deletable by hand, so the never-delete rule holds for ordinary notes while the one risky category has an exit. Rejected: redaction, because a false positive destroys text permanently and unrecoverably, which is the failure this whole card exists to stop; and archive-as-normal, because it puts a secret in a store the design calls permanent and feeds it to the search index. Asked of the user 2026-09-08 after the compliance judge found the trade-off had been settled inside the spec rather than routed out, which `rules/core-conduct.md` forbids |
+
 Triage (`triaging-new-instructions`, 2026-09-08): every item classifies as **hook** (tier 1,
 script-decidable from observable facts). No new `core-conduct.md` rule, no new `gates.md`
 stub. One documentation edit to `managing-session-memory` to teach the marker convention.
@@ -410,7 +412,7 @@ report. And an archive that has ever contained a flagged block is force-reindexe
 `replace_source` so previously embedded chunks are actually deleted rather than merely
 un-refreshed.
 
-**The retention trade-off itself is a user decision, not a spec decision** — see D16.
+**The retention trade-off is D16**, answered by the user 2026-09-08: quarantine file, not redaction and not archive-as-normal.
 
 ### Block-message sanitization (finding C8, reopened in round 2)
 
