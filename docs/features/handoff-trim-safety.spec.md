@@ -20,7 +20,7 @@ Two independent limits, set by different hooks that do not know about each other
 | Limit | Location | Value | Behaviour past it |
 |---|---|---|---|
 | Write | `hooks/handoff/live-handoff.sh:47` | 80 lines (no task/bug marker file) | Directive flips from append to `Rewrite… Be ruthless`, target 60 (`:90`, `:96`) |
-| Read | `hooks/handoff/slim-session-start.sh:18` | 8192 bytes | Prints header, **omits the entire body** (`:84-88`) |
+| Read | `hooks/handoff/slim-session-start.sh`, the `MAX_BYTES` default | 8192 bytes | Prints header, **omits the entire body** — the oversize branch printing the `handoff omitted` pointer |
 
 Write ceilings vary by marker file (`live-handoff.sh:39-49`): none → 80/60,
 `current-task.md` → 100/80, `current-bug.md` → 120/100.
@@ -66,7 +66,7 @@ Population survey, 12 files across 6 repos. Two already in failure:
 - **`pre-compact.sh` re-injects the wrong files.** It sends `context.md`, `current-task.md`,
   `current-bug.md` and **not** `session-state.md` — the only one kept current. In vibe-scape
   `context.md` is from 2026-07-25 while the notepad is from 2026-09-08.
-- **`slim-session-start.sh:85-86` comment contradicts its code.** It states the cap
+- **The comment above the body-drop `printf` in `slim-session-start.sh` contradicts its code.** It states the cap
   `must not degrade backwards by withholding the handoff exactly when work overran it`,
   which is precisely what dropping the body does.
 - **vibe-scape has no `docs/features/`** (only `decisions`, `design`, `plans`, `specs`), so
@@ -197,7 +197,7 @@ No new runtime dependencies. No network access in any hook.
 |---|---|
 | `hooks/handoff/live-handoff.sh` | Raise caps (`:40-49`); snapshot on **every** turn, not only over the cap; suppress the trim directive if the snapshot cannot be written; rewrite the directive (`:86-99`); re-inject protected headings verbatim. |
 | `hooks/handoff/pre-compact-handoff.sh` | **Added after the observability read.** Its own directive (`:78`, `:85`) says `REWRITE it completely` with targets `60-80 / 80-100 / 100-120` — an independent trim path with no snapshot and no `[KEEP]` enforcement. Raise its targets to match, and route it through the same snapshot. This is the pre-clear handoff path the original bug report came from. |
-| `hooks/handoff/slim-session-start.sh` | Raise `MAX_BYTES` (`:18`); replace body-drop (`:84-88`) with truncate-and-say; report guard liveness; reap stale snapshots. |
+| `hooks/handoff/slim-session-start.sh` | Raise the `MAX_BYTES` default; replace the oversize body-drop branch with truncate-and-say; report guard liveness; reap stale snapshots. |
 | `hooks/handoff/pre-compact.sh` | Inject `.claude/session-state.md` first (D7). |
 | `.gitignore` | Confirm archive coverage per repo with `git check-ignore`, never assumed. |
 | `memsearch/config.json` | New `archive_roots` + `archive_pattern` keys. |
@@ -319,7 +319,7 @@ gap rather than a detail.
 
 | Job | Tool | Why |
 |---|---|---|
-| Heading and fence detection | `grep -E` on a line at a time, or `[[ =~ ]]` **with the pattern held in a variable, never inline** | The house rule is *regex in a variable*, not *no `[[ ]]`*. `slim-session-start.sh:36` — the very function this card extracts — matches with `[[ "$line" =~ $MARKER_PATTERN ]]`, so forbidding `[[ ]]` would contradict the code being moved. ⚠️ The rule is stated at `slim-session-start.sh:14`, which attributes it to `git-guard.sh:22`; that anchor is **wrong** — `git-guard.sh` contains no `[[ ]]` at all and line 22 is about the shell-segment classifier. An earlier revision of this spec copied that citation without opening it. Fix the comment in the hook when the extraction task touches it. |
+| Heading and fence detection | `grep -E` on a line at a time, or `[[ =~ ]]` **with the pattern held in a variable, never inline** | The house rule is *regex in a variable*, not *no `[[ ]]`*. `sanitize_line` — the very function this card extracts — matches with `[[ "$line" =~ $MARKER_PATTERN ]]`, so forbidding `[[ ]]` would contradict the code being moved. That function, and the comment stating the rule, now live in `hooks/handoff/lib/handoff-archive.sh`. ⚠️ The rule used to attribute itself to `git-guard.sh:22`; that anchor was **wrong** — `git-guard.sh` contains no `[[ ]]` at all and its line 22 is about the shell-segment classifier — and an earlier revision of this spec copied the citation without opening it. **Already closed by the extraction commit:** the false anchor was dropped rather than repointed, and replaced with a mechanism verified by running it — a bare `(` or `;` inline in `[[ =~ ]]` is a bash parse error, exit 2, measured for both characters. The identical false citation survives in four other hooks and is recorded as out of scope. |
 | Line membership | `grep -F -x -q -f <protected-lines-file> <current-file>` inverted per line | Fixed-string, whole-line matching. No line of a notepad can be read as a pattern, which is the injection risk a regex match would carry. |
 | Region extraction | `awk` with an explicit fence-state variable | Needs one pass with state; `grep` cannot carry it. |
 
@@ -442,7 +442,7 @@ un-refreshed.
 
 Restricting the block reason to headings and counts is not sufficient on its own. A heading is
 still model-authored text out of the notepad, and the guard feeds it into the `Stop`
-instruction channel — the same class of bytes that `slim-session-start.sh:4-12,26-43` wraps in
+instruction channel — the same class of bytes that the session-start hook and its extracted `sanitize_line` wrap in
 a tamper-evident DATA envelope precisely because a body line must not be able to forge a
 marker.
 
@@ -679,7 +679,7 @@ Scenario: Outside a repo, each hook keeps its existing behaviour
   When live-handoff.sh runs
   Then it falls back to the working directory, unchanged from live-handoff.sh:24
   When slim-session-start.sh runs
-  Then it exits 0 and emits nothing, unchanged from slim-session-start.sh:58
+  Then it exits 0 and emits nothing, unchanged from the repo_root resolution in slim-session-start.sh
   When handoff-keep-guard.sh runs
   Then it exits 0 without blocking
 
@@ -951,7 +951,7 @@ that ignores them, in two repos measured as not covering them today.
       exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
 - [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
-      body-drop at `slim-session-start.sh:84-88` replaced by truncate-and-say, **and** the
+      oversize body-drop branch in `slim-session-start.sh` replaced by truncate-and-say, **and** the
       write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and
       `pre-compact-handoff.sh:85`. Deliberately one task, not two. Raising the write caps
       first opens a live regression window in every repo: `vibe-scape` is 75 lines / 5,165
