@@ -168,11 +168,18 @@ Out of scope: giving vibe-scape a `docs/features/` tree (D4, declined — known 
 migrating existing oversize notepads by hand; changing what the model chooses to write.
 
 **Explicitly not covered, stated because it is easy to assume otherwise:** the root-level
-`~/.claude/session-state.md` (95,456 bytes, hand-kept) is a different file, read by no hook,
-and this card does not protect it. It was untracked *and* un-gitignored in a public repo when
-the compliance judge found it. The ignore rule is **applied in the working tree and effective
-now, but has no commit** — `main` accepts only docs — so a clean checkout still loses it. Not
-"fixed": pending, and scheduled as its own task.
+`~/.claude/session-state.md` is a different file, read by no hook, and this card does not
+protect it. It is hand-kept and grows continuously, so its size is deliberately not quoted here
+— an earlier revision named a byte count that was already ~4 KB stale when re-measured; run
+`wc -c` if you need it. It was untracked *and* un-gitignored in a public repo when the
+compliance judge found it.
+⚠️ **Corrected 2026-09-09, and it was wrong in both directions.** An earlier revision of this
+paragraph said the ignore rule "has no commit"; elsewhere the card said it was "already
+committed". Measured: the rule **is** committed on this branch (`.gitignore`, the
+`/session-state.md` entry) and is **absent from `main`**, while the primary checkout is
+protected today only by an *uncommitted* edit to its own `.gitignore`. So the substance of the
+original warning holds even though its wording did not — a clean checkout of `main` still loses
+the file, until this branch merges. That merge is the fix; no separate task covers it.
 
 ### Pinned toolchain
 
@@ -914,7 +921,10 @@ that ignores them, in two repos measured as not covering them today.
       original wording did not name it. `~/.claude` needs **no** new sidecar rule: the hooks
       write to `$REPO_ROOT/.claude/` (`hooks/handoff/live-handoff.sh:25`) and this repo already
       ignores `/.claude/` wholesale (`.gitignore:87`); the root-level rule for the hand-kept
-      `session-state.md` is a separate file and is already committed at `1476a46`. Landed in
+      `session-state.md` is a separate file, committed at `1476a46` **on this branch only** —
+      it is absent from `main`, and the primary checkout is protected today merely by an
+      uncommitted `.gitignore` edit, so a clean checkout of `main` still loses that file
+      until this branch merges. Measured 2026-09-09. Landed in
       the other three as branch `chore/ignore-notepad-sidecars`, each cut from its own
       worktree off `origin/main` so that no in-flight branch was disturbed — `Snatch-Bracket`
       `4c39519`, `vibe-scape` `2245b8e`, `mtg-wizard` `99286e0`, one `.gitignore` and eleven

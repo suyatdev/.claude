@@ -72,7 +72,10 @@ that ignores them, in two repos measured as not covering them today.
       original wording did not name it. `~/.claude` needs **no** new sidecar rule: the hooks
       write to `$REPO_ROOT/.claude/` (`hooks/handoff/live-handoff.sh:25`) and this repo already
       ignores `/.claude/` wholesale (`.gitignore:87`); the root-level rule for the hand-kept
-      `session-state.md` is a separate file and is already committed at `1476a46`. Landed in
+      `session-state.md` is a separate file, committed at `1476a46` **on this branch only** —
+      it is absent from `main`, and the primary checkout is protected today merely by an
+      uncommitted `.gitignore` edit, so a clean checkout of `main` still loses that file
+      until this branch merges. Measured 2026-09-09. Landed in
       the other three as branch `chore/ignore-notepad-sidecars`, each cut from its own
       worktree off `origin/main` so that no in-flight branch was disturbed — `Snatch-Bracket`
       `4c39519`, `vibe-scape` `2245b8e`, `mtg-wizard` `99286e0`, one `.gitignore` and eleven
