@@ -203,7 +203,7 @@ case "$MUTANT_OUT" in
 esac
 
 # ========================================================================================
-# The rest of this file tests the task-3 additions to the library: snapshot, [KEEP]
+# The rest of this file tests the library-building step's additions: snapshot, [KEEP]
 # region extraction with fence tracking, protected-line membership, archive append,
 # rotation, secret flagging and quarantine. Fence cases come first, per the card's
 # TDD instruction, since fence tracking is what every other extraction test depends on.

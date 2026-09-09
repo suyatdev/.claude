@@ -52,10 +52,11 @@ gen_tag() {
 }
 
 # ==========================================================================================
-# Everything below is task 3 (docs/features/handoff-trim-safety.md, "named, never numbered"
-# per that card's own rule — this is the step that grows this file from the extraction above
-# into the full library the card calls for): snapshot, [KEEP] region extraction with fence
-# tracking, protected-line membership, archive append, rotation, secret flagging, quarantine.
+# Everything below was added by the step of docs/features/handoff-trim-safety.md that grows
+# this file from the extraction above into the full library the card calls for: snapshot,
+# [KEEP] region extraction with fence tracking, protected-line membership, archive append,
+# rotation, secret flagging, quarantine. Named by what it does and never by number — that
+# card renumbers, states the rule outright, and enforces it with a search over both halves.
 #
 # Pure library, same contract as above: no hook wiring lives here, sourcing this file still
 # runs nothing and prints nothing. The functions below are called by future consumers
