@@ -110,7 +110,7 @@ that ignores them, in two repos measured as not covering them today.
       exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
 - [ ] 6. Raise **both caps in one commit**: `SLIM_HANDOFF_MAX_BYTES` to 24576 (D17) with the
-      body-drop at `slim-session-start.sh:84-88` replaced by truncate-and-say, **and** the
+      oversize body-drop branch in `slim-session-start.sh` replaced by truncate-and-say, **and** the
       write caps to 150/120, 170/140, 190/160 in `live-handoff.sh:40-49` and
       `pre-compact-handoff.sh:85`. Deliberately one task, not two. Raising the write caps
       first opens a live regression window in every repo: `vibe-scape` is 75 lines / 5,165
