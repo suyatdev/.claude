@@ -893,14 +893,28 @@ rules come **first**, before anything writes a file they are meant to cover — 
 ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
 that ignores them, in two repos measured as not covering them today.
 
-- [ ] 1. Ignore rules, everywhere, before any new file exists. In all six repos holding a
+- [x] 1. Ignore rules, everywhere, before any new file exists. In every repo holding a
       notepad, confirm with `git check-ignore` — never assume — that
       `session-state.archive*`, `session-state.pretrim.*`, `session-state.keepguard-strikes.*`,
       `session-state.keepguard.log` and `session-state.quarantine.md` are all ignored.
-      Measured 2026-09-08: `vibe-scape` and `mtg-wizard` list `.claude/` files one by one and
-      cover **none** of these. Includes committing the already-applied rule for the root
-      `~/.claude/session-state.md`, which is effective on disk but has no commit and would be
-      lost by a clean checkout.
+      **Re-measured 2026-09-08** by walking every notepad on disk and resolving each to its
+      repo, which corrected two errors in the original wording. The notepads live in **four**
+      git repos, not six — `~/.claude`, `Snatch-Bracket`, `vibe-scape`, `mtg-wizard` — plus
+      `~/Other Docs/AI/AI_Projx/.claude`, which is not a repository at all, and worktrees of
+      the first two. **Three** repos covered none of the five names, not two: `Snatch-Bracket`
+      lists `.claude/` paths one by one exactly as `vibe-scape` and `mtg-wizard` do, and the
+      original wording did not name it. `~/.claude` needs **no** new sidecar rule: the hooks
+      write to `$REPO_ROOT/.claude/` (`hooks/handoff/live-handoff.sh:25`) and this repo already
+      ignores `/.claude/` wholesale (`.gitignore:87`); the root-level rule for the hand-kept
+      `session-state.md` is a separate file and is already committed at `1476a46`. Landed in
+      the other three as branch `chore/ignore-notepad-sidecars`, each cut from its own
+      worktree off `origin/main` so that no in-flight branch was disturbed — `Snatch-Bracket`
+      `4c39519`, `vibe-scape` `2245b8e`, `mtg-wizard` `99286e0`, one `.gitignore` and eleven
+      inserted lines each, verified by reading each commit back. Left unpushed by design.
+      Verified by `check-ignore` on all five names plus a rotated archive, and falsified by
+      deleting one rule and confirming the check reports not-ignored. **Known gap:** the
+      `Snatch-Bracket` worktree on `chore/close-mutation-seed-chain` carries its own copy of
+      `.gitignore` and stays uncovered until that branch takes main.
 - [ ] 2. Extract `gen_tag`, `sanitize_line` and the three module-level values they read
       (`MARKER_PATTERN`, `TAG_BYTES`, `URANDOM_SRC`) from `slim-session-start.sh` into
       `hooks/handoff/lib/handoff-archive.sh`, with tests, leaving both call sites behaving
