@@ -1,7 +1,7 @@
 ---
-phase: planning
+phase: implementation
 model_tier: high
-branch: TBD
+branch: refactor/pane-dispatch-test-suite-split
 ---
 
 # `panes/dispatch-pane-agent.test.sh` is 957 lines, past the 800-line hard maximum
@@ -14,10 +14,15 @@ observability judge on `docs/features/pane-agent-scratch-isolation.md`
 PR #98 merged. **Revised 2026-09-08 after compliance judge round 1 returned FAIL with six
 violations** — all six accepted, none waived. What changed is recorded in §Revision history.
 
-> **Gate status: CLOSED.** No branch, no source edit. The planning → implementation
-> transition opens only on the literal user phrase `gate confirmed` (`rules/gates.md`).
+> **Gate status: OPEN.** The user gave the literal phrase `gate confirmed` on 2026-09-09,
+> after reading the spec. Branch `refactor/pane-dispatch-test-suite-split` cut from `656a09e`,
+> which carries the three planning commits (`f0d8a53`, `6efcb0c`, `c0da316`) plus this one, so
+> the plan and its implementation travel in one PR.
 > Model-switch checkpoint 2 asked and answered 2026-09-07: **Sonnet high** for the
 > implementation, **Opus** for both judges.
+>
+> **Compliance ledger: round 1 FAIL (6), round 2 FAIL (3), round 3 PASS (0).** Nine findings
+> accepted, zero waived. Verdicts in `coding-memory/compliance-judge/`.
 
 ## What is wrong
 
@@ -431,8 +436,9 @@ Then it passes whether or not its own dispatch created a launcher
 
 ## Checklist
 
-- [ ] 1. Cut the branch, record it in this file's frontmatter, move `phase` to
-  `implementation`. (Gate transition — `gate confirmed` only.)
+- [x] 1. Cut the branch, record it in this file's frontmatter, move `phase` to
+  `implementation`. **Done 2026-09-09** — branch `refactor/pane-dispatch-test-suite-split`
+  from `656a09e`.
 - [ ] 2. Re-run both suites at the branch base and re-read the output. Record the counts here.
   Do not carry §Baseline forward on trust.
 - [ ] 3. Write `panes/label-set.py` — the escape-aware **source** extractor of Decision 3,
