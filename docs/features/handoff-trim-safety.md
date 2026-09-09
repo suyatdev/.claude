@@ -21,7 +21,9 @@ sat waiting to be judged.
 [`handoff-trim-safety.spec.md`](handoff-trim-safety.spec.md).** Read it before implementing;
 do not read it at session start.
 
-Status: planning — **both judges PASS**, spec is at the human review gate.
+Status: **implementation** — the gate opened 2026-09-08 on the literal phrase; the
+frontmatter `phase` is the authority and this line must agree with it. Both judges PASSED
+on the spec and must run again after implementation, before any PR.
 
 Compliance: FAILED seven times (9, 8, 7, 4, 1, 5, 1 violations across rounds 1 to 7), then
 **PASSED with zero violations in round 8**. Observability: failed `success_masking` in rounds
