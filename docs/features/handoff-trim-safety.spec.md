@@ -37,6 +37,11 @@ surviving true statement is narrower, and is the one the design actually rests o
 the write cap alone would have moved those repos from partial loss to total loss.
 
 Population survey, 12 files across 6 repos. Two already in failure:
+⚠️ **Superseded wording.** The ignore-rules step later walked every notepad on disk and
+resolved each to its owner: they live in **four** git repos, plus one directory that is not
+a repository at all, plus worktrees of two of the four. The survey below is the original
+measurement and is left as it was taken; where the two disagree, the later walk is correct,
+and the word to distrust here is *repos*, not the file count.
 
 - `~/Other Docs/mtg-wizard/.claude/session-state.md` — **235 lines / 13,455 bytes, mtime
   2026-09-08 10:42 (active)**. 3x over the write cap, so every turn has been issuing the
@@ -888,7 +893,10 @@ labelling it as one would repeat the fault it was written to correct.
 
 ## Tasks
 
-Ordered so every step is independently useful and nothing depends on a later step. The ignore
+Ordered so every step is independently useful and nothing depends on a later step. **The list
+skips 7 on purpose** — the read-cap step was folded into the write-cap step so both caps rise in
+one commit, and the numbers were deliberately not re-flowed, because re-flowing them is what made
+cross-references stale before. Steps are referred to by what they do, never by number. The ignore
 rules come **first**, before anything writes a file they are meant to cover — an earlier
 ordering created per-turn byte-identical copies of the notepad seventeen tasks before the rule
 that ignores them, in two repos measured as not covering them today.
