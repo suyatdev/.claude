@@ -915,11 +915,32 @@ that ignores them, in two repos measured as not covering them today.
       deleting one rule and confirming the check reports not-ignored. **Known gap:** the
       `Snatch-Bracket` worktree on `chore/close-mutation-seed-chain` carries its own copy of
       `.gitignore` and stays uncovered until that branch takes main.
-- [ ] 2. Extract `gen_tag`, `sanitize_line` and the three module-level values they read
+- [x] 2. Extract `gen_tag`, `sanitize_line` and the three module-level values they read
       (`MARKER_PATTERN`, `TAG_BYTES`, `URANDOM_SRC`) from `slim-session-start.sh` into
       `hooks/handoff/lib/handoff-archive.sh`, with tests, leaving both call sites behaving
       identically. Moving a working function out of a hook that passes its tests is the
-      riskiest edit here, so it goes early and alone.
+      riskiest edit here, so it goes early and alone. **Done 2026-09-09.** The five items
+      moved byte-verbatim, bodies and comments together; `slim-session-start.sh` now resolves
+      the library from `${BASH_SOURCE[0]}` rather than `$PWD` or `git rev-parse`, because the
+      existing suite sources the hook from a throwaway repo elsewhere on disk. Measured
+      before and after: the untouched `slim-session-start.test.sh` reads **29/29** on both
+      sides of the move, which is the whole evidence for *behaving identically*; the new
+      `hooks/handoff/lib/handoff-archive.test.sh` reads **28/28** and carries a falsifier that
+      strips `shopt -s nocasematch` from a **copy** of the library and confirms the uppercase
+      marker then goes unsanitized, so the case-insensitivity assertions are shown able to
+      fail rather than assumed to be. Three library states are now pinned, not two: missing
+      and unreadable both give exit 0 with nothing on stdout **or** stderr, while a third —
+      present, readable, and not parseable — gives exit 0 and empty stdout but is
+      **deliberately not silenced**, since a library that fails to load is a real defect and
+      swallowing it would rebuild the silent-death shape this card exists to prevent. The
+      false citation at `slim-session-start.sh:14` is fixed as the spec instructs: `git-guard.sh`
+      was opened and confirmed to contain **zero** `[[ ]]` constructs, so the anchor was dropped
+      rather than repointed, and the replacement states a mechanism verified by running it —
+      a bare `(` or `;` inline in `[[ =~ ]]` is a bash parse error, exit 2, measured for both
+      characters. **Known and out of scope:** the identical false citation survives at
+      `phase-guard.sh:22`, and `judge-guard.sh:24`, `feature-sync-guard.sh:49` and
+      `doc-guard.sh:31` each attribute the same rule to `git-guard.sh` with no line number;
+      none were touched.
 - [ ] 3. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
       full fence tracking (`awk` with an explicit fence-state variable), archive append,
       rotation, secret flagging, quarantine. Line membership uses `grep -F -x -q`, never a

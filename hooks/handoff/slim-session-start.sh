@@ -10,44 +10,27 @@
 # context.md, task-history.md, recent-prompts.md, or the retired CODING_MEMORY.md. Models on
 # memsearch-nudge.sh: silent on every failure, never delays or breaks a session
 # start. Design, contract and scenarios: docs/features/memory-system-split.md.
-#
-# Regexes live in variables, never inline in `[[ ]]` — the trap at git-guard.sh:22.
 
 set -u
 
 MAX_BYTES="${SLIM_HANDOFF_MAX_BYTES:-8192}"
 STALE_HOURS="${SLIM_HANDOFF_STALE_HOURS:-24}"
-TAG_BYTES=4
-URANDOM_SRC="${SLIM_HANDOFF_URANDOM:-/dev/urandom}"
 
-# written lowercase-canonical; nocasematch (not bracket classes) is what makes this
-# case-insensitive — see docs/features/memory-system-split.md on why the bracket-class
-# fix shipped twice and still missed "=== END HANDOFF ===".
-MARKER_PATTERN='^[[:space:]]*===[[:space:]]*(end[[:space:]]+)?handoff'
-
-# Sanitizes one body line: prefixes it with "| " if it could be mistaken for an
-# envelope marker, case-insensitively. Never drops a line — a false positive costs
-# two characters, not a lost line. Brackets nocasematch tightly around the match and
-# restores whatever the caller had set, since it is shell-global state.
-sanitize_line() {
-  local line="$1" was_on=0
-  case "$(shopt -p nocasematch)" in *"-s nocasematch"*) was_on=1 ;; esac
-  shopt -s nocasematch
-  if [[ "$line" =~ $MARKER_PATTERN ]]; then
-    printf '| %s\n' "$line"
-  else
-    printf '%s\n' "$line"
-  fi
-  [ "$was_on" -eq 0 ] && shopt -u nocasematch
-  return 0
-}
-
-# 8 hex chars from $TAG_BYTES bytes of $URANDOM_SRC. Empty input (unreadable source,
-# e.g. tests pointing URANDOM_SRC at /dev/null) yields an empty tag on purpose — the
-# caller must treat that as "emit nothing," never as "emit an untagged envelope."
-gen_tag() {
-  head -c "$TAG_BYTES" "$URANDOM_SRC" 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n'
-}
+# MARKER_PATTERN, TAG_BYTES, URANDOM_SRC, sanitize_line() and gen_tag() live in
+# lib/handoff-archive.sh, resolved relative to THIS file (${BASH_SOURCE[0]}'s
+# directory) — never $PWD and never `git rev-parse` — so the hook behaves the same
+# regardless of caller cwd; the test suite runs/sources this hook from a throwaway
+# repo elsewhere on disk. Per this hook's own silent-on-every-failure contract
+# (above), a missing or unreadable library must not print or delay a session start:
+# fail silent, exit 0, emit nothing, same as every early exit in main() below.
+HOOK_DIR="$(dirname -- "${BASH_SOURCE[0]}")"
+LIB="$HOOK_DIR/lib/handoff-archive.sh"
+if [ -r "$LIB" ]; then
+  # shellcheck disable=SC1090  # library lives beside this hook, not user input
+  . "$LIB" || exit 0
+else
+  exit 0
+fi
 
 main() {
   [ -n "${CLAUDE_PANE_AGENT:-}" ] && exit 0
