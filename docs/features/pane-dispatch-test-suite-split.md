@@ -101,8 +101,8 @@ sums close for exactly one assignment, so the assignment *is* the spec.
 | File | Concern | Section headers | Body | + skeleton |
 |---|---|---|---|---|
 | `dispatch-pane-agent.dispatch.test.sh` | happy path, launcher shape, `--role`/`--model`/validation, F1/F4 regressions | 38, 60, 72, 151, 167, 736 | 101 | 142 |
-| `dispatch-pane-agent.policy.test.sh` | no-terminal + adapter-failure cooldown, set-policy, read_policy (incl. the `:696-703` wrap case moved in), lane/session markers, live worker count, at/over-max overflow | 83, 90, 175, 202, 228, 259, 279, 288, 295 **+ `:696-703`** | 162 | 203 |
-| `dispatch-pane-agent.routing.test.sh` | surface-ref fixtures, round-robin, tab targeting, degrade paths, open_tab failure streaks, final-review carry-forwards | 316, 333, 364, 382, 398, 412, 435, 475, 533, 674 **− `:696-703`** | 412 | 453 |
+| `dispatch-pane-agent.policy.test.sh` | no-terminal + adapter-failure cooldown, set-policy, read_policy (incl. the `NEW-A (pair pin)` wrap case moved in), lane/session markers, live worker count, at/over-max overflow | 83, 90, 175, 202, 228, 259, 279, 288, 295 **+ `:697-703`** | 162 | 203 |
+| `dispatch-pane-agent.routing.test.sh` | surface-ref fixtures, round-robin, tab targeting, degrade paths, open_tab failure streaks, final-review carry-forwards | 316, 333, 364, 382, 398, 412, 435, 475, 533, 674 **− `:697-703`** | 412 | 453 |
 | `dispatch-pane-agent.cleanup.test.sh` | `cleanup_stale` / run-dir + work-child retention | 96, 866 | 97 | 138 |
 | `dispatch-pane-agent.scratch.test.sh` | work-child dir, `prompt.md` preamble | 768, 794, 820, 849 | 98 | 139 |
 | `dispatch-pane-agent.subcommands.test.sh` | `wait`, `handoff` | 105, 127 | 46 | 87 |
@@ -133,7 +133,8 @@ for k, secs in BUCKET.items():
 print("body", tot, "+ 37 preamble + 4 footer =", tot+41)
 assert tot + 41 == 957
 # The one sub-section move: the read_policy wrap case leaves routing for policy.
-WRAP = 703 - 696 + 1                      # 8 lines, :696-703
+# Content is :697-703 (7 lines); the move carries the blank separator at :696, so 8.
+WRAP = 703 - 697 + 1 + 1                  # 7 content + 1 separator blank
 print("after the wrap move -> policy", 154 + WRAP, " routing", 420 - WRAP)
 assert 154 + WRAP == 162 and 420 - WRAP == 412
 EOF
@@ -162,12 +163,18 @@ the cut at `:316` is unaffected. The chain justified keeping 228–315 together,
 crossed twice, not once: `call_read_policy` (`:207`) **and** `RP_DIR` (assigned `:206`,
 consumed at `:701-702`). Under the file's `set -u`, a `routing.test.sh` holding `:701-702`
 would abort with `RP_DIR: unbound variable`. Rather than relocate either symbol, **the
-`read_policy` wrap case at `:696-703` moves to `policy.test.sh`**, where its five sibling
-`read_policy` cases already live. That is where it belongs on the concern axis anyway. After
-the move both symbols are policy-local, `call_read_policy` does **not** enter the shared
-library, and no variable crosses a file boundary.
+`read_policy` wrap case moves to `policy.test.sh`**, where its five sibling `read_policy`
+cases already live. That is where it belongs on the concern axis anyway. After the move both
+symbols are policy-local, `call_read_policy` does **not** enter the shared library, and no
+variable crosses a file boundary.
 
-| | Section body | `:696-703` delta | Final body | + skeleton |
+**The block is `:697-703`** — the comment beginning `# NEW-A (pair pin)` through the
+`read_policy: 64-bit-wrapping N -> empty` assertion. Seven content lines; the move takes
+**8**, carrying the blank separator at `:696` with it, which is why the delta below is 8 and
+not 7. (An earlier revision cited the range as `:696-703`, whose first line is blank — the
+arithmetic was right, the citation was not.)
+
+| | Section body | `:697-703` delta | Final body | + skeleton |
 |---|---|---|---|---|
 | `policy.test.sh` | 154 | **+8** | **162** | **203** |
 | `routing.test.sh` | 420 | **−8** | **412** | **453** |
@@ -190,7 +197,7 @@ compliance either way.
 Measured: **`ok()` and `bad()` are the only helpers called from more than one bucket.** Every
 other helper — `call_read_policy`, `mk_run`, `mk_run_ref`, `tf_dispatch`, `tr_dispatch`,
 `mk_stale_run`, `call_count_workers`, `call_cleanup_stale`, `ts_hours_ago`, `ts_days_ago` — is
-used inside exactly one bucket once the `:696-703` move of Decision 1 lands. **No variable
+used inside exactly one bucket once the `:697-703` move of Decision 1 lands. **No variable
 crosses a file boundary either** — judge round 2 caught `RP_DIR` (`:206` → `:701-702`) doing
 so, which under `set -u` would have aborted `routing.test.sh` with `RP_DIR: unbound variable`;
 the move removes the crossing rather than papering it with a relocation.
@@ -434,6 +441,28 @@ Then it passes whether or not its own dispatch created a launcher
 
 ---
 
+## ⚠️ Every line number in this document dies at task 7
+
+All 30 `:NNN` citations above point into `panes/dispatch-pane-agent.test.sh` **as it stands at
+the branch base `656a09e`**. Task 7 deletes that file. From that moment every citation in this
+card is an anchor into something that no longer exists — it will not error, it will silently
+point at nothing, which is the failure mode that is expensive rather than loud.
+
+**Rules that follow, and they are not optional:**
+
+- **Before task 7**, these citations are live and were audited: 29 of 30 resolve to the line
+  they claim (verified 2026-09-09 by resolving each one); the exception was `:696`, corrected
+  above. Re-run that audit if you doubt one — do not trust this sentence over the file.
+- **After task 7**, cite by **content anchor**, never by line: the assertion's label text, or a
+  comment marker like `# NEW-A (pair pin)`. Labels are unique (139 distinct, measured) and
+  survive a move; line numbers do not.
+- **Do not "update" these citations to their new homes.** Rewriting 30 anchors in place is how
+  a document gets a confident set of numbers nobody re-derived — and it corrupts the sentences
+  that record what the file looked like *at the baseline*, which is the whole point of this
+  section. They are historical, and the heading above says so.
+- Anything written **after** task 7 — commit messages, the PR body, the observability judge
+  brief — takes content anchors from the start.
+
 ## Checklist
 
 - [x] 1. Cut the branch, record it in this file's frontmatter, move `phase` to
@@ -461,8 +490,9 @@ Then it passes whether or not its own dispatch created a launcher
   skeleton under a second caller before the big file depends on it.
 - [ ] 7. Run the Decision 1 derivation script; all three asserts must pass. Then split
   `dispatch-pane-agent.test.sh` into the six files by the published header mapping, each
-  sourcing the library with its own domain fixtures. **Move `:696-703` (the `read_policy` wrap
-  case) into `policy.test.sh`, not `routing.test.sh`** — that move is what keeps `RP_DIR` and
+  sourcing the library with its own domain fixtures. **Move the `read_policy` wrap case
+  (`:697-703`, the block headed `# NEW-A (pair pin)`) into `policy.test.sh`, not
+  `routing.test.sh`** — that move is what keeps `RP_DIR` and
   `call_read_policy` from crossing a file boundary. Delete the original. Then grep each new
   file for a variable it uses but never assigns; `set -u` makes any such crossing fatal, and
   `RP_DIR` was found only because someone looked for it.
@@ -523,7 +553,8 @@ confirmed fixed). All three accepted.**
 7. `writing-specs/api-contracts` — three measured holes. **`RP_DIR`** (`:206` to `:701-702`)
    crossed the cut, so the naive split cost two relocations, not one, and `routing.test.sh`
    would have died under `set -u` with `RP_DIR: unbound variable`. Resolved by **moving the
-   `read_policy` wrap case `:696-703` into policy**, where its five siblings already live —
+   `read_policy` wrap case (`:697-703`, headed `# NEW-A (pair pin)`) into policy**, where its
+   five siblings already live —
    after which neither `RP_DIR` nor `call_read_policy` crosses, and the library needs neither.
    The library's `return 1` on `MARKER_ROOT` was **fail-open** (judge measured: caller
    continues, variable unset, exit 0); it is now `|| exit 1`, which from a sourced file exits
