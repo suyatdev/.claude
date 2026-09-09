@@ -110,10 +110,34 @@ that ignores them, in two repos measured as not covering them today.
       `phase-guard.sh:22`, and `judge-guard.sh:24`, `feature-sync-guard.sh:49` and
       `doc-guard.sh:31` each attribute the same rule to `git-guard.sh` with no line number;
       none were touched.
-- [ ] 3. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
+- [x] 3. `hooks/handoff/lib/handoff-archive.sh` — snapshot, `[KEEP]` region extraction with
       full fence tracking (`awk` with an explicit fence-state variable), archive append,
       rotation, secret flagging, quarantine. Line membership uses `grep -F -x -q`, never a
       regex. Pure library, no hook wiring. Tests first, fence cases first among those.
+      **Done 2026-09-09** at `716a816`: nine functions and two constants, written test-first
+      with the fence cases first. Measured rather than reported — the new suite reads
+      **79/79** and the untouched sibling `slim-session-start.test.sh` still reads **29/29**,
+      which is the whole evidence that the existing consumer was not disturbed; both were
+      re-run independently against the committed bytes under `/bin/bash` 3.2.57. Four
+      falsifiers mutate a **copy** of the library and each is confirmed to flip its paired
+      assertion red: fence tracking removed, `grep -F` swapped for a regex, the rotation
+      threshold made to ignore the pending size, and the secret check made fail-open. Two
+      properties of `/usr/bin/awk` were measured against the real binary rather than assumed —
+      it **does** support `{n,m}` interval expressions, and it does **not** treat `--` as an
+      end-of-options marker, which surfaced as a live bug (every extraction returned empty)
+      before it was found. Verified end to end against the **real** `scan-secrets.sh` and not
+      a stub: a clean block lands in the archive, a block carrying a fake AWS key lands in the
+      quarantine file leaving only a heading-only stub in the archive, and the archive is
+      confirmed not to contain the credential.
+      ⚠️ **Two gaps the later steps must not build on.** `missing_protected_lines` returns
+      rc 0 when the *snapshot* is missing or unreadable, so "nothing was protected" is
+      indistinguishable from "nothing is missing" — the keep-guard step must test for the
+      snapshot itself before reading that rc, or the no-snapshot case silently becomes
+      `allow` where the spec requires `unprotected`. And `secret_labels` fails **open** where
+      `block_has_secret` fails **closed**: an unavailable scanner still quarantines the
+      block, which is the safe direction, but records an empty reason in the stub — the one
+      case where the reason matters most says nothing. The file is now **398 lines** against
+      the 400-line house guideline, so the next step to touch it should split rather than grow.
 - [ ] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
 - [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
