@@ -226,15 +226,45 @@ that ignores them, in two repos measured as not covering them today.
       `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
       retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc` becomes a usable
       health signal.
-- [ ] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
+- [x] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
+      **Done 2026-09-10.** The convention is written up under the skill's
+      *Protecting Notepad Sections* heading — anchored by heading, not line number, because
+      eleven anchors in this card went stale inside their own implementation phase. It states
+      the ATX-only heading form, the setext exclusion, the region boundary, set-membership
+      survival, and the both-directions fence rule, then names
+      `hooks/handoff/lib/handoff-archive.sh` as authoritative over the summary so the two can
+      never silently disagree.
+      The **first real use** was an audit, not an edit: all eight tagged headings in
+      `.claude/session-state.md` already conform, verified byte-for-byte rather than by eye —
+      ATX form, `[KEEP]` the last non-whitespace on the line, no fenced block anywhere in the
+      file to create a false region boundary. Only the H1 title and its three-line intro are
+      untagged, and they are pointer text with nothing to lose. No corrections were needed, so
+      none were invented.
+      One claim in the first draft of that section was **wrong and was corrected before the
+      commit**: it said the guard holds the turn open until the block is restored. It does not
+      — `keep_guard.max_strikes` is 2, after which it fails open with a loud warning. The
+      corrected text says so, because a doc that overstates a protection is worse than one that
+      omits it.
 - [x] 17. ADR under `docs/decisions/` for the two structural decisions: D11 (an append-only
       store that rotates and is never deleted) and D12 (that store being permanent, gitignored
       and machine-local). `rules/gates.md` requires an ADR for structural decisions.
-- [ ] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
+- [x] 18. Write the quarantine purge procedure into `skills/managing-session-memory/SKILL.md`:
       what `session-state.quarantine.md` is, how to read it, and how to delete it safely. D16
       is answered — quarantine file, not redaction, not archive-as-normal — so this task
       documents the decision rather than waiting on it.
+      **Done 2026-09-10.** Written up under the skill's *The Quarantine File* heading. It says
+      what the file is (a flagged block diverted out of the permanent archive, which gets only
+      a stub), that it is never indexed, how to read it (plain Markdown, but treat the contents
+      as live credential material), and how to delete it — and it explains *why* this is the
+      one archive-family file that is safe to delete by hand, which is the part a reader needs
+      to act without asking: routing a suspected secret through a permanent, indexed,
+      never-deleted store would make a false positive searchable forever.
+      **Two gaps were flagged rather than filled.** The design specifies no retention period
+      before deletion, and no migration path for blocks flagged before this file existed. Both
+      are named in the skill as deliberately unspecified. Writing a plausible rule for either
+      would have read as settled design in a document a later session trusts, which is exactly
+      the failure mode this card exists to prevent.
 
 Split into `handoff-trim-safety.spec.md`, exercising the MAY in `rules/gates.md`
 (one-canonical-file discipline). The card keeps frontmatter, tasks and verification — what a
