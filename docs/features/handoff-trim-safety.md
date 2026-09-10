@@ -211,11 +211,55 @@ that ignores them, in two repos measured as not covering them today.
       the protected headings are re-injected verbatim.
 - [ ] 9. Route `pre-compact-handoff.sh` through the same snapshot. This is the pre-clear path
       the original bug report came from.
-- [ ] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
+- [x] 10. `hooks/handoff/handoff-keep-guard.sh` as a `Stop` hook: protected-block check, strike
       cap with reset on both exits, mechanical archive append, liveness heartbeat with the full
       set of decision tokens. Every notepad-derived string it emits is sanitized and enveloped.
-- [ ] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
+      **Done 2026-09-10.** 371 lines of hook, 385 of suite, **47/47 passing**, and
+      `handoff-archive.test.sh` still **79/79** — the evidence the shared library was called
+      and not grown. The six liveness decision tokens (`allow`, `block`, `unprotected`,
+      `failopen`, `archive_failed`, and the log-write-failure escalation) are each asserted.
+      `MAX_STRIKES=2`, taken from spec Constants, not chosen.
+      The library gap the spec warns about is handled rather than inherited: because
+      `missing_protected_lines` returns rc 0 both when nothing is missing *and* when the
+      snapshot is absent or unreadable, the hook tests for the snapshot **first** and emits
+      `unprotected` — never `allow` — when there is nothing to compare against. For the secret
+      check it goes through `file_removed_block`, which uses the **fail-CLOSED**
+      `block_has_secret`: an unreadable scanner quarantines rather than publishing into a
+      permanent, indexed archive. `secret_labels`, which fails open, is deliberately unused.
+      ⚠️ **Process deviation, recorded rather than hidden.** The implementer wrote the hook and
+      its suite together instead of test-first, which `rules/core-conduct.md` forbids precisely
+      because a co-written test can be shaped to fit the code. It disclosed this rather than
+      claiming TDD. The suite was therefore **re-validated independently by two mutations the
+      implementer did not run**: forcing the survival check to always pass turns **16 of 47**
+      red, and raising `MAX_STRIKES` to 99 turns **6** red — distinct, narrow sets, not a
+      blanket failure. The suite discriminates. That is evidence the tests are real; it is not
+      a substitute for the ordering rule, and the next task should not repeat the shortcut.
+      Two genuine defects surfaced during that work and are fixed: `awk -v` silently mangles
+      `\[KEEP\]` through C-style escape processing, so the regex is inlined in the awk program
+      text as the library itself does; and the ATX `#` prefix must be stripped before
+      `sanitize_line`, whose `MARKER_PATTERN` is anchored and would otherwise never fire on a
+      heading.
+      One judgment call flagged: the heartbeat log rotates on a local timestamp scheme rather
+      than reusing `archive_rotate_if_needed`, which hardcodes a `.md` suffix and would misname
+      `session-state.keepguard.log`. No scenario pins the rotated name, so nothing is violated.
+- [x] 11. Confirm the `Stop` hook JSON contract against the installed binary, not the docs
       page, and pin the finding in a comment.
+      **Done 2026-09-10**, pinned at the top of `handoff-keep-guard.sh`, attributed to
+      `/Users/marksuyat/.local/bin/claude` **2.1.267** and dated, so a later reader can tell
+      when it was true. Four findings, each read out of the binary rather than the docs site:
+      `decision` accepts **only** `approve` or `block` (the validator string is
+      `Unknown hook decision type: … Valid types are: approve, block`); the four-value
+      `allow/deny/ask/defer` set belongs to `hookSpecificOutput.permissionDecision` and is
+      **PreToolUse-only**; `hookSpecificOutput` for Stop is
+      `{hookEventName, additionalContext}`, and the consumer routes `case "Stop"` through the
+      **same** generic handler as `PostToolUse`, so injected context genuinely reaches the
+      model; and the binary advises returning success while `stop_hook_active` is true.
+      ⚠️ **The load-bearing find:** the runtime **already caps consecutive Stop-hook blocks at
+      8** — `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP ?? 8` — and past that it warns and ends the turn
+      whatever the hook says. This is what makes `keep_guard.max_strikes: 2` a real control
+      rather than dead code, and it means any future proposal to raise that cap to 8 or beyond
+      would silently hand the decision to the runtime. Checked *before* building on it, not
+      after.
 - [ ] 12. Register the guard in `settings.json` under `Stop`.
 - [ ] 13. Guard-liveness reporting in `slim-session-start.sh`, above the early exits, reading
       **both** the mtime comparison **and the last line's decision token** — mtime alone cannot
