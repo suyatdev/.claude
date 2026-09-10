@@ -4119,6 +4119,48 @@ All six round-1 open questions are closed. Kept as a record so they are not reop
 
       Criterion 3 (reading every would-deny line) is not yet done for either layer — still
       open when this note was written.
+
+      **2026-09-04 re-measure.** Criterion 1 MET (elapsed 2026-09-02). Criterion 2 MET for
+      layer 1: `A` 340, `B2D` 927 (log at 1310 lines); the 36 `D` / 7 `B2` legacy lines still
+      count for neither arm. Criterion 3 found to be a real review job, not a wait: 1267
+      live-arm lines dedupe to 123 distinct `A` targets and 885 distinct `B2D` commands, and a
+      first pass shows most are refusals in *other* repos on this machine (`mtg-wizard`,
+      several `AI/AI_Projx` repos) that have no worktree yet — correct per spec, but it means
+      the flip's real cost is blocking ordinary writes there until each gets one.
+
+      **2026-09-07/08 — criterion 3 reviewed for layer 1, and it FAILS. Confirmed code defect,
+      blocks arming.** Pane-dispatched review (1152 distinct shapes) found 4 confirmed-wrong
+      refusals, all one mechanism: `physical_path()` (`hooks/worktree-guard.sh:459-479`) branches
+      only on `case "$2" in /*)`, so a leading `~` is read as *relative*, glued onto cwd, and the
+      walk lands on the wrong directory — taking the fail-closed "cannot be entered" path.
+      Reproduced live with one variable changed (`WORKTREE_GUARD_MODE=deny`, cwd `~/.claude`):
+
+      | same command, only the path form differs | rc |
+      |---|---|
+      | `cd ~/.worktrees/vibe-scape/plan4b-implementation && git merge …` | **2 blocked** |
+      | `cd /Users/marksuyat/.worktrees/vibe-scape/plan4b-implementation …` | 0 |
+      | `cd "$HOME/.worktrees/vibe-scape/plan4b-implementation" …` | 0 |
+
+      That directory **is** a real linked worktree. **The one path form that names the location
+      the guard requires is the form it refuses** — arming `deny` today blocks ordinary worktree
+      use for anyone who types `~`. (One further row from the same pass, a bare
+      `~/.claude/settings.json` arm-A refusal from 2026-08-27, does not reproduce today and is
+      unexplained — not actionable, not the tilde mechanism.)
+
+      Confirmed still unfixed as of 2026-09-10: `hooks/worktree-guard.sh:459-462` is unchanged,
+      no commit has touched the file since 2026-09-04. **Next step is a fix, not a flip** — teach
+      `physical_path()` to expand a leading `~` (and `~user`), red test first
+      (`superpowers:test-driven-development`), before criterion 3 can be re-run.
+
+      Layer 2 (`reference-transaction.log`, 3380 lines as of 2026-09-10) has never had this
+      per-row review done — only layer 1 has been read line-by-line. Criteria 1 and 2 likely hold
+      for layer 2 by now (armed 2026-09-01, so its own 7 days completed 2026-09-08) but this has
+      not been re-measured or written down.
+
+      ⚠️ The per-row verdicts from the 2026-09-07/08 review (`scratchpad/criterion3-report.md`,
+      `scratchpad/criterion3-verdicts.tsv`) were never committed and are gone — a session
+      scratchpad does not survive. Only this prose summary and the reproduced table above remain.
+      If a future re-review is dispatched, commit its artifacts before relying on them.
 - [x] 11. ADR under `docs/decisions/` — this changes a machine-wide invariant and pivots the
       standing worktree rule from advisory to enforced. Verify the next free number against the
       deciding ref, not stale local `main`.
