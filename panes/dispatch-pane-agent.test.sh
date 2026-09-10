@@ -22,6 +22,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # green. Adding a concern file means adding it here.
 SUITES="dispatch policy routing cleanup scratch subcommands"
 
+# Counted separately from `pass`/`fail`, which also carry the runner's OWN
+# diagnostics. Mixing them makes the total check answer about the wrong
+# population: a runner message inflates it into a false second failure, and
+# in the mirror direction one message can cancel a genuine shortfall and
+# silence the check in exactly the case it exists for.
+child_total=0
+
 # The mirror of that: a concern file added to panes/ but never added to SUITES
 # would silently never run. The named list stays authoritative; this only
 # reports the drift. Emits a label solely when it finds some.
@@ -104,6 +111,8 @@ for suite in $SUITES; do
       "0 labels -- it reached the end without running its assertion block"
   fi
 
+  child_total=$((child_total + s_ok + s_fail))
+
   if [ "$rc" -ne 0 ]; then
     bad "concern suite exited 0: $suite" "rc=$rc; stderr: $(tr '\n' ' ' < "$err")"
   fi
@@ -126,9 +135,8 @@ done
 # are added: that edit is the point at which a human confirms the change was
 # intended, which is the whole argument for the number being here at all.
 EXPECTED_LABELS=139
-emitted=$((pass + fail))
-if [ "$emitted" -ne "$EXPECTED_LABELS" ]; then
-  bad "total emitted labels is $EXPECTED_LABELS" "emitted $emitted"
+if [ "$child_total" -ne "$EXPECTED_LABELS" ]; then
+  bad "total labels emitted by the six suites is $EXPECTED_LABELS" "emitted $child_total"
 fi
 
 tl_finish

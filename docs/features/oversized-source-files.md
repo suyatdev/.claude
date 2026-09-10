@@ -45,7 +45,7 @@ done | sort -rn
 
 **Resolved since, one row.** `panes/dispatch-pane-agent.test.sh` was split on
 `refactor/pane-dispatch-test-suite-split` (2026-09-09) into six concern files plus a runner.
-Measured after: 445 / 195 / 140 / 131 / 130 / 79, plus a 134-line runner at the original name
+Measured after: 445 / 195 / 140 / 131 / 130 / 79, plus a 142-line runner at the original name
 and a 66-line shared `panes/test-lib.sh`. All under 800; one (`routing`, 445) is over the 400
 preferred and is a stated residual on that card. **The table above is left as measured at
 `1b213a1` and is not rewritten** — it records what was true then, and editing it would falsify

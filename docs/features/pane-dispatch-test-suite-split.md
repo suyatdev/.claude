@@ -308,6 +308,7 @@ method delivers:
 | A body edited to pass unconditionally | **no** |
 | An assertion that goes **vacuous** after the reorder | **no**, and it reports green |
 | One of the six files never invoked by the runner | **no** by `SOURCE-SET`; **yes** by `RUN-SET` |
+| A label **substituted** for another — one deleted, another duplicated in its place | **no**, and this is where the class now sits. 139 emitted, 138 distinct: the count check passes, `RUN-SET` vs `SOURCE-SET` passes because both sides changed together, and only a comparison against the **pre-split** `panes/.label-baseline` catches it. That file is **untracked and gitignored**, so from a clean clone nobody but the author can re-run that comparison. Measured by the round-3 judge. |
 | A **duplicate** label introduced by the split | **no** — set equality is blind in the opposite direction from the count it warns against: copy-and-delete yields 140 emissions of 139 distinct labels and passes green. Task 8 therefore asserts the emitted **count** is 139 as well as the set. |
 
 The third and fifth rows are not hypothetical: **vacuity is the exact hazard this card
@@ -641,7 +642,7 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   | 1 | a child ending normally before `tl_finish` writes the marker for a partial run | fixed |
   | 2 | the runner discards the child summary line, the one available sentinel | fixed (it is now required) |
   | 3 | no executable artifact pins 139 | **initially declined, then fixed in round 2** — see below |
-  | 4 | the marker test blob now binds only the runner | documented; deferred to the pairing-rule card |
+  | 4 | the marker test blob now binds only the runner | documented in ADR 0044; **the follow-up work is unscheduled — no card exists for it yet**, and saying "deferred to the pairing-rule card" implied one did |
   | 5 | `mktemp -d` has no `\|\| exit 1` | fixed |
   | 6 | the hazard audit enumerated `find` calls only, not a whole-tree sweep | **open, declined** — the audit's population was `find` over `$PANE_STATE_DIR`; a wider sweep is a different measurement and belongs to whoever makes it, not to a refactor |
   | 7 | the three label tools ship with no sibling test | **open, declined for this branch** — they are proof scaffolding, not shipped behaviour; named here so it is a decision rather than an oversight |
@@ -652,14 +653,14 @@ point at nothing, which is the failure mode that is expensive rather than loud.
 - [x] 13b. **Observability judge round 2 (Opus) on `4db65eb` — `risk=low confidence=high`,
   11 concerns.** Round 2 verified the round-1 fixes by rebuilding them on a synthetic replica,
   and independently confirmed the green run by hashing the test marker against the commit's own
-  post-image — evidence round 1 could not produce. Six items were actionable and all six are
+  post-image — evidence round 1 could not produce. Eight items were actionable and all eight are
   fixed:
 
   | Round-2 concern | Action |
   |---|---|
   | a child reaching `tl_finish` with its assertion block skipped reconciles at 0/0 and the marker is written on 92 of 139 labels | **fixed** — `EXPECTED_LABELS=139` total pin plus a per-suite zero-label check |
   | `label-diff.py` already ships `--count/--expect-count`, so the round-1 decline understated how cheap the pin was | **accepted** — the decline is withdrawn, and the reasoning is corrected rather than left standing |
-  | the sentinel is stated as "if and only if"; the only-if half is false | **fixed** — reworded in both the ADR and the runner comment, with the spoof route named as closed by content, not construction |
+  | the sentinel is stated as "if and only if"; the only-if half is false | **partly fixed in `f69a327`, completed in round 3** — the runner comment and one of the ADR's two copies were reworded; `0044:124` kept the phrase for a round, so the ADR carried a claim and its own refutation. This row previously said "both", which was wrong. |
   | "four findings, all acted on" understates round 1's ten | **fixed** — the table above |
   | the dispatcher is called 545 lines; it is 618 | **fixed** — 618 measured at HEAD and at `origin/main`; 545 was its size on 2026-08-24 and was copied forward without re-measurement |
   | `test-lib.sh` called 63 lines at task 5; it is 66 | **fixed** |
@@ -677,8 +678,43 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   | NUL byte on stdout, `grep -a` present | clean, `139 passed, 0 failed` |
   | unmutated baseline | `139 passed, 0 failed` |
 
+- [x] 13c. **Observability judge round 3 (Opus) on `f69a327` — `risk=low confidence=high`,
+  13 concerns, no dimension `fail`.** This is the first round in which **139 stopped being the
+  author's number**: the judge re-derived it from source itself (28/31/47/8/14/11, all distinct,
+  no assertion inside a loop) and hashed the on-disk test marker against the commit's own
+  post-image. Because a green run now *requires* the total to be 139, that receipt asserts the
+  count rather than merely reporting it. It also re-ran every row of the round-2 falsification
+  table on a synthetic replica and attacked the new drift loop four ways — a glob character in a
+  filename, a glob that would match a real suite, an empty list, and round 2's spanning-space
+  name — and found no hole in it.
+
+  | Round-3 concern | Action |
+  |---|---|
+  | **a defect this branch introduced:** the total counted the runner's *own* failure labels as assertions | **fixed** — a separate `child_total` accumulates only the six suites' labels |
+  | the ADR still said "if and only if" at `:124`, 58 lines below the paragraph explaining why it is wrong | **fixed** — the ADR carried a claim and its own refutation for one round |
+  | the card recorded that fix as "reworded in **both**" when one of two copies was reworded | **fixed** |
+  | "Six items were actionable" sat above a table of eight rows | **fixed** — the third round running where a count understated its own evidence, and the second time inside the paragraph correcting the previous one |
+  | one disposition pointed at a "pairing-rule card" that does not exist | **fixed** — the follow-up is named as unscheduled, with no card |
+  | the pin counts *how many*, never *which* — a substituted label gives 139 emitted, 138 distinct, and passes | **documented, not fixed** — added to the blind-spot table with the reason it cannot be closed here |
+  | `panes/.label-baseline` is gitignored, so the one check that catches a substitution cannot be re-run from a clean clone | **documented** in the same row |
+
+  **The introduced defect was reproduced before being fixed**, and the mirror direction matters
+  more than the noisy one:
+
+  | Case | before | after |
+  |---|---|---|
+  | a runner diagnostic fires, nothing has drifted | false second failure, `emitted 140` | drift reported alone; the total stays silent |
+  | a real shortfall | caught | caught, `emitted 130` |
+  | **a real shortfall *and* a runner diagnostic** | **the two cancelled and the pin went silent** — in exactly the case it exists for | both reported independently |
+  | unmutated baseline | `139 passed, 0 failed` | `139 passed, 0 failed` |
+
+  Everything stayed red and no marker was written in any of those cases, so this was a
+  wrong-message defect rather than a safety one — but the third row is a check going quiet
+  under load, which is the failure this card keeps being about.
+
   **Left open, stated:** round 2's own concerns 10 and 11 — the `MSG_STALE_TEST` narrowing
-  (deferred to the pairing-rule card, see ADR 0044) and the observation that 139 is ultimately
+  (recorded in ADR 0044 as declined for this branch; **the follow-up is unscheduled and has no
+  card**) and the observation that 139 is ultimately
   the author's count. The second is now weaker than it was: the number is pinned in the runner,
   so a green run asserts it rather than merely reporting it.
 - [ ] 14. Open the PR. Update this card to `review` when it merges.
@@ -802,7 +838,7 @@ Per-suite emission: dispatch 28, policy 31, routing 47, cleanup 8, scratch 14, s
 | 130 | `panes/dispatch-pane-agent.cleanup.test.sh` |
 | 79 | `panes/dispatch-pane-agent.subcommands.test.sh` |
 | 66 | `panes/test-lib.sh` |
-| 134 | `panes/dispatch-pane-agent.test.sh` (runner) |
+| 142 | `panes/dispatch-pane-agent.test.sh` (runner) |
 
 `routing` landed at **445**, not the 453 Decision 1 projected. Decision 1 already flagged its
 `+41 with skeleton` column as an upper bound that assumed each file re-carries the whole
@@ -835,7 +871,7 @@ a 618-line production script, and nothing would have reported it — a guard tha
 guarding is indistinguishable from one that is working.
 
 **Closed by the user decision of 2026-09-09: keep a runner at the original name.**
-`panes/dispatch-pane-agent.test.sh` is now a **134-line runner** that invokes the six by
+`panes/dispatch-pane-agent.test.sh` is now a **142-line runner** that invokes the six by
 explicit name, re-emits their assertion lines verbatim as its own stdout, counts them itself
 rather than trusting a child summary line, folds any child's non-zero exit into `fail`, and —
 after the judge showed the exit status alone was not enough — **requires each child's summary
@@ -854,7 +890,7 @@ suites do. The gate is armed through the runner, not through them.
 The first version of this paragraph said the gate's guarantee "is about the *subject's* bytes,
 which is what it has always been". **That is wrong.** `hooks/lib/decide-commit-gate.py`
 compares the **test** blob as well, and blocks with `MSG_STALE_TEST` when it has moved. Before
-the split that check covered all 963 lines of assertions; it now covers only the 134-line
+the split that check covered all 963 lines of assertions; it now covers only the 142-line
 runner. Editing a concern file no longer invalidates the receipt, where before it would have —
 six of seven test files have left that check's scope. Recorded in ADR 0044 as the cost of
 declining the pairing-rule change.
