@@ -1,7 +1,7 @@
 ---
 phase: implementation
 model_tier: xhigh
-branch: fix/worktree-guard-refusal-messages
+branch: main
 ---
 
 # worktree-guard.sh — worktrees are mandatory, and they live in one place
