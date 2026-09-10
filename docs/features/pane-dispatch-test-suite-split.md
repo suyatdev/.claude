@@ -577,7 +577,7 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   not execute on a green run, which is exactly why converting them would be an unmeasured
   change to an untested path. Leaving them inline is sound: `pass`/`fail` are plain shell
   variables in the same shell, so an inline `printf` still counts correctly.
-- [ ] 7. Run the Decision 1 derivation script **in its §Post-task-4 mapping form** — the
+- [x] 7. Run the Decision 1 derivation script **in its §Post-task-4 mapping form** — the
   pre-task-4 numbers in Decision 1 no longer resolve. All three asserts must pass. Then split
   `dispatch-pane-agent.test.sh` into the six files by that mapping, each
   sourcing the library with its own domain fixtures. **Move the `read_policy` wrap case
@@ -586,7 +586,7 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   `call_read_policy` from crossing a file boundary. Delete the original. Then grep each new
   file for a variable it uses but never assigns; `set -u` makes any such crossing fatal, and
   `RP_DIR` was found only because someone looked for it.
-- [ ] 8. Run all six plus `run-pane-agent`. Assert, in this order:
+- [x] 8. Run all six plus `run-pane-agent`. Assert, in this order:
   (a) each of the six named files ran — **by name, not by glob count**;
   (b) each exited 0;
   (c) `SOURCE-SET` after is **set-equal** to the task-3 baseline;
@@ -595,13 +595,13 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   Order matters: (c) alone cannot distinguish a lost label from a crashed file, and (e) is the
   only check that catches a duplicate introduced by copy-and-delete — 140 emissions of 139
   distinct labels satisfies every set comparison above it.
-- [ ] 9. `wc -l` every new file. Assert each under 800; record which exceed the 400 preferred
+- [x] 9. `wc -l` every new file. Assert each under 800; record which exceed the 400 preferred
   (`routing.test.sh` is expected to, at ~453) as a named residual with its measured number.
-- [ ] 10. Six files where there was one means six markers. Verify `write-test-marker.py` is
+- [x] 10. Six files where there was one means six markers. Verify `write-test-marker.py` is
   invoked once per file, that `MARKER_SELF` resolves to the sourcing script and not to
   `test-lib.sh`, and that `hooks/test-marker-guard.sh` passes for a commit staging all six.
   `test-lib.sh` itself has no sibling test — confirm the guard does not demand one.
-- [ ] 11. Grep the repo for `panes/dispatch-pane-agent.test.sh` by name — CI wiring, docs,
+- [x] 11. Grep the repo for `panes/dispatch-pane-agent.test.sh` by name — CI wiring, docs,
   ADRs, other cards — and update every hit. A stale reference to a deleted file fails closed
   and reads as the tests being switched off.
 - [x] 12. File `docs/features/oversized-source-files.md`. **Done 2026-09-07 during planning**,
@@ -668,7 +668,126 @@ when. This section supersedes them for task 7 and nothing else.
 
 ## Task 8 resolution — the one label that cannot be set-compared
 
-*(pending — see the ⚠️ under checklist task 3)*
+**Decided by the user 2026-09-09: teach the comparison about placeholders.** Not an exclusion,
+and not an edit to the assertion — the test file stays the unbiased baseline, and all 139
+labels stay inside the check.
+
+`panes/label-diff.py` converts a source label into an anchored pattern in which each `$name` /
+`${name}` reference becomes a wildcard and every other character is escaped literally. Literal
+labels are resolved first by plain set membership; only the placeholder-bearing remainder is
+then matched against the remaining unclaimed run labels, and a pattern matching more than one
+run label (or a run label matched by more than one pattern) is reported as an **ambiguity**,
+never silently accepted.
+
+**The wildcard is `\S+?`, not `.*`, and that is the load-bearing choice.** With `.*` a pattern
+whose placeholder sits at the end has nothing to anchor against, so `result: $x` full-matches
+`result: 2 and something else entirely different` — the check degrades into "the prefix
+matches, accept anything after it". `\S` cannot cross the space, so it rejects that.
+Falsified both ways: the shipped rule reports the pair unmatched (exit 1); a throwaway copy
+patched to `.*` reports `OK: 1 distinct labels matched` (exit 0). Its stated limit, accepted:
+a substituted value containing whitespace will never match and is reported as unmatched.
+
+The count check is a **separate** mode (`--count … --expect-count N`) on raw line count with no
+dedup, because set equality is structurally blind to a duplicate. Demonstrated on 140 emissions
+of 139 distinct labels: the set comparison passes green and the count check fails — both halves
+shown, which is exactly the blind-spot row Decision 3 warns about.
+
+## Task 7-11 results, measured
+
+**Task 7 — the split was performed by a slicing script, not by transcription.** It builds each
+file as a list of source line numbers, asserts the six lists are an **exact partition of body
+lines 38-959** by line number with nothing claimed twice, and only then writes. Body sizes came
+out at exactly the derivation's figures: dispatch 107, policy 162, routing 412, cleanup 97,
+scratch 98, subcommands 46 — 922 total.
+
+The `set -u` crossing check was run statically as well as by execution. Seven names were
+flagged and **all seven are false positives**, confirmed by reading each in context: five occur
+only inside comments, `$d` in two files is the `sed '/^cmd=/,$d'` command rather than a shell
+variable, `$PANE_AGENT_ROLE` is the deliberately-unexpanded stub text (and carries a `:-unset`
+default), and `$d` in `routing` is `local` to `mk_run_ref`. No variable crosses a file boundary.
+
+**Task 8 — all five checks, in the card's order:**
+
+| Check | Result |
+|---|---|
+| (a) each of the six named files ran, by name | yes — the runner names them explicitly; per-suite lines on stderr |
+| (b) each exited 0 | yes, all six |
+| (c) `SOURCE-SET` after set-equal to the task-3 baseline | `OK: 139 distinct labels matched (1 via placeholder)` |
+| (d) `RUN-SET` after set-equal to `SOURCE-SET` after | `OK: 139 distinct labels matched (1 via placeholder)` |
+| (e) emitted label count is exactly 139 | `OK: emits exactly 139 labels` |
+
+Per-suite emission: dispatch 28, policy 31, routing 47, cleanup 8, scratch 14, subcommands 11.
+
+**Task 9 — sizes.** All under the 800 hard maximum. One residual over the 400 preferred:
+
+| Lines | File |
+|---|---|
+| 445 | `panes/dispatch-pane-agent.routing.test.sh` ← the stated residual |
+| 195 | `panes/dispatch-pane-agent.policy.test.sh` |
+| 140 | `panes/dispatch-pane-agent.dispatch.test.sh` |
+| 131 | `panes/dispatch-pane-agent.scratch.test.sh` |
+| 130 | `panes/dispatch-pane-agent.cleanup.test.sh` |
+| 79 | `panes/dispatch-pane-agent.subcommands.test.sh` |
+| 63 | `panes/test-lib.sh` |
+| 60 | `panes/dispatch-pane-agent.test.sh` (runner) |
+
+`routing` landed at **445**, not the 453 Decision 1 projected. Decision 1 already flagged its
+`+41 with skeleton` column as an upper bound that assumed each file re-carries the whole
+preamble; ~11 lines went to the library instead, so the real figure is 8 lower. The direction
+was the safe one.
+
+## ⚠️ Task 10 found that the split disarms a Tier-1 guard, and how it was closed
+
+**This is the most important finding on the branch and it was not anticipated by the spec.**
+Checklist task 10 assumed "six files where there was one means six markers". Measured, the
+truth is the opposite: **six files where there was one means *zero* markers, and the production
+dispatcher stops being gated at all.**
+
+`hooks/lib/write-test-marker.py` derives a test's subject by the `X.test.sh → X.sh` rule
+(`PAIR_SUFFIXES`). Each concern file therefore derives `dispatch-pane-agent.<concern>.sh`,
+which does not exist, and each run printed `marker skipped: … has no tracked subject`.
+Symmetrically, `hooks/lib/decide-commit-gate.py` `_form_pairs` skips a staged subject whose
+sibling test is neither tracked nor on disk (`continue  # no sibling test at all -- never
+gated, per Scope`).
+
+Measured against the real `_form_pairs`, both conditions on the same function:
+
+| Condition | `_form_pairs` for staging `panes/dispatch-pane-agent.sh` |
+|---|---|
+| sibling test present (before the split) | `[('panes/dispatch-pane-agent.sh', 'panes/dispatch-pane-agent.test.sh')]` |
+| sibling test absent (after the split) | `[]` — **never gated** |
+
+So deleting the file outright would have silently switched off the verification-marker gate for
+a 545-line production script, and nothing would have reported it — a guard that has stopped
+guarding is indistinguishable from one that is working.
+
+**Closed by the user decision of 2026-09-09: keep a runner at the original name.**
+`panes/dispatch-pane-agent.test.sh` is now a **60-line runner** that invokes the six by
+explicit name, re-emits their assertion lines verbatim as its own stdout, counts them itself
+rather than trusting a child summary line, and folds any child's non-zero exit into `fail` so
+`tl_finish` cannot write a marker for a partial run. Verified: the marker for
+`panes/dispatch-pane-agent.sh` is written again, and its `test.blob` is the runner's blob.
+
+The alternative — teaching `write-test-marker.py` and `decide-commit-gate.py` an
+`X.<concern>.test.sh → X.sh` rule — was considered and declined for this branch: it edits two
+Tier-1 scripts every commit in the repo depends on, which deserves its own card and review.
+
+**Residual, stated:** the six concern files remain orphan suites that write no marker of their
+own, exactly as the three pre-existing orphan suites do. The gate is armed through the runner,
+not through them. Editing one concern file without editing the dispatcher therefore does not
+by itself invalidate the marker — the gate's guarantee is about the *subject's* bytes, which
+is what it has always been, but the narrowing is worth naming rather than discovering later.
+
+**Task 11 — references.** One live reference outside documentation:
+`panes/dispatch-pane-agent.sh:225` cited the deleted file by name for the "three panes lost to
+a cmux restart" assertions; repointed to `dispatch-pane-agent.routing.test.sh`, where those
+assertions now live (verified by grep — `:376`). **No CI wiring exists** (no `.github/`), so
+there was nothing to rewire. The remaining ten hits are historical records — merged cards, old
+plans under `docs/superpowers/plans/`, and judge verdict stores — and are **deliberately left
+unedited**: they record what was true when written, and rewriting them would falsify the
+measurements they exist to preserve. `docs/features/oversized-source-files.md` gets a
+resolution note appended below its dated table for the same reason.
+
 
 ## Not in scope
 

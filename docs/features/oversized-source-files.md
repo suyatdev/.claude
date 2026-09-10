@@ -43,6 +43,14 @@ done | sort -rn
 **Ten of twelve are test suites.** Two are production source: `treko/support.js` (1911) and
 `statusline-command.sh` (833).
 
+**Resolved since, one row.** `panes/dispatch-pane-agent.test.sh` was split on
+`refactor/pane-dispatch-test-suite-split` (2026-09-09) into six concern files plus a runner.
+Measured after: 445 / 195 / 140 / 131 / 130 / 79, plus a 60-line runner at the original name
+and a 63-line shared `panes/test-lib.sh`. All under 800; one (`routing`, 445) is over the 400
+preferred and is a stated residual on that card. **The table above is left as measured at
+`1b213a1` and is not rewritten** — it records what was true then, and editing it would falsify
+the measurement it exists to preserve.
+
 ## What this does and does not claim
 
 - **Claimed, because measured:** these twelve files exceeded 800 lines at commit `1b213a1`,

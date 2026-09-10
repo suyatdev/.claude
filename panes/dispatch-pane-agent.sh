@@ -222,7 +222,7 @@ count_live_workers() {
 # cmux restart at N=3 would declare a perfectly healthy adapter tab-incapable.
 # Advancing is what carries the selector past the ghosts to a pane whose
 # successful tab clears the streak. Pinned by the "three panes lost to a cmux
-# restart" assertions in dispatch-pane-agent.test.sh; RUN 3's proposed
+# restart" assertions in dispatch-pane-agent.routing.test.sh; RUN 3's proposed
 # advance-only-on-success change is the mutant they kill.
 select_worker_surface() {
   local key="$1" line ref i=0
