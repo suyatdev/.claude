@@ -14,6 +14,19 @@
 #   - When session-state.md grows too large, the directive switches to "rewrite" mode
 #
 # Install: place in .claude/hooks/ and add UserPromptSubmit to .claude/settings.json
+#
+# Locally patched 2026-09-09 by docs/features/handoff-trim-safety.md: before any directive
+# is emitted, the notepad is copied to a per-session snapshot, and the trim directive is
+# withheld whenever that copy could not be taken. Rationale, in the card's terms:
+#   - the snapshot happens on EVERY turn, not only over the cap (spec finding C3). The
+#     directive is a request, not a ceiling: a model can rewrite the notepad below the cap
+#     too, and before this the great majority of turns had no copy behind them at all.
+#   - the filename carries the session id (spec finding C2). A single shared snapshot let
+#     the first session to finish delete it, after which a second session in the same repo
+#     found none and checked nothing.
+#   - a failed snapshot suppresses the trim (spec finding O-C). Asking for a cut while
+#     unable to back it up is exactly the promise this card exists to stop making, so the
+#     trim pauses and the append directive says why.
 
 set -euo pipefail
 
@@ -26,6 +39,44 @@ STATE_FILE="$REPO_ROOT/.claude/session-state.md"
 
 # Ensure .claude directory exists
 mkdir -p "$REPO_ROOT/.claude"
+
+# --- Session identity ---------------------------------------------------------------
+# Hooks receive the id on stdin; a pane-less caller may only have the environment
+# variable, and a caller with neither still gets a working (if less specific) snapshot
+# rather than none. Same three-step fallback and the same "nosession" literal as
+# hooks/secret-command-guard.sh, so the two agree about what to call an unnamed session.
+JQ_BIN="/usr/bin/jq"
+HOOK_PAYLOAD=""
+[ -t 0 ] || HOOK_PAYLOAD="$(cat 2>/dev/null || true)"
+SESSION_RAW=""
+if [ -n "$HOOK_PAYLOAD" ] && [ -x "$JQ_BIN" ]; then
+  SESSION_RAW="$(printf '%s' "$HOOK_PAYLOAD" | "$JQ_BIN" -er '.session_id // empty' 2>/dev/null)" \
+    || SESSION_RAW=""
+fi
+[ -n "$SESSION_RAW" ] || SESSION_RAW="${CLAUDE_CODE_SESSION_ID:-}"
+[ -n "$SESSION_RAW" ] || SESSION_RAW="nosession"
+
+# The id reaches a filename, so everything outside the portable-filename set becomes an
+# underscore — a payload is untrusted input, and "../../x" must not steer a write out of
+# .claude. Real ids are UUID-shaped, so in practice this substitutes nothing.
+SESSION_SLUG="$(printf '%s' "$SESSION_RAW" | tr -c 'A-Za-z0-9_-' '_' | cut -c1-64)"
+[ -n "$SESSION_SLUG" ] || SESSION_SLUG="nosession"
+
+PRETRIM_FILE="$REPO_ROOT/.claude/session-state.pretrim.${SESSION_SLUG}.md"
+STRIKE_FILE="$REPO_ROOT/.claude/session-state.keepguard-strikes.${SESSION_SLUG}"
+
+# snapshot_notepad() lives in the shared library, resolved from THIS file's own directory
+# (never $PWD, never `git rev-parse`) so the hook behaves the same whatever the caller cwd.
+# Sourcing happens inside the `if` so `set -e` cannot kill the hook on a library that fails
+# to parse: an unloadable library is handled below as a snapshot failure, which is the same
+# "cannot back this up" state as an unwritable disk and must not fall through to a trim.
+HOOK_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+LIB="$HOOK_DIR/lib/handoff-archive.sh"
+LIB_OK=false
+# shellcheck disable=SC1090  # library lives beside this hook, not user input
+if [ -r "$LIB" ] && . "$LIB"; then
+  LIB_OK=true
+fi
 
 # Check for active task/bug files
 HAS_TASK=false
@@ -68,6 +119,36 @@ Auto-maintained during conversation. Do not delete.
 INIT
 fi
 
+# --- Snapshot, before any directive is emitted ----------------------------------------
+# One case deliberately does NOT refresh the snapshot: a keep-guard strike is outstanding
+# and the snapshot it is holding still exists. That snapshot is the pre-damage copy the
+# guard blocked on, and the notepad in front of us is the damaged one — overwriting it
+# would destroy the only recovery source at exactly the moment it is needed, and would
+# make "the guard has already blocked twice on the same PT" unreachable. A strike file
+# with no snapshot beside it is not that case: snapshot normally, so a deleted copy plus a
+# stale strike file cannot leave the session permanently unprotected.
+SNAPSHOT_OK=false
+SNAPSHOT_REASON=""
+if [ -f "$STRIKE_FILE" ] && [ -r "$PRETRIM_FILE" ]; then
+    SNAPSHOT_OK=true
+elif [ "$LIB_OK" != true ]; then
+    SNAPSHOT_REASON="the snapshot library ${LIB} could not be loaded"
+elif snapshot_notepad "$STATE_FILE" "$PRETRIM_FILE"; then
+    SNAPSHOT_OK=true
+else
+    SNAPSHOT_REASON="${PRETRIM_FILE} could not be written"
+fi
+
+SNAPSHOT_WARNING=""
+if [ "$SNAPSHOT_OK" != true ]; then
+    SNAPSHOT_WARNING="
+⚠️ TRIM SUPPRESSED — no pre-trim snapshot was taken: ${SNAPSHOT_REASON}.
+Append only this turn. Do NOT rewrite, shorten, reorder or delete any part of
+.claude/session-state.md: nothing removed while the snapshot is unavailable can be
+recovered. Report this to the user, and fix the write failure (usually an unwritable
+.claude directory) or copy the file aside by hand before trimming anything."
+fi
+
 # Count current lines
 LINE_COUNT=$(wc -l < "$STATE_FILE" | tr -d ' ')
 
@@ -81,8 +162,10 @@ Also evaluate: has the current task or bug been completed?
 - If still in progress: keep task/bug context current in session-state.md"
 fi
 
-# Always output the directive — Claude sees this every turn
-if [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
+# Always output a directive — Claude sees this every turn. The SNAPSHOT_OK conjunct is the
+# suppression: with no copy behind it, the oversize branch is never taken whatever the line
+# count, and the append branch below carries the warning instead.
+if [ "$SNAPSHOT_OK" = true ] && [ "$LINE_COUNT" -gt "$MAX_LINES" ]; then
     cat << DIRECTIVE
 <live-handoff>
 REQUIRED: Before responding, update .claude/session-state.md:
@@ -109,7 +192,7 @@ If yes — append to the appropriate section in .claude/session-state.md:
 - Changes to current focus or next steps
 If nothing noteworthy happened (e.g. simple question, no new info), skip the update.
 Do NOT rewrite the whole file — just append new items to existing sections.
-${TASK_BUG_DIRECTIVE}
+${TASK_BUG_DIRECTIVE}${SNAPSHOT_WARNING}
 </live-handoff>
 DIRECTIVE
 fi

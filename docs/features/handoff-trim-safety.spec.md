@@ -987,8 +987,37 @@ that ignores them, in two repos measured as not covering them today.
       block, which is the safe direction, but records an empty reason in the stub — the one
       case where the reason matters most says nothing. The file is now **398 lines** against
       the 400-line house guideline, so the next step to touch it should split rather than grow.
-- [ ] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
+- [x] 4. `live-handoff.sh` snapshots on **every** turn to a per-session filename, and
       **suppresses the trim directive** if the snapshot cannot be written.
+      **Done 2026-09-10.** The hook reads `session_id` off the stdin payload, falls back to
+      `$CLAUDE_CODE_SESSION_ID` and then to the same `nosession` literal
+      `secret-command-guard.sh` uses, and sanitizes it to the portable-filename set before it
+      reaches a path. Measured rather than reported: the new
+      `hooks/handoff/live-handoff.test.sh` reads **31/31**, and both untouched siblings still
+      read what they read before — `handoff-archive.test.sh` **79/79** and
+      `slim-session-start.test.sh` **29/29**, which is the whole evidence that the extracted
+      library and the session-start reader were not disturbed. The suppression carries a
+      falsifier that strips the `SNAPSHOT_OK` conjunct from a **copy** of the hook and
+      confirms the trim directive then fires with no snapshot behind it, so the no-trim
+      assertion is shown able to fail; that falsifier also asserts its own `sed` changed
+      something, because a mutation that silently matched nothing would have proved nothing.
+      The traversal check plants a decoy stray file and confirms the search counts it, after
+      a first version scoped that search so narrowly that six other fixture repos' correct
+      snapshots read as escapes.
+      **One behaviour beyond the literal task wording, recorded because it is load-bearing:**
+      a snapshot is *not* refreshed while a keep-guard strike file sits beside it. Snapshot
+      on every turn plus keep-the-snapshot-on-block would otherwise have the next turn
+      overwrite the pre-damage copy with the damaged notepad — destroying the recovery source
+      at the moment it is needed, and making the scenario "the guard has already blocked
+      twice on the same PT" unreachable. A strike file with **no** snapshot beside it still
+      snapshots normally, so a deleted copy plus a stale strike file cannot leave a session
+      permanently unprotected.
+      ⚠️ **Two stated limits.** The strike filename is a contract with the keep-guard step,
+      which does not exist yet: nothing writes that file today, so the retention branch is
+      tested but not yet exercised in real use. And if `/usr/bin/jq` is absent the id falls
+      back to the environment variable and then to `nosession`, so every session in one repo
+      would share one snapshot — the exact C2 blinding the per-session filename exists to
+      prevent. Degraded rather than silent: one shared snapshot still beats none.
 - [ ] 5. Stale-snapshot reaper in `slim-session-start.sh`, running **above every early
       exit** in that function, and deleting a snapshot only after confirming the archive append
       succeeded.
