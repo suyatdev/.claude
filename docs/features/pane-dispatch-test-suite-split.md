@@ -83,6 +83,18 @@ At `1b213a1`, both suites run green:
 This is the "before" the split is proved against. Re-run and re-read it at the branch base;
 do not carry these numbers forward on trust.
 
+**Settled by execution 2026-09-09** (task 2), at branch base `8a26ab5`, run from the worktree
+`~/.claude/.claude/worktrees/secret-command-guard`:
+
+| Suite | Exit | Summary line | `ok   — ` emissions | `FAIL — ` emissions |
+|---|---|---|---|---|
+| `panes/dispatch-pane-agent.test.sh` | 0 | `139 passed, 0 failed` | 139 | 0 |
+| `panes/run-pane-agent.test.sh` | 0 | `18 passed, 0 failed` | 18 | 0 |
+
+The emission columns are counted from the captured stdout, not read off the summary line, so
+the summary and the actual number of `ok` calls corroborate each other rather than one being
+taken on trust. The `1b213a1` figures above are reproduced exactly at the branch base.
+
 ---
 
 ## Decisions
@@ -468,8 +480,9 @@ point at nothing, which is the failure mode that is expensive rather than loud.
 - [x] 1. Cut the branch, record it in this file's frontmatter, move `phase` to
   `implementation`. **Done 2026-09-09** — branch `refactor/pane-dispatch-test-suite-split`
   from `656a09e`.
-- [ ] 2. Re-run both suites at the branch base and re-read the output. Record the counts here.
-  Do not carry §Baseline forward on trust.
+- [x] 2. Re-run both suites at the branch base and re-read the output. Record the counts here.
+  Do not carry §Baseline forward on trust. **Done 2026-09-09** at `8a26ab5` — 139/0 and 18/0,
+  both exit 0, recorded in §Baseline with emission counts.
 - [ ] 3. Write `panes/label-set.py` — the escape-aware **source** extractor of Decision 3,
   taking file paths as `sys.argv` and printing one label per line to stdout. Capture
   `SOURCE-SET` before to `panes/.label-baseline` (untracked). Write the **`RUN-SET`** reader
