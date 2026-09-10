@@ -473,3 +473,113 @@ def test_indexing_stores_judge_doc_for_verdict_files(tmp_path):
     plain = next(p for p in types if p.endswith("decisions.md"))
     assert types[verdict] == "judge_doc"
     assert types[plain] == "curated_doc"
+
+
+def test_doc_source_type_widened_to_the_archive_pattern():
+    """Not just the retired CODING_MEMORY.md by name: a file matching the
+    configured archive_pattern is typed archive_doc too, regardless of which
+    bucket found it. archive_pattern is optional so the existing bare 2-arg
+    call sites above are unaffected."""
+    from memsearch.index import _doc_source_type
+    assert _doc_source_type(
+        Path("/x/coding-memory/session-state.archive.md"), "curated_doc",
+        "session-state.archive*.md") == "archive_doc"
+    assert _doc_source_type(
+        Path("/x/myrepo/session-state.archive.3.md"), "repo_doc",
+        "session-state.archive*.md") == "archive_doc"
+    # unrelated filename, pattern present: unaffected
+    assert _doc_source_type(
+        Path("/x/coding-memory/decisions.md"), "curated_doc",
+        "session-state.archive*.md") == "curated_doc"
+
+
+def archive_roots_cfg(tmp_path: Path, roots: list[str], **over):
+    p = write_cfg(tmp_path, **{
+        "embed_model": "test-embed", "embed_dim": DIM,
+        "db_path": str(tmp_path / "memory-index" / "memory.db"),
+        "transcripts_glob": str(tmp_path / "no-transcripts" / "*.jsonl"),
+        "curated_docs": [], "repo_roots": [],
+        "archive_roots": roots,
+        **over,
+    })
+    return load_config(p)
+
+
+def test_archive_roots_are_walked_with_rglob_into_dot_directories(tmp_path):
+    """The archives live under dot-directories. glob.glob's `**` would not
+    reach them (measured: 0 vs 7 on the live tree); Path.rglob does, with no
+    version-gated keyword needed."""
+    notepad = tmp_path / "home" / ".claude" / ".claude" / "some-card"
+    notepad.mkdir(parents=True)
+    (notepad / "session-state.archive.md").write_text(
+        "# Archive\n\nSession narrative.\n")
+    cfg = archive_roots_cfg(tmp_path, [str(tmp_path / "home" / ".claude")])
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    rows = conn.execute(
+        "SELECT file_path, source_type FROM chunks").fetchall()
+    conn.close()
+    assert rows, "archive file under a dot-directory was not indexed"
+    assert all(stype == "archive_doc" for _p, stype in rows)
+
+
+def test_zero_match_archive_root_is_reported(tmp_path, capsys):
+    """A glob that matches nothing is indistinguishable from 'nothing
+    changed' unless it is reported (finding O5)."""
+    empty_root = tmp_path / "home" / "empty"
+    empty_root.mkdir(parents=True)
+    cfg = archive_roots_cfg(tmp_path, [str(empty_root)])
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    err = capsys.readouterr().err
+    assert str(empty_root) in err
+    assert "matched nothing" in err
+
+
+def test_quarantine_file_is_never_indexed_via_archive_roots(tmp_path):
+    """session-state.quarantine.md is excluded by name: quarantined content
+    never enters the archive, so there is nothing in it to index."""
+    notepad = tmp_path / "home" / ".claude" / "some-card"
+    notepad.mkdir(parents=True)
+    quarantine_file = notepad / "session-state.quarantine.md"
+    quarantine_file.write_text("# Quarantined\n\nFlagged content.\n")
+    (notepad / "session-state.archive.md").write_text(
+        "# Archive\n\nClean content.\n")
+    cfg = archive_roots_cfg(tmp_path, [str(tmp_path / "home" / ".claude")])
+    run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+              progress=lambda _: None)
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    paths = [r[0] for r in conn.execute("SELECT file_path FROM chunks")]
+    conn.close()
+    # Exact-path check, not a substring check: pytest's own tmp_path embeds
+    # this test's function name, which contains "quarantine" itself.
+    assert str(quarantine_file) not in paths
+    assert any(p.endswith("session-state.archive.md") for p in paths)
+
+
+def test_archive_roots_do_not_double_index_a_file_the_repo_walk_already_found(
+        tmp_path):
+    """An archive file that also sits inside a repo_root's own *.md walk must
+    be indexed once, not twice — the repo walk already types it archive_doc
+    via the widened _doc_source_type."""
+    repo = tmp_path / "myrepo"
+    repo.mkdir()
+    (repo / "session-state.archive.md").write_text(
+        "# Archive\n\nIn both the repo walk and the archive walk.\n")
+    p = write_cfg(tmp_path, **{
+        "embed_model": "test-embed", "embed_dim": DIM,
+        "db_path": str(tmp_path / "memory-index" / "memory.db"),
+        "transcripts_glob": str(tmp_path / "no-transcripts" / "*.jsonl"),
+        "curated_docs": [],
+        "repo_roots": [{"id": "myrepo", "name": "myrepo", "root": str(repo)}],
+        "archive_roots": [str(tmp_path)],
+    })
+    cfg = load_config(p)
+    report = run_index(cfg, embedder=stub_embedder, digester=stub_digester,
+                       progress=lambda _: None)
+    assert report["processed"] == 1
+    conn = dbmod.connect(cfg.db_path, cfg.embed_model, cfg.embed_dim)
+    sources = [r[0] for r in conn.execute("SELECT path FROM sources")]
+    conn.close()
+    assert len(sources) == 1

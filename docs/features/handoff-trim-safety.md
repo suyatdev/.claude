@@ -222,10 +222,43 @@ that ignores them, in two repos measured as not covering them today.
       see `unprotected`, because a guard heartbeating it every turn keeps the log looking
       fresh while nothing is protected.
 - [ ] 14. `pre-compact.sh` injects `session-state.md` first (D7).
-- [ ] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
+- [x] 15. memsearch: `archive_roots`/`archive_pattern` via `Path.rglob`, zero-match reporting,
       `session-state.quarantine.md` excluded by name, `_doc_source_type` widened off the
       retired `CODING_MEMORY.md`, and a `--reclassify` run so `archive_doc` becomes a usable
       health signal.
+      **Done 2026-09-10, with one half of the intent explicitly NOT delivered — see below.**
+      `_iter_archive_docs` walks the three roots with `Path.rglob`, dedupes against the files
+      the `curated_docs` and `repo_roots` walks already yielded, and reports a zero-matching
+      root on stderr instead of indexing as though nothing changed. `_doc_source_type` gained
+      an optional third argument so a file matching `archive_pattern` types as `archive_doc`
+      whichever bucket found it; the existing two-argument call sites are untouched, which is
+      why the pre-existing suite needed no edit.
+      **Measured: 110 passed, 23 deselected.** The 23 are the `golden` and `measurement`
+      marks that `pyproject.toml` deselects by default, and this card has been bitten by that
+      exact line before, so it was checked rather than assumed: neither deselected file
+      mentions archives at all, and all three files that do are in the selected set.
+      **Falsified, not just green.** Swapping `root.rglob` for a non-recursive `root.glob`
+      turns exactly two tests red, one of them
+      `test_archive_roots_are_walked_with_rglob_into_dot_directories`. A suite that stayed
+      green under that mutation would have been measuring nothing.
+      ⚠️ **`archive_doc` is NOT yet a usable health signal, and the checkbox does not claim it
+      is.** The real `--reclassify` run reported `retyped=0`, with the `archive_doc` chunk
+      count at 514 before and 514 after, because **zero `session-state.archive*.md` files
+      exist anywhere on disk** — the hook that writes them has not shipped. The plumbing is
+      wired and proven; the signal turns on by itself once tasks 8 to 12 land. Re-run
+      `--reclassify` then, and only then record what the count did.
+      ⚠️ **A wrong number was caught in this task's own code comment before it committed.**
+      The comment justified `Path.rglob` with "0 matches vs Path.rglob's 7 on the live tree",
+      which is false for the pattern it sits beside: for `session-state.archive*.md` both
+      return **0**. Re-measured on 2026-09-10, the real evidence is two separate facts —
+      `glob.glob` never expands `~` (0 matches for all three roots, any pattern), and with `~`
+      expanded its `**` still will not enter dot-directories (**6** vs `Path.rglob`'s **29**
+      for `session-state*.md`). The comment now states those, and states that the shipped
+      pattern cannot demonstrate the difference today.
+      Unrelated drift seen while measuring, recorded so a later reader does not chase it: the
+      reclassify run printed `vanished_sources=682`, and `repo_doc`/`judge_doc` counts moved
+      between snapshots because the scheduled `launchd` indexer was running against the same
+      live database. `retyped=0` is what shows this change caused none of it.
 - [x] 16. Document the `[KEEP]` convention in `skills/managing-session-memory/SKILL.md`, and
       tag the sections that need protecting in this repo notepad as the first real use.
       **Done 2026-09-10.** The convention is written up under the skill's

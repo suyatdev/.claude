@@ -13,6 +13,8 @@
     {"id": "vibe-scape", "name": "vibe-scape", "root": "~/Other Docs/AI/AI_Projx/vibe-scape"},
     {"id": "snatch-bracket", "name": "Snatch-Bracket", "root": "~/Other Docs/AI/AI_Projx/Snatch-Bracket"}
   ],
-  "exclude_paths": ["/subagents/", "/node_modules/", "/.git/", "/dist/", "/build/", "/.venv/", "/site-packages/", "/.pytest_cache/"],
+  "archive_roots": ["~/.claude", "~/Other Docs", "~/.worktrees"],
+  "archive_pattern": "session-state.archive*.md",
+  "exclude_paths": ["/subagents/", "/node_modules/", "/.git/", "/dist/", "/build/", "/.venv/", "/site-packages/", "/.pytest_cache/", "session-state.quarantine.md"],
   "weights": {"curated_doc": 1.5, "repo_doc": 1.2, "judge_doc": 1.2, "transcript_digest": 1.0, "archive_doc": 1.0}
 }

@@ -10,6 +10,11 @@ REAL_CONFIG = Path(__file__).resolve().parent.parent / "config.json"
 
 def write_cfg(tmp_path: Path, **overrides) -> Path:
     base = json.loads(REAL_CONFIG.read_text())
+    # Tests must opt in explicitly to a nonempty archive_roots: the real
+    # config's roots are ~/.claude, ~/Other Docs and ~/.worktrees, and a bare
+    # write_cfg() feeding run_index() would otherwise walk the real home
+    # directory instead of tmp_path.
+    base["archive_roots"] = []
     base.update(overrides)
     p = tmp_path / "config.json"
     p.write_text(json.dumps(base))
@@ -23,6 +28,13 @@ def test_loads_real_config():
     assert cfg.db_path.is_absolute()
     assert all(p.is_absolute() for p in cfg.curated_docs)
     assert cfg.weights["curated_doc"] > cfg.weights["transcript_digest"]
+
+
+def test_archive_roots_and_pattern_load_from_real_config():
+    cfg = load_config(REAL_CONFIG)
+    assert cfg.archive_pattern == "session-state.archive*.md"
+    assert len(cfg.archive_roots) >= 1
+    assert all(p.is_absolute() for p in cfg.archive_roots)
 
 
 def test_cloud_model_refused(tmp_path):
@@ -48,6 +60,9 @@ def test_is_excluded():
     assert is_excluded(
         Path("/x/Snatch-Bracket/backend/lib/site-packages/fastapi/LICENSE.md"),
         cfg)
+    # quarantined content never enters the archive at all, so there is
+    # nothing in it for memsearch to index either
+    assert is_excluded(Path("/x/.claude/session-state.quarantine.md"), cfg)
 
 
 def test_real_config_weights_cover_every_known_source_type():
