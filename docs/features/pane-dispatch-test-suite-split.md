@@ -544,7 +544,7 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   `|| exit 1` on `MARKER_ROOT`, and the library-owned EXIT trap. Assert the fail-closed
   behaviour directly: source it from a directory outside any repository and confirm the caller
   **stops** rather than continuing with `MARKER_ROOT` unset. No behavior change to any suite yet.
-  **Done 2026-09-09**, 63 lines. Measured, and re-run independently by the main session rather
+  **Done 2026-09-09**, 66 lines. Measured, and re-run independently by the main session rather
   than taken from the worker's report:
 
   | Probe | Observed |
@@ -632,12 +632,55 @@ point at nothing, which is the failure mode that is expensive rather than loud.
   is reported by name, and a child emitting a label it does not count is caught as
   `child reported 11/0, runner counted 12/0`.
 
-  **Not acted on, with reason:** the judge also noted that 139 is pinned in no executable
-  artifact, so a suite that legitimately shrinks to 138 reports green. True, and deliberately
-  left — the pre-split suite had no count pin either, so this is not a regression, and hard-
-  coding 139 inside the runner would make every legitimate new assertion an edit to it. The
-  completion sentinel covers the loss-by-truncation case, which is the one the split created.
-  Task 8's count check remains the place that number is asserted.
+  **⚠️ The round-1 tally above said "four findings" and that understated the verdict — round 2
+  caught it.** Round 1 recorded **ten** concerns. Four were acted on in `4db65eb`; the full
+  accounting, so none is silently dropped:
+
+  | # | Round-1 concern | Disposition |
+  |---|---|---|
+  | 1 | a child ending normally before `tl_finish` writes the marker for a partial run | fixed |
+  | 2 | the runner discards the child summary line, the one available sentinel | fixed (it is now required) |
+  | 3 | no executable artifact pins 139 | **initially declined, then fixed in round 2** — see below |
+  | 4 | the marker test blob now binds only the runner | documented; deferred to the pairing-rule card |
+  | 5 | `mktemp -d` has no `\|\| exit 1` | fixed |
+  | 6 | the hazard audit enumerated `find` calls only, not a whole-tree sweep | **open, declined** — the audit's population was `find` over `$PANE_STATE_DIR`; a wider sweep is a different measurement and belongs to whoever makes it, not to a refactor |
+  | 7 | the three label tools ship with no sibling test | **open, declined for this branch** — they are proof scaffolding, not shipped behaviour; named here so it is a decision rather than an oversight |
+  | 8 | a seventh concern file added without editing `SUITES` has no detector | fixed |
+  | 9 | a failing child's stderr is flattened and then deleted by the EXIT trap | fixed — stderr is now surfaced before `$TMP` is removed |
+  | 10 | the judge did not run the suites, by instruction | **inherent** — a grader must not write the marker it is grading; the runs are the author's, and round 2 corroborated them by hashing the marker |
+
+- [x] 13b. **Observability judge round 2 (Opus) on `4db65eb` — `risk=low confidence=high`,
+  11 concerns.** Round 2 verified the round-1 fixes by rebuilding them on a synthetic replica,
+  and independently confirmed the green run by hashing the test marker against the commit's own
+  post-image — evidence round 1 could not produce. Six items were actionable and all six are
+  fixed:
+
+  | Round-2 concern | Action |
+  |---|---|
+  | a child reaching `tl_finish` with its assertion block skipped reconciles at 0/0 and the marker is written on 92 of 139 labels | **fixed** — `EXPECTED_LABELS=139` total pin plus a per-suite zero-label check |
+  | `label-diff.py` already ships `--count/--expect-count`, so the round-1 decline understated how cheap the pin was | **accepted** — the decline is withdrawn, and the reasoning is corrected rather than left standing |
+  | the sentinel is stated as "if and only if"; the only-if half is false | **fixed** — reworded in both the ADR and the runner comment, with the spoof route named as closed by content, not construction |
+  | "four findings, all acted on" understates round 1's ten | **fixed** — the table above |
+  | the dispatcher is called 545 lines; it is 618 | **fixed** — 618 measured at HEAD and at `origin/main`; 545 was its size on 2026-08-24 and was copied forward without re-measurement |
+  | `test-lib.sh` called 63 lines at task 5; it is 66 | **fixed** |
+  | drift check treats a concern name spanning a space as listed, since it substring-matches the joined `SUITES` | **fixed** — element-wise comparison; falsified with `dispatch-pane-agent.policy routing.test.sh`, now reported by name |
+  | a NUL byte on child stdout puts `Binary file … matches` into the summary variable | **fixed** — `grep -a`; proven load-bearing by removing the flag and reproducing the unreadable message |
+
+  **Falsification of the round-2 fixes, all re-run by the main session:**
+
+  | Mutated child | Result |
+  |---|---|
+  | runs **no** assertions, reaches `tl_finish` | `rc=1`, caught twice — zero-label check *and* total |
+  | runs **some** assertions, reaches `tl_finish` | `rc=1`, caught by the total alone — nothing else can see this |
+  | concern filename spanning a space | `rc=1`, reported by name |
+  | NUL byte on stdout, `grep -a` removed | reconcile message reads `Binary file … matches` |
+  | NUL byte on stdout, `grep -a` present | clean, `139 passed, 0 failed` |
+  | unmutated baseline | `139 passed, 0 failed` |
+
+  **Left open, stated:** round 2's own concerns 10 and 11 — the `MSG_STALE_TEST` narrowing
+  (deferred to the pairing-rule card, see ADR 0044) and the observation that 139 is ultimately
+  the author's count. The second is now weaker than it was: the number is pinned in the runner,
+  so a green run asserts it rather than merely reporting it.
 - [ ] 14. Open the PR. Update this card to `review` when it merges.
 
 ## Post-task-4 mapping
@@ -759,7 +802,7 @@ Per-suite emission: dispatch 28, policy 31, routing 47, cleanup 8, scratch 14, s
 | 130 | `panes/dispatch-pane-agent.cleanup.test.sh` |
 | 79 | `panes/dispatch-pane-agent.subcommands.test.sh` |
 | 66 | `panes/test-lib.sh` |
-| 101 | `panes/dispatch-pane-agent.test.sh` (runner) |
+| 134 | `panes/dispatch-pane-agent.test.sh` (runner) |
 
 `routing` landed at **445**, not the 453 Decision 1 projected. Decision 1 already flagged its
 `+41 with skeleton` column as an upper bound that assumed each file re-carries the whole
@@ -788,11 +831,11 @@ Measured against the real `_form_pairs`, both conditions on the same function:
 | sibling test absent (after the split) | `[]` — **never gated** |
 
 So deleting the file outright would have silently switched off the verification-marker gate for
-a 545-line production script, and nothing would have reported it — a guard that has stopped
+a 618-line production script, and nothing would have reported it — a guard that has stopped
 guarding is indistinguishable from one that is working.
 
 **Closed by the user decision of 2026-09-09: keep a runner at the original name.**
-`panes/dispatch-pane-agent.test.sh` is now a **101-line runner** that invokes the six by
+`panes/dispatch-pane-agent.test.sh` is now a **134-line runner** that invokes the six by
 explicit name, re-emits their assertion lines verbatim as its own stdout, counts them itself
 rather than trusting a child summary line, folds any child's non-zero exit into `fail`, and —
 after the judge showed the exit status alone was not enough — **requires each child's summary
@@ -811,7 +854,7 @@ suites do. The gate is armed through the runner, not through them.
 The first version of this paragraph said the gate's guarantee "is about the *subject's* bytes,
 which is what it has always been". **That is wrong.** `hooks/lib/decide-commit-gate.py`
 compares the **test** blob as well, and blocks with `MSG_STALE_TEST` when it has moved. Before
-the split that check covered all 963 lines of assertions; it now covers only the 101-line
+the split that check covered all 963 lines of assertions; it now covers only the 134-line
 runner. Editing a concern file no longer invalidates the receipt, where before it would have —
 six of seven test files have left that check's scope. Recorded in ADR 0044 as the cost of
 declining the pairing-rule change.

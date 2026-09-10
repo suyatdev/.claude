@@ -30,10 +30,16 @@ for f in "$HERE"/dispatch-pane-agent.*.test.sh; do
   base="${f##*/}"
   concern="${base#dispatch-pane-agent.}"
   concern="${concern%.test.sh}"
-  case " $SUITES " in
-    *" $concern "*) ;;
-    *) bad "concern suite is listed in SUITES: $concern" "$base exists but SUITES does not name it" ;;
-  esac
+  # Compared element by element, not as a substring of the joined list: a file
+  # whose concern spans a space ("policy routing") is a substring of " $SUITES "
+  # and would be treated as listed. Measured by the round-2 judge.
+  listed=no
+  for known in $SUITES; do
+    [ "$known" = "$concern" ] && listed=yes
+  done
+  if [ "$listed" = no ]; then
+    bad "concern suite is listed in SUITES: $concern" "$base exists but SUITES does not name it"
+  fi
 done
 
 for suite in $SUITES; do
@@ -67,10 +73,17 @@ for suite in $SUITES; do
   # stdout, which is indistinguishable from a finished suite. Measured: both
   # shapes reported "130 passed, 0 failed" and would have written a marker for a
   # run that lost 9 assertions. tl_finish is the child's last statement, so its
-  # summary line is present if and only if the child reached the end; requiring
-  # it, and reconciling its numbers against the ones counted above, is what
-  # makes "all six finished" a checked fact rather than an assumption.
-  summary=$(grep -E '^[0-9]+ passed, [0-9]+ failed$' "$out" | tail -n 1)
+  # summary line is present whenever the child reached the end. The converse is
+  # NOT guaranteed: a child could print a summary-shaped line itself and then
+  # exit early. That route is closed by content rather than by construction --
+  # the grep runs on raw stdout, so an assertion label cannot produce the line,
+  # and no label in the six files can. Requiring the line, and reconciling its
+  # numbers against the ones counted above, is what makes "all six finished" a
+  # checked fact rather than an assumption.
+  # -a: a NUL byte anywhere on the child's stdout otherwise makes grep answer
+  # "Binary file ... matches", which lands in $summary and makes the reconcile
+  # message unreadable. It still fails closed either way; -a keeps it legible.
+  summary=$(grep -aE '^[0-9]+ passed, [0-9]+ failed$' "$out" | tail -n 1)
   if [ -z "$summary" ]; then
     bad "concern suite ran to completion: $suite" \
       "no summary line -- it stopped before tl_finish (rc=$rc)"
@@ -82,6 +95,13 @@ for suite in $SUITES; do
       bad "concern suite counts reconcile: $suite" \
         "child reported $c_ok/$c_fail, runner counted $s_ok/$s_fail"
     fi
+  fi
+
+  # A suite that reaches tl_finish having run none of its assertions reconciles
+  # perfectly at 0/0 and would otherwise vanish without trace.
+  if [ "$s_ok" -eq 0 ] && [ "$s_fail" -eq 0 ]; then
+    bad "concern suite emitted assertions: $suite" \
+      "0 labels -- it reached the end without running its assertion block"
   fi
 
   if [ "$rc" -ne 0 ]; then
@@ -97,5 +117,18 @@ for suite in $SUITES; do
 
   printf 'ran %-12s %3s ok  %3s fail  (exit %s)\n' "$suite" "$s_ok" "$s_fail" "$rc" >&2
 done
+
+# The sentinel proves each child REACHED its end. It cannot prove the child ran
+# its assertions on the way there: a block skipped by a bad guard still reaches
+# tl_finish, reports a count that reconciles, and disappears. Measured by the
+# round-2 judge -- 92 of 139 labels emitted, rc=0, marker written. The total is
+# the only check that sees a partial skip. Bump it deliberately when assertions
+# are added: that edit is the point at which a human confirms the change was
+# intended, which is the whole argument for the number being here at all.
+EXPECTED_LABELS=139
+emitted=$((pass + fail))
+if [ "$emitted" -ne "$EXPECTED_LABELS" ]; then
+  bad "total emitted labels is $EXPECTED_LABELS" "emitted $emitted"
+fi
 
 tl_finish

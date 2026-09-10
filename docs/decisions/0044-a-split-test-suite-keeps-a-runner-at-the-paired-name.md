@@ -1,7 +1,7 @@
 # 0044 — A split test suite keeps a runner at the paired name, or the gate it feeds goes silent
 
 - **Status:** Accepted (2026-09-09).
-- **Context:** `panes/dispatch-pane-agent.test.sh` (now a 101-line runner), the six concern
+- **Context:** `panes/dispatch-pane-agent.test.sh` (now a 134-line runner), the six concern
   suites `panes/dispatch-pane-agent.{dispatch,policy,routing,cleanup,scratch,subcommands}.test.sh`,
   and `panes/test-lib.sh`. The pairing rules this decision turns on live in
   `hooks/lib/write-test-marker.py` (`PAIR_SUFFIXES`, `derive_subject`) and
@@ -31,7 +31,7 @@ card's plan, which had assumed "six files where there was one means six markers"
 
 2. More seriously, `_form_pairs` skips a staged subject whose sibling test is neither tracked
    nor present on disk, with the comment `no sibling test at all -- never gated, per Scope`.
-   Deleting the original therefore leaves `panes/dispatch-pane-agent.sh` — 545 lines of
+   Deleting the original therefore leaves `panes/dispatch-pane-agent.sh` — 618 lines of
    production dispatcher — paired with nothing.
 
 Measured against the real `_form_pairs`, both conditions on the same function, no commit made:
@@ -50,7 +50,7 @@ stderr of — reports the symptom rather than the consequence.
 
 **A test suite that is split into concern files keeps a runner at the original, paired name.**
 
-`panes/dispatch-pane-agent.test.sh` is now a 101-line runner holding no assertions of its own.
+`panes/dispatch-pane-agent.test.sh` is now a 134-line runner holding no assertions of its own.
 It:
 
 - invokes the six by **explicit name**, not by glob — a glob cannot distinguish "this suite was
@@ -61,8 +61,14 @@ It:
 - **folds any child's non-zero exit into `fail`**, which catches a child that *crashes*;
 - **requires each child's `N passed, M failed` summary line as a completion sentinel, and
   reconciles its numbers against the labels the runner counted itself** — this is what catches
-  a child that stops *quietly*, at `rc=0`, which the exit status alone does not (see the
-  Consequences bullet below, where it is measured);
+  a child that stops *quietly*, at `rc=0`, which the exit status alone does not. The line is
+  present **whenever** a child reached its end; the converse does not hold, and an earlier
+  draft of this ADR wrongly said "if and only if". A child could print a summary-shaped line
+  itself and then exit early. That route is closed **by content, not by construction**: the
+  grep reads raw stdout, so an assertion label cannot produce the line, and no label in the six
+  files can. Worth knowing before someone adds one that could;
+- **asserts the emitted total against `EXPECTED_LABELS`**, because the sentinel proves a child
+  *reached* its end, never that it *ran its assertions on the way there* (see Consequences);
 - emits a label **only on failure**, so a green run is exactly the 139 the proof expects.
 
 Verified after the change: the marker for `panes/dispatch-pane-agent.sh` is written again and
@@ -83,7 +89,7 @@ intact, which is worse than never having had it.
 
 ## Consequences
 
-- The 800-line problem is fixed: 445 / 195 / 140 / 131 / 130 / 79, plus the 101-line runner and
+- The 800-line problem is fixed: 445 / 195 / 140 / 131 / 130 / 79, plus the 134-line runner and
   a 66-line shared `panes/test-lib.sh`. `routing` at 445 is over the 400 preferred and is a
   stated residual on the card.
 - One more file exists than a naive split would produce, and adding a seventh concern file
@@ -98,7 +104,7 @@ intact, which is worse than never having had it.
   the gate's guarantee "has always been about the subject's bytes". That is false as written:
   `hooks/lib/decide-commit-gate.py` compares the **test** blob as well as the subject blob, and
   blocks with `MSG_STALE_TEST` when it has moved. Before the split that check covered all 963
-  lines of assertions; it now covers only the 101-line runner, because the runner is the file
+  lines of assertions; it now covers only the 134-line runner, because the runner is the file
   the marker names. Editing a concern file therefore no longer invalidates the receipt, where
   before it would have. Six of the seven test files just left that check's scope. The
   `X.<concern>.test.sh → X.sh` pairing rule declined above is what would restore it.
@@ -118,3 +124,13 @@ intact, which is worse than never having had it.
   statement, so the line is present if and only if the child reached the end — and reconciles
   its numbers against the labels the runner counted itself. Re-measured after the fix: all
   three shapes are caught at `rc=1`, and the unmutated baseline is still `139 passed, 0 failed`.
+
+- **The sentinel was still not sufficient, and round 2 measured that too.** A child whose
+  assertion block is skipped but which *does* reach `tl_finish` reports a count that reconciles
+  perfectly, exits 0, and the marker is written on 92 of 139 labels — the same
+  receipt-for-work-not-done failure, one step further along. Only a **total** sees it, so the
+  runner now pins `EXPECTED_LABELS=139`. That number has to be bumped deliberately when
+  assertions are added, and that is the argument for it being there: the bump is the moment a
+  human confirms the change was intended. Measured after: a child running **no** assertions is
+  caught twice (by the per-suite zero check and by the total); a child running **some** is
+  caught by the total alone, which is precisely the case nothing else could see.
